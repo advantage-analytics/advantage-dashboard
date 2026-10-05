@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   RAIL_DEFAULT_PX,
+  RAIL_MAX_PX,
   RAIL_MIN_PX,
 } from "@/components/admin/labels/label-layout";
 import { labelScores } from "@/lib/services/labels/score";
@@ -743,6 +744,73 @@ function rally(): LabelPoint {
   });
 }
 
+/** One track of `SHOT_TRACKS`: its floor, and its share of the slack. */
+interface Track {
+  min: number;
+  fr: number;
+}
+
+/**
+ * `SHOT_TRACKS` read as tracks. A fixed `Npx` is a floor with no share; a
+ * `minmax(Npx, Xfr)` is both; the result's `minmax(calc(var(--shot-tail,
+ * Tpx) + Apx), Xfr)` floor is read from `floors`, which the component
+ * exports beside the string so the two cannot drift.
+ */
+function shotTracks(spec: string, floors: readonly number[]): Track[] {
+  const inner = /grid-cols-\[(.+)\]$/.exec(spec)![1];
+  // Split on the underscores between tracks, not the ones inside calc().
+  const tracks: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of inner) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (ch === "_" && depth === 0) {
+      tracks.push(current);
+      current = "";
+    } else current += ch;
+  }
+  tracks.push(current);
+  return tracks.map((track, i) => {
+    const fixed = /^(\d+)px$/.exec(track);
+    if (fixed) return { min: Number(fixed[1]), fr: 0 };
+    const range = /^minmax\((.+),([\d.]+)fr\)$/.exec(track);
+    expect(range, track).not.toBeNull();
+    const floor = /^(\d+)px$/.exec(range![1]);
+    if (!floor) {
+      expect(range![1]).toMatch(/^calc\(var\(--shot-tail,\d+px\)_\+_\d+px\)$/);
+    }
+    return { min: floor ? Number(floor[1]) : floors[i], fr: Number(range![2]) };
+  });
+}
+
+/**
+ * CSS grid's share-out of `space` over `tracks`: every track starts on its
+ * floor, the slack goes to the fr tracks in proportion, and a track that
+ * would fall under its floor is pinned there and the rest re-shared.
+ */
+function distribute(tracks: readonly Track[], space: number): number[] {
+  const widths = tracks.map((t) => t.min);
+  const free = new Set(
+    tracks.map((t, i) => (t.fr > 0 ? i : -1)).filter((i) => i >= 0),
+  );
+  for (;;) {
+    const fixed = tracks.reduce(
+      (sum, t, i) => sum + (free.has(i) ? 0 : widths[i]),
+      0,
+    );
+    const frs = [...free].reduce((sum, i) => sum + tracks[i].fr, 0);
+    if (frs === 0) return widths;
+    const unit = (space - fixed) / frs;
+    const pinned = [...free].filter((i) => unit * tracks[i].fr < tracks[i].min);
+    if (pinned.length === 0) {
+      for (const i of free) widths[i] = unit * tracks[i].fr;
+      return widths;
+    }
+    for (const i of pinned) free.delete(i);
+  }
+}
+
 function wellEdit(overrides: Record<string, unknown> = {}, editable = true) {
   return { ...editContext(labelSessionFixture(), editable), ...overrides };
 }
@@ -820,16 +888,21 @@ test.describe("the black shots well", () => {
       html.indexOf('data-shot-id="w-lit"'),
     );
 
-    // Add shot closes the well.
+    // Add shot closes the well, on the well's own tracks: the plus under
+    // the numbers, the words under the times, at any rail width.
     const add = tag(html, "data-add-shot");
+    const { SHOT_TRACKS } = createLoader().load(WELL) as {
+      SHOT_TRACKS: string;
+    };
     for (const cls of [
-      "grid-cols-[22px_minmax(0,1fr)]",
+      SHOT_TRACKS,
       "text-[11px]",
       "font-medium",
       "text-white/70",
     ]) {
       expect(add).toContain(cls);
     }
+    expect(html.slice(html.indexOf("data-add-shot"))).toContain("col-[2/-1]");
     expect(html.indexOf("data-add-shot")).toBeGreaterThan(
       html.indexOf('data-shot-id="w-lit"'),
     );
@@ -875,50 +948,71 @@ test.describe("the black shots well", () => {
       expect(open).toContain(cls);
     }
 
-    // The tracks: the frame's at 640 — every `minmax()` grows to the frame's
-    // width before the 1fr takes anything — and narrow enough at their
-    // minimums to fit the rail's narrowest, with the gaps and the padding.
-    const tracks = /grid-cols-\[([^\]]+)\]/.exec(open)![1].split("_");
+    // The tracks: the well's one set (`SHOT_TRACKS`), the word columns
+    // fractions with floors so the row reads edge to edge at every rail
+    // width, the number and the two positions fixed.
+    const {
+      SHOT_TRACKS,
+      SHOT_FLOORS_PX,
+      SHOT_GAPS_PX,
+      SHOT_PADDING_PX,
+      SHOT_TAIL_PX,
+    } = createLoader().load(WELL) as {
+      SHOT_TRACKS: string;
+      SHOT_FLOORS_PX: readonly number[];
+      SHOT_GAPS_PX: number;
+      SHOT_PADDING_PX: number;
+      SHOT_TAIL_PX: number;
+    };
+    expect(open).toContain(SHOT_TRACKS);
+    const tracks = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
     expect(tracks).toHaveLength(9);
-    const bounds = tracks.map((track) => {
-      const range = /^minmax\((\d+)px,(\d+px|1fr)\)$/.exec(track);
-      if (range) {
-        return {
-          min: Number(range[1]),
-          max: range[2] === "1fr" ? null : parseInt(range[2], 10),
-        };
-      }
-      const fixed = /^(\d+)px$/.exec(track);
-      expect(fixed, track).not.toBeNull();
-      return { min: Number(fixed![1]), max: Number(fixed![1]) };
-    });
-    // number · time · player · stroke · spin · hit · landed · placement —
-    // the frame's, but for 8px the placement gave to the result, whose
-    // frame width (28) could not hold a mark disc and the pencil.
-    expect(bounds.slice(0, 8).map((b) => b.max)).toEqual([
-      22, 48, 54, 80, 52, 88, 88, 80,
-    ]);
-    // The result is the one flexible track, and never narrower than its
-    // marks slot — an 18px disc, a 4px gap and the 11px pencil — so the
-    // slot never grows the grid past the rail.
-    expect(bounds[8]).toEqual({ min: 36, max: null });
-    expect(bounds[8].min).toBeGreaterThanOrEqual(18 + 4 + 11);
-    // The two positions never give.
-    expect(bounds[5]).toEqual({ min: 88, max: 88 });
-    expect(bounds[6]).toEqual({ min: 88, max: 88 });
-    const GAPS = 8 * 8;
-    const PADDING = 2 * 14;
-    const narrowest =
-      bounds.reduce((sum, b) => sum + b.min, 0) + GAPS + PADDING;
-    expect(narrowest).toBeLessThanOrEqual(RAIL_MIN_PX);
-    // At the default rail the frame's eight tracks fit whole, with the
-    // result's minimum.
+    expect(tracks.map((t) => t.min)).toEqual([...SHOT_FLOORS_PX]);
+    // number · hit · landed never give: the numbers being checked.
+    expect(tracks[0]).toEqual({ min: 22, fr: 0 });
+    expect(tracks[5]).toEqual({ min: 88, fr: 0 });
+    expect(tracks[6]).toEqual({ min: 88, fr: 0 });
+    // Every word column grows.
+    for (const i of [1, 2, 3, 4, 7, 8]) expect(tracks[i].fr).toBeGreaterThan(0);
+    // The result is never narrower than its marks slot — an 18px disc, a
+    // 4px gap and the 11px pencil — plus the cell's gap, so the slot never
+    // grows the grid past the rail.
+    expect(SHOT_TAIL_PX).toBe(18 + 4 + 11);
+    expect(tracks[8].min).toBeGreaterThanOrEqual(SHOT_TAIL_PX + 3);
+    // The floors, the gaps and the padding are the rail's narrowest exactly:
+    // nothing passes its edge at 520.
+    expect(SHOT_GAPS_PX).toBe(8 * 8);
+    expect(SHOT_PADDING_PX).toBe(2 * 14);
     expect(
-      bounds.slice(0, 8).reduce((sum, b) => sum + b.max!, 0) +
-        bounds[8].min +
-        GAPS +
-        PADDING,
-    ).toBeLessThanOrEqual(RAIL_DEFAULT_PX);
+      tracks.reduce((sum, t) => sum + t.min, 0) +
+        SHOT_GAPS_PX +
+        SHOT_PADDING_PX,
+    ).toBe(RAIL_MIN_PX);
+    const widthsAt = (rail: number) =>
+      distribute(tracks, rail - SHOT_GAPS_PX - SHOT_PADDING_PX);
+    // At 520 every track sits on its floor.
+    expect(widthsAt(RAIL_MIN_PX)).toEqual([...SHOT_FLOORS_PX]);
+    // At the default rail the row is the frame's — 22 · 48 · 54 · 80 · 52 ·
+    // 88 · 88 · 80 · 36 — within a few px: the time sits on its 44px floor
+    // (a tabular time wants no room past its digits), the words within 2.
+    const FRAME = [22, 48, 54, 80, 52, 88, 88, 80, 36];
+    for (const [i, width] of widthsAt(RAIL_DEFAULT_PX).entries()) {
+      expect(Math.abs(width - FRAME[i]), `track ${i}`).toBeLessThanOrEqual(
+        i === 1 ? 4 : 2,
+      );
+    }
+    // At the widest rail the slack is shared across the word columns in
+    // proportion: no column is left on its floor while another takes the
+    // whole void, and the fixed ones have not moved.
+    const wide = widthsAt(RAIL_MAX_PX);
+    expect(wide.reduce((sum, w) => sum + w, 0)).toBeCloseTo(
+      RAIL_MAX_PX - SHOT_GAPS_PX - SHOT_PADDING_PX,
+      6,
+    );
+    for (const i of [1, 2, 3, 4, 7, 8]) {
+      expect(wide[i], `track ${i}`).toBeGreaterThan(tracks[i].min + 8);
+    }
+    expect([wide[0], wide[5], wide[6]]).toEqual([22, 88, 88]);
 
     // A word its track can no longer hold truncates.
     expect(tag(row, 'data-calculated="placement"')).toContain("truncate");
@@ -1137,8 +1231,9 @@ test.describe("the black shots well", () => {
     for (const cls of [
       "absolute",
       "inset-y-0",
-      // Short of the tail's marks, so a chip and the pencil stay reachable.
-      "right-[51px]",
+      // Short of the tail's marks, so a chip and the pencil stay reachable:
+      // the padding, the well's `--shot-tail` and 4px of air.
+      "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]",
       "bg-[var(--surface-dark)]",
       "[mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)]",
     ]) {

@@ -5,6 +5,7 @@ import { LabelConsole } from "@/components/admin/labels/label-console";
 import { getLabelSession } from "@/lib/data/labels-server";
 import {
   addLabelShotAction,
+  combineLabelPointsAction,
   deleteLabelPointAction,
   deleteLabelShotAction,
   moveLabelPointAction,
@@ -19,6 +20,7 @@ import {
   setLabelGameTypeAction,
   setLabelPointCheckedAction,
   shiftLabelGameOverflowAction,
+  splitLabelPointAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -96,6 +98,8 @@ export default async function AdminLabelSessionPage({
           dismissSuggestion: dismissLabelSuggestionAction,
           insertPoint: insertLabelPointAction,
           shiftGameOverflow: shiftLabelGameOverflowAction,
+          splitPoint: splitLabelPointAction,
+          combinePoints: combineLabelPointsAction,
           updateSessionFields: updateLabelSessionFieldsAction,
         }}
         headerAction={

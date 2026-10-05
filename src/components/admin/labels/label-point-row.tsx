@@ -37,6 +37,7 @@ import {
   formatVideoTime,
   type SideNames,
 } from "./label-format";
+import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
 import { PointMenu } from "./label-point-menu";
 import {
   DeletedMarker,
@@ -631,6 +632,10 @@ export function DeletedPoint({
   const open = edit.openTombstoneIds.has(point.id);
   const { names, operations } = edit;
   const summary = pointSummary(point);
+  // A tombstone with no shot rows is what a combine leaves behind
+  // (point-combine.ts): its marker says so, and there is no Undo —
+  // restoring it would bring back an empty point.
+  const combined = isCombinedTombstone(point);
   return (
     <>
       <DeletedMarker
@@ -638,6 +643,7 @@ export function DeletedPoint({
         id={point.id}
         open={open}
         onToggle={edit.onToggleTombstone}
+        label={combined ? "Combined into the point above" : undefined}
       />
       {open ? (
         <div
@@ -663,7 +669,11 @@ export function DeletedPoint({
           <Ghost className={POINT_CELL.rally}>{summary.rally}</Ghost>
           <Ghost className={POINT_CELL.note}>{point.note}</Ghost>
           <span className={cn("flex items-center", POINT_CELL.status)}>
-            {operations ? (
+            {combined ? (
+              <span className="truncate text-[12px] text-[var(--ink-500)]">
+                Split the point above to undo
+              </span>
+            ) : operations ? (
               <UndoButton
                 label={`Undo delete point ${point.pointIndex + 1}`}
                 onClick={() => operations.onRestorePoint(point.id)}

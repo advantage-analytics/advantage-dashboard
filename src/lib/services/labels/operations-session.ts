@@ -391,7 +391,11 @@ export async function writeLabelPointDelete(params: {
   return failed ? { error: failed } : { ok: true, status: plan.write.status };
 }
 
-/** Undo a point's delete. */
+/**
+ * Undo a point's delete. A tombstone that owns no shot rows — what a
+ * combine leaves behind (`point-combine.ts`) — is refused: restoring it
+ * would bring back an empty point.
+ */
 export async function writeLabelPointRestore(params: {
   supabase: AdminClient;
   pointId: unknown;
@@ -400,7 +404,18 @@ export async function writeLabelPointRestore(params: {
   if (!pointId) return { error: "Invalid point id." };
   const read = await readPointState(params.supabase, pointId);
   if ("error" in read) return read;
-  const plan = planPointRestore(read.row);
+  const { data: shots, error: shotsError } = await params.supabase
+    .from("label_shots")
+    .select("id")
+    .eq("label_point_id", pointId)
+    .returns<{ id: string }[]>();
+  if (shotsError) {
+    return { error: `Could not read the point's shots: ${shotsError.message}` };
+  }
+  const plan = planPointRestore({
+    ...read.row,
+    shot_count: (shots ?? []).length,
+  });
   if ("error" in plan) return plan;
   const failed = await updateIfUnchanged(
     params.supabase,

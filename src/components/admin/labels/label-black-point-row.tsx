@@ -53,6 +53,7 @@ import {
   type GameBandMenuRow,
 } from "./label-game-band";
 import { PointMenu } from "./label-point-menu";
+import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
 import { BlackUndoButton, drawsGhosts } from "./label-black-shot-row";
 import { parseNote, pointSummary } from "./label-point-row";
 import {
@@ -689,6 +690,11 @@ export function BlackGameOverflow({
  * folds open here, so `openTombstoneIds` is not read. A deleted point has no
  * score and no band. Undo is the same request (`onRestorePoint`), absent on
  * a session that cannot be written.
+ *
+ * A tombstone with no shot rows of its own is what a combine leaves behind
+ * (`isCombinedTombstone`, point-combine.ts): its line reads "Combined into
+ * the point above" and offers no Undo — restoring it would bring back an
+ * empty point. The way back is "Split point here" on the first moved shot.
  */
 export function BlackDeletedPoint({
   point,
@@ -699,20 +705,22 @@ export function BlackDeletedPoint({
 }) {
   const { operations } = edit;
   const time = pointSummary(point).time;
+  const combined = isCombinedTombstone(point);
   return (
     <div
       data-row="deleted-point"
       data-tombstone-id={point.id}
+      data-combined={combined ? "" : undefined}
       className="grid h-[30px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] px-[14px]"
     >
       <span aria-hidden="true" className="mono text-[10px] text-white/25">
         –
       </span>
       <span className="min-w-0 truncate text-[11px] text-white/45">
-        Deleted point
+        {combined ? "Combined into the point above" : "Deleted point"}
         {time ? <span className="text-white/35"> · {time}</span> : null}
       </span>
-      {operations ? (
+      {operations && !combined ? (
         <BlackUndoButton
           label={`Undo delete point ${point.pointIndex + 1}`}
           onClick={() => operations.onRestorePoint(point.id)}

@@ -78,6 +78,25 @@ import {
   type InsertPosition,
 } from "@/lib/services/labels/point-insert";
 import type { LabelInsertPointResult } from "@/lib/services/labels/point-insert-session";
+import {
+  applyPointSplit,
+  draftSplitPoint,
+  planPointSplit,
+  settlePointSplit,
+  withdrawPointSplit,
+  type PointSplitSaved,
+} from "@/lib/services/labels/point-split";
+import type { LabelSplitPointResult } from "@/lib/services/labels/point-split-session";
+import {
+  applyPointCombine,
+  isCombinedTombstone,
+  planPointCombine,
+  settlePointCombine,
+  withdrawPointCombine,
+  type CombineDirection,
+  type PointCombineSaved,
+} from "@/lib/services/labels/point-combine";
+import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
 import {
   applyLabelSessionPatch,
@@ -1045,6 +1064,83 @@ export function LabelConsole({
   }
 
   /**
+   * Split a point at one of its shots (`point-split.ts`): that shot and
+   * every shot after it leave the anchor for a draft point drawn right
+   * below it at once, the later points renumbered in memory
+   * (`applyPointSplit`); the saved row takes the draft's place when the
+   * write lands (`settlePointSplit`), or the shots come back and the draft
+   * goes (`withdrawPointSplit`). Then the anchor's ending is re-derived from
+   * the shots it kept (`syncEnding`, which leaves its winner alone), and the
+   * new point is made current, held and brought into view — setting its
+   * winner is what comes next.
+   */
+  function splitPoint(pointId: string, shotId: string) {
+    const anchor = points.find((point) => point.id === pointId);
+    if (!anchor || !operations) return;
+    // A draft point cannot be split until its own insert lands.
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
+    const plan = planPointSplit(points, pointId, shotId);
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    pendingIds.current += 1;
+    const tempId = `${PENDING_POINT_PREFIX}${pendingIds.current}`;
+    const draft = draftSplitPoint(plan.write.insert, tempId);
+    const change = (rows: LabelPoint[]) =>
+      applyPointSplit(rows, pointId, draft, plan.write);
+    void runOperation<PointSplitSaved>(
+      change,
+      () => operations.splitPoint(pointId, shotId),
+      (rows, result) => settlePointSplit(rows, tempId, result),
+      (rows) => withdrawPointSplit(rows, anchor, tempId),
+    ).then((result) => {
+      if (!result) return;
+      syncEnding(anchor, change);
+      setRestPointId(result.point.id);
+      holdPoint(result.point.id);
+      jumpToPointId.current = result.point.id;
+    });
+  }
+
+  /**
+   * Combine a point with its neighbour above or below in the same game
+   * (`point-combine.ts`): the later point's shots join the earlier at once,
+   * which takes the later one's winner and ending, and the later row is a
+   * tombstone with nothing in it (`applyPointCombine`); on a refusal both
+   * rows come back as they were. Then the kept point's ending is re-derived
+   * from the merged shots (`syncEnding`). The kept point is current if the
+   * removed one was.
+   */
+  function combinePoints(pointId: string, direction: CombineDirection) {
+    if (!operations) return;
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
+    const plan = planPointCombine(points, pointId, direction);
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    const kept = points.find((point) => point.id === plan.write.keptId);
+    const removed = points.find((point) => point.id === plan.write.removedId);
+    if (!kept || !removed) return;
+    const merged = applyPointCombine([kept, removed], plan.write)[0];
+    void runOperation<PointCombineSaved>(
+      (rows) => applyPointCombine(rows, plan.write),
+      () => operations.combinePoints(pointId, direction),
+      (rows, result) => settlePointCombine(rows, result),
+      (rows) => withdrawPointCombine(rows, kept, removed),
+    ).then((saved) => {
+      if (!saved) return;
+      syncEnding(kept, (rows) =>
+        rows.map((row) => (row.id === kept.id ? merged : row)),
+      );
+      if (currentPointId === removed.id) setRestPointId(kept.id);
+    });
+  }
+
+  /**
    * One of the score banner's two writes (board 08m's "Fix the entered
    * score" / "Video ends early"): the session's fields change at once, the
    * server is asked, and they come back on a refusal — `runOperation`'s
@@ -1146,6 +1242,8 @@ export function LabelConsole({
   function restorePoint(pointId: string) {
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
+    // A combined point's tombstone offers no Undo; the plan refuses it too.
+    if (isCombinedTombstone(before)) return;
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointRestore),
       () => operations.restorePoint(pointId),
@@ -1479,6 +1577,8 @@ export function LabelConsole({
         onDismissSuggestion: dismissSuggestion,
         onInsertPoint: insertPoint,
         onShiftGameOverflow: shiftGameOverflow,
+        onSplitPoint: splitPoint,
+        onCombinePoints: combinePoints,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -1998,6 +2098,28 @@ export interface LabelConsoleOperations {
     sessionId: string,
     fromPointId: string,
   ) => Promise<LabelGameShiftResult>;
+  /**
+   * Split `pointId` at `shotId` (`point-split.ts`): the later points'
+   * indexes shifted up one, the new row inserted, the shot rows from that
+   * shot on moved to it in one update, the anchor marked edited —
+   * `label_points` and `label_shots`. Returns the new row and the anchor as
+   * written.
+   */
+  splitPoint: (
+    pointId: string,
+    shotId: string,
+  ) => Promise<LabelSplitPointResult>;
+  /**
+   * Combine `pointId` with its neighbour `direction` in the same game
+   * (`point-combine.ts`): the later point's shot rows moved to the earlier
+   * in one update, the earlier written with the later's winner and ending
+   * and both rows' rallies, the later tombstoned — `label_points` and
+   * `label_shots`. Returns both rows as written.
+   */
+  combinePoints: (
+    pointId: string,
+    direction: CombineDirection,
+  ) => Promise<LabelCombinePointsResult>;
   /**
    * The score banner's answers (board 08m): `final_score` and
    * `video_ends_early` on `label_sessions`, the only table it writes.

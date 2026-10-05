@@ -51,6 +51,15 @@ import {
   shiftLabelGameOverflow,
   type LabelGameShiftResult,
 } from "@/lib/services/labels/game-shift-session";
+import {
+  splitLabelPoint,
+  type LabelSplitPointResult,
+} from "@/lib/services/labels/point-split-session";
+import type { CombineDirection } from "@/lib/services/labels/point-combine";
+import {
+  combineLabelPoints,
+  type LabelCombinePointsResult,
+} from "@/lib/services/labels/point-combine-session";
 import type { LabelSessionFieldsPatch } from "@/lib/services/labels/session-fields";
 import {
   updateLabelSessionFields,
@@ -268,6 +277,39 @@ export async function shiftLabelGameOverflowAction(
   fromPointId: string,
 ): Promise<LabelGameShiftResult> {
   return shiftLabelGameOverflow(sessionId, fromPointId);
+}
+
+/**
+ * Split a point at `shotId`: that shot and every shot after it (in video
+ * order, tombstones included) move to a new point right below `pointId`,
+ * which takes the anchor's set, game, server and game type and the rallies
+ * of the moved vendor shots; the later points move up one index and the
+ * anchor becomes `edited`. `label_points` and `label_shots` only, never a
+ * delete. Refused on a session that is not labelling, on a deleted point or
+ * shot, and at the point's first live shot; a session labelled without
+ * marks is fine — this is a manual edit.
+ */
+export async function splitLabelPointAction(
+  pointId: string,
+  shotId: string,
+): Promise<LabelSplitPointResult> {
+  return splitLabelPoint(pointId, shotId);
+}
+
+/**
+ * Combine `pointId` with its live neighbour `direction` in the same game:
+ * the EARLIER point keeps both rows' shots and takes the later one's winner,
+ * ending and ended by plus the union of their rallies; the later point
+ * becomes a tombstone with no shots, which Undo then refuses. `label_points`
+ * and `label_shots` only, never a delete. Refused on a session that is not
+ * labelling and when there is no live neighbour that way in the game; a
+ * session labelled without marks is fine.
+ */
+export async function combineLabelPointsAction(
+  pointId: string,
+  direction: CombineDirection,
+): Promise<LabelCombinePointsResult> {
+  return combineLabelPoints(pointId, direction);
 }
 
 /**

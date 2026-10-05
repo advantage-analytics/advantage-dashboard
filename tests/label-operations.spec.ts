@@ -946,6 +946,10 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     "src/lib/services/labels/game-shift-session.ts",
     "src/lib/services/labels/session-fields.ts",
     "src/lib/services/labels/session-fields-session.ts",
+    "src/lib/services/labels/point-split.ts",
+    "src/lib/services/labels/point-split-session.ts",
+    "src/lib/services/labels/point-combine.ts",
+    "src/lib/services/labels/point-combine-session.ts",
     "src/app/admin/labels/actions.ts",
   ]) {
     const source = readFileSync(path.resolve(file), "utf8");

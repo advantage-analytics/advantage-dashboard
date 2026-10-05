@@ -49,11 +49,13 @@ import {
   PLAYING_WASH,
   ResetRowButton,
   RowNumber,
+  RowTextAction,
   UndoButton,
   sideLabel,
   type EditContext,
 } from "./label-row-parts";
 import { SHOT_ROW_GRID } from "./label-table-layout";
+import { canSplitAtShot } from "@/lib/services/labels/point-split";
 
 /**
  * The open point's strokes — board 08g's `.srows` card and its `.srw` rows.
@@ -107,6 +109,7 @@ export function ShotRows({
         key={shot.id}
         shot={shot}
         number={n}
+        point={point}
         pointNumber={pointNumber}
         edit={edit}
       />,
@@ -168,11 +171,14 @@ export const STROKE_OPTIONS: SelectOption[] = LABEL_STROKES.map((value) => ({
 export function ShotRow({
   shot,
   number,
+  point,
   pointNumber,
   edit,
 }: {
   shot: LabelShot;
   number: number;
+  /** The point the stroke is in, for "Split point here". */
+  point: Pick<LabelPoint, "id" | "status" | "shots">;
   pointNumber: number;
   edit: EditContext;
 }) {
@@ -306,6 +312,20 @@ export function ShotRow({
           <span className="text-[12px] whitespace-nowrap text-[var(--ink-500)]">
             Fault
           </span>
+        ) : null}
+        {/* Split point here: this shot and those after it become a new
+            point. Beside Reset, in the Status track — the one place the
+            row keeps a text action — and never on the point's first live
+            shot (`canSplitAtShot`). */}
+        {operations && canSplitAtShot(point, shot.id) ? (
+          <RowTextAction
+            attr="data-split-row"
+            label={`Split point at shot ${number}`}
+            revealed={selected}
+            onClick={() => operations.onSplitPoint(point.id, shot.id)}
+          >
+            Split
+          </RowTextAction>
         ) : null}
         {operations && canResetShot(shot) ? (
           <ResetRowButton

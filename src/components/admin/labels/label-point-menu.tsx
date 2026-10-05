@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CornerDownRight,
+  Merge,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -25,6 +26,8 @@ import {
   destinationServerIn,
   neighbourGames,
 } from "@/lib/services/labels/operations";
+import { combineNeighbour } from "@/lib/services/labels/point-combine";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { canResetPoint } from "@/lib/services/labels/reset";
 import type { EditContext, LabelRowOperations } from "./label-row-parts";
 
@@ -35,6 +38,11 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  *     (`onInsertPoint`, before or after); the labeller fills it in place, as
  *     the suggestion slot's "Add point" row is filled. A manual edit, so it
  *     is there on every session — marks on or off.
+ *   · `combineAbove` / `combineBelow` — this point and its live neighbour
+ *     that way become one (`onCombinePoints`, point-combine.ts), the earlier
+ *     kept; only when that neighbour is in the SAME game. Each carries the
+ *     two numbers, so the labeller reads which point's shots go where. Three
+ *     or more are combined by repeating.
  *   · `move` — the games either side of the point, each saying who serves it;
  *     picking one hands it to the console, which asks "switch players?" first
  *     when that is not this point's server. Empty when the point has no
@@ -42,7 +50,11 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  *   · `shiftOverflow` — only on a leftover: a row sitting past the row that
  *     decided its game, whose score reads "Game–30" (`game-shift.ts`). Moves
  *     every leftover of that game into the next one, and on down the match.
- *   · `reset` — only on a point that has changed and has a stored seed.
+ *   · `reset` — only on a point that has changed and has a stored seed, and
+ *     not while another live point was built from one of its vendor rallies
+ *     (`sharesVendorRally`): the two halves of a split. Reset would put the
+ *     point's own fields back and call it `unchanged`, which a point whose
+ *     rally was cut in two is not.
  *   · `remove` — always.
  */
 export function pointMenuActions(
@@ -52,14 +64,31 @@ export function pointMenuActions(
 ): {
   addAbove: () => void;
   addBelow: () => void;
+  combineAbove: { description: string; run: () => void } | null;
+  combineBelow: { description: string; run: () => void } | null;
   move: { key: string; label: string; description?: string; run: () => void }[];
   shiftOverflow: (() => void) | null;
   reset: (() => void) | null;
   remove: () => void;
 } {
+  const number = point.pointIndex + 1;
+  const above = combineNeighbour(context.points, point.id, "above");
+  const below = combineNeighbour(context.points, point.id, "below");
   return {
     addAbove: () => operations.onInsertPoint(point.id, "before"),
     addBelow: () => operations.onInsertPoint(point.id, "after"),
+    combineAbove: above
+      ? {
+          description: `Point ${number}'s shots join point ${above.pointIndex + 1}`,
+          run: () => operations.onCombinePoints(point.id, "above"),
+        }
+      : null,
+    combineBelow: below
+      ? {
+          description: `Point ${below.pointIndex + 1}'s shots join point ${number}`,
+          run: () => operations.onCombinePoints(point.id, "below"),
+        }
+      : null,
     shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
       point.id,
     )
@@ -74,9 +103,10 @@ export function pointMenuActions(
         run: () => operations.onMovePoint(point.id, game),
       };
     }),
-    reset: canResetPoint(point)
-      ? () => operations.onAskResetPoint(point.id)
-      : null,
+    reset:
+      canResetPoint(point) && !sharesVendorRally(point, context.points)
+        ? () => operations.onAskResetPoint(point.id)
+        : null,
     remove: () => operations.onAskDeletePoint(point.id),
   };
 }
@@ -234,6 +264,46 @@ export function PointMenu({
                     actions.addBelow();
                   }}
                 />
+                {actions.combineAbove ? (
+                  <FloatMenuItem
+                    label="Combine with point above"
+                    description={actions.combineAbove.description}
+                    icon={
+                      <Merge
+                        className={cn(
+                          "size-3",
+                          dark ? "text-white/50" : "text-[var(--ink-500)]",
+                        )}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={() => {
+                      close();
+                      actions.combineAbove?.run();
+                    }}
+                  />
+                ) : null}
+                {actions.combineBelow ? (
+                  <FloatMenuItem
+                    label="Combine with point below"
+                    description={actions.combineBelow.description}
+                    icon={
+                      <Merge
+                        className={cn(
+                          "size-3 rotate-180",
+                          dark ? "text-white/50" : "text-[var(--ink-500)]",
+                        )}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={() => {
+                      close();
+                      actions.combineBelow?.run();
+                    }}
+                  />
+                ) : null}
                 <FloatMenuDivider />
                 {actions.move.length > 0 ? (
                   <FloatMenuItem

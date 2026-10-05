@@ -146,16 +146,33 @@ export function planPointDelete(current: {
 }
 
 /**
+ * The sentence a restore of a combined point's tombstone answers with: its
+ * shots went to the point above (`point-combine.ts`), so there is nothing
+ * to bring back but an empty row.
+ */
+export const COMBINED_POINT_RESTORE_REFUSED =
+  "This point was combined into the point above, so there is nothing to bring back. Split that point at the first moved shot instead.";
+
+/**
  * Undo a point's delete: the status it had before. Without a remembered
  * status (unreachable while the migration's CHECK pairs the two) it comes
  * back as seeded, `unchanged` — the same fallback as a vendor stroke's `kept`.
+ *
+ * Refused on a tombstone with NO shot rows of its own (`shot_count` 0): that
+ * is what a combine leaves behind, and restoring it would bring back an
+ * empty point. The way back is "Split point here" on the first moved shot.
  */
 export function planPointRestore(current: {
   status: LabelPointStatus;
   status_before_delete: LivePointStatus | null;
+  /** How many shot rows (any status) the point owns, when the caller knows. */
+  shot_count?: number;
 }): Planned<PointRestoreWrite> {
   if (current.status !== "deleted") {
     return { error: "This point is not deleted." };
+  }
+  if (current.shot_count === 0) {
+    return { error: COMBINED_POINT_RESTORE_REFUSED };
   }
   return {
     ok: true,
@@ -200,7 +217,8 @@ export function applyPointDelete(point: LabelPoint): LabelPoint {
 }
 
 export function applyPointRestore(point: LabelPoint): LabelPoint {
-  if (point.status !== "deleted") return point;
+  // A combined point's tombstone (no shot rows) is refused, as the plan is.
+  if (point.status !== "deleted" || point.shots.length === 0) return point;
   return {
     ...point,
     status: point.statusBeforeDelete ?? "unchanged",

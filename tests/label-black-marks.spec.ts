@@ -840,11 +840,22 @@ test.describe("a selected stroke's mark stays in reach", () => {
     expect(row).toContain('data-selected=""');
     expect(row).toContain("relative");
 
-    // The result is the row's LAST track and the one that grows, inside
-    // 14px of padding: its right edge is the row's at every rail width.
-    const tracks = /grid-cols-\[([^\]]+)\]/.exec(row)![1].split("_");
-    expect(tracks.at(-1)).toBe("minmax(36px,1fr)");
-    expect(tracks.filter((t) => t.includes("fr"))).toHaveLength(1);
+    // The result is the row's LAST track, inside 14px of padding: its right
+    // edge is the row's at every rail width, and its floor is the marks
+    // slot — read off the well's `--shot-tail` — plus the cell's gap.
+    const { SHOT_TRACKS, SHOT_TAIL_PX, SHOT_TAIL_AIR_PX } = createLoader().load(
+      WELL,
+    ) as {
+      SHOT_TRACKS: string;
+      SHOT_TAIL_PX: number;
+      SHOT_TAIL_AIR_PX: number;
+    };
+    expect(row).toContain(SHOT_TRACKS);
+    expect(SHOT_TRACKS).toMatch(
+      new RegExp(
+        `minmax\\(calc\\(var\\(--shot-tail,${SHOT_TAIL_PX}px\\)_\\+_${SHOT_TAIL_AIR_PX}px\\),[\\d.]+fr\\)\\]$`,
+      ),
+    );
     expect(row).toContain("px-[14px]");
 
     // The slot is pinned to that edge, the cell's last child, and holds the
@@ -862,18 +873,23 @@ test.describe("a selected stroke's mark stays in reach", () => {
     expect(pencils(cell)).toBe(1);
 
     // The overlay stops 4px short of the slot at its widest: the row's
-    // padding, the disc, the gap and the pencil.
-    const { SHOT_TAIL_PX } = createLoader().load(WELL) as {
-      SHOT_TAIL_PX: number;
-    };
+    // padding, the well's `--shot-tail` (the disc, the gap and the pencil)
+    // and 4px — the same variable the result's floor reads, set once on the
+    // well, so the two cannot drift apart.
     const overlay = tagOf(html, "data-shot-actions");
-    const right = Number(/ right-\[(\d+)px\]/.exec(overlay)![1]);
-    expect(right).toBe(14 + SHOT_TAIL_PX + 4);
+    expect(overlay).toContain(
+      `right-[calc(14px_+_var(--shot-tail,${SHOT_TAIL_PX}px)_+_4px)]`,
+    );
+    expect(overlay).not.toMatch(/ right-\[\d+px\]/);
     expect(overlay).toContain("absolute");
     expect(overlay).not.toMatch(/\binset-0\b|\binset-x-0\b|\bleft-/);
-    // The slot fits the cell at its 36px minimum, gap included.
+    const wellTag = tagOf(html, "data-shots-well");
+    expect(wellTag).toContain(`--shot-tail:${SHOT_TAIL_PX}px`);
+    // The slot fits the cell at its floor, gap included.
     const gap = Number(/ gap-\[(\d+)px\]/.exec(resultTag)![1]);
-    expect(SHOT_TAIL_PX + gap).toBeLessThanOrEqual(36);
+    expect(SHOT_TAIL_PX + gap).toBeLessThanOrEqual(
+      SHOT_TAIL_PX + SHOT_TAIL_AIR_PX,
+    );
 
     // Nothing takes the pointer from the chip or lifts itself over it.
     for (const tag of [slot, chip.tag, resultTag]) {

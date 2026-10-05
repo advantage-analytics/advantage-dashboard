@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { InsertPosition } from "@/lib/services/labels/point-insert";
+import type { CombineDirection } from "@/lib/services/labels/point-combine";
 import type {
   LabelPointPatch,
   LabelShotPatch,
@@ -71,6 +72,19 @@ export interface LabelRowOperations {
    * so does a leftover's ⋯ menu in the light table.
    */
   onShiftGameOverflow: (fromPointId: string) => void;
+  /**
+   * Split a point at one of its shots (`point-split.ts`): that shot and
+   * every shot after it become a new point right below. A shot row's
+   * "Split point here" asks, in the black well and the light card alike;
+   * never on the point's first live shot.
+   */
+  onSplitPoint: (pointId: string, shotId: string) => void;
+  /**
+   * Combine a point with its live neighbour above or below in the same game
+   * (`point-combine.ts`): the earlier point keeps every shot, the later
+   * becomes a tombstone. The ⋯ menu asks.
+   */
+  onCombinePoints: (pointId: string, direction: CombineDirection) => void;
 }
 
 /** What every row needs to draw and save its editors. */
@@ -125,13 +139,16 @@ export function DeletedMarker({
   id,
   open,
   onToggle,
+  label: words,
 }: {
   kind: "point" | "shot";
   id: string;
   open: boolean;
   onToggle?: (id: string) => void;
+  /** The pill's words, when not "Deleted point" / "Deleted shot". */
+  label?: string;
 }) {
-  const label = kind === "point" ? "Deleted point" : "Deleted shot";
+  const label = words ?? (kind === "point" ? "Deleted point" : "Deleted shot");
   return (
     <div
       data-row={kind === "point" ? "deleted-point" : "deleted-shot"}
@@ -235,11 +252,45 @@ export function UndoButton({
 }
 
 /**
- * Reset, as a row action: board 08's `.card-link` blue words (like Undo), at
+ * A row's text action — board 08's `.card-link` blue words (like Undo), at
  * 12px. Revealed like the ✕ — on the row's hover, on focus, and on the open
- * point or selected stroke — 200ms. It only ASKS: the console opens the
- * confirm, and nothing is written from here.
+ * point or selected stroke — 200ms. It only ASKS: the console opens a
+ * confirm or runs the plan, and nothing is written from here. `attr` names
+ * what it asks for.
  */
+export function RowTextAction({
+  attr,
+  label,
+  onClick,
+  revealed = false,
+  children,
+}: {
+  attr: "data-reset-row" | "data-split-row";
+  label: string;
+  onClick: () => void;
+  revealed?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      {...{ [attr]: "" }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-[opacity,color] duration-200 group-hover/row:opacity-100 hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        revealed ? "opacity-100" : "opacity-0",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Reset, as a row action: `RowTextAction` reading "Reset". */
 export function ResetRowButton({
   label,
   onClick,
@@ -250,21 +301,14 @@ export function ResetRowButton({
   revealed?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      data-reset-row=""
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={cn(
-        "shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-[opacity,color] duration-200 group-hover/row:opacity-100 hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        revealed ? "opacity-100" : "opacity-0",
-      )}
+    <RowTextAction
+      attr="data-reset-row"
+      label={label}
+      onClick={onClick}
+      revealed={revealed}
     >
       Reset
-    </button>
+    </RowTextAction>
   );
 }
 

@@ -17,10 +17,17 @@ import { cn } from "@/lib/utils";
  * A cell is TEXT until someone reaches for it. The editor (the design
  * system's menu select or a text input, in the board's field chrome) mounts
  * only while the cell is
- *   · hovered by a pointer,
+ *   · hovered by a pointer — the light table only (`hoverReveals`, on by
+ *     default): the black rail's rows are a third the width, and a field
+ *     box appearing under a crossing pointer read as a field that was
+ *     already selected, so there a hover draws nothing and the cell's text
+ *     may wear at most a quiet affordance (`textClassName`: a cursor, the
+ *     word to white), never a border or a ground,
  *   · in the selected row (a selected shot shows every field, as `.sel .ms`),
  *   · or being edited — opened from the keyboard (Tab to the cell,
- *     Enter/Space), or holding focus from a click.
+ *     Enter/Space), or holding focus from a click; with hover off, a click
+ *     on the text opens the editor outright, so one click still selects the
+ *     row AND opens that cell.
  * A table of a hundred points therefore carries no form controls until one is
  * wanted, and a row reads as data, not as a form.
  *
@@ -43,7 +50,9 @@ export function EditableCell({
   display,
   editable,
   rowSelected = false,
+  hoverReveals = true,
   className,
+  textClassName,
   editor,
 }: {
   /** What the cell is, for assistive technology: "Shot 2 player". */
@@ -55,13 +64,21 @@ export function EditableCell({
   /** False for a frozen session: the cell stays text. */
   editable: boolean;
   rowSelected?: boolean;
+  /**
+   * Whether a hovering pointer mounts the editor. False on the black rail:
+   * only the selected row, a click or the keyboard draws a field there.
+   */
+  hoverReveals?: boolean;
   className?: string;
+  /** Classes on the text while it is text — the hover affordance's home. */
+  textClassName?: string;
   /** The select or input, mounted only when the cell is reached for. */
   editor: ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
-  const mounted = editable && (rowSelected || hovered || editing);
+  const mounted =
+    editable && (rowSelected || (hoverReveals && hovered) || editing);
 
   const wrapper = useRef<HTMLSpanElement>(null);
   const text = useRef<HTMLSpanElement>(null);
@@ -91,6 +108,17 @@ export function EditableCell({
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     focusNext.current = "editor";
+    setEditing(true);
+  }
+
+  /**
+   * With hover off, the click that selects the row is also the click that
+   * opens this cell: the editor mounts and takes focus. (With hover on, the
+   * editor is already there under the pointer, and the click lands in it.)
+   */
+  function openFromClick() {
+    if (hoverReveals || !editable) return;
+    if (!mounted) focusNext.current = "editor";
     setEditing(true);
   }
 
@@ -139,7 +167,11 @@ export function EditableCell({
             textFocused.current = false;
           }}
           onKeyDown={editable ? open : undefined}
-          className="tabular min-w-0 truncate rounded-[var(--radius-button)]"
+          onClick={openFromClick}
+          className={cn(
+            "tabular min-w-0 truncate rounded-[var(--radius-button)]",
+            editable && textClassName,
+          )}
         >
           {display}
         </span>

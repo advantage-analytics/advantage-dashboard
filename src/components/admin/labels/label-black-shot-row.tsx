@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RotateCcw, Undo2, WandSparkles, X } from "lucide-react";
+import { Plus, RotateCcw, Split, Undo2, WandSparkles, X } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +18,7 @@ import {
   isLabelDeleteReason,
   planAddedShot,
 } from "@/lib/services/labels/operations";
+import { canSplitAtShot } from "@/lib/services/labels/point-split";
 import { canResetShot } from "@/lib/services/labels/reset";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { suggestionState } from "@/lib/services/labels/suggestions";
@@ -69,37 +70,83 @@ import {
  */
 
 /**
- * The frame's `.bk-sr` tracks: number · time · player · stroke · spin ·
- * hit at · landed at · placement · result.
+ * The well's one set of tracks: number · time · player · stroke · spin ·
+ * hit at · landed at · placement · result. Every row kind in the well — a
+ * stroke, a shown ghost, a suggested stroke, "Add shot" — is laid on
+ * `SHOT_TRACKS`, so their columns line up by construction: a ghost's
+ * reason and a suggestion's sentence span tracks (`col-[8/-1]`,
+ * `col-[4/7]`) rather than carrying tracks of their own.
  *
- * The frame draws them for a 640px rail — 22 · 48 · 54 · 80 · 52 · 88 · 88 ·
- * 88 and what is left — and that is nearly what each `minmax()` here grows
- * to: a grid fills every track to its maximum before the `1fr` takes
- * anything, so at 640 and wider the row is the frame's, but for 8px moved
- * from the placement (80) to the result (36), which the frame's 28 could
- * not hold a mark and a pencil in. But the rail goes down to 520
- * (`RAIL_MIN_PX`), where those fixed tracks alone need 612 and pushed the
- * result off the rail. So the words give: each track's MINIMUM is what its
- * shortest useful reading needs, the minimums with the gaps and the padding
- * come to 518, and a word that no longer fits truncates (a select's whole
- * word is in its menu, the placement's in a tooltip). The two positions
- * never give — they are the numbers being checked.
+ * The frame draws the row for a 640px rail — 22 · 48 · 54 · 80 · 52 · 88 ·
+ * 88 · 88 and what is left — but the rail resizes from 520 to 880
+ * (`RAIL_MIN_PX` … `RAIL_MAX_PX`), and a row of `minmax(min, Npx)` tracks
+ * hit every maximum at 640 and handed everything past that to the last
+ * track: at 880 the words sat packed on the left and the result alone in a
+ * void. So the WORD tracks are fractions with floors. The fractions are the
+ * frame's widths in proportion (time's a little under, since a tabular
+ * time is not a word and wants no room past its digits), so at 640 each
+ * track is the frame's within a couple of px, and past 640 the slack is
+ * shared out in those proportions — the row reads edge to edge at every
+ * width, its gaps even rather than one big one. The two positions stay
+ * fixed at 88: tabular numbers whose decimal points line up down the
+ * column, however wide the rail. The number is 22.
  *
- * The result's minimum, 36, is its tail's room — one 18px mark disc, a gap
- * and the 11px pencil (`SHOT_TAIL_PX`) — so the tail never grows the grid:
- * the result word truncates first, and nothing in the row ever passes the
- * rail's edge at any width from 520 up.
+ * Each floor is what the track's shortest useful reading needs, and the
+ * floors with the gaps and the padding come to exactly 520 (`SHOT_FLOORS_PX`
+ * + `SHOT_GAPS_PX` + `SHOT_PADDING_PX`): at the rail's narrowest nothing
+ * passes its edge, and a word that no longer fits truncates (a select's
+ * whole word is in its menu, the placement's in a tooltip).
  *
- * The row's two requests take NO track: they are an overlay
- * (`data-shot-actions`), so reaching for a row never moves a column. It
- * stops short of the tail's marks (14px padding + `SHOT_TAIL_PX` + 4px), so
- * a chip and the pencil stay under the pointer while the row is hovered.
+ * The result's floor is its tail's room: one 18px mark disc, a 4px gap and
+ * the 11px pencil (`SHOT_TAIL_PX`, set once on the well as `--shot-tail`)
+ * plus the cell's own 3px gap and 2px of air — so the tail never grows the
+ * grid; the result word truncates first. The same variable places the
+ * row's actions overlay (`data-shot-actions`), which takes NO track and
+ * stops short of the tail (padding + `--shot-tail` + 4px), so a chip and
+ * the pencil stay under the pointer while the row is hovered. The ghost
+ * row's tail — the placement and result tracks spanned, with the gap
+ * between them — is at its narrowest `30 + 8 + 38 = 76`, which holds
+ * Restore whole.
  */
-const ROW_GRID =
-  "relative grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(30px,80px)_minmax(36px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
-
 /** The widest the result cell's tail gets: 18px disc + 4px gap + 11px pencil. */
 export const SHOT_TAIL_PX = 33;
+/** What the result track adds around the tail: the cell's 3px gap and 2px. */
+export const SHOT_TAIL_AIR_PX = 5;
+
+/** Each track's floor, left to right; the positions and the number are fixed. */
+export const SHOT_FLOORS_PX = [
+  22,
+  44,
+  36,
+  52,
+  30,
+  88,
+  88,
+  30,
+  SHOT_TAIL_PX + SHOT_TAIL_AIR_PX,
+] as const;
+/** The 8 gaps between 9 tracks, at `gap-x-2`. */
+export const SHOT_GAPS_PX = 8 * 8;
+/** `px-[14px]`, both sides. */
+export const SHOT_PADDING_PX = 2 * 14;
+
+/**
+ * The tracks themselves. The result's floor reads `--shot-tail` so the two
+ * numbers cannot drift apart; its fallback is `SHOT_TAIL_PX` for a row
+ * drawn outside the well.
+ */
+export const SHOT_TRACKS = `grid-cols-[22px_minmax(44px,0.3fr)_minmax(36px,0.55fr)_minmax(52px,0.8fr)_minmax(30px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,${SHOT_TAIL_PX}px)_+_${SHOT_TAIL_AIR_PX}px),0.35fr)]`;
+
+/** A stroke row: the tracks, the gap, the height and the padding. */
+const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px]`;
+
+/** The actions overlay's right edge: the padding, the tail and 4px of air. */
+const ACTIONS_RIGHT = "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]";
+
+/** The CSS variables the well sets once for every row in it. */
+export const WELL_STYLE = {
+  "--shot-tail": `${SHOT_TAIL_PX}px`,
+} as React.CSSProperties;
 
 /** A stroke row's mark without the key it is listed by. */
 function chipProps({ code: _code, ...chip }: ShotRowMark) {
@@ -191,6 +238,7 @@ export function BlackShotsWell({
           key={shot.id}
           shot={shot}
           number={n}
+          point={point}
           pointNumber={pointNumber}
           edit={edit}
           marks={shotRowMarks(shown, shot, marks, edit.names)}
@@ -213,6 +261,7 @@ export function BlackShotsWell({
     <div
       data-shots-well={point.id}
       className="flex flex-col bg-white/[0.035] py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]"
+      style={WELL_STYLE}
     >
       {rows}
       {edit.editable && operations ? (
@@ -220,9 +269,12 @@ export function BlackShotsWell({
           type="button"
           data-add-shot=""
           onClick={() => operations.onAddShot(point.id, null)}
-          // The row's own first track and gap, so the plus sits under the
-          // numbers and the words under the times, at any rail width.
-          className="grid h-[34px] w-full cursor-pointer grid-cols-[22px_minmax(0,1fr)] items-center gap-x-2 px-[14px] text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          // The row's own tracks, so the plus sits under the numbers and
+          // the words under the times, at any rail width.
+          className={cn(
+            ROW_GRID,
+            "w-full cursor-pointer text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+          )}
         >
           <Plus
             className="size-2.5"
@@ -230,7 +282,7 @@ export function BlackShotsWell({
             strokeWidth={2}
             aria-hidden="true"
           />
-          Add shot
+          <span className="col-[2/-1] min-w-0 truncate">Add shot</span>
         </button>
       ) : null}
     </div>
@@ -247,15 +299,21 @@ export function BlackShotsWell({
  * the reason · the blue pencil on a stroke the labeller changed or added.
  *
  * Time, Player, Stroke, Spin and the two positions are the light table's
- * `EditableCell`s: text until hovered, and every one a field on the SELECTED
- * row. A typed position sends the result it derives in the same patch
- * (`positionPatch`), exactly as a court click does.
+ * `EditableCell`s with hover turned off: text until the row is SELECTED
+ * (then every one is a field) or the cell itself is clicked or reached from
+ * the keyboard. A hovered cell shows only its cursor and its word a step
+ * brighter — no box: a field under a crossing pointer read as a field
+ * already chosen. A typed position sends the result it derives in the same
+ * patch (`positionPatch`), exactly as a court click does.
  *
- * The row's two requests — Reset (an edited stroke with a seed) and Delete —
- * are an overlay on the row's right edge, out of the grid, there only on
- * hover, on focus and on the selected row, so the row at rest is the frame's
- * and no column moves when they appear. Each only ASKS, as the light row's
- * do: the console opens the confirm.
+ * The row's requests — Split point here (any shot but the point's first
+ * live one), Reset (an edited stroke with a seed) and Delete — are an
+ * overlay on the row's right edge, out of the grid, there only on hover, on
+ * focus and on the selected row, so the row at rest is the frame's and no
+ * column moves when they appear. Reset and Delete only ASK, as the light
+ * row's do: the console opens the confirm. Split runs at once — it moves
+ * rows and deletes nothing, and "Split point here" on the first moved shot
+ * is the way back from a combine.
  *
  * LIT — selected, or the stroke the film is on — is the frame's `.bk-lit`
  * wash. A FAULT, a serve that did not go in, is a step quieter throughout:
@@ -264,12 +322,18 @@ export function BlackShotsWell({
 export function BlackShotRow({
   shot,
   number,
+  point,
   pointNumber,
   edit,
   marks = NO_MARKS,
 }: {
   shot: LabelShot;
   number: number;
+  /**
+   * The point the stroke is in, for "Split point here" (`canSplitAtShot`
+   * reads its shots in video order). Absent, no split is offered.
+   */
+  point?: Pick<LabelPoint, "id" | "status" | "shots">;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
@@ -287,7 +351,7 @@ export function BlackShotRow({
     if (!selected) onSelectShot?.(shot.id);
   };
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
-  const cell = { editable, rowSelected: selected };
+  const cell = { editable, rowSelected: selected, hoverReveals: false };
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const placement = shotPlacement(labelShotValues(shot));
   /** The words' ink — `.bk-pl`, `.bk-sp`, `.bk-cv` — a step down on a fault. */
@@ -328,6 +392,7 @@ export function BlackShotRow({
         {...cell}
         label={`Shot ${number} time`}
         valueText={time ?? "Not set"}
+        textClassName={TEXT_AFFORDANCE}
         display={
           time ? (
             <span
@@ -466,7 +531,8 @@ export function BlackShotRow({
         <span
           data-shot-actions=""
           className={cn(
-            "absolute inset-y-0 right-[51px] flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+            "absolute inset-y-0 flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+            ACTIONS_RIGHT,
             // Hidden, it is not in the pointer's way either: a click on the
             // result under it selects the row. A selected row waits for the
             // pointer or the keyboard too, so its result stays readable.
@@ -474,6 +540,17 @@ export function BlackShotRow({
           )}
           style={{ backgroundImage: actionsGround(lit) }}
         >
+          {point && canSplitAtShot(point, shot.id) ? (
+            <RowAction
+              attr="data-split-row"
+              label={`Split point at shot ${number}`}
+              tooltip="Split point here"
+              detail={`Shot ${number} and those after it become a new point`}
+              onClick={() => operations.onSplitPoint(point.id, shot.id)}
+            >
+              <Split className="size-3" strokeWidth={1.6} aria-hidden="true" />
+            </RowAction>
+          ) : null}
           {canResetShot(shot) ? (
             <RowAction
               attr="data-reset-row"
@@ -561,26 +638,29 @@ export function BlackDeletedShot({
 }
 
 /**
- * The ghost row's tracks: the stroke row's first seven — number · time ·
- * player · stroke · spin · hit at · landed at — then ONE track for the reason
- * and Restore where the row's placement and result would be (the frame's
- * `.fx-gt`, `grid-column: 8 / -1`): nobody derives a placement for a stroke
- * that is out of the rally.
- *
- * That last track's MINIMUM is what Restore needs whole — the button (the
- * icon, "Restore", its padding) and the gap before it, `GHOST_TAIL_PX` —
- * because a grid fills every `minmax()` track to its maximum before a `1fr`
- * takes anything: a `minmax(0,1fr)` tail was handed 4px at 520 and Restore
- * ran 56px past the rail. With 76 reserved, 520 − 28 − 56 − 76 leaves the
- * seven tracks exactly their minimums, so the columns still line up with the
- * stroke row's at every width, and the reason's words are what give —
- * truncating to nothing before Restore moves or is cut.
+ * A ghost row's reason and Restore sit where the stroke row's placement and
+ * result would be, spanning both tracks (the frame's `.fx-gt`,
+ * `grid-column: 8 / -1`): nobody derives a placement for a stroke that is
+ * out of the rally. The span is at its narrowest the two floors and the gap
+ * between them — `30 + 8 + 38 = 76` (`GHOST_TAIL_MIN_PX`), which holds
+ * Restore whole (the icon, "Restore", its padding and the gap before it) —
+ * so the reason's words are what give, truncating to nothing before
+ * Restore moves or is cut. The ghost row is `ROW_GRID` itself, so its
+ * columns are the stroke row's by construction.
  */
-const GHOST_ROW_GRID =
-  "grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(76px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
+const GHOST_TAIL = "col-[8/-1]";
 
-/** The ghost row's reason track at its narrowest: Restore whole, plus the gap. */
-export const GHOST_TAIL_PX = 76;
+/** The ghost tail at its narrowest: Restore whole, plus the gap. */
+export const GHOST_TAIL_MIN_PX = SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8];
+
+/**
+ * The quiet affordance on an editable cell's text while it is text: the
+ * cursor says what a click does, and class-coloured words step up to white.
+ * No border and no ground — those are the field's, drawn once the cell is
+ * opened or its row selected.
+ */
+const TEXT_AFFORDANCE =
+  "cursor-pointer transition-colors duration-200 hover:text-white";
 
 /**
  * A ghost (board 08m §3, the frame's `.fx-gl` and `.fx-gone`): a stroke the
@@ -648,7 +728,7 @@ export function BlackGhostShot({
           id={rowId}
           data-row="ghost-shot-row"
           data-shot-ghost-row={shot.id}
-          className={cn(GHOST_ROW_GRID, "bg-white/[0.03]")}
+          className={cn(ROW_GRID, "bg-white/[0.03]")}
         >
           <span
             aria-hidden="true"
@@ -673,7 +753,10 @@ export function BlackGhostShot({
           <GhostPosition end="landed" x={shot.landingX} y={shot.landingY} />
           <span
             data-ghost-reason=""
-            className="flex min-w-0 items-center justify-between gap-2.5 text-[11px] whitespace-nowrap"
+            className={cn(
+              GHOST_TAIL,
+              "flex min-w-0 items-center justify-between gap-2.5 text-[11px] whitespace-nowrap",
+            )}
             style={{ color: "rgba(255,255,255,0.5)" }}
           >
             <span className="min-w-0 truncate">Hit after the fault</span>
@@ -745,10 +828,10 @@ const SUGGESTION_INK = "rgba(252,211,77,0.75)";
  * stroke); "Dismiss" stores the suggestion's key. Both are absent on a
  * session that cannot be written.
  *
- * It sits on the ghost row's tracks (`GHOST_ROW_GRID`), so its first three
- * columns line up with the strokes around it: the sentence takes the stroke,
- * spin and hit-at tracks, the answers the last two — 172px at a 520px rail,
- * which holds both whole — and the sentence is what truncates.
+ * It sits on the stroke row's tracks (`ROW_GRID`), so its first three
+ * columns line up with the strokes around it: the sentence spans the
+ * stroke, spin and hit-at tracks, the answers the last three — 172px at a
+ * 520px rail, which holds both whole — and the sentence is what truncates.
  */
 function BlackSuggestedShot({
   suggestion,
@@ -774,7 +857,7 @@ function BlackSuggestedShot({
       data-row="suggested-shot"
       data-shot-suggestion={suggestion.key}
       className={cn(
-        GHOST_ROW_GRID,
+        ROW_GRID,
         "cursor-default rounded-lg bg-[rgba(253,230,138,0.06)] outline-1 -outline-offset-4 outline-[rgba(252,211,77,0.45)] outline-dashed",
       )}
     >
@@ -956,24 +1039,27 @@ export function BlackUndoButton({
 }
 
 /**
- * One of the row's two requests: a 22px glyph button, quiet until reached.
- * It never selects the row it sits in.
+ * One of the row's requests: a 22px glyph button, quiet until reached. It
+ * never selects the row it sits in.
  */
 function RowAction({
   attr,
   label,
   tooltip,
+  detail,
   onClick,
   children,
 }: {
-  attr: "data-reset-row" | "data-delete-row";
+  attr: "data-split-row" | "data-reset-row" | "data-delete-row";
   label: string;
   tooltip: string;
+  /** A line under the tooltip's name, saying what the request does. */
+  detail?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <ChromeTooltip label={tooltip} side="top">
+    <ChromeTooltip label={tooltip} detail={detail} side="top">
       <button
         type="button"
         {...{ [attr]: "" }}
@@ -1006,6 +1092,7 @@ function Dash({ label }: { label: string }) {
 function BlackSelectCell({
   editable,
   rowSelected,
+  hoverReveals,
   label,
   value,
   text,
@@ -1016,6 +1103,7 @@ function BlackSelectCell({
 }: {
   editable: boolean;
   rowSelected: boolean;
+  hoverReveals: boolean;
   label: string;
   value: string | null;
   text: string | null;
@@ -1029,8 +1117,10 @@ function BlackSelectCell({
     <EditableCell
       editable={editable}
       rowSelected={rowSelected}
+      hoverReveals={hoverReveals}
       label={label}
       valueText={text ?? "Not set"}
+      textClassName={TEXT_AFFORDANCE}
       display={
         text ? (
           <span className={className} style={style}>
@@ -1071,6 +1161,7 @@ const NUM = "mono tabular w-8 flex-none text-right text-[10px]";
 function BlackPositionCell({
   editable,
   rowSelected,
+  hoverReveals,
   end,
   label,
   x,
@@ -1080,6 +1171,7 @@ function BlackPositionCell({
 }: {
   editable: boolean;
   rowSelected: boolean;
+  hoverReveals: boolean;
   end: "hit" | "landed";
   label: string;
   x: number | null;
@@ -1108,9 +1200,11 @@ function BlackPositionCell({
       <EditableCell
         editable={editable}
         rowSelected={rowSelected}
+        hoverReveals={hoverReveals}
         label={label}
         valueText={text ?? "Not set"}
         className="flex-1"
+        textClassName="cursor-text"
         display={
           <span className="inline-flex items-center gap-1.5 align-middle">
             {pair ? (

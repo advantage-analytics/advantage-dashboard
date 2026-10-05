@@ -246,6 +246,17 @@ export function labelSessionFixture(): LabelSession {
         status: "deleted",
         statusBeforeDelete: "unchanged",
         ending: "let_replayed",
+        // One shot row of its own, deleted with the point: a tombstone with
+        // NO shot rows is what a combine leaves (`isCombinedTombstone`) and
+        // offers no Undo, which this ordinary deleted point must.
+        shots: [
+          shot("s-let", P3, {
+            stroke: "first_serve",
+            status: "deleted",
+            statusBeforeDelete: "added",
+            deleteReason: "other",
+          }),
+        ],
       }),
       seededPoint(P4, 3, {
         gameNumber: 2,
