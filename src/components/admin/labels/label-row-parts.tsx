@@ -4,6 +4,7 @@ import { ChevronDown, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import type { LabelGame } from "@/lib/services/labels/operations";
+import type { InsertPosition } from "@/lib/services/labels/point-insert";
 import type {
   LabelPointPatch,
   LabelShotPatch,
@@ -55,12 +56,13 @@ export interface LabelRowOperations {
    */
   onDismissSuggestion: (pointId: string, key: string) => void;
   /**
-   * Add a point the vendor never saw BEFORE `beforePointId` — the second of
-   * two points served from one side (board 08m §5): it and every later point
-   * move up one, and the new one takes its place. Only the black view draws
-   * the slot that asks.
+   * Add a point the vendor never saw beside `anchorPointId`: BEFORE it (the
+   * default — board 08m §5's slot on the second of two points served from
+   * one side, which only the black view draws, and the ⋯ menu's "Add point
+   * above") or AFTER it ("Add point below"). The later points move up one
+   * and the new one takes the slot, in the anchor's game.
    */
-  onInsertPoint: (beforePointId: string) => void;
+  onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
 }
 
 /** What every row needs to draw and save its editors. */

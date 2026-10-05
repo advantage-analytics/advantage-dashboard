@@ -743,7 +743,7 @@ test.describe("the point row over a ghost", () => {
     const html = renderRow(ended, marksOf(ended, [phantomMark()]));
     expect(inner(html, "data-point-sentence")).toBe("Backhand error by Vargas");
     expect(inner(html, "data-point-detail")).toBe("2 shot rally");
-    expect(html).toContain("Changed by you");
+    expect(html).toContain("data-pencil");
   });
 
   test("the removed-shot chip stands while the ghost does, and goes with Restore", () => {
@@ -753,7 +753,7 @@ test.describe("the point row over a ghost", () => {
     const chip = tag(before, 'data-mark-kind="fix"');
     expect(chip).toContain('data-mark-state="settled"');
     expect(before).toContain(">1 shot removed<");
-    expect(before).not.toContain("Changed by you");
+    expect(before).not.toContain("data-pencil");
 
     const restored: LabelPoint = {
       ...point,
@@ -765,7 +765,7 @@ test.describe("the point row over a ghost", () => {
     expect(after).not.toContain("data-mark-kind");
     expect(after).not.toContain("1 shot removed");
     // Restore is a change the labeller made: the pencil shows.
-    expect(after).toContain("Changed by you");
+    expect(after).toContain("data-pencil");
     // And the well numbers the stroke again.
     const well = renderWell(restored, marksOf(restored, [phantomMark()]));
     expect(well).not.toContain("data-shot-ghost");
@@ -785,7 +785,7 @@ test.describe("the point row over a ghost", () => {
     const html = renderRow(two, marksOf(two, [phantomMark([402, 404])]));
     // One of the two is back: the chip reads one.
     expect(html).toContain(">1 shot removed<");
-    expect(html).toContain("Changed by you");
+    expect(html).toContain("data-pencil");
   });
 });
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -58,6 +60,7 @@ function spies() {
     resetPoint: record("resetPoint", { ok: true, status: "unchanged" }),
     setGameServer: record("setGameServer", { ok: true, points: [] }),
     setGameType: record("setGameType", { ok: true, points: [] }),
+    insertPoint: record("insertPoint", { error: "not in this spec" }),
   };
   return { calls, operations };
 }
@@ -205,6 +208,7 @@ function tableTree(overrides: Props = {}) {
     onAddShot: ask("onAddShot"),
     onAskResetShot: ask("onAskResetShot"),
     onAskResetPoint: ask("onAskResetPoint"),
+    onInsertPoint: ask("onInsertPoint"),
   };
   // The hook-free table: `LabelPointsTable` is this plus the scores' memo.
   const { LabelPointsTableView } = loader().load(
@@ -226,6 +230,8 @@ function tableTree(overrides: Props = {}) {
 const NAMES = { p1: "Lee", p2: "Vargas" };
 
 type MenuActions = {
+  addAbove: () => void;
+  addBelow: () => void;
   move: { label: string; description?: string; run: () => void }[];
   reset: (() => void) | null;
   remove: () => void;
@@ -252,6 +258,104 @@ function menuActions(
     operations,
   );
 }
+
+// ── Add point above / below ────────────────────────────────────────────────
+
+test.describe("add point above / below", () => {
+  test("every live point's menu offers both, each asking for the insert on its side", () => {
+    const { asked, operations } = tableTree();
+    for (const pointId of [P1, P2, P4]) {
+      const actions = menuActions(pointId, operations);
+      actions.addAbove();
+      actions.addBelow();
+    }
+    expect(asked).toEqual({
+      onInsertPoint: [
+        [P1, "before"],
+        [P1, "after"],
+        [P2, "before"],
+        [P2, "after"],
+        [P4, "before"],
+        [P4, "after"],
+      ],
+    });
+  });
+
+  test("the menu draws them first, before Move to game…, with a glyph each; a read-only console has no menu", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-point-menu.tsx",
+      "utf8",
+    );
+    const above = source.indexOf('label="Add point above"');
+    const below = source.indexOf('label="Add point below"');
+    const move = source.indexOf('label="Move to game…"');
+    expect(above).toBeGreaterThan(-1);
+    expect(above).toBeLessThan(below);
+    expect(below).toBeLessThan(move);
+    expect(source).toContain("ArrowUpToLine");
+    expect(source).toContain("ArrowDownToLine");
+    // Not behind the marks: the menu asks on every session, so the items
+    // do not read `marksEnabled`.
+    expect(source).not.toContain("marksEnabled");
+
+    const { operations } = spies();
+    const editable = renderConsole({
+      ...SAVES,
+      operations,
+      initialExpandedPointId: P1,
+    });
+    expect(count(editable, /data-point-menu/g)).toBe(3);
+    const complete = { ...labelSessionFixture(), status: "complete" as const };
+    for (const readOnly of [
+      renderConsole({ initialExpandedPointId: P1 }),
+      renderConsole({ ...SAVES, operations, session: complete }),
+    ]) {
+      expect(readOnly).not.toContain("data-point-menu");
+      expect(readOnly).not.toContain("Point 1 actions");
+    }
+  });
+
+  test("the console plans the slot on the client and calls the action with the position", async () => {
+    const { calls, operations } = spies();
+    let table: Props = {};
+    const { LabelConsole } = createLoader({
+      stubs: {
+        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
+        "@/components/admin/labels/label-points-table": {
+          LabelPointsTable: (props: Props) => {
+            table = props;
+            return null;
+          },
+        },
+      },
+    }).load("src/components/admin/labels/label-console.tsx") as {
+      LabelConsole: React.ComponentType<Props>;
+    };
+    const session = labelSessionFixture();
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session,
+        video: null,
+        ...SAVES,
+        operations,
+      }),
+    );
+    const rows = table.operations as {
+      onInsertPoint: (id: string, position?: string) => void;
+    };
+    rows.onInsertPoint(P4, "after");
+    await Promise.resolve();
+    expect(calls.insertPoint).toEqual([[session.id, P4, "after"]]);
+    // No position is "before" — what T40's suggestion slot asks for.
+    rows.onInsertPoint(P2);
+    await Promise.resolve();
+    expect(calls.insertPoint?.at(-1)).toEqual([session.id, P2, "before"]);
+    // A tombstone is no anchor: refused on the client, nothing sent.
+    rows.onInsertPoint(P3, "after");
+    await Promise.resolve();
+    expect(calls.insertPoint).toHaveLength(2);
+  });
+});
 
 // ── Delete asks first ──────────────────────────────────────────────────────
 

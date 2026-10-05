@@ -383,13 +383,19 @@ test.describe("the black point row", () => {
     expect(html).toContain('aria-label="Point 1 won by Vargas"');
 
     // Edited — and a stroke of it edited, added and deleted: the pencil,
-    // in the tail slot.
+    // in the tail slot. The point has a seed, so the pencil is its Reset
+    // too: a button named for that, the glyph the same blue.
     const tail = html.slice(
       html.indexOf("data-row-tail"),
       html.indexOf("data-point-score"),
     );
-    expect(tail).toContain('aria-label="Changed by you"');
+    const pencil = tag(tail, "data-reset-pencil");
+    expect(pencil).toMatch(/^<button/);
+    expect(pencil).toContain('aria-label="Reset point 1"');
+    expect(pencil).toContain("data-pencil");
+    expect(pencil).toContain("data-cell");
     expect(tail).toContain("text-[var(--blue)]");
+    expect(tail).not.toContain('aria-label="Changed by you"');
 
     // The score before it, mono and right-aligned.
     expect(inner(html, "data-point-score")).toBe("0–0");
@@ -453,7 +459,7 @@ test.describe("the black point row", () => {
     expect(tick).toContain("text-[var(--success)]");
     // Kept as seeded: nothing changed by the labeller.
     expect(html).toContain("data-row-tail");
-    expect(html).not.toContain("Changed by you");
+    expect(html).not.toContain("data-pencil");
     // Won by Lee: p1's blue mark.
     expect(tag(html, "data-winner-mark")).toContain("bg-[var(--blue)]");
     // It has a note: the Note action is white.
@@ -512,6 +518,74 @@ test.describe("the black point row", () => {
     expect(renderRow(FIXTURE_POINT_IDS.P2, {}, false)).toContain(
       "data-note-action",
     );
+  });
+
+  test("the pencil asks to reset the point, and does not toggle the row", () => {
+    const session = labelSessionFixture();
+    const { BlackPointRow } = components();
+    const asked: unknown[][] = [];
+    const edit = {
+      ...editContext(session),
+      operations: {
+        ...OPERATIONS,
+        onAskResetPoint: (...args: unknown[]) => asked.push(["reset", ...args]),
+      },
+    };
+    // The row as elements: the pencil is `PencilMark`'s, so that component
+    // is entered on the way down; nothing else is called.
+    const find = (
+      node: React.ReactNode,
+      attr: string,
+    ): React.ReactElement<Record<string, unknown>> | null => {
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          const hit = find(child, attr);
+          if (hit) return hit;
+        }
+        return null;
+      }
+      if (!React.isValidElement(node)) return null;
+      const el = node as React.ReactElement<Record<string, unknown>>;
+      if (attr in el.props) return el;
+      if (typeof el.type === "function" && el.type.name === "PencilMark") {
+        return find(
+          (el.type as (p: unknown) => React.ReactNode)(el.props),
+          attr,
+        );
+      }
+      return find(el.props.children as React.ReactNode, attr);
+    };
+    const first = session.points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!;
+    const tree = (BlackPointRow as unknown as (p: unknown) => React.ReactNode)({
+      point: first,
+      open: false,
+      playing: false,
+      score: null,
+      edit,
+    });
+    const pencil = find(tree, "data-reset-pencil");
+    expect(pencil).not.toBeNull();
+    expect(pencil!.props["aria-label"]).toBe("Reset point 1");
+    (pencil!.props.onClick as (e: unknown) => void)({
+      stopPropagation: () => asked.push(["stopped"]),
+    });
+    expect(asked).toEqual([["stopped"], ["reset", FIXTURE_POINT_IDS.P1]]);
+
+    // Without a seed, or read-only: the pencil is the plain indicator.
+    const unseeded = renderToStaticMarkup(
+      React.createElement(BlackPointRow, {
+        point: { ...first, seed: null },
+        open: false,
+        playing: false,
+        score: null,
+        edit: editContext(session),
+      }),
+    );
+    expect(unseeded).toContain('aria-label="Changed by you"');
+    expect(unseeded).not.toContain("data-reset-pencil");
+    const frozen = renderRow(FIXTURE_POINT_IDS.P1, {}, false);
+    expect(frozen).toContain('aria-label="Changed by you"');
+    expect(frozen).not.toContain("data-reset-pencil");
   });
 
   test("what counts as changed by you", () => {
@@ -858,12 +932,21 @@ test.describe("the black shots well", () => {
     );
     expect(row).toContain("color:rgba(255,255,255,0.45)");
     expect(row).toContain("color:rgba(255,255,255,0.72)");
-    // Edited: the blue pencil closes the row.
+    // Edited, with a seed: the blue pencil closes the row, and is its Reset.
     const result = row.slice(row.indexOf('data-calculated="result"'));
-    expect(result).toContain('aria-label="Changed by you"');
+    const pencil = tag(result, "data-reset-pencil");
+    expect(pencil).toMatch(/^<button/);
+    expect(pencil).toContain('aria-label="Reset shot 3"');
     expect(result).toContain("text-[var(--blue)]");
+    expect(result).not.toContain('aria-label="Changed by you"');
+    // Inside the marks slot, not the overlay: the slot's last child.
+    const slot = result.slice(result.indexOf("data-shot-marks"));
+    expect(slot.indexOf("data-reset-pencil")).toBeGreaterThan(-1);
+    expect(slot.indexOf("data-reset-pencil")).toBeLessThan(
+      slot.indexOf("data-shot-actions"),
+    );
     // A kept stroke has none.
-    expect(shotRow(html, "w-lit")).not.toContain("Changed by you");
+    expect(shotRow(html, "w-lit")).not.toContain("data-pencil");
 
     // A serve's topspin is a Kick; with no landing it has no placement.
     const serve = shotRow(html, "w-serve");
@@ -1053,9 +1136,10 @@ test.describe("the black shots well", () => {
     for (const cls of [
       "absolute",
       "inset-y-0",
-      "right-0",
+      // Short of the tail's marks, so a chip and the pencil stay reachable.
+      "right-[51px]",
       "bg-[var(--surface-dark)]",
-      "[mask-image:linear-gradient(to_right,transparent,black_16px)]",
+      "[mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)]",
     ]) {
       expect(group, cls).toContain(cls);
     }
@@ -1126,7 +1210,10 @@ test.describe("the black shots well", () => {
       if (!React.isValidElement(node)) return null;
       const el = node as React.ReactElement<Record<string, unknown>>;
       if (attr in el.props) return el;
-      if (typeof el.type === "function" && el.type.name === "RowAction") {
+      if (
+        typeof el.type === "function" &&
+        (el.type.name === "RowAction" || el.type.name === "PencilMark")
+      ) {
         return find(
           (el.type as (p: unknown) => React.ReactNode)(el.props),
           attr,
@@ -1150,7 +1237,12 @@ test.describe("the black shots well", () => {
       }),
     });
     const event = { stopPropagation: () => asked.push(["stopped"]) };
-    for (const attr of ["data-reset-row", "data-delete-row"]) {
+    // The pencil in the marks slot is the same ask as the overlay's Reset.
+    for (const attr of [
+      "data-reset-row",
+      "data-delete-row",
+      "data-reset-pencil",
+    ]) {
       const button = find(row, attr);
       expect(button, attr).not.toBeNull();
       (button!.props.onClick as (e: unknown) => void)(event);
@@ -1160,8 +1252,44 @@ test.describe("the black shots well", () => {
       ["reset", "w-return", 3, 7],
       ["stopped"],
       ["delete", "w-return", 3, 7],
+      ["stopped"],
+      ["reset", "w-return", 3, 7],
     ]);
     expect(selected).toEqual([]);
+  });
+
+  test("the pencil is a plain mark when the stroke cannot be reset", () => {
+    // An added stroke: changed, so the pencil — but nothing seeded to go
+    // back to, so no button and no Reset name.
+    const { BlackShotsWell } = well();
+    const withAdded = point({
+      id: "p-well",
+      shots: [
+        ...rally().shots,
+        shot("w-added", { hitter: "p1", stroke: "forehand", status: "added" }),
+      ],
+    });
+    const added = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: withAdded,
+        edit: wellEdit(),
+      }),
+    );
+    const row = shotRow(added, "w-added");
+    expect(row).toContain(
+      'role="img" data-pencil="" aria-label="Changed by you"',
+    );
+    expect(row).not.toContain("data-reset-pencil");
+    expect(row).not.toContain('aria-label="Reset shot');
+    // The edited stroke on a read-only session: the indicator alone.
+    const frozen = shotRow(renderWell({}, false), "w-return");
+    expect(frozen).toContain('aria-label="Changed by you"');
+    expect(frozen).not.toContain("data-reset-pencil");
+    // The pencil never changes the marks slot's shape: 11px, no padding.
+    const pencil = tag(shotRow(renderWell(), "w-return"), "data-reset-pencil");
+    expect(pencil).not.toMatch(/\bp[xy]?-/);
+    expect(pencil).toContain("shrink-0");
+    expect(pencil).toContain("focus-visible:shadow-[var(--focus-ring)]");
   });
 
   test("a deleted stroke is one dark line that fits the rail, with Undo", () => {

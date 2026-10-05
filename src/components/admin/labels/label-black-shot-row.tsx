@@ -94,8 +94,10 @@ import {
  * the result word truncates first, and nothing in the row ever passes the
  * rail's edge at any width from 520 up.
  *
- * The row's two requests take NO track: they are an overlay on its right
- * edge (`data-shot-actions`), so reaching for a row never moves a column.
+ * The row's two requests take NO track: they are an overlay
+ * (`data-shot-actions`), so reaching for a row never moves a column. It
+ * stops short of the tail's marks (14px padding + `SHOT_TAIL_PX` + 4px), so
+ * a chip and the pencil stay under the pointer while the row is hovered.
  */
 const ROW_GRID =
   "relative grid grid-cols-[22px_minmax(44px,48px)_minmax(36px,54px)_minmax(52px,80px)_minmax(30px,52px)_88px_88px_minmax(30px,80px)_minmax(36px,1fr)] items-center gap-x-2 h-[34px] px-[14px]";
@@ -442,7 +444,26 @@ export function BlackShotRow({
             className="inline-flex shrink-0 items-center gap-1 justify-self-end"
           >
             {mark ? <MarkChip {...chipProps(mark)} /> : null}
-            {changed ? <PencilMark /> : null}
+            {/* The pencil is the row's Reset too, when there is one to
+                offer — the same ask as the overlay's button, in the slot
+                the overlay stops short of. */}
+            {changed ? (
+              <PencilMark
+                reset={
+                  operations && canResetShot(shot)
+                    ? {
+                        label: `Reset shot ${number}`,
+                        onClick: () =>
+                          operations.onAskResetShot(
+                            shot.id,
+                            number,
+                            pointNumber,
+                          ),
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
           </span>
         ) : null}
       </span>
@@ -450,7 +471,7 @@ export function BlackShotRow({
         <span
           data-shot-actions=""
           className={cn(
-            "absolute inset-y-0 right-0 flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px)] pr-[10px] pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+            "absolute inset-y-0 right-[51px] flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
             // Hidden, it is not in the pointer's way either: a click on the
             // result under it selects the row. A selected row waits for the
             // pointer or the keyboard too, so its result stays readable.

@@ -34,6 +34,7 @@ import type {
   LabelPoint,
   LabelSide,
 } from "@/lib/services/labels/session";
+import { canResetPoint } from "@/lib/services/labels/reset";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
   formatClockTime,
@@ -247,12 +248,25 @@ export function BlackPointRow({
         </button>
 
         {/* The marks, in the frame's order: what to check, what was fixed,
-            then the pencil. A chip's words go before the two lines do — see
-            `MarkChip` — so the tail never takes the score's room. */}
+            then the pencil — which is the point's Reset as well, when its
+            own fields have changed and it has a seed to go back to (the
+            same ask as the menu's). A chip's words go before the two lines
+            do — see `MarkChip` — so the tail never takes the score's room. */}
         <span data-row-tail="" className="inline-flex items-center gap-2">
           {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
           {rowMarks?.fix ? <MarkChip {...rowMarks.fix} /> : null}
-          {changed ? <PencilMark /> : null}
+          {changed ? (
+            <PencilMark
+              reset={
+                operations && canResetPoint(point)
+                  ? {
+                      label: `Reset point ${number}`,
+                      onClick: () => operations.onAskResetPoint(point.id),
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
         </span>
 
         {/* A new point has no score of its own yet — the frame draws a dash

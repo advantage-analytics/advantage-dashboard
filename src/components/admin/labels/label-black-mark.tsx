@@ -138,16 +138,57 @@ export function MarkChip({
   );
 }
 
-/** The blue "Changed by you" pencil — the frame's `.fx-pen`. */
-export function PencilMark() {
+/**
+ * The blue "Changed by you" pencil — the frame's `.fx-pen`.
+ *
+ * With `reset`, it is the row's Reset as well: a button the size of the
+ * glyph, named for what it does ("Reset shot 3"), its hover saying both
+ * things. It only ASKS — the console opens the confirm — and a click on it
+ * is not a click on its row. Without `reset` (an added row, a row with no
+ * seed, a session that cannot be written) it is the plain indicator. Either
+ * way it is 11px wide: the marks slot that holds it never grows.
+ */
+export function PencilMark({
+  reset,
+}: {
+  reset?: { label: string; onClick: () => void };
+} = {}) {
+  const glyph = (
+    <Pencil
+      className="size-[11px] text-[var(--blue)]"
+      strokeWidth={2}
+      aria-hidden="true"
+    />
+  );
+  if (!reset) {
+    return (
+      <span
+        role="img"
+        data-pencil=""
+        aria-label="Changed by you"
+        className="inline-flex"
+      >
+        {glyph}
+      </span>
+    );
+  }
   return (
-    <span role="img" aria-label="Changed by you" className="inline-flex">
-      <Pencil
-        className="size-[11px] text-[var(--blue)]"
-        strokeWidth={2}
-        aria-hidden="true"
-      />
-    </span>
+    <ChromeTooltip label="Changed by you · click to reset" side="top">
+      <button
+        type="button"
+        data-pencil=""
+        data-reset-pencil=""
+        data-cell=""
+        aria-label={reset.label}
+        onClick={(event) => {
+          event.stopPropagation();
+          reset.onClick();
+        }}
+        className="inline-flex shrink-0 cursor-pointer items-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none hover:[&>svg]:text-[var(--blue-hover)]"
+      >
+        {glyph}
+      </button>
+    </ChromeTooltip>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   type LabelMarks,
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
+import { planPointDelete } from "@/lib/services/labels/operations";
 import {
   applyInsertedPoint,
   draftInsertedPoint,
@@ -159,6 +160,85 @@ test.describe("planInsertedPoint", () => {
     expect(planInsertedPoint(points(), "p-nope")).toEqual({
       error: "The point to add before is not a point of this session.",
     });
+  });
+
+  // "Add point below" (the ⋯ menu): the slot after the anchor.
+  test("after: the next index, in the anchor's game even when it closes that game, and only the later points move", () => {
+    // P1 is the first point of game 1; P2 (game 1) and the tombstone P3
+    // follow it. The anchor itself does not move.
+    expect(planInsertedPoint(points(), P1, "after")).toEqual({
+      ok: true,
+      write: {
+        insert: {
+          point_index: 1,
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "added",
+          vendor_rally_ids: [],
+        },
+        shifts: [
+          { id: P4, point_index: 4 },
+          { id: P3, point_index: 3 },
+          { id: P2, point_index: 2 },
+        ],
+      },
+    });
+    // P2 is the last live point of game 1: below it is still game 1, served
+    // by Lee — never game 2 — and the tombstone after it moves too.
+    expect(planInsertedPoint(points(), P2, "after")).toMatchObject({
+      ok: true,
+      write: {
+        insert: { point_index: 2, game_number: 1, server: "p1" },
+        shifts: [
+          { id: P4, point_index: 4 },
+          { id: P3, point_index: 3 },
+        ],
+      },
+    });
+    // After the last point of all: nothing moves.
+    expect(planInsertedPoint(points(), P4, "after")).toEqual({
+      ok: true,
+      write: {
+        insert: {
+          point_index: 4,
+          set_number: 1,
+          game_number: 2,
+          server: "p2",
+          game_type: "game",
+          status: "added",
+          vendor_rally_ids: [],
+        },
+        shifts: [],
+      },
+    });
+    // The default is "before": what T40's slot asks for.
+    expect(planInsertedPoint(points(), P2)).toEqual(
+      planInsertedPoint(points(), P2, "before"),
+    );
+    // Refused as before: a tombstone, or a stranger, is no anchor.
+    expect(planInsertedPoint(points(), P3, "after")).toEqual({
+      error: "Restore the point before the slot before adding one.",
+    });
+    expect(planInsertedPoint(points(), "p-nope", "after")).toEqual({
+      error: "The point to add after is not a point of this session.",
+    });
+    // The console's in-memory rows agree with the plan.
+    const plan = planInsertedPoint(points(), P2, "after");
+    if ("error" in plan) throw new Error(plan.error);
+    const rows = applyInsertedPoint(
+      points(),
+      draftInsertedPoint(plan.write.insert, NEW_ID),
+    );
+    expect(rows.map((p) => [p.id, p.pointIndex])).toEqual([
+      [P1, 0],
+      [P2, 1],
+      [NEW_ID, 2],
+      [P3, 3],
+      [P4, 4],
+    ]);
+    expect(rows[2]).toMatchObject({ gameNumber: 1, server: "p1" });
   });
 
   test("applyInsertedPoint renumbers in memory and withdrawInsertedPoint undoes it", () => {
@@ -369,7 +449,7 @@ test.describe("writeLabelPointInsert", () => {
     const result = await writeLabelPointInsert({
       supabase: fake.supabase,
       sessionId: SESSION_ID,
-      beforePointId: UUID(2),
+      anchorPointId: UUID(2),
     });
     expect(result).toMatchObject({
       ok: true,
@@ -442,7 +522,46 @@ test.describe("writeLabelPointInsert", () => {
     ]);
   });
 
-  test("a session labelled without marks, and a complete one, are refused before anything is read or written", async () => {
+  test("after: the same writes with the slot one higher, and the anchor left where it is", async () => {
+    const fake = fakeClient({ points: UUID_ROWS });
+    const result = await writeLabelPointInsert({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      anchorPointId: UUID(2),
+      position: "after",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      point: { pointIndex: 2, gameNumber: 1, server: "p1", status: "added" },
+    });
+    expect(writes(fake).map((c) => [c.op, c.values, c.filters])).toEqual([
+      ["update", { point_index: 4 }, { id: UUID(4) }],
+      ["update", { point_index: 3 }, { id: UUID(3) }],
+      [
+        "insert",
+        expect.objectContaining({
+          session_id: SESSION_ID,
+          point_index: 2,
+          game_number: 1,
+          server: "p1",
+          status: "added",
+        }),
+        {},
+      ],
+    ]);
+    // Anything but "after" is "before", as the entry point passes it through.
+    const odd = fakeClient({ points: UUID_ROWS });
+    expect(
+      await insertLabelPoint(SESSION_ID, UUID(2), "sideways", {
+        requireAdmin: async () => ({ id: "admin" }),
+        createAdminClient: () => odd.supabase,
+      }),
+    ).toMatchObject({ ok: true, point: { pointIndex: 1 } });
+  });
+
+  test("a session labelled without marks takes a point — a manual edit, not an answer to a mark", async () => {
+    // Ace v Goodman: the ground-truth session, `marks_enabled` false. The
+    // gate is the plain open-session one every row operation shares.
     const blind = fakeClient({
       points: UUID_ROWS,
       session: { status: "labelling", marks_enabled: false },
@@ -451,14 +570,20 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: blind.supabase,
         sessionId: SESSION_ID,
-        beforePointId: UUID(2),
+        anchorPointId: UUID(2),
+        position: "after",
       }),
-    ).toEqual({
-      error:
-        "This session is labelled without the site's marks, so there is no point to add.",
-    });
-    expect(blind.calls.map((c) => c.table)).toEqual(["label_sessions"]);
+    ).toMatchObject({ ok: true, point: { pointIndex: 2 } });
+    expect(blind.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_points", "insert"],
+    ]);
+  });
 
+  test("a complete session is refused before anything is read or written", async () => {
     const frozen = fakeClient({
       points: UUID_ROWS,
       session: { status: "complete", marks_enabled: true },
@@ -467,7 +592,7 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: frozen.supabase,
         sessionId: SESSION_ID,
-        beforePointId: UUID(2),
+        anchorPointId: UUID(2),
       }),
     ).toEqual({
       error: "This session is complete, so its labels can no longer change.",
@@ -479,7 +604,7 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: gone.supabase,
         sessionId: SESSION_ID,
-        beforePointId: UUID(2),
+        anchorPointId: UUID(2),
       }),
     ).toEqual({ error: "Session not found." });
   });
@@ -489,14 +614,14 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: fakeClient({}).supabase,
         sessionId: "not-a-uuid",
-        beforePointId: UUID(2),
+        anchorPointId: UUID(2),
       }),
     ).toEqual({ error: "Invalid session id." });
     expect(
       await writeLabelPointInsert({
         supabase: fakeClient({}).supabase,
         sessionId: SESSION_ID,
-        beforePointId: BEFORE_ID.slice(1),
+        anchorPointId: BEFORE_ID.slice(1),
       }),
     ).toEqual({ error: "Invalid point id." });
 
@@ -505,7 +630,7 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: deleted.supabase,
         sessionId: SESSION_ID,
-        beforePointId: UUID(3),
+        anchorPointId: UUID(3),
       }),
     ).toEqual({ error: "Restore the point after the slot before adding one." });
     expect(writes(deleted)).toEqual([]);
@@ -515,7 +640,7 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: stranger.supabase,
         sessionId: SESSION_ID,
-        beforePointId: BEFORE_ID,
+        anchorPointId: BEFORE_ID,
       }),
     ).toEqual({
       error: "The point to add before is not a point of this session.",
@@ -528,7 +653,7 @@ test.describe("writeLabelPointInsert", () => {
       await writeLabelPointInsert({
         supabase: failed.supabase,
         sessionId: SESSION_ID,
-        beforePointId: UUID(2),
+        anchorPointId: UUID(2),
       }),
     ).toEqual({ error: "Could not make room for the point: boom" });
     expect(writes(failed).map((c) => c.op)).toEqual(["update"]);
@@ -536,7 +661,7 @@ test.describe("writeLabelPointInsert", () => {
 
   test("the entry point refuses without an admin, before a client is built", async () => {
     let built = 0;
-    const result = await insertLabelPoint(SESSION_ID, UUID(2), {
+    const result = await insertLabelPoint(SESSION_ID, UUID(2), "before", {
       requireAdmin: async () => null,
       createAdminClient: () => {
         built += 1;
@@ -548,7 +673,7 @@ test.describe("writeLabelPointInsert", () => {
 
     const fake = fakeClient({ points: UUID_ROWS });
     expect(
-      await insertLabelPoint(SESSION_ID.toUpperCase(), UUID(2), {
+      await insertLabelPoint(SESSION_ID.toUpperCase(), UUID(2), "before", {
         requireAdmin: async () => ({ id: "admin" }),
         createAdminClient: () => fake.supabase,
       }),
@@ -829,7 +954,7 @@ test.describe("a suggested point on the black rail", () => {
     );
     expect(tag(row, "data-point-score")).toBeTruthy();
     expect(row.slice(row.indexOf("data-point-score"))).toContain("No score");
-    expect(row).toContain("Changed by you");
+    expect(row).toContain("data-pencil");
 
     // The flagged point's question goes grey, never away: settled by the
     // point now between the two, and the hover says that — not "changed the
@@ -840,7 +965,7 @@ test.describe("a suggested point on the black rail", () => {
       'aria-label="Same side twice · settled. You added the missing point."',
     );
     // The flagged point itself is untouched: no pencil of its own.
-    expect(pointRow(html, P2)).not.toContain("Changed by you");
+    expect(pointRow(html, P2)).not.toContain("data-pencil");
   });
 
   test("after “was a let”: the slot is gone and the chip reads settled; after Dismiss, dismissed", () => {
@@ -873,7 +998,7 @@ test.describe("a suggested point on the black rail", () => {
     expect(tag(pointRow(after, P2), 'data-mark-kind="flag"')).toContain(
       'data-mark-state="dismissed"',
     );
-    expect(pointRow(after, P2)).not.toContain("Changed by you");
+    expect(pointRow(after, P2)).not.toContain("data-pencil");
   });
 
   test("with marks off, none built, a pair that is not two live rows, or no way to write — no slot, or no answers", () => {
@@ -919,6 +1044,58 @@ test.describe("a suggested point on the black rail", () => {
         ...SAVES,
       }),
     ).not.toContain("data-point-suggestion=");
+  });
+});
+
+test("an added empty point reads in the light table too, with its menu, and can be deleted", () => {
+  // "Add point below" on point 2: the new point sits third, in game 1.
+  const session = unchecked();
+  const plan = planInsertedPoint(session.points, P2, "after");
+  if ("error" in plan) throw new Error(plan.error);
+  const added = {
+    ...session,
+    points: applyInsertedPoint(
+      session.points,
+      draftInsertedPoint(plan.write.insert, NEW_ID),
+    ),
+  };
+  const { operations } = countingOperations();
+  const html = renderConsole({
+    session: added,
+    video: null,
+    marks: null,
+    initialExpandedPointId: NEW_ID,
+    operations,
+    ...SAVES,
+  });
+  // Its row, numbered 3, between points 2 and the tombstone; the empties
+  // read as empties (a blank ending, no shot, a 0 rally — the score column
+  // is the scoreboard's score BEFORE the point, which it has) and the ⋯
+  // menu is there.
+  const row = pointRow(html, NEW_ID);
+  expect(row).toContain('aria-label="Point 3 actions"');
+  expect(row).toContain('aria-label="Point 3 winner not labelled"');
+  expect(row).toContain('aria-label="Point 3 ending: Not labelled"');
+  expect(row).toContain("No shot");
+  expect(inner(row, "data-point-rally")).toBe("0");
+  expect(html.indexOf(`data-point-id="${P2}"`)).toBeLessThan(
+    html.indexOf(`data-point-id="${NEW_ID}"`),
+  );
+  // (The light tombstone row carries no `data-point-id`; P4, now fifth, is
+  // the next live row.)
+  expect(html.indexOf(`data-point-id="${NEW_ID}"`)).toBeLessThan(
+    html.indexOf(`data-point-id="${P4}"`),
+  );
+  expect(html).toContain('aria-label="Point 5 actions"');
+  // Open: no strokes, and the footer's Add shot.
+  expect(html).toContain(`data-shots-for="${NEW_ID}"`);
+  expect(html).toContain("No strokes on this point");
+
+  // Delete point goes through the ordinary path: the plan tombstones an
+  // added point like any other, remembering what it was.
+  expect(planPointDelete({ status: "added" })).toEqual({
+    ok: true,
+    write: { status: "deleted", status_before_delete: "added" },
   });
 });
 

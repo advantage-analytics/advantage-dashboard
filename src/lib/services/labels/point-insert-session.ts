@@ -1,13 +1,17 @@
 /**
  * The labelling console's "Add point", admin-gated: make room for a point the
- * vendor never saw between two served from one side (`point-insert.ts`,
- * board 08m §5).
+ * vendor never saw — the suggestion's slot between two points served from
+ * one side (board 08m §5), or any point's "Add point above" / "Add point
+ * below" (`point-insert.ts`).
  *
- * Same shape as suggestions-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false (`checkSessionOpenWithMarks`
- * — the ground-truth match is never written from here), and decides what to
- * write with the pure plan the console ran for its optimistic rows.
+ * Same shape as operations-session.ts: the entry point re-checks
+ * `requireAdmin`, runs on the service-role client, refuses a session that is
+ * not `labelling` (`checkSessionOpen`, the gate every row operation shares),
+ * and decides what to write with the pure plan the console ran for its
+ * optimistic rows. NOT the marks gate (`checkSessionOpenWithMarks`): adding
+ * a point is a manual label edit, not an answer to a mark, so a session
+ * labelled without marks — the ground-truth match — takes one too. The
+ * suggestion slot that also calls this only draws when marks are on.
  *
  * Its writes are all on `label_points` and nothing else: one UPDATE of
  * `point_index` per point at or after the slot, HIGHEST index first so no two
@@ -20,16 +24,16 @@
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
+  checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
-  checkSessionOpenWithMarks,
-  gated,
-  normaliseId,
-  type LabelOpResult,
-} from "./operations-session";
-import { planInsertedPoint, type InsertablePoint } from "./point-insert";
+  planInsertedPoint,
+  type InsertablePoint,
+  type InsertPosition,
+} from "./point-insert";
 import type {
   LabelEnding,
   LabelGameType,
@@ -41,8 +45,10 @@ import type {
 
 export type LabelInsertPointResult = LabelOpResult<{ point: LabelPoint }>;
 
-const BLIND =
-  "This session is labelled without the site's marks, so there is no point to add.";
+/** `position` as the action receives it: anything else is "before". */
+function normalisePosition(position: unknown): InsertPosition {
+  return position === "after" ? "after" : "before";
+}
 
 /** What the plan reads of each row of the session. */
 interface IndexRow {
@@ -116,16 +122,19 @@ function toLabelPoint(row: InsertedRow): LabelPoint {
 export async function writeLabelPointInsert(params: {
   supabase: AdminClient;
   sessionId: unknown;
-  beforePointId: unknown;
+  /** The anchor: the new point goes before it (the default) or after it. */
+  anchorPointId: unknown;
+  position?: unknown;
 }): Promise<LabelInsertPointResult> {
   const { supabase } = params;
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
-  const beforePointId = normaliseId(params.beforePointId);
-  if (!beforePointId) return { error: "Invalid point id." };
+  const anchorPointId = normaliseId(params.anchorPointId);
+  if (!anchorPointId) return { error: "Invalid point id." };
+  const position = normalisePosition(params.position);
 
-  const refused = await checkSessionOpenWithMarks(supabase, sessionId, BLIND);
-  if (refused) return { error: refused };
+  const closed = await checkSessionOpen(supabase, sessionId);
+  if (closed) return { error: closed };
 
   const { data: rows, error } = await supabase
     .from("label_points")
@@ -137,7 +146,11 @@ export async function writeLabelPointInsert(params: {
     return { error: `Could not read the session's points: ${error.message}` };
   }
 
-  const plan = planInsertedPoint((rows ?? []).map(toInsertable), beforePointId);
+  const plan = planInsertedPoint(
+    (rows ?? []).map(toInsertable),
+    anchorPointId,
+    position,
+  );
   if ("error" in plan) return plan;
 
   // Highest first (the plan's order), one row at a time: an index is never
@@ -179,12 +192,14 @@ export async function writeLabelPointInsert(params: {
 /** The admin-gated entry point behind `insertLabelPointAction`. */
 export function insertLabelPoint(
   sessionId: unknown,
-  beforePointId: unknown,
+  anchorPointId: unknown,
+  position: unknown = "before",
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,
 ): Promise<LabelInsertPointResult> {
   return gated(
     deps,
-    (supabase) => writeLabelPointInsert({ supabase, sessionId, beforePointId }),
+    (supabase) =>
+      writeLabelPointInsert({ supabase, sessionId, anchorPointId, position }),
     "add the point",
   );
 }

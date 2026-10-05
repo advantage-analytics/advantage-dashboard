@@ -69,6 +69,7 @@ import {
   draftInsertedPoint,
   planInsertedPoint,
   withdrawInsertedPoint,
+  type InsertPosition,
 } from "@/lib/services/labels/point-insert";
 import type { LabelInsertPointResult } from "@/lib/services/labels/point-insert-session";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
@@ -950,17 +951,22 @@ export function LabelConsole({
   }
 
   /**
-   * Add a point the vendor never saw, BEFORE `beforePointId` (board 08m §5's
-   * "Add point"): the rows get a draft of the planned point at once, every
-   * point from there on renumbered in memory (`applyInsertedPoint`), and the
-   * saved row takes the draft's place when the insert lands — or the draft
-   * goes and the numbers come back (`withdrawInsertedPoint`). The new point
-   * is then held open: setting its winner and adding its shots is what
-   * comes next. Nothing is re-derived — the point has no strokes yet.
+   * Add a point the vendor never saw beside `anchorPointId` — BEFORE it
+   * (board 08m §5's "Add point" on the suggestion slot, and the ⋯ menu's
+   * "Add point above") or AFTER it ("Add point below"): the rows get a draft
+   * of the planned point at once, every point from there on renumbered in
+   * memory (`applyInsertedPoint`), and the saved row takes the draft's place
+   * when the insert lands — or the draft goes and the numbers come back
+   * (`withdrawInsertedPoint`). The new point is then held open and brought
+   * into view: setting its winner and adding its shots is what comes next.
+   * Nothing is re-derived — the point has no strokes yet.
    */
-  function insertPoint(beforePointId: string) {
+  function insertPoint(
+    anchorPointId: string,
+    position: InsertPosition = "before",
+  ) {
     if (!operations) return;
-    const plan = planInsertedPoint(points, beforePointId);
+    const plan = planInsertedPoint(points, anchorPointId, position);
     if ("error" in plan) {
       dispatchSave({ type: "start" });
       dispatchSave({ type: "failure", message: plan.error });
@@ -971,12 +977,14 @@ export function LabelConsole({
     const draft = draftInsertedPoint(plan.write.insert, tempId);
     void runOperation<{ point: LabelPoint }>(
       (rows) => applyInsertedPoint(rows, draft),
-      () => operations.insertPoint(session.id, beforePointId),
+      () => operations.insertPoint(session.id, anchorPointId, position),
       (rows, result) =>
         applyInsertedPoint(withdrawInsertedPoint(rows, tempId), result.point),
       (rows) => withdrawInsertedPoint(rows, tempId),
     ).then((result) => {
-      if (result) holdPoint(result.point.id);
+      if (!result) return;
+      holdPoint(result.point.id);
+      jumpToPointId.current = result.point.id;
     });
   }
 
@@ -1007,11 +1015,11 @@ export function LabelConsole({
   /**
    * "Find the gap": navigation only. The mismatching set's first point is
    * held open and the video seeks to its first stroke, as a row click does;
-   * the row is then brought to the rail's top (`gapScrollTo`, below). With
+   * the row is then brought to the rail's top (`jumpToPointId`, below). With
    * no such point — the rows stop before that set — the last labelled point
    * is where the gap begins. Nothing is written.
    */
-  const gapScrollTo = useRef<string | null>(null);
+  const jumpToPointId = useRef<string | null>(null);
   function findGap(pointId: string | null) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
@@ -1024,20 +1032,21 @@ export function LabelConsole({
       (shot) => shot.status !== "deleted" && shot.videoTime !== null,
     );
     if (first?.videoTime != null) player.current?.seekTo(first.videoTime);
-    gapScrollTo.current = target;
+    jumpToPointId.current = target;
   }
-  // The follow scroll moves nothing while held, so the jump is made here
-  // with its own arithmetic once the hold has rendered the row: its top
+  // The follow scroll moves nothing while held, so the jump — "Find the
+  // gap"'s, or to a point just added (`insertPoint`) — is made here with its
+  // own arithmetic once the hold has rendered the row: its top
   // `REFOLLOW_JUMP_INSET_PX` under the rail's, as a re-follow jump lands. A
   // ref, not state: the request is consumed by the commit after the hold
   // and must not render anything itself.
   useEffect(() => {
-    const gapPointId = gapScrollTo.current;
-    if (gapPointId === null) return;
-    gapScrollTo.current = null;
+    const pointId = jumpToPointId.current;
+    if (pointId === null) return;
+    jumpToPointId.current = null;
     const scroller = scrollerRef.current;
     const row = scroller?.querySelector<HTMLElement>(
-      `[data-point-id="${gapPointId}"]`,
+      `[data-point-id="${pointId}"]`,
     );
     if (!scroller || !row) return;
     const box = scroller.getBoundingClientRect();
@@ -1917,12 +1926,14 @@ export interface LabelConsoleOperations {
     key: string,
   ) => Promise<LabelDismissSuggestionResult>;
   /**
-   * Add a point BEFORE `beforePointId` (board 08m §5): later points' indexes
+   * Add a point BEFORE `anchorPointId` (board 08m §5's slot, the menu's "Add
+   * point above") or AFTER it ("Add point below"): later points' indexes
    * shifted up one, then the new row inserted — `label_points` only.
    */
   insertPoint: (
     sessionId: string,
-    beforePointId: string,
+    anchorPointId: string,
+    position: InsertPosition,
   ) => Promise<LabelInsertPointResult>;
   /**
    * The score banner's answers (board 08m): `final_score` and

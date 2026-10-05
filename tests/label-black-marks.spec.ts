@@ -199,8 +199,7 @@ function tagOf(html: string, attr: string): string {
   return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
 }
 
-const pencils = (html: string) =>
-  html.match(/aria-label="Changed by you"/g)?.length ?? 0;
+const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
 
 const AMBER = "bg-[rgba(253,230,138,0.14)]";
 const QUIET = "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]";
@@ -269,7 +268,7 @@ test.describe("a flag on the point row", () => {
     // The roll-up's pencil and the row's own are ONE pencil, after the chip.
     expect(pencils(html)).toBe(1);
     const t = tail(html);
-    expect(t.indexOf('aria-label="Changed by you"')).toBeGreaterThan(chip.at);
+    expect(t.indexOf('data-pencil=""')).toBeGreaterThan(chip.at);
     expect(t).toContain("text-[var(--blue)]");
   });
 

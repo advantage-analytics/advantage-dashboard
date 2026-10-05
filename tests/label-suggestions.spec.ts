@@ -757,7 +757,7 @@ test.describe("a suggested shot in the black well", () => {
     expect(tag(row, 'data-mark-kind="flag"')).toContain(
       'data-mark-state="settled"',
     );
-    expect(row).toContain("Changed by you");
+    expect(row).toContain("data-pencil");
   });
 
   test("after Dismiss: the row is gone and the chip reads dismissed, never gone", () => {
@@ -772,7 +772,7 @@ test.describe("a suggested shot in the black well", () => {
       'data-mark-state="dismissed"',
     );
     // A dismissal is not a change to the point.
-    expect(row).not.toContain("Changed by you");
+    expect(row).not.toContain("data-pencil");
   });
 
   test("with marks off, or none built, no suggestion renders", () => {

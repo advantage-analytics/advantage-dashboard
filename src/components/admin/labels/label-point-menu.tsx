@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+} from "lucide-react";
 import {
   FloatMenu,
   FloatMenuDivider,
@@ -27,6 +33,10 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
 /**
  * What the ⋯ menu can ask for on `point`, as plain data — the menu draws
  * these, and a spec can run them without opening a popover.
+ *   · `addAbove` / `addBelow` — an empty point beside this one, in its game
+ *     (`onInsertPoint`, before or after); the labeller fills it in place, as
+ *     the suggestion slot's "Add point" row is filled. A manual edit, so it
+ *     is there on every session — marks on or off.
  *   · `move` — the games either side of the point, each saying who serves it;
  *     picking one hands it to the console, which asks "switch players?" first
  *     when that is not this point's server. Empty when the point has no
@@ -39,11 +49,15 @@ export function pointMenuActions(
   context: Pick<EditContext, "points" | "names">,
   operations: LabelRowOperations,
 ): {
+  addAbove: () => void;
+  addBelow: () => void;
   move: { key: string; label: string; description?: string; run: () => void }[];
   reset: (() => void) | null;
   remove: () => void;
 } {
   return {
+    addAbove: () => operations.onInsertPoint(point.id, "before"),
+    addBelow: () => operations.onInsertPoint(point.id, "after"),
     move: neighbourGames(context.points, point.id).map((game) => {
       const server = destinationServerIn(context.points, point.id, game);
       return {
@@ -176,6 +190,43 @@ export function PointMenu({
             </>
           ) : (
             <>
+              <FloatMenuItem
+                label="Add point above"
+                description={`An empty point before point ${number}`}
+                icon={
+                  <ArrowUpToLine
+                    className={cn(
+                      "size-3",
+                      dark ? "text-white/50" : "text-[var(--ink-500)]",
+                    )}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                }
+                onSelect={() => {
+                  close();
+                  actions.addAbove();
+                }}
+              />
+              <FloatMenuItem
+                label="Add point below"
+                description={`An empty point after point ${number}`}
+                icon={
+                  <ArrowDownToLine
+                    className={cn(
+                      "size-3",
+                      dark ? "text-white/50" : "text-[var(--ink-500)]",
+                    )}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                }
+                onSelect={() => {
+                  close();
+                  actions.addBelow();
+                }}
+              />
+              <FloatMenuDivider />
               {actions.move.length > 0 ? (
                 <FloatMenuItem
                   label="Move to game…"

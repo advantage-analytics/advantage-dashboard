@@ -5,6 +5,13 @@
  * second point's index, every point from there on moved up one — and the
  * labeller then sets who won and adds its shots.
  *
+ * The same insert is every point's "Add point above" / "Add point below"
+ * (the ⋯ menu): a manual edit on an anchor point, with no mark behind it.
+ * "Above" is the suggestion's insert — the new point takes the anchor's
+ * index. "Below" takes the index after it. Either way the new point joins
+ * the ANCHOR's set, game, server and game type, so a point added below the
+ * last point of a game stays in that game rather than opening the next.
+ *
  * Nothing re-indexes on its own: `label_points.point_index` is what the rail
  * numbers rows by and has no unique constraint, so the shift is plain updates
  * on each later row, written highest first by `point-insert-session.ts` so no
@@ -20,9 +27,12 @@
 import type { Planned } from "./operations";
 import type { LabelGameType, LabelPoint, LabelSide } from "./session";
 
+/** Which side of the anchor point the new one goes: "before" is the default. */
+export type InsertPosition = "before" | "after";
+
 /** What the new row is seeded with; the labeller fills in the rest. */
 export interface InsertedPointWrite {
-  /** The flagged point's index — the new point takes its place. */
+  /** The anchor's index ("before"), or the one after it ("after"). */
   point_index: number;
   set_number: number | null;
   game_number: number | null;
@@ -62,25 +72,36 @@ export type InsertablePoint = Pick<
 >;
 
 /**
- * Plan a new point BEFORE `beforePointId` — the flagged point, the second of
- * the two served from one side. The new point takes that point's index and
- * its set, game, server and game type (a point between two of a game is a
- * point of that game, served by the same player), and the flagged point and
- * everything after it move up one. Refused when the flagged point is not
- * among `points` or is a tombstone: nothing goes in front of a deleted row.
+ * Plan a new point beside `anchorPointId`. BEFORE (the default, and the
+ * suggestion's "Add point" on the second of two points served from one
+ * side): the new point takes the anchor's index, and the anchor and
+ * everything after it move up one. AFTER: it takes the next index, and only
+ * what came after the anchor moves. Either way it takes the anchor's set,
+ * game, server and game type — a point beside one of a game is a point of
+ * that game, served by the same player. Refused when the anchor is not among
+ * `points` or is a tombstone: nothing goes beside a deleted row.
  */
 export function planInsertedPoint(
   points: readonly InsertablePoint[],
-  beforePointId: string,
+  anchorPointId: string,
+  position: InsertPosition = "before",
 ): Planned<InsertedPointPlan> {
-  const before = points.find((point) => point.id === beforePointId);
-  if (!before) {
-    return { error: "The point to add before is not a point of this session." };
+  const anchor = points.find((point) => point.id === anchorPointId);
+  if (!anchor) {
+    return {
+      error: `The point to add ${position} is not a point of this session.`,
+    };
   }
-  if (before.status === "deleted") {
-    return { error: "Restore the point after the slot before adding one." };
+  if (anchor.status === "deleted") {
+    return {
+      error:
+        position === "before"
+          ? "Restore the point after the slot before adding one."
+          : "Restore the point before the slot before adding one.",
+    };
   }
-  const index = before.pointIndex;
+  const index =
+    position === "before" ? anchor.pointIndex : anchor.pointIndex + 1;
   const shifts = points
     .filter((point) => point.pointIndex >= index)
     .sort((a, b) => b.pointIndex - a.pointIndex)
@@ -90,10 +111,10 @@ export function planInsertedPoint(
     write: {
       insert: {
         point_index: index,
-        set_number: before.setNumber,
-        game_number: before.gameNumber,
-        server: before.server,
-        game_type: before.gameType,
+        set_number: anchor.setNumber,
+        game_number: anchor.gameNumber,
+        server: anchor.server,
+        game_type: anchor.gameType,
         status: "added",
         vendor_rally_ids: [],
       },

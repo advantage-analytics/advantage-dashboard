@@ -42,6 +42,7 @@ import {
   dismissLabelSuggestion,
   type LabelDismissSuggestionResult,
 } from "@/lib/services/labels/suggestions-session";
+import type { InsertPosition } from "@/lib/services/labels/point-insert";
 import {
   insertLabelPoint,
   type LabelInsertPointResult,
@@ -230,17 +231,21 @@ export async function dismissLabelSuggestionAction(
 }
 
 /**
- * Add a point the vendor never saw, BEFORE `beforePointId` (the second of two
- * points served from one side): that point and every later one move up one
- * `point_index`, and the new row takes its place with no winner, no ending
- * and no shots. Writes `label_points` only. Refused on a complete session, on
- * one labelled without marks, and before a deleted point.
+ * Add a point the vendor never saw beside `anchorPointId`: BEFORE it (the
+ * default — the suggestion's slot on the second of two points served from
+ * one side, and the menu's "Add point above") or AFTER it ("Add point
+ * below"). The later points move up one `point_index` and the new row takes
+ * the slot in the anchor's set, game and service, with no winner, no ending
+ * and no shots. Writes `label_points` only. Refused on a session that is not
+ * labelling and beside a deleted point; a session labelled without marks is
+ * fine — this is a manual edit, not an answer to a mark.
  */
 export async function insertLabelPointAction(
   sessionId: string,
-  beforePointId: string,
+  anchorPointId: string,
+  position: InsertPosition = "before",
 ): Promise<LabelInsertPointResult> {
-  return insertLabelPoint(sessionId, beforePointId);
+  return insertLabelPoint(sessionId, anchorPointId, position);
 }
 
 /**
