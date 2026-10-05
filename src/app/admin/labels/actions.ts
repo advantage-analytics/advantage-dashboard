@@ -42,6 +42,10 @@ import {
   dismissLabelSuggestion,
   type LabelDismissSuggestionResult,
 } from "@/lib/services/labels/suggestions-session";
+import {
+  insertLabelPoint,
+  type LabelInsertPointResult,
+} from "@/lib/services/labels/point-insert-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -218,4 +222,18 @@ export async function dismissLabelSuggestionAction(
   key: string,
 ): Promise<LabelDismissSuggestionResult> {
   return dismissLabelSuggestion(pointId, key);
+}
+
+/**
+ * Add a point the vendor never saw, BEFORE `beforePointId` (the second of two
+ * points served from one side): that point and every later one move up one
+ * `point_index`, and the new row takes its place with no winner, no ending
+ * and no shots. Writes `label_points` only. Refused on a complete session, on
+ * one labelled without marks, and before a deleted point.
+ */
+export async function insertLabelPointAction(
+  sessionId: string,
+  beforePointId: string,
+): Promise<LabelInsertPointResult> {
+  return insertLabelPoint(sessionId, beforePointId);
 }

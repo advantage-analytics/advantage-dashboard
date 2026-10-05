@@ -24,6 +24,8 @@ import {
   BlackDeletedPoint,
   BlackGameBand,
   BlackPointRow,
+  BlackSuggestedPoint,
+  openPointSuggestions,
 } from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
 import type { SideNames } from "./label-format";
@@ -46,9 +48,11 @@ import type { SaveStatus } from "./save-status";
  * game's first live point, a `BlackPointRow` per point with the score before
  * it and its marks (board 08m, `label-black-mark.tsx`) in its tail, a
  * one-line dark tombstone with its Undo (`BlackDeletedPoint`) for a
- * deleted one, and the recessed shots well (`BlackShotsWell`) under the open
- * point only. The scroller never scrolls sideways: every row is built to fit
- * the rail from its narrowest (520px), and `overflow-x-hidden` holds that.
+ * deleted one, a dashed slot (`BlackSuggestedPoint`, board 08m §5) before a
+ * point the marks think is missing a point in front of it, and the recessed
+ * shots well (`BlackShotsWell`) under the open point only. The scroller
+ * never scrolls sideways: every row is built to fit the rail from its
+ * narrowest (520px), and `overflow-x-hidden` holds that.
  * The "Now playing" pill is pinned over the scroller's top-centre while held
  * and a point is playing, as it is over the light table.
  *
@@ -162,6 +166,8 @@ export function LabelBlackRail({
     playingShotId,
   };
   const bandBefore = bandsBeforePoints(points, scores.games);
+  // The slots still waiting for an answer, by the point whose row follows.
+  const slotBefore = openPointSuggestions(points, edit, marks);
 
   return (
     <TooltipProvider>
@@ -217,6 +223,7 @@ export function LabelBlackRail({
                 );
               }
               const band = bandBefore.get(point.id);
+              const slot = slotBefore.get(point.id);
               // The playing point is always unfolded, whatever is held: the
               // labeller sees its strokes light as they are hit. A held
               // point stays open beside it.
@@ -231,6 +238,15 @@ export function LabelBlackRail({
                       names={names}
                       onSetGameType={editable ? onSetGameType : undefined}
                       onSetGameServer={editable ? onSetGameServer : undefined}
+                    />
+                  ) : null}
+                  {/* The slot sits between the pair's two rows: after the
+                      point before it (and any band), before this one. */}
+                  {slot ? (
+                    <BlackSuggestedPoint
+                      suggestion={slot}
+                      point={point}
+                      edit={edit}
                     />
                   ) : null}
                   <BlackPointRow

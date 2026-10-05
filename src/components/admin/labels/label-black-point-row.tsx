@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, GripVertical, StickyNote } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  GripVertical,
+  Plus,
+  StickyNote,
+} from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -20,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
 import { cn } from "@/lib/utils";
-import type { LabelMarks } from "@/lib/services/labels/marks";
+import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
 import type {
@@ -28,7 +34,9 @@ import type {
   LabelPoint,
   LabelSide,
 } from "@/lib/services/labels/session";
+import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
+  formatClockTime,
   pointDetail,
   pointSentence,
   withoutGhosts,
@@ -145,8 +153,16 @@ export function BlackPointRow({
   // deciding stroke and the rally count say what the rally is now. With the
   // session's marks off or none built, a ghost is a stroke like any other.
   const shown = drawsGhosts(edit, marks) ? withoutGhosts(point) : point;
-  const sentence = pointSentence(shown, names);
-  const rowMarks = pointRowMarks(point, marks, names, sentence);
+  // A point the labeller just added (board 08m §5's "New point"): nothing on
+  // it yet, so the two lines say what to do next rather than how it ended.
+  const fresh = isNewPoint(point);
+  const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
+  const detail = fresh
+    ? newPointDetail(point, edit.points)
+    : pointDetail(shown, names);
+  // The rail's rows go along so a "Same side twice" question reads settled
+  // once a point the labeller added sits between the two (marks-state.ts).
+  const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);
   // ONE pencil: the roll-up's when the session has marks (it also counts a
   // removed stroke the labeller put back), the row's own rule when not.
   const changed = rowMarks ? rowMarks.pencil : pointChangedByYou(point);
@@ -156,6 +172,7 @@ export function BlackPointRow({
       <div
         data-row="point"
         data-point-id={point.id}
+        data-point-new={fresh ? "" : undefined}
         data-playing={playing ? "true" : undefined}
         onClick={(event) => {
           // A click that lands in a control is that control's, not a toggle.
@@ -190,7 +207,12 @@ export function BlackPointRow({
           />
         </span>
 
-        <BlackWinnerCell point={point} number={number} edit={edit} />
+        <BlackWinnerCell
+          point={point}
+          number={number}
+          edit={edit}
+          fresh={fresh}
+        />
 
         {/* The two lines, and the row's fold control for a keyboard and a
             screen reader — the row's own click does the same for a mouse. */}
@@ -207,7 +229,11 @@ export function BlackPointRow({
         >
           <span
             data-point-sentence=""
-            className="truncate text-[12px] font-medium text-white"
+            className={cn(
+              "truncate text-[12px] font-medium",
+              // The frame's `.fx-new .bk-t`: the new point's title in blue.
+              fresh ? "text-[var(--blue)]" : "text-white",
+            )}
           >
             {sentence}
           </span>
@@ -216,7 +242,7 @@ export function BlackPointRow({
             className="truncate text-[11px]"
             style={{ color: "rgba(255,255,255,0.45)" }}
           >
-            {pointDetail(shown, names)}
+            {detail}
           </span>
         </button>
 
@@ -229,12 +255,14 @@ export function BlackPointRow({
           {changed ? <PencilMark /> : null}
         </span>
 
+        {/* A new point has no score of its own yet — the frame draws a dash
+            until its winner is set — whatever the scoreboard says before it. */}
         <span
           data-point-score=""
           className="mono tabular truncate text-right text-[11px]"
           style={{ color: "rgba(255,255,255,0.85)" }}
         >
-          {score ?? (
+          {(fresh ? null : score) ?? (
             <>
               <span aria-hidden="true" className="text-white/35">
                 —
@@ -333,6 +361,209 @@ export function BlackPointRow({
   );
 }
 
+// ── A new point ────────────────────────────────────────────────────────────
+
+const NEW_POINT_TITLE = "New point";
+const NEW_POINT_DETAIL = "Set who won, then add its shots";
+
+/**
+ * A point the labeller added and has not touched since: no winner and no
+ * live stroke. The frame's "New point" row (board 08m §5) — a "?" in a blue
+ * ring, the title in blue, the detail saying what to do next. Setting the
+ * winner or adding a stroke makes it an ordinary row.
+ */
+export function isNewPoint(
+  point: Pick<LabelPoint, "status" | "winner" | "shots">,
+): boolean {
+  return (
+    point.status === "added" &&
+    point.winner === null &&
+    !point.shots.some((shot) => shot.status !== "deleted")
+  );
+}
+
+/**
+ * The new point's detail line: "Set who won, then add its shots · between
+ * {t1} and {t2}", where t1 is the last live stroke of the live point before
+ * it on the rail and t2 the first live stroke of the one after, on the rail's
+ * clock (`formatClockTime`). With only one neighbour timed it reads "after
+ * t1" / "before t2"; with neither, the words alone.
+ */
+export function newPointDetail(
+  point: Pick<LabelPoint, "id">,
+  points: readonly LabelPoint[],
+): string {
+  const at = points.findIndex((p) => p.id === point.id);
+  if (at === -1) return NEW_POINT_DETAIL;
+  const live = (p: LabelPoint) =>
+    p.shots.filter((shot) => shot.status !== "deleted");
+  let t1: number | null = null;
+  for (let i = at - 1; i >= 0 && t1 === null; i -= 1) {
+    const p = points[i];
+    if (p.status === "deleted") continue;
+    t1 = live(p).findLast((shot) => shot.videoTime !== null)?.videoTime ?? null;
+    break;
+  }
+  let t2: number | null = null;
+  for (let i = at + 1; i < points.length && t2 === null; i += 1) {
+    const p = points[i];
+    if (p.status === "deleted") continue;
+    t2 = live(p).find((shot) => shot.videoTime !== null)?.videoTime ?? null;
+    break;
+  }
+  if (t1 !== null && t2 !== null) {
+    return `${NEW_POINT_DETAIL} · between ${formatClockTime(t1)} and ${formatClockTime(t2)}`;
+  }
+  if (t1 !== null) return `${NEW_POINT_DETAIL} · after ${formatClockTime(t1)}`;
+  if (t2 !== null) return `${NEW_POINT_DETAIL} · before ${formatClockTime(t2)}`;
+  return NEW_POINT_DETAIL;
+}
+
+// ── A suggested point ──────────────────────────────────────────────────────
+
+type PointSuggestion = Extract<LabelSuggestion, { kind: "missing_point" }>;
+
+/**
+ * The missing-point suggestions still waiting for an answer, by the flagged
+ * point's id (board 08m §5): the session computes marks and has them, both
+ * points of the pair are live rows of the rail, and the suggestion is
+ * neither dismissed nor answered — by a point added between the two, or by
+ * the second marked a replayed let (`suggestionState`). With marks off, or
+ * none built, there is none.
+ */
+export function openPointSuggestions(
+  points: readonly LabelPoint[],
+  edit: Pick<EditContext, "marksEnabled">,
+  marks: LabelMarks | null | undefined,
+): ReadonlyMap<string, PointSuggestion> {
+  const open = new Map<string, PointSuggestion>();
+  if (!marks || !drawsGhosts(edit, marks)) return open;
+  const byId = new Map(points.map((point) => [point.id, point]));
+  for (const suggestion of marks.suggestions) {
+    if (suggestion.kind !== "missing_point") continue;
+    const flagged = byId.get(suggestion.pointId);
+    const before = byId.get(suggestion.beforePointId);
+    if (!flagged || flagged.status === "deleted") continue;
+    if (!before || before.status === "deleted") continue;
+    if (suggestionState(suggestion, flagged, points) !== "open") continue;
+    if (!open.has(flagged.id)) open.set(flagged.id, suggestion);
+  }
+  return open;
+}
+
+/** The frame's `.fx-pi`: the plus in the slot's first track. */
+const SLOT_PLUS_INK = "rgba(252,211,77,0.8)";
+
+/**
+ * A suggested point (board 08m §5, the frame's `.fx-psug`): two points of a
+ * game were served from the same side, so one is probably missing between
+ * them. A dashed amber slot between their rows — a plus on the row's number
+ * track, the sentence over the reason, and three answers: "Add point" (the
+ * insert, `onInsertPoint` before the flagged point), "{b} was a let" (the
+ * existing point autosave, `ending: let_replayed` — the score stands, as
+ * score.ts already rules), and "Dismiss" (the suggestion's key stored). The
+ * answers are absent on a session that cannot be written.
+ *
+ * Built to fit the rail from 520px: the two lines truncate, the answers
+ * never shrink or wrap (`shrink-0 whitespace-nowrap`), and at that width the
+ * three take about 215px of the slot's 440, so they sit on one line with the
+ * words. Nothing is added until a click.
+ */
+export function BlackSuggestedPoint({
+  suggestion,
+  point,
+  edit,
+}: {
+  suggestion: PointSuggestion;
+  /** The flagged point — the second of the pair, whose row follows the slot. */
+  point: LabelPoint;
+  edit: EditContext;
+}) {
+  const operations = edit.editable ? edit.operations : undefined;
+  // The pair as the rail numbers them NOW — a point added or removed above
+  // moves both — falling back to the marks' reading.
+  const before = edit.points.find((p) => p.id === suggestion.beforePointId);
+  const a = before ? before.pointIndex + 1 : suggestion.pointNumbers[0];
+  const b = point.pointIndex + 1;
+  const reason = `Points ${a} and ${b} were both served from the ${suggestion.side} side`;
+  return (
+    <div
+      data-row="suggested-point"
+      data-point-suggestion={point.id}
+      className="mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[rgba(252,211,77,0.45)] bg-[rgba(253,230,138,0.06)] py-1.5 pr-[10px] pl-1.5"
+    >
+      <Plus
+        className="size-3"
+        style={{ color: SLOT_PLUS_INK }}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <span className="flex min-w-0 flex-col gap-px">
+        <span
+          data-point-suggestion-title=""
+          className="truncate text-[12px] font-medium text-white"
+        >
+          A point is probably missing here
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              data-point-suggestion-detail=""
+              className="truncate text-[11px] text-white/50"
+            >
+              {reason}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{reason}</TooltipContent>
+        </Tooltip>
+      </span>
+      {operations ? (
+        <span
+          data-point-suggestion-actions=""
+          className="flex shrink-0 items-center justify-end gap-[14px]"
+        >
+          <button
+            type="button"
+            data-point-suggestion-add=""
+            aria-label={`Add a point between points ${a} and ${b}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              operations.onInsertPoint(point.id);
+            }}
+            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)] transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            Add point
+          </button>
+          <button
+            type="button"
+            data-point-suggestion-let=""
+            aria-label={`Point ${b} was a let, replayed`}
+            onClick={(event) => {
+              event.stopPropagation();
+              edit.onPatchPoint?.(point.id, { ending: "let_replayed" });
+            }}
+            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            {b} was a let
+          </button>
+          <button
+            type="button"
+            data-point-suggestion-dismiss=""
+            aria-label={`Dismiss the suggested point between points ${a} and ${b}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              operations.onDismissSuggestion(point.id, suggestion.key);
+            }}
+            className="shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/50 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            Dismiss
+          </button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 // ── A deleted point ────────────────────────────────────────────────────────
 
 /**
@@ -386,27 +617,33 @@ const SIDES: readonly LabelSide[] = ["p1", "p2"];
 /**
  * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
  * `--blue`, p2 on a white wash. Two grounds, not two hues, as down the
- * table's own column. No winner yet is the wash with a dash.
+ * table's own column. No winner yet is the wash with a dash — or, on a point
+ * the labeller just added (`fresh`, the frame's `.fx-new .bk-mk`), a "?" in a
+ * `--blue` ring on the room's own black: the one thing to set first.
  */
 function BlackWinnerMark({
   side,
   names,
+  fresh = false,
 }: {
   side: LabelSide | null;
   names: SideNames;
+  fresh?: boolean;
 }) {
   return (
     <span
-      data-winner-mark={side ?? "none"}
+      data-winner-mark={side ?? (fresh ? "new" : "none")}
       aria-hidden="true"
       className={cn(
         "flex size-[30px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[11px] leading-none font-medium tracking-[0.3px]",
         side === "p1"
           ? "bg-[var(--blue)] text-white"
-          : "bg-white/[0.14] text-white/90",
+          : side === null && fresh
+            ? "bg-transparent text-[var(--blue)] shadow-[inset_0_0_0_1px_var(--blue)]"
+            : "bg-white/[0.14] text-white/90",
       )}
     >
-      {side ? sideInitial(side, names) : "—"}
+      {side ? sideInitial(side, names) : fresh ? "?" : "—"}
     </span>
   );
 }
@@ -421,10 +658,13 @@ function BlackWinnerCell({
   point,
   number,
   edit,
+  fresh = false,
 }: {
   point: LabelPoint;
   number: number;
   edit: EditContext;
+  /** A point just added: the mark is the "?" (`BlackWinnerMark`). */
+  fresh?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { names } = edit;
@@ -434,7 +674,7 @@ function BlackWinnerCell({
   if (!edit.editable) {
     return (
       <span role="img" aria-label={name} className="flex">
-        <BlackWinnerMark side={point.winner} names={names} />
+        <BlackWinnerMark side={point.winner} names={names} fresh={fresh} />
       </span>
     );
   }
@@ -466,7 +706,7 @@ function BlackWinnerCell({
               open && "shadow-[0_0_0_1.5px_rgba(255,255,255,0.5)]",
             )}
           >
-            <BlackWinnerMark side={point.winner} names={names} />
+            <BlackWinnerMark side={point.winner} names={names} fresh={fresh} />
           </button>
         }
       >

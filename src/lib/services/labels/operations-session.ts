@@ -23,6 +23,7 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
 import {
   ADMIN_REQUIRED,
+  FROZEN,
   checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
@@ -98,6 +99,36 @@ export async function gated<T extends object>(
     console.error(`${LOG} ${what} threw`, { message: message(err) });
     return { error: `Could not ${what}: ${message(err)}` };
   }
+}
+
+interface MarksSessionGate {
+  status: string;
+  marks_enabled: boolean | null;
+}
+
+/**
+ * The gate the marks' own writes share (board 08m: Restore a ghost, Dismiss a
+ * suggestion, Add a point): refuses anything but an open session that
+ * computes marks. A session whose `marks_enabled` is false was labelled blind
+ * to the derivation and carries no mark to act on — the ground-truth match is
+ * never written from here — and `blind` is the sentence that says so for the
+ * write at hand. Returns an error sentence, or null to proceed.
+ */
+export async function checkSessionOpenWithMarks(
+  supabase: AdminClient,
+  sessionId: string,
+  blind: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("label_sessions")
+    .select("status, marks_enabled")
+    .eq("id", sessionId)
+    .maybeSingle<MarksSessionGate>();
+  if (error) return `Could not read the session: ${error.message}`;
+  if (!data) return "Session not found.";
+  if (data.status !== "labelling") return FROZEN;
+  if (data.marks_enabled !== true) return blind;
+  return null;
 }
 
 /**

@@ -299,6 +299,66 @@ test.describe("a flag's life", () => {
     ).toBe("dismissed");
   });
 
+  test("a missing point settles 'Same side twice' once a point is added between the two", () => {
+    const sameSide = sample("service_court_repeat");
+    const suggestion: LabelSuggestion = {
+      kind: "missing_point",
+      key: "missing_point",
+      pointId: "point-1",
+      beforePointId: "point-0",
+      side: "ad",
+      pointNumbers: [1, 2],
+    };
+    const rows = (between: MarkStatePoint["status"] | null) => [
+      { id: "point-0", status: "unchanged" as const },
+      ...(between ? [{ id: "point-new", status: between }] : []),
+      { id: "point-1", status: "unchanged" as const },
+    ];
+    // Without the rows the add cannot be seen; with them, the flag is settled
+    // though the flagged point itself is untouched.
+    expect(markState(sameSide, point(), undefined, [suggestion])).toBe("open");
+    expect(
+      markState(sameSide, point(), undefined, [suggestion], rows(null)),
+    ).toBe("open");
+    expect(
+      markState(sameSide, point(), undefined, [suggestion], rows("added")),
+    ).toBe("settled");
+    expect(
+      markState(
+        sameSide,
+        point({ checkedAt: CHECKED_AT }),
+        undefined,
+        [suggestion],
+        rows("added"),
+      ),
+    ).toBe("checked");
+    // Deleting the added point opens the question again; a vendor point
+    // between the two was always there and answers nothing.
+    expect(
+      markState(sameSide, point(), undefined, [suggestion], rows("deleted")),
+    ).toBe("open");
+    expect(
+      markState(sameSide, point(), undefined, [suggestion], rows("unchanged")),
+    ).toBe("open");
+    // Answered outranks dismissed, and another flag on the point is untouched.
+    expect(
+      markState(
+        sameSide,
+        point({ dismissed: ["missing_point"] }),
+        undefined,
+        [suggestion],
+        rows("added"),
+      ),
+    ).toBe("settled");
+    expect(
+      markState(flag, point(), undefined, [suggestion], rows("added")),
+    ).toBe("open");
+    expect(
+      markStates([sameSide, flag], [], point(), [suggestion], rows("added"))
+        .point,
+    ).toEqual(["settled", "open"]);
+  });
+
   test("a fix is never open: settled by nature, checked once checked", () => {
     const fix = sample("phantom_strokes_dropped");
     expect(markState(fix, point())).toBe("settled");
@@ -324,6 +384,26 @@ test.describe("a flag's life", () => {
     expect(
       stateHover(sample("service_court_repeat"), "dismissed", names, SENTENCE),
     ).toBe("Same side twice · dismissed.");
+  });
+
+  test("a 'Same side twice' settled by adding the point says so", () => {
+    const sameSide = sample("service_court_repeat");
+    for (const state of ["settled", "checked"] as const) {
+      expect(stateHover(sameSide, state, names, SENTENCE, true)).toBe(
+        "Same side twice · settled. You added the missing point.",
+      );
+      // Settled by a let instead: the ordinary line, the ending did change.
+      expect(stateHover(sameSide, state, names, "Let, replayed", false)).toBe(
+        "Same side twice · settled. You changed the ending to Let, replayed.",
+      );
+    }
+    // The line belongs to that one flag; another settled flag keeps its own.
+    expect(stateHover(flag, "settled", names, SENTENCE, true)).toBe(
+      "Check the ending · settled. You changed the ending to Backhand error by Ace.",
+    );
+    expect(stateHover(sameSide, "dismissed", names, SENTENCE, true)).toBe(
+      "Same side twice · dismissed.",
+    );
   });
 
   test("a fix's hover still says what the site did", () => {

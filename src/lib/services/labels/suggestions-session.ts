@@ -5,10 +5,11 @@
  *
  * Same shape as site-removal-session.ts: the entry point re-checks
  * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false — that session's labels
- * were made blind to the derivation and has no suggestion to dismiss; the
- * ground-truth match is never written from here — and decides what to write
- * with the pure rule the console ran for its optimistic update.
+ * session and one whose `marks_enabled` is false (`checkSessionOpenWithMarks`,
+ * the gate every marks write shares — that session's labels were made blind
+ * to the derivation and has no suggestion to dismiss; the ground-truth match
+ * is never written from here) and decides what to write with the pure rule
+ * the console ran for its optimistic update.
  *
  * Its ONE write is an UPDATE of `label_points` setting `dismissed` to the
  * array it read plus the key, matched on the id AND on the status the row
@@ -23,6 +24,7 @@ import {
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
+  checkSessionOpenWithMarks,
   gated,
   normaliseId,
   updateIfUnchanged,
@@ -35,7 +37,6 @@ export type LabelDismissSuggestionResult = LabelOpResult<{
   dismissed: string[];
 }>;
 
-const FROZEN = "This session is complete, so its labels can no longer change.";
 const BLIND =
   "This session is labelled without the site's marks, so there is nothing to dismiss.";
 
@@ -45,28 +46,6 @@ interface DismissRow {
   status: LabelPointStatus;
   /** Raw column — an array of keys, or null on a row older than the column. */
   dismissed: unknown;
-}
-
-interface SessionGate {
-  status: string;
-  marks_enabled: boolean | null;
-}
-
-/** Refuses anything but an open session that computes marks. */
-async function checkSessionDismissable(
-  supabase: AdminClient,
-  sessionId: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("label_sessions")
-    .select("status, marks_enabled")
-    .eq("id", sessionId)
-    .maybeSingle<SessionGate>();
-  if (error) return `Could not read the session: ${error.message}`;
-  if (!data) return "Session not found.";
-  if (data.status !== "labelling") return FROZEN;
-  if (data.marks_enabled !== true) return BLIND;
-  return null;
 }
 
 function keysOf(value: unknown): string[] {
@@ -93,7 +72,11 @@ export async function writeLabelSuggestionDismiss(params: {
   if (error) return { error: `Could not read the point: ${error.message}` };
   if (!row) return { error: "Point not found." };
 
-  const refused = await checkSessionDismissable(supabase, row.session_id);
+  const refused = await checkSessionOpenWithMarks(
+    supabase,
+    row.session_id,
+    BLIND,
+  );
   if (refused) return { error: refused };
 
   const plan = planDismiss({ dismissed: keysOf(row.dismissed) }, params.key);

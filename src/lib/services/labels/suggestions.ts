@@ -11,8 +11,10 @@
  * the only column this module plans a write for.
  *
  * Whether a suggestion is still open is derived, never stored: it is `done`
- * once the point holds a live added stroke following the pair's first, and
- * `dismissed` once its key is on the point.
+ * once the point holds a live added stroke following the pair's first (a
+ * missing shot), or once a live added point sits between the two served from
+ * one side or the second was marked a replayed let (a missing point —
+ * `point-insert.ts` is the add), and `dismissed` once its key is on the point.
  *
  * Pure, and importable from the client bundle: the console runs
  * `applyDismiss` for its optimistic row and `suggestions-session.ts` runs
@@ -34,7 +36,23 @@ export function isSuggestionKey(value: unknown): value is string {
 
 /** What a suggestion's state reads off its point. */
 export type SuggestionPoint = Pick<LabelPoint, "dismissed"> & {
+  /** Read for a `missing_point`: a replayed let answers it. Optional for a shot's. */
+  ending?: LabelPoint["ending"];
   shots: readonly Pick<LabelShot, "status" | "afterEventId">[];
+};
+
+/** What `addedPointBetween` reads of the session's rows, in rail order. */
+export type SuggestionNeighbour = Pick<LabelPoint, "id" | "status">;
+
+/**
+ * The two ids a `missing_point` is read against — the suggestion's own
+ * `pointId` (the flagged point) and `beforePointId`. Optional so a bare
+ * `{ kind, key }` still has a state: without them, or without `points`, the
+ * add cannot be seen and only a let or a dismissal answers it.
+ */
+type StatefulSuggestion = Pick<LabelSuggestion, "kind" | "key"> & {
+  pointId?: string;
+  beforePointId?: string;
 };
 
 const MISSING_SHOT_PREFIX = "missing_shot:";
@@ -47,18 +65,39 @@ function afterEventIdOf(key: string): number | null {
 }
 
 /**
+ * Whether a LIVE point the labeller added sits strictly between `beforeId`
+ * and `afterId` in `points` (the rows in rail order) — what "Add point" puts
+ * there. False when either is missing or they are not in that order.
+ */
+export function addedPointBetween(
+  points: readonly SuggestionNeighbour[],
+  beforeId: string,
+  afterId: string,
+): boolean {
+  const a = points.findIndex((point) => point.id === beforeId);
+  const b = points.findIndex((point) => point.id === afterId);
+  if (a === -1 || b === -1 || b <= a) return false;
+  return points.slice(a + 1, b).some((point) => point.status === "added");
+}
+
+/**
  * Where a suggestion stands on its point.
  *
  * A `missing_shot` is `done` once a LIVE stroke the labeller added follows
  * the pair's first vendor stroke (`afterEventId` — what `planAddedShot`
  * writes for a stroke added after it). Deleting that added stroke opens the
  * suggestion again. Done outranks dismissed: the stroke is there either way.
- * A `missing_point` has no `done` here — adding the point is its own
- * operation — so it is open until dismissed.
+ *
+ * A `missing_point` is `done` once the flagged point's ending is
+ * `let_replayed` — the second serve from that side was the same point played
+ * again, so nothing is missing — or once a live added point sits between the
+ * two (`addedPointBetween`, which needs the session's `points`). Deleting
+ * that added point opens the suggestion again.
  */
 export function suggestionState(
-  suggestion: Pick<LabelSuggestion, "kind" | "key">,
+  suggestion: StatefulSuggestion,
   point: SuggestionPoint,
+  points?: readonly SuggestionNeighbour[],
 ): SuggestionState {
   if (suggestion.kind === "missing_shot") {
     const after = afterEventIdOf(suggestion.key);
@@ -67,6 +106,16 @@ export function suggestionState(
       point.shots.some(
         (shot) => shot.status === "added" && shot.afterEventId === after,
       )
+    ) {
+      return "done";
+    }
+  } else {
+    if (point.ending === "let_replayed") return "done";
+    if (
+      points &&
+      suggestion.pointId !== undefined &&
+      suggestion.beforePointId !== undefined &&
+      addedPointBetween(points, suggestion.beforePointId, suggestion.pointId)
     ) {
       return "done";
     }

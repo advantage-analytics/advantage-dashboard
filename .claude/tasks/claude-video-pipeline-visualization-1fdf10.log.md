@@ -533,3 +533,15 @@ Decisions:
 1. No way to undo a Dismiss from the console.
 2. The session gate (status + marks_enabled) is duplicated in two services.
 3. The server checks the key's shape only, not that the suggestion exists.
+
+## T40 · Suggested point: Add point (new insert + re-index), "was a let", Dismiss — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** For each open `missing_point` suggestion the rail draws a dashed slot between the two points ("A point is probably missing here" · Add point · "{n} was a let" · Dismiss). Add point is a new operation (`point-insert.ts` / `point-insert-session.ts` / action): later points shift up and one `added` row is inserted in the same game, drawn as a blue "New point" with a dash for its score. "Was a let" patches the ending; Dismiss stores the key. The "Same side twice" chip then reads settled or dismissed. The session gate is now one shared helper.
+
+**follow-ups:**
+
+1. The shift and insert are separate statements; a failure midway leaves a gap in `point_index`.
+2. Later points keep their score before a New point has a winner (score.ts unchanged); the frame shows a dash.
+3. The light layouts draw an added point as a plain row.

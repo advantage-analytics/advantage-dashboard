@@ -64,6 +64,13 @@ import type {
   LabelShotStatusResult,
 } from "@/lib/services/labels/operations-session";
 import { playingRowAt } from "@/lib/services/labels/playback";
+import {
+  applyInsertedPoint,
+  draftInsertedPoint,
+  planInsertedPoint,
+  withdrawInsertedPoint,
+} from "@/lib/services/labels/point-insert";
+import type { LabelInsertPointResult } from "@/lib/services/labels/point-insert-session";
 import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
@@ -138,6 +145,8 @@ import {
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
+/** A point row whose insert is still in flight (`insertPoint`), likewise. */
+const PENDING_POINT_PREFIX = "pending-point-";
 
 /** One frozen `follow`, so re-following while following changes no identity. */
 const FOLLOW: PointFocus = { mode: "follow" };
@@ -696,6 +705,9 @@ export function LabelConsole({
     async (pointId: string, patch: LabelPointPatch) => {
       const before = points.find((point) => point.id === pointId);
       if (!before || !onSavePoint) return;
+      // A draft point has no id the server knows yet; its insert is still in
+      // flight, and the saved row replaces it when that lands.
+      if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
       setPoints((current) =>
         current.map((point) =>
           point.id === pointId
@@ -920,6 +932,37 @@ export function LabelConsole({
     );
   }
 
+  /**
+   * Add a point the vendor never saw, BEFORE `beforePointId` (board 08m §5's
+   * "Add point"): the rows get a draft of the planned point at once, every
+   * point from there on renumbered in memory (`applyInsertedPoint`), and the
+   * saved row takes the draft's place when the insert lands — or the draft
+   * goes and the numbers come back (`withdrawInsertedPoint`). The new point
+   * is then held open: setting its winner and adding its shots is what
+   * comes next. Nothing is re-derived — the point has no strokes yet.
+   */
+  function insertPoint(beforePointId: string) {
+    if (!operations) return;
+    const plan = planInsertedPoint(points, beforePointId);
+    if ("error" in plan) {
+      dispatchSave({ type: "start" });
+      dispatchSave({ type: "failure", message: plan.error });
+      return;
+    }
+    pendingIds.current += 1;
+    const tempId = `${PENDING_POINT_PREFIX}${pendingIds.current}`;
+    const draft = draftInsertedPoint(plan.write.insert, tempId);
+    void runOperation<{ point: LabelPoint }>(
+      (rows) => applyInsertedPoint(rows, draft),
+      () => operations.insertPoint(session.id, beforePointId),
+      (rows, result) =>
+        applyInsertedPoint(withdrawInsertedPoint(rows, tempId), result.point),
+      (rows) => withdrawInsertedPoint(rows, tempId),
+    ).then((result) => {
+      if (result) holdPoint(result.point.id);
+    });
+  }
+
   function deletePoint(pointId: string) {
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
@@ -960,6 +1003,8 @@ export function LabelConsole({
   function addShot(pointId: string, afterShotId: string | null) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
+    // A draft point cannot take a stroke until its own insert lands.
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     const plan = planAddedShot(point, afterShotId);
     if ("error" in plan) {
       dispatchSave({ type: "start" });
@@ -1274,6 +1319,7 @@ export function LabelConsole({
         onRestorePoint: restorePoint,
         onRestoreSiteRemoval: restoreSiteRemoval,
         onDismissSuggestion: dismissSuggestion,
+        onInsertPoint: insertPoint,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -1760,6 +1806,14 @@ export interface LabelConsoleOperations {
     pointId: string,
     key: string,
   ) => Promise<LabelDismissSuggestionResult>;
+  /**
+   * Add a point BEFORE `beforePointId` (board 08m §5): later points' indexes
+   * shifted up one, then the new row inserted — `label_points` only.
+   */
+  insertPoint: (
+    sessionId: string,
+    beforePointId: string,
+  ) => Promise<LabelInsertPointResult>;
 }
 
 /** The dock bar's "Point N · shot M", numbered as the table numbers them. */

@@ -54,6 +54,13 @@ export interface LabelRowOperations {
    * black view draws suggestions, so only it asks.
    */
   onDismissSuggestion: (pointId: string, key: string) => void;
+  /**
+   * Add a point the vendor never saw BEFORE `beforePointId` — the second of
+   * two points served from one side (board 08m §5): it and every later point
+   * move up one, and the new one takes its place. Only the black view draws
+   * the slot that asks.
+   */
+  onInsertPoint: (beforePointId: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */

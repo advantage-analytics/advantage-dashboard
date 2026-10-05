@@ -10,6 +10,7 @@ import type {
 import {
   markState,
   markStates,
+  missingPointAdded,
   mostOpen,
   rollupMarks,
   stateHover,
@@ -208,7 +209,9 @@ function liveGhostFixes(
  * stroke's status, and the removed-shot fix counts the ghosts still live.
  * `sentence` is the point as the row READS it (`pointSentence` over the
  * point without its ghosts while they are drawn as ghosts), for the settled
- * hover line; by default the point's own.
+ * hover line; by default the point's own. `points` — the rail's rows — lets
+ * a "Same side twice" question read settled once a point was added between
+ * the two (board 08m §5), with the hover saying so.
  *
  * A chip standing for several marks hovers every line it stands for: the
  * open ones while any flag is open, every flag once none is, every fix.
@@ -218,6 +221,7 @@ export function pointRowMarks(
   marks: LabelMarks | null | undefined,
   names: SideNames,
   sentence: string = pointSentence(point, names),
+  points?: readonly LabelPoint[],
 ): PointRowMarks | null {
   if (!marks) return null;
   const pointMarks = liveGhostFixes(point, marks.points[point.id] ?? []);
@@ -227,7 +231,14 @@ export function pointRowMarks(
     .filter((shot) => shot.status !== "deleted")
     .flatMap((shot) => marks.shots[shot.id] ?? [])
     .filter((mark) => mark.code !== SHOT_ONLY_CODE);
-  const states = markStates(pointMarks, shotMarks, point, marks.suggestions);
+  const states = markStates(
+    pointMarks,
+    shotMarks,
+    point,
+    marks.suggestions,
+    points,
+  );
+  const pointAdded = missingPointAdded(point, marks.suggestions, points);
   const rollup = rollupMarks(pointMarks, shotMarks, states);
 
   const all = [
@@ -239,7 +250,7 @@ export function pointRowMarks(
     const open = members.filter((m) => m.state === "open");
     return joinHovers(
       (open.length > 0 ? open : members).map((m) =>
-        stateHover(m.mark, m.state, names, sentence),
+        stateHover(m.mark, m.state, names, sentence, pointAdded),
       ),
     );
   };

@@ -8,9 +8,10 @@
  * the one the console ran for its optimistic update.
  *
  * Two things are this write's own. It also refuses a session whose
- * `marks_enabled` is false: that session's labels were made blind to the
- * derivation and carry no ghost to restore — the ground-truth match is never
- * written from here. And its ONE write is an UPDATE of `label_shots` setting
+ * `marks_enabled` is false (`checkSessionOpenWithMarks`, the gate every marks
+ * write shares): that session's labels were made blind to the derivation and
+ * carry no ghost to restore — the ground-truth match is never written from
+ * here. And its ONE write is an UPDATE of `label_shots` setting
  * `site_removal_restored_at`, matched on the id AND on the two columns the
  * plan read (`site_removal is not null`, `site_removal_restored_at is null`),
  * so two tabs restoring the same ghost cannot both report success, and
@@ -23,7 +24,12 @@ import {
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { gated, normaliseId, type LabelOpResult } from "./operations-session";
+import {
+  checkSessionOpenWithMarks,
+  gated,
+  normaliseId,
+  type LabelOpResult,
+} from "./operations-session";
 import type { LabelShotStatus, LabelSiteRemoval } from "./session";
 import { planSiteRemovalRestore } from "./site-removal";
 
@@ -32,7 +38,6 @@ export type LabelSiteRemovalRestoreResult = LabelOpResult<{
 }>;
 
 const RACED = "This row changed in another tab. Reload to see it.";
-const FROZEN = "This session is complete, so its labels can no longer change.";
 const BLIND =
   "This session is labelled without the site's marks, so there is nothing to restore.";
 
@@ -42,28 +47,6 @@ interface GhostRow {
   status: LabelShotStatus;
   site_removal: LabelSiteRemoval | null;
   site_removal_restored_at: string | null;
-}
-
-interface SessionGate {
-  status: string;
-  marks_enabled: boolean | null;
-}
-
-/** Refuses anything but an open session that computes marks. */
-async function checkSessionRestorable(
-  supabase: AdminClient,
-  sessionId: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("label_sessions")
-    .select("status, marks_enabled")
-    .eq("id", sessionId)
-    .maybeSingle<SessionGate>();
-  if (error) return `Could not read the session: ${error.message}`;
-  if (!data) return "Session not found.";
-  if (data.status !== "labelling") return FROZEN;
-  if (data.marks_enabled !== true) return BLIND;
-  return null;
 }
 
 /** Read the ghost, check its session, write the one column. Never throws. */
@@ -85,7 +68,11 @@ export async function writeLabelSiteRemovalRestore(params: {
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!row) return { error: "Shot not found." };
 
-  const refused = await checkSessionRestorable(supabase, row.session_id);
+  const refused = await checkSessionOpenWithMarks(
+    supabase,
+    row.session_id,
+    BLIND,
+  );
   if (refused) return { error: refused };
 
   const at = params.at ?? new Date().toISOString();

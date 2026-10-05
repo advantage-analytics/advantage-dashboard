@@ -51,7 +51,9 @@ export const defaultLabelWriteDependencies: LabelWriteDependencies = {
 const defaults = defaultLabelWriteDependencies;
 
 export const ADMIN_REQUIRED = "Administrator access is required.";
-const FROZEN = "This session is complete, so its labels can no longer change.";
+/** The refusal every write gives a `complete` session. */
+export const FROZEN =
+  "This session is complete, so its labels can no longer change.";
 const BUSY = "This row changed while it was saving. Try again.";
 
 /**

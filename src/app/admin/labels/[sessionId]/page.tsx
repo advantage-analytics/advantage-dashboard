@@ -13,6 +13,7 @@ import {
   restoreLabelPointAction,
   restoreLabelShotAction,
   dismissLabelSuggestionAction,
+  insertLabelPointAction,
   restoreLabelSiteRemovalAction,
   setLabelGameServerAction,
   setLabelGameTypeAction,
@@ -27,7 +28,8 @@ import {
  * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
  * operations (delete and Undo, add a shot, move a point, mark it checked,
  * reset an edited row to its seed, set a game's server or type, put back a
- * stroke the site removed) through the rest of `../actions`. The header lives
+ * stroke the site removed, dismiss a suggestion, add a suggested point)
+ * through the rest of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
  *
@@ -88,6 +90,7 @@ export default async function AdminLabelSessionPage({
           setGameType: setLabelGameTypeAction,
           restoreSiteRemoval: restoreLabelSiteRemovalAction,
           dismissSuggestion: dismissLabelSuggestionAction,
+          insertPoint: insertLabelPointAction,
         }}
         headerAction={
           <Link

@@ -15,6 +15,7 @@
 import type { LabelMark, LabelSuggestion } from "./marks";
 import { fixLabel, MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import type { LabelPoint, LabelShot } from "./session";
+import { addedPointBetween, type SuggestionNeighbour } from "./suggestions";
 
 export type MarkState =
   "open" | "settled" | "checked" | "checked-as-is" | "dismissed";
@@ -75,8 +76,33 @@ function flagDismissed(
 }
 
 /**
+ * Whether the `missing_point` suggestion on `point` was answered with "Add
+ * point": a live added point now sits between the two served from one side
+ * (`addedPointBetween`). Needs the session's `suggestions` and its `points`
+ * (the rail's rows); without either it cannot be seen and is false. The one
+ * change that settles a flag from OUTSIDE the point — the flagged point
+ * itself is untouched, but the question it asked is answered.
+ */
+export function missingPointAdded(
+  point: Pick<MarkStatePoint, "id">,
+  suggestions?: readonly LabelSuggestion[],
+  points?: readonly SuggestionNeighbour[],
+): boolean {
+  if (!suggestions || !points) return false;
+  return suggestions.some(
+    (s) =>
+      s.kind === "missing_point" &&
+      s.pointId === point.id &&
+      addedPointBetween(points, s.beforePointId, s.pointId),
+  );
+}
+
+/**
  * Where a mark is in its life. `shot` is the row a shot mark sits on; it only
- * matters when that row is not among `point.shots`.
+ * matters when that row is not among `point.shots`. `points` — the session's
+ * rows in rail order — lets a "Same side twice" question read settled once a
+ * point was added between the two (`missingPointAdded`); without them that
+ * answer is not seen.
  *
  * A fix is never `open`: the site already acted, so it is `settled` by nature
  * and `checked` once the point is.
@@ -86,9 +112,19 @@ export function markState(
   point: MarkStatePoint,
   shot?: MarkStateShot,
   suggestions?: readonly LabelSuggestion[],
+  points?: readonly SuggestionNeighbour[],
 ): MarkState {
   const checked = point.checkedAt !== null;
   if (mark.kind === "fix") return checked ? "checked" : "settled";
+
+  // Answered outranks dismissed, as it does for the suggestion itself: the
+  // point is there either way.
+  if (
+    mark.code === "service_court_repeat" &&
+    missingPointAdded(point, suggestions, points)
+  ) {
+    return checked ? "checked" : "settled";
+  }
 
   if (flagDismissed(mark, point, suggestions)) return "dismissed";
 
@@ -106,19 +142,25 @@ export function markState(
  * An open flag reads its own line. A fix reads its own line in every state —
  * the hover still says what the site did. A flag settled and then checked
  * keeps the settled line: the row still shows what was questioned and what
- * the labeller did.
+ * the labeller did. A "Same side twice" settled by "Add point" (`pointAdded`,
+ * from `missingPointAdded`) says that instead — the flagged point's ending
+ * never changed, so the ordinary settled line would be false.
  */
 export function stateHover(
   mark: LabelMark,
   state: MarkState,
   names: MarkNames,
   sentence: string,
+  pointAdded = false,
 ): string {
   if (mark.kind === "fix" || state === "open") return markHover(mark, names);
   const label = MARK_LABEL[mark.code];
   switch (state) {
     case "settled":
     case "checked":
+      if (pointAdded && mark.code === "service_court_repeat") {
+        return `${label} · settled. You added the missing point.`;
+      }
       return `${label} · settled. You changed the ending to ${sentence}.`;
     case "checked-as-is":
       return `${label} · checked as is. You confirmed the point without changing it.`;
@@ -147,9 +189,10 @@ export function markStates(
   shotMarks: readonly LabelMark[],
   point: MarkStatePoint,
   suggestions?: readonly LabelSuggestion[],
+  points?: readonly SuggestionNeighbour[],
 ): MarkStates {
   const stateOf = (mark: LabelMark) =>
-    markState(mark, point, undefined, suggestions);
+    markState(mark, point, undefined, suggestions, points);
   return {
     point: pointMarks.map(stateOf),
     shots: shotMarks.map(stateOf),

@@ -565,7 +565,7 @@ ready).
 
 ## T40 · Suggested point: Add point (new insert + re-index), "was a let", Dismiss
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T39
 - **files:** src/lib/services/labels/point-insert.ts (new), src/lib/services/labels/point-insert-session.ts (new), src/app/admin/labels/actions.ts, src/app/admin/labels/[sessionId]/page.tsx, src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-black-point-row.tsx, src/components/admin/labels/label-console.tsx, tests/label-point-insert.spec.ts (new), tests/label-operations.spec.ts (guess)
