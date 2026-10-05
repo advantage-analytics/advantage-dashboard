@@ -450,7 +450,7 @@ ready).
 
 ## T32 · The rail's resize handle: 520–880, double-click 640, shows on reach
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T30
 - **files:** src/components/admin/labels/label-rail-resize.tsx (new), src/components/admin/labels/label-divider.tsx, tests/label-rail-resize.spec.ts (new) (guess)

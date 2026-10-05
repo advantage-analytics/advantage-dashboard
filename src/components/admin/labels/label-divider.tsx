@@ -5,6 +5,118 @@ import { cn } from "@/lib/utils";
 import { DIVIDER_KEY_STEP_PX, type DockedLayoutMode } from "./label-layout";
 
 /**
+ * The pointer and key mechanics of a window splitter (`role="separator"` with
+ * a value, in px), for whichever edge wears them: {@link LabelDivider}'s, and
+ * the black view's rail handle (`label-rail-resize.tsx`). One implementation
+ * of the drag, so the two edges cannot come to behave differently.
+ *
+ * - **Pointer**: `pointerdown` captures the pointer, `pointermove` reports the
+ *   size the drag has reached (`sizeFromDrag`), `pointerup` / `pointercancel`
+ *   let go. Never HTML5 drag-and-drop (Reorder Mode's rule).
+ * - **Keys**: `growKey` / `shrinkKey` move it `DIVIDER_KEY_STEP_PX`, Home and
+ *   End go to the least and the most, Enter back to the default. Each is
+ *   `preventDefault`ed, which is also what tells the console's own ← / → /
+ *   Enter shortcuts to stand down.
+ * - **Double-click**: back to the default.
+ *
+ * Spread `separatorProps` on the element; `dragging` is for its styling.
+ */
+export function useSeparatorDrag({
+  axis,
+  value,
+  min,
+  max,
+  growKey,
+  shrinkKey,
+  sizeFromDrag,
+  onResize,
+  onReset,
+}: {
+  /** The way the edge travels: `y` for one under a band, `x` beside a column. */
+  axis: "x" | "y";
+  /** The size now, in px. */
+  value: number;
+  min: number;
+  max: number;
+  /** The arrow keys that grow and shrink what the edge sizes. */
+  growKey: string;
+  shrinkKey: string;
+  /** The size a drag has reached: where it began, and where the pointer is. */
+  sizeFromDrag: (startSize: number, from: number, at: number) => number;
+  /** The size asked for, in px. */
+  onResize: (px: number) => void;
+  /** Back to the default size. */
+  onReset: () => void;
+}) {
+  const drag = useRef<{ pointerId: number; from: number; size: number } | null>(
+    null,
+  );
+  const [dragging, setDragging] = useState(false);
+
+  const along = (event: PointerEvent<HTMLDivElement>) =>
+    axis === "y" ? event.clientY : event.clientX;
+
+  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    drag.current = {
+      pointerId: event.pointerId,
+      from: along(event),
+      size: value,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+  }
+
+  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const held = drag.current;
+    if (!held || held.pointerId !== event.pointerId) return;
+    onResize(sizeFromDrag(held.size, held.from, along(event)));
+  }
+
+  function release(event: PointerEvent<HTMLDivElement>) {
+    const held = drag.current;
+    if (!held || held.pointerId !== event.pointerId) return;
+    drag.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === growKey) onResize(value + DIVIDER_KEY_STEP_PX);
+    else if (event.key === shrinkKey) onResize(value - DIVIDER_KEY_STEP_PX);
+    else if (event.key === "Home") onResize(min);
+    else if (event.key === "End") onResize(max);
+    else if (event.key === "Enter") onReset();
+    else return;
+    event.preventDefault();
+  }
+
+  return {
+    dragging,
+    separatorProps: {
+      role: "separator",
+      "aria-orientation": axis === "y" ? "horizontal" : "vertical",
+      "aria-valuemin": min,
+      "aria-valuemax": max,
+      "aria-valuenow": value,
+      tabIndex: 0,
+      "data-dragging": dragging ? "true" : "false",
+      "data-focus-ring": "none",
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: release,
+      onPointerCancel: release,
+      onLostPointerCapture: release,
+      onDoubleClick: onReset,
+      onKeyDown,
+    },
+  } as const;
+}
+
+/**
  * The edge between the docked video-and-court and the points table (T25):
  * drag it and the dock grows or shrinks, the table taking whatever is left.
  *
@@ -55,73 +167,23 @@ export function LabelDivider({
   // Dragging the edge down grows the band above it; dragging it left grows
   // the column to its right.
   const sign = top ? 1 : -1;
-  const drag = useRef<{ pointerId: number; from: number; size: number } | null>(
-    null,
-  );
-  const [dragging, setDragging] = useState(false);
-
-  const along = (event: PointerEvent<HTMLDivElement>) =>
-    top ? event.clientY : event.clientX;
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    drag.current = {
-      pointerId: event.pointerId,
-      from: along(event),
-      size: value,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragging(true);
-  }
-
-  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const held = drag.current;
-    if (!held || held.pointerId !== event.pointerId) return;
-    onResize(held.size + sign * (along(event) - held.from));
-  }
-
-  function release(event: PointerEvent<HTMLDivElement>) {
-    const held = drag.current;
-    if (!held || held.pointerId !== event.pointerId) return;
-    drag.current = null;
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const grow = top ? "ArrowDown" : "ArrowLeft";
-    const shrink = top ? "ArrowUp" : "ArrowRight";
-    if (event.key === grow) onResize(value + DIVIDER_KEY_STEP_PX);
-    else if (event.key === shrink) onResize(value - DIVIDER_KEY_STEP_PX);
-    else if (event.key === "Home") onResize(min);
-    else if (event.key === "End") onResize(max);
-    else if (event.key === "Enter") onReset();
-    else return;
-    event.preventDefault();
-  }
+  const { dragging, separatorProps } = useSeparatorDrag({
+    axis: top ? "y" : "x",
+    value,
+    min,
+    max,
+    growKey: top ? "ArrowDown" : "ArrowLeft",
+    shrinkKey: top ? "ArrowUp" : "ArrowRight",
+    sizeFromDrag: (size, from, at) => size + sign * (at - from),
+    onResize,
+    onReset,
+  });
 
   return (
     <div
-      role="separator"
-      aria-orientation={top ? "horizontal" : "vertical"}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={value}
+      {...separatorProps}
       aria-label="Resize video and court"
-      tabIndex={0}
       data-label-divider={mode}
-      data-dragging={dragging ? "true" : "false"}
-      data-focus-ring="none"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
-      onDoubleClick={onReset}
-      onKeyDown={onKeyDown}
       className={cn(
         "group relative shrink-0 touch-none select-none focus-visible:outline-none",
         top ? "my-1 h-2 cursor-row-resize" : "mx-1 w-2 cursor-col-resize",

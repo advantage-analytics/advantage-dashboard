@@ -435,3 +435,14 @@ Decisions:
 2. The deleted-shot tombstone is the light component inside the dark well.
 3. The dark note field types in mono 10px; may want a prose-sized variant.
 4. At a 520px rail the result cell may crowd when its actions are revealed (not measured).
+
+## T32 · The rail's resize handle: 520–880, double-click 640, shows on reach — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `LabelRailResize` on the rail's left edge (`role=separator`, arrows / Home / End, Enter or double-click to reset) with the pure `railWidthFromDrag`; it is invisible at rest and shows a line and grip on hover, drag or keyboard focus. The pointer and key mechanics were extracted from `LabelDivider` into a shared `useSeparatorDrag` hook; the divider's behaviour is unchanged.
+
+**follow-ups:**
+
+1. The rail must be `relative` and not clip its left 4px.
+2. A browser-level spec for the drag once the handle is mounted.
