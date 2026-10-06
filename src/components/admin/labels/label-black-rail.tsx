@@ -78,10 +78,6 @@ import type {
 } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import type { SaveStatus } from "./save-status";
-import {
-  WHOLE_SCREEN_COPY,
-  type BrowserFullscreenControl,
-} from "./use-browser-fullscreen";
 
 /**
  * The black view's points rail (board 08l's `.bk-rail`): the Video
@@ -146,7 +142,7 @@ import {
 
 /** The header's icon buttons: the whole screen, the full screen and the exit. */
 const HEADER_BUTTON =
-  "flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+  "flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-[color,background-color,scale] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100";
 
 export function LabelBlackRail({
   player1Name,
@@ -158,7 +154,6 @@ export function LabelBlackRail({
   showSession = true,
   onExit,
   onFullScreen,
-  wholeScreen,
   scrollerRef,
   onFocusCapture,
   affordance,
@@ -210,11 +205,6 @@ export function LabelBlackRail({
   onExit?: () => void;
   /** Into the full-screen view. Absent, there is no button. */
   onFullScreen?: () => void;
-  /**
-   * The browser's own full screen (`useBrowserFullscreen`). Absent, or not
-   * supported, there is no button.
-   */
-  wholeScreen?: BrowserFullscreenControl;
   /** Lands on the scroller, for the console's follow scroll. */
   scrollerRef?: RefObject<HTMLDivElement | null>;
   /** The console's editor-focus hold, on the rows' frame. */
@@ -267,6 +257,14 @@ export function LabelBlackRail({
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
 }) {
+  // The shots well unfolds (`BlackShotsWell`'s `animate`) for every point
+  // the labeller or the film opens — never for the one that was already
+  // open when this rail mounted, which is the page loading (or the layout
+  // switching), not a point being opened. Latched in render, so the first
+  // well to mount after the open point changes already has it.
+  const [openAtMount] = useState(expandedPointId);
+  const [openMoved, setOpenMoved] = useState(false);
+  if (!openMoved && expandedPointId !== openAtMount) setOpenMoved(true);
   // The chip's arithmetic, over the same rows as the scoreboard: shown only
   // with marks built (never on a session labelled blind), not once the
   // labeller has said the video ends early, and only on a disagreement.
@@ -407,45 +405,6 @@ export function LabelBlackRail({
           {showSession ? (
             <LabelSaveStatus status={saveStatus} tone={tone} />
           ) : null}
-          {wholeScreen?.supported ? (
-            <ChromeTooltip
-              label={
-                wholeScreen.active
-                  ? WHOLE_SCREEN_COPY.leave
-                  : WHOLE_SCREEN_COPY.enter
-              }
-              detail={WHOLE_SCREEN_COPY.detail}
-              side="bottom"
-              align="end"
-            >
-              <button
-                type="button"
-                data-label-whole-screen=""
-                aria-label={
-                  wholeScreen.active
-                    ? WHOLE_SCREEN_COPY.leave
-                    : WHOLE_SCREEN_COPY.enter
-                }
-                aria-pressed={wholeScreen.active}
-                onClick={wholeScreen.toggle}
-                className={HEADER_BUTTON}
-              >
-                {wholeScreen.active ? (
-                  <Minimize
-                    className="size-3.5"
-                    strokeWidth={1.6}
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Maximize
-                    className="size-3.5"
-                    strokeWidth={1.6}
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            </ChromeTooltip>
-          ) : null}
           {onFullScreen ? (
             <ChromeTooltip
               label="Full screen"
@@ -564,6 +523,7 @@ export function LabelBlackRail({
                           edit={edit}
                           marks={marks}
                           playingShotId={playingShotId}
+                          animate={openMoved}
                         />
                       ) : null}
                     </BlackPointRow>
@@ -668,7 +628,7 @@ function ScoreChip({
   const chip = cn(
     "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[var(--rail-amber-wash)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[var(--rail-amber)]",
     answers &&
-      "cursor-pointer transition-colors duration-200 hover:bg-[var(--rail-amber-wash-strong)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+      "cursor-pointer transition-[color,background-color,scale] duration-200 hover:bg-[var(--rail-amber-wash-strong)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100",
   );
   const inside = (
     <>

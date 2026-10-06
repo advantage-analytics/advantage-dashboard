@@ -15,6 +15,18 @@ import { railAmber } from "./label-rail-tone";
  * those live in the class constants below.
  */
 
+/**
+ * A rail control's pressed state: the button dips to 0.96 under the pointer
+ * — 100ms in, the hover's 200ms back out — on top of the colour and wash
+ * transition every one of them already had. It stands IN for
+ * `transition-colors` (one `transition-property` per element), and names
+ * `scale` because that is the property Tailwind's `scale-*` sets. Reduced
+ * motion keeps the colour change and drops the dip. Whole literals: the
+ * classes are read off this string.
+ */
+export const RAIL_PRESS =
+  "transition-[color,background-color,scale] duration-200 active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100";
+
 /** The slot's leading glyph — the frame's `.fx-slot .bk-pl`. */
 export const AMBER_SLOT_ICON_INK = railAmber(0.8);
 /** A suggested stroke's own ink — the frame's `.fx-sug .bk-n, .bk-tm, .bk-pl`. */
@@ -51,7 +63,7 @@ export function BlackTextAction({
     <button
       type="button"
       {...props}
-      className={`shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap ${TEXT_ACTION_INK[ink]} transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
+      className={`shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap ${TEXT_ACTION_INK[ink]} ${RAIL_PRESS} hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
     />
   );
 }

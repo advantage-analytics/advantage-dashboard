@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
- * The browser's own full screen, for the console's full-screen layout.
+ * The browser's own full screen — which IS the console's full-screen layout.
  *
- * "Full screen" is a `fixed inset-0` layer: it fills the browser's viewport,
- * and the browser's tabs and address bar stay above it. This is the second
- * step — the Fullscreen API — that takes those away too, so the console has
- * the whole display.
+ * "Full screen" means the whole display: the black layout
+ * (`label-black-view.tsx`, a `fixed inset-0` layer) and the Fullscreen API
+ * are one state, entered together and left together. There is no black
+ * layout under the browser's tabs and address bar, and no separate control
+ * for the second step. The one exception is a browser with no Fullscreen API
+ * at all (`"unsupported"`): there the layer alone is the only full screen
+ * there can be, so the feature is not lost.
  *
  * It is asked of `document.documentElement`, the whole page, never of the
  * layer: the Fullscreen API shows only the fullscreened element's subtree,
@@ -20,7 +23,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
  * falls back to them; its `webkitRequestFullscreen` returns nothing rather
  * than a promise, which the helpers allow for. A browser may refuse — no
  * gesture, a denied permission, an embedding frame without the allowance —
- * and a refusal is swallowed: the button simply stays off.
+ * and a refusal is reported (`"refused"`), never thrown: the console goes
+ * back to its docked layout.
  *
  * Nothing is remembered. A browser refuses full screen without a gesture, so
  * a stored choice could never be restored on reload.
@@ -51,23 +55,6 @@ export const FULLSCREEN_EVENTS = [
   "fullscreenchange",
   "webkitfullscreenchange",
 ] as const;
-
-/** The control's words. Never the layout's own "Exit full screen". */
-export const WHOLE_SCREEN_COPY = {
-  enter: "Fill the whole screen",
-  leave: "Leave the whole screen",
-  detail: "Hides the browser's bars · Esc leaves",
-} as const;
-
-/** What a view needs to draw the control. */
-export interface BrowserFullscreenControl {
-  /** The browser can do it; false on the server and until mounted. */
-  supported: boolean;
-  /** The page is in the browser's full screen right now. */
-  active: boolean;
-  /** Enter or leave — call it from the click, which is the gesture. */
-  toggle: () => void;
-}
 
 /** Can this document be fullscreened, by either spelling? */
 export function fullscreenSupported(doc: FullscreenDocument): boolean {
@@ -130,56 +117,67 @@ export function exitFullscreen(doc: FullscreenDocument): Promise<boolean> {
 }
 
 /**
- * Enters when nothing is fullscreened, leaves when something is. Resolves
- * with the state it asked for and whether the browser went along.
+ * How a request for the full screen came out:
+ * - `"entered"` — the page is in the browser's full screen (it went along,
+ *   or something had already put it there);
+ * - `"refused"` — the browser has a full screen and would not give it;
+ * - `"unsupported"` — the browser has none to give.
  */
-export async function toggleFullscreen(
+export type FullscreenEntry = "entered" | "refused" | "unsupported";
+
+/** Asks for the whole page full screen and says how it came out. */
+export async function requestFullscreen(
   doc: FullscreenDocument,
-): Promise<{ asked: "enter" | "exit"; ok: boolean }> {
-  if (fullscreenActive(doc)) {
-    return { asked: "exit", ok: await exitFullscreen(doc) };
-  }
-  return { asked: "enter", ok: await enterFullscreen(doc) };
+): Promise<FullscreenEntry> {
+  if (!fullscreenSupported(doc)) return "unsupported";
+  if (fullscreenActive(doc)) return "entered";
+  return (await enterFullscreen(doc)) ? "entered" : "refused";
 }
 
-const neverChanges = () => () => {};
-const notActive = () => false;
-const readSupported = () => fullscreenSupported(document);
-const readActive = () => fullscreenActive(document);
+/**
+ * What a `fullscreenchange` means to whoever is listening: `true` when the
+ * page has LEFT the browser's full screen. Only ever asked from the event —
+ * a document that was never fullscreened has left nothing.
+ */
+export function fullscreenLeft(doc: FullscreenDocument): boolean {
+  return !fullscreenActive(doc);
+}
 
 /**
- * The control's state and its verbs.
+ * The console's two verbs, and the one thing it is told.
  *
- * `enter()` is for the console, when the labeller chooses the full-screen
- * layout: it must run inside that click, which is the gesture the browser
- * asks for. Nothing happens where it is already on or not offered.
+ * `enter()` runs when the labeller chooses the full-screen layout: it must
+ * run inside that click, which is the gesture the browser asks for. It
+ * resolves with how the request came out ({@link FullscreenEntry}).
  *
- * `leave()` is for the console, when a full-screen layout goes away: it
- * leaves the browser's full screen only if THIS hook entered it and it is
- * still on — a full screen the labeller got some other way is theirs. The
- * same runs on unmount. The browser's own Esc leaves the browser's full
- * screen and nothing else; the layout stays as it is.
+ * `leave()` runs when the full-screen layout goes away: it leaves the
+ * browser's full screen only if THIS hook entered it and it is still on — a
+ * full screen the labeller got some other way is theirs. The same runs on
+ * unmount.
  *
- * `initialSupported` is the server render's answer, for specs: there is no
- * document there, so it is false unless a spec says otherwise. Once mounted
- * the real document decides.
+ * `onLeft` is called when the page leaves the browser's full screen by ANY
+ * road — the browser's own Esc or control, or `leave()` — and only from a
+ * real change event: never for the not-active state a page starts in, so a
+ * first render (or a static one) of the full-screen layout is not bounced.
  */
-export function useBrowserFullscreen(
-  initialSupported?: boolean,
-): BrowserFullscreenControl & { enter: () => void; leave: () => void } {
-  // Entered by this hook's own toggle, and not left since.
+export function useBrowserFullscreen(onLeft?: () => void): {
+  enter: () => Promise<FullscreenEntry>;
+  leave: () => void;
+} {
+  // Entered by this hook's own `enter`, and not left since.
   const entered = useRef(false);
+  // The latest `onLeft`, so the listener is bound once.
+  const left = useRef(onLeft);
+  useEffect(() => {
+    left.current = onLeft;
+  });
 
-  const supported = useSyncExternalStore(
-    neverChanges,
-    readSupported,
-    () => initialSupported ?? false,
-  );
-  const subscribe = useCallback((onChange: () => void) => {
+  useEffect(() => {
     const changed = () => {
-      // Left by any road — Esc, the browser's own control, this button.
-      if (!fullscreenActive(document)) entered.current = false;
-      onChange();
+      if (!fullscreenLeft(document)) return;
+      // Left by any road — Esc, the browser's own control, `leave()`.
+      entered.current = false;
+      left.current?.();
     };
     for (const name of FULLSCREEN_EVENTS) {
       document.addEventListener(name, changed);
@@ -190,23 +188,15 @@ export function useBrowserFullscreen(
       }
     };
   }, []);
-  const active = useSyncExternalStore(subscribe, readActive, notActive);
 
-  const toggle = useCallback(() => {
-    const entering = !fullscreenActive(document);
-    entered.current = entering;
-    void toggleFullscreen(document).then(({ asked, ok }) => {
-      // Refused: nothing was entered, so there is nothing to leave later.
-      if (asked === "enter" && !ok) entered.current = false;
-    });
-  }, []);
-
-  const enter = useCallback(() => {
-    if (!fullscreenSupported(document) || fullscreenActive(document)) return;
-    entered.current = true;
-    void enterFullscreen(document).then((ok) => {
-      if (!ok) entered.current = false;
-    });
+  const enter = useCallback(async (): Promise<FullscreenEntry> => {
+    // Already on by some other road: nothing of ours to leave later.
+    const ours = !fullscreenActive(document);
+    if (ours) entered.current = true;
+    const outcome = await requestFullscreen(document);
+    // Refused or not offered: nothing was entered, so nothing to leave.
+    if (ours && outcome !== "entered") entered.current = false;
+    return outcome;
   }, []);
 
   const leave = useCallback(() => {
@@ -216,5 +206,5 @@ export function useBrowserFullscreen(
   }, []);
   useEffect(() => leave, [leave]);
 
-  return { supported, active, toggle, enter, leave };
+  return { enter, leave };
 }

@@ -1,6 +1,5 @@
 import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import {
-  LABEL_NOTE_MAX,
   LABEL_STROKES,
   labelShotValues,
   type LabelShotPatch,
@@ -184,29 +183,6 @@ export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
 }
 
 /**
- * The patch a typed position sends: the two coordinates of that end AND the
- * result the row's values derive once they are in — one write, so In / Out /
- * Net never lags the position it follows. Clearing an end (or typing one
- * while the other is still missing) leaves nothing to derive from:
- * `deriveShotResult` answers null, the patch carries no `result` key, and the
- * row keeps its stored value — `nextPlacement`'s rule for a court click.
- */
-export function positionPatch(
-  shot: LabelShot,
-  end: "contact" | "landing",
-  point: { x: number; y: number } | null,
-): LabelShotPatch {
-  const x = point?.x ?? null;
-  const y = point?.y ?? null;
-  const placed: LabelShotPatch =
-    end === "contact"
-      ? { contact_x: x, contact_y: y }
-      : { landing_x: x, landing_y: y };
-  const result = deriveShotResult({ ...labelShotValues(shot), ...placed });
-  return result === null ? placed : { ...placed, result };
-}
-
-/**
  * What a point row reads off its strokes. Tombstones never count: the row
  * says what the rally is now, not what the vendor first reported.
  *   · `time` — the first live stroke that has a time;
@@ -232,11 +208,4 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
     lastShot: last?.stroke ? STROKE_LABEL[last.stroke] : null,
     rally: live.length - Math.max(serve, 0),
   };
-}
-
-/** Typed text → the note to store: null when cleared, undefined when too long. */
-export function parseNote(text: string): string | null | undefined {
-  const note = text.trim();
-  if (note === "") return null;
-  return note.length > LABEL_NOTE_MAX ? undefined : note;
 }

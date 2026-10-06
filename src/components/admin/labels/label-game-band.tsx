@@ -164,7 +164,7 @@ const PAINT = {
   labelInk: "text-white/45",
   metaInk: "text-white/40",
   trigger:
-    "-my-1 flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] px-1.5 transition-[color,background-color] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    "-my-1 flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] px-1.5 transition-[color,background-color,scale] duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100",
   triggerOpen: "bg-white/[0.12] text-white",
   triggerRest: "hover:bg-white/[0.08] hover:text-white",
 } as const;

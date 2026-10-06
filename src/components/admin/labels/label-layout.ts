@@ -1,7 +1,7 @@
 /**
  * How the labelling console lays out its video and court against the points
- * list. Pure — the console reads and remembers the mode; this file is the
- * vocabulary and the rail's arithmetic.
+ * list. Pure — the console holds the mode; this file is the vocabulary, the
+ * full screen's two rules and the rail's arithmetic.
  *
  * Two modes, the labeller's choice, and one arrangement between them — the
  * film top-left with its transport, the court under it, the points rail
@@ -10,9 +10,15 @@
  * - **docked-side** (`label-side-view.tsx`) — that arrangement inside the
  *   admin page, under the console's header: the film and the court as dark
  *   cards on the light page, the rail as a white card. The default.
- * - **black** (board 08l, `label-black-view.tsx`) — the same arrangement over
- *   the whole page, black to the edges, and — where the browser has one — in
- *   the browser's own full screen. The menu calls it "Full screen".
+ * - **black** (board 08l, `label-black-view.tsx`) — the same arrangement on
+ *   black, in the browser's own full screen: the whole display, never under
+ *   the browser's bars. The menu calls it "Full screen". The two are one
+ *   state ({@link layoutAfterFullscreenRequest},
+ *   {@link layoutAfterFullscreenLeft}); only a browser with no Fullscreen API
+ *   shows the black layer by itself.
+ *
+ * The mode is not stored: a reload cannot re-enter the browser's full screen
+ * without a gesture, so the console always starts docked.
  *
  * Both are sized by the rail's width alone ({@link clampRailWidth}, kept
  * under {@link RAIL_WIDTH_STORAGE_KEY}): the film and the court take what is
@@ -28,8 +34,6 @@ export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
 ];
 
 export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "docked-side";
-
-export const LAYOUT_MODE_STORAGE_KEY = "labels-layout-mode";
 
 /** The menu's words for each mode, and what choosing it does. */
 export const LAYOUT_MODE_LABEL: Record<
@@ -47,13 +51,27 @@ export const LAYOUT_MODE_LABEL: Record<
 };
 
 /**
- * A stored mode. Anything else — nothing, or a value that names no mode of
- * this console — is the default.
+ * The layout once the browser has answered a request for its full screen
+ * (`use-browser-fullscreen.ts`): black when it went along, and when the
+ * browser has no Fullscreen API at all — there the black layer is the only
+ * full screen there is. A REFUSED request is docked side: black is never
+ * shown under the browser's bars.
  */
-export function parseLayoutMode(
-  raw: string | null | undefined,
+export function layoutAfterFullscreenRequest(
+  outcome: "entered" | "refused" | "unsupported",
 ): LabelLayoutMode {
-  return raw === "black" ? raw : DEFAULT_LAYOUT_MODE;
+  return outcome === "refused" ? "docked-side" : "black";
+}
+
+/**
+ * The layout once the page has left the browser's full screen by any road —
+ * the exit button, the Layout menu, the browser's own Esc: docked side,
+ * whatever it was.
+ */
+export function layoutAfterFullscreenLeft(
+  _mode: LabelLayoutMode,
+): LabelLayoutMode {
+  return "docked-side";
 }
 
 // ── The rail ────────────────────────────────────────────────────────────────

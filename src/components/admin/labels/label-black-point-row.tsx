@@ -1,26 +1,23 @@
 "use client";
 
 import { memo, useState } from "react";
-import {
-  Check,
-  CornerDownRight,
-  GripVertical,
-  Plus,
-  StickyNote,
-} from "lucide-react";
+import { Check, CornerDownRight, Plus } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
   FloatMenuLabel,
   floatMenuToneClasses,
 } from "@/components/ui/float-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { filmProgressWidth } from "@/components/dashboard/matches/match-detail/film/film-clock";
+import {
+  FILM_ROW_ACTION_HELD,
+  FILM_ROW_ACTION_ON_REACH,
+  FILM_ROW_ACTION_TRANSITION,
+  FILM_ROW_SLIDE_HELD,
+  FILM_ROW_SLIDE_ON_REACH,
+  FILM_ROW_SLIDE_TRANSITION,
+} from "@/components/dashboard/matches/match-detail/film/film-row-reveal";
 import { cn } from "@/lib/utils";
 import type {
   GameOverflow,
@@ -37,18 +34,18 @@ import {
   withoutGhosts,
 } from "./label-black-format";
 import { MarkChip, PencilMark, pointRowMarks } from "./label-black-mark";
-import { EditableCell, TextEditor } from "./label-cells";
 import type { SideNames } from "./label-format";
 import { PointMenu } from "./label-point-menu";
 import { isCombinedTombstone } from "@/lib/services/labels/point-combine";
 import {
   AMBER_SLOT_ICON_INK,
   BLACK_SLOT,
+  RAIL_PRESS,
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
 import { drawsGhosts } from "./label-black-shot-row";
-import { parseNote, pointSummary } from "./label-format";
+import { pointSummary } from "./label-format";
 import { RAIL_TONE_CLASS, railInk } from "./label-rail-tone";
 import {
   SIDES,
@@ -73,12 +70,36 @@ import {
 
 /**
  * The frame's `.bk-row` tracks: number · winner mark · the two lines · tail ·
- * score · actions · tick. The actions track is `auto` and empty until the
- * row is reached for, so the score sits against the tick and slides left
- * when they appear; the tick's own track never moves.
+ * score · tick. The row's actions take NO track: they are an overlay over
+ * the score's right end (`ACTIONS_RIGHT`), revealed as the Video tab's point
+ * row reveals its bookmark (`film-row-reveal.ts`) — the score slides 26px
+ * left on a transform and the actions fade in where it was, so no column
+ * re-lays and nothing changes width. The score's track is the Video tab's
+ * 52px, which leaves the slide room inside the 10px gap before the tail.
  */
 const ROW_GRID =
-  "grid grid-cols-[22px_30px_minmax(0,1fr)_auto_48px_auto_22px] items-center gap-x-[10px] min-h-[52px] px-[14px] py-1.5";
+  "grid grid-cols-[22px_30px_minmax(0,1fr)_auto_52px_22px] items-center gap-x-[10px] min-h-[52px] px-[14px] py-1.5";
+
+/**
+ * Where the row's actions sit: over the score's right end, out of the grid —
+ * the row's 14px of padding, the tick's 22px track and the 10px gap before
+ * it. The Video tab puts its bookmark at the row's `right-[14px]`; the rail
+ * has the tick there, so its overlay starts one track in.
+ */
+const ACTIONS_RIGHT = "right-[46px]";
+
+/**
+ * The rail's two additions to the Video tab's slide (`film-row-reveal.ts`).
+ * The score also stays aside while the row's ⋯ menu is open — the menu is
+ * portalled, so the row has neither the pointer nor the focus by then. And
+ * under reduced motion the score still gets out of the way, at once: the
+ * Video tab leaves it under its bookmark, a small glyph over a score's last
+ * digit, but a 22px button over the rail's would hide it.
+ */
+const SCORE_ASIDE_FOR_MENU =
+  "group-has-[[data-row-actions]_[aria-expanded=true]]/row:-translate-x-[26px]";
+const SCORE_ASIDE_REDUCED =
+  "motion-reduce:transition-none motion-reduce:group-focus-within/row:-translate-x-[26px] motion-reduce:group-hover/row:-translate-x-[26px]";
 
 /** A point the labeller has changed: itself, or any of its strokes. */
 export function pointChangedByYou(
@@ -99,13 +120,12 @@ export function pointChangedByYou(
 /**
  * One point of the black rail — the frame's `.bk-row`.
  *
- * Left to right: the point's number (a grip in its place while the row is
- * hovered or playing — drawn as the frame draws it; nothing reorders) · the
+ * Left to right: the point's number · the
  * WINNER mark, which is the menu that changes who won · how the point ended
  * as a sentence over the deciding shot, the time and the rally · a tail slot
  * carrying the point's marks (board 08m: what to check, what the site fixed)
  * and the blue pencil on a point the labeller has changed · the score
- * before the point · the row's actions (Note and ⋯), there only on hover, on
+ * before the point · the row's actions (⋯), there only on hover, on
  * focus and on the playing row · the tick that marks the point checked.
  *
  * The PLAYING row draws the rail's progress rule along its foot, its width
@@ -152,7 +172,6 @@ export const BlackPointRow = memo(function BlackPointRow({
   const tone = edit.tone ?? "dark";
   const number = point.pointIndex + 1;
   const checked = point.checkedAt !== null;
-  const showNote = edit.editable || point.note !== null;
   // The point as the rail reads it (board 08m §3): without the strokes the
   // site removed while the well draws them as ghosts, so the sentence, the
   // deciding stroke and the rally count say what the rally is now. With the
@@ -191,25 +210,12 @@ export const BlackPointRow = memo(function BlackPointRow({
           playing ? "bg-white/[0.08]" : "hover:bg-white/[0.06]",
         )}
       >
-        {/* The number, and the frame's grip over it once the row is reached. */}
-        <span className="mono tabular relative inline-flex items-center text-[10px] text-white/35">
-          <span
-            className={cn(
-              "transition-opacity duration-200",
-              playing ? "opacity-0" : "group-hover/row:opacity-0",
-            )}
-          >
-            {number}
-          </span>
-          <GripVertical
-            data-row-handle=""
-            aria-hidden="true"
-            strokeWidth={1.6}
-            className={cn(
-              "absolute left-0 size-3.5 cursor-grab text-white/60 transition-opacity duration-200",
-              playing ? "opacity-100" : "opacity-0 group-hover/row:opacity-100",
-            )}
-          />
+        {/* The number: it stays put under the pointer and on the playing row. */}
+        <span
+          data-point-number=""
+          className="mono tabular inline-flex items-center text-[10px] text-white/35"
+        >
+          {number}
         </span>
 
         <BlackWinnerCell
@@ -277,7 +283,19 @@ export const BlackPointRow = memo(function BlackPointRow({
             until its winner is set — whatever the scoreboard says before it. */}
         <span
           data-point-score=""
-          className="mono tabular truncate text-right text-[11px]"
+          className={cn(
+            "mono tabular truncate text-right text-[11px]",
+            FILM_ROW_SLIDE_TRANSITION,
+            // Only a row with actions has anything to make room for.
+            operations &&
+              (playing
+                ? FILM_ROW_SLIDE_HELD
+                : cn(
+                    FILM_ROW_SLIDE_ON_REACH,
+                    SCORE_ASIDE_FOR_MENU,
+                    SCORE_ASIDE_REDUCED,
+                  )),
+          )}
           style={{ color: SCORE_INK }}
         >
           {(fresh ? null : score) ?? (
@@ -290,23 +308,25 @@ export const BlackPointRow = memo(function BlackPointRow({
           )}
         </span>
 
-        {/* Collapsed to nothing until the row is reached for, so the score
-            keeps the tick's side; open, it takes its width and the score
-            slides left. A menu open from here holds it open. */}
+        {/* Over the score's right end, out of the grid: faded in as the
+            score slides aside (the Video tab's reveal), lit at rest on the
+            playing row. A menu open from here holds it lit. */}
         <span
           data-row-actions=""
           data-cell=""
           onClick={(event) => event.stopPropagation()}
           className={cn(
-            "inline-flex items-center gap-0.5 transition-opacity duration-200",
+            "absolute inset-y-0 inline-flex items-center gap-0.5",
+            ACTIONS_RIGHT,
+            FILM_ROW_ACTION_TRANSITION,
             playing
-              ? "opacity-100"
-              : "w-0 overflow-hidden opacity-0 group-focus-within/row:w-auto group-focus-within/row:overflow-visible group-focus-within/row:opacity-100 group-hover/row:w-auto group-hover/row:overflow-visible group-hover/row:opacity-100 has-[[aria-expanded=true]]:w-auto has-[[aria-expanded=true]]:overflow-visible has-[[aria-expanded=true]]:opacity-100",
+              ? FILM_ROW_ACTION_HELD
+              : cn(
+                  FILM_ROW_ACTION_ON_REACH,
+                  "has-[[aria-expanded=true]]:opacity-100",
+                ),
           )}
         >
-          {showNote ? (
-            <BlackNoteAction point={point} number={number} edit={edit} />
-          ) : null}
           {operations ? (
             <PointMenu
               point={point}
@@ -331,10 +351,17 @@ export const BlackPointRow = memo(function BlackPointRow({
             disabled={!operations}
             onClick={(event) => {
               event.stopPropagation();
+              // The glyph answers THIS click (`label-check-in`, globals.css):
+              // the mark is set here, on the element, and by nothing else —
+              // so a row that mounts already checked plays nothing, and the
+              // memoised row takes no state or prop for it.
+              if (checked) delete event.currentTarget.dataset.justChecked;
+              else event.currentTarget.dataset.justChecked = "";
               operations?.onSetChecked(point.id, !checked);
             }}
             className={cn(
-              "flex size-[22px] items-center justify-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              "flex size-[22px] items-center justify-center rounded-[var(--radius-button)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              RAIL_PRESS,
               operations && "cursor-pointer",
               checked
                 ? "text-[var(--success)]"
@@ -344,7 +371,11 @@ export const BlackPointRow = memo(function BlackPointRow({
               operations && !checked && "hover:text-white",
             )}
           >
-            <Check className="size-3.5" strokeWidth={2.2} aria-hidden="true" />
+            <Check
+              className="label-check-in size-3.5"
+              strokeWidth={2.2}
+              aria-hidden="true"
+            />
           </button>
         </ChromeTooltip>
 
@@ -864,102 +895,5 @@ function BlackWinnerCell({
         })}
       </FloatMenu>
     </span>
-  );
-}
-
-// ── The note ───────────────────────────────────────────────────────────────
-
-/**
- * The row's Note action — the frame's `.bk-ib`, white once the point has a
- * note. It opens the note's cell (`EditableCell` + `TextEditor`, `parseNote`
- * and a `{ note }` patch) on the menu surface of the rail's tone: the field is there at once, Enter or leaving it saves, and a
- * saved note closes the popover. Read-only, the popover is the note's text.
- *
- * The popover is portalled out of the rail, so the rail's palette does not
- * reach it: its contents sit in a wrapper that wears the palette again. A
- * wrapper, not the surface itself — the surface's own ground is `bg-white`,
- * which the light palette would turn to ink.
- */
-function BlackNoteAction({
-  point,
-  number,
-  edit,
-}: {
-  point: LabelPoint;
-  number: number;
-  edit: EditContext;
-}) {
-  const [open, setOpen] = useState(false);
-  const tone = edit.tone ?? "dark";
-  const { note } = point;
-  const label = `Point ${number} note`;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      {/* The tooltip's trigger is the popover's: Radix merges the two onto
-          the one button. Open, the popover already says its name. */}
-      <ChromeTooltip label="Note" side="top" hidden={open}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            data-note-action=""
-            data-has-note={note ? "" : undefined}
-            aria-label={note ? `${label}: ${note}` : label}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            className={cn(
-              "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-              note ? "text-white" : "text-white/55",
-              open && "bg-white/[0.08] text-white",
-            )}
-          >
-            <StickyNote
-              className="size-[13px]"
-              strokeWidth={1.6}
-              aria-hidden="true"
-            />
-          </button>
-        </PopoverTrigger>
-      </ChromeTooltip>
-      <PopoverContent
-        align="end"
-        sideOffset={4}
-        aria-label={label}
-        className={cn(floatMenuToneClasses(tone), "w-[300px]")}
-      >
-        <div data-note-palette={tone} className={RAIL_TONE_CLASS[tone]}>
-          <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
-            Note on point {number}
-          </p>
-          {/* The rail's field pulls itself 5px left to sit over a cell's
-              text and runs 2px past it; the inset here hands both back. */}
-          <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
-            <EditableCell
-              editable={edit.editable}
-              rowSelected
-              label={label}
-              valueText={note ?? "None"}
-              display={
-                <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
-                  {note}
-                </span>
-              }
-              editor={
-                <TextEditor
-                  label={label}
-                  text={note ?? ""}
-                  parse={parseNote}
-                  onCommit={(value) => {
-                    edit.onPatchPoint?.(point.id, {
-                      note: value as string | null,
-                    });
-                    setOpen(false);
-                  }}
-                />
-              }
-            />
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }

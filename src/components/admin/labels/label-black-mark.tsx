@@ -205,7 +205,7 @@ export function PencilMark({
           event.stopPropagation();
           reset.onClick();
         }}
-        className="inline-flex shrink-0 cursor-pointer items-center rounded-[var(--radius-button)] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none hover:[&>svg]:text-[var(--blue-hover)]"
+        className="inline-flex shrink-0 cursor-pointer items-center rounded-[var(--radius-button)] transition-[color,background-color,scale] duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100 [&>svg]:transition-colors [&>svg]:duration-200 hover:[&>svg]:text-[var(--blue-hover)]"
       >
         {glyph}
       </button>

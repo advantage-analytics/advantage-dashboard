@@ -252,12 +252,10 @@ test.describe("a flag on the point row", () => {
     const point = fixturePoint();
     const html = renderRow(point, marksOf(point, [DISPUTED]));
     // The row is the size container the words answer to: under 600px of it
-    // they are not drawn, and the score's own 48px track never moves.
+    // they are not drawn, and the score's own 52px track never moves.
     const row = html.slice(0, html.indexOf(">") + 1);
     expect(row).toContain("@container");
-    expect(row).toContain(
-      "grid-cols-[22px_30px_minmax(0,1fr)_auto_48px_auto_22px]",
-    );
+    expect(row).toContain("grid-cols-[22px_30px_minmax(0,1fr)_auto_52px_22px]");
     const words = /<span[^>]*data-mark-text=""[^>]*>/.exec(html)![0];
     expect(words).toContain("hidden");
     expect(words).toContain("@min-[600px]:inline");

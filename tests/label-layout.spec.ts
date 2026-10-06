@@ -7,14 +7,14 @@ import {
   DEFAULT_LAYOUT_MODE,
   LAYOUT_MODES,
   LAYOUT_MODE_LABEL,
-  LAYOUT_MODE_STORAGE_KEY,
   RAIL_DEFAULT_PX,
   RAIL_KEY_STEP_PX,
   RAIL_MAX_PX,
   RAIL_MIN_PX,
   RAIL_WIDTH_STORAGE_KEY,
   clampRailWidth,
-  parseLayoutMode,
+  layoutAfterFullscreenLeft,
+  layoutAfterFullscreenRequest,
   parseRailWidth,
   type LabelLayoutMode,
 } from "@/components/admin/labels/label-layout";
@@ -22,15 +22,17 @@ import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * The labelling console's two layouts (`label-layout.ts`): the words, the
- * stored-mode fallback, and the arithmetic of the one size both share — the
+ * full screen's two rules, and the arithmetic of the one size both share — the
  * points rail's width. Then the header's Layout menu
  * (`label-layout-control.tsx`), rendered offline.
  */
 
-test("two modes, docked side by default, under a key of its own", () => {
+test("two modes, docked side by default, and the mode is never stored", () => {
   expect(LAYOUT_MODES).toEqual(["docked-side", "black"]);
   expect(DEFAULT_LAYOUT_MODE).toBe("docked-side");
-  expect(LAYOUT_MODE_STORAGE_KEY).toBe("labels-layout-mode");
+  // A reload cannot re-enter the browser's full screen, so nothing is kept.
+  expect(Object.keys(layout)).not.toContain("LAYOUT_MODE_STORAGE_KEY");
+  expect(Object.keys(layout)).not.toContain("parseLayoutMode");
   // Every mode has the menu's words, and only the two modes do.
   expect(Object.keys(LAYOUT_MODE_LABEL)).toEqual(["docked-side", "black"]);
   expect(LAYOUT_MODE_LABEL["docked-side"]).toEqual({
@@ -43,29 +45,18 @@ test("two modes, docked side by default, under a key of its own", () => {
   });
 });
 
-test("a stored mode parses; anything unknown is docked side", () => {
-  expect(parseLayoutMode("docked-side")).toBe("docked-side");
-  expect(parseLayoutMode("black")).toBe("black");
-  for (const raw of [
-    null,
-    undefined,
-    "",
-    "docked",
-    "DOCKED-SIDE",
-    "BLACK",
-    "black ",
-    "1",
-    "{}",
-  ]) {
-    expect(parseLayoutMode(raw), String(raw)).toBe("docked-side");
-  }
+test("a request for the browser's full screen settles the layout", () => {
+  // It went along: black, in the browser's full screen.
+  expect(layoutAfterFullscreenRequest("entered")).toBe("black");
+  // Refused: never black under the browser's bars.
+  expect(layoutAfterFullscreenRequest("refused")).toBe("docked-side");
+  // No Fullscreen API at all: the black layer is the only full screen.
+  expect(layoutAfterFullscreenRequest("unsupported")).toBe("black");
 });
 
-test("a mode this console no longer has parses to docked side", () => {
-  // What a browser that last used the overlay, the docked band or the film
-  // full screen still has under the key.
-  for (const legacy of ["overlay", "docked-top", "film"]) {
-    expect(parseLayoutMode(legacy), legacy).toBe("docked-side");
+test("leaving the browser's full screen is docked side, whatever the layout was", () => {
+  for (const mode of LAYOUT_MODES) {
+    expect(layoutAfterFullscreenLeft(mode), mode).toBe("docked-side");
   }
 });
 
@@ -94,7 +85,6 @@ test.describe("the rail's width", () => {
     expect(RAIL_MAX_PX).toBe(880);
     expect(RAIL_DEFAULT_PX).toBe(640);
     expect(RAIL_WIDTH_STORAGE_KEY).toBe("labels-rail-width");
-    expect(RAIL_WIDTH_STORAGE_KEY).not.toBe(LAYOUT_MODE_STORAGE_KEY);
 
     // Both ends, and the ends themselves.
     expect(clampRailWidth(100)).toBe(520);

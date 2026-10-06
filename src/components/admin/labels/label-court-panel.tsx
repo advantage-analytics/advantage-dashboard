@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
@@ -197,6 +197,14 @@ export function LabelCourtPanel({
       ? shots.filter((shot) => shot.status !== "deleted").indexOf(selected) + 1
       : null;
   const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
+  // The court crossfades between the whole court and the zoomed half
+  // (`label-court-view-in`, globals.css) — but only once the labeller has
+  // made it switch: the court this panel mounted with, on page load or after
+  // a layout change, is simply there. Latched in render, so the first
+  // switched court already mounts with it.
+  const [zoomAtMount] = useState(placing);
+  const [zoomSwitched, setZoomSwitched] = useState(false);
+  if (!zoomSwitched && placing !== zoomAtMount) setZoomSwitched(true);
 
   // The marks the film is showing right now, as a string snapshot: React
   // re-renders this body only when an opacity steps, and the console — which
@@ -258,6 +266,7 @@ export function LabelCourtPanel({
           target={placing ? placement.target : null}
           prompt={prompt}
           onPlace={placing ? onPlace : undefined}
+          fadeOnZoom={zoomSwitched}
         />
       </div>
 

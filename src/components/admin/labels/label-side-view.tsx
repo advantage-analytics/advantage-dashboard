@@ -39,8 +39,15 @@ export function LabelSideView({
   video,
   court,
   placing = false,
+  arrive = false,
   children,
 }: {
+  /**
+   * The labeller just left the full screen for this view: it fades in
+   * (`label-layer-in-docked`, globals.css — 150ms, opacity only). Off on
+   * first render, so the page never loads into a fade.
+   */
+  arrive?: boolean;
   /** The rail's width on first render, in px — for specs. */
   initialRailWidth?: number;
   /** The shared `LabelVideoPlayer`. */
@@ -55,7 +62,13 @@ export function LabelSideView({
   const rail = useRailWidth(initialRailWidth);
 
   return (
-    <div data-label-side="" className="flex min-h-0 flex-1 gap-4">
+    <div
+      data-label-side=""
+      className={cn(
+        "flex min-h-0 flex-1 gap-4",
+        arrive && "label-layer-in-docked",
+      )}
+    >
       {/* The stage: a size container, for the film's cap. */}
       <div
         data-label-side-stage=""

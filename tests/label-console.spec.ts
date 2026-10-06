@@ -34,7 +34,6 @@ type ConsoleProps = {
     { mode: "follow" } | { mode: "held"; pointId: string | null };
   initialLayoutMode?: "docked-side" | "black";
   initialRailWidth?: number;
-  initialFullscreenSupported?: boolean;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -188,25 +187,18 @@ test("a point row's winner chip and score, and its note", () => {
   const first = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`);
   expect(cell(first, 'data-winner-mark="p2"')).toBe("V");
   expect(cell(first, "data-point-score")).toBe("0–0");
-  // Editable, the chip is the menu's trigger, and the note is a button
-  // whether or not there is one yet.
+  // Editable, the chip is the menu's trigger.
   expect(first).toMatch(
     /<button[^>]*aria-label="Point 1 won by Vargas"[^>]*aria-haspopup="menu"/,
   );
-  expect(first).toMatch(
-    /<button[^>]*data-note-action=""[^>]*aria-label="Point 1 note"[^>]*aria-haspopup="dialog"/,
-  );
-  expect(tagOf(first, "data-note-action")).not.toContain("data-has-note");
+  // No note control on the row, with a note stored or without.
+  expect(html).not.toContain("data-note-action");
 
   // Point 2: Lee (p1) on blue, at 0–15 after losing the first point.
   const second = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P2}"`);
   expect(cell(second, 'data-winner-mark="p1"')).toBe("L");
   expect(second).toMatch(/data-winner-mark="p1"[^>]*bg-\[var\(--blue\)\]/);
   expect(cell(second, "data-point-score")).toBe("0–15");
-  expect(tagOf(second, "data-note-action")).toContain(
-    'aria-label="Point 2 note: Clean ace down the T."',
-  );
-  expect(tagOf(second, "data-note-action")).toContain("data-has-note");
 
   // Read-only: the winner is a picture, not a menu.
   const readOnly = render({
@@ -657,7 +649,6 @@ test.describe("editing (T6)", () => {
     expect(count(html, /data-row="shot"/g)).toBe(3);
     expect(count(html, EDITORS)).toBe(0);
     // Each cell is a keyboard stop that names what it edits.
-    expect(html).toContain('aria-label="Point 1 note"');
     expect(html).toContain('aria-label="Shot 2 stroke: Backhand"');
     expect(html).toContain('aria-label="Shot 2 spin: Topspin"');
     expect(html).toContain('aria-label="Shot 3 spin: Not set"');
@@ -1253,7 +1244,6 @@ test.describe("the two layouts", () => {
         session: labelSessionFixture(),
         video: VIDEO,
         initialExpandedPointId: FIXTURE_POINT_IDS.P1,
-        initialFullscreenSupported: true,
         ...SAVES,
       });
       expect(count(html, /data-rail-tone=/g)).toBe(1);
@@ -1665,72 +1655,69 @@ test.describe("the two layouts", () => {
 });
 
 /**
- * The browser's own full screen (`use-browser-fullscreen.ts`): a second
- * control beside the layout's exit, in the full-screen layout only, and only
- * where the browser has one. A server render has no document, so the support
- * is injected with `initialFullscreenSupported`.
+ * "Full screen" is the whole display: the black layout and the browser's own
+ * full screen (`use-browser-fullscreen.ts`) are one state. There is no
+ * second control for the browser's half, and no black layout under its bars.
  */
-test.describe("the whole-screen control", () => {
-  const ENTER = 'aria-label="Fill the whole screen"';
+test.describe("full screen is the browser's full screen", () => {
   const base = () => ({
     session: labelSessionFixture(),
     video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
     initialExpandedPointId: FIXTURE_POINT_IDS.P1,
   });
+  const LABELS = "src/components/admin/labels";
+  const source = readFileSync(`${LABELS}/label-console.tsx`, "utf8");
 
-  test("the full-screen layout draws it, off, left of the layout's own exit", () => {
-    const html = render({
-      ...base(),
-      initialLayoutMode: "black",
-      initialFullscreenSupported: true,
-    });
-    expect(count(html, /data-label-whole-screen/g)).toBe(1);
-    const button = tagOf(html, "data-label-whole-screen");
-    expect(button).toContain("<button");
-    expect(button).toContain(ENTER);
-    expect(button).toContain('aria-pressed="false"');
-    // The rail header's own recipe.
-    expect(button).toContain("size-[26px]");
-    expect(html).toContain("lucide-maximize");
-    // The layout's exit keeps its label, once, and comes after it.
-    expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
-    expect(html.indexOf("data-label-whole-screen")).toBeLessThan(
-      html.indexOf('aria-label="Exit full screen"'),
-    );
-    expect(html.indexOf("data-label-whole-screen")).toBeGreaterThan(
-      html.indexOf("data-label-rail-header"),
-    );
-  });
-
-  test("not without support — the server render's default", () => {
-    const html = render({ ...base(), initialLayoutMode: "black" });
-    expect(html).not.toContain("data-label-whole-screen");
-    expect(html).not.toContain("the whole screen");
-    expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
-  });
-
-  test("never in the docked layout", () => {
-    for (const initialLayoutMode of [undefined, "docked-side"] as const) {
-      const html = render({
-        ...base(),
-        initialLayoutMode,
-        initialFullscreenSupported: true,
-      });
+  test("no whole-screen control anywhere; the full screen keeps its one exit", () => {
+    for (const initialLayoutMode of [
+      undefined,
+      "docked-side",
+      "black",
+    ] as const) {
+      const html = render({ ...base(), initialLayoutMode });
       expect(html, String(initialLayoutMode)).not.toContain(
         "data-label-whole-screen",
       );
       expect(html, String(initialLayoutMode)).not.toContain("the whole screen");
     }
+    for (const file of [
+      "label-console.tsx",
+      "label-black-rail.tsx",
+      "label-black-view.tsx",
+      "use-browser-fullscreen.ts",
+    ]) {
+      const text = readFileSync(`${LABELS}/${file}`, "utf8");
+      expect(text, file).not.toContain("data-label-whole-screen");
+      expect(text, file).not.toContain("WHOLE_SCREEN_COPY");
+      expect(text, file).not.toMatch(/\bwholeScreen[=?:]/);
+    }
+    // A static render of the full screen still stands: nothing bounces it
+    // for the not-active state a page starts in.
+    const black = render({ ...base(), initialLayoutMode: "black" });
+    expect(black).toContain('data-label-layout-mode="black"');
+    expect(count(black, /aria-label="Exit full screen"/g)).toBe(1);
+    expect(tagOf(black, "data-label-black-exit")).toContain("size-[26px]");
   });
 
-  test("choosing the full screen asks for the browser's, inside the same click; leaving gives it back", () => {
-    const source = readFileSync(
-      "src/components/admin/labels/label-console.tsx",
-      "utf8",
+  test("choosing it asks for the browser's inside the same click; a refused request goes back to docked", () => {
+    const choose = source.slice(
+      source.indexOf("const chooseLayout = useCallback("),
+      source.indexOf("const fullScreen = layoutMode"),
     );
-    expect(source).toContain('if (mode === "black") enterWholeScreen();');
-    expect(source).toContain("else leaveWholeScreen();");
-    // The rail's two buttons are the same choice the Layout menu makes.
+    // Synchronously in the handler — the gesture — never after an await.
+    expect(choose).toMatch(
+      /switchLayout\(mode\);\s+if \(mode === "black"\) \{[\s\S]*?void enterWholeScreen\(\)\.then\(\(outcome\) => \{\s+const settled = layoutAfterFullscreenRequest\(outcome\);\s+if \(settled !== "black"\) switchLayout\(settled\);/,
+    );
+    expect(choose).not.toContain("await");
+  });
+
+  test("every way out leaves the browser's full screen too", () => {
+    const choose = source.slice(
+      source.indexOf("const chooseLayout = useCallback("),
+      source.indexOf("const fullScreen = layoutMode"),
+    );
+    // The exit button and the Layout menu are both `chooseLayout`.
+    expect(choose).toMatch(/\} else \{[\s\S]*?leaveWholeScreen\(\);\s+\}/);
     expect(source).toMatch(
       /const enterFullScreen = useCallback\(\s*\(\) => chooseLayout\("black"\)/,
     );
@@ -1743,6 +1730,23 @@ test.describe("the whole-screen control", () => {
     expect(source).toContain(
       "onFullScreen={fullScreen ? undefined : enterFullScreen}",
     );
+    expect(source).toContain(
+      "<LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />",
+    );
+  });
+
+  test("the browser's own Esc — a change event to not-active — returns to docked side", () => {
+    expect(source).toMatch(
+      /const leftWholeScreen = \(\) => \{\s+if \(layoutMode === "black"\) \{\s+switchLayout\(layoutAfterFullscreenLeft\(layoutMode\)\);\s+\}\s+\};/,
+    );
+    expect(source).toMatch(/useBrowserFullscreen\(leftWholeScreen\)/);
+  });
+
+  test("the layout is never stored or restored", () => {
+    expect(source).not.toContain("LAYOUT_MODE_STORAGE_KEY");
+    expect(source).not.toContain("parseLayoutMode");
+    expect(source).not.toContain("localStorage");
+    expect(source).toContain("initialLayoutMode ?? DEFAULT_LAYOUT_MODE");
   });
 });
 

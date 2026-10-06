@@ -564,7 +564,7 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
 
   test("the result is deriveShotResult of the row after the edit", () => {
     const { positionPatch } = createLoader().load(
-      "src/components/admin/labels/label-format.ts",
+      "src/lib/services/labels/shot-derived.ts",
     ) as {
       positionPatch: (
         shot: LabelShot,

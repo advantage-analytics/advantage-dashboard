@@ -138,7 +138,17 @@ export function LabelCourt({
   target = null,
   prompt = null,
   onPlace,
+  fadeOnZoom = false,
 }: {
+  /**
+   * Fade the art in when the court changes between the whole court and a
+   * half (`label-court-view-in`, globals.css): the zoom reads as one court
+   * changing scale, not a cut. Opacity only — the SVG's geometry is never
+   * animated. Off (the default, and the panel's first court), the art is
+   * simply there. Near ↔ far is not a zoom and does not fade: it happens on
+   * every placing click.
+   */
+  fadeOnZoom?: boolean;
   /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
   strokes: readonly CourtStroke[];
   /** The whole court, or the half a click is being taken on. */
@@ -167,7 +177,16 @@ export function LabelCourt({
   const net = zoomed ? fromCourtInHalf(view, { x: 6.9, y: NET_Y }) : null;
 
   const art = (
-    <>
+    // Keyed by the scale, so a zoom mounts a fresh layer and the fade plays
+    // from its mount; a half-to-half flip keeps the layer and replays nothing.
+    <span
+      key={zoomed ? "half" : "whole"}
+      data-court-layer=""
+      className={cn(
+        "absolute inset-0 block",
+        fadeOnZoom && "label-court-view-in",
+      )}
+    >
       <CourtArt view={view} />
       <svg
         className="absolute inset-0 block h-full w-full"
@@ -245,7 +264,7 @@ export function LabelCourt({
           Net
         </span>
       ) : null}
-    </>
+    </span>
   );
 
   const box = cn(

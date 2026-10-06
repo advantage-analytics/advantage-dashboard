@@ -358,10 +358,8 @@ test.describe("the black point row", () => {
     const row = tag(html, 'data-row="point"');
     expect(row).toContain(`data-point-id="${FIXTURE_POINT_IDS.P1}"`);
     expect(row).not.toContain("data-playing");
-    // The frame's grid.
-    expect(row).toContain(
-      "grid-cols-[22px_30px_minmax(0,1fr)_auto_48px_auto_22px]",
-    );
+    // The frame's grid: the actions take no track (they are an overlay).
+    expect(row).toContain("grid-cols-[22px_30px_minmax(0,1fr)_auto_52px_22px]");
     for (const cls of ["gap-x-[10px]", "min-h-[52px]", "px-[14px]", "py-1.5"]) {
       expect(row).toContain(cls);
     }
@@ -414,36 +412,41 @@ test.describe("the black point row", () => {
   test("the actions sit between the score and the tick, hidden until reached", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1);
     const score = html.indexOf("data-point-score");
-    const actions = html.indexOf("data-row-actions");
+    const actions = html.indexOf('data-row-actions=""');
     const tick = html.indexOf("data-check-row");
     expect(score).toBeLessThan(actions);
     expect(actions).toBeLessThan(tick);
 
-    const group = tag(html, "data-row-actions");
-    expect(group).toContain("opacity-0");
-    expect(group).toContain("group-hover/row:opacity-100");
-    // No width until then, so the score keeps the tick's side.
-    expect(group).toContain("w-0");
-    expect(group).toContain("group-hover/row:w-auto");
+    // The Video tab's reveal (`film-row-reveal.ts`): an overlay over the
+    // score's right end that fades in, never a track that changes width.
+    const group = tag(html, 'data-row-actions=""');
+    for (const cls of [
+      "absolute",
+      "inset-y-0",
+      "right-[46px]",
+      "transition-opacity",
+      "duration-200",
+      "opacity-0",
+      "group-hover/row:opacity-100",
+      "group-focus-within/row:opacity-100",
+      "has-[[aria-expanded=true]]:opacity-100",
+    ]) {
+      expect(group, cls).toContain(cls);
+    }
+    expect(group).not.toMatch(/\bw-0\b|w-auto/);
 
-    // Note, then the point's ⋯ menu, on the dark tone.
+    // The point's ⋯ menu alone, on the dark tone: no note control.
     const inGroup = html.slice(actions, tick);
-    expect(inGroup).toContain('aria-label="Point 1 note"');
     expect(inGroup).toContain('aria-label="Point 1 actions"');
-    expect(inGroup.indexOf("data-note-action")).toBeLessThan(
-      inGroup.indexOf("data-point-menu"),
-    );
-    expect(tag(html, "data-note-action")).toContain("text-white/55");
+    expect(html).not.toContain("data-note-action");
     expect(tag(html, "data-point-menu")).toContain("text-white/55");
     expect(tag(html, "data-point-menu")).not.toContain("--ink-");
 
-    // The grip, decorative, in the number's cell.
-    const handle = tag(html, "data-row-handle");
-    expect(handle).toContain('aria-hidden="true"');
-    expect(handle).toContain("cursor-grab");
-    expect(handle).toContain("text-white/60");
-    expect(handle).toContain("opacity-0");
-    expect(handle).toContain("group-hover/row:opacity-100");
+    // The number stays put: no grip takes its place, and it never fades.
+    expect(html).not.toContain("data-row-handle");
+    const numberTag = tag(html, "data-point-number");
+    expect(numberTag).not.toContain("opacity-0");
+    expect(inner(html, "data-point-number")).toBe("1");
   });
 
   test("a checked, untouched point: the tick is pressed and green, no pencil", () => {
@@ -461,14 +464,11 @@ test.describe("the black point row", () => {
     expect(html).not.toContain("data-pencil");
     // Won by Lee: p1's blue mark.
     expect(tag(html, "data-winner-mark")).toContain("bg-[var(--blue)]");
-    // It has a note: the Note action is white.
-    const note = tag(html, "data-note-action");
-    expect(note).toContain("data-has-note");
-    expect(note).toContain("text-white");
-    expect(note).not.toContain("text-white/55");
+    // It has a note stored; the row draws no control for it.
+    expect(html).not.toContain("data-note-action");
   });
 
-  test("a playing point: marked, its actions and grip shown, the rule drawn", () => {
+  test("a playing point: marked, its actions shown, the rule drawn", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P4, {
       playing: true,
       open: true,
@@ -484,11 +484,14 @@ test.describe("the black point row", () => {
     expect(inner(html, "data-point-sentence")).toBe("Point 4");
     expect(inner(html, "data-point-detail")).toBe("Second Serve · serve only");
 
-    const group = tag(html, "data-row-actions");
+    const group = tag(html, 'data-row-actions=""');
     expect(group).toContain("opacity-100");
     expect(group).not.toContain("opacity-0");
-    expect(group).not.toContain("w-0");
-    expect(tag(html, "data-row-handle")).not.toContain("opacity-0");
+    // The playing row holds the reveal: the score stays aside for it.
+    expect(tag(html, "data-point-score")).toMatch(/ -translate-x-\[26px\]/);
+    expect(tag(html, "data-point-score")).not.toContain("group-hover/row");
+    expect(html).not.toContain("data-row-handle");
+    expect(inner(html, "data-point-number")).toBe("4");
     expect(tag(html, "data-check-row")).toContain("text-white/50");
 
     const rule = tag(html, "data-playing-rule");
@@ -511,13 +514,8 @@ test.describe("the black point row", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1, {}, false);
     expect(html).toContain('role="img" aria-label="Point 1 won by Vargas"');
     expect(html).not.toContain("data-point-menu");
-    // No note to read, and none to write.
     expect(html).not.toContain("data-note-action");
     expect(tag(html, "data-check-row")).toContain("disabled");
-    // A point with a note still shows it.
-    expect(renderRow(FIXTURE_POINT_IDS.P2, {}, false)).toContain(
-      "data-note-action",
-    );
   });
 
   test("the pencil asks to reset the point, and does not toggle the row", () => {
@@ -860,8 +858,11 @@ function xy(row: string, end: "hit" | "landed"): string {
 test.describe("the black shots well", () => {
   test("a recessed well with no header row, one row a live stroke, and Add shot", () => {
     const html = renderWell();
-    const frame = tag(html, "data-shots-well");
-    expect(frame).toContain('data-shots-well="p-well"');
+    expect(tag(html, "data-shots-well")).toContain('data-shots-well="p-well"');
+    // The wash and the hairlines are on the well's inner column — what the
+    // outer grid's track clips as the well unfolds.
+    const outerEnd = html.indexOf(">", html.indexOf("data-shots-well")) + 1;
+    const frame = html.slice(outerEnd, html.indexOf(">", outerEnd) + 1);
     for (const cls of [
       "bg-white/[0.035]",
       "shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]",
@@ -932,8 +933,10 @@ test.describe("the black shots well", () => {
         },
       }),
     });
+    // The well's outer grid holds one child: the column of rows.
+    const column = (tree.props as { children: React.ReactElement }).children;
     const children = React.Children.toArray(
-      (tree.props as { children: React.ReactNode }).children,
+      (column.props as { children: React.ReactNode }).children,
     ) as React.ReactElement<Record<string, unknown>>[];
     const button = children.find((el) => el.props["data-add-shot"] === "");
     expect(button).toBeDefined();
@@ -1813,12 +1816,8 @@ test.describe("the rail's two tones", () => {
     expect(rail).toMatch(/<FloatMenu[\s\S]*?width=\{272\}\s+tone=\{tone\}/);
     expect(rail).not.toContain('tone="dark"');
     const row = readFileSync(ROW, "utf8");
-    // Who won, and the note's surface with the palette worn again inside it.
+    // Who won.
     expect(row).toContain('tone={edit.tone ?? "dark"}');
-    expect(row).toContain("floatMenuToneClasses(tone)");
-    expect(row).toContain(
-      "<div data-note-palette={tone} className={RAIL_TONE_CLASS[tone]}>",
-    );
     expect(row).not.toContain('tone="dark"');
     expect(readFileSync(WELL, "utf8")).not.toContain('tone="dark"');
     // The band takes it: one paint, menus from `menu`.

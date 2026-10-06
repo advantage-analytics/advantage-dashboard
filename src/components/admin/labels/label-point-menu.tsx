@@ -280,7 +280,7 @@ export function PointMenu({
                 aria-expanded={open}
                 data-point-menu=""
                 className={cn(
-                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[color,background-color] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[color,background-color,scale] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100",
                   open ? "bg-white/[0.08] text-white" : "text-white/55",
                 )}
               >

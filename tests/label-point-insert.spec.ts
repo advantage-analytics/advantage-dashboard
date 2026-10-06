@@ -781,9 +781,8 @@ function pointRow(html: string, pointId: string): string {
 /** The number drawn in a point row's first track. */
 function numberOf(html: string, pointId: string): string {
   const row = pointRow(html, pointId);
-  const first = row.indexOf("<span");
-  const second = row.indexOf("<span", first + 1);
-  const start = row.indexOf(">", second) + 1;
+  const at = row.indexOf("data-point-number");
+  const start = row.indexOf(">", at) + 1;
   return row.slice(start, row.indexOf("<", start));
 }
 

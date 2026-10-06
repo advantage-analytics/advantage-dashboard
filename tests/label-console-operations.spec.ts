@@ -186,6 +186,8 @@ function press(tree: React.ReactNode, name: string) {
   (control!.props.onClick as (event: unknown) => void)({
     stopPropagation() {},
     preventDefault() {},
+    // The tick marks its own element for the check's answer.
+    currentTarget: { dataset: {} },
   });
 }
 

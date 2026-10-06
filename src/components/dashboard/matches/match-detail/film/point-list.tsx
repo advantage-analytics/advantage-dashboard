@@ -44,6 +44,14 @@ import {
   type ShotStop,
 } from "./film-shots";
 import {
+  FILM_ROW_ACTION_HELD,
+  FILM_ROW_ACTION_ON_REACH,
+  FILM_ROW_ACTION_TRANSITION,
+  FILM_ROW_SLIDE_HELD,
+  FILM_ROW_SLIDE_ON_REACH,
+  FILM_ROW_SLIDE_TRANSITION,
+} from "./film-row-reveal";
+import {
   followAffordance,
   type FollowAffordance,
   type PointFocus,
@@ -953,10 +961,9 @@ const ROW_TONE = {
     title: "truncate text-[12px] text-[var(--ink-900)]",
     detail: "text-micro truncate",
     detailStyle: undefined,
-    score:
-      "text-scoreboard-sm tabular inline-block min-w-[52px] text-right transition-transform duration-200 ease-[var(--ease-primary)]",
+    score: `text-scoreboard-sm tabular inline-block min-w-[52px] text-right ${FILM_ROW_SLIDE_TRANSITION}`,
     scoreStyle: { fontSize: "13px", color: "var(--ink-900)" } as const,
-    save: "absolute right-3 inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 transition-opacity duration-200 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    save: `absolute right-3 inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 ${FILM_ROW_ACTION_TRANSITION} focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`,
     savedInk: "var(--blue)",
     restingInk: "var(--ink-400)",
   },
@@ -976,10 +983,9 @@ const ROW_TONE = {
     detailStyle: { color: "rgba(255,255,255,0.45)" } as const,
     // Same story for `.text-scoreboard-sm`: the room's score is mono, not the
     // scoreboard face, so the dark branch does not borrow the class at all.
-    score:
-      "mono tabular inline-block min-w-[52px] text-right transition-transform duration-200 ease-[var(--ease-primary)]",
+    score: `mono tabular inline-block min-w-[52px] text-right ${FILM_ROW_SLIDE_TRANSITION}`,
     scoreStyle: { fontSize: "11px", color: "rgba(255,255,255,0.85)" } as const,
-    save: "absolute right-[14px] inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 transition-opacity duration-200 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+    save: `absolute right-[14px] inline-flex cursor-pointer items-center justify-center rounded-[var(--radius-cell)] p-0.5 ${FILM_ROW_ACTION_TRANSITION} focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`,
     // Saving is the room's one filled glyph (R9) — white, not blue: blue on
     // the dark scope is reserved for the progress rule and the serve dot.
     savedInk: "rgba(255,255,255,1)",
@@ -1110,9 +1116,7 @@ export const PointRow = memo(function PointRow({
             t.score,
             // A saved point's bookmark stays lit, so its score stays aside
             // for it rather than sliding back under it when the hover ends.
-            point.saved
-              ? "-translate-x-[26px]"
-              : "motion-safe:group-focus-within/row:-translate-x-[26px] motion-safe:group-hover/row:-translate-x-[26px]",
+            point.saved ? FILM_ROW_SLIDE_HELD : FILM_ROW_SLIDE_ON_REACH,
           )}
           style={t.scoreStyle}
         >
@@ -1132,9 +1136,7 @@ export const PointRow = memo(function PointRow({
           t.save,
           // The room's row: the bookmark sits over the row's right edge and
           // fades in as the score slides aside; a saved point's stays lit.
-          point.saved
-            ? "opacity-100"
-            : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+          point.saved ? FILM_ROW_ACTION_HELD : FILM_ROW_ACTION_ON_REACH,
         )}
       >
         <Bookmark

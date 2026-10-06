@@ -48,6 +48,7 @@ import {
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
+import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
@@ -148,8 +149,8 @@ import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import { labelFilmStops } from "./label-film-stops";
 import {
   DEFAULT_LAYOUT_MODE,
-  LAYOUT_MODE_STORAGE_KEY,
-  parseLayoutMode,
+  layoutAfterFullscreenLeft,
+  layoutAfterFullscreenRequest,
   type LabelLayoutMode,
 } from "./label-layout";
 import { LabelLayoutControl } from "./label-layout-control";
@@ -303,10 +304,9 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  * ── Two layouts ─────────────────────────────────────────────────────────────
  *
  * One arrangement, in the page or over it (`label-layout.ts`), chosen from
- * the header's Layout menu or the rail's own buttons and remembered under
- * `LAYOUT_MODE_STORAGE_KEY` — read after mount, since the page is
- * server-rendered and a first client render that read storage would not
- * hydrate:
+ * the header's Layout menu or the rail's own buttons. It is not stored: the
+ * console always starts docked, since a reload cannot re-enter the browser's
+ * full screen without a gesture.
  *
  * - **Docked side** (`label-side-view.tsx`), the default: under this
  *   header, the film and the court as dark cards and the rail as a white
@@ -315,8 +315,12 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  * - **Full screen** (`label-black-view.tsx`, board 08l): a `fixed inset-0
  *   z-50` layer over the whole page — the film room's own mechanism, which
  *   is what hides the admin header — black to the edges, the rail in its
- *   dark tone with the title, progress and save line in its header. Choosing
- *   it also asks for the browser's own full screen, inside the same click.
+ *   dark tone with the title, progress and save line in its header. It and
+ *   the browser's own full screen are ONE state (`use-browser-fullscreen.ts`):
+ *   choosing it asks for the browser's inside the same click, a refused
+ *   request goes back to docked side, and leaving by any road — the rail's
+ *   "Exit full screen", the Layout menu, the browser's own Esc — leaves both.
+ *   Only a browser with no Fullscreen API shows the layer by itself.
  *   The layer stays a child of this root, not a portal, so the `--film-t`
  *   clock still reaches its rows.
  *
@@ -343,7 +347,6 @@ export function LabelConsole({
   initialPointFocus,
   initialLayoutMode,
   initialRailWidth,
-  initialFullscreenSupported,
   headerAction,
 }: {
   session: LabelSession;
@@ -386,19 +389,12 @@ export function LabelConsole({
   /** Follow or hold on first render — for specs. Follows by default. */
   initialPointFocus?: PointFocus;
   /**
-   * Docked side or full screen on first render — for specs. Given, storage
-   * is not consulted. Otherwise docked side, then the stored mode once the
-   * client can read it.
+   * Docked side or full screen on first render — for specs. Otherwise
+   * docked side.
    */
   initialLayoutMode?: LabelLayoutMode;
   /** The rail's width on first render, in px — for specs. */
   initialRailWidth?: number;
-  /**
-   * Whether the browser has a full screen of its own, on the server render —
-   * for specs. There is no document there, so it is false by default; once
-   * mounted the browser itself answers.
-   */
-  initialFullscreenSupported?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -474,53 +470,55 @@ export function LabelConsole({
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
 
-  // Docked side or full screen (label-layout.ts). The stored choice is read
-  // after mount: the page is server-rendered and the server has no storage,
-  // so a first client render that disagreed with the server's would not
-  // hydrate.
+  // Docked side or full screen (label-layout.ts). Never stored: the full
+  // screen is the browser's own, which a reload cannot re-enter without a
+  // gesture, so the console always starts docked.
   const [layoutMode, setLayoutMode] = useState<LabelLayoutMode>(
     initialLayoutMode ?? DEFAULT_LAYOUT_MODE,
-  );
-  useEffect(() => {
-    if (initialLayoutMode !== undefined) return;
-    try {
-      const stored = localStorage.getItem(LAYOUT_MODE_STORAGE_KEY);
-      // Storage is the external system here, readable only after mount.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (stored !== null) setLayoutMode(parseLayoutMode(stored));
-    } catch {
-      /* storage blocked — the console just starts docked */
-    }
-  }, [initialLayoutMode]);
-  // The browser's own full screen (use-browser-fullscreen.ts), which the
-  // full-screen layout asks for as it is chosen and gives back as it is
-  // left, when this console is what entered it. The browser's Esc leaves
-  // only the browser's full screen; the layout stays, with its own way out.
-  const {
-    supported: wholeScreenSupported,
-    active: wholeScreenActive,
-    toggle: toggleWholeScreen,
-    enter: enterWholeScreen,
-    leave: leaveWholeScreen,
-  } = useBrowserFullscreen(initialFullscreenSupported);
-  const wholeScreen = useMemo(
-    () => ({
-      supported: wholeScreenSupported,
-      active: wholeScreenActive,
-      toggle: toggleWholeScreen,
-    }),
-    [wholeScreenSupported, wholeScreenActive, toggleWholeScreen],
   );
   // A mode change remounts the `<video>`, which stops it: remember whether
   // the film was running so the new element can carry on.
   const resumeAfterLayout = useRef(false);
+  /** The one way the layout changes, whoever asked. */
+  // A view fades in only once the labeller has switched layouts — never the
+  // one the page loaded with (`arrive`, label-black-view / label-side-view).
+  const [layoutSwitched, setLayoutSwitched] = useState(false);
+  const switchLayout = useCallback((mode: LabelLayoutMode) => {
+    resumeAfterLayout.current = player.current?.isPlaying() ?? false;
+    setLayoutMode(mode);
+    setLayoutSwitched(true);
+  }, []);
+  // The browser's own full screen (use-browser-fullscreen.ts) and the black
+  // layout are ONE state. The page leaving the browser's full screen by any
+  // road — its own Esc or control, or this console's `leaveWholeScreen` — is
+  // a real change event, and puts the layout back to docked side.
+  // Only while the layout IS the full screen: a full screen that was never
+  // this layout's (another element's, left again) changes nothing here. The
+  // hook calls the latest of these, so it reads the layout as it stands.
+  const leftWholeScreen = () => {
+    if (layoutMode === "black") {
+      switchLayout(layoutAfterFullscreenLeft(layoutMode));
+    }
+  };
+  const { enter: enterWholeScreen, leave: leaveWholeScreen } =
+    useBrowserFullscreen(leftWholeScreen);
   const chooseLayout = useCallback(
     (mode: LabelLayoutMode) => {
-      resumeAfterLayout.current = player.current?.isPlaying() ?? false;
-      setLayoutMode(mode);
-      // Inside the click that chose it: the gesture the browser asks for.
-      if (mode === "black") enterWholeScreen();
-      else leaveWholeScreen();
+      switchLayout(mode);
+      if (mode === "black") {
+        // Inside the click that chose it: the gesture the browser asks for.
+        // Black is drawn at once, so the layer and the browser's full
+        // screen arrive together; a REFUSED request puts it back — black is
+        // never left showing under the browser's bars. A browser with no
+        // Fullscreen API keeps the black layer: its only full screen.
+        void enterWholeScreen().then((outcome) => {
+          const settled = layoutAfterFullscreenRequest(outcome);
+          if (settled !== "black") switchLayout(settled);
+        });
+      } else {
+        // The exit button and the Layout menu leave the browser's too.
+        leaveWholeScreen();
+      }
       // The menu hands focus back to its trigger once it has closed (some
       // 400ms later), and a focused button swallows Space and the arrows the
       // film is driven by. Let go of it as it arrives, so the keys work
@@ -541,13 +539,8 @@ export function LabelConsole({
       };
       const giveUp = window.setTimeout(stop, 1500);
       document.addEventListener("focusin", release);
-      try {
-        localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
-      } catch {
-        /* private window — the choice just isn't kept */
-      }
     },
-    [enterWholeScreen, leaveWholeScreen],
+    [switchLayout, enterWholeScreen, leaveWholeScreen],
   );
   const fullScreen = layoutMode === "black";
   const scrollerRef = fullScreen ? blackScrollerRef : sideScrollerRef;
@@ -766,20 +759,32 @@ export function LabelConsole({
     [patchPoint],
   );
 
-  const patchShot = useCallback(
-    async (shotId: string, patch: LabelShotPatch) => {
-      const before = findShot(points, shotId);
-      if (!before || !onSaveShot) return;
-      const owner = pointOfShot(points, shotId);
+  /**
+   * One shot write, optimistic: the labeller's own (`patchShot`) or a
+   * follower of one. `rows` is what the write reads the stroke and its point
+   * from — the committed rows for the labeller's edit, the rows with that
+   * edit applied for its follower. Answers the stroke's point with the patch
+   * applied once the write has SAVED, and null when it did not (refused
+   * before the call, or failed and put back).
+   */
+  const writeShot = useCallback(
+    async (
+      rows: readonly LabelPoint[],
+      shotId: string,
+      patch: LabelShotPatch,
+    ): Promise<LabelPoint | null> => {
+      const before = findShot(rows, shotId);
+      if (!before || !onSaveShot) return null;
+      const owner = pointOfShot(rows, shotId);
       // A draft row has no id the server knows yet; its add is still in
       // flight, and the saved row replaces it when that lands.
-      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
+      if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
       const retime = "video_time" in patch;
-      setPoints((current) =>
+      const change = (current: readonly LabelPoint[]) =>
         updateShot(current, shotId, retime, (shot) =>
           applyLabelShotPatch(shot, patch),
-        ),
-      );
+        );
+      setPoints(change);
 
       dispatchSave({ type: "start" });
       const result = await settle(onSaveShot(shotId, patch));
@@ -799,7 +804,7 @@ export function LabelConsole({
           })),
         );
         dispatchSave({ type: "failure", message: result.error });
-        return;
+        return null;
       }
       setPoints((current) =>
         updateShot(current, shotId, false, (shot) => ({
@@ -808,13 +813,37 @@ export function LabelConsole({
         })),
       );
       dispatchSave({ type: "success", at: Date.now() });
-      syncEnding(owner, (rows) =>
-        updateShot(rows, shotId, retime, (shot) =>
-          applyLabelShotPatch(shot, patch),
-        ),
-      );
+      syncEnding(owner, change);
+      return owner ? (change([owner])[0] ?? null) : null;
     },
-    [points, onSaveShot, syncEnding],
+    [onSaveShot, syncEnding],
+  );
+
+  /**
+   * The labeller's edit of one stroke, and — once it has SAVED — the volley
+   * link (volley-link.ts): a volley or an overhead and the stroke before it
+   * share one place, this one's contact and that one's landing, so the other
+   * end goes out as a shot write of its own through the same `writeShot`.
+   * A follower's write is never asked for followers of its own — the link is
+   * planned here, off the labeller's patch alone — and, like `syncEnding`, a
+   * failed write never reaches it, so a reverted row leaves none behind.
+   */
+  const patchShot = useCallback(
+    async (shotId: string, patch: LabelShotPatch) => {
+      const strokeBefore = findShot(points, shotId)?.stroke ?? null;
+      const saved = await writeShot(points, shotId, patch);
+      if (!saved) return;
+      for (const follower of volleyLinkWrites({
+        point: saved,
+        shotId,
+        strokeBefore,
+        patch,
+        ghosts: marks !== null,
+      })) {
+        void writeShot([saved], follower.shotId, follower.patch);
+      }
+    },
+    [points, writeShot, marks],
   );
 
   /**
@@ -1755,7 +1784,6 @@ export function LabelConsole({
       saveStatus={saveStatus}
       onExit={fullScreen ? exitFullScreen : undefined}
       onFullScreen={fullScreen ? undefined : enterFullScreen}
-      wholeScreen={fullScreen ? wholeScreen : undefined}
       scrollerRef={scrollerRef}
       onFocusCapture={railHandlers.holdOnEditorFocus}
       affordance={affordance}
@@ -1836,6 +1864,7 @@ export function LabelConsole({
         video={videoPlayer}
         court={courtPanel}
         placing={placing}
+        arrive={layoutSwitched}
       >
         {rail}
       </View>

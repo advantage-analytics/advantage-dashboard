@@ -201,8 +201,15 @@ export function LabelBlackView({
   video,
   court,
   placing = false,
+  arrive = false,
   children,
 }: {
+  /**
+   * The labeller just chose the full screen: the layer fades in over the
+   * page (`label-layer-in-full`, globals.css — 200ms, opacity only, from a
+   * visible default). Off on first render.
+   */
+  arrive?: boolean;
   /** The rail's width on first render, in px — for specs. */
   initialRailWidth?: number;
   /** The shared `LabelVideoPlayer`. */
@@ -220,7 +227,10 @@ export function LabelBlackView({
     <div
       ref={inertOutside}
       data-label-black=""
-      className="fixed inset-0 z-50 flex bg-black text-white"
+      className={cn(
+        "fixed inset-0 z-50 flex bg-black text-white",
+        arrive && "label-layer-in-full",
+      )}
     >
       {/* The stage: the film at 16:9 of the stage's width, flush to the top,
           and the court on the black under it taking the rest — no card

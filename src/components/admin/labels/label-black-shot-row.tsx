@@ -2,6 +2,7 @@
 
 import { Plus, RotateCcw, Split, Undo2, WandSparkles, X } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
   isGhostShot,
@@ -25,9 +26,11 @@ import { suggestionState } from "@/lib/services/labels/suggestions";
 import { courtPair, withoutGhosts } from "./label-black-format";
 import {
   AMBER_SUGGESTION_INK,
+  RAIL_PRESS,
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
+import { positionPatch } from "@/lib/services/labels/shot-derived";
 import {
   MarkChip,
   PencilMark,
@@ -51,7 +54,6 @@ import {
   isFault,
   parseCourtPoint,
   parseVideoTime,
-  positionPatch,
   sideOptions,
   spinLabel,
   spinOptions,
@@ -159,6 +161,65 @@ const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
 } as React.CSSProperties;
 
+// ── The rally arriving ───────────────────────────────────────────────────
+
+/**
+ * The Video tab's shots well, on the rail (`ShotWell` / `ShotWellRow` in
+ * `film/point-list.tsx`, the keyframes in globals.css): the well unfolds on
+ * `film-shot-well-open` — an outer grid whose one track grows 0fr → 1fr over
+ * an inner `min-h-0 overflow-hidden` column — and each row in it arrives on
+ * `film-shot-row-in`, 25ms after the one before, capped at eight steps
+ * (`shotRowRevealDelay`, the Video tab's own function). Same classes, so the
+ * same durations, curve and reduced-motion behaviour.
+ *
+ * `order` is the row's place in the well, 1-based, tombstones, ghosts and
+ * suggestions included — the stagger only. Undefined (a well that was
+ * already open when the page loaded, or a row drawn outside a well) is no
+ * arrival at all.
+ *
+ * Mount-driven: every row is keyed by its stroke's id, so an edit, a save or
+ * a tick of the film's clock re-renders rows that are already there and
+ * replays nothing.
+ */
+function rowArrival(order: number | undefined): {
+  className: string | undefined;
+  style: React.CSSProperties | undefined;
+} {
+  if (order === undefined) return { className: undefined, style: undefined };
+  return {
+    className: "film-shot-row-in",
+    style: { animationDelay: `${shotRowRevealDelay(order)}ms` },
+  };
+}
+
+/**
+ * The rally has arrived: mark the well, on the element — no state, so the
+ * well stays a plain function of its props. From here a row that mounts in
+ * it is an edit, and globals.css (`[data-well-settled]`) takes the stagger
+ * and the rise off it; only a tombstone still rises in.
+ */
+function settleWell(well: HTMLElement) {
+  well.dataset.wellSettled = "";
+}
+
+/** Settled when the LAST row's arrival ends — or, reduced, the well's fade. */
+function settleWellOnArrival(event: React.AnimationEvent<HTMLDivElement>) {
+  const well = event.currentTarget;
+  if (event.animationName === "film-shot-well-fade") {
+    if (event.target === well) settleWell(well);
+    return;
+  }
+  if (event.animationName !== "film-shot-row-in") return;
+  if (event.target === well.firstElementChild?.lastElementChild) {
+    settleWell(well);
+  }
+}
+
+/** Reaching into the well ends the arrival: nothing holds a row from a click. */
+function settleWellOnReach(event: React.SyntheticEvent<HTMLDivElement>) {
+  settleWell(event.currentTarget);
+}
+
 /**
  * The ground under the row's two requests: the rail's own (`--rail-ground`:
  * `--surface-dark` on black, the card's white on the light ground) with the
@@ -218,9 +279,16 @@ export function BlackShotsWell({
   edit,
   marks = null,
   playingShotId = null,
+  animate = true,
 }: {
   point: LabelPoint;
   edit: EditContext;
+  /**
+   * Unfold the well and let its rows arrive, as the Video tab's does. Off
+   * for the one well the rail must not animate: the point that was already
+   * open when the page loaded.
+   */
+  animate?: boolean;
   /** The session's marks; null draws no chip on any stroke. */
   marks?: LabelMarks | null;
   /** The stroke the film is on, when it is one of this point's. */
@@ -234,13 +302,30 @@ export function BlackShotsWell({
   const suggested = openShotSuggestions(point, marks);
   const rows: React.ReactNode[] = [];
   let n = 0;
+  // The next row's place in the well, for the stagger; none when the well
+  // does not animate.
+  const arrive = () => (animate ? rows.length + 1 : undefined);
   for (const shot of point.shots) {
     if (shot.status === "deleted") {
-      rows.push(<BlackDeletedShot key={shot.id} shot={shot} edit={edit} />);
+      rows.push(
+        <BlackDeletedShot
+          key={shot.id}
+          shot={shot}
+          edit={edit}
+          arrive={arrive()}
+        />,
+      );
       continue;
     }
     if (ghosts && isGhostShot(shot)) {
-      rows.push(<BlackGhostShot key={shot.id} shot={shot} edit={edit} />);
+      rows.push(
+        <BlackGhostShot
+          key={shot.id}
+          shot={shot}
+          edit={edit}
+          arrive={arrive()}
+        />,
+      );
     } else {
       n += 1;
       rows.push(
@@ -253,6 +338,7 @@ export function BlackShotsWell({
           edit={edit}
           playing={shot.id === playingShotId}
           marks={shotRowMarks(shown, shot, marks, edit.names)}
+          arrive={arrive()}
         />,
       );
     }
@@ -264,38 +350,52 @@ export function BlackShotsWell({
           suggestion={suggestion}
           point={point}
           edit={edit}
+          arrive={arrive()}
         />,
       );
     }
   }
+  const addArrival = rowArrival(arrive());
   return (
+    // Two elements, as the Video tab's `ShotWell` is: the outer grid is what
+    // `film-shot-well-open` unfolds, the inner `min-h-0 overflow-hidden`
+    // column is what its track clips — the wash, the hairlines and the rows.
+    // The rows under the well slide down with the track instead of jumping.
     <div
       data-shots-well={point.id}
-      className="flex flex-col bg-white/[0.035] shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+      data-well-animate={animate ? "" : undefined}
+      className={animate ? "film-shot-well-open" : undefined}
       style={WELL_STYLE}
+      onAnimationEnd={animate ? settleWellOnArrival : undefined}
+      onPointerDownCapture={animate ? settleWellOnReach : undefined}
+      onKeyDownCapture={animate ? settleWellOnReach : undefined}
     >
-      {rows}
-      {edit.editable && operations ? (
-        <button
-          type="button"
-          data-add-shot=""
-          onClick={() => operations.onAddShot(point.id, null)}
-          // The row's own tracks, so the plus sits under the numbers and
-          // the words under the times, at any rail width.
-          className={cn(
-            ROW_GRID,
-            "w-full cursor-pointer text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-          )}
-        >
-          <Plus
-            className="size-2.5"
-            style={{ color: QUIET_INK }}
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-          <span className="col-[2/-1] min-w-0 truncate">Add shot</span>
-        </button>
-      ) : null}
+      <div className="flex min-h-0 flex-col overflow-hidden bg-white/[0.035] shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]">
+        {rows}
+        {edit.editable && operations ? (
+          <button
+            type="button"
+            data-add-shot=""
+            onClick={() => operations.onAddShot(point.id, null)}
+            style={addArrival.style}
+            // The row's own tracks, so the plus sits under the numbers and
+            // the words under the times, at any rail width.
+            className={cn(
+              ROW_GRID,
+              addArrival.className,
+              "w-full cursor-pointer text-left text-[11px] font-medium text-white/70 transition-colors duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+            )}
+          >
+            <Plus
+              className="size-2.5"
+              style={{ color: QUIET_INK }}
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <span className="col-[2/-1] min-w-0 truncate">Add shot</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -338,9 +438,12 @@ export function BlackShotRow({
   edit,
   playing = false,
   marks = NO_MARKS,
+  arrive,
 }: {
   shot: LabelShot;
   number: number;
+  /** The row's place in the well, for its arrival (`rowArrival`). */
+  arrive?: number;
   /**
    * The point the stroke is in, for "Split point here" (`canSplitAtShot`
    * reads its shots in video order). Absent, no split is offered.
@@ -373,6 +476,7 @@ export function BlackShotRow({
   const words = fault ? "text-white/35" : "text-white/50";
   // ONE disc for the row's marks, however many (`collapseShotMarks`).
   const mark = collapseShotMarks(marks);
+  const arrival = rowArrival(arrive);
 
   return (
     // Selecting is a pointer convenience; the keyboard selects by focusing
@@ -385,8 +489,10 @@ export function BlackShotRow({
       data-fault={fault ? "" : undefined}
       onClick={select}
       onFocus={select}
+      style={arrival.style}
       className={cn(
         ROW_GRID,
+        arrival.className,
         // A size container, for a mark that narrows with the rail.
         "group/row @container transition-colors duration-200",
         lit
@@ -610,10 +716,18 @@ export function BlackShotRow({
 export function BlackDeletedShot({
   shot,
   edit,
+  arrive,
 }: {
   shot: LabelShot;
   edit: EditContext;
+  /**
+   * The row's place in the well (`rowArrival`). It also carries
+   * `label-row-arrive`: a tombstone that mounts in a well already open — the
+   * stroke was just deleted — rises in where the stroke was (globals.css).
+   */
+  arrive?: number;
 }) {
+  const arrival = rowArrival(arrive);
   const { operations } = edit;
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const reason = isLabelDeleteReason(shot.deleteReason)
@@ -625,7 +739,12 @@ export function BlackDeletedShot({
       data-row="deleted-shot"
       data-tombstone-id={shot.id}
       data-well-tombstone=""
-      className="grid h-[30px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-2 px-[14px]"
+      style={arrival.style}
+      className={cn(
+        "grid h-[30px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-2 px-[14px]",
+        arrival.className,
+        arrival.className && "label-row-arrive",
+      )}
     >
       <span
         aria-hidden="true"
@@ -691,10 +810,14 @@ const TEXT_AFFORDANCE =
 export function BlackGhostShot({
   shot,
   edit,
+  arrive,
 }: {
   shot: LabelShot;
   edit: EditContext;
+  /** The line's place in the well (`rowArrival`); its shown row shares it. */
+  arrive?: number;
 }) {
+  const arrival = rowArrival(arrive);
   const { names, operations, onToggleGhost } = edit;
   const open = edit.openGhostIds?.has(shot.id) ?? false;
   const rowId = `label-ghost-${shot.id}`;
@@ -708,8 +831,11 @@ export function BlackGhostShot({
       <div
         data-row="ghost-shot"
         data-shot-ghost={shot.id}
-        className="flex h-[26px] items-center gap-[7px] pr-[14px] pl-[44px] text-[11px]"
-        style={{ color: QUIET_INK }}
+        className={cn(
+          "flex h-[26px] items-center gap-[7px] pr-[14px] pl-[44px] text-[11px]",
+          arrival.className,
+        )}
+        style={{ color: QUIET_INK, ...arrival.style }}
       >
         <WandSparkles
           className="size-[11px] shrink-0"
@@ -738,7 +864,8 @@ export function BlackGhostShot({
           id={rowId}
           data-row="ghost-shot-row"
           data-shot-ghost-row={shot.id}
-          className={cn(ROW_GRID, "bg-white/[0.03]")}
+          style={arrival.style}
+          className={cn(ROW_GRID, arrival.className, "bg-white/[0.03]")}
         >
           <span
             aria-hidden="true"
@@ -781,7 +908,10 @@ export function BlackGhostShot({
                   event.stopPropagation();
                   operations.onRestoreSiteRemoval(shot.id);
                 }}
-                className="inline-flex shrink-0 cursor-pointer items-center gap-[5px] rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/70 transition-colors duration-200 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                className={cn(
+                  "inline-flex shrink-0 cursor-pointer items-center gap-[5px] rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap text-white/70 hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  RAIL_PRESS,
+                )}
               >
                 <Undo2
                   className="size-[11px]"
@@ -843,11 +973,15 @@ function BlackSuggestedShot({
   suggestion,
   point,
   edit,
+  arrive,
 }: {
   suggestion: ShotSuggestion;
   point: LabelPoint;
   edit: EditContext;
+  /** The row's place in the well, for its arrival (`rowArrival`). */
+  arrive?: number;
 }) {
+  const arrival = rowArrival(arrive);
   const plan = planAddedShot(point, suggestion.afterShotId);
   if ("error" in plan) return null;
   const operations = edit.editable ? edit.operations : undefined;
@@ -862,8 +996,10 @@ function BlackSuggestedShot({
     <div
       data-row="suggested-shot"
       data-shot-suggestion={suggestion.key}
+      style={arrival.style}
       className={cn(
         ROW_GRID,
+        arrival.className,
         "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
       )}
     >
@@ -1044,7 +1180,7 @@ function RowAction({
           event.stopPropagation();
           onClick();
         }}
-        className="flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/[0.45] transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className="flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/[0.45] transition-[color,background-color,scale] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100"
       >
         {children}
       </button>
