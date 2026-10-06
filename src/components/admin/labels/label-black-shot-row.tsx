@@ -119,12 +119,14 @@ export const SHOT_TAIL_PX = 33;
 export const SHOT_TAIL_AIR_PX = 5;
 
 /** Each track's floor, left to right; the positions and the number are fixed. */
+// The time's floor holds a match past the hour whole: "1:02:03.4" is nine
+// 6px mono figures.
 export const SHOT_FLOORS_PX = [
   22,
-  44,
-  36,
-  52,
-  30,
+  56,
+  32,
+  48,
+  26,
   88,
   88,
   30,
@@ -143,7 +145,7 @@ export const SHOT_PADDING_PX = 2 * 14;
 // A literal: Tailwind only emits a class it can read whole in the source, so
 // the two numbers (`SHOT_TAIL_PX`, `SHOT_TAIL_AIR_PX`) are written out here.
 export const SHOT_TRACKS =
-  "grid-cols-[22px_minmax(44px,0.3fr)_minmax(36px,0.55fr)_minmax(52px,0.8fr)_minmax(30px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
+  "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
 /** A stroke row: the tracks, the gap, the height and the padding. */
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its

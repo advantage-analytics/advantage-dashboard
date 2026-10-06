@@ -998,12 +998,12 @@ test.describe("the black shots well", () => {
     // At 520 every track sits on its floor.
     expect(widthsAt(RAIL_MIN_PX)).toEqual([...SHOT_FLOORS_PX]);
     // At the default rail the row is the frame's — 22 · 48 · 54 · 80 · 52 ·
-    // 88 · 88 · 80 · 36 — within a few px: the time sits on its 44px floor
-    // (a tabular time wants no room past its digits), the words within 2.
+    // 88 · 88 · 80 · 36 — within a few px: the time sits on its 56px floor
+    // (room for "1:02:03.4", a match past the hour), the words give it back.
     const FRAME = [22, 48, 54, 80, 52, 88, 88, 80, 36];
     for (const [i, width] of widthsAt(RAIL_DEFAULT_PX).entries()) {
       expect(Math.abs(width - FRAME[i]), `track ${i}`).toBeLessThanOrEqual(
-        i === 1 ? 4 : 2,
+        i === 1 ? 8 : 4,
       );
     }
     // At the widest rail the slack is shared across the word columns in
@@ -1014,10 +1014,16 @@ test.describe("the black shots well", () => {
       RAIL_MAX_PX - SHOT_GAPS_PX - SHOT_PADDING_PX,
       6,
     );
-    for (const i of [1, 2, 3, 4, 7, 8]) {
+    // (The time keeps to its floor: a tabular time wants no room past its
+    // figures.)
+    for (const i of [2, 3, 4, 7, 8]) {
       expect(wide[i], `track ${i}`).toBeGreaterThan(tracks[i].min + 8);
     }
     expect([wide[0], wide[5], wide[6]]).toEqual([22, 88, 88]);
+
+    // The time's floor holds an hour-long match's time whole: nine 6px mono
+    // figures.
+    expect(SHOT_FLOORS_PX[1]).toBeGreaterThanOrEqual("1:02:03.4".length * 6);
 
     // A word its track can no longer hold truncates.
     expect(tag(row, 'data-calculated="placement"')).toContain("truncate");
