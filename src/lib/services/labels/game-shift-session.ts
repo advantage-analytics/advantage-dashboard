@@ -31,6 +31,7 @@
  * `tests/label-operations.spec.ts` scans this file for a delete.
  */
 
+import { readAllPages } from "@/lib/data/admin-range-read";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { readJobAdScoring, resolveLabelAdScoring } from "./ad-scoring";
 import {
@@ -58,20 +59,33 @@ import type { ShotSwapWrite } from "./player-swap";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import type { LabelShot } from "./session";
 
-/** Every shot row of the session, as the console's rows. */
+/**
+ * Every shot row of the session, as the console's rows. Paged
+ * (`readAllPages`, in a stable `id` order) because PostgREST caps one
+ * response at 1000 rows and a long match holds more strokes than that.
+ */
 async function readShotsOfSession(
   supabase: AdminClient,
   sessionId: string,
 ): Promise<{ shots: LabelShot[] } | { error: string }> {
-  const { data, error } = await supabase
-    .from("label_shots")
-    .select(LABEL_SHOT_COLUMNS)
-    .eq("session_id", sessionId)
-    .returns<LabelShotRow[]>();
-  if (error) {
-    return { error: `Could not read the session's shots: ${error.message}` };
+  try {
+    const rows = await readAllPages<LabelShotRow>(
+      supabase
+        .from("label_shots")
+        .select(LABEL_SHOT_COLUMNS)
+        .eq("session_id", sessionId)
+        .order("id"),
+      "Could not read the session's shots",
+    );
+    return { shots: rows.map(toLabelShot) };
+  } catch (cause) {
+    return {
+      error:
+        cause instanceof Error
+          ? cause.message
+          : "Could not read the session's shots",
+    };
   }
-  return { shots: (data ?? []).map(toLabelShot) };
 }
 
 export type LabelGameShiftResult = LabelOpResult<{

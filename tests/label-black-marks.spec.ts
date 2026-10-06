@@ -214,8 +214,11 @@ function tagOf(html: string, attr: string): string {
 
 const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
 
-const AMBER = "bg-[rgba(253,230,138,0.14)]";
-const QUIET = "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]";
+// The rail's palette (`label-rail-tone.ts`): its amber wash, and its ink at
+// 14% — written so the light ground can re-point both.
+const AMBER = "bg-[var(--rail-amber-wash)]";
+const QUIET =
+  "shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-white)_14%,transparent)]";
 
 test.describe("a flag on the point row", () => {
   test("open: amber, its words, and the hover with the fixture's names", () => {
@@ -236,7 +239,7 @@ test.describe("a flag on the point row", () => {
       "text-[10px]",
       "font-medium",
       AMBER,
-      "text-[rgba(252,211,77,1)]",
+      "text-[var(--rail-amber)]",
     ]) {
       expect(chip.tag, cls).toContain(cls);
     }
@@ -271,7 +274,7 @@ test.describe("a flag on the point row", () => {
     expect(chip.text).toBeNull();
     expect(chip.count).toBeNull();
     expect(chip.tag).toContain(QUIET);
-    expect(chip.tag).toContain("text-[rgba(255,255,255,0.38)]");
+    expect(chip.tag).toContain("text-white/[0.38]");
     expect(chip.tag).not.toContain(AMBER);
     const { pointSentence } = createLoader().load(FORMAT) as {
       pointSentence: (point: LabelPoint, names: typeof NAMES) => string;
@@ -360,7 +363,7 @@ test.describe("a fix on the point row", () => {
     expect(fix.count).toBeNull();
     // Grey, not quiet: the site acted and the point is not checked yet.
     expect(fix.tag).toContain("bg-white/10");
-    expect(fix.tag).toContain("text-[rgba(255,255,255,0.78)]");
+    expect(fix.tag).toContain("text-white/[0.78]");
     expect(fix.tag).toContain("px-1.5");
     expect(fix.label).toContain("That guess is right about 4 times in 5.");
   });

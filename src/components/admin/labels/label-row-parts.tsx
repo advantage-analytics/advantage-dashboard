@@ -1,7 +1,5 @@
 "use client";
 
-import { ChevronDown, Play } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { InsertPosition } from "@/lib/services/labels/point-insert";
@@ -14,15 +12,13 @@ import type { LabelPointScore } from "@/lib/services/labels/score";
 import type { SideNames } from "./label-format";
 
 /**
- * What the points table's two kinds of row share: the context every row
- * draws and saves from, the requests a row can make of the console, and the
- * small controls both a point row (`label-point-row.tsx`) and a stroke row
- * (`label-shot-row.tsx`) carry. It imports neither, so the two can import
- * it — and the table both — without a cycle.
+ * What the rail's rows share: the context every row draws and saves from,
+ * the requests a row can make of the console, and the two sides' names. It
+ * imports neither kind of row, so both can import it without a cycle.
  */
 
 /**
- * The row operations the table can ask for. Each is a request: the console
+ * The row operations a row can ask for. Each is a request: the console
  * decides whether it needs a confirm first, and does the write.
  */
 export interface LabelRowOperations {
@@ -119,6 +115,8 @@ export interface EditContext {
    */
   adScoring?: boolean;
   playingShotId: string | null;
+  /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
+  tone?: import("./label-rail-tone").RailTone;
 }
 
 /**
@@ -130,282 +128,9 @@ export interface PlayingWindow {
   end: number;
 }
 
-/**
- * A tombstone: a thin red rule carrying a small pill, board 08's `.dl`. The
- * pill (and the rule) is one button that expands a struck-through ghost of
- * the deleted row underneath, where Undo lives.
- */
-export function DeletedMarker({
-  kind,
-  id,
-  open,
-  onToggle,
-  label: words,
-}: {
-  kind: "point" | "shot";
-  id: string;
-  open: boolean;
-  onToggle?: (id: string) => void;
-  /** The pill's words, when not "Deleted point" / "Deleted shot". */
-  label?: string;
-}) {
-  const label = words ?? (kind === "point" ? "Deleted point" : "Deleted shot");
-  return (
-    <div
-      data-row={kind === "point" ? "deleted-point" : "deleted-shot"}
-      data-tombstone-id={id}
-      className={cn(
-        "flex h-7 items-center",
-        // A shot's marker sits in the shot card, at a row's own padding.
-        kind === "shot" ? "px-[11px]" : "",
-      )}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggle?.(id);
-        }}
-        className="group/dl flex h-6 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-element)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-      >
-        <span
-          className={cn(
-            "inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] font-medium whitespace-nowrap text-[var(--danger-hover)] transition-colors duration-200",
-          )}
-          style={{
-            background: `color-mix(in srgb, var(--danger) ${open ? 14 : 8}%, transparent)`,
-            boxShadow:
-              "inset 0 0 0 1px color-mix(in srgb, var(--danger) 25%, transparent)",
-          }}
-        >
-          {label}
-          <ChevronDown
-            className={cn(
-              "size-2.5 transition-transform duration-200",
-              open && "rotate-180",
-            )}
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-        </span>
-        <span
-          className="h-px flex-1 transition-colors duration-200"
-          style={{
-            background: open
-              ? "var(--danger)"
-              : "color-mix(in srgb, var(--danger) 35%, transparent)",
-          }}
-          aria-hidden="true"
-        />
-      </button>
-    </div>
-  );
-}
-
-/** A ghost row's value: struck through, muted. An empty one is a plain dash. */
-export function Ghost({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "tabular truncate text-[var(--ink-500)] line-through",
-        className,
-      )}
-    >
-      {/* An inline-block is not struck by its parent's line-through. */}
-      {children ?? <span className="inline-block">—</span>}
-    </span>
-  );
-}
-
-/** Board 08's `.card-link`: a blue text action. */
-export function UndoButton({
-  label,
-  onClick,
-  className,
-}: {
-  label: string;
-  onClick: () => void;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={cn(
-        "cursor-pointer rounded-[var(--radius-button)] text-[13px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        className,
-      )}
-    >
-      Undo
-    </button>
-  );
-}
-
-/**
- * A row's text action — board 08's `.card-link` blue words (like Undo), at
- * 12px. Revealed like the ✕ — on the row's hover, on focus, and on the open
- * point or selected stroke — 200ms. It only ASKS: the console opens a
- * confirm or runs the plan, and nothing is written from here. `attr` names
- * what it asks for.
- */
-export function RowTextAction({
-  attr,
-  label,
-  onClick,
-  revealed = false,
-  children,
-}: {
-  attr: "data-reset-row" | "data-split-row";
-  label: string;
-  onClick: () => void;
-  revealed?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      {...{ [attr]: "" }}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={cn(
-        "shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-[opacity,color] duration-200 group-hover/row:opacity-100 hover:text-[var(--blue-hover)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-        revealed ? "opacity-100" : "opacity-0",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** Reset, as a row action: `RowTextAction` reading "Reset". */
-export function ResetRowButton({
-  label,
-  onClick,
-  revealed = false,
-}: {
-  label: string;
-  onClick: () => void;
-  revealed?: boolean;
-}) {
-  return (
-    <RowTextAction
-      attr="data-reset-row"
-      label={label}
-      onClick={onClick}
-      revealed={revealed}
-    >
-      Reset
-    </RowTextAction>
-  );
-}
-
-/** The playing row's ground: a light blue wash, no stripe, no ring. */
-export const PLAYING_WASH = "var(--blue-tint-08)";
-
-/**
- * A row's number. On the playing row it turns `--blue` and a small play glyph
- * follows it — after, so the numbers down the column stay aligned.
- */
-export function RowNumber({
-  number,
-  strong,
-  playing,
-  className,
-}: {
-  number: number;
-  strong: boolean;
-  playing: boolean;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "tabular inline-flex items-center gap-1",
-        className,
-        playing
-          ? "font-medium text-[var(--blue)]"
-          : strong
-            ? "font-medium text-[var(--ink-900)]"
-            : "text-[var(--ink-600)]",
-      )}
-    >
-      {number}
-      {playing ? (
-        <>
-          <Play
-            className="size-2 shrink-0"
-            fill="currentColor"
-            strokeWidth={1.5}
-            aria-hidden="true"
-            data-playing-mark=""
-          />
-          <span className="sr-only">, playing</span>
-        </>
-      ) : null}
-    </span>
-  );
-}
-
 /** A side's chip letter: its cell label's first character. */
 export function sideInitial(side: LabelSide, names: SideNames): string {
   return names[side].trim().charAt(0).toUpperCase();
-}
-
-/**
- * Board 08g's `.mk`: a square carrying a player's initial — p1 on `--blue`
- * with white text, p2 on `--surface-subtle` inside a hairline. Two grounds,
- * not two hues: down a column of marks the blue squares are one player and
- * the grey ones the other, before a letter is read. No side yet is an empty
- * hairline square with a dash.
- *
- * At 30px (`.mk.s30`) it is the point row's WINNER mark; at 22px it is the
- * hitter's chip beside a stroke's player name — the same chip, so a player is
- * one colour all the way down the table; at 18px it is the server's chip in a
- * game band's trigger. `attr` names what the mark says.
- */
-export function SideMark({
-  side,
-  names,
-  size = 30,
-  attr = "data-winner-mark",
-}: {
-  side: LabelSide | null;
-  names: SideNames;
-  size?: 30 | 22 | 18;
-  attr?: "data-winner-mark" | "data-player-mark";
-}) {
-  return (
-    <span
-      {...{ [attr]: side ?? "none" }}
-      aria-hidden="true"
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-[var(--radius-button)] leading-none font-medium tracking-[0.3px]",
-        size === 30 && "size-[30px] text-[11px]",
-        size === 22 && "size-[22px] text-[10px]",
-        size === 18 && "size-[18px] rounded-[5px] text-[9px] tracking-[0.2px]",
-        side === "p1"
-          ? "bg-[var(--blue)] text-white"
-          : "text-[var(--ink-700)] shadow-[inset_0_0_0_1px_var(--border-hairline)]",
-        side === "p2" && "bg-[var(--surface-subtle)]",
-      )}
-    >
-      {side ? sideInitial(side, names) : "—"}
-    </span>
-  );
 }
 
 /** The two players, in the order every menu of them lists them. */

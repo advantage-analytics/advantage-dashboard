@@ -49,6 +49,7 @@ import {
   type LabelShotValues,
 } from "./edit";
 import {
+  isServeStroke,
   opponent,
   orderLabelShots,
   type LabelPoint,
@@ -112,7 +113,7 @@ export function servingShot<T extends SwapShot>(shots: readonly T[]): T | null {
   );
   let serve: T | null = null;
   for (const shot of live) {
-    if (shot.stroke === "first_serve" || shot.stroke === "second_serve") {
+    if (isServeStroke(shot.stroke)) {
       serve = shot;
     }
   }

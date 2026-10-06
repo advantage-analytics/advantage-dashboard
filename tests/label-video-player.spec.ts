@@ -3,15 +3,6 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { playingStopAt } from "@/components/dashboard/matches/match-detail/film/film-timeline";
-import {
-  DEFAULT_DOCK_ANCHOR,
-  DOCK_ANCHOR_STORAGE_KEY,
-  DOCK_INSETS,
-  DOCK_MINIMISED_STORAGE_KEY,
-  dockOrigin,
-  dockRest,
-  parseDockMinimised,
-} from "@/components/admin/labels/label-dock-position";
 import { labelFilmStops } from "@/components/admin/labels/label-film-stops";
 import {
   POINT_TAIL_SECONDS,
@@ -25,11 +16,11 @@ import {
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The labelling console's floating video: the label points as the film
- * player's stops (`label-film-stops.ts`), and where the dock rests
- * (`label-dock-position.ts`) — both pure — then the dock itself, rendered
- * offline through `fixtures/vm-modules`: the Video tab's transport on the
- * film, its title row, and the frame's loading state.
+ * The labelling console's video: the label points as the film player's stops
+ * (`label-film-stops.ts`, pure), then the player itself (`label-video.tsx`),
+ * rendered offline through `fixtures/vm-modules` — the Video tab's transport
+ * on the film, its title row (`label-now-playing.ts`), and the frame's
+ * loading state.
  *
  * The fixture's point 1 has live strokes at 2472.0, 2473.1 and 2474.4 and a
  * tombstone at 2473.6; point 2 has one stroke at 2490.2; point 3 is deleted
@@ -143,98 +134,69 @@ test.describe("the player's stops", () => {
   });
 });
 
-test.describe("where the dock rests", () => {
-  const dock = { width: 480, height: 302 };
-  const room = { width: 1440, height: 900 };
-
-  test("each corner keeps 24px from the viewport, and clears the admin header", () => {
-    expect(DOCK_INSETS).toEqual({ top: 68, right: 24, bottom: 24, left: 24 });
-    expect(dockRest("top-left", dock, room)).toEqual({ left: 24, top: 68 });
-    expect(dockRest("top-right", dock, room)).toEqual({ left: 936, top: 68 });
-    expect(dockRest("bottom-left", dock, room)).toEqual({
-      left: 24,
-      top: 574,
-    });
-    expect(dockRest("bottom-right", dock, room)).toEqual({
-      left: 936,
-      top: 574,
-    });
-  });
-
-  test("a viewer who never moved it gets the bottom right", () => {
-    expect(DEFAULT_DOCK_ANCHOR).toBe("bottom-right");
-    expect(dockRest(null, dock, room)).toEqual(
-      dockRest("bottom-right", dock, room),
-    );
-  });
-
-  test("a viewport too small for the insets keeps it on screen", () => {
-    const small = { width: 500, height: 330 };
-    const at = dockRest("bottom-right", dock, small);
-    expect(at.left).toBeGreaterThanOrEqual(8);
-    expect(at.top).toBeGreaterThanOrEqual(8);
-  });
-
-  test("minimising collapses toward the anchored corner", () => {
-    expect(dockOrigin("top-left")).toBe("top left");
-    expect(dockOrigin("bottom-right")).toBe("bottom right");
-    expect(dockOrigin(null)).toBe("bottom right");
-  });
-
-  test("its own storage keys, and a stored minimised flag", () => {
-    expect(DOCK_ANCHOR_STORAGE_KEY).toBe("labels-player-corner");
-    expect(DOCK_MINIMISED_STORAGE_KEY).toBe("labels-player-minimised");
-    expect(parseDockMinimised("1")).toBe(true);
-    expect(parseDockMinimised("0")).toBe(false);
-    expect(parseDockMinimised(null)).toBe(false);
-    expect(parseDockMinimised("true")).toBe(false);
-  });
-});
-
-test.describe("the dock's film", () => {
+test.describe("the player's film", () => {
   const VIDEO = {
     url: "https://example.test/v.mp4?sig=x",
     startTimeSeconds: 0,
   };
   const NAMES = { p1: "Lee", p2: "Vargas" };
 
-  type DockProps = {
+  type NowPlaying = { id: string; point: number; shot: number | null } | null;
+  type Readout = {
+    title: string;
+    subtitle: string | null;
+    position: { index: number; total: number } | null;
+  };
+  type PlayerProps = {
     video: typeof VIDEO | null;
     points: readonly LabelPoint[];
-    nowPlaying: { id: string; point: number; shot: number | null } | null;
-    names: typeof NAMES;
-    adScoring: boolean;
-    onTime: (videoTime: number) => void;
-    initialMinimised?: boolean;
+    readout?: Readout;
+    onTime?: (videoTime: number) => void;
     initialReady?: boolean;
+    square?: boolean;
   };
 
   function load() {
-    return createLoader().load(
-      "src/components/admin/labels/label-video-dock.tsx",
-    ) as {
-      LabelVideoDock: React.ComponentType<DockProps>;
-      dockReadout: (
-        points: readonly LabelPoint[],
-        nowPlaying: DockProps["nowPlaying"],
-        names: typeof NAMES,
-        scores: unknown,
-      ) => {
-        title: string;
-        subtitle: string | null;
-        position: { index: number; total: number } | null;
-      };
+    const loader = createLoader();
+    return {
+      ...(loader.load("src/components/admin/labels/label-video.tsx") as {
+        LabelVideoPlayer: React.ComponentType<PlayerProps>;
+      }),
+      ...(loader.load("src/components/admin/labels/label-now-playing.ts") as {
+        nowPlayingReadout: (
+          points: readonly LabelPoint[],
+          nowPlaying: NowPlaying,
+          names: typeof NAMES,
+          scores: unknown,
+        ) => Readout;
+        nowPlayingOf: (
+          points: readonly LabelPoint[],
+          playing: { pointId: string; shotId: string } | null,
+        ) => NowPlaying;
+      }),
+      ...(loader.load("src/lib/services/labels/score.ts") as {
+        labelScores: (
+          points: readonly LabelPoint[],
+          adScoring: boolean,
+        ) => unknown;
+      }),
     };
   }
 
-  function render(props: Partial<DockProps> = {}): string {
+  /** The player as the console draws it: the playing point's own readout. */
+  function render(props: Partial<PlayerProps> = {}): string {
+    const { LabelVideoPlayer, nowPlayingReadout, labelScores } = load();
+    const list = points();
     return renderToStaticMarkup(
-      React.createElement(load().LabelVideoDock, {
+      React.createElement(LabelVideoPlayer, {
         video: VIDEO,
-        points: points(),
-        nowPlaying: { id: P1, point: 1, shot: 2 },
-        names: NAMES,
-        adScoring: true,
+        points: list,
+        readout: nowPlayingReadout(
+          list,
+          { id: P1, point: 1, shot: 2 },
+          NAMES,
+          labelScores(list, true),
+        ),
         onTime: () => {},
         ...props,
       }),
@@ -295,13 +257,15 @@ test.describe("the dock's film", () => {
     // Opening: nothing measured yet, so the clock is one dash.
     expect(words).toContain("—");
 
-    // Minimise is the dock bar's own button; the room's extras are left off.
-    expect(html).toContain('aria-label="Minimise the video"');
+    // The room's extras are left off, and nothing minimises: the player is
+    // a card of the page or the full screen's stage, never a floating dock.
     for (const absent of [
       "Save point",
       "Show the court",
       "Exit fullscreen",
       "More — not available yet",
+      "Minimise the video",
+      "Expand the video",
     ]) {
       expect(html).not.toContain(absent);
     }
@@ -338,30 +302,28 @@ test.describe("the dock's film", () => {
     expect(ready).toContain("bg-white/[0.14]");
   });
 
-  test("minimised, the pill keeps its play/pause and Point N", () => {
-    const html = render({ initialMinimised: true, initialReady: true });
-    const pill = html.slice(html.indexOf("data-dock-pill"));
-    expect(pill).toContain('aria-label="Play"');
-    expect(pill).toContain('aria-label="Expand the video"');
-    expect(text(pill)).toContain("Point 1");
-    // Hidden, not unmounted.
-    expect(html).toContain('data-testid="label-video"');
+  test("`square` takes the skeleton's card radius off, for a frame flush to the black stage", () => {
+    expect(tag(render(), "data-label-video-pending")).not.toContain(
+      "[&amp;_*]:rounded-none",
+    );
+    expect(tag(render({ square: true }), "data-label-video-pending")).toContain(
+      "[&amp;_*]:rounded-none",
+    );
+  });
+
+  test("no video: the frame says so, with no element and no transport", () => {
+    const html = render({ video: null });
+    expect(html).toContain("No video for this job");
+    expect(html).not.toContain('data-testid="label-video"');
+    expect(html).not.toContain('role="slider"');
   });
 
   test("the title row leaves out what a point lacks, and says so in dead time", () => {
-    const { dockReadout } = load();
-    const { labelScores } = createLoader().load(
-      "src/lib/services/labels/score.ts",
-    ) as {
-      labelScores: (
-        points: readonly LabelPoint[],
-        adScoring: boolean,
-      ) => unknown;
-    };
+    const { nowPlayingReadout, labelScores } = load();
     const list = points();
     const scores = labelScores(list, true);
 
-    expect(dockReadout(list, null, NAMES, scores)).toEqual({
+    expect(nowPlayingReadout(list, null, NAMES, scores)).toEqual({
       title: "Between points",
       subtitle: null,
       position: null,
@@ -369,7 +331,7 @@ test.describe("the dock's film", () => {
 
     // The tombstone at 2473.6 is not the last stroke; the added forehand is.
     expect(
-      dockReadout(list, { id: P1, point: 1, shot: 1 }, NAMES, scores),
+      nowPlayingReadout(list, { id: P1, point: 1, shot: 1 }, NAMES, scores),
     ).toEqual({
       title: "Error · Forehand",
       subtitle: "Set 1 · Game 1 · Lee serves",
@@ -387,7 +349,7 @@ test.describe("the dock's film", () => {
           }
         : p,
     );
-    const readout = dockReadout(
+    const readout = nowPlayingReadout(
       bare,
       { id: P2, point: 2, shot: null },
       NAMES,
@@ -396,6 +358,31 @@ test.describe("the dock's film", () => {
     expect(readout.title).toBe("Point 2");
     expect(readout.subtitle).not.toContain("serves");
     expect(readout.position).toEqual({ index: 2, total: 4 });
+  });
+
+  test("the playing row as the list numbers it: point N, and its live stroke M", () => {
+    const { nowPlayingOf } = load();
+    const list = points();
+    expect(nowPlayingOf(list, null)).toBeNull();
+    expect(nowPlayingOf(list, { pointId: "gone", shotId: "s-return" })).toBe(
+      null,
+    );
+    expect(nowPlayingOf(list, { pointId: P1, shotId: "s-return" })).toEqual({
+      id: P1,
+      point: 1,
+      shot: 2,
+    });
+    // The tombstone at 2473.6 is not counted: the stroke after it is the 3rd.
+    const live = list[0].shots.filter((shot) => shot.status !== "deleted");
+    expect(
+      nowPlayingOf(list, { pointId: P1, shotId: live[live.length - 1].id }),
+    ).toEqual({ id: P1, point: 1, shot: live.length });
+    // A stroke that is not among the point's live ones has no number.
+    expect(nowPlayingOf(list, { pointId: P2, shotId: "nowhere" })).toEqual({
+      id: P2,
+      point: 2,
+      shot: null,
+    });
   });
 });
 

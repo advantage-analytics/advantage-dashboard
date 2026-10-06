@@ -48,7 +48,8 @@ import {
   BlackUndoButton,
 } from "./label-black-parts";
 import { drawsGhosts } from "./label-black-shot-row";
-import { parseNote, pointSummary } from "./label-point-row";
+import { parseNote, pointSummary } from "./label-format";
+import { RAIL_CHROME_TONE, RAIL_TONE_CLASS, railInk } from "./label-rail-tone";
 import {
   SIDES,
   sideInitial,
@@ -65,8 +66,10 @@ import {
  *
  * Colours are the frame's: white at an alpha on the room's black, `--blue`
  * for the one player's mark, the progress rule and the "changed" pencil,
- * `--success` for a checked tick. Nothing here is a light token — the row
- * never sits on a light ground.
+ * `--success` for a checked tick. The same classes draw the row on the light
+ * ground: there "white" is the page's ink (`label-rail-tone.ts`), so nothing
+ * here names a light token, and nothing here may mean the COLOUR white by
+ * writing `white` — that is `--rail-on-accent`.
  */
 
 /**
@@ -141,6 +144,7 @@ export function BlackPointRow({
   children?: React.ReactNode;
 }) {
   const { operations, names } = edit;
+  const tone = edit.tone ?? "dark";
   const number = point.pointIndex + 1;
   const checked = point.checkedAt !== null;
   const showNote = edit.editable || point.note !== null;
@@ -236,7 +240,7 @@ export function BlackPointRow({
           <span
             data-point-detail=""
             className="truncate text-[11px]"
-            style={{ color: "rgba(255,255,255,0.45)" }}
+            style={{ color: DETAIL_INK }}
           >
             {detail}
           </span>
@@ -269,7 +273,7 @@ export function BlackPointRow({
         <span
           data-point-score=""
           className="mono tabular truncate text-right text-[11px]"
-          style={{ color: "rgba(255,255,255,0.85)" }}
+          style={{ color: SCORE_INK }}
         >
           {(fresh ? null : score) ?? (
             <>
@@ -306,7 +310,8 @@ export function BlackPointRow({
               open
               edit={edit}
               operations={operations}
-              tone="dark"
+              tone={RAIL_CHROME_TONE}
+              menu={tone}
             />
           ) : null}
         </span>
@@ -359,6 +364,11 @@ export function BlackPointRow({
     </>
   );
 }
+
+/** The second line's ink — the frame's `.bk-d`. */
+const DETAIL_INK = railInk(0.45);
+/** The score before the point — the frame's `.bk-sc`. */
+const SCORE_INK = railInk(0.85);
 
 // ── A new point ────────────────────────────────────────────────────────────
 
@@ -731,7 +741,8 @@ export function BlackDeletedPoint({
 
 /**
  * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
- * `--blue`, p2 on a white wash. Two grounds, not two hues, as down the
+ * `--blue` (its letter white on either ground: `--rail-on-accent`), p2 on a
+ * white wash. Two grounds, not two hues, as down the
  * table's own column. No winner yet is the wash with a dash — or, on a point
  * the labeller just added (`fresh`, the frame's `.fx-new .bk-mk`), a "?" in a
  * `--blue` ring on the room's own black: the one thing to set first.
@@ -752,7 +763,7 @@ function BlackWinnerMark({
       className={cn(
         "flex size-[30px] shrink-0 items-center justify-center rounded-[var(--radius-button)] text-[11px] leading-none font-medium tracking-[0.3px]",
         side === "p1"
-          ? "bg-[var(--blue)] text-white"
+          ? "bg-[var(--blue)] text-[var(--rail-on-accent)]"
           : side === null && fresh
             ? "bg-transparent text-[var(--blue)] shadow-[inset_0_0_0_1px_var(--blue)]"
             : "bg-white/[0.14] text-white/90",
@@ -817,7 +828,7 @@ function BlackWinnerCell({
         align="start"
         sideOffset={8}
         width={260}
-        tone="dark"
+        tone={edit.tone ?? "dark"}
         label={`Who won point ${number}`}
         trigger={
           <button
@@ -827,7 +838,8 @@ function BlackWinnerCell({
             aria-expanded={open}
             className={cn(
               "cursor-pointer rounded-[var(--radius-button)] transition-shadow duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-              open && "shadow-[0_0_0_1.5px_rgba(255,255,255,0.5)]",
+              open &&
+                "shadow-[0_0_0_1.5px_color-mix(in_oklab,var(--color-white)_50%,transparent)]",
             )}
           >
             <BlackWinnerMark side={point.winner} names={names} fresh={fresh} />
@@ -862,9 +874,14 @@ function BlackWinnerCell({
 /**
  * The row's Note action — the frame's `.bk-ib`, white once the point has a
  * note. It opens the table row's own note cell (`EditableCell` + `TextEditor`,
- * the same parse and the same `{ note }` patch) on the dark menu surface: the
- * field is there at once, Enter or leaving it saves, and a saved note closes
- * the popover. Read-only, the popover is the note's text.
+ * the same parse and the same `{ note }` patch) on the menu surface of the
+ * rail's tone: the field is there at once, Enter or leaving it saves, and a
+ * saved note closes the popover. Read-only, the popover is the note's text.
+ *
+ * The popover is portalled out of the rail, so the rail's palette does not
+ * reach it: its contents sit in a wrapper that wears the palette again. A
+ * wrapper, not the surface itself — the surface's own ground is `bg-white`,
+ * which the light palette would turn to ink.
  */
 function BlackNoteAction({
   point,
@@ -876,6 +893,7 @@ function BlackNoteAction({
   edit: EditContext;
 }) {
   const [open, setOpen] = useState(false);
+  const tone = edit.tone ?? "dark";
   const { note } = point;
   const label = `Point ${number} note`;
   return (
@@ -909,39 +927,41 @@ function BlackNoteAction({
         align="end"
         sideOffset={4}
         aria-label={label}
-        className={cn(floatMenuToneClasses("dark"), "w-[300px]")}
+        className={cn(floatMenuToneClasses(tone), "w-[300px]")}
       >
-        <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
-          Note on point {number}
-        </p>
-        {/* The dark field pulls itself 5px left to sit over a cell's text
-              and runs 2px past it; the inset here hands both back. */}
-        <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
-          <EditableCell
-            editable={edit.editable}
-            rowSelected
-            label={label}
-            valueText={note ?? "None"}
-            display={
-              <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
-                {note}
-              </span>
-            }
-            editor={
-              <TextEditor
-                tone="dark"
-                label={label}
-                text={note ?? ""}
-                parse={parseNote}
-                onCommit={(value) => {
-                  edit.onPatchPoint?.(point.id, {
-                    note: value as string | null,
-                  });
-                  setOpen(false);
-                }}
-              />
-            }
-          />
+        <div data-note-palette={tone} className={RAIL_TONE_CLASS[tone]}>
+          <p className="px-[9px] pt-[7px] pb-[5px] text-[11px] text-white/50">
+            Note on point {number}
+          </p>
+          {/* The rail's field pulls itself 5px left to sit over a cell's
+              text and runs 2px past it; the inset here hands both back. */}
+          <div className="pt-0.5 pr-[11px] pb-[7px] pl-[14px]">
+            <EditableCell
+              editable={edit.editable}
+              rowSelected
+              label={label}
+              valueText={note ?? "None"}
+              display={
+                <span className="-ml-[5px] block text-[12px] whitespace-normal text-white/85">
+                  {note}
+                </span>
+              }
+              editor={
+                <TextEditor
+                  tone={RAIL_CHROME_TONE}
+                  label={label}
+                  text={note ?? ""}
+                  parse={parseNote}
+                  onCommit={(value) => {
+                    edit.onPatchPoint?.(point.id, {
+                      note: value as string | null,
+                    });
+                    setOpen(false);
+                  }}
+                />
+              }
+            />
+          </div>
         </div>
       </PopoverContent>
     </Popover>

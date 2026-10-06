@@ -45,20 +45,19 @@ import {
   DELETE_REASON_LABEL,
   RESULT_LABEL,
   STROKE_LABEL,
+  STROKE_OPTIONS,
   formatCourtPoint,
   formatVideoTime,
+  isFault,
   parseCourtPoint,
   parseVideoTime,
+  positionPatch,
+  sideOptions,
   spinLabel,
   spinOptions,
 } from "./label-format";
+import { RAIL_CHROME_TONE, railInk, type RailTone } from "./label-rail-tone";
 import { sideLabel, type EditContext } from "./label-row-parts";
-import {
-  STROKE_OPTIONS,
-  isFault,
-  positionPatch,
-  sideOptions,
-} from "./label-shot-row";
 
 /**
  * The black full-screen view's strokes (board 08l's `.bk-well` and `.bk-sr`):
@@ -71,7 +70,9 @@ import {
  * and every other column reads as what it is.
  *
  * Colours are the frame's: white at an alpha on black, and `--blue` for the
- * "changed" pencil. Nothing here is a light token.
+ * "changed" pencil. The same classes draw the well on the light ground,
+ * where "white" is the page's ink (`label-rail-tone.ts`) — so an ink set by
+ * style is `railInk(alpha)`, never a literal white.
  */
 
 /**
@@ -161,28 +162,31 @@ export const WELL_STYLE = {
 } as React.CSSProperties;
 
 /**
- * The ground under the row's two requests: the rail's own `--surface-dark`
- * with the washes the row is wearing painted back over it — the well's, then
+ * The ground under the row's two requests: the rail's own (`--rail-ground`:
+ * `--surface-dark` on black, the card's white on the light ground) with the
+ * washes the row is wearing painted back over it — the well's, then
  * the lit row's or the hovered one's — so the patch is the row's colour and
  * the result text it covers does not show through the buttons. Its left 16px
  * fade in (a mask), so the words run under it rather than into an edge.
  */
-const WELL_WASH = "rgba(255,255,255,0.035)";
+const WELL_WASH = railInk(0.035);
 function actionsGround(lit: boolean): string {
-  const wash = lit ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)";
+  const wash = lit ? railInk(0.12) : railInk(0.06);
   return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
 }
 
 const NO_MARKS: readonly ShotRowMark[] = [];
 
 /** The frame's `.bk-em`: a value that is not there. */
-const EMPTY_INK = "rgba(255,255,255,0.25)";
+const EMPTY_INK = railInk(0.25);
 /** `.bk-tm`'s ink, and a faulted serve's stroke and numbers. */
-const QUIET_INK = "rgba(255,255,255,0.45)";
+const QUIET_INK = railInk(0.45);
 /** `.bk-sk` and `.bk-num`. */
-const VALUE_INK = "rgba(255,255,255,0.72)";
+const VALUE_INK = railInk(0.72);
+/** A ghost's reason — the frame's `.fx-gt`. */
+const REASON_INK = railInk(0.5);
 /** A ghost's struck-through values — the frame's `.fx-gone`. */
-const GONE_INK = "rgba(255,255,255,0.32)";
+const GONE_INK = railInk(0.32);
 
 /**
  * Whether the black view draws a site-removed stroke as a ghost (board 08m
@@ -265,7 +269,7 @@ export function BlackShotsWell({
   return (
     <div
       data-shots-well={point.id}
-      className="flex flex-col bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]"
+      className="flex flex-col bg-white/[0.035] shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
       style={WELL_STYLE}
     >
       {rows}
@@ -346,6 +350,7 @@ export function BlackShotRow({
   marks?: readonly ShotRowMark[];
 }) {
   const { names, editable, onSelectShot, onPatchShot } = edit;
+  const tone = edit.tone ?? "dark";
   const operations = editable ? edit.operations : undefined;
   const selected = shot.id === edit.selectedShotId;
   const playing = shot.id === edit.playingShotId;
@@ -357,6 +362,7 @@ export function BlackShotRow({
   };
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected, hoverReveals: false };
+  const selectCell = { ...cell, menu: tone };
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const placement = shotPlacement(labelShotValues(shot));
   /** The words' ink — `.bk-pl`, `.bk-sp`, `.bk-cv` — a step down on a fault. */
@@ -412,7 +418,7 @@ export function BlackShotRow({
         }
         editor={
           <TextEditor
-            tone="dark"
+            tone={RAIL_CHROME_TONE}
             label={`Shot ${number} time`}
             text={time ?? ""}
             parse={parseVideoTime}
@@ -421,7 +427,7 @@ export function BlackShotRow({
         }
       />
       <BlackSelectCell
-        {...cell}
+        {...selectCell}
         label={`Shot ${number} player`}
         value={shot.hitter}
         text={sideLabel(shot.hitter, names)}
@@ -430,7 +436,7 @@ export function BlackShotRow({
         onChange={(value) => patch({ hitter: value as LabelSide | null })}
       />
       <BlackSelectCell
-        {...cell}
+        {...selectCell}
         label={`Shot ${number} stroke`}
         value={shot.stroke}
         text={shot.stroke ? STROKE_LABEL[shot.stroke] : null}
@@ -442,7 +448,7 @@ export function BlackShotRow({
         }
       />
       <BlackSelectCell
-        {...cell}
+        {...selectCell}
         label={`Shot ${number} spin`}
         value={shot.spin}
         text={spinLabel(shot.stroke, shot.spin)}
@@ -536,7 +542,7 @@ export function BlackShotRow({
         <span
           data-shot-actions=""
           className={cn(
-            "absolute inset-y-0 flex items-center gap-0.5 bg-[var(--surface-dark)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+            "absolute inset-y-0 flex items-center gap-0.5 bg-[var(--rail-ground)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
             ACTIONS_RIGHT,
             // Hidden, it is not in the pointer's way either: a click on the
             // result under it selects the row. A selected row waits for the
@@ -761,7 +767,7 @@ export function BlackGhostShot({
               GHOST_TAIL,
               "flex min-w-0 items-center justify-between gap-2.5 text-[11px] whitespace-nowrap",
             )}
-            style={{ color: "rgba(255,255,255,0.5)" }}
+            style={{ color: REASON_INK }}
           >
             <span className="min-w-0 truncate">Hit after the fault</span>
             {operations ? (
@@ -858,7 +864,7 @@ function BlackSuggestedShot({
       data-shot-suggestion={suggestion.key}
       className={cn(
         ROW_GRID,
-        "cursor-default rounded-lg bg-[rgba(253,230,138,0.06)] outline-1 -outline-offset-4 outline-[rgba(252,211,77,0.45)] outline-dashed",
+        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
       )}
     >
       <Plus
@@ -1063,6 +1069,7 @@ function BlackSelectCell({
   editable,
   rowSelected,
   hoverReveals,
+  menu,
   label,
   value,
   text,
@@ -1074,6 +1081,8 @@ function BlackSelectCell({
   editable: boolean;
   rowSelected: boolean;
   hoverReveals: boolean;
+  /** The tone of the menu the select opens — the rail's. */
+  menu: RailTone;
   label: string;
   value: string | null;
   text: string | null;
@@ -1102,7 +1111,8 @@ function BlackSelectCell({
       }
       editor={
         <SelectEditor
-          tone="dark"
+          tone={RAIL_CHROME_TONE}
+          menu={menu}
           label={label}
           value={value}
           options={options}
@@ -1204,7 +1214,7 @@ function BlackPositionCell({
         }
         editor={
           <TextEditor
-            tone="dark"
+            tone={RAIL_CHROME_TONE}
             label={`${label}, metres x, y`}
             text={text ?? ""}
             parse={parseCourtPoint}

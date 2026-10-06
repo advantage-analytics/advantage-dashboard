@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { INITIAL_SAVE_STATUS } from "@/components/admin/labels/save-status";
 import {
   applyGameWrites,
   planGameServer,
@@ -23,8 +24,10 @@ import { createLoader } from "./fixtures/vm-modules";
 /**
  * T7 in the console, rendered offline through `fixtures/vm-modules`: the ✕
  * (a stroke's) and the ⋯ menu (a point's) that ask before deleting, the
- * tombstone that expands to a ghost row with Undo, the move question, the
- * point's checked footer, and Reset on an edited row that has a seed.
+ * tombstone's one line with its Undo, the move question, the point's tick,
+ * and Reset on an edited row that has a seed. The rows are the points
+ * rail's (`label-black-rail.tsx`), in both of the console's layouts; their
+ * own paint and presses are `label-black-rows.spec.ts`'s.
  *
  * Radix portals render nothing under `renderToStaticMarkup`, so
  * `ConfirmDialog` is stubbed to print its props — and to hand the spec its
@@ -32,11 +35,12 @@ import { createLoader } from "./fixtures/vm-modules";
  * is held: the operation spies stay empty through the render, and fill only
  * once that action runs.
  *
- * Clicks in the (stateless) table are pressed by walking its element tree:
+ * A click on a (hook-free) row is pressed by walking its element tree:
  * {@link press} finds a control by its accessible name and calls its
  * `onClick`, exactly as React would, without a DOM. A point's ⋯ menu is a
  * popover with state of its own, which that walk cannot open — its rows are
- * `pointMenuActions`, plain data the menu draws, run here directly.
+ * `pointMenuActions`, plain data the menu draws, run here directly. What the
+ * console hands its rail is read by stubbing the rail ({@link railProps}).
  */
 
 type Props = Record<string, unknown>;
@@ -132,7 +136,7 @@ function count(html: string, pattern: RegExp): number {
   return html.match(pattern)?.length ?? 0;
 }
 
-// ── A tiny element walker for the stateless table ─────────────────────────
+// ── A tiny element walker for a stateless row ─────────────────────────────
 
 type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
 
@@ -196,7 +200,8 @@ function textOf(node: React.ReactNode): string {
   return "";
 }
 
-function tableTree(overrides: Props = {}) {
+/** Row operations that only record what they were asked. */
+function askSpies() {
   const asked: Record<string, unknown[][]> = {};
   const ask =
     (name: string) =>
@@ -216,21 +221,68 @@ function tableTree(overrides: Props = {}) {
     onInsertPoint: ask("onInsertPoint"),
     onSwitchPlayers: ask("onSwitchPlayers"),
   };
-  // The hook-free table: `LabelPointsTable` is this plus the scores' memo.
-  const { LabelPointsTableView } = loader().load(
-    "src/components/admin/labels/label-points-table.tsx",
-  ) as { LabelPointsTableView: (p: Props) => React.ReactNode };
+  return { asked, operations };
+}
+
+/**
+ * The rail's row for point `pointId` (`BlackPointRow`, hook-free) as an
+ * element tree, with row operations that record what they were asked.
+ */
+function pointRowTree(pointId: string) {
+  const { asked, operations } = askSpies();
+  const { BlackPointRow } = loader().load(
+    "src/components/admin/labels/label-black-point-row.tsx",
+  ) as { BlackPointRow: (p: Props) => React.ReactNode };
   const session: LabelSession = labelSessionFixture();
-  const tree = LabelPointsTableView({
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
-    names: NAMES,
-    expandedPointId: P1,
-    editable: true,
-    operations,
-    ...overrides,
+  const scores = labelScores(session.points, session.adScoring).points;
+  const tree = BlackPointRow({
+    point: session.points.find((point) => point.id === pointId),
+    open: false,
+    playing: false,
+    score: scores.get(pointId)?.scoreBefore ?? null,
+    edit: {
+      editable: true,
+      names: NAMES,
+      selectedShotId: null,
+      operations,
+      openTombstoneIds: new Set<string>(),
+      points: session.points,
+      scores,
+      playingShotId: null,
+    },
   });
-  return { tree, asked, operations, session };
+  return { tree, asked };
+}
+
+/**
+ * What the console hands its points rail: the console rendered with
+ * `LabelBlackRail` stubbed to keep its props — the row operations, the game
+ * menus' callbacks and the autosaves, each the console's own.
+ */
+function railProps(props: Props): Props {
+  let rail: Props = {};
+  dialogs = [];
+  const { LabelConsole } = createLoader({
+    stubs: {
+      "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
+      "@/components/admin/labels/label-black-rail": {
+        LabelBlackRail: (railGiven: Props) => {
+          rail = railGiven;
+          return null;
+        },
+      },
+    },
+  }).load("src/components/admin/labels/label-console.tsx") as {
+    LabelConsole: React.ComponentType<Props>;
+  };
+  renderToStaticMarkup(
+    React.createElement(LabelConsole, {
+      session: labelSessionFixture(),
+      video: null,
+      ...props,
+    }),
+  );
+  return rail;
 }
 
 const NAMES = { p1: "Lee", p2: "Vargas" };
@@ -274,7 +326,7 @@ function menuActions(
 
 test.describe("add point above / below", () => {
   test("every live point's menu offers both, each asking for the insert on its side", () => {
-    const { asked, operations } = tableTree();
+    const { asked, operations } = askSpies();
     for (const pointId of [P1, P2, P4]) {
       const actions = menuActions(pointId, operations);
       actions.addAbove();
@@ -328,30 +380,9 @@ test.describe("add point above / below", () => {
 
   test("the console plans the slot on the client and calls the action with the position", async () => {
     const { calls, operations } = spies();
-    let table: Props = {};
-    const { LabelConsole } = createLoader({
-      stubs: {
-        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
-        "@/components/admin/labels/label-points-table": {
-          LabelPointsTable: (props: Props) => {
-            table = props;
-            return null;
-          },
-        },
-      },
-    }).load("src/components/admin/labels/label-console.tsx") as {
-      LabelConsole: React.ComponentType<Props>;
-    };
     const session = labelSessionFixture();
-    renderToStaticMarkup(
-      React.createElement(LabelConsole, {
-        session,
-        video: null,
-        ...SAVES,
-        operations,
-      }),
-    );
-    const rows = table.operations as {
+    const rail = railProps({ session, ...SAVES, operations });
+    const rows = rail.operations as {
       onInsertPoint: (id: string, position?: string) => void;
     };
     rows.onInsertPoint(P4, "after");
@@ -393,14 +424,11 @@ test.describe("delete", () => {
     expect(html).not.toContain("data-confirm");
   });
 
-  test("delete only asks: the table hands the request up and deletes nothing", () => {
-    const { tree, asked } = tableTree();
-    press(tree, "Delete shot 2");
-    expect(asked).toEqual({ onAskDeleteShot: [["s-return", 2, 1]] });
-
-    const again = tableTree();
-    menuActions(P4, again.operations).remove();
-    expect(again.asked).toEqual({ onAskDeletePoint: [[P4]] });
+  test("the ⋯ menu's Delete only asks: the request goes up and nothing is deleted", () => {
+    // (A stroke's ✕ doing the same is label-black-rows.spec.ts's.)
+    const { asked, operations } = askSpies();
+    menuActions(P4, operations).remove();
+    expect(asked).toEqual({ onAskDeletePoint: [[P4]] });
   });
 
   test("the confirm asks, and the write waits for its action", async () => {
@@ -484,61 +512,39 @@ test.describe("delete", () => {
 // ── Tombstones ─────────────────────────────────────────────────────────────
 
 test.describe("tombstones", () => {
-  test("the marker expands to a struck-through ghost row with Undo", () => {
+  test("a tombstone is one line in the rail, with Undo where the console can write", () => {
     const { operations } = spies();
-    const closed = renderConsole({
+    const html = renderConsole({
       ...SAVES,
       operations,
       initialExpandedPointId: P1,
     });
-    expect(closed).toMatch(
-      /data-tombstone-id="s-phantom"[^>]*>\s*<button[^>]*aria-expanded="false"/,
+    // The deleted stroke, inside its point's well, and the deleted point.
+    const shot = after(html, 'data-tombstone-id="s-phantom"');
+    expect(text(shot.slice(0, shot.indexOf("</div>")))).toBe(
+      "– Deleted shot · 41:13.6 · Not a shot Undo",
     );
-    expect(closed).not.toContain("data-ghost-id");
-
-    const open = renderConsole({
-      ...SAVES,
-      operations,
-      initialExpandedPointId: P1,
-      initialOpenTombstoneIds: ["s-phantom", P3],
-    });
-    expect(open).toMatch(
-      /data-tombstone-id="s-phantom"[^>]*>\s*<button[^>]*aria-expanded="true"/,
+    const point = after(html, `data-tombstone-id="${P3}"`);
+    expect(text(point.slice(0, point.indexOf("</div>")))).toMatch(
+      /^– Deleted point .*Undo$/,
     );
-    const ghostShot = after(open, 'data-ghost-id="s-phantom"');
-    expect(text(ghostShot)).toMatch(
-      /^– 41:13\.6 Lee Forehand — — — — — Not a shot Undo/,
-    );
-    expect(open).toMatch(
-      /data-ghost-id="s-phantom"[^>]*>(?:(?!data-row=)[\s\S])*line-through/,
-    );
-    expect(open).toContain('aria-label="Undo delete shot at 41:13.6"');
-
-    const ghostPoint = after(open, `data-ghost-id="${P3}"`);
-    // No winner, no number, no time, (no score), the ending, no last shot,
-    // a rally of 0, no note — then Undo, in the Status column.
-    expect(text(ghostPoint)).toMatch(/^— – — Let, replayed — 0 — Undo/);
-    expect(open).toContain('aria-label="Undo delete point 3"');
+    expect(html).toContain('aria-label="Undo delete shot at 41:13.6"');
+    expect(html).toContain('aria-label="Undo delete point 3"');
+    expect(count(html, /data-undo-delete/g)).toBe(2);
+    // Nothing to expand: no marker button, no ghost row.
+    expect(html).not.toMatch(/data-tombstone-id="[^"]*"[^>]*aria-expanded/);
+    expect(html).not.toContain("data-ghost-id");
   });
 
-  test("Undo restores, from the table's request", () => {
-    const { tree, asked } = tableTree({
-      openTombstoneIds: new Set(["s-phantom", P3]),
-    });
-    press(tree, "Undo delete shot at 41:13.6");
-    press(tree, "Undo delete point 3");
-    expect(asked).toEqual({
-      onRestoreShot: [["s-phantom"]],
-      onRestorePoint: [[P3]],
-    });
-  });
-
-  test("read-only, a ghost row still shows — without Undo", () => {
+  test("read-only, a tombstone still shows — without Undo", () => {
     const html = renderConsole({
       initialExpandedPointId: P1,
       initialOpenTombstoneIds: ["s-phantom"],
     });
-    expect(html).toContain('data-ghost-id="s-phantom"');
+    expect(html).toContain('data-tombstone-id="s-phantom"');
+    expect(html).toContain(`data-tombstone-id="${P3}"`);
+    expect(text(html)).toContain("Deleted shot · 41:13.6 · Not a shot");
+    expect(text(html)).toContain("Deleted point");
     expect(html).not.toContain("Undo");
     expect(html).not.toContain("data-delete-row");
   });
@@ -548,7 +554,7 @@ test.describe("tombstones", () => {
 
 test.describe("move point", () => {
   test("the ⋯ menu offers the neighbouring games, where there is one", () => {
-    const { operations, asked } = tableTree();
+    const { operations, asked } = askSpies();
     // P1's neighbours share its game; P2 and P4 each have one to move to.
     expect(menuActions(P1, operations).move).toEqual([]);
     const from2 = menuActions(P2, operations).move;
@@ -729,7 +735,7 @@ test.describe("switch players", () => {
   const MENU = "src/components/admin/labels/label-point-menu.tsx";
 
   test("the ⋯ menu offers it on every live point with a hitter, saying what it does; not on a point with none", () => {
-    const { operations, asked } = tableTree();
+    const { operations, asked } = askSpies();
     // P2: Lee's ace, won by Lee — the shots and the winner change hands.
     const p2 = menuActions(P2, operations).switchPlayers;
     expect(p2).toMatchObject({
@@ -767,7 +773,7 @@ test.describe("switch players", () => {
     session.points = session.points.map((point) =>
       point.id === P2 ? { ...point, server: "p2" as const } : point,
     );
-    const { operations } = tableTree();
+    const { operations } = askSpies();
     expect(menuActions(P2, operations, session).switchPlayers).toMatchObject({
       description: "Vargas serves this game, but Lee hits the serve here",
       contradicts: true,
@@ -787,7 +793,7 @@ test.describe("switch players", () => {
     expect(after).toBeLessThan(move);
     expect(source).toContain('label="Switch players"');
     expect(source).toContain("ArrowLeftRight");
-    // One menu serves both layouts: the dark rail and the light table.
+    // One menu serves both of the rail's grounds.
     expect(source).toContain('tone === "dark"');
   });
 
@@ -799,30 +805,8 @@ test.describe("switch players", () => {
 
   test("the console plans the switch on the client, calls the action, and applies the flip to the rows it holds — never the ending", async () => {
     const { calls, operations } = spies();
-    let table: Props = {};
-    const { LabelConsole } = createLoader({
-      stubs: {
-        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
-        "@/components/admin/labels/label-points-table": {
-          LabelPointsTable: (props: Props) => {
-            table = props;
-            return null;
-          },
-        },
-      },
-    }).load("src/components/admin/labels/label-console.tsx") as {
-      LabelConsole: React.ComponentType<Props>;
-    };
-    const session = labelSessionFixture();
-    renderToStaticMarkup(
-      React.createElement(LabelConsole, {
-        session,
-        video: null,
-        ...SAVES,
-        operations,
-      }),
-    );
-    const rows = table.operations as { onSwitchPlayers: (id: string) => void };
+    const rail = railProps({ ...SAVES, operations });
+    const rows = rail.operations as { onSwitchPlayers: (id: string) => void };
     rows.onSwitchPlayers(P2);
     await Promise.resolve();
     expect(calls.switchPlayers).toEqual([[P2]]);
@@ -863,7 +847,7 @@ test.describe("mark as a let / not a point", () => {
   /** Point `pointId`'s menu over `session`, and every patch it sent. */
   function letMenu(pointId: string, session = labelSessionFixture()) {
     const patches: unknown[][] = [];
-    const { operations, asked } = tableTree();
+    const { operations, asked } = askSpies();
     const { pointMenuActions } = loader().load(MENU) as {
       pointMenuActions: (
         point: unknown,
@@ -999,55 +983,51 @@ test.describe("mark as a let / not a point", () => {
 // ── Checked ────────────────────────────────────────────────────────────────
 
 test.describe("mark point checked", () => {
-  test("an unchecked open point offers the primary, with its ↵", () => {
+  test("every live point carries its tick, pressed once checked, and the open point an Add shot", () => {
+    // (The tick's paint is label-black-rows.spec.ts's.)
     const { operations } = spies();
     const html = renderConsole({
       ...SAVES,
       operations,
       initialExpandedPointId: P1,
     });
-    const footer = after(html, `data-point-footer="${P1}"`);
-    expect(html).toMatch(
-      /<button[^>]*data-checked-state="unchecked"[^>]*>Mark point checked<kbd[^>]*>↵<\/kbd>/,
+    expect(count(html, /data-check-row/g)).toBe(3);
+    for (const [number, pressed] of [
+      [1, false],
+      [2, true],
+      [4, false],
+    ]) {
+      expect(html).toMatch(
+        new RegExp(
+          `<button[^>]*data-check-row=""[^>]*aria-pressed="${pressed}"[^>]*aria-label="Point ${number} checked"`,
+        ),
+      );
+    }
+    expect(html).not.toMatch(/data-check-row=""[^>]*disabled/);
+    // One Add shot, closing the open point's well.
+    expect(count(html, /data-add-shot/g)).toBe(1);
+    const well = after(html, `data-shots-well="${P1}"`);
+    expect(text(after(well, "data-add-shot").split("</button>")[0])).toBe(
+      "Add shot",
     );
-    expect(text(footer)).toMatch(/^Mark point checked ↵ Add shot/);
   });
 
-  test("a checked one reads ✓ Point checked · Undo", () => {
-    const { operations } = spies();
-    const html = renderConsole({
-      ...SAVES,
-      operations,
-      initialExpandedPointId: P2,
-    });
-    const footer = after(html, `data-point-footer="${P2}"`);
-    expect(html).toContain('data-checked-state="checked"');
-    expect(text(footer)).toMatch(/^Point checked Undo Add shot/);
-    expect(html).not.toContain("Mark point checked");
-  });
+  test("the tick marks and unmarks through the console", () => {
+    const unchecked = pointRowTree(P1);
+    press(unchecked.tree, "Point 1 checked");
+    expect(unchecked.asked).toEqual({ onSetChecked: [[P1, true]] });
 
-  test("the footer marks, unmarks and adds through the console", () => {
-    const unchecked = tableTree();
-    press(unchecked.tree, "Mark point checked");
-    press(unchecked.tree, "Add shot");
-    expect(unchecked.asked).toEqual({
-      onSetChecked: [[P1, true]],
-      onAddShot: [[P1, null]],
-    });
-
-    const checked = tableTree({ expandedPointId: P2 });
-    press(checked.tree, "Undo point 2 checked");
+    const checked = pointRowTree(P2);
+    press(checked.tree, "Point 2 checked");
     expect(checked.asked).toEqual({ onSetChecked: [[P2, false]] });
-
-    const selected = tableTree({ selectedShotId: "s-return" });
-    press(selected.tree, "Add shot after shot 2");
-    expect(selected.asked).toEqual({ onAddShot: [[P1, "s-return"]] });
   });
 
-  test("without operations there is no footer", () => {
+  test("without operations the tick cannot be pressed, and there is no Add shot or menu", () => {
     const html = renderConsole({ ...SAVES, initialExpandedPointId: P1 });
-    expect(html).not.toContain("data-point-footer");
-    expect(html).not.toContain("Mark point checked");
+    expect(count(html, /data-check-row/g)).toBe(3);
+    expect(count(html, /data-check-row=""[^>]*disabled=""/g)).toBe(3);
+    expect(html).not.toContain("data-add-shot");
+    expect(html).not.toContain("data-point-menu");
     expect(html).not.toContain("Move point");
   });
 });
@@ -1066,7 +1046,12 @@ test.describe("reset", () => {
     // serve, the added stroke and the unchanged points are not.
     expect(html).toContain('aria-label="Reset point 1"');
     expect(html).toContain('aria-label="Reset shot 2"');
-    expect(count(html, /data-reset-row/g)).toBe(2);
+    // Each one's pencil is its Reset; the stroke's row offers it again
+    // among its requests.
+    expect(count(html, /data-reset-pencil/g)).toBe(2);
+    expect(count(html, /data-reset-row/g)).toBe(1);
+    expect(count(html, /aria-label="Reset point 1"/g)).toBe(1);
+    expect(count(html, /aria-label="Reset shot 2"/g)).toBe(2);
     for (const name of [
       "Reset shot 1",
       "Reset shot 3",
@@ -1075,14 +1060,6 @@ test.describe("reset", () => {
     ]) {
       expect(html).not.toContain(`aria-label="${name}"`);
     }
-    // Revealed on the open point and hidden (hover/focus) on the unselected
-    // stroke, like the row's ✕.
-    expect(html).toMatch(
-      /<button[^>]*aria-label="Reset point 1"[^>]*class="[^"]*opacity-100/,
-    );
-    expect(html).toMatch(
-      /<button[^>]*aria-label="Reset shot 2"[^>]*class="[^"]*opacity-0/,
-    );
   });
 
   test("no seed, no Reset — and none on a read-only console", () => {
@@ -1103,23 +1080,17 @@ test.describe("reset", () => {
       initialExpandedPointId: P1,
     });
     expect(html).not.toContain("data-reset-row");
+    expect(html).not.toContain("data-reset-pencil");
+    expect(html).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
 
     const readOnly = renderConsole({ initialExpandedPointId: P1 });
     expect(readOnly).not.toContain("data-reset-row");
-  });
-
-  test("Reset only asks: the table hands the request up", () => {
-    const { tree, asked } = tableTree();
-    press(tree, "Reset shot 2");
-    press(tree, "Reset point 1");
-    expect(asked).toEqual({
-      onAskResetShot: [["s-return", 2, 1]],
-      onAskResetPoint: [[P1]],
-    });
+    expect(readOnly).not.toContain("data-reset-pencil");
+    expect(readOnly).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
   });
 
   test("the ⋯ menu carries Reset too, on the same rows", () => {
-    const { operations, asked } = tableTree();
+    const { operations, asked } = askSpies();
     expect(menuActions(P2, operations).reset).toBeNull();
     expect(menuActions(P4, operations).reset).toBeNull();
     menuActions(P1, operations).reset?.();
@@ -1191,7 +1162,7 @@ type BandRow = {
   run: () => void;
 };
 
-/** Each band's text, in table order. */
+/** Each band's text, in the rail's order. */
 function bands(html: string): string[] {
   return html
     .split(/(?=<div data-game-band=)/)
@@ -1205,20 +1176,25 @@ function bands(html: string): string[] {
     });
 }
 
-function renderTable(props: Props): string {
-  const { LabelPointsTableView } = loader().load(
-    "src/components/admin/labels/label-points-table.tsx",
-  ) as { LabelPointsTableView: React.ComponentType<Props> };
-  const session = (props.session as LabelSession) ?? labelSessionFixture();
-  const scores = labelScores(session.points, session.adScoring);
+/** The points rail alone (`LabelBlackRail`), read-only, over `session`. */
+function renderRail(session: LabelSession = labelSessionFixture()): string {
+  const { LabelBlackRail } = loader().load(
+    "src/components/admin/labels/label-black-rail.tsx",
+  ) as { LabelBlackRail: React.ComponentType<Props> };
   return renderToStaticMarkup(
-    React.createElement(LabelPointsTableView, {
+    React.createElement(LabelBlackRail, {
+      player1Name: session.player1Name,
+      player2Name: session.player2Name,
+      checked: 0,
+      total: 0,
+      saveStatus: INITIAL_SAVE_STATUS,
+      affordance: null,
+      onFollow: () => {},
       points: session.points,
-      scores: scores.points,
-      games: scores.games,
+      scores: labelScores(session.points, session.adScoring),
+      adScoring: session.adScoring,
       names: NAMES,
       expandedPointId: null,
-      ...props,
     }),
   );
 }
@@ -1280,7 +1256,7 @@ test.describe("game bands", () => {
         server: "p1",
       },
     ];
-    expect(bands(renderTable({ session }))).toEqual([
+    expect(bands(renderRail(session))).toEqual([
       "Set 1 · Game 1 0–0 · Lee serves",
       "Set 2 · Game 1 0–0 · Vargas serves",
       "Set 2 · Tiebreak 0–0 · Vargas serves first",
@@ -1293,7 +1269,7 @@ test.describe("game bands", () => {
     session.points = session.points.map((point) =>
       point.id === P4 ? { ...point, status: "deleted" as const } : point,
     );
-    const html = renderTable({ session });
+    const html = renderRail(session);
     expect(bands(html)).toEqual(["Set 1 · Game 1 0–0 · Lee serves"]);
     expect(html).not.toContain('data-game-band="1-2"');
   });
@@ -1361,29 +1337,8 @@ test.describe("game bands", () => {
 
   test("the console plans the game on the client, then calls the action with the session", async () => {
     const { calls, operations } = spies();
-    let table: Props = {};
-    const { LabelConsole } = createLoader({
-      stubs: {
-        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
-        "@/components/admin/labels/label-points-table": {
-          LabelPointsTable: (props: Props) => {
-            table = props;
-            return null;
-          },
-        },
-      },
-    }).load("src/components/admin/labels/label-console.tsx") as {
-      LabelConsole: React.ComponentType<Props>;
-    };
     const session = labelSessionFixture();
-    renderToStaticMarkup(
-      React.createElement(LabelConsole, {
-        session,
-        video: null,
-        ...SAVES,
-        operations,
-      }),
-    );
+    const table = railProps({ session, ...SAVES, operations });
     const game = { setNumber: 1, gameNumber: 1 };
     (table.onSetGameServer as (...args: unknown[]) => void)(game, "p2");
     (table.onSetGameType as (...args: unknown[]) => void)(game, "tiebreak");
@@ -1401,15 +1356,15 @@ test.describe("game bands", () => {
     await Promise.resolve();
     expect(calls.setGameServer).toHaveLength(1);
 
-    // Read-only, the table is handed neither callback.
-    renderToStaticMarkup(
-      React.createElement(LabelConsole, { session, video: null, ...SAVES }),
-    );
-    expect(table.onSetGameServer).toBeUndefined();
-    expect(table.onSetGameType).toBeUndefined();
+    // Read-only, the rail is handed neither callback — nor any row operation.
+    const frozen = railProps({ session, ...SAVES });
+    expect(frozen.points).toBe(session.points);
+    expect(frozen.onSetGameServer).toBeUndefined();
+    expect(frozen.onSetGameType).toBeUndefined();
+    expect(frozen.operations).toBeUndefined();
   });
 
-  test("swapping a game's server re-derives the Score column and the band", () => {
+  test("swapping a game's server re-derives the rows' scores and the band", () => {
     const session = labelSessionFixture();
     const plan = planGameServer(
       session.points,
@@ -1431,8 +1386,8 @@ test.describe("game bands", () => {
 
     const row = (html: string) =>
       text(after(html, `data-point-id="${P2}"`).split("data-point-id=")[0]);
-    const before = renderTable({ session });
-    const afterSwap = renderTable({ session: swapped });
+    const before = renderRail(session);
+    const afterSwap = renderRail(swapped);
     expect(row(before)).toContain("0–15");
     expect(row(before)).not.toContain("15–0");
     expect(row(afterSwap)).toContain("15–0");
@@ -1483,30 +1438,9 @@ test.describe("how it ended follows the shot rows", () => {
     return session;
   }
 
-  function consoleTable(props: Props): Props {
-    let table: Props = {};
-    const { LabelConsole } = createLoader({
-      stubs: {
-        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
-        "@/components/admin/labels/label-points-table": {
-          LabelPointsTable: (tableProps: Props) => {
-            table = tableProps;
-            return null;
-          },
-        },
-      },
-    }).load("src/components/admin/labels/label-console.tsx") as {
-      LabelConsole: React.ComponentType<Props>;
-    };
-    renderToStaticMarkup(
-      React.createElement(LabelConsole, {
-        session: winnerSession(),
-        video: null,
-        ...props,
-      }),
-    );
-    return table;
-  }
+  /** What the console hands its rail, over the winner session. */
+  const consoleTable = (props: Props): Props =>
+    railProps({ session: winnerSession(), ...props });
 
   type PatchShot = (shotId: string, patch: Props) => Promise<void>;
 

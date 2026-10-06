@@ -235,6 +235,7 @@ export function LabelGameBand({
   onSetGameType,
   onSetGameServer,
   tone = "light",
+  menu = tone,
 }: {
   band: LabelGameBandScore;
   points: readonly LabelPoint[];
@@ -243,6 +244,12 @@ export function LabelGameBand({
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   tone?: FloatMenuTone;
+  /**
+   * The two menus' tone when it is not the band's: the rail on a light
+   * ground keeps the band's rail paint but opens light menus
+   * (`label-rail-tone.ts`).
+   */
+  menu?: FloatMenuTone;
 }) {
   const paint = TONE[tone];
   // The model reads every row of the game: once per band and rows, not on
@@ -273,6 +280,7 @@ export function LabelGameBand({
             align="start"
             rows={menus.type}
             tone={tone}
+            menu={menu}
             ink={paint.labelInk}
             // With no set before it, the trigger's text starts the band.
             className={cn(BAND_LABEL, !model.setLabel && "-ml-1.5")}
@@ -303,6 +311,7 @@ export function LabelGameBand({
             align="end"
             rows={menus.server}
             tone={tone}
+            menu={menu}
             ink={paint.metaInk}
             className={cn(BAND_META, "-mr-1.5")}
           >
@@ -333,6 +342,7 @@ function BandMenu({
   align,
   rows,
   tone,
+  menu,
   ink,
   className,
   children,
@@ -345,6 +355,8 @@ function BandMenu({
   align: "start" | "end";
   rows: readonly GameBandMenuRow[];
   tone: FloatMenuTone;
+  /** The menu's own tone (the band's `menu`). */
+  menu: FloatMenuTone;
   /** The trigger's resting ink — the label's or the meta's. */
   ink: string;
   /** The trigger's type — the rail's label or meta — and any edge pull. */
@@ -360,7 +372,7 @@ function BandMenu({
       align={align}
       sideOffset={6}
       width={290}
-      tone={tone}
+      tone={menu}
       label={menuLabel}
       trigger={
         <button

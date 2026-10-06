@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  ChevronDown,
-  Fullscreen,
-  Layers,
-  Maximize2,
-  PanelRight,
-  PanelTop,
-} from "lucide-react";
+import { ChevronDown, Maximize2, PanelRight } from "lucide-react";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 import {
@@ -18,25 +11,20 @@ import {
 } from "./label-layout";
 
 /**
- * The console header's "Layout" control (T24): a `FloatMenu` listing the
- * ways the video and the court can sit against the table — Overlay, Docked
- * top, Docked side, then the two full screens — with the current one checked.
+ * The console header's "Layout" control: a `FloatMenu` listing the two ways
+ * the console can sit — Docked side, in the page, and Full screen — with the
+ * current one checked.
  *
  * The trigger is `MenuSelect`'s pill, drawn by hand because it names the
  * control ("Layout") rather than the value: the glyph beside the word is the
- * mode — stacked layers for the floating cards, a top panel for the band, a
- * right panel for the column, the expand arrows for the black full screen
- * and the frame corners for the film one — so the current choice still reads
- * at a glance without the pill growing to "Docked side". Each row carries a
- * second line saying what choosing it does, since "Overlay" alone would not.
+ * mode — a right panel for the docked rail, the expand arrows for the full
+ * screen — so the current choice still reads at a glance. Each row carries a
+ * second line saying what choosing it does.
  */
 
-const MODE_ICON: Record<LabelLayoutMode, typeof Layers> = {
-  overlay: Layers,
-  "docked-top": PanelTop,
+const MODE_ICON: Record<LabelLayoutMode, typeof PanelRight> = {
   "docked-side": PanelRight,
   black: Maximize2,
-  film: Fullscreen,
 };
 
 export function LabelLayoutControl({

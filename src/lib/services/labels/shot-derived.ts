@@ -26,6 +26,7 @@ import {
   serveZone,
 } from "../splitstep/derivation/court";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
+import { isServeStroke } from "./session";
 
 /** The net's `y`, metres from the near baseline. */
 const NET_Y = BASELINE_M;
@@ -42,10 +43,6 @@ export type ShotGeometry = Pick<
 export type ShotPlacement =
   | NonNullable<ReturnType<typeof serveZone>>
   | NonNullable<ReturnType<typeof directionZone>>;
-
-function isServe(stroke: ShotGeometry["stroke"]): boolean {
-  return stroke === "first_serve" || stroke === "second_serve";
-}
 
 /**
  * In, out or net, from where the stroke was hit and where the ball came down.
@@ -79,7 +76,7 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
 
   const insideSidelines = Math.abs(landing_x) <= SINGLES_HALF_WIDTH_M;
 
-  if (isServe(shot.stroke)) {
+  if (isServeStroke(shot.stroke)) {
     const crossedCentreLine =
       contact_x === 0 ||
       landing_x === 0 ||
@@ -102,7 +99,7 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
  * the rule needs are missing.
  */
 export function shotPlacement(shot: ShotGeometry): ShotPlacement | null {
-  return isServe(shot.stroke)
+  return isServeStroke(shot.stroke)
     ? serveZone(shot.landing_x)
     : directionZone(shot.landing_x, shot.contact_x);
 }

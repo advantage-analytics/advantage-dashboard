@@ -46,7 +46,6 @@ import { createLoader } from "./fixtures/vm-modules";
 
 const MENU = "src/components/admin/labels/label-point-menu.tsx";
 const BLACK_ROW = "src/components/admin/labels/label-black-point-row.tsx";
-const LIGHT_ROW = "src/components/admin/labels/label-point-row.tsx";
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 
 const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
@@ -621,7 +620,7 @@ test.describe("the ⋯ menu", () => {
     expect(quiet).toEqual([]);
   });
 
-  test("the menu draws the two rows after the two Add rows, in both tones", () => {
+  test("the menu draws the two rows after the two Add rows, and the rail row draws the menu", () => {
     const source = readFileSync(MENU, "utf8");
     const addBelow = source.indexOf('label="Add point below"');
     const above = source.indexOf('label="Combine with point above"');
@@ -631,8 +630,7 @@ test.describe("the ⋯ menu", () => {
     expect(above).toBeGreaterThan(addBelow);
     expect(below).toBeGreaterThan(above);
     expect(move).toBeGreaterThan(below);
-    // One menu for both layouts: the light row and the dark row draw it.
-    expect(readFileSync(LIGHT_ROW, "utf8")).toContain("<PointMenu");
+    // One menu for both layouts: the rail row draws it, on either ground.
     expect(readFileSync(BLACK_ROW, "utf8")).toContain("<PointMenu");
   });
 });
@@ -695,45 +693,6 @@ test.describe("the combined tombstone", () => {
     );
     expect(ordinary).not.toContain("data-combined");
     expect(text(ordinary)).toBe("– Deleted point Undo");
-    expect(ordinary).toContain('aria-label="Undo delete point 3"');
-  });
-
-  test("light table: the tombstone marker says so, and its open ghost points at the split instead of Undo", () => {
-    const { DeletedPoint } = createLoader().load(LIGHT_ROW) as {
-      DeletedPoint: React.ComponentType<Record<string, unknown>>;
-    };
-    const session = labelSessionFixture();
-    const rows = combined();
-    const closed = renderToStaticMarkup(
-      React.createElement(DeletedPoint, {
-        point: rows[1],
-        edit: editContext(session, rows),
-      }),
-    );
-    expect(closed).toContain("Combined into the point above");
-    expect(closed).not.toContain("Deleted point");
-    expect(closed).not.toContain("Undo");
-    const open = renderToStaticMarkup(
-      React.createElement(DeletedPoint, {
-        point: rows[1],
-        edit: editContext(session, rows, {
-          openTombstoneIds: new Set([P2]),
-        }),
-      }),
-    );
-    expect(open).toContain('data-ghost-id="' + P2 + '"');
-    expect(open).toContain("Split the point above to undo");
-    expect(open).not.toContain("Undo delete point");
-    // The ordinary tombstone, open, still offers Undo.
-    const ordinary = renderToStaticMarkup(
-      React.createElement(DeletedPoint, {
-        point: rows[2],
-        edit: editContext(session, rows, {
-          openTombstoneIds: new Set([P3]),
-        }),
-      }),
-    );
-    expect(ordinary).toContain("Deleted point");
     expect(ordinary).toContain('aria-label="Undo delete point 3"');
   });
 

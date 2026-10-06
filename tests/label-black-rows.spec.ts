@@ -375,7 +375,7 @@ test.describe("the black point row", () => {
       "Crosscourt · 41:12 · 3 shot rally",
     );
     expect(tag(html, "data-point-detail")).toContain(
-      "color:rgba(255,255,255,0.45)",
+      "color:color-mix(in oklab, var(--color-white) 45%, transparent)",
     );
 
     // Won by Vargas: the other player's wash, not the blue.
@@ -661,7 +661,6 @@ test.describe("the black game band", () => {
 
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
 const CELLS = "src/components/admin/labels/label-cells.tsx";
-const LIGHT_SHOT_ROW = "src/components/admin/labels/label-shot-row.tsx";
 
 type WellProps = { point: LabelPoint; edit: Record<string, unknown> };
 
@@ -862,7 +861,7 @@ test.describe("the black shots well", () => {
     expect(frame).toContain('data-shots-well="p-well"');
     for (const cls of [
       "bg-white/[0.035]",
-      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(255,255,255,0.06)]",
+      "shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]",
     ]) {
       expect(frame).toContain(cls);
     }
@@ -1036,8 +1035,12 @@ test.describe("the black shots well", () => {
     expect(text(row)).toBe(
       "3 15:58.9 Lee Forehand Backspin 1.76 23.34 0.77 3.90 Middle In",
     );
-    expect(row).toContain("color:rgba(255,255,255,0.45)");
-    expect(row).toContain("color:rgba(255,255,255,0.72)");
+    expect(row).toContain(
+      "color:color-mix(in oklab, var(--color-white) 45%, transparent)",
+    );
+    expect(row).toContain(
+      "color:color-mix(in oklab, var(--color-white) 72%, transparent)",
+    );
     // Edited, with a seed: the blue pencil closes the row, and is its Reset.
     const result = row.slice(row.indexOf('data-calculated="result"'));
     const pencil = tag(result, "data-reset-pencil");
@@ -1064,7 +1067,9 @@ test.describe("the black shots well", () => {
     // The faulted first serve is muted, as the light table mutes it.
     const fault = shotRow(html, "w-fault");
     expect(tag(fault, 'data-row="shot"')).toContain("data-fault");
-    expect(fault).not.toContain("color:rgba(255,255,255,0.72)");
+    expect(fault).not.toContain(
+      "color:color-mix(in oklab, var(--color-white) 72%, transparent)",
+    );
     expect(fault).toContain("text-white/35");
     expect(serve).not.toContain("data-fault");
   });
@@ -1096,7 +1101,9 @@ test.describe("the black shots well", () => {
     // No landing: one em dash under the dot, and an empty second slot.
     const none = xy(shotRow(html, "w-serve"), "landed");
     expect(none).toContain('aria-label="Landed at"');
-    expect(none).toContain("color:rgba(255,255,255,0.25)");
+    expect(none).toContain(
+      "color:color-mix(in oklab, var(--color-white) 25%, transparent)",
+    );
     expect(text(none.slice(none.indexOf(">") + 1))).toBe("— Not set");
     expect(none).toMatch(/<b class="[^"]*w-8[^"]*" aria-hidden="true"><\/b>/);
   });
@@ -1136,7 +1143,7 @@ test.describe("the black shots well", () => {
       /class="text-\[11px\] font-medium text-white">Forehand</,
     );
     expect(shotRow(html, "w-return")).toMatch(
-      /class="text-\[11px\] font-medium" style="color:rgba\(255,255,255,0\.72\)">Forehand</,
+      /class="text-\[11px\] font-medium" style="color:color-mix\(in oklab, var\(--color-white\) 72%, transparent\)">Forehand</,
     );
 
     // Read-only: nothing to open, even on the selected row.
@@ -1245,7 +1252,7 @@ test.describe("the black shots well", () => {
       // Short of the tail's marks, so a chip and the pencil stay reachable:
       // the padding, the well's `--shot-tail` and 4px of air.
       "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]",
-      "bg-[var(--surface-dark)]",
+      "bg-[var(--rail-ground)]",
       "[mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)]",
     ]) {
       expect(group, cls).toContain(cls);
@@ -1504,9 +1511,11 @@ test.describe("the black shots well", () => {
 
   test("the dark fields: a menu in the dark tone, room for a position, danger while invalid", () => {
     const cells = readFileSync(CELLS, "utf8");
-    // The select hands its tone to the menu it opens.
+    // The select hands its tone to the menu it opens — unless the menu is
+    // given one of its own (the rail on a light ground, `menu`).
+    expect(cells).toContain("menu = tone,");
     expect(cells).toMatch(
-      /<MenuSelect[\s\S]*?\btone=\{tone\}[\s\S]*?className=\{tone === "dark" \? SELECT_TRIGGER_DARK : SELECT_TRIGGER\}/,
+      /<MenuSelect[\s\S]*?\btone=\{menu\}[\s\S]*?className=\{tone === "dark" \? SELECT_TRIGGER_DARK : SELECT_TRIGGER\}/,
     );
     const menu = readFileSync(MENU_SELECT, "utf8");
     expect(menu).toContain('tone = "light",');
@@ -1534,7 +1543,7 @@ test.describe("the black shots well", () => {
     expect(cells).toContain('data-invalid={invalid ? "" : undefined}');
   });
 
-  test("the light table's cells are untouched but for exports and a tone", () => {
+  test("the cells keep the light chrome to the class, with a tone beside it", () => {
     const cells = readFileSync(CELLS, "utf8");
     // The light chrome, to the class.
     expect(cells).toContain(
@@ -1545,20 +1554,6 @@ test.describe("the black shots well", () => {
     );
     expect(cells.match(/tone = "light"/g)).toHaveLength(2);
     expect(cells.match(/tone\?: EditorTone/g)).toHaveLength(2);
-
-    const light = readFileSync(LIGHT_SHOT_ROW, "utf8");
-    expect(light).not.toMatch(/\btone\b/);
-    expect(light).not.toContain("label-black");
-    for (const name of [
-      "export function isFault(",
-      "export function sideOptions(",
-      "export const STROKE_OPTIONS",
-      "export function positionPatch(",
-      "export function PositionCell(",
-      "export function DeletedShot(",
-    ]) {
-      expect(light).toContain(name);
-    }
   });
 });
 
@@ -1606,4 +1601,320 @@ test("no labels component builds an arbitrary-value class from an interpolation"
       ).toBe(false);
     });
   }
+});
+
+// ── The rail on a light ground ─────────────────────────────────────────────
+
+const RAIL = "src/components/admin/labels/label-black-rail.tsx";
+const RAIL_TONE = "src/components/admin/labels/label-rail-tone.ts";
+const PILL = "src/components/admin/labels/label-follow-pill.tsx";
+
+test.describe("the rail's two tones", () => {
+  type RailProps = Record<string, unknown>;
+
+  function renderRail(props: RailProps = {}): string {
+    const { LabelBlackRail } = createLoader().load(RAIL) as {
+      LabelBlackRail: React.ComponentType<RailProps>;
+    };
+    const session = labelSessionFixture();
+    return renderToStaticMarkup(
+      React.createElement(LabelBlackRail, {
+        player1Name: NAMES.p1,
+        player2Name: NAMES.p2,
+        checked: 1,
+        total: 4,
+        saveStatus: { pending: 0, last: { kind: "saved", at: Date.now() } },
+        onExit: noop,
+        affordance: null,
+        onFollow: noop,
+        points: session.points,
+        scores: labelScores(session.points, session.adScoring),
+        names: NAMES,
+        expandedPointId: null,
+        editable: true,
+        operations: OPERATIONS,
+        onSetGameServer: noop,
+        onSetGameType: noop,
+        ...props,
+      }),
+    );
+  }
+
+  function palette() {
+    return createLoader().load(RAIL_TONE) as {
+      RAIL_TONE_CLASS: Record<"dark" | "light", string>;
+      RAIL_CHROME_TONE: string;
+      railInk: (alpha: number) => string;
+      railAmber: (alpha: number) => string;
+    };
+  }
+
+  test("the palette: dark keeps the frame's amber, light re-points white at the page's ink", () => {
+    const { RAIL_TONE_CLASS, RAIL_CHROME_TONE, railInk, railAmber } = palette();
+    // The same variables in both, so a row never reads one that is not set.
+    const names = (classes: string) =>
+      [...classes.matchAll(/\[(--rail-[a-z-]+):/g)].map((m) => m[1]).sort();
+    expect(names(RAIL_TONE_CLASS.dark)).toEqual(names(RAIL_TONE_CLASS.light));
+    expect(names(RAIL_TONE_CLASS.dark)).toEqual([
+      "--rail-amber",
+      "--rail-amber-line",
+      "--rail-amber-wash",
+      "--rail-amber-wash-faint",
+      "--rail-amber-wash-strong",
+      "--rail-ground",
+      "--rail-on-accent",
+    ]);
+    // Dark: exactly what the rows drew before the palette.
+    for (const cls of [
+      "[--rail-ground:var(--surface-dark)]",
+      "[--rail-amber:rgba(252,211,77,1)]",
+      "[--rail-amber-wash-faint:rgba(253,230,138,0.06)]",
+      "[--rail-amber-wash:rgba(253,230,138,0.14)]",
+      "[--rail-amber-wash-strong:rgba(253,230,138,0.22)]",
+      "[--rail-amber-line:rgba(252,211,77,0.45)]",
+    ]) {
+      expect(RAIL_TONE_CLASS.dark, cls).toContain(cls);
+    }
+    // …and white stays white there.
+    expect(RAIL_TONE_CLASS.dark).not.toContain("--color-white");
+    // Light: ink for white, the card for the ground, the warning triple.
+    for (const cls of [
+      "[--color-white:var(--ink-900)]",
+      "text-[var(--ink-900)]",
+      "[--rail-ground:var(--surface-card)]",
+      "[--rail-amber:var(--warning-text)]",
+      "[--rail-amber-wash:var(--warning-bg)]",
+      "[--rail-amber-line:var(--warning-border)]",
+    ]) {
+      expect(RAIL_TONE_CLASS.light, cls).toContain(cls);
+    }
+    // White on both grounds, for a letter on a fill.
+    for (const tone of ["dark", "light"] as const) {
+      expect(RAIL_TONE_CLASS[tone]).toContain(
+        "[--rail-on-accent:rgb(255,255,255)]",
+      );
+    }
+    // An ink set by style follows the same variable a class does.
+    expect(railInk(0.45)).toBe(
+      "color-mix(in oklab, var(--color-white) 45%, transparent)",
+    );
+    expect(railInk(0.035)).toBe(
+      "color-mix(in oklab, var(--color-white) 3.5%, transparent)",
+    );
+    expect(railInk(0.12)).toBe(
+      "color-mix(in oklab, var(--color-white) 12%, transparent)",
+    );
+    expect(railAmber(0.8)).toBe(
+      "color-mix(in oklab, var(--rail-amber) 80%, transparent)",
+    );
+    expect(RAIL_CHROME_TONE).toBe("dark");
+  });
+
+  test("dark by default: the palette on a box of no size, the session in the header, the way out", () => {
+    const html = renderRail();
+    const box = tag(html, "data-rail-palette");
+    expect(box).toContain('data-rail-palette="dark"');
+    expect(box).toContain("contents");
+    expect(box).toContain(palette().RAIL_TONE_CLASS.dark);
+    expect(inner(html, "data-label-rail-title")).toBe("Lee vs Vargas");
+    expect(html).toContain("data-label-rail-progress");
+    // The save line in its dark recipe.
+    expect(tag(html, 'data-save-status="saved"')).toContain(
+      'data-save-tone="dark"',
+    );
+    expect(tag(html, "data-label-black-exit")).toContain(
+      'aria-label="Exit full screen"',
+    );
+    expect(html).not.toContain("data-label-rail-full-screen");
+  });
+
+  test("light: the same rows under the light palette, the save line in its light recipe", () => {
+    const dark = renderRail();
+    const light = renderRail({ tone: "light" });
+    const box = tag(light, "data-rail-palette");
+    expect(box).toContain('data-rail-palette="light"');
+    expect(box).toContain(palette().RAIL_TONE_CLASS.light);
+    // The save line is the page header's: no dark mark, the light ink.
+    const save = tag(light, 'data-save-status="saved"');
+    expect(save).not.toContain("data-save-tone");
+    expect(save).toContain("color:var(--ink-500)");
+    // Everything else is the SAME markup — only the palette differs.
+    const rows = (html: string) =>
+      html.slice(html.indexOf("data-label-rail-scroller"));
+    expect(rows(light)).toBe(rows(dark));
+    // p1's initial sits on blue: white on both grounds, not the rail's ink.
+    expect(light).toContain("bg-[var(--blue)] text-[var(--rail-on-accent)]");
+  });
+
+  test("the tone reaches what leaves the rail through a portal: every menu, the note", () => {
+    type Props = Record<string, unknown>;
+    type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
+    function elements(node: React.ReactNode, out: Element[] = []): Element[] {
+      if (Array.isArray(node)) {
+        for (const child of node) elements(child, out);
+        return out;
+      }
+      if (!React.isValidElement(node)) return out;
+      const element = node as Element;
+      out.push(element);
+      if (typeof element.type === "function") {
+        const error = console.error;
+        console.error = () => {};
+        try {
+          const render = element.type as (p: Props) => React.ReactNode;
+          return elements(render(element.props), out);
+        } catch {
+          elements(element.props.editor as React.ReactNode, out);
+        } finally {
+          console.error = error;
+        }
+      }
+      return elements(element.props.children, out);
+    }
+
+    for (const tone of ["dark", "light"] as const) {
+      // The well: compact chrome on either ground, the menu in the tone.
+      const { BlackShotsWell } = well();
+      const wellElements = elements(
+        BlackShotsWell({
+          point: rally(),
+          edit: wellEdit({ tone, selectedShotId: "w-return" }),
+        }),
+      );
+      const selects = wellElements.filter(
+        (el) =>
+          "options" in el.props && "menu" in el.props && "tone" in el.props,
+      );
+      expect(selects.length, tone).toBeGreaterThan(0);
+      for (const select of selects) {
+        expect(select.props.tone, tone).toBe("dark");
+        expect(select.props.menu, tone).toBe(tone);
+      }
+
+      // The point row: the ⋯ menu.
+      const session = labelSessionFixture();
+      const edit = { ...editContext(session), tone };
+      const row = session.points.find((p) => p.status !== "deleted")!;
+      const { BlackPointRow } = components();
+      const rowElements = elements(
+        (BlackPointRow as unknown as (p: RowProps) => React.ReactNode)({
+          point: row,
+          open: false,
+          playing: false,
+          score: null,
+          edit,
+        }),
+      );
+      const menu = rowElements.find(
+        (el) => "operations" in el.props && "menu" in el.props,
+      );
+      expect(menu, tone).toBeDefined();
+      expect(menu!.props.tone, tone).toBe("dark");
+      expect(menu!.props.menu, tone).toBe(tone);
+    }
+
+    // No tone on the context is the dark rail, as before the palette.
+    const { BlackShotsWell } = well();
+    const untoned = elements(
+      BlackShotsWell({ point: rally(), edit: wellEdit() }),
+    ).filter((el) => "options" in el.props && "menu" in el.props);
+    for (const select of untoned) expect(select.props.menu).toBe("dark");
+
+    // The rest are read off the source: these menus open inside components
+    // that hold state, which cannot be walked outside a render.
+    const rail = readFileSync(RAIL, "utf8");
+    // The game band keeps the rail's paint and opens menus in the tone.
+    expect(rail).toMatch(
+      /<LabelGameBand[\s\S]*?tone=\{RAIL_CHROME_TONE\}\s+menu=\{tone\}/,
+    );
+    // The score chip's answers.
+    expect(rail).toMatch(/<FloatMenu[\s\S]*?width=\{272\}\s+tone=\{tone\}/);
+    expect(rail).not.toContain('tone="dark"');
+    const row = readFileSync(ROW, "utf8");
+    // Who won, and the note's surface with the palette worn again inside it.
+    expect(row).toContain('tone={edit.tone ?? "dark"}');
+    expect(row).toContain("floatMenuToneClasses(tone)");
+    expect(row).toContain(
+      "<div data-note-palette={tone} className={RAIL_TONE_CLASS[tone]}>",
+    );
+    expect(row).not.toContain('tone="dark"');
+    expect(readFileSync(WELL, "utf8")).not.toContain('tone="dark"');
+    // The band takes it: paint from `tone`, menus from `menu`.
+    const band = readFileSync(BAND, "utf8");
+    expect(band).toContain("menu = tone,");
+    expect(band.match(/\btone=\{menu\}/g)).toHaveLength(1);
+  });
+
+  test("showSession off: 'Points' in place of the title, no progress, no save line; the totals stay", () => {
+    const marks = { points: {}, shots: {}, suggestions: [] };
+    const html = renderRail({ showSession: false, tone: "light", marks });
+    expect(inner(html, "data-label-rail-title")).toBe("Points");
+    expect(html).not.toContain("Lee vs Vargas");
+    expect(html).not.toContain("data-label-rail-progress");
+    expect(html).not.toContain("data-save-status");
+    expect(html).toContain("data-label-rail-to-check");
+    expect(html).toContain("data-label-rail-fixes");
+    // With it on (the default) all three are there.
+    const whole = renderRail({ marks });
+    expect(whole).toContain("data-label-rail-progress");
+    expect(whole).toContain("data-save-status");
+    expect(whole).toContain("data-label-rail-to-check");
+  });
+
+  test("onFullScreen draws its button; no onExit, no exit button", () => {
+    let entered = 0;
+    const html = renderRail({
+      onExit: undefined,
+      onFullScreen: () => {
+        entered += 1;
+      },
+    });
+    const button = tag(html, "data-label-rail-full-screen");
+    expect(button).toContain("<button");
+    expect(button).toContain('aria-label="Full screen"');
+    expect(html).toContain("lucide-maximize-2");
+    expect(html).not.toContain("data-label-black-exit");
+    expect(html).not.toContain("Exit full screen");
+    expect(entered).toBe(0);
+    // Its tooltip's two lines, and the click, are the source's.
+    const rail = readFileSync(RAIL, "utf8");
+    expect(rail).toMatch(
+      /label="Full screen"\s+detail="Fills the whole screen"[\s\S]*?data-label-rail-full-screen=""\s+aria-label="Full screen"\s+onClick=\{onFullScreen\}/,
+    );
+    // Both at once, the way in before the way out.
+    const both = renderRail({ onFullScreen: noop });
+    expect(both.indexOf("data-label-rail-full-screen")).toBeGreaterThan(-1);
+    expect(both.indexOf("data-label-rail-full-screen")).toBeLessThan(
+      both.indexOf("data-label-black-exit"),
+    );
+  });
+
+  test("the 'Now playing' pill: the rail's place on either ground, the page's shadow on the light one", () => {
+    const affordance = { label: "Now playing", ariaLabel: "Follow" };
+    const pill = (props: RailProps) =>
+      tag(renderRail({ affordance, ...props }), "data-label-follow-pill");
+    const dark = pill({});
+    for (const cls of [
+      "top-3",
+      "z-10",
+      "text-white",
+      "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]",
+    ]) {
+      expect(dark, cls).toContain(cls);
+    }
+    const light = pill({ tone: "light" });
+    for (const cls of [
+      "top-3",
+      "z-10",
+      "shadow-[var(--shadow-floating)]",
+      // Inside the light rail "white" is ink: the chip's words say white
+      // by the palette's own name.
+      "text-[var(--rail-on-accent)]",
+      "bg-[rgba(13,13,13,0.72)]",
+    ]) {
+      expect(light, cls).toContain(cls);
+    }
+    expect(light).not.toMatch(/\btext-white\b/);
+    expect(readFileSync(PILL, "utf8")).toContain('tone = "dark",');
+  });
 });

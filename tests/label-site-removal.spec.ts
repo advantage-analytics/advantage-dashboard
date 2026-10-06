@@ -503,7 +503,9 @@ test.describe("a ghost in the black well", () => {
     expect(open).toContain('data-row="ghost-shot"');
     expect(open).toContain("h-[26px]");
     expect(open).toContain("text-[11px]");
-    expect(open).toContain("rgba(255,255,255,0.45)");
+    expect(open).toContain(
+      "color-mix(in oklab, var(--color-white) 45%, transparent)",
+    );
     expect(open).toContain("pl-[44px]");
     expect(text(line)).toBe("1 shot removed: Lee hit the fault back Show");
     expect(tag(line, "data-ghost-toggle")).toContain('aria-expanded="false"');
@@ -587,7 +589,9 @@ test.describe("a ghost in the black well", () => {
       expect(at, value).toBeGreaterThan(-1);
       const cell = row.slice(row.lastIndexOf("<", at), at + 1);
       expect(cell, value).toContain("line-through");
-      expect(cell, value).toContain("rgba(255,255,255,0.32)");
+      expect(cell, value).toContain(
+        "color-mix(in oklab, var(--color-white) 32%, transparent)",
+      );
     }
     // The em dashes — the untimed time, the result-less landing — are not.
     const dashes = [...row.matchAll(/<span[^>]*>—<\/span>/g)].map((m) => m[0]);
@@ -845,32 +849,52 @@ test.describe("the console", () => {
     expect(none).not.toContain("data-shot-ghost");
   });
 
-  test("the light layouts never draw a ghost", () => {
+  test("the default layout draws the ghost the same way, and only on a session with marks on", () => {
     const session = labelSessionFixture();
-    const html = renderConsole({
+    const marks = marksOf(point4(), [phantomMark()]);
+    // No `initialLayoutMode`: the default, docked-side, rail on a light ground.
+    const on = renderConsole({
       session,
       video: null,
-      marks: marksOf(point4(), [phantomMark()]),
+      marks,
+      initialExpandedPointId: P4,
+      initialOpenGhostIds: [GHOST],
+      ...SAVES,
+    });
+    expect(on).toContain('data-label-layout-mode="docked-side"');
+    expect(on).toContain(`data-shot-ghost="${GHOST}"`);
+    expect(on).toContain(`data-shot-ghost-row="${GHOST}"`);
+    expect(on).toContain("Hit after the fault");
+
+    const off = renderConsole({
+      session: { ...session, marksEnabled: false },
+      video: null,
+      marks: null,
       initialExpandedPointId: P4,
       ...SAVES,
     });
-    expect(html).not.toContain("data-shot-ghost");
-    expect(html).toContain(`data-shot-id="${GHOST}"`);
+    expect(off).not.toContain("data-shot-ghost");
+    expect(off).toContain(`data-shot-id="${GHOST}"`);
+
+    const none = renderConsole({
+      session,
+      video: null,
+      marks: null,
+      initialExpandedPointId: P4,
+      ...SAVES,
+    });
+    expect(none).not.toContain("data-shot-ghost");
   });
 });
 
-test("the light table files know nothing of a site-removed stroke", () => {
-  for (const file of [
-    "src/components/admin/labels/label-point-row.tsx",
-    "src/components/admin/labels/label-shot-row.tsx",
-    "src/components/admin/labels/label-points-table.tsx",
+test("the game band knows nothing of a site-removed stroke", () => {
+  const source = readFileSync(
     "src/components/admin/labels/label-game-band.tsx",
-  ]) {
-    const source = readFileSync(file, "utf8");
-    expect(source, file).not.toMatch(
-      /isGhostShot|siteRemoval|data-shot-ghost|withoutGhosts|drawsGhosts/,
-    );
-  }
+    "utf8",
+  );
+  expect(source).not.toMatch(
+    /isGhostShot|siteRemoval|data-shot-ghost|withoutGhosts|drawsGhosts/,
+  );
 });
 
 /** The first element in a React tree whose props carry `attr`. */

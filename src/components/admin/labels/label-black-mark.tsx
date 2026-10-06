@@ -30,9 +30,10 @@ import type { SideNames } from "./label-format";
  * to draw; every word, state and hover line in them is `marks-copy.ts`'s and
  * `marks-state.ts`'s.
  *
- * Colours are the frame's, written as rgba because its amber and its blue
- * are not palette hexes: amber on an amber wash for a flag still open, white
- * on a white wash for a fix, and one quiet outline once either is answered.
+ * Colours are the rail's (`label-rail-tone.ts`): its amber on its amber wash
+ * for a flag still open, its ink on a wash of that ink for a fix, and one
+ * quiet outline once either is answered — white on black, the page's ink on
+ * the light ground.
  */
 
 /** What `MarkChip` draws. */
@@ -122,10 +123,10 @@ export function MarkChip({
         className={cn(
           "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full text-[10px] font-medium whitespace-nowrap",
           quiet
-            ? "bg-transparent text-[rgba(255,255,255,0.38)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]"
+            ? "bg-transparent text-white/[0.38] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-white)_14%,transparent)]"
             : kind === "flag"
-              ? "bg-[rgba(253,230,138,0.14)] text-[rgba(252,211,77,1)]"
-              : "bg-white/10 text-[rgba(255,255,255,0.78)]",
+              ? "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]"
+              : "bg-white/10 text-white/[0.78]",
           compact
             ? "w-[18px] justify-center px-0"
             : words

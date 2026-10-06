@@ -10,6 +10,7 @@ import {
 import {
   Flag,
   Maximize,
+  Maximize2,
   Minimize,
   Minimize2,
   PanelRightClose,
@@ -70,6 +71,11 @@ import {
 } from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
 import type { SideNames } from "./label-format";
+import {
+  RAIL_CHROME_TONE,
+  RAIL_TONE_CLASS,
+  type RailTone,
+} from "./label-rail-tone";
 import type {
   EditContext,
   LabelRowOperations,
@@ -116,11 +122,25 @@ import {
  * The "Now playing" pill is pinned over the scroller's top-centre while held
  * and a point is playing, as it is over the light table.
  *
- * Stateless but for the scoreboard memo and the chip's open state, exactly
- * as `LabelPointsTableView`: every callback is the console's, handed down
- * unchanged, so follow and hold, autosave, the row operations and the game
- * menus work here as they do in the light table — only the paint is this
- * file's.
+ * Stateless but for the scoreboard memo and the chip's open state: every
+ * callback is the console's, handed down unchanged, so follow and hold,
+ * autosave, the row operations and the game menus are the console's — only
+ * the paint is this file's.
+ *
+ * ── Two grounds ─────────────────────────────────────────────────────────────
+ *
+ * `tone` (`label-rail-tone.ts`) is the ground the rail is drawn on: `dark`,
+ * the black and film views', or `light`, a white card docked in the admin
+ * page. The markup and the classes are the same; the rail wraps itself in a
+ * box-less element (`display: contents`) that wears the tone's palette, hands
+ * the tone to its rows through `edit.tone`, and gives every menu it opens —
+ * which leaves the rail through a portal — the tone as its own.
+ *
+ * The docked rail sits under the page's own header, which already names the
+ * match, counts the checked points and shows the save line: `showSession`
+ * off drops those three for a plain "Points", and keeps the two totals and
+ * the score chip. `onFullScreen` is its way into the full-screen view; with
+ * no `onExit` there is nothing to leave.
  */
 
 /** The header's icon buttons: the hide, the whole screen and the exit. */
@@ -133,7 +153,10 @@ export function LabelBlackRail({
   checked,
   total,
   saveStatus,
+  tone = "dark",
+  showSession = true,
   onExit,
+  onFullScreen,
   wholeScreen,
   onHide,
   hideButtonRef,
@@ -176,8 +199,20 @@ export function LabelBlackRail({
   checked: number;
   total: number;
   saveStatus: SaveStatus;
-  /** Back to the layout the console was in before this one. */
-  onExit: () => void;
+  /** The ground the rail is drawn on (`label-rail-tone.ts`). */
+  tone?: RailTone;
+  /**
+   * The header's match title, checked count and save line. False where the
+   * page's own header already shows them: the header leads with "Points".
+   */
+  showSession?: boolean;
+  /**
+   * Back to the layout the console was in before this one. Absent — a rail
+   * that is not in a full-screen view — there is no exit button.
+   */
+  onExit?: () => void;
+  /** Into the full-screen view. Absent, there is no button. */
+  onFullScreen?: () => void;
   /**
    * The browser's own full screen (`useBrowserFullscreen`). Absent, or not
    * supported, there is no button.
@@ -277,6 +312,7 @@ export function LabelBlackRail({
     scores: scores.points,
     adScoring,
     playingShotId,
+    tone,
   };
   const bandBefore = useMemo(
     () => bandsBeforePoints(points, scores.games),
@@ -296,224 +332,276 @@ export function LabelBlackRail({
 
   return (
     <TooltipProvider>
-      {/* A size container, for the chip's words (`@min-[600px]`). */}
+      {/* The palette, on a box of no size: the header and the scroller stay
+         the children of whatever the rail is mounted in. */}
       <div
-        data-label-rail-header=""
-        className="@container flex h-[46px] shrink-0 items-center gap-[10px] pr-[10px] pl-[14px] shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]"
+        data-rail-palette={tone}
+        className={cn("contents", RAIL_TONE_CLASS[tone])}
       >
-        <span
-          data-label-rail-title=""
-          className="truncate text-[12px] font-medium text-white"
+        {/* A size container, for the chip's words (`@min-[600px]`). */}
+        <div
+          data-label-rail-header=""
+          className="@container flex h-[46px] shrink-0 items-center gap-[10px] pr-[10px] pl-[14px] shadow-[inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_8%,transparent)]"
         >
-          {player1Name} vs {player2Name}
-        </span>
-        <span
-          data-label-rail-progress=""
-          className="mono tabular shrink-0 text-[10px] whitespace-nowrap text-white/45"
-        >
-          {checked} <span className="text-white/25">/</span> {total} checked
-        </span>
-        {summary ? (
-          <>
-            <RailTotal
-              attr="data-label-rail-to-check"
-              icon={Flag}
-              count={summary.open}
-              label={toCheckLabel(summary.open)}
-              detail={onPointsDetail(summary.openPoints)}
-              className={
-                summary.open > 0 ? "text-[rgba(252,211,77,1)]" : "text-white/45"
-              }
-            />
-            <RailTotal
-              attr="data-label-rail-fixes"
-              icon={WandSparkles}
-              count={summary.fixes}
-              label={fixesLabel(summary.fixes)}
-              detail={onPointsDetail(summary.fixPoints)}
-              className="text-white/55"
-            />
-          </>
-        ) : null}
-        {mismatch ? (
-          <ScoreChip
-            mismatch={mismatch}
-            onFixEnteredScore={
-              onFixEnteredScore && editable
-                ? () =>
-                    onFixEnteredScore(
-                      labelledSets.map((set) => [set.games[0], set.games[1]]),
-                    )
-                : undefined
-            }
-            onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
-            onFindGap={editable ? onFindGap : undefined}
-          />
-        ) : null}
-        <span className="flex-1" />
-        <LabelSaveStatus status={saveStatus} tone="dark" />
-        {onHide ? (
-          <ChromeTooltip label="Hide the points list" side="bottom" align="end">
-            <button
-              type="button"
-              ref={hideButtonRef}
-              data-label-rail-hide=""
-              aria-label="Hide the points list"
-              onClick={onHide}
-              className={HEADER_BUTTON}
-            >
-              <PanelRightClose
-                className="size-3.5"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-            </button>
-          </ChromeTooltip>
-        ) : null}
-        {wholeScreen?.supported ? (
-          <ChromeTooltip
-            label={
-              wholeScreen.active
-                ? WHOLE_SCREEN_COPY.leave
-                : WHOLE_SCREEN_COPY.enter
-            }
-            detail={WHOLE_SCREEN_COPY.detail}
-            side="bottom"
-            align="end"
+          <span
+            data-label-rail-title=""
+            className="truncate text-[12px] font-medium text-white"
           >
-            <button
-              type="button"
-              data-label-whole-screen=""
-              aria-label={
+            {showSession ? `${player1Name} vs ${player2Name}` : "Points"}
+          </span>
+          {showSession ? (
+            <span
+              data-label-rail-progress=""
+              className="mono tabular shrink-0 text-[10px] whitespace-nowrap text-white/45"
+            >
+              {checked} <span className="text-white/25">/</span> {total} checked
+            </span>
+          ) : null}
+          {summary ? (
+            <>
+              <RailTotal
+                attr="data-label-rail-to-check"
+                icon={Flag}
+                count={summary.open}
+                label={toCheckLabel(summary.open)}
+                detail={onPointsDetail(summary.openPoints)}
+                className={
+                  summary.open > 0
+                    ? "text-[var(--rail-amber)]"
+                    : "text-white/45"
+                }
+              />
+              <RailTotal
+                attr="data-label-rail-fixes"
+                icon={WandSparkles}
+                count={summary.fixes}
+                label={fixesLabel(summary.fixes)}
+                detail={onPointsDetail(summary.fixPoints)}
+                className="text-white/55"
+              />
+            </>
+          ) : null}
+          {mismatch ? (
+            <ScoreChip
+              mismatch={mismatch}
+              tone={tone}
+              onFixEnteredScore={
+                onFixEnteredScore && editable
+                  ? () =>
+                      onFixEnteredScore(
+                        labelledSets.map((set) => [set.games[0], set.games[1]]),
+                      )
+                  : undefined
+              }
+              onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
+              onFindGap={editable ? onFindGap : undefined}
+            />
+          ) : null}
+          <span className="flex-1" />
+          {showSession ? (
+            <LabelSaveStatus status={saveStatus} tone={tone} />
+          ) : null}
+          {onHide ? (
+            <ChromeTooltip
+              label="Hide the points list"
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                ref={hideButtonRef}
+                data-label-rail-hide=""
+                aria-label="Hide the points list"
+                onClick={onHide}
+                className={HEADER_BUTTON}
+              >
+                <PanelRightClose
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              </button>
+            </ChromeTooltip>
+          ) : null}
+          {wholeScreen?.supported ? (
+            <ChromeTooltip
+              label={
                 wholeScreen.active
                   ? WHOLE_SCREEN_COPY.leave
                   : WHOLE_SCREEN_COPY.enter
               }
-              aria-pressed={wholeScreen.active}
-              onClick={wholeScreen.toggle}
-              className={HEADER_BUTTON}
+              detail={WHOLE_SCREEN_COPY.detail}
+              side="bottom"
+              align="end"
             >
-              {wholeScreen.active ? (
-                <Minimize
+              <button
+                type="button"
+                data-label-whole-screen=""
+                aria-label={
+                  wholeScreen.active
+                    ? WHOLE_SCREEN_COPY.leave
+                    : WHOLE_SCREEN_COPY.enter
+                }
+                aria-pressed={wholeScreen.active}
+                onClick={wholeScreen.toggle}
+                className={HEADER_BUTTON}
+              >
+                {wholeScreen.active ? (
+                  <Minimize
+                    className="size-3.5"
+                    strokeWidth={1.6}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Maximize
+                    className="size-3.5"
+                    strokeWidth={1.6}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            </ChromeTooltip>
+          ) : null}
+          {onFullScreen ? (
+            <ChromeTooltip
+              label="Full screen"
+              detail="Fills the whole screen"
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                data-label-rail-full-screen=""
+                aria-label="Full screen"
+                onClick={onFullScreen}
+                className={HEADER_BUTTON}
+              >
+                <Maximize2
                   className="size-3.5"
                   strokeWidth={1.6}
                   aria-hidden="true"
                 />
-              ) : (
-                <Maximize
+              </button>
+            </ChromeTooltip>
+          ) : null}
+          {onExit ? (
+            <ChromeTooltip label="Exit full screen" side="bottom" align="end">
+              <button
+                type="button"
+                data-label-black-exit=""
+                aria-label="Exit full screen"
+                onClick={onExit}
+                className={HEADER_BUTTON}
+              >
+                <Minimize2
                   className="size-3.5"
                   strokeWidth={1.6}
                   aria-hidden="true"
                 />
-              )}
-            </button>
-          </ChromeTooltip>
-        ) : null}
-        <ChromeTooltip label="Exit full screen" side="bottom" align="end">
-          <button
-            type="button"
-            data-label-black-exit=""
-            aria-label="Exit full screen"
-            onClick={onExit}
-            className={HEADER_BUTTON}
-          >
-            <Minimize2
-              className="size-3.5"
-              strokeWidth={1.6}
-              aria-hidden="true"
-            />
-          </button>
-        </ChromeTooltip>
-      </div>
-
-      {/* The scroller and the pill's positioning context: the pill sits over
-          the rows rather than among them, so it stays put while they move. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          className="flex min-h-0 flex-1 flex-col"
-          onFocusCapture={onFocusCapture}
-        >
-          <div
-            ref={scrollerRef}
-            data-label-rail-scroller=""
-            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2"
-          >
-            {points.map((point) => {
-              if (point.status === "deleted") {
-                return (
-                  <BlackDeletedPoint key={point.id} point={point} edit={edit} />
-                );
-              }
-              const band = bandBefore.get(point.id);
-              const slot = slotBefore.get(point.id);
-              const overflow = overflowBefore.get(point.id);
-              // One point unfolds: the current one (the console's
-              // `currentPointId`, playing or resting). Nothing else does.
-              const open = point.id === expandedPointId;
-              return (
-                <Fragment key={point.id}>
-                  {band ? (
-                    <LabelGameBand
-                      band={band}
-                      points={points}
-                      names={names}
-                      onSetGameType={editable ? onSetGameType : undefined}
-                      onSetGameServer={editable ? onSetGameServer : undefined}
-                      tone="dark"
-                    />
-                  ) : null}
-                  {/* The slot sits between the pair's two rows: after the
-                      point before it (and any band), before this one. */}
-                  {slot ? (
-                    <BlackSuggestedPoint
-                      suggestion={slot}
-                      point={point}
-                      edit={edit}
-                    />
-                  ) : null}
-                  {/* Before the first row that reads "Game–30": the game
-                      is already won, these rows belong to the next one. */}
-                  {overflow ? (
-                    <BlackGameOverflow
-                      overflow={overflow.overflow}
-                      summary={overflow.summary}
-                      point={point}
-                      edit={edit}
-                    />
-                  ) : null}
-                  <BlackPointRow
-                    point={point}
-                    open={open}
-                    playing={point.id === playingPointId}
-                    playingWindow={
-                      point.id === playingPointId ? playingWindow : null
-                    }
-                    score={scores.points.get(point.id)?.scoreBefore ?? null}
-                    onToggle={onTogglePoint}
-                    edit={edit}
-                    marks={marks}
-                  >
-                    {open ? (
-                      <BlackShotsWell point={point} edit={edit} marks={marks} />
-                    ) : null}
-                  </BlackPointRow>
-                </Fragment>
-              );
-            })}
-          </div>
+              </button>
+            </ChromeTooltip>
+          ) : null}
         </div>
 
-        {/* The film room's return pill (point-list.tsx `FollowPill`) in the
+        {/* The scroller and the pill's positioning context: the pill sits over
+          the rows rather than among them, so it stays put while they move. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            onFocusCapture={onFocusCapture}
+          >
+            <div
+              ref={scrollerRef}
+              data-label-rail-scroller=""
+              className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2"
+            >
+              {points.map((point) => {
+                if (point.status === "deleted") {
+                  return (
+                    <BlackDeletedPoint
+                      key={point.id}
+                      point={point}
+                      edit={edit}
+                    />
+                  );
+                }
+                const band = bandBefore.get(point.id);
+                const slot = slotBefore.get(point.id);
+                const overflow = overflowBefore.get(point.id);
+                // One point unfolds: the current one (the console's
+                // `currentPointId`, playing or resting). Nothing else does.
+                const open = point.id === expandedPointId;
+                return (
+                  <Fragment key={point.id}>
+                    {band ? (
+                      <LabelGameBand
+                        band={band}
+                        points={points}
+                        names={names}
+                        onSetGameType={editable ? onSetGameType : undefined}
+                        onSetGameServer={editable ? onSetGameServer : undefined}
+                        tone={RAIL_CHROME_TONE}
+                        menu={tone}
+                      />
+                    ) : null}
+                    {/* The slot sits between the pair's two rows: after the
+                      point before it (and any band), before this one. */}
+                    {slot ? (
+                      <BlackSuggestedPoint
+                        suggestion={slot}
+                        point={point}
+                        edit={edit}
+                      />
+                    ) : null}
+                    {/* Before the first row that reads "Game–30": the game
+                      is already won, these rows belong to the next one. */}
+                    {overflow ? (
+                      <BlackGameOverflow
+                        overflow={overflow.overflow}
+                        summary={overflow.summary}
+                        point={point}
+                        edit={edit}
+                      />
+                    ) : null}
+                    <BlackPointRow
+                      point={point}
+                      open={open}
+                      playing={point.id === playingPointId}
+                      playingWindow={
+                        point.id === playingPointId ? playingWindow : null
+                      }
+                      score={scores.points.get(point.id)?.scoreBefore ?? null}
+                      onToggle={onTogglePoint}
+                      edit={edit}
+                      marks={marks}
+                    >
+                      {open ? (
+                        <BlackShotsWell
+                          point={point}
+                          edit={edit}
+                          marks={marks}
+                        />
+                      ) : null}
+                    </BlackPointRow>
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* The film room's return pill (point-list.tsx `FollowPill`) in the
             room's own dark recipe — the inset hairline, since the rail is
-            as dark as the room — pinned to the scroller's top-centre, over
-            the rows. */}
-        {affordance ? (
-          <LabelFollowPill
-            affordance={affordance}
-            onFollow={onFollow}
-            placement="rail"
-          />
-        ) : null}
+            as dark as the room; the page's floating shadow on the light
+            ground — pinned to the scroller's top-centre, over the rows. */}
+          {affordance ? (
+            <LabelFollowPill
+              affordance={affordance}
+              onFollow={onFollow}
+              placement="rail"
+              tone={tone}
+            />
+          ) : null}
+        </div>
       </div>
     </TooltipProvider>
   );
@@ -565,8 +653,7 @@ function RailTotal({
  * front of it. Under 600px of header the words give way and the dot stands
  * alone; the hover says everything either way.
  *
- * With the three answers it is a `FloatMenu` trigger in the rail's dark
- * tone, each row saying what choosing it does: "Fix the entered score"
+ * With the three answers it is a `FloatMenu` trigger in the rail's tone, each row saying what choosing it does: "Fix the entered score"
  * stores the labelled sets as the session's score, "Video ends early" says
  * the rows stop before the match did, and "Find the gap" goes to the
  * mismatching set's first point and writes nothing. The answers write ONLY
@@ -576,11 +663,14 @@ function RailTotal({
  */
 function ScoreChip({
   mismatch,
+  tone,
   onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
 }: {
   mismatch: LabelScoreMismatch;
+  /** The rail's tone, for the menu of answers. */
+  tone: RailTone;
   /** Store the labelled sets as `final_score`. Absent: no answers at all. */
   onFixEnteredScore?: () => void;
   onVideoEndsEarly?: () => void;
@@ -593,9 +683,9 @@ function ScoreChip({
   const text = scoreMismatchText(labelled, entered);
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
   const chip = cn(
-    "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[rgba(253,230,138,0.14)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[rgba(252,211,77,1)]",
+    "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[var(--rail-amber-wash)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[var(--rail-amber)]",
     answers &&
-      "cursor-pointer transition-colors duration-200 hover:bg-[rgba(253,230,138,0.22)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+      "cursor-pointer transition-colors duration-200 hover:bg-[var(--rail-amber-wash-strong)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
   );
   const inside = (
     <>
@@ -646,7 +736,7 @@ function ScoreChip({
           onOpenChange={setOpen}
           align="end"
           width={272}
-          tone="dark"
+          tone={tone}
           label={SCORE_MISMATCH_LABEL}
           trigger={
             <button
@@ -655,7 +745,7 @@ function ScoreChip({
               aria-label={SCORE_MISMATCH_LABEL}
               aria-haspopup="menu"
               aria-expanded={open}
-              className={cn(chip, open && "bg-[rgba(253,230,138,0.22)]")}
+              className={cn(chip, open && "bg-[var(--rail-amber-wash-strong)]")}
             >
               {inside}
             </button>

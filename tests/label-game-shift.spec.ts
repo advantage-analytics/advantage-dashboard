@@ -614,6 +614,8 @@ function fakeClient(rows: {
         select: () => builder,
         order: () => builder,
         returns: () => builder,
+        /** One page of a `readAllPages` read: the fake holds under a page. */
+        range: () => Promise.resolve(answer()),
         update: (values: Record<string, unknown>) => {
           call.op = "update";
           call.values = values;
@@ -1132,8 +1134,8 @@ test.describe("the slot on the black rail", () => {
       "my-0.5",
       "rounded-lg",
       "border-dashed",
-      "border-[rgba(252,211,77,0.45)]",
-      "bg-[rgba(253,230,138,0.06)]",
+      "border-[var(--rail-amber-line)]",
+      "bg-[var(--rail-amber-wash-faint)]",
       "grid-cols-[22px_minmax(0,1fr)_auto]",
     ]) {
       expect(open, cls).toContain(cls);
@@ -1148,7 +1150,7 @@ test.describe("the slot on the black rail", () => {
     );
     expect(inner(row, "data-game-overflow-move")).toBe("Move to game 2");
     expect(tag(row, "data-game-overflow-move")).toContain(
-      "text-[rgba(252,211,77,1)]",
+      "text-[var(--rail-amber)]",
     );
     expect(row).not.toContain("Dismiss");
     // The lines give way; the answer never shrinks or wraps.

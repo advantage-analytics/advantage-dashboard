@@ -284,6 +284,7 @@ export function SelectEditor({
   options,
   onChange,
   tone = "light",
+  menu = tone,
 }: {
   label: string;
   value: string | null;
@@ -291,6 +292,11 @@ export function SelectEditor({
   onChange: (value: string | null) => void;
   /** The trigger's chrome, and the tone of the menu it opens. */
   tone?: EditorTone;
+  /**
+   * The menu's tone when it is not the trigger's: the rail on a light ground
+   * keeps its compact chrome but opens a light menu (`label-rail-tone.ts`).
+   */
+  menu?: FloatMenuTone;
 }) {
   return (
     <span
@@ -307,7 +313,7 @@ export function SelectEditor({
         placeholder="—"
         align="start"
         width="trigger"
-        tone={tone}
+        tone={menu}
         className={tone === "dark" ? SELECT_TRIGGER_DARK : SELECT_TRIGGER}
       />
     </span>

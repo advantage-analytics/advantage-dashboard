@@ -5,8 +5,8 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  DIVIDER_KEY_STEP_PX,
   RAIL_DEFAULT_PX,
+  RAIL_KEY_STEP_PX,
   RAIL_MAX_PX,
   RAIL_MIN_PX,
   clampRailWidth,
@@ -14,15 +14,14 @@ import {
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The black view's rail handle (T32, board 08l's "The rail's edge"):
- * `label-rail-resize.tsx`, rendered offline through `fixtures/vm-modules`,
- * nothing stubbed. Its drag and keys are `LabelDivider`'s (`useSeparatorDrag`),
- * so what is held here is the handle's own half — the separator it announces,
- * the three looks it carries, and which way a drag goes.
+ * The points rail's handle (T32, board 08l's "The rail's edge"), in both the
+ * docked view and the full screen: `label-rail-resize.tsx`, rendered offline
+ * through `fixtures/vm-modules`, nothing stubbed — the separator it
+ * announces, the three looks it carries, which way a drag goes, and the one
+ * set of pointer and key mechanics (`useSeparatorDrag`) in the same file.
  */
 
 const HANDLE = "src/components/admin/labels/label-rail-resize.tsx";
-const DIVIDER = "src/components/admin/labels/label-divider.tsx";
 
 type Props = {
   width: number;
@@ -120,11 +119,12 @@ test.describe("the rail's resize handle (T32)", () => {
       expect(part).toContain("duration-200");
     }
     expect(line).toContain("w-px");
-    expect(line).toContain("bg-[rgba(255,255,255,0.45)]");
+    // The rail's ink, so it reads on the light rail too (label-rail-tone.ts).
+    expect(line).toContain("bg-white/45");
     expect(grip).toContain("w-1");
     expect(grip).toContain("h-8");
     expect(grip).toContain("rounded-[2px]");
-    expect(grip).toContain("bg-[rgba(255,255,255,0.85)]");
+    expect(grip).toContain("bg-white/85");
     expect(tagOf(html, "data-rail-resize-line")).toContain(
       'aria-hidden="true"',
     );
@@ -160,8 +160,8 @@ test.describe("the rail's resize handle (T32)", () => {
     expect(clampRailWidth(700.4)).toBe(700);
     expect(clampRailWidth(Number.NaN)).toBe(RAIL_DEFAULT_PX);
     // A key step from either end stays inside.
-    expect(clampRailWidth(RAIL_MAX_PX + DIVIDER_KEY_STEP_PX)).toBe(RAIL_MAX_PX);
-    expect(clampRailWidth(RAIL_MIN_PX - DIVIDER_KEY_STEP_PX)).toBe(RAIL_MIN_PX);
+    expect(clampRailWidth(RAIL_MAX_PX + RAIL_KEY_STEP_PX)).toBe(RAIL_MAX_PX);
+    expect(clampRailWidth(RAIL_MIN_PX - RAIL_KEY_STEP_PX)).toBe(RAIL_MIN_PX);
   });
 
   test("a drag to the LEFT widens the rail, and holds at the bounds", () => {
@@ -176,19 +176,100 @@ test.describe("the rail's resize handle (T32)", () => {
     expect(railWidthFromDrag(640, 800, 1400)).toBe(RAIL_MIN_PX);
   });
 
-  test("the drag is LabelDivider's, not a second one", () => {
+  test("an arrow press is 16px", () => {
+    expect(RAIL_KEY_STEP_PX).toBe(16);
+  });
+
+  test("one set of drag mechanics: the hook's, with pointer capture, never a native drag", () => {
     const handle = readFileSync(HANDLE, "utf8");
-    expect(handle).toContain("useSeparatorDrag");
-    for (const own of [
-      "setPointerCapture",
-      "onPointerDown=",
-      "onDragStart",
-      "draggable",
-    ]) {
+    expect(handle).toContain("export function useSeparatorDrag");
+    expect(handle.match(/setPointerCapture\(/g)).toHaveLength(1);
+    expect(handle.match(/useSeparatorDrag\(/g)).toHaveLength(2);
+    for (const own of ["onDragStart", "draggable", "dataTransfer"]) {
       expect(handle, own).not.toContain(own);
     }
-    const divider = readFileSync(DIVIDER, "utf8");
-    expect(divider.match(/setPointerCapture\(/g)).toHaveLength(1);
-    expect(divider).toContain("export function useSeparatorDrag");
+  });
+
+  test("the hook's separator: ← widens and → narrows by one step, Home and End the bounds, Enter the default", () => {
+    const { useSeparatorDrag } = createLoader().load(HANDLE) as {
+      useSeparatorDrag: (options: {
+        axis: "x" | "y";
+        value: number;
+        min: number;
+        max: number;
+        growKey: string;
+        shrinkKey: string;
+        sizeFromDrag: (startSize: number, from: number, at: number) => number;
+        onResize: (px: number) => void;
+        onReset: () => void;
+      }) => {
+        dragging: boolean;
+        separatorProps: {
+          "aria-orientation": string;
+          onKeyDown: (event: unknown) => void;
+          onDoubleClick: () => void;
+        };
+      };
+    };
+    const asked: number[] = [];
+    let resets = 0;
+    let props: ReturnType<typeof useSeparatorDrag>["separatorProps"] | null =
+      null;
+    function Probe() {
+      const drag = useSeparatorDrag({
+        axis: "x",
+        value: 640,
+        min: RAIL_MIN_PX,
+        max: RAIL_MAX_PX,
+        growKey: "ArrowLeft",
+        shrinkKey: "ArrowRight",
+        sizeFromDrag: (size) => size,
+        onResize: (px) => asked.push(px),
+        onReset: () => {
+          resets += 1;
+        },
+      });
+      props = drag.separatorProps;
+      expect(drag.dragging).toBe(false);
+      return null;
+    }
+    renderToStaticMarkup(React.createElement(Probe));
+    expect(props!["aria-orientation"]).toBe("vertical");
+
+    const press = (key: string, modifiers: Record<string, boolean> = {}) => {
+      let prevented = false;
+      props!.onKeyDown({
+        key,
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        ...modifiers,
+        preventDefault: () => {
+          prevented = true;
+        },
+      });
+      return prevented;
+    };
+    // Each handled key is prevented — what tells the console's own ← / → /
+    // Enter shortcuts to stand down.
+    expect(press("ArrowLeft")).toBe(true);
+    expect(press("ArrowRight")).toBe(true);
+    expect(press("Home")).toBe(true);
+    expect(press("End")).toBe(true);
+    expect(asked).toEqual([
+      640 + RAIL_KEY_STEP_PX,
+      640 - RAIL_KEY_STEP_PX,
+      RAIL_MIN_PX,
+      RAIL_MAX_PX,
+    ]);
+    expect(press("Enter")).toBe(true);
+    expect(resets).toBe(1);
+    props!.onDoubleClick();
+    expect(resets).toBe(2);
+    // Anything else, or a chord, is left alone.
+    expect(press("a")).toBe(false);
+    expect(press("ArrowUp")).toBe(false);
+    expect(press("ArrowLeft", { metaKey: true })).toBe(false);
+    expect(asked).toHaveLength(4);
   });
 });

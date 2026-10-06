@@ -41,18 +41,28 @@
  * {@link fromCourtInHalf} are its percent conversions, exact inverses too.
  */
 
+import {
+  COURT_LENGTH_M,
+  NET_Y_M,
+} from "@/components/dashboard/matches/match-detail/film/film-court";
+import {
+  DOUBLES_HALF_WIDTH_M,
+  SERVICE_LINE_M,
+  SINGLES_HALF_WIDTH_M,
+} from "@/lib/services/splitstep/derivation/court";
+
 /** Metres of apron drawn beside each doubles sideline. */
 const SIDE_APRON = 1.78;
 /** Metres of apron drawn behind each baseline. */
 const BACK_APRON = 4.5;
 
-export const COURT_LENGTH = 23.77;
-export const DOUBLES_HALF_WIDTH = 5.485;
-export const SINGLES_HALF_WIDTH = 4.115;
-export const NET_Y = COURT_LENGTH / 2;
+export const COURT_LENGTH = COURT_LENGTH_M;
+export const DOUBLES_HALF_WIDTH = DOUBLES_HALF_WIDTH_M;
+export const SINGLES_HALF_WIDTH = SINGLES_HALF_WIDTH_M;
+export const NET_Y = NET_Y_M;
 /** Service lines, measured from the near baseline (6.40 m from the net). */
-export const NEAR_SERVICE_Y = NET_Y - 6.4;
-export const FAR_SERVICE_Y = NET_Y + 6.4;
+export const NEAR_SERVICE_Y = NET_Y - SERVICE_LINE_M;
+export const FAR_SERVICE_Y = NET_Y + SERVICE_LINE_M;
 
 export const COURT_LEFT = -(DOUBLES_HALF_WIDTH + SIDE_APRON); // -7.265
 export const COURT_WIDTH = 2 * (DOUBLES_HALF_WIDTH + SIDE_APRON); // 14.53

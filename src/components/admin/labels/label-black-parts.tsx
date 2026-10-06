@@ -1,32 +1,35 @@
 "use client";
 
 import type { ButtonHTMLAttributes } from "react";
+import { railAmber } from "./label-rail-tone";
 
 /**
  * The pieces the black view's rows share (board 08l / 08m): a text action in
  * the dark tone, the dashed amber slot's class, and the amber the frame draws
  * both with.
  *
- * The frame's amber is not a palette hex, so it is written as rgba — here,
- * once, for the inks the rows set by style. The same amber inside a Tailwind
- * class (`text-[rgba(252,211,77,1)]`) has to stay a literal so the class is
- * generated; those live in the class constants below.
+ * The amber is the rail's (`--rail-amber` and its washes, set per ground in
+ * `label-rail-tone.ts`: the frame's amber on black, the warning triple on
+ * white). An ink a row sets by style is that variable at an alpha; inside a
+ * Tailwind class it has to be a whole literal so the class is generated —
+ * those live in the class constants below.
  */
 
 /** The slot's leading glyph — the frame's `.fx-slot .bk-pl`. */
-export const AMBER_SLOT_ICON_INK = "rgba(252,211,77,0.8)";
+export const AMBER_SLOT_ICON_INK = railAmber(0.8);
 /** A suggested stroke's own ink — the frame's `.fx-sug .bk-n, .bk-tm, .bk-pl`. */
-export const AMBER_SUGGESTION_INK = "rgba(252,211,77,0.75)";
+export const AMBER_SUGGESTION_INK = railAmber(0.75);
 
 /**
  * A text action's resting ink: amber for the slot's one answer, quiet white
  * for its other answers, plain white for Undo / Show / Hide. Every one goes
- * full white on hover.
+ * full white on hover — "white" being the rail's ink, so the page's ink on a
+ * light ground.
  */
 export type BlackTextActionInk = "amber" | "quiet" | "plain";
 
 const TEXT_ACTION_INK: Record<BlackTextActionInk, string> = {
-  amber: "text-[rgba(252,211,77,1)]",
+  amber: "text-[var(--rail-amber)]",
   quiet: "text-white/50",
   plain: "text-white/70",
 };
@@ -88,4 +91,4 @@ export function BlackUndoButton({
  * stops at a component boundary — and share the frame's one class.
  */
 export const BLACK_SLOT =
-  "mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[rgba(252,211,77,0.45)] bg-[rgba(253,230,138,0.06)] py-1.5 pr-[10px] pl-1.5";
+  "mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[var(--rail-amber-line)] bg-[var(--rail-amber-wash-faint)] py-1.5 pr-[10px] pl-1.5";

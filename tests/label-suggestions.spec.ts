@@ -641,10 +641,10 @@ test.describe("a suggested shot in the black well", () => {
     for (const cls of [
       "outline-dashed",
       "outline-1",
-      "outline-[rgba(252,211,77,0.45)]",
+      "outline-[color:var(--rail-amber-line)]",
       "-outline-offset-4",
       "rounded-lg",
-      "bg-[rgba(253,230,138,0.06)]",
+      "bg-[var(--rail-amber-wash-faint)]",
     ]) {
       expect(open, cls).toContain(cls);
     }
@@ -653,21 +653,23 @@ test.describe("a suggested shot in the black well", () => {
     expect(row).toContain("lucide-plus");
     expect(row).toContain(">28:01.5<");
     expect(row).toContain(">Lee<");
-    expect(row.match(/color:rgba\(252,\s?211,\s?77,\s?0\.75\)/g)).toHaveLength(
-      3,
-    );
+    expect(
+      row.match(
+        /color:color-mix\(in oklab, var\(--rail-amber\) 75%, transparent\)/g,
+      ),
+    ).toHaveLength(3);
     expect(inner(row, "data-suggestion-text")).toBe(
       "A shot by Lee is probably missing here",
     );
     expect(tag(row, "data-suggestion-text")).toContain("text-[11px]");
     expect(tag(row, "data-suggestion-text")).toMatch(
-      /color:rgba\(255,\s?255,\s?255,\s?0\.72\)/,
+      /color:color-mix\(in oklab, var\(--color-white\) 72%, transparent\)/,
     );
     expect(tag(row, "data-suggestion-text")).toContain("truncate");
 
     expect(inner(row, "data-suggestion-add")).toBe("Add shot");
     expect(tag(row, "data-suggestion-add")).toContain(
-      "text-[rgba(252,211,77,1)]",
+      "text-[var(--rail-amber)]",
     );
     expect(inner(row, "data-suggestion-dismiss")).toBe("Dismiss");
     expect(tag(row, "data-suggestion-dismiss")).toContain("text-white/50");
@@ -900,7 +902,7 @@ test.describe("the console", () => {
     expect(saves).toEqual([]);
   });
 
-  test("not on a session with marks off, and never in the light layouts", () => {
+  test("not on a session with marks off; the default layout draws them with marks on", () => {
     const { operations } = countingOperations();
     const saves = {
       onSaveShot: async () => ({ ok: true, status: "edited" }),
@@ -918,7 +920,9 @@ test.describe("the console", () => {
     expect(off).not.toContain("data-shot-suggestion");
     expect(off).toContain('data-shot-id="s-b"');
 
-    const light = renderConsole({
+    // The default layout (docked side) is the same rail: with marks on it
+    // draws the suggestion too.
+    const docked = renderConsole({
       session: sessionWithPair(),
       video: null,
       marks: marksOf(pairPoint()),
@@ -926,23 +930,18 @@ test.describe("the console", () => {
       operations,
       ...saves,
     });
-    expect(light).not.toContain("data-shot-suggestion");
-    expect(light).toContain('data-shot-id="s-b"');
+    expect(docked).toContain('data-label-layout-mode="docked-side"');
+    expect(docked).toContain(`data-shot-suggestion="${KEY}"`);
+    expect(docked).toContain('data-shot-id="s-b"');
   });
 });
 
-test("the light table files know nothing of a suggestion", () => {
-  for (const file of [
-    "src/components/admin/labels/label-point-row.tsx",
-    "src/components/admin/labels/label-shot-row.tsx",
-    "src/components/admin/labels/label-points-table.tsx",
+test("the game band knows nothing of a suggestion", () => {
+  const source = readFileSync(
     "src/components/admin/labels/label-game-band.tsx",
-  ]) {
-    const source = readFileSync(file, "utf8");
-    expect(source, file).not.toMatch(
-      /suggestion|onDismissSuggestion|missing_shot/i,
-    );
-  }
+    "utf8",
+  );
+  expect(source).not.toMatch(/suggestion|onDismissSuggestion|missing_shot/i);
 });
 
 /**

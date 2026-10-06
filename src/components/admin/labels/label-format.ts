@@ -1,12 +1,22 @@
 import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import {
+  LABEL_NOTE_MAX,
+  LABEL_STROKES,
+  labelShotValues,
+  type LabelShotPatch,
+} from "@/lib/services/labels/edit";
+import {
   LABEL_SPINS,
+  isServeStroke,
   type LabelEnding,
+  type LabelPoint,
+  type LabelShot,
   type LabelShotResult,
   type LabelSide,
   type LabelSpin,
   type LabelStroke,
 } from "@/lib/services/labels/session";
+import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import type { LabelDeleteReason } from "@/lib/services/labels/operations";
 import { surnameLabels } from "@/lib/data/match-utils";
 
@@ -149,4 +159,84 @@ export function parseCourtPoint(
   if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
   if (!parts.every((p) => /^-?\d+(\.\d+)?$/.test(p))) return undefined;
   return { x, y };
+}
+
+/** The Player dropdown's rows: the two sides, by name. */
+export function sideOptions(
+  names: SideNames,
+): { value: LabelSide; label: string }[] {
+  return [
+    { value: "p1", label: names.p1 },
+    { value: "p2", label: names.p2 },
+  ];
+}
+
+/** The Stroke dropdown's rows. */
+export const STROKE_OPTIONS: { value: LabelStroke; label: string }[] =
+  LABEL_STROKES.map((value) => ({ value, label: STROKE_LABEL[value] }));
+
+/** A serve that did not go in: part of the point, not of the rally. */
+export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
+  return (
+    isServeStroke(shot.stroke) &&
+    (shot.result === "out" || shot.result === "net")
+  );
+}
+
+/**
+ * The patch a typed position sends: the two coordinates of that end AND the
+ * result the row's values derive once they are in — one write, so In / Out /
+ * Net never lags the position it follows. Clearing an end (or typing one
+ * while the other is still missing) leaves nothing to derive from:
+ * `deriveShotResult` answers null, the patch carries no `result` key, and the
+ * row keeps its stored value — `nextPlacement`'s rule for a court click.
+ */
+export function positionPatch(
+  shot: LabelShot,
+  end: "contact" | "landing",
+  point: { x: number; y: number } | null,
+): LabelShotPatch {
+  const x = point?.x ?? null;
+  const y = point?.y ?? null;
+  const placed: LabelShotPatch =
+    end === "contact"
+      ? { contact_x: x, contact_y: y }
+      : { landing_x: x, landing_y: y };
+  const result = deriveShotResult({ ...labelShotValues(shot), ...placed });
+  return result === null ? placed : { ...placed, result };
+}
+
+/**
+ * What a point row reads off its strokes. Tombstones never count: the row
+ * says what the rally is now, not what the vendor first reported.
+ *   · `time` — the first live stroke that has a time;
+ *   · `lastShot` — the last live stroke's name;
+ *   · `rally` — the live strokes from the LAST serve on, that serve included,
+ *     so a fault, a second serve and two groundstrokes is a rally of 3. A
+ *     point with no serve labelled counts every live stroke.
+ */
+export function pointSummary(point: Pick<LabelPoint, "shots">): {
+  time: string | null;
+  lastShot: string | null;
+  rally: number;
+} {
+  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const timed = live.find((shot) => shot.videoTime !== null);
+  const last = live.at(-1);
+  const serve = live.findLastIndex((shot) => isServeStroke(shot.stroke));
+  return {
+    time:
+      timed && timed.videoTime !== null
+        ? formatVideoTime(timed.videoTime)
+        : null,
+    lastShot: last?.stroke ? STROKE_LABEL[last.stroke] : null,
+    rally: live.length - Math.max(serve, 0),
+  };
+}
+
+/** Typed text → the note to store: null when cleared, undefined when too long. */
+export function parseNote(text: string): string | null | undefined {
+  const note = text.trim();
+  if (note === "") return null;
+  return note.length > LABEL_NOTE_MAX ? undefined : note;
 }

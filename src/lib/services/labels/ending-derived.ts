@@ -14,6 +14,7 @@
 
 import type { LabelPointPatch } from "./edit";
 import {
+  isServeStroke,
   opponent,
   orderLabelShots,
   type LabelEnding,
@@ -35,10 +36,6 @@ export interface DerivedEnding {
 }
 
 type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
-
-function isServe(shot: Pick<LabelShot, "stroke">): boolean {
-  return shot.stroke === "first_serve" || shot.stroke === "second_serve";
-}
 
 function missed(shot: Pick<LabelShot, "result">): boolean {
   return shot.result === "out" || shot.result === "net";
@@ -67,11 +64,12 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   const endedBy = last.hitter;
   const earlier = live.slice(0, -1);
 
-  if (isServe(last)) {
+  if (isServeStroke(last.stroke)) {
     if (!missed(last)) {
       return { ending: "ace", endedBy, winner: wonBy(last) };
     }
-    return last.stroke === "second_serve" || earlier.some(isServe)
+    return last.stroke === "second_serve" ||
+      earlier.some((shot) => isServeStroke(shot.stroke))
       ? { ending: "double_fault", endedBy, winner: lostBy(endedBy) }
       : null;
   }
@@ -79,7 +77,8 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   if (missed(last)) {
     const previous = earlier.at(-1);
     return {
-      ending: previous && isServe(previous) ? "service_winner" : "error",
+      ending:
+        previous && isServeStroke(previous.stroke) ? "service_winner" : "error",
       endedBy,
       winner: lostBy(endedBy),
     };

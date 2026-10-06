@@ -44,6 +44,10 @@ import {
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import {
+  MAX_DEAD_TAIL as SERVE_FAULT_MAX_TAIL,
+  SIDE_DEAD_ZONE_M,
+} from "@/lib/services/splitstep/derivation/flags";
+import {
   opponent,
   type LabelPoint,
   type LabelServeSide,
@@ -201,15 +205,10 @@ const SERVE_SHOT_TYPES = new Set(["First Serve", "Second Serve"]);
 const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
   shot.shot_type !== null && SERVE_SHOT_TYPES.has(shot.shot_type);
 
-/** A `serve_fault` tail: strokes after the lone serve, at most this many. */
-const SERVE_FAULT_MAX_TAIL = 2;
-
-/**
- * A server standing within this of the centre mark says nothing reliable
- * about the side — flags.ts's `SIDE_DEAD_ZONE_M`, the cut its own
- * `score_side_mismatch` makes.
- */
-const SIDE_DEAD_ZONE_M = 0.3;
+// A `serve_fault` tail — strokes after the lone serve, at most this many —
+// is flags.ts's `MAX_DEAD_TAIL`, and a server within `SIDE_DEAD_ZONE_M` of
+// the centre mark says nothing reliable about the side: the cut flags.ts's
+// own `score_side_mismatch` makes. Both are imported so they cannot drift.
 
 function mark<C extends LabelMarkCode>(
   code: C,

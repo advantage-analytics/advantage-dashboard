@@ -28,19 +28,20 @@ export interface PlayingRow {
   shotId: string;
 }
 
-interface Span {
+/** One live point on the video's clock. */
+export interface PlaybackSpan {
   pointId: string;
   /** Live, timed strokes in time order. */
   strokes: { id: string; time: number }[];
 }
 
-export function playingRowAt(
-  points: readonly LabelPoint[],
-  time: number | null,
-): PlayingRow | null {
-  if (time === null || !Number.isFinite(time)) return null;
-
-  const spans: Span[] = [];
+/**
+ * Every live point with a timed stroke, in video order — the table
+ * {@link playingRowIn} scans. Built once per change of the rows rather than
+ * on every tick of the clock.
+ */
+export function playbackSpans(points: readonly LabelPoint[]): PlaybackSpan[] {
+  const spans: PlaybackSpan[] = [];
   for (const point of points) {
     if (point.status === "deleted") continue;
     const strokes = point.shots
@@ -52,7 +53,15 @@ export function playingRowAt(
       .sort((a, b) => a.time - b.time);
     if (strokes.length > 0) spans.push({ pointId: point.id, strokes });
   }
-  spans.sort((a, b) => a.strokes[0].time - b.strokes[0].time);
+  return spans.sort((a, b) => a.strokes[0].time - b.strokes[0].time);
+}
+
+/** The row playing at `time`, read off {@link playbackSpans}. */
+export function playingRowIn(
+  spans: readonly PlaybackSpan[],
+  time: number | null,
+): PlayingRow | null {
+  if (time === null || !Number.isFinite(time)) return null;
 
   for (let i = 0; i < spans.length; i++) {
     const { pointId, strokes } = spans[i];
@@ -70,4 +79,12 @@ export function playingRowAt(
     return { pointId, shotId };
   }
   return null;
+}
+
+/** {@link playingRowIn} over rows whose spans are not already built. */
+export function playingRowAt(
+  points: readonly LabelPoint[],
+  time: number | null,
+): PlayingRow | null {
+  return playingRowIn(playbackSpans(points), time);
 }

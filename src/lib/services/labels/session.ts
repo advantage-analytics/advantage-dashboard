@@ -74,6 +74,11 @@ export function isLabelSpin(value: unknown): value is LabelSpin {
   );
 }
 
+/** Whether a stroke is a serve — a first or a second. */
+export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
+  return stroke === "first_serve" || stroke === "second_serve";
+}
+
 /** The other player. */
 export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";

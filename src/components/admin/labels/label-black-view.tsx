@@ -15,6 +15,7 @@ import {
   parseRailWidth,
 } from "./label-layout";
 import { LabelRailResize } from "./label-rail-resize";
+import { RAIL_TONE_CLASS, type RailTone } from "./label-rail-tone";
 
 /** How long after the last resize the rail's width is written to storage. */
 const RAIL_WIDTH_PERSIST_MS = 150;
@@ -122,16 +123,19 @@ export function inertOutside(
 /**
  * The rail's width, as the file comment has it: the default, then the stored
  * width after mount, then whatever the handle asks for — clamped, and written
- * to storage once it settles. Shared with the film view (`label-film-view.tsx`),
- * whose rail is the same rail at the same width under the same key.
+ * to storage once it settles. Shared with the docked view
+ * (`label-side-view.tsx`), whose rail is the same rail at the same width
+ * under the same key.
  */
-export function useRailWidth(initialRailWidth?: number): {
+export interface RailWidth {
   railWidth: number;
   /** The width asked for, in px; clamped here. */
   resizeRail: (px: number) => void;
   /** Back to `RAIL_DEFAULT_PX`. */
   resetRail: () => void;
-} {
+}
+
+export function useRailWidth(initialRailWidth?: number): RailWidth {
   const [railWidth, setRailWidth] = useState(() =>
     initialRailWidth !== undefined
       ? clampRailWidth(initialRailWidth)
@@ -210,7 +214,7 @@ export function LabelBlackView({
   /** The rail's contents — `LabelBlackRail`. */
   children: ReactNode;
 }) {
-  const { railWidth, resizeRail, resetRail } = useRailWidth(initialRailWidth);
+  const rail = useRailWidth(initialRailWidth);
 
   return (
     <div
@@ -247,21 +251,58 @@ export function LabelBlackView({
         </div>
       </div>
 
-      {/* The rail: `relative` for the handle on its left edge, which hangs
-          4px outside it; nothing here clips it. */}
-      <aside
-        data-label-rail=""
-        aria-label="Points"
-        className="relative flex shrink-0 flex-col bg-[var(--surface-dark)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1)]"
-        style={{ width: railWidth }}
+      <LabelRailAside
+        tone="dark"
+        rail={rail}
+        className="bg-[var(--surface-dark)] shadow-[inset_1px_0_0_rgba(255,255,255,0.1)]"
       >
-        <LabelRailResize
-          width={railWidth}
-          onResize={resizeRail}
-          onReset={resetRail}
-        />
         {children}
-      </aside>
+      </LabelRailAside>
     </div>
+  );
+}
+
+/**
+ * The rail's box, the same in both views: `relative` for the handle on its
+ * left edge, which hangs 4px outside it — so the aside itself never clips,
+ * and a view that rounds its rail clips the box inside (`boxClassName`). It
+ * wears its tone's palette (`label-rail-tone.ts`); the ground and the edge
+ * are the view's (`className`).
+ */
+export function LabelRailAside({
+  tone,
+  rail,
+  className,
+  boxClassName,
+  children,
+}: {
+  tone: RailTone;
+  rail: RailWidth;
+  className?: string;
+  boxClassName?: string;
+  /** The rail's contents — `LabelBlackRail`. */
+  children: ReactNode;
+}) {
+  return (
+    <aside
+      data-label-rail=""
+      data-rail-tone={tone}
+      aria-label="Points"
+      className={cn(
+        "relative flex shrink-0 flex-col",
+        RAIL_TONE_CLASS[tone],
+        className,
+      )}
+      style={{ width: rail.railWidth }}
+    >
+      <LabelRailResize
+        width={rail.railWidth}
+        onResize={rail.resizeRail}
+        onReset={rail.resetRail}
+      />
+      <div className={cn("flex min-h-0 flex-1 flex-col", boxClassName)}>
+        {children}
+      </div>
+    </aside>
   );
 }

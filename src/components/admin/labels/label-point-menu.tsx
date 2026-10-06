@@ -212,6 +212,7 @@ export function PointMenu({
   edit,
   operations,
   tone = "light",
+  menu = tone,
 }: {
   point: LabelPoint;
   number: number;
@@ -219,6 +220,11 @@ export function PointMenu({
   edit: EditContext;
   operations: LabelRowOperations;
   tone?: FloatMenuTone;
+  /**
+   * The menu's tone when it is not the trigger's: the rail on a light ground
+   * keeps its 22px trigger but opens a light menu (`label-rail-tone.ts`).
+   */
+  menu?: FloatMenuTone;
 }) {
   const dark = tone === "dark";
   const [open, setOpen] = useState(false);
@@ -235,7 +241,7 @@ export function PointMenu({
     close();
     run();
   };
-  const iconInk = dark ? "text-white/50" : "text-[var(--ink-500)]";
+  const iconInk = menu === "dark" ? "text-white/50" : "text-[var(--ink-500)]";
   const iconClass = cn("size-3", iconInk);
   const now =
     point.setNumber !== null && point.gameNumber !== null
@@ -272,7 +278,7 @@ export function PointMenu({
             open={open}
             onOpenChange={(next) => (next ? setOpen(true) : close())}
             width={232}
-            tone={tone}
+            tone={menu}
             label={`Point ${number} actions`}
             trigger={
               <button

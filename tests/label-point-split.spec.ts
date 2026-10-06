@@ -35,12 +35,11 @@ import { createLoader } from "./fixtures/vm-modules";
  *
  * The pure plan and the console's optimistic rows; the service over a fake
  * client, for the ORDER of its writes, their tables and what it refuses; the
- * black well's and the light card's Split actions, rendered offline through
+ * black well's Split action, rendered offline through
  * `fixtures/vm-modules`; and the console's wiring, read off its source.
  */
 
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
-const LIGHT_ROW = "src/components/admin/labels/label-shot-row.tsx";
 const MENU = "src/components/admin/labels/label-point-menu.tsx";
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 
@@ -769,42 +768,6 @@ test.describe("Split point here", () => {
       edit: editContext(labelSessionFixture()),
     });
     expect(find(bare, "data-split-row")).toBeNull();
-  });
-
-  test("in the light card: a 'Split' text action beside Reset in the Status track, on every live shot but the first", () => {
-    const session = labelSessionFixture();
-    const { ShotRows } = createLoader().load(LIGHT_ROW) as {
-      ShotRows: React.ComponentType<Record<string, unknown>>;
-    };
-    const html = renderToStaticMarkup(
-      React.createElement(ShotRows, {
-        point: pointOf(P1),
-        edit: editContext(session, { selectedShotId: "s-return" }),
-      }),
-    );
-    expect(shotRow(html, "s-serve")).not.toContain("data-split-row");
-    const ret = shotRow(html, "s-return");
-    const split = tag(ret, "data-split-row");
-    expect(split).toContain('aria-label="Split point at shot 2"');
-    expect(split).toContain("text-[var(--blue)]");
-    expect(split).toContain("opacity-100");
-    expect(ret).toMatch(/data-split-row=""[^>]*>Split<\/button>/);
-    expect(ret.indexOf("data-split-row")).toBeLessThan(
-      ret.indexOf("data-reset-row"),
-    );
-    expect(ret.indexOf("data-reset-row")).toBeLessThan(
-      ret.indexOf("data-delete-row"),
-    );
-    const added = shotRow(html, "s-added");
-    expect(tag(added, "data-split-row")).toContain("opacity-0");
-    expect(
-      renderToStaticMarkup(
-        React.createElement(ShotRows, {
-          point: pointOf(P1),
-          edit: editContext(session, {}, false),
-        }),
-      ),
-    ).not.toContain("data-split-row");
   });
 
   test("the menu holds Reset back on a point whose rally another live point shares", () => {

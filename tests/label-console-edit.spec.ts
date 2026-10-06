@@ -400,24 +400,30 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
     return elements(element.props.children, out);
   }
 
-  /** The open point's table, and every patch its rows send. */
-  function table() {
-    const { LabelPointsTableView } = createLoader().load(
-      "src/components/admin/labels/label-points-table.tsx",
-    ) as { LabelPointsTableView: (p: Props) => React.ReactNode };
+  /**
+   * The open point's shots well (`BlackShotsWell`, the rail's rows under the
+   * current point), with the stroke `selectedShotId` names carrying its
+   * editors — and every patch its rows send.
+   */
+  function well(selectedShotId: string) {
+    const { BlackShotsWell } = createLoader().load(
+      "src/components/admin/labels/label-black-shot-row.tsx",
+    ) as { BlackShotsWell: (p: Props) => React.ReactNode };
     const session = labelSessionFixture();
     const patches: [string, LabelShotPatch][] = [];
-    const pointPatches: [string, unknown][] = [];
-    const tree = LabelPointsTableView({
-      points: session.points,
-      scores: labelScores(session.points, session.adScoring).points,
-      names: { p1: "Lee", p2: "Vargas" },
-      expandedPointId: FIXTURE_POINT_IDS.P1,
-      editable: true,
-      onPatchShot: (id: string, patch: LabelShotPatch) =>
-        patches.push([id, patch]),
-      onPatchPoint: (id: string, patch: unknown) =>
-        pointPatches.push([id, patch]),
+    const tree = BlackShotsWell({
+      point: session.points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!,
+      edit: {
+        editable: true,
+        names: { p1: "Lee", p2: "Vargas" },
+        selectedShotId,
+        onPatchShot: (id: string, patch: LabelShotPatch) =>
+          patches.push([id, patch]),
+        openTombstoneIds: new Set<string>(),
+        points: session.points,
+        scores: labelScores(session.points, session.adScoring).points,
+        playingShotId: null,
+      },
     });
     /** Type `value` into the position input named `label`, and commit. */
     const type = (label: string, value: { x: number; y: number } | null) => {
@@ -465,36 +471,49 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
         },
       };
     };
-    return { patches, pointPatches, type, dropdown };
+    return { patches, type, dropdown };
   }
 
   test("every dropdown is the DS menu, and a pick sends that one field", () => {
-    const { patches, pointPatches, dropdown } = table();
+    const patches: [string, LabelShotPatch][] = [];
+    const on = (shotId: string) => {
+      const drawn = well(shotId);
+      return {
+        dropdown: drawn.dropdown,
+        done: () => patches.push(...drawn.patches),
+      };
+    };
 
-    const player = dropdown("Shot 2 player");
+    const back = on("s-return");
+    const player = back.dropdown("Shot 2 player");
     expect(player.value).toBe("p2");
     expect(player.rows).toEqual(["Lee", "Vargas"]);
     player.pick("Lee");
 
-    const stroke = dropdown("Shot 2 stroke");
+    const stroke = back.dropdown("Shot 2 stroke");
     expect(stroke.value).toBe("backhand");
     expect(stroke.rows).toContain("Backhand volley");
     stroke.pick("Forehand");
 
     // A rally shot's spin prints as recorded…
-    const spin = dropdown("Shot 2 spin");
+    const spin = back.dropdown("Shot 2 spin");
     expect(spin.value).toBe("topspin");
     expect(spin.rows).toEqual(["Topspin", "Flat", "Backspin", "Sidespin"]);
     spin.pick("Backspin");
+    back.done();
     // …a serve's in Serve › Spin's words, for the same four values.
-    const serveSpin = dropdown("Shot 1 spin");
+    const serve = on("s-serve");
+    const serveSpin = serve.dropdown("Shot 1 spin");
     expect(serveSpin.value).toBe("flat");
     expect(serveSpin.rows).toEqual(["Kick", "Flat", "Backspin", "Slice"]);
     serveSpin.pick("Kick");
+    serve.done();
     // Not set yet: no row is chosen, and any of them can be.
-    const unset = dropdown("Shot 3 spin");
+    const added = on("s-added");
+    const unset = added.dropdown("Shot 3 spin");
     expect(unset.value).toBeUndefined();
     unset.pick("Flat");
+    added.done();
 
     expect(patches).toEqual([
       ["s-return", { hitter: "p1" }],
@@ -502,13 +521,6 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
       ["s-return", { spin: "backspin" }],
       ["s-serve", { spin: "topspin" }],
       ["s-added", { spin: "flat" }],
-    ]);
-
-    const ending = dropdown("Point 1 ending");
-    expect(ending.value).toBe("error");
-    ending.pick("Winner");
-    expect(pointPatches).toEqual([
-      [FIXTURE_POINT_IDS.P1, { ending: "winner" }],
     ]);
   });
 
@@ -544,7 +556,7 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
   // The fixture's return: hit at (1.80, 24.49), landed at (-2.10, 3.49), In.
 
   test("Hit at sends the contact and the result it now derives, in one patch", () => {
-    const { patches, type } = table();
+    const { patches, type } = well("s-return");
     // Hit from the landing's own side of the net: it never crossed.
     type("Shot 2 hit at", { x: 1.8, y: 1 });
     expect(patches).toEqual([
@@ -552,18 +564,9 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
     ]);
   });
 
-  test("Landed at sends the landing and the result it now derives, in one patch", () => {
-    const { patches, type } = table();
-    // Past the singles sideline.
-    type("Shot 2 landed at", { x: -5, y: 3.49 });
-    expect(patches).toEqual([
-      ["s-return", { landing_x: -5, landing_y: 3.49, result: "out" }],
-    ]);
-  });
-
   test("the result is deriveShotResult of the row after the edit", () => {
     const { positionPatch } = createLoader().load(
-      "src/components/admin/labels/label-shot-row.tsx",
+      "src/components/admin/labels/label-format.ts",
     ) as {
       positionPatch: (
         shot: LabelShot,

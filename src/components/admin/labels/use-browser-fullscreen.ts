@@ -148,7 +148,11 @@ const readSupported = () => fullscreenSupported(document);
 const readActive = () => fullscreenActive(document);
 
 /**
- * The control's state and its two verbs.
+ * The control's state and its verbs.
+ *
+ * `enter()` is for the console, when the labeller chooses the full-screen
+ * layout: it must run inside that click, which is the gesture the browser
+ * asks for. Nothing happens where it is already on or not offered.
  *
  * `leave()` is for the console, when a full-screen layout goes away: it
  * leaves the browser's full screen only if THIS hook entered it and it is
@@ -162,7 +166,7 @@ const readActive = () => fullscreenActive(document);
  */
 export function useBrowserFullscreen(
   initialSupported?: boolean,
-): BrowserFullscreenControl & { leave: () => void } {
+): BrowserFullscreenControl & { enter: () => void; leave: () => void } {
   // Entered by this hook's own toggle, and not left since.
   const entered = useRef(false);
 
@@ -197,6 +201,14 @@ export function useBrowserFullscreen(
     });
   }, []);
 
+  const enter = useCallback(() => {
+    if (!fullscreenSupported(document) || fullscreenActive(document)) return;
+    entered.current = true;
+    void enterFullscreen(document).then((ok) => {
+      if (!ok) entered.current = false;
+    });
+  }, []);
+
   const leave = useCallback(() => {
     if (!entered.current) return;
     entered.current = false;
@@ -204,5 +216,5 @@ export function useBrowserFullscreen(
   }, []);
   useEffect(() => leave, [leave]);
 
-  return { supported, active, toggle, leave };
+  return { supported, active, toggle, enter, leave };
 }

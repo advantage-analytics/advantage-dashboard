@@ -1,6 +1,7 @@
 import { labelShotValues } from "@/lib/services/labels/edit";
 import {
   isGhostShot,
+  isServeStroke,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -10,10 +11,10 @@ import { formatClock } from "@/components/dashboard/matches/match-detail/format-
 import {
   ENDING_LABEL,
   STROKE_LABEL,
+  pointSummary,
   spinLabel,
   type SideNames,
 } from "./label-format";
-import { pointSummary } from "./label-point-row";
 
 /**
  * The black full-screen view's two lines for a point (board 08l's `.bk-t` and
@@ -50,10 +51,6 @@ export function withoutGhosts<T extends Pick<LabelPoint, "shots">>(
 ): T {
   if (!point.shots.some(isGhostShot)) return point;
   return { ...point, shots: point.shots.filter((shot) => !isGhostShot(shot)) };
-}
-
-function isServe(shot: Pick<LabelShot, "stroke">): boolean {
-  return shot.stroke === "first_serve" || shot.stroke === "second_serve";
 }
 
 /** " by Goodman", or nothing when nobody is named. */
@@ -127,7 +124,7 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
   if (last) {
     const shot = [
       spinLabel(last.stroke, last.spin),
-      isServe(last) && last.stroke
+      isServeStroke(last.stroke) && last.stroke
         ? titleCase(STROKE_LABEL[last.stroke])
         : null,
       shotPlacement(labelShotValues(last)),
@@ -141,7 +138,8 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
   }
 
   const { rally } = pointSummary(point);
-  const serveOnly = rally === 0 || (rally === 1 && !!last && isServe(last));
+  const serveOnly =
+    rally === 0 || (rally === 1 && !!last && isServeStroke(last.stroke));
   parts.push(serveOnly ? "serve only" : `${rally} shot rally`);
 
   return parts.join(" · ");

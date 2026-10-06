@@ -500,8 +500,8 @@ test.describe("the score chip in the rail header", () => {
     expect(chip).toContain('aria-expanded="false"');
     for (const cls of [
       "rounded-full",
-      "bg-[rgba(253,230,138,0.14)]",
-      "text-[rgba(252,211,77,1)]",
+      "bg-[var(--rail-amber-wash)]",
+      "text-[var(--rail-amber)]",
       "text-[10px]",
       "h-[18px]",
       "shrink-0",
@@ -596,7 +596,7 @@ test.describe("the score chip in the rail header", () => {
       "src/components/admin/labels/label-black-rail.tsx",
       "utf8",
     );
-    expect(rail).toContain('tone="dark"');
+    expect(rail).toContain("tone={tone}");
     expect(rail).toContain(
       "findGapDescription(setNumber, firstPointId !== null)",
     );
@@ -678,7 +678,7 @@ test.describe("the header's totals", () => {
     const head = header(black(session, marks));
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('aria-label="1 flag to check"');
-    expect(toCheck).toContain("text-[rgba(252,211,77,1)]");
+    expect(toCheck).toContain("text-[var(--rail-amber)]");
     expect(tag(head, 'data-label-rail-fixes=""')).toContain(
       'aria-label="2 automatic fixes"',
     );

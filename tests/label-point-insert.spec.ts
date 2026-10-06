@@ -811,15 +811,17 @@ test.describe("a suggested point on the black rail", () => {
       "rounded-lg",
       "border",
       "border-dashed",
-      "border-[rgba(252,211,77,0.45)]",
-      "bg-[rgba(253,230,138,0.06)]",
+      "border-[var(--rail-amber-line)]",
+      "bg-[var(--rail-amber-wash-faint)]",
       "grid-cols-[22px_minmax(0,1fr)_auto]",
     ]) {
       expect(open, cls).toContain(cls);
     }
     const row = slot(html);
     expect(row).toContain("lucide-plus");
-    expect(row).toMatch(/color:rgba\(252,\s?211,\s?77,\s?0\.8\)/);
+    expect(row).toMatch(
+      /color:color-mix\(in oklab, var\(--rail-amber\) 80%, transparent\)/,
+    );
     expect(inner(row, "data-point-suggestion-title")).toBe(
       "A point is probably missing here",
     );
@@ -834,7 +836,7 @@ test.describe("a suggested point on the black rail", () => {
 
     expect(inner(row, "data-point-suggestion-add")).toBe("Add point");
     expect(tag(row, "data-point-suggestion-add")).toContain(
-      "text-[rgba(252,211,77,1)]",
+      "text-[var(--rail-amber)]",
     );
     expect(inner(row, "data-point-suggestion-let")).toBe("2 was a let");
     expect(tag(row, "data-point-suggestion-let")).toContain("text-white/50");
@@ -1033,21 +1035,28 @@ test.describe("a suggested point on the black rail", () => {
     expect(readOnly).not.toContain("data-point-suggestion-let");
     expect(readOnly).not.toContain("data-point-suggestion-dismiss");
 
-    // Never in the light layouts.
+    // The default layout (docked side) draws the same rail: the slot with
+    // marks on, none with marks off.
+    const docked = {
+      video: null,
+      initialExpandedPointId: null,
+      operations: countingOperations().operations,
+      ...SAVES,
+    };
+    expect(renderConsole({ ...docked, session, marks: marksOf() })).toContain(
+      `data-point-suggestion="${P2}"`,
+    );
     expect(
       renderConsole({
-        session,
-        video: null,
-        marks: marksOf(),
-        initialExpandedPointId: null,
-        operations: countingOperations().operations,
-        ...SAVES,
+        ...docked,
+        session: { ...session, marksEnabled: false },
+        marks: null,
       }),
     ).not.toContain("data-point-suggestion=");
   });
 });
 
-test("an added empty point reads in the light table too, with its menu, and can be deleted", () => {
+test("an added empty point reads on the default layout's rail, with its menu, and can be deleted", () => {
   // "Add point below" on point 2: the new point sits third, in game 1.
   const session = unchecked();
   const plan = planInsertedPoint(session.points, P2, "after");
@@ -1068,28 +1077,30 @@ test("an added empty point reads in the light table too, with its menu, and can 
     operations,
     ...SAVES,
   });
-  // Its row, numbered 3, between points 2 and the tombstone; the empties
-  // read as empties (a blank ending, no shot, a 0 rally — the score column
-  // is the scoreboard's score BEFORE the point, which it has) and the ⋯
-  // menu is there.
+  // Its row, numbered 3, between points 2 and the tombstone: the rail's
+  // "New point" row — a "?" for the winner not yet labelled, no score yet,
+  // the ⋯ menu — and, open, no strokes and the well's Add shot.
   const row = pointRow(html, NEW_ID);
+  expect(html).toContain('data-label-layout-mode="docked-side"');
+  expect(tag(row, "data-point-id")).toContain("data-point-new");
+  expect(numberOf(html, NEW_ID)).toBe("3");
   expect(row).toContain('aria-label="Point 3 actions"');
   expect(row).toContain('aria-label="Point 3 winner not labelled"');
-  expect(row).toContain('aria-label="Point 3 ending: Not labelled"');
-  expect(row).toContain("No shot");
-  expect(inner(row, "data-point-rally")).toBe("0");
+  expect(inner(row, 'data-winner-mark="new"')).toBe("?");
+  expect(inner(row, "data-point-sentence")).toBe("New point");
+  expect(row.slice(row.indexOf("data-point-score"))).toContain("No score");
   expect(html.indexOf(`data-point-id="${P2}"`)).toBeLessThan(
     html.indexOf(`data-point-id="${NEW_ID}"`),
   );
-  // (The light tombstone row carries no `data-point-id`; P4, now fifth, is
-  // the next live row.)
+  // (P4, now fifth, is the next live row after the added one.)
   expect(html.indexOf(`data-point-id="${NEW_ID}"`)).toBeLessThan(
     html.indexOf(`data-point-id="${P4}"`),
   );
   expect(html).toContain('aria-label="Point 5 actions"');
   // Open: no strokes, and the footer's Add shot.
   expect(html).toContain(`data-shots-for="${NEW_ID}"`);
-  expect(html).toContain("No strokes on this point");
+  expect(html).toContain("data-add-shot");
+  expect(html).not.toContain(`data-shot-id=`);
 
   // Delete point goes through the ordinary path: the plan tombstones an
   // added point like any other, remembering what it was.
@@ -1099,16 +1110,12 @@ test("an added empty point reads in the light table too, with its menu, and can 
   });
 });
 
-test("the light table files know nothing of an inserted point", () => {
-  for (const file of [
-    "src/components/admin/labels/label-point-row.tsx",
-    "src/components/admin/labels/label-shot-row.tsx",
-    "src/components/admin/labels/label-points-table.tsx",
+test("the game band knows nothing of an inserted point", () => {
+  const source = readFileSync(
     "src/components/admin/labels/label-game-band.tsx",
-  ]) {
-    const source = readFileSync(file, "utf8");
-    expect(source, file).not.toMatch(/onInsertPoint|missing_point|New point/);
-  }
+    "utf8",
+  );
+  expect(source).not.toMatch(/onInsertPoint|missing_point|New point/);
 });
 
 /**
