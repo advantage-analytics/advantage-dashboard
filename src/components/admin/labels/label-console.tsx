@@ -1772,6 +1772,31 @@ export function LabelConsole({
       setChecked(expanded.id, true);
     };
   });
+  // Escape lets go of the selected stroke, from anywhere in its row: a text
+  // field has already put its draft back by the time the key reaches the
+  // window. An open menu or dialog keeps the key for itself.
+  const selectedShotId = placement.shotId;
+  useEffect(() => {
+    if (selectedShotId === null) return;
+    function onEscape(event: KeyboardEvent) {
+      if (
+        event.key !== "Escape" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        document.querySelector(
+          "[role='menu'], [role='dialog'], [role='alertdialog']",
+        )
+      ) {
+        return;
+      }
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      setPlacement(NO_PLACEMENT);
+    }
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [selectedShotId]);
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const key = event.key;
@@ -2382,7 +2407,10 @@ function pointOfShot(
 
 /**
  * Selecting a stroke for the court: the first click is its contact, on the
- * half its hitter stood in (court-placement.ts `hitterHalf`).
+ * half its hitter stood in (court-placement.ts `hitterHalf`). A stroke that
+ * already has its contact and is only missing where it landed opens on the
+ * landing instead, on the half across the net, so the one click it still
+ * needs is the next one.
  */
 function placementOf(
   points: readonly LabelPoint[],
@@ -2391,10 +2419,16 @@ function placementOf(
   const owner = shotId === null ? null : pointOfShot(points, shotId);
   if (!owner) return startPlacement(shotId);
   const index = owner.shots.findIndex((shot) => shot.id === shotId);
-  return startPlacement(
+  const shot = owner.shots[index];
+  const start = startPlacement(
     shotId,
-    hitterHalf(owner.shots[index], owner.shots.slice(0, index)),
+    hitterHalf(shot, owner.shots.slice(0, index)),
   );
+  const hasContact = shot.contactX !== null && shot.contactY !== null;
+  const hasLanding = shot.landingX !== null && shot.landingY !== null;
+  return hasContact && !hasLanding
+    ? setPlacementTarget(start, "landing", shot.contactY)
+    : start;
 }
 
 /** `points` with one shot replaced; re-sorted into video order on a retime. */
