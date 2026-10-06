@@ -6,14 +6,15 @@
  * Pure and import-free of anything server-side — the `"use client"` console
  * calls it around every shot change (label-console.tsx `syncEnding`).
  *
- * It reads the rows and the labelled `winner`; it never writes the winner.
- * Where the two disagree (the last ball went out, but its hitter is labelled
- * as having won the point) the ending follows the rows and the winner is left
- * for the labeller.
+ * A last ball that missed also settles who won — the other side — so the
+ * winner follows it and the scoreboard with it. A last ball that stayed in
+ * settles nothing by itself (the vendor often never sees the miss that came
+ * after it), so there the labelled `winner` is read and never written.
  */
 
 import type { LabelPointPatch } from "./edit";
 import {
+  opponent,
   orderLabelShots,
   type LabelEnding,
   type LabelPoint,
@@ -25,6 +26,12 @@ export interface DerivedEnding {
   ending: LabelEnding;
   /** The last live stroke's hitter. */
   endedBy: LabelSide | null;
+  /**
+   * Who the rows say won: the other side from a last stroke that missed.
+   * Null when the rows do not settle it (the last stroke stayed in, has no
+   * result yet, or names no hitter).
+   */
+  winner: LabelSide | null;
 }
 
 type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
@@ -61,9 +68,9 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   const earlier = live.slice(0, -1);
 
   if (isServe(last)) {
-    if (!missed(last)) return { ending: "ace", endedBy };
+    if (!missed(last)) return { ending: "ace", endedBy, winner: null };
     return last.stroke === "second_serve" || earlier.some(isServe)
-      ? { ending: "double_fault", endedBy }
+      ? { ending: "double_fault", endedBy, winner: lostBy(endedBy) }
       : null;
   }
 
@@ -72,6 +79,7 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
     return {
       ending: previous && isServe(previous) ? "service_winner" : "error",
       endedBy,
+      winner: lostBy(endedBy),
     };
   }
 
@@ -81,7 +89,13 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
         ? "winner"
         : "error",
     endedBy,
+    winner: null,
   };
+}
+
+/** The side that won a point its `hitter` just lost; null with no hitter. */
+function lostBy(hitter: LabelSide | null): LabelSide | null {
+  return hitter === null ? null : opponent(hitter);
 }
 
 /** Endings that say the point was not played out — no stroke rewrites them. */
@@ -97,19 +111,33 @@ const HELD_ENDINGS: readonly (LabelEnding | null)[] = [
  * due only when the change MOVED the derived ending — so an ending set by hand
  * survives every shot edit that leaves the rows saying the same thing — and
  * the new one is not null, not what the point already holds, and the point is
- * not a let or a non-point.
+ * not a let or a non-point. When the rows now settle who won (the last stroke
+ * missed) and the point says otherwise, the same patch carries the `winner`,
+ * so the score after it follows.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,
   after: EndingPoint & Pick<LabelPoint, "ending" | "endedBy">,
-): Pick<LabelPointPatch, "ending" | "ended_by"> | null {
+): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> | null {
   if (HELD_ENDINGS.includes(after.ending)) return null;
   const was = deriveEnding(before);
   const now = deriveEnding(after);
   if (!now) return null;
-  if (was && was.ending === now.ending && was.endedBy === now.endedBy) {
+  if (
+    was &&
+    was.ending === now.ending &&
+    was.endedBy === now.endedBy &&
+    was.winner === now.winner
+  ) {
     return null;
   }
-  if (after.ending === now.ending && after.endedBy === now.endedBy) return null;
-  return { ending: now.ending, ended_by: now.endedBy };
+  const patch: Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> = {};
+  if (after.ending !== now.ending || after.endedBy !== now.endedBy) {
+    patch.ending = now.ending;
+    patch.ended_by = now.endedBy;
+  }
+  if (now.winner !== null && after.winner !== now.winner) {
+    patch.winner = now.winner;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
 }

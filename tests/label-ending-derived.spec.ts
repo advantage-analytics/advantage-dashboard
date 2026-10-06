@@ -72,6 +72,7 @@ test.describe("deriveEnding", () => {
     expect(deriveEnding(point([serve()], "p1"))).toEqual({
       ending: "ace",
       endedBy: "p1",
+      winner: null,
     });
     // A serve with no result yet reads the same: nothing came back.
     expect(deriveEnding(point([serve({ result: null })]))?.ending).toBe("ace");
@@ -84,8 +85,9 @@ test.describe("deriveEnding", () => {
   });
 
   test("a return into the net is a service winner", () => {
+    // The return missed, so the server won.
     expect(deriveEnding(point([serve(), p2({ result: "net" })], "p1"))).toEqual(
-      { ending: "service_winner", endedBy: "p2" },
+      { ending: "service_winner", endedBy: "p2", winner: "p1" },
     );
     expect(deriveEnding(point([serve(), p2({ result: "out" })]))?.ending).toBe(
       "service_winner",
@@ -103,7 +105,7 @@ test.describe("deriveEnding", () => {
           "p2",
         ),
       ),
-    ).toEqual({ ending: "double_fault", endedBy: "p1" });
+    ).toEqual({ ending: "double_fault", endedBy: "p1", winner: "p2" });
     // A lone missed second serve, the first never recorded.
     expect(
       deriveEnding(point([serve({ stroke: "second_serve", result: "net" })]))
@@ -130,16 +132,19 @@ test.describe("deriveEnding", () => {
   test("the last rally ball out is an error", () => {
     expect(
       deriveEnding(point([serve(), p2(), p1({ result: "out" })], "p2")),
-    ).toEqual({ ending: "error", endedBy: "p1" });
-    expect(
-      deriveEnding(point([serve(), p2(), p1(), p2({ result: "net" })]))?.ending,
-    ).toBe("error");
+    ).toEqual({ ending: "error", endedBy: "p1", winner: "p2" });
+    const netted = deriveEnding(
+      point([serve(), p2(), p1(), p2({ result: "net" })]),
+    );
+    expect(netted?.ending).toBe("error");
+    expect(netted?.winner).toBe("p1");
   });
 
   test("the last ball in, by the winner, is a winner", () => {
     expect(deriveEnding(point([serve(), p2(), p1()], "p1"))).toEqual({
       ending: "winner",
       endedBy: "p1",
+      winner: null,
     });
     // No winner labelled, or no result yet: still a winner.
     expect(deriveEnding(point([serve(), p2()]))?.ending).toBe("winner");
@@ -152,6 +157,7 @@ test.describe("deriveEnding", () => {
     expect(deriveEnding(point([serve(), p2(), p1()], "p2"))).toEqual({
       ending: "error",
       endedBy: "p1",
+      winner: null,
     });
   });
 
@@ -163,7 +169,7 @@ test.describe("deriveEnding", () => {
           "p1",
         ),
       ),
-    ).toEqual({ ending: "service_winner", endedBy: "p2" });
+    ).toEqual({ ending: "service_winner", endedBy: "p2", winner: "p1" });
   });
 
   test("the last stroke is the last on the video, whatever order the rows come in", () => {
@@ -173,7 +179,42 @@ test.describe("deriveEnding", () => {
     expect(deriveEnding(point([third, first, second]))).toEqual({
       ending: "error",
       endedBy: "p1",
+      winner: "p2",
     });
+  });
+
+  test("winner: the other side from a last stroke that missed, null otherwise", () => {
+    // error: the hitter missed, the opponent won — whoever the point names.
+    expect(
+      deriveEnding(point([serve(), p2(), p1({ result: "out" })], "p1"))?.winner,
+    ).toBe("p2");
+    expect(
+      deriveEnding(point([serve(), p2({ result: "net" })], "p1"))?.winner,
+    ).toBe("p1");
+    // double fault: the receiver
+    expect(
+      deriveEnding(
+        point([
+          serve({ result: "net" }),
+          serve({ stroke: "second_serve", result: "out" }),
+        ]),
+      )?.winner,
+    ).toBe("p2");
+    // service winner: the server (the returner missed)
+    expect(deriveEnding(point([serve(), p2({ result: "out" })]))?.winner).toBe(
+      "p1",
+    );
+    // ace and a last stroke in: the rows settle nothing
+    expect(deriveEnding(point([serve()], "p2"))?.winner).toBeNull();
+    expect(deriveEnding(point([serve(), p2(), p1()], "p2"))?.winner).toBeNull();
+    expect(
+      deriveEnding(point([serve(), p2(), p1({ result: null })], "p1"))?.winner,
+    ).toBeNull();
+    // a missed stroke with no hitter names no winner
+    expect(
+      deriveEnding(point([serve(), p2(), p1({ hitter: null, result: "out" })]))
+        ?.winner,
+    ).toBeNull();
   });
 });
 
@@ -188,7 +229,50 @@ test.describe("endingPatchForShotChange", () => {
         point(rally, "p1", "winner", "p1"),
         point(flip("out"), "p1", "winner", "p1"),
       ),
-    ).toEqual({ ending: "error", ended_by: "p1" });
+    ).toEqual({ ending: "error", ended_by: "p1", winner: "p2" });
+  });
+
+  test("a flip to out when the labelled winner is already the opponent leaves the winner alone", () => {
+    expect(
+      endingPatchForShotChange(
+        point(rally, "p2", "error", "p1"),
+        point(flip("out"), "p2", "error", "p1"),
+      ),
+    ).toBeNull();
+    const patch = endingPatchForShotChange(
+      point(rally, "p2", "winner", "p1"),
+      point(flip("out"), "p2", "winner", "p1"),
+    );
+    expect(patch).toEqual({ ending: "error", ended_by: "p1" });
+    expect(patch).not.toHaveProperty("winner");
+  });
+
+  test("the winner follows in two steps: delete the last stroke, then mark the new last out", () => {
+    // Vargas (p2) won the point on Lee's last ball, which stayed in.
+    const live = [serve(), p2(), p1()];
+    const deleted = live.map((s, i) =>
+      i === 2 ? { ...s, status: "deleted" as const } : s,
+    );
+    // Step 1: the rows now end on a ball that stayed in, which settles nothing,
+    // so the patch moves the ending but never the winner.
+    const step1 = endingPatchForShotChange(
+      point(live, "p2", "error", "p1"),
+      point(deleted, "p2", "error", "p1"),
+    );
+    expect(step1).toEqual({ ending: "winner", ended_by: "p2" });
+    expect(step1).not.toHaveProperty("winner");
+
+    // Step 2: the new last stroke, Vargas's return, is marked out. The rows now
+    // say Lee won, so the patch carries it.
+    const marked = deleted.map((s, i) =>
+      i === 1 ? { ...s, result: "out" as const } : s,
+    );
+    expect(
+      endingPatchForShotChange(
+        point(deleted, "p2", "winner", "p2"),
+        point(marked, "p2", "winner", "p2"),
+      ),
+    ).toEqual({ ending: "service_winner", ended_by: "p2", winner: "p1" });
   });
 
   test("a change that leaves it the same sends nothing, so a hand-set ending survives", () => {
@@ -201,11 +285,11 @@ test.describe("endingPatchForShotChange", () => {
     ).toBeNull();
   });
 
-  test("nothing when the point already holds the new ending, or the rows now say nothing", () => {
+  test("nothing when the point already holds the new ending and winner, or the rows now say nothing", () => {
     expect(
       endingPatchForShotChange(
-        point(rally, "p1", "error", "p1"),
-        point(flip("out"), "p1", "error", "p1"),
+        point(rally, "p2", "error", "p1"),
+        point(flip("out"), "p2", "error", "p1"),
       ),
     ).toBeNull();
     const lone = serve();
@@ -215,6 +299,15 @@ test.describe("endingPatchForShotChange", () => {
         point([{ ...lone, result: "out" }], "p1", "ace", "p1"),
       ),
     ).toBeNull();
+  });
+
+  test("the ending already right but the winner wrong: only the winner is sent", () => {
+    expect(
+      endingPatchForShotChange(
+        point(rally, "p1", "error", "p1"),
+        point(flip("out"), "p1", "error", "p1"),
+      ),
+    ).toEqual({ winner: "p2" });
   });
 
   test("a let or a non-point is never rewritten", () => {

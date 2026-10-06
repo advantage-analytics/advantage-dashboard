@@ -870,7 +870,8 @@ export function LabelConsole({
    * "How it ended" follows the shot rows. Called by every shot path once its
    * write has SAVED, with the shot's point as it was and the change the write
    * made: when that change moved what the rows say (`deriveEnding`), the new
-   * ending goes out as one point patch through the point autosave. A failed
+   * ending goes out as one point patch through the point autosave — with the
+   * winner when the last stroke now missed, so the scores after it follow. A failed
    * shot write never reaches here, so a reverted row cannot leave an ending
    * behind. A point reset is not a shot change and does not call this.
    */
@@ -1141,7 +1142,7 @@ export function LabelConsole({
    * (`applyPointSplit`); the saved row takes the draft's place when the
    * write lands (`settlePointSplit`), or the shots come back and the draft
    * goes (`withdrawPointSplit`). Then the anchor's ending is re-derived from
-   * the shots it kept (`syncEnding`, which leaves its winner alone), and the
+   * the shots it kept (`syncEnding`), and the
    * new point is made current, held and brought into view — setting its
    * winner is what comes next.
    */

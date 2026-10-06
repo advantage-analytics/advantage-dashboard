@@ -1107,7 +1107,35 @@ test.describe("how it ended follows the shot rows", () => {
     await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
     await settled();
     expect(shot).toEqual([["s-added", { result: "out" }]]);
-    expect(point).toEqual([[P1, { ending: "error", ended_by: "p1" }]]);
+    // Lee (p1) hit the last ball and was labelled the winner of the point; the
+    // ball missed, so Vargas won, and the same patch says so.
+    expect(point).toEqual([
+      [P1, { ending: "error", ended_by: "p1", winner: "p2" }],
+    ]);
+  });
+
+  test("the winner in that one patch is what moves the next point's score", async () => {
+    const { point, saves } = saveSpies();
+    const table = consoleTable({ ...saves, operations: spies().operations });
+    await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
+    await settled();
+    // The harness renders once, so the re-render is read through the scoreboard:
+    // exactly one point write, and applying its patch re-scores the next point.
+    expect(point).toHaveLength(1);
+    const patch = point[0][1] as Record<string, unknown>;
+    expect(patch).toHaveProperty("winner", "p2");
+
+    const session = winnerSession();
+    const scoreOf = (s: LabelSession) =>
+      labelScores(s.points, s.adScoring).points.get(P2)?.scoreBefore;
+    const patched = {
+      ...session,
+      points: session.points.map((row) =>
+        row.id === P1 ? { ...row, winner: "p2" as const } : row,
+      ),
+    };
+    expect(scoreOf(session)).toBe("15–0");
+    expect(scoreOf(patched)).toBe("0–15");
   });
 
   test("a spin edit sends none", async () => {
