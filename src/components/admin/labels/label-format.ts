@@ -71,11 +71,11 @@ export function spinOptions(
 
 /** Why a stroke was deleted, in the delete dialog's and the ghost row's words. */
 export const DELETE_REASON_LABEL: Record<LabelDeleteReason, string> = {
-  dead_ball_after_fault: "Dead ball after a fault",
-  dead_ball_after_point: "Dead ball after the point",
-  not_a_stroke: "Not a stroke",
-  duplicate: "Duplicate",
-  other: "Other",
+  dead_ball_after_fault: "Hit after a fault",
+  dead_ball_after_point: "Hit after the point ended",
+  not_a_stroke: "Not a shot",
+  duplicate: "Counted twice",
+  other: "Something else",
 };
 
 /** The two sides' cell labels: surnames, initialled only when they clash. */

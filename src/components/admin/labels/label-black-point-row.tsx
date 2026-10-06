@@ -786,9 +786,17 @@ function BlackWinnerCell({
   const name = point.winner
     ? `Point ${number} won by ${names[point.winner]}`
     : `Point ${number} winner not labelled`;
+  // A let or a non-point keeps its winner — so counting it again restores a
+  // whole point — but nobody won it: the mark steps back.
+  const uncounted =
+    point.ending === "let_replayed" || point.ending === "not_a_point";
   if (!edit.editable) {
     return (
-      <span role="img" aria-label={name} className="flex">
+      <span
+        role="img"
+        aria-label={name}
+        className={cn("flex", uncounted && "opacity-40")}
+      >
         <BlackWinnerMark side={point.winner} names={names} fresh={fresh} />
       </span>
     );
@@ -799,7 +807,8 @@ function BlackWinnerCell({
     // bubbles through its React tree.
     <span
       data-cell=""
-      className="flex"
+      data-winner-uncounted={uncounted ? "" : undefined}
+      className={cn("flex", uncounted && "opacity-40")}
       onClick={(event) => event.stopPropagation()}
     >
       <FloatMenu

@@ -70,7 +70,7 @@ export function labelConfirmCopy(
     case "delete-shot":
       return {
         title: `Delete shot ${confirm.shotNumber}?`,
-        description: `This deletes the row from point ${confirm.pointNumber}. It stays as a deleted marker you can undo, and the vendor's original detection stays in the raw file.`,
+        description: `It comes off point ${confirm.pointNumber} and stops counting in the rally. You can undo this from the point's shots.`,
         confirmLabel: "Delete shot",
         pendingLabel: "Deleting…",
         tone: "danger",

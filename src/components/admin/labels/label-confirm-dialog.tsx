@@ -87,7 +87,7 @@ function LabelConfirmBody({
       error={problem}
       onConfirm={() => {
         if (needsReason && reason === null) {
-          setProblem("Choose why this shot is being deleted.");
+          setProblem("Pick a reason to delete this shot.");
           return;
         }
         onConfirm(confirm, needsReason ? reason : null);
@@ -120,7 +120,9 @@ export function DeleteReasonChoice({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[11px] text-[var(--ink-600)]">Reason</span>
+      <span className="text-[11px] text-[var(--ink-600)]">
+        Why are you deleting it?
+      </span>
       <div
         role="radiogroup"
         aria-label="Why this shot is being deleted"

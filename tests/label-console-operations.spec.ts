@@ -462,15 +462,15 @@ test.describe("delete", () => {
       confirmLabel: "Delete shot",
       tone: "danger",
     });
-    expect(String(dialog.description)).toContain(
-      "This deletes the row from point 1.",
+    expect(String(dialog.description)).toBe(
+      "It comes off point 1 and stops counting in the rally. You can undo this from the point's shots.",
     );
     // The reason picker: the five reasons, as a radio group.
     const picker = renderToStaticMarkup(dialog.children as React.ReactElement);
     expect(picker).toContain('role="radiogroup"');
     expect(count(picker, /role="radio"/g)).toBe(5);
     expect(text(picker)).toBe(
-      "Reason Dead ball after a fault Dead ball after the point Not a stroke Duplicate Other",
+      "Why are you deleting it? Hit after a fault Hit after the point ended Not a shot Counted twice Something else",
     );
 
     (dialog.onConfirm as () => void)();
@@ -507,7 +507,7 @@ test.describe("tombstones", () => {
     );
     const ghostShot = after(open, 'data-ghost-id="s-phantom"');
     expect(text(ghostShot)).toMatch(
-      /^– 41:13\.6 Lee Forehand — — — — — Not a stroke Undo/,
+      /^– 41:13\.6 Lee Forehand — — — — — Not a shot Undo/,
     );
     expect(open).toMatch(
       /data-ghost-id="s-phantom"[^>]*>(?:(?!data-row=)[\s\S])*line-through/,
@@ -846,6 +846,153 @@ test.describe("switch players", () => {
     expect(fn).not.toContain("syncEnding");
     expect(fn).not.toContain("server");
     expect(source).toContain("onSwitchPlayers: switchPlayers,");
+  });
+});
+
+// ── A let, a non-point, and counting it again ──────────────────────────────
+
+test.describe("mark as a let / not a point", () => {
+  const MENU = "src/components/admin/labels/label-point-menu.tsx";
+
+  type LetActions = {
+    markLet: (() => void) | null;
+    markNotAPoint: (() => void) | null;
+    countPoint: (() => void) | null;
+  };
+
+  /** Point `pointId`'s menu over `session`, and every patch it sent. */
+  function letMenu(pointId: string, session = labelSessionFixture()) {
+    const patches: unknown[][] = [];
+    const { operations, asked } = tableTree();
+    const { pointMenuActions } = loader().load(MENU) as {
+      pointMenuActions: (
+        point: unknown,
+        context: unknown,
+        operations: unknown,
+      ) => LetActions;
+    };
+    const actions = pointMenuActions(
+      session.points.find((point) => point.id === pointId),
+      {
+        points: session.points,
+        names: NAMES,
+        onPatchPoint: (...args: unknown[]) => patches.push(args),
+      },
+      operations,
+    );
+    return { actions, patches, asked };
+  }
+
+  /** The fixture with point `pointId` changed. */
+  function sessionWith(pointId: string, fields: Props): LabelSession {
+    const session = labelSessionFixture();
+    session.points = session.points.map((point) =>
+      point.id === pointId ? { ...point, ...fields } : point,
+    );
+    return session;
+  }
+
+  test("a played point offers both, each one point patch of the ending alone", () => {
+    for (const pointId of [P1, P2, P4]) {
+      const { actions, patches, asked } = letMenu(pointId);
+      expect(actions.countPoint).toBeNull();
+      actions.markLet!();
+      actions.markNotAPoint!();
+      // The winner is not in either patch: the point keeps it.
+      expect(patches).toEqual([
+        [pointId, { ending: "let_replayed" }],
+        [pointId, { ending: "not_a_point" }],
+      ]);
+      // The point autosave only — no operation is asked for.
+      expect(asked).toEqual({});
+    }
+  });
+
+  test("an added point with no shots and no winner is offered them too", () => {
+    const blank = sessionWith(P4, {
+      status: "added",
+      seed: null,
+      winner: null,
+      ending: null,
+      endedBy: null,
+      shots: [],
+    });
+    const { actions, patches } = letMenu(P4, blank);
+    actions.markLet!();
+    expect(patches).toEqual([[P4, { ending: "let_replayed" }]]);
+  });
+
+  test("a let or a non-point shows only Count this point, read off its rows", () => {
+    for (const ending of ["let_replayed", "not_a_point"]) {
+      // Point 1 ends on Lee's forehand, out: an error by Lee, Vargas's
+      // point — which the point already says, so the winner is left out.
+      const held = letMenu(P1, sessionWith(P1, { ending }));
+      expect(held.actions.markLet).toBeNull();
+      expect(held.actions.markNotAPoint).toBeNull();
+      held.actions.countPoint!();
+      expect(held.patches).toEqual([[P1, { ending: "error", ended_by: "p1" }]]);
+    }
+  });
+
+  test("when the rows settle a winner the point does not hold, the same patch carries it", () => {
+    const { actions, patches } = letMenu(
+      P1,
+      sessionWith(P1, { ending: "let_replayed", winner: "p1" }),
+    );
+    actions.countPoint!();
+    expect(patches).toEqual([
+      [P1, { ending: "error", ended_by: "p1", winner: "p2" }],
+    ]);
+  });
+
+  test("rows that say nothing fall back to the seeded ending, and to none without a seed", () => {
+    // No live stroke: point 1 was seeded as Lee's winner.
+    const seeded = letMenu(
+      P1,
+      sessionWith(P1, { ending: "let_replayed", shots: [] }),
+    );
+    seeded.actions.countPoint!();
+    expect(seeded.patches).toEqual([
+      [P1, { ending: "winner", ended_by: "p1" }],
+    ]);
+
+    const unseeded = letMenu(
+      P1,
+      sessionWith(P1, { ending: "not_a_point", shots: [], seed: null }),
+    );
+    unseeded.actions.countPoint!();
+    expect(unseeded.patches).toEqual([[P1, { ending: null }]]);
+  });
+
+  test("the menu draws the group after Switch players and the Combine items, before Move to game…", () => {
+    const source = readFileSync(MENU, "utf8");
+    const at = (needle: string) => {
+      const index = source.indexOf(needle);
+      expect(index, needle).toBeGreaterThan(-1);
+      return index;
+    };
+    const order = [
+      at('label="Combine with point below"'),
+      at("{switchFirst ? null : switchItem}"),
+      at('label="Mark as a let"'),
+      at('description="Replayed. The score skips it."'),
+      at('label="Not a point"'),
+      at('description="Not part of the match. The score skips it."'),
+      at('label="Count this point"'),
+      at('description="It was played. The score counts it again."'),
+      at('label="Move to game…"'),
+      at('label="Delete point"'),
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    for (const glyph of ["RotateCcw", "Ban", "Undo2"]) {
+      expect(source).toContain(`<${glyph}`);
+    }
+  });
+
+  test("read-only, there is no menu to offer them", () => {
+    expect(renderConsole({ initialExpandedPointId: P1 })).not.toContain(
+      "data-point-menu",
+    );
   });
 });
 

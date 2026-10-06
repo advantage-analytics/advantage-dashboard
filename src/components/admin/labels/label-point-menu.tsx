@@ -5,11 +5,14 @@ import {
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowUpToLine,
+  Ban,
   ChevronLeft,
   ChevronRight,
   CornerDownRight,
   Merge,
   MoreHorizontal,
+  RotateCcw,
+  Undo2,
 } from "lucide-react";
 import {
   FloatMenu,
@@ -21,6 +24,8 @@ import {
 } from "@/components/ui/float-menu";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
+import type { LabelPointPatch } from "@/lib/services/labels/edit";
+import { deriveEnding } from "@/lib/services/labels/ending-derived";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { leftoverIds } from "@/lib/services/labels/game-shift";
 import {
@@ -36,6 +41,36 @@ import { combineNeighbour } from "@/lib/services/labels/point-combine";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { canResetPoint } from "@/lib/services/labels/reset";
 import type { EditContext, LabelRowOperations } from "./label-row-parts";
+
+/**
+ * The patch that makes a let or a non-point a played point again: the ending
+ * its rows describe (`deriveEnding` — with the winner when they settle one
+ * the point does not hold, as `endingPatchForShotChange` writes it), else
+ * the ending it was seeded with, else none.
+ */
+export function countPointPatch(
+  point: Pick<LabelPoint, "winner" | "shots" | "seed">,
+): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> {
+  const derived = deriveEnding(point);
+  if (derived) {
+    return {
+      ending: derived.ending,
+      ended_by: derived.endedBy,
+      ...(derived.winner !== null && derived.winner !== point.winner
+        ? { winner: derived.winner }
+        : {}),
+    };
+  }
+  const seeded = point.seed?.ending ?? null;
+  if (
+    seeded !== null &&
+    seeded !== "let_replayed" &&
+    seeded !== "not_a_point"
+  ) {
+    return { ending: seeded, ended_by: point.seed?.ended_by ?? null };
+  }
+  return { ending: null };
+}
 
 /**
  * What the ⋯ menu can ask for on `point`, as plain data — the menu draws
@@ -56,6 +91,13 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  *     other side, as a point moved into another player's game before the
  *     swap rule existed is — it `contradicts`, says so, and the menu lists
  *     it FIRST so the stuck point advertises its fix.
+ *   · `markLet` / `markNotAPoint` — the point stays, with its shots and its
+ *     winner, and the score skips it: one point patch through the row's own
+ *     autosave (`onPatchPoint`), `ending: let_replayed` — the suggestion
+ *     slot's "was a let" — or `ending: not_a_point`. On every live point,
+ *     an added one included. Null once the point is either.
+ *   · `countPoint` — only on a let or a non-point: the ending goes back to
+ *     what its rows say (`countPointPatch`), so the score counts it again.
  *   · `move` — the games either side of the point, each saying who serves it;
  *     picking one hands it to the console, which asks "switch players?" first
  *     when that is not this point's server. Empty when the point has no
@@ -72,7 +114,7 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  */
 export function pointMenuActions(
   point: LabelPoint,
-  context: Pick<EditContext, "points" | "names" | "adScoring">,
+  context: Pick<EditContext, "points" | "names" | "adScoring" | "onPatchPoint">,
   operations: LabelRowOperations,
 ): {
   addAbove: () => void;
@@ -85,6 +127,9 @@ export function pointMenuActions(
     contradicts: boolean;
     run: () => void;
   } | null;
+  markLet: (() => void) | null;
+  markNotAPoint: (() => void) | null;
+  countPoint: (() => void) | null;
   move: { key: string; label: string; description?: string; run: () => void }[];
   shiftOverflow: (() => void) | null;
   reset: (() => void) | null;
@@ -95,6 +140,10 @@ export function pointMenuActions(
   const below = combineNeighbour(context.points, point.id, "below");
   const contradicts = rowsContradictServer(point);
   const serveHitter = contradicts ? servingShot(point.shots)?.hitter : null;
+  const uncounted =
+    point.ending === "let_replayed" || point.ending === "not_a_point";
+  const patch = (values: LabelPointPatch) => () =>
+    context.onPatchPoint?.(point.id, values);
   return {
     addAbove: () => operations.onInsertPoint(point.id, "before"),
     addBelow: () => operations.onInsertPoint(point.id, "after"),
@@ -122,6 +171,9 @@ export function pointMenuActions(
           run: () => operations.onSwitchPlayers(point.id),
         }
       : null,
+    markLet: uncounted ? null : patch({ ending: "let_replayed" }),
+    markNotAPoint: uncounted ? null : patch({ ending: "not_a_point" }),
+    countPoint: uncounted ? patch(countPointPatch(point)) : null,
     shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
       point.id,
     )
@@ -340,6 +392,51 @@ export function PointMenu({
                   />
                 ) : null}
                 {switchFirst ? null : switchItem}
+                <FloatMenuDivider />
+                {/* Whether the point counts: a let or a non-point keeps its
+                    row and its shots, and the score skips it. */}
+                {actions.markLet ? (
+                  <FloatMenuItem
+                    label="Mark as a let"
+                    description="Replayed. The score skips it."
+                    icon={
+                      <RotateCcw
+                        className={iconClass}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={pick(actions.markLet)}
+                  />
+                ) : null}
+                {actions.markNotAPoint ? (
+                  <FloatMenuItem
+                    label="Not a point"
+                    description="Not part of the match. The score skips it."
+                    icon={
+                      <Ban
+                        className={iconClass}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={pick(actions.markNotAPoint)}
+                  />
+                ) : null}
+                {actions.countPoint ? (
+                  <FloatMenuItem
+                    label="Count this point"
+                    description="It was played. The score counts it again."
+                    icon={
+                      <Undo2
+                        className={iconClass}
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                    }
+                    onSelect={pick(actions.countPoint)}
+                  />
+                ) : null}
                 <FloatMenuDivider />
                 {actions.move.length > 0 ? (
                   <FloatMenuItem

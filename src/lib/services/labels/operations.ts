@@ -83,7 +83,7 @@ export function planShotDelete(
     return { error: "This shot is already deleted." };
   }
   if (!isLabelDeleteReason(reason)) {
-    return { error: "Choose why this shot is being deleted." };
+    return { error: "Pick a reason to delete this shot." };
   }
   return {
     ok: true,
