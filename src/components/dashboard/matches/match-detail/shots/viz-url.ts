@@ -10,6 +10,21 @@
 
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { EMPTY_VIZ_FILTERS, chartAllowedOn, filterKeysFor } from "./viz-model";
+import {
+  appliedValues,
+  capitalizeFirst,
+  optionLabel,
+  phraseFor,
+  SENTENCE_KEYS,
+  type PhraseNames,
+} from "../match-filters/applied-words";
+import {
+  filtersEqual,
+  hasActiveMatchFilters,
+  parseMatchFilters,
+  serializeMatchFilters,
+  type MatchFilterKey,
+} from "../match-filters/model";
 
 /* ── sameView ───────────────────────────────────────────────────────────── */
 
@@ -47,16 +62,32 @@ export function sameView(
   if (current.chart !== candidate.chart) return false;
 
   for (const key of filterKeysFor(candidate.cut)) {
-    if (key === "player") {
-      if (current.filters.player !== candidate.filters.player) return false;
-      continue;
-    }
-    if (!sameValues(current.filters[key], candidate.filters[key])) {
+    if (!sameFilterValue(key, current.filters, candidate.filters)) {
       return false;
     }
   }
 
   return true;
+}
+
+/**
+ * Whether `a` and `b` agree on one `VizFilters` key: `player` by value,
+ * `match` by `filtersEqual` (a candidate built before advanced filters
+ * existed may carry none — read as EMPTY), every list group as a set.
+ */
+export function sameFilterValue(
+  key: keyof VizFilters,
+  a: VizFilters,
+  b: VizFilters,
+): boolean {
+  if (key === "player") return a.player === b.player;
+  if (key === "match") {
+    return filtersEqual(
+      a.match ?? EMPTY_VIZ_FILTERS.match,
+      b.match ?? EMPTY_VIZ_FILTERS.match,
+    );
+  }
+  return sameValues(a[key] ?? [], b[key] ?? []);
 }
 
 /**
@@ -208,6 +239,11 @@ export const OPTIONS = {
   pressure: { break: "Break points", setMatch: "Set & match points" },
   result: { won: "Won", lost: "Lost", ace: "Aces" },
   rally: { short: "1–4 shots", medium: "5–8 shots", long: "9+ shots" },
+  error: {
+    unforced: "Unforced errors",
+    forced: "Forced errors",
+    doubleFault: "Double faults",
+  },
 } as const;
 
 const ORDER = [
@@ -219,7 +255,16 @@ const ORDER = [
   "pressure",
   "rally",
   "game",
+  "error",
 ] as const;
+
+/**
+ * The advanced (`MatchFilters`) half of `VizFilters`, in
+ * `serializeMatchFilters`' compact form. Its own key, never the Video tab's
+ * `?f=` (`MATCH_FILTERS_PARAM`): the two tabs filter independently, and
+ * sharing the param would have one silently narrow the other.
+ */
+export const VIZ_MATCH_FILTERS_PARAM = "vf";
 
 // `set` (bare) is NOT a viz key: the match report already owns it
 // (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the day
@@ -233,6 +278,7 @@ const VIZ_KEYS = [
   "vset",
   "draft",
   "fullscreen",
+  VIZ_MATCH_FILTERS_PARAM,
   ...ORDER,
 ];
 
@@ -373,7 +419,8 @@ export function parseVizState(params: URLSearchParams): VizState {
     cutParam === "returnPlacement" ||
     cutParam === "returnContact" ||
     cutParam === "rallyPosition" ||
-    cutParam === "rallyPlacement"
+    cutParam === "rallyPlacement" ||
+    cutParam === "errors"
   ) {
     cut = cutParam;
   }
@@ -495,6 +542,11 @@ export function vizStateQuery(
     }
   }
 
+  if (allowedKeys.has("match") && state.filters.match) {
+    const match = serializeMatchFilters(state.filters.match);
+    if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
+  }
+
   return next.toString();
 }
 
@@ -515,6 +567,10 @@ export function clearedFilters(state: VizState): VizState {
  * since those still mean something off serve.
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
+  // Error kinds only mean something on the errors cut.
+  if (nextCut !== "errors" && filters.error.length) {
+    filters = { ...filters, error: [] };
+  }
   if (nextCut === "serve") {
     return filters;
   }
@@ -536,15 +592,32 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
  * two removable tokens. Skips empty groups and keys not in the cut. Returns
  * label strings from OPTIONS.
  */
+/**
+ * One applied-strip token. `match` tokens carry `matchKey` — the
+ * `MatchFilters` group the value belongs to — and the raw `matchValue`, so a
+ * token's X can toggle exactly that option back off.
+ */
+export interface ActiveFilterEntry {
+  key: keyof VizFilters;
+  value: string;
+  label: string;
+  matchKey?: MatchFilterKey;
+  matchValue?: unknown;
+}
+
+const DEFAULT_PHRASE_NAMES: PhraseNames = { you: "You", opponent: "Opponent" };
+
 export function activeFilterEntries(
   state: VizState,
-): { key: keyof VizFilters; value: string; label: string }[] {
+  /** Player names for the advanced filters' phrases ("Rudy serving"). */
+  names: PhraseNames = DEFAULT_PHRASE_NAMES,
+): ActiveFilterEntry[] {
   if (state.cut === null) {
     return [];
   }
 
   const allowedKeys = new Set(filterKeysFor(state.cut));
-  const result: { key: keyof VizFilters; value: string; label: string }[] = [];
+  const result: ActiveFilterEntry[] = [];
 
   for (const key of ORDER) {
     if (!allowedKeys.has(key)) continue;
@@ -570,6 +643,28 @@ export function activeFilterEntries(
         value: String(setNumber),
         label: `Set ${setNumber}`,
       });
+    }
+  }
+
+  const match = state.filters.match;
+  if (allowedKeys.has("match") && match && hasActiveMatchFilters(match)) {
+    for (const matchKey of SENTENCE_KEYS) {
+      for (const matchValue of appliedValues(match, matchKey)) {
+        result.push({
+          key: "match",
+          value: `${matchKey}:${String(matchValue)}`,
+          label: capitalizeFirst(
+            phraseFor(
+              matchKey,
+              optionLabel(matchKey, matchValue),
+              matchValue,
+              names,
+            ),
+          ),
+          matchKey,
+          matchValue,
+        });
+      }
     }
   }
 
@@ -612,6 +707,8 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   if (setValues.length > 0) {
     filters.set = canonicalSetValues(setValues);
   }
+
+  filters.match = parseMatchFilters(params.get(VIZ_MATCH_FILTERS_PARAM));
 
   return filters;
 }

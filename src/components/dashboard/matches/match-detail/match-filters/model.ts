@@ -723,6 +723,10 @@ function lastShotOf(point: MatchPoint): MatchShot | undefined {
   return shots[shots.length - 1];
 }
 
+/** The point's deciding shot row (`lastShotOf`) — the Visualizations errors
+ * cut plots where it landed. */
+export const decidingShotOf = lastShotOf;
+
 /**
  * Result › Missed: the point's LAST shot row went Out or into the Net
  * (either case), and — when a Result player is set — that player hit it.

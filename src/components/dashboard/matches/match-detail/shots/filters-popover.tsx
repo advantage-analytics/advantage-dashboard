@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
-import { SlidersHorizontal, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -9,47 +9,78 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
-import { filterKeysFor, type PlayerFilter, type VizFilters } from "./viz-model";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { FiltersPanel } from "../match-filters/filters-panel";
+import {
+  activeFilterCount,
+  serializeMatchFilters,
+  type MatchFilters,
+} from "../match-filters/model";
+import {
+  useFiltersPanelData,
+  useMatchFilters,
+} from "../match-filters/provider";
+import {
+  computeViz,
+  foldedMatchFilters,
+  subjectFor,
+  withFoldedFilters,
+  type PlayerFilter,
+  type VizFilters,
+  type VizResult,
+} from "./viz-model";
 import {
   activeFilterEntries,
   canonicalOptionValues,
-  canonicalSetValues,
   clearedFilters,
   OPTIONS,
 } from "./viz-url";
+import { useVizPoints } from "./use-viz-points";
 import { useVizState } from "./use-viz-state";
 import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
-type MultiFilterKey = Exclude<keyof VizFilters, "player">;
-/** The `MultiFilterKey`s that are also `OPTIONS` groups — everything except
- *  `set`, whose pills come from the match's own set numbers, not a fixed
- *  label map. */
-type OptionFilterKey = Exclude<MultiFilterKey, "set">;
+/** The `VizFilters` keys still drawn as live pills here — everything else
+ *  lives in the advanced panel. */
+type OptionFilterKey = "error";
+
+const COUNT_NOUN: Record<VizResult["noun"], { one: string; many: string }> = {
+  serves: { one: "serve", many: "serves" },
+  returns: { one: "return", many: "returns" },
+  shots: { one: "shot", many: "shots" },
+  errors: { one: "error", many: "errors" },
+};
 
 /**
- * The Filters popover (P1f): every non-default `VizFilters` key as a wrap of
- * pills, applied live on click. Built on the same Radix `Popover` primitive
- * `ui/float-menu.tsx` wraps (click-outside, Esc, focus-return all come from
- * Radix, not hand-rolled here) — but not `FloatMenu` itself, since this panel
- * is a 400px 2-column form, not a `role="menu"` list of rows.
+ * The Filters popover: whose court it is (Player), on the errors cut which
+ * errors (Error type) — both applied live on click, since they pick what is
+ * plotted rather than narrow it — and "Advanced filters", which swaps the
+ * popover's body for the Video tab's own `FiltersPanel` (Score / Serve /
+ * Return / Result / Custom, the same catalog, wording and draft-then-Show
+ * behaviour as the Video tab's drawer). The panel edits `VizFilters.match`;
+ * its count is this court's (`computeViz` under the draft), so "Show 12
+ * serves" is exactly what the court will draw.
  *
- * `count`/`total`/`noun` come from the caller's already-computed
- * `computeViz` result and `sets` from `availableSets(points)` — this
- * component has no data fetch of its own, just `useVizState` for the current
- * filters and `cut`.
+ * The pill groups this popover used to draw (Ball, Court, Zone, Result,
+ * Pressure, Rally, Set, Game) are all advanced options now. A default tile
+ * or an older saved view can still carry them: the panel opens on them
+ * folded in (`foldedMatchFilters`), and its Show writes them back as
+ * advanced filters only (`withFoldedFilters`), so nothing is ever applied
+ * twice or left where no control can clear it.
  *
- * Phase 2A: `tone="dark"` draws the fullscreen viewer's popover (f4b-report
- * P2h — `rgba(13,13,13,.9)` blur 10, `rgba(255,255,255,.18)`→`.55` pill
- * borders). Defaults `"light"`; light output is unchanged. `side` picks
- * which edge it opens from — the viewer's summary pill is top-right, so its
- * popover opens `"bottom"` (the default) but callers that anchor from the
- * floor of the screen pass `"top"`.
+ * Built on the same Radix `Popover` primitive `ui/float-menu.tsx` wraps
+ * (click-outside, Esc, focus-return all come from Radix). `count`/`total`/
+ * `noun` come from the caller's already-computed `computeViz` result.
+ *
+ * `tone="dark"` draws the fullscreen viewer's popover (f4b-report P2h —
+ * `rgba(13,13,13,.9)` blur 10, `rgba(255,255,255,.18)`→`.55` pill borders)
+ * and the panel's `.dark` token scope. `side` picks which edge it opens
+ * from.
  */
 export function FiltersPopover({
   count,
   total,
   noun,
-  sets,
   youName,
   opponentName,
   tone = "light",
@@ -59,8 +90,7 @@ export function FiltersPopover({
 }: {
   count: number;
   total: number;
-  noun: string;
-  sets: number[];
+  noun: VizResult["noun"];
   youName: string;
   opponentName: string;
   tone?: FloatMenuTone;
@@ -86,24 +116,69 @@ export function FiltersPopover({
 }) {
   const { state, setState } = useVizState();
   const [open, setOpenState] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
   const setOpen = (next: boolean) => {
     setOpenState(next);
+    // Every open starts on the quick view.
+    if (!next) setAdvanced(false);
     onOpenChange?.(next);
   };
   const headingId = useId();
   const dark = tone === "dark";
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const advancedRowRef = useRef<HTMLButtonElement>(null);
+
+  const points = useVizPoints(useMatchData());
+  const { you } = useMatchSides();
+  const { context } = useMatchFilters();
+  const { availability } = useFiltersPanelData();
 
   const cut = state.cut;
+  const filters = state.filters;
+  const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
+  const chart = state.chart;
+  const countFor = useCallback(
+    (draft: MatchFilters) =>
+      cut === null
+        ? 0
+        : computeViz(
+            points,
+            cut,
+            withFoldedFilters(filters, draft),
+            subjectIsPlayer1,
+            chart,
+            context,
+          ).count,
+    [points, cut, filters, subjectIsPlayer1, chart, context],
+  );
+
+  // Swapping the body unmounts the control that had focus: move it into
+  // the panel on the way in, and back to the Advanced row on the way out.
+  const returnFocusRef = useRef(false);
+  useEffect(() => {
+    if (advanced) {
+      bodyRef.current
+        ?.querySelector<HTMLElement>("button:not([disabled])")
+        ?.focus({ preventScroll: true });
+    } else if (returnFocusRef.current) {
+      returnFocusRef.current = false;
+      advancedRowRef.current?.focus({ preventScroll: true });
+    }
+  }, [advanced]);
+  function backToQuick() {
+    returnFocusRef.current = true;
+    setAdvanced(false);
+  }
+
   if (cut === null) {
     // Guarded by the caller (`viz-focused.tsx` only mounts this while a cut
     // is active) — this only fires on a render race, never in steady state.
     return null;
   }
 
-  const allowedKeys = new Set(filterKeysFor(cut));
-  const showZone = allowedKeys.has("zone");
-  const showSet = sets.length > 1;
   const applied = activeFilterEntries(state).length;
+  const folded = foldedMatchFilters(filters);
+  const advancedCount = activeFilterCount(folded);
 
   // Player stays single-select: choosing one always replaces the other,
   // it never toggles off to "neither subject" — a court always has to
@@ -116,10 +191,9 @@ export function FiltersPopover({
     }));
   }
 
-  // Every other group toggles membership: picking an already-selected pill
-  // removes it, picking a new one adds it — the group stays in canonical
-  // (OPTIONS) order so the same set of picks always serialises identically.
-  function toggle<K extends MultiFilterKey>(
+  // Error type toggles membership, kept in canonical (OPTIONS) order so the
+  // same set of picks always serialises identically.
+  function toggle<K extends OptionFilterKey>(
     key: K,
     value: VizFilters[K][number],
   ) {
@@ -128,16 +202,12 @@ export function FiltersPopover({
       const next = current.includes(value)
         ? current.filter((v) => v !== value)
         : [...current, value];
-      const canonical =
-        key === "set"
-          ? canonicalSetValues(next as readonly number[])
-          : canonicalOptionValues(
-              key as Exclude<MultiFilterKey, "set">,
-              next as readonly string[],
-            );
       return {
         ...prev,
-        filters: { ...prev.filters, [key]: canonical },
+        filters: {
+          ...prev.filters,
+          [key]: canonicalOptionValues(key, next as readonly string[]),
+        },
         viewId: null,
       };
     });
@@ -147,9 +217,14 @@ export function FiltersPopover({
     setState((prev) => clearedFilters(prev));
   }
 
-  const resultKeys = (
-    Object.keys(OPTIONS.result) as (keyof typeof OPTIONS.result)[]
-  ).filter((key) => key !== "ace" || cut === "serve");
+  function applyAdvanced(next: MatchFilters) {
+    setState((prev) => ({
+      ...prev,
+      filters: withFoldedFilters(prev.filters, next),
+      viewId: null,
+    }));
+    backToQuick();
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -173,162 +248,165 @@ export function FiltersPopover({
         role="dialog"
         aria-labelledby={headingId}
         className={cn(
-          "w-[400px] rounded-[12px] p-0",
+          "w-[340px] max-w-[calc(100vw-32px)] rounded-[12px] p-0",
           dark
             ? "border border-white/10 bg-[rgba(13,13,13,0.9)] shadow-[var(--shadow-dropdown)] backdrop-blur-[10px]"
             : "border border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]",
         )}
       >
-        <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2.5">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span
-              id={headingId}
-              className="text-[13px] font-medium"
-              style={
-                dark
-                  ? { color: "rgba(255,255,255,1)" }
-                  : { color: "var(--ink-900)" }
-              }
-            >
-              Filters
-            </span>
-            {/* `text-micro` is a DS type class and sets its own colour
-                unlayered — it beats a Tailwind colour utility, so the dark
-                override has to be an inline style, not a class. */}
-            <span
-              className="text-micro tabular-nums"
-              style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
-            >
-              {applied} applied · {count} of {total} {noun}
-            </span>
-          </div>
-          <button
-            type="button"
-            aria-label="Close filters"
-            onClick={() => setOpen(false)}
-            className={cn(
-              "flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors duration-200",
-              dark
-                ? "text-white/70 hover:bg-white/10 hover:text-white"
-                : "text-[#888888] hover:bg-[var(--surface-subtle)] hover:text-[#0D0D0D]",
-            )}
-          >
-            <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </div>
+        <div ref={bodyRef}>
+          {advanced ? (
+            <div className="flex h-[min(560px,calc(var(--radix-popover-content-available-height)-8px))] min-h-[320px] flex-col">
+              <span id={headingId} className="sr-only">
+                Advanced filters
+              </span>
+              <FiltersPanel
+                key={serializeMatchFilters(folded)}
+                className="min-h-0 flex-1"
+                tone={dark ? "dark" : "light"}
+                filters={folded}
+                availability={availability}
+                youName={youName}
+                oppName={opponentName}
+                countFor={countFor}
+                total={total}
+                noun={COUNT_NOUN[noun]}
+                onApply={applyAdvanced}
+                onClose={backToQuick}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2.5">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span
+                    id={headingId}
+                    className="text-[13px] font-medium"
+                    style={
+                      dark
+                        ? { color: "rgba(255,255,255,1)" }
+                        : { color: "var(--ink-900)" }
+                    }
+                  >
+                    Filters
+                  </span>
+                  {/* `text-micro` is a DS type class and sets its own colour
+                      unlayered — it beats a Tailwind colour utility, so the
+                      dark override has to be an inline style, not a class. */}
+                  <span
+                    className="text-micro tabular-nums"
+                    style={
+                      dark ? { color: "rgba(255,255,255,0.55)" } : undefined
+                    }
+                  >
+                    {applied} applied · {count} of {total} {noun}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close filters"
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors duration-200",
+                    dark
+                      ? "text-white/70 hover:bg-white/10 hover:text-white"
+                      : "text-[#888888] hover:bg-[var(--surface-subtle)] hover:text-[#0D0D0D]",
+                  )}
+                >
+                  <X
+                    className="size-3.5"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
 
-        <div
-          className="grid px-4 pb-3"
-          style={{ gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}
-        >
-          <FilterGroup label="Player" dark={dark}>
-            <FilterPill
-              label={youName}
-              active={state.filters.player === "you"}
-              onClick={() => selectPlayer("you")}
-              dark={dark}
-            />
-            <FilterPill
-              label={opponentName}
-              active={state.filters.player === "opponent"}
-              onClick={() => selectPlayer("opponent")}
-              dark={dark}
-            />
-          </FilterGroup>
+              <div className="flex flex-col gap-[14px] px-4 pb-3">
+                <FilterGroup label="Player" dark={dark}>
+                  <FilterPill
+                    label={youName}
+                    active={filters.player === "you"}
+                    onClick={() => selectPlayer("you")}
+                    dark={dark}
+                  />
+                  <FilterPill
+                    label={opponentName}
+                    active={filters.player === "opponent"}
+                    onClick={() => selectPlayer("opponent")}
+                    dark={dark}
+                  />
+                </FilterGroup>
 
-          <OptionsGroup
-            filterKey="ball"
-            label="Ball"
-            dark={dark}
-            active={state.filters.ball}
-            onToggle={(value) => toggle("ball", value)}
-          />
+                {cut === "errors" && (
+                  <OptionsGroup
+                    filterKey="error"
+                    label="Error type"
+                    dark={dark}
+                    active={filters.error}
+                    onToggle={(value) => toggle("error", value)}
+                  />
+                )}
 
-          <OptionsGroup
-            filterKey="court"
-            label="Court"
-            dark={dark}
-            active={state.filters.court}
-            onToggle={(value) => toggle("court", value)}
-          />
+                <button
+                  ref={advancedRowRef}
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={() => setAdvanced(true)}
+                  className={cn(
+                    "flex h-9 w-full cursor-pointer items-center justify-between gap-3 rounded-[var(--radius-element)] border px-3 text-[12px] font-medium transition-colors duration-200",
+                    dark
+                      ? "border-white/[0.18] text-white hover:bg-white/10"
+                      : "border-[var(--border-hairline)] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)]",
+                  )}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <SlidersHorizontal
+                      className="size-[13px] shrink-0"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                    Advanced filters
+                  </span>
+                  <span
+                    className="flex items-center gap-1 text-[11px] font-normal tabular-nums"
+                    style={{
+                      color: dark ? "rgba(255,255,255,0.55)" : "var(--ink-500)",
+                    }}
+                  >
+                    {advancedCount === 0 ? "Any" : `${advancedCount} applied`}
+                    <ChevronRight
+                      className="size-3"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  </span>
+                </button>
+              </div>
 
-          {showZone && (
-            <OptionsGroup
-              filterKey="zone"
-              label="Zone"
-              dark={dark}
-              active={state.filters.zone}
-              onToggle={(value) => toggle("zone", value)}
-            />
+              <div
+                className={cn(
+                  "flex items-center justify-between gap-3 border-t px-4 py-2.5",
+                  dark
+                    ? "border-white/[0.12]"
+                    : "border-[var(--border-hairline)]",
+                )}
+              >
+                <span
+                  className="text-micro"
+                  style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
+                >
+                  Player and error type apply as you pick.
+                </span>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                >
+                  Clear all
+                </button>
+              </div>
+            </>
           )}
-
-          <OptionsGroup
-            filterKey="result"
-            label="Result"
-            dark={dark}
-            active={state.filters.result}
-            keys={resultKeys}
-            onToggle={(value) => toggle("result", value)}
-          />
-
-          <OptionsGroup
-            filterKey="pressure"
-            label="Pressure"
-            dark={dark}
-            active={state.filters.pressure}
-            onToggle={(value) => toggle("pressure", value)}
-          />
-
-          <OptionsGroup
-            filterKey="rally"
-            label="Rally"
-            dark={dark}
-            active={state.filters.rally}
-            onToggle={(value) => toggle("rally", value)}
-          />
-
-          {showSet && (
-            <FilterGroup label="Set" dark={dark}>
-              {sets.map((setNumber) => (
-                <FilterPill
-                  key={setNumber}
-                  label={`Set ${setNumber}`}
-                  active={state.filters.set.includes(setNumber)}
-                  onClick={() => toggle("set", setNumber)}
-                  dark={dark}
-                />
-              ))}
-            </FilterGroup>
-          )}
-
-          <OptionsGroup
-            filterKey="game"
-            label="Game"
-            dark={dark}
-            active={state.filters.game}
-            onToggle={(value) => toggle("game", value)}
-          />
-        </div>
-
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 border-t px-4 py-2.5",
-            dark ? "border-white/[0.12]" : "border-[var(--border-hairline)]",
-          )}
-        >
-          <span
-            className="text-micro"
-            style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
-          >
-            Changes apply as you pick.
-          </span>
-          <button
-            type="button"
-            onClick={clearAll}
-            className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-          >
-            Clear all
-          </button>
         </div>
       </PopoverContent>
     </Popover>
@@ -336,13 +414,9 @@ export function FiltersPopover({
 }
 
 /**
- * One `OPTIONS`-backed group — Ball, Court, Zone, Result, Pressure, Rally,
- * Game were seven copies of the same `Object.keys(OPTIONS.x).map(...)` block
- * (Player stays hand-written above: it's single-select, not an `OPTIONS`
- * group; Set stays hand-written too: its pills come from the match's own set
- * numbers via `sets`, not a fixed label map). `keys` overrides the default
- * "every key in this OPTIONS group" order — `resultKeys` uses it to drop
- * "ace" off serve.
+ * One `OPTIONS`-backed group — Error type (Player stays hand-written above:
+ * it's single-select, not an `OPTIONS` group). `keys` overrides the default
+ * "every key in this OPTIONS group" order.
  */
 function OptionsGroup<K extends OptionFilterKey>({
   filterKey,

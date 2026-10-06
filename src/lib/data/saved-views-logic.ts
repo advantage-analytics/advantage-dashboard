@@ -14,7 +14,14 @@ import {
   type Chart,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  parseVizState,
+  VIZ_MATCH_FILTERS_PARAM,
+} from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  serializeMatchFilters,
+  type MatchFilters,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 export const SAVED_VIEW_NAME_MAX = 60;
@@ -101,6 +108,20 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       if (key === "player") {
         // The one scalar filter, old or new shape alike.
         params.set(paramKey, String(value));
+        continue;
+      }
+
+      // The advanced filters are an object, stored as `VizFilters.match`
+      // itself; they travel as the URL layer's one compact `vf` param, which
+      // `parseMatchFilters` then narrows to known groups and options. A
+      // hand-edited blob that will not serialize is no advanced filter.
+      if (key === "match") {
+        try {
+          const match = serializeMatchFilters(value as MatchFilters);
+          if (match) params.set(VIZ_MATCH_FILTERS_PARAM, match);
+        } catch {
+          // Unreadable: dropped, like any other value outside its enum.
+        }
         continue;
       }
 

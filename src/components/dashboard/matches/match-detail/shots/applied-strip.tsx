@@ -3,8 +3,17 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import {
+  toggleMatchFilter,
+  type MatchFilterValue,
+} from "../match-filters/model";
 import { useVizState } from "./use-viz-state";
-import { activeFilterEntries, clearedFilters } from "./viz-url";
+import {
+  activeFilterEntries,
+  clearedFilters,
+  type ActiveFilterEntry,
+} from "./viz-url";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
 import { EMPTY_VIZ_FILTERS, type VizFilters } from "./viz-model";
 
@@ -39,15 +48,39 @@ export function AppliedStrip({
   fullscreen?: boolean;
 } = {}) {
   const { state, setState } = useVizState();
-  const entries = activeFilterEntries(state);
+  const sides = useMatchSides();
+  const entries = activeFilterEntries(state, {
+    you: sides.you.shortName,
+    opponent: sides.opp.shortName,
+  });
   const dark = tone === "dark";
 
   if (entries.length === 0) {
     return null;
   }
 
-  function removeToken(key: keyof VizFilters, value: string) {
+  function removeToken({
+    key,
+    value,
+    matchKey,
+    matchValue,
+  }: ActiveFilterEntry) {
     setState((prev) => {
+      // An advanced filter's token toggles its one option back off.
+      if (key === "match" && matchKey) {
+        return {
+          ...prev,
+          filters: {
+            ...prev.filters,
+            match: toggleMatchFilter(
+              prev.filters.match,
+              matchKey,
+              matchValue as MatchFilterValue<typeof matchKey>,
+            ),
+          },
+          viewId: null,
+        };
+      }
       if (key === "player") {
         return {
           ...prev,
@@ -103,7 +136,7 @@ export function AppliedStrip({
             <button
               type="button"
               aria-label={`Remove ${entry.label}`}
-              onClick={() => removeToken(entry.key, entry.value)}
+              onClick={() => removeToken(entry)}
               className={cn(
                 "flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200",
                 dark

@@ -8,7 +8,7 @@ import {
   FloatMenuNote,
   type FloatMenuTone,
 } from "@/components/ui/float-menu";
-import type { Chart } from "./viz-model";
+import { chartAllowedOn, type Chart } from "./viz-model";
 import { useVizState } from "./use-viz-state";
 import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
 
@@ -78,16 +78,18 @@ export function ChartMenu({
         }
         onSelect={() => selectChart("heat")}
       />
-      <FloatMenuItem
-        label="Zones"
-        description={
-          state.cut === "serve"
-            ? "Count and points won per service box"
-            : "Count and points won per depth or contact band"
-        }
-        chosen={state.chart === "zones"}
-        onSelect={() => selectChart("zones")}
-      />
+      {(state.cut === null || chartAllowedOn(state.cut, "zones")) && (
+        <FloatMenuItem
+          label="Zones"
+          description={
+            state.cut === "serve"
+              ? "Count and points won per service box"
+              : "Count and points won per depth or contact band"
+          }
+          chosen={state.chart === "zones"}
+          onSelect={() => selectChart("zones")}
+        />
+      )}
 
       <FloatMenuNote>
         Zones follows the service boxes or the current depth and contact bands.

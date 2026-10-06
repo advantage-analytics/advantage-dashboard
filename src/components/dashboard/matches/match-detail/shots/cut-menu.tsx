@@ -182,6 +182,12 @@ export function CutMenu({
         chosen={state.cut === "rallyPosition"}
         onSelect={() => selectCut("rallyPosition")}
       />
+      <FloatMenuItem
+        label="Errors"
+        description="Where every error landed"
+        chosen={state.cut === "errors"}
+        onSelect={() => selectCut("errors")}
+      />
 
       <FloatMenuDivider />
 

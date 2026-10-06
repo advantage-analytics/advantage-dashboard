@@ -160,7 +160,9 @@ function CourtMark({
         points={trianglePointsFor(
           cut === "serve"
             ? "serve"
-            : cut === "returnPlacement" || cut === "rallyPlacement"
+            : cut === "returnPlacement" ||
+                cut === "rallyPlacement" ||
+                cut === "errors"
               ? "placement"
               : "contact",
           cx,
@@ -343,6 +345,7 @@ const CUT_NOUN: Record<Cut, string> = {
   returnContact: "return contact",
   rallyPosition: "rally position",
   rallyPlacement: "rally placement",
+  errors: "errors",
 };
 
 // Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
@@ -356,13 +359,15 @@ const HEAT_CUT_LABEL: Record<Cut, string> = {
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
+  errors: "Errors",
 };
-const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
+const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots" | "errors"> = {
   serve: "serves",
   returnPlacement: "returns",
   returnContact: "returns",
   rallyPosition: "shots",
   rallyPlacement: "shots",
+  errors: "errors",
 };
 
 /**
@@ -625,7 +630,7 @@ export function CourtArt({
         ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
         : showZones
           ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-          : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;
+          : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "errors" ? `error${dots.length === 1 ? "" : "s"}` : cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;
   // Zero dots ⇒ drawing the filter would still paint the floor tint over
   // the whole view (every pixel of the filter region gets touched, dots or
   // not — see `HeatFilterDef`'s doc comment), which would wash an empty
@@ -640,7 +645,9 @@ export function CourtArt({
   const heatProject =
     cut === "serve"
       ? projectServeHeatDot
-      : cut === "returnPlacement" || cut === "rallyPlacement"
+      : cut === "returnPlacement" ||
+          cut === "rallyPlacement" ||
+          cut === "errors"
         ? projectReturnPlacementHeatDot
         : projectReturnContactHeatDot;
 
@@ -863,7 +870,7 @@ export function CourtArt({
   // not. `projectReturnDot` accounts for that extra flip in the lateral
   // sign it uses for each kind — see its own doc comment.
   const kind =
-    cut === "returnPlacement" || cut === "rallyPlacement"
+    cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors"
       ? "placement"
       : "contact";
   return (

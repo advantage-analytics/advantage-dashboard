@@ -45,4 +45,11 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     filters: {},
     pills: ["All rally shots"],
   },
+  {
+    cut: "errors",
+    chart: "scatter",
+    name: "Unforced errors",
+    filters: { error: ["unforced"] },
+    pills: ["Unforced", "All strokes"],
+  },
 ];

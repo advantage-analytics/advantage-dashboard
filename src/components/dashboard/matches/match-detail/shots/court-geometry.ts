@@ -1180,7 +1180,10 @@ export function projectViewerDot(
   const rawX =
     VIEWER_COURT.centreX + dot.lateralM * SERVE_LATERAL_UNITS_PER_METER;
   const isLanding =
-    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
+    cut === "serve" ||
+    cut === "returnPlacement" ||
+    cut === "rallyPlacement" ||
+    cut === "errors";
   const rawY = dot.atNet
     ? VIEWER_COURT.netY
     : isLanding
@@ -1246,7 +1249,10 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const frameH = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
   const isLanding =
-    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
+    cut === "serve" ||
+    cut === "returnPlacement" ||
+    cut === "rallyPlacement" ||
+    cut === "errors";
   const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
   const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
 

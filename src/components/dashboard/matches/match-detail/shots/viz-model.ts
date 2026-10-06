@@ -33,6 +33,15 @@ import {
   type BandSettings,
 } from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
+import {
+  applyMatchFilters,
+  decidingShotOf,
+  EMPTY_MATCH_FILTERS,
+  errorMadeBy,
+  hasActiveMatchFilters,
+  type MatchFilterContext,
+  type MatchFilters,
+} from "../match-filters/model";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -41,7 +50,8 @@ export type Cut =
   | "returnPlacement"
   | "returnContact"
   | "rallyPosition"
-  | "rallyPlacement";
+  | "rallyPlacement"
+  | "errors";
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
@@ -56,6 +66,8 @@ export type ZoneValue = "t" | "body" | "wide";
 export type PressureValue = "break" | "setMatch";
 export type ResultValue = "won" | "lost" | "ace";
 export type RallyValue = "short" | "medium" | "long";
+/** The errors cut's error kinds, read off the point's free-text result type. */
+export type ErrorValue = "unforced" | "forced" | "doubleFault";
 
 export type SetFilter = readonly number[];
 export type GameFilter = readonly GameValue[];
@@ -65,6 +77,7 @@ export type ZoneFilter = readonly ZoneValue[];
 export type PressureFilter = readonly PressureValue[];
 export type ResultFilter = readonly ResultValue[];
 export type RallyFilter = readonly RallyValue[];
+export type ErrorFilter = readonly ErrorValue[];
 
 export interface ShotFilterState {
   set: SetFilter;
@@ -79,6 +92,14 @@ export interface ShotFilterState {
 
 export interface VizFilters extends ShotFilterState {
   player: PlayerFilter;
+  /** Errors cut only: which errors are plotted. Empty = every error. */
+  error: ErrorFilter;
+  /**
+   * The Video tab's advanced filters (`match-filters/model.ts`), edited
+   * through the same `FiltersPanel`. AND'd with every group above. Its
+   * players are you/opponent-relative — never the court's subject.
+   */
+  match: MatchFilters;
 }
 
 export const EMPTY_VIZ_FILTERS: VizFilters = {
@@ -91,6 +112,8 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
   pressure: [],
   result: [],
   rally: [],
+  error: [],
+  match: EMPTY_MATCH_FILTERS,
 };
 
 export type Outcome = "won" | "lost" | "miss";
@@ -188,14 +211,16 @@ export interface VizResult {
   dots: VizDot[];
   count: number; // points matching the filters (rallyPosition: matching SHOTS)
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
-  noun: "serves" | "returns" | "shots";
+  noun: "serves" | "returns" | "shots" | "errors";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
   /** Drawable out/net serves, excluded from the service-zone denominator. */
   serveOutOrNetCount?: number;
 }
 
-/** All three chart types support every visualization cut. */
+/** All three chart types support every visualization cut except Errors,
+ * which has no service boxes or bands to count into — scatter and heat. */
 export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
+  if (cut === "errors") return chart === "scatter" || chart === "heat";
   return (
     [
       "serve",
@@ -757,7 +782,138 @@ const BASE_KEYS = [
 ] as const;
 
 export function filterKeysFor(cut: Cut): (keyof VizFilters)[] {
-  return cut === "serve" ? [...BASE_KEYS, "zone"] : [...BASE_KEYS];
+  if (cut === "serve") return [...BASE_KEYS, "zone", "match"];
+  if (cut === "errors") return [...BASE_KEYS, "error", "match"];
+  return [...BASE_KEYS, "match"];
+}
+
+/**
+ * The advanced (`MatchFilters`) half of `filters` as a point predicate, or
+ * `null` when none is applied. `applyMatchFilters` needs the whole match in
+ * order (the service court is a running count), so it runs once over
+ * `points` and the answer is a set lookup per point.
+ *
+ * `ctx` is the report's own (`useMatchFilters().context`). Without one it is
+ * rebuilt from the subject: "you" is the subject unless the court is the
+ * opponent's — hands unknown, so Custom › Direction's inside shots never
+ * match, and the match reads as not derived.
+ */
+function matchFilterPass(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  ctx: MatchFilterContext | undefined,
+): ((p: MatchPoint) => boolean) | null {
+  if (!filters.match || !hasActiveMatchFilters(filters.match)) return null;
+  const context: MatchFilterContext = ctx ?? {
+    youIsPlayer1:
+      filters.player === "you" ? subjectIsPlayer1 : !subjectIsPlayer1,
+    hands: { player1: null, player2: null },
+  };
+  const ids = new Set(
+    applyMatchFilters(points, filters.match, context).map((p) => p.id),
+  );
+  return (p) => ids.has(p.id);
+}
+
+/** The pill groups the advanced filters replaced in the Filters popover. */
+const FOLDED_KEYS = [
+  "set",
+  "game",
+  "ball",
+  "court",
+  "zone",
+  "pressure",
+  "result",
+  "rally",
+] as const;
+
+/**
+ * `filters`' pill groups (Ball, Court, Zone, …) restated as the advanced
+ * filters they now live in, merged into `filters.match` — what the Filters
+ * popover's `FiltersPanel` opens on, so a default tile's "1st" or an older
+ * saved view's pills read as pressed options there. `withFoldedFilters`
+ * writes the panel's answer back with those groups emptied.
+ *
+ * The pill groups are SUBJECT-relative (Game "Serving", Result "Won" are
+ * the court's player); the advanced filters are YOU-relative, so a court of
+ * the opponent's flips them. Game with both values picked is no constraint
+ * and folds to nothing; Result's "Ace" is Serve › Result's ace.
+ */
+export function foldedMatchFilters(filters: VizFilters): MatchFilters {
+  const base = filters.match ?? EMPTY_MATCH_FILTERS;
+  const subject = filters.player;
+  const other: PlayerFilter = subject === "you" ? "opponent" : "you";
+  const add = <T>(held: readonly T[], more: readonly T[]): T[] => [
+    ...held,
+    ...more.filter((v) => !held.includes(v)),
+  ];
+  const outcomes = filters.result
+    .filter((v): v is "won" | "lost" => v !== "ace")
+    .map((v) =>
+      subject === "you"
+        ? v
+        : v === "won"
+          ? ("lost" as const)
+          : ("won" as const),
+    );
+  const zoneOf = { t: "T", body: "Body", wide: "Wide" } as const;
+  return {
+    ...base,
+    sets: add(base.sets, filters.set),
+    server:
+      filters.game.length === 1
+        ? filters.game[0] === "serving"
+          ? subject
+          : other
+        : base.server,
+    serveType: add(base.serveType, filters.ball),
+    court: filters.court.length === 1 ? filters.court[0] : base.court,
+    serveZone: add(
+      base.serveZone,
+      filters.zone.map((z) => zoneOf[z]),
+    ),
+    scoreType: add(
+      base.scoreType,
+      filters.pressure.flatMap((v) =>
+        v === "break"
+          ? (["breakpoint"] as const)
+          : (["setPoint", "matchPoint"] as const),
+      ),
+    ),
+    serveResult: filters.result.includes("ace")
+      ? add(base.serveResult, ["ace"] as const)
+      : base.serveResult,
+    resultOutcome: add(base.resultOutcome, outcomes),
+    resultRallyLength: add(base.resultRallyLength, filters.rally),
+  };
+}
+
+/** `filters` with the advanced filters set to `match` and every pill group
+ * `foldedMatchFilters` folds into them emptied — the panel's Apply. */
+export function withFoldedFilters(
+  filters: VizFilters,
+  match: MatchFilters,
+): VizFilters {
+  const next: VizFilters = { ...filters, match };
+  for (const key of FOLDED_KEYS) next[key] = [];
+  return next;
+}
+
+/**
+ * The kind of error a point ended on, off its free-text result type — the
+ * same substrings `calculate_match_stats` buckets (`LIKE '%Unforced
+ * Error%'`). `null` for a point that is not one of the three (a winner, or
+ * an error the source did not classify).
+ */
+export function errorKindOf(
+  p: Pick<MatchPoint, "resultType">,
+): ErrorValue | null {
+  const rt = (p.resultType ?? "").toLowerCase();
+  if (rt.includes("double fault")) return "doubleFault";
+  if (rt.includes("unforced error")) return "unforced";
+  if (rt.includes("forced error")) return "forced";
+  return null;
 }
 
 export function subjectFor(
@@ -828,6 +984,7 @@ function computeRallyViz(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   placement: boolean,
+  matchPass: ((p: MatchPoint) => boolean) | null,
 ): VizResult {
   let total = 0;
   let count = 0;
@@ -839,13 +996,9 @@ function computeRallyViz(
     // it's whichever serve started the point that's being asked about. But
     // "court" must stay score-based (courtFrame: "return") — a rally shot
     // has no serve-box landing side of its own, unlike the actual serve cut.
-    const passes = pointMatchesFilters(
-      p,
-      filters,
-      "serve",
-      subjectIsPlayer1,
-      "return",
-    );
+    const passes =
+      pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return") &&
+      (matchPass === null || matchPass(p));
     const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
 
     const rallyShots = pickRallyShots(p.shots ?? [], (s) => s.shotType);
@@ -881,6 +1034,63 @@ function computeRallyViz(
     noun: "shots",
     zoneStats: null,
   };
+}
+
+/**
+ * Errors cut: one dot per point the SUBJECT lost on their own error
+ * (`errorMadeBy`, the attribution the Result filters and the Point endings
+ * card use — a double fault is the server's), drawn where the erring shot
+ * landed, from behind its hitter, on the same full-court landing frame as
+ * rally placement. The erring shot is the point's deciding row
+ * (`decidingShotOf`): its last, or a double fault's last serve. A point
+ * whose deciding shot has no measured landing is not drawable and stays out
+ * of `total`, as with every other cut.
+ *
+ * Every dot is a lost point, so outcome reads `"lost"`; a ball that never
+ * crossed sets `atNet` and is drawn at the net, as elsewhere. `error`
+ * narrows by kind (`errorKindOf`); `ball` reads the serve that started the
+ * point, `court` stays score-based, like the rally cuts.
+ */
+function computeErrorsViz(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchPass: ((p: MatchPoint) => boolean) | null,
+): VizResult {
+  let total = 0;
+  let count = 0;
+  const dots: VizDot[] = [];
+
+  for (const p of points) {
+    if (errorMadeBy(p) !== subjectIsPlayer1) continue;
+    const shot = decidingShotOf(p);
+    if (!shot || shot.isPlayer1 !== subjectIsPlayer1) continue;
+    const landing = rallyLandingMetrics(shot);
+    if (!landing) continue;
+
+    total++;
+    if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return")) {
+      continue;
+    }
+    if (matchPass !== null && !matchPass(p)) continue;
+    if (filters.error.length) {
+      const kind = errorKindOf(p);
+      if (kind === null || !filters.error.includes(kind)) continue;
+    }
+    count++;
+
+    dots.push({
+      id: p.id,
+      lateralM: landing.lateralM,
+      depthM: landing.depthM,
+      outcome: "lost",
+      shape: shapeFromShotType(shot.shotType),
+      atNet: landing.atNet,
+      meta: pointDotMeta(p, subjectIsPlayer1, shot),
+    });
+  }
+
+  return { dots, count, total, noun: "errors", zoneStats: null };
 }
 
 /**
@@ -940,14 +1150,26 @@ export function computeViz(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   chart: Chart = "scatter",
+  /** The report's filter context, for `filters.match` — see `matchFilterPass`. */
+  matchCtx?: MatchFilterContext,
 ): VizResult {
+  const matchPass = matchFilterPass(
+    points,
+    filters,
+    subjectIsPlayer1,
+    matchCtx,
+  );
   if (cut === "rallyPosition" || cut === "rallyPlacement") {
     return computeRallyViz(
       points,
       filters,
       subjectIsPlayer1,
       cut === "rallyPlacement",
+      matchPass,
     );
+  }
+  if (cut === "errors") {
+    return computeErrorsViz(points, filters, subjectIsPlayer1, matchPass);
   }
 
   const frame = cutFrame(cut);
@@ -967,6 +1189,7 @@ export function computeViz(
 
       total++;
       if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
+      if (matchPass !== null && !matchPass(p)) continue;
       count++;
       if (metrics.kind === "out" || metrics.kind === "net") {
         serveOutOrNetCount++;
@@ -1025,6 +1248,7 @@ export function computeViz(
       total++;
       if (!pointMatchesFilters(p, filters, "return", subjectIsPlayer1))
         continue;
+      if (matchPass !== null && !matchPass(p)) continue;
       count++;
       const o = returnOutcome(p, subjectIsPlayer1);
       // `pointReturnShot` reads `p.shots` by role — but plenty of fixtures
@@ -1103,6 +1327,11 @@ export interface StatRow {
   count: number;
   won: number;
   winPct: number | null; // null when count === 0
+  /**
+   * The errors cut's rows: every dot is a lost point, so `winPct` there is
+   * the row's SHARE of the errors shown instead — and the row says so.
+   */
+  share?: boolean;
 }
 
 /**
@@ -1116,6 +1345,10 @@ export interface StatRow {
  * with an empty label again the way the live app briefly did.
  */
 export function statRowAnnouncement(row: StatRow): string {
+  if (row.share) {
+    if (row.count === 0) return `${row.label}: no errors`;
+    return `${row.label}: ${row.winPct}% of errors, ${row.count}`;
+  }
   if (row.winPct === null) return `${row.label}: no points`;
   return `${row.label}: ${row.winPct}% of ${row.count} points won`;
 }
@@ -1587,6 +1820,22 @@ export function computeVizStats(
     };
   }
 
+  if (cut === "errors") {
+    const groups = errorStats(result);
+    const noun = total === 1 ? "error" : "errors";
+    const top = groups[0].rows.find((row) => row.count > 0);
+    return {
+      title: "How the errors missed",
+      subtitle: `Share of errors · ${total} ${noun}`,
+      groups,
+      sentence:
+        top && total >= 3
+          ? `${top.label}: ${top.winPct}% of ${total} errors.`
+          : null,
+      total,
+    };
+  }
+
   if (cut === "rallyPosition") {
     // Same depth-band + Forehand/Backhand builder returnContact uses —
     // `returnContactStats` only reads `result.dots`' `depthM`/`shape`, which
@@ -1616,6 +1865,72 @@ export function computeVizStats(
   };
 }
 
+/**
+ * The errors cut's two groups, each row a SHARE of the errors drawn
+ * (`StatRow.share`): how the ball missed — into the net, long (past the
+ * baseline), wide (past a sideline) — and the stroke that missed it. A ball
+ * both long and wide reads Long. Rows are in count order, biggest first.
+ */
+function errorStats(result: VizResult): StatGroup[] {
+  const total = result.dots.length;
+  const shareRow = (key: string, label: string, count: number): StatRow => ({
+    key,
+    label,
+    count,
+    won: 0,
+    winPct: total === 0 ? null : Math.round((count / total) * 100),
+    share: true,
+  });
+  const byCount = (rows: StatRow[]) =>
+    [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
+
+  let net = 0;
+  let long = 0;
+  let wide = 0;
+  let inCourt = 0;
+  const strokes = new Map<string, number>();
+  for (const dot of result.dots) {
+    if (dot.atNet) net++;
+    else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
+    else if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
+      wide++;
+    else inCourt++;
+    const stroke = errorStrokeLabel(dot.meta?.shotType);
+    strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
+  }
+
+  const missRows = [
+    shareRow("net", "Net", net),
+    shareRow("long", "Long", long),
+    shareRow("wide", "Wide", wide),
+  ];
+  // A recorded error whose landing reads in — kept, so the shares add up.
+  if (inCourt > 0) missRows.push(shareRow("in", "Landed in", inCourt));
+
+  return [
+    { key: "miss", label: "Miss", rows: byCount(missRows) },
+    {
+      key: "stroke",
+      label: "Stroke",
+      rows: byCount(
+        [...strokes].map(([label, count]) =>
+          shareRow(label.toLowerCase(), label, count),
+        ),
+      ),
+    },
+  ];
+}
+
+function errorStrokeLabel(shotType: string | null | undefined): string {
+  const t = (shotType ?? "").toLowerCase();
+  if (isServeShotType(shotType ?? null)) return "Serve";
+  if (t.includes("overhead") || t.includes("smash")) return "Overhead";
+  if (t.includes("volley")) return "Volley";
+  if (t.includes("backhand") || t.startsWith("bh")) return "Backhand";
+  if (t.includes("forehand") || t.startsWith("fh")) return "Forehand";
+  return "Other";
+}
+
 /** Geometry and values share the SAME settings and computed statistics. */
 export interface VizBandZones {
   kind: "depth" | "contact";
@@ -1631,7 +1946,7 @@ export function bandZonesFor(
   stats: VizStats | null,
   contactHidden = false,
 ): VizBandZones | null {
-  if (cut === "serve") return null;
+  if (cut === "serve" || cut === "errors") return null;
   const kind =
     cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact";
   if (kind === "contact" && contactHidden) return null;

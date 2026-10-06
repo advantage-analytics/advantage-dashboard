@@ -10,6 +10,7 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
+import { useMatchFilters } from "../match-filters/provider";
 import { useVizState } from "./use-viz-state";
 import { useVizBands } from "./viz-bands-context";
 import {
@@ -81,6 +82,7 @@ export function useVizView(): VizView {
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
   const { bands, unit, contactHidden } = useVizBands();
+  const { context } = useMatchFilters();
 
   const cut = state.cut;
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
@@ -88,9 +90,16 @@ export function useVizView(): VizView {
   const result = useMemo(
     () =>
       cut
-        ? computeViz(points, cut, state.filters, subjectIsPlayer1, state.chart)
+        ? computeViz(
+            points,
+            cut,
+            state.filters,
+            subjectIsPlayer1,
+            state.chart,
+            context,
+          )
         : null,
-    [points, cut, state.filters, subjectIsPlayer1, state.chart],
+    [points, cut, state.filters, subjectIsPlayer1, state.chart, context],
   );
   const stats = useMemo(
     () =>

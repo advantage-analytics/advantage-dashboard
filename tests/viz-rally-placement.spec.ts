@@ -200,7 +200,7 @@ test("default previews include independent rally placement tiles for both subjec
     (state) => vizStateQuery(new URLSearchParams(), state),
   );
   const rallies = tiles.filter((t) => t.cut === "rallyPlacement");
-  expect(tiles).toHaveLength(8);
+  expect(tiles).toHaveLength(10);
   expect(rallies.map((t) => t.key)).toEqual([
     "you:rallyPlacement",
     "opponent:rallyPlacement",

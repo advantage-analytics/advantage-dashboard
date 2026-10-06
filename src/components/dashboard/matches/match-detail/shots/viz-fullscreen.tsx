@@ -69,7 +69,6 @@ import {
   loadedViewLabel,
   type LegendItem,
 } from "./viz-labels";
-import { availableSets } from "./viz-model";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 import { useFullscreenReveal } from "./use-fullscreen-reveal";
@@ -121,11 +120,6 @@ export function VizFullscreen() {
     unit,
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
-  // `availableSets` is an O(points) scan; this viewer re-renders on every
-  // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
-  // so it's memoized on `points` alone rather than re-scanning on every one
-  // of those.
-  const sets = useMemo(() => availableSets(points), [points]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const closeWithReveal = useFullscreenReveal(rootRef);
@@ -667,7 +661,6 @@ export function VizFullscreen() {
                 count={result.count}
                 total={result.total}
                 noun={result.noun}
-                sets={sets}
                 youName={you.name}
                 opponentName={opp.name}
                 tone="dark"
