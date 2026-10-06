@@ -273,6 +273,7 @@ test.describe("add shot", () => {
 // ── Move a point ────────────────────────────────────────────────────────────
 
 test.describe("move point", () => {
+  /** A point with no strokes: a move only ever takes the server. */
   const unchangedP1 = {
     status: "unchanged" as const,
     server: "p1" as const,
@@ -283,6 +284,7 @@ test.describe("move point", () => {
     ending: "winner" as const,
     endedBy: "p1" as const,
     seed: null,
+    shots: [],
   };
   /** The same point, seeded where it sits: set 1, game 3, p1 serving. */
   const seededP1 = {
@@ -308,6 +310,7 @@ test.describe("move point", () => {
     expect(away).toEqual({
       ok: true,
       write: { set_number: 1, game_number: 4, status: "edited" },
+      shots: [],
     });
     const moved = { ...seededP1, gameNumber: 4, status: "edited" as const };
     expect(
@@ -315,6 +318,7 @@ test.describe("move point", () => {
     ).toEqual({
       ok: true,
       write: { set_number: 1, game_number: 3, status: "unchanged" },
+      shots: [],
     });
     // Back in its game but with a label still changed: stays edited.
     expect(
@@ -345,6 +349,56 @@ test.describe("move point", () => {
         status: "unchanged",
         server: "p1",
       },
+      shots: [],
+    });
+  });
+
+  test("a server switch that the point's strokes contradict switches its players too", () => {
+    // The fixture's P2: Lee's (p1) ace in game 1, seeded so. Game 2 is
+    // Vargas's — moving there, the serve says Lee served, so every row
+    // changes hands: the ace is Vargas's, and so is the point.
+    const { points } = labelSessionFixture();
+    const p2 = points.find((p) => p.id === FIXTURE_POINT_IDS.P2)!;
+    const plan = planPointMove(p2, { setNumber: 1, gameNumber: 2 }, "p2", true);
+    expect(plan).toEqual({
+      ok: true,
+      write: {
+        set_number: 1,
+        game_number: 2,
+        status: "edited",
+        server: "p2",
+        winner: "p2",
+        ended_by: "p2",
+      },
+      shots: [
+        {
+          id: "s-ace",
+          hitter: "p2",
+          status: "edited",
+          status_before_delete: null,
+        },
+      ],
+    });
+    // Rows that already agree with the new server: the server alone.
+    const agreeing = {
+      ...p2,
+      shots: p2.shots.map((shot) => ({ ...shot, hitter: "p2" as const })),
+    };
+    expect(
+      planPointMove(agreeing, { setNumber: 1, gameNumber: 2 }, "p2", true),
+    ).toEqual({
+      ok: true,
+      write: { set_number: 1, game_number: 2, status: "edited", server: "p2" },
+      shots: [],
+    });
+    // The console's apply agrees with the plan.
+    if ("error" in plan) throw new Error(plan.error);
+    expect(applyPointMove(p2, plan.write)).toMatchObject({
+      gameNumber: 2,
+      server: "p2",
+      winner: "p2",
+      endedBy: "p2",
+      status: "edited",
     });
   });
 
@@ -389,6 +443,7 @@ test.describe("move point", () => {
     expect(switched).toEqual({
       ok: true,
       write: { set_number: 1, game_number: 4, status: "edited", server: "p2" },
+      shots: [],
     });
   });
 
@@ -406,6 +461,7 @@ test.describe("move point", () => {
       expect(plan).toEqual({
         ok: true,
         write: { set_number: 1, game_number: 2, status: "edited" },
+        shots: [],
       });
     }
   });
@@ -527,6 +583,8 @@ interface Call {
   values?: Record<string, unknown>;
   filters: Record<string, unknown>;
   negated: Record<string, unknown>;
+  /** `.in(column, values)`, as a swap's grouped writes name their rows. */
+  in?: Record<string, readonly unknown[]>;
 }
 
 function fakeClient(rows: {
@@ -563,7 +621,7 @@ function fakeClient(rows: {
           };
         }
         if (table === "label_shots") {
-          return "label_point_id" in call.filters
+          return "label_point_id" in call.filters || call.in?.label_point_id
             ? { data: rows.shots ?? [], error: null }
             : { data: rows.shot ?? null, error: null };
         }
@@ -592,6 +650,10 @@ function fakeClient(rows: {
         },
         neq: (column: string, value: unknown) => {
           call.negated[column] = value;
+          return builder;
+        },
+        in: (column: string, values: readonly unknown[]) => {
+          call.in = { ...call.in, [column]: values };
           return builder;
         },
         returns: () => builder,
@@ -848,6 +910,7 @@ test.describe("the services", () => {
       server: "p2",
       setNumber: 1,
       gameNumber: 4,
+      shots: [],
     });
     expect(fake.calls.find((c) => c.op === "update")?.values).toEqual({
       set_number: 1,
@@ -855,6 +918,238 @@ test.describe("the services", () => {
       status: "edited",
       server: "p2",
     });
+    // The point's shots were read (and found empty): the switch needed them.
+    expect(
+      fake.calls.find((c) => c.table === "label_shots" && c.op === "select")
+        ?.in,
+    ).toEqual({ label_point_id: [POINT_ID] });
+  });
+
+  test("a switch the strokes contradict flips the point, then its strokes in grouped writes — label_points and label_shots, no delete", async () => {
+    const shotRow = (id: string, fields: Record<string, unknown>) => ({
+      id,
+      label_point_id: POINT_ID,
+      event_id: 1,
+      after_event_id: null,
+      status: "kept",
+      status_before_delete: null,
+      delete_reason: null,
+      hitter: "p1",
+      stroke: "forehand",
+      result: "in",
+      spin: null,
+      contact_x: null,
+      contact_y: null,
+      landing_x: null,
+      landing_y: null,
+      video_time: null,
+      site_removal: null,
+      site_removal_restored_at: null,
+      seed: {
+        hitter: fields.hitter ?? "p1",
+        stroke: fields.stroke ?? "forehand",
+        result: "in",
+        spin: null,
+        contact_x: null,
+        contact_y: null,
+        landing_x: null,
+        landing_y: null,
+        video_time: fields.video_time ?? null,
+      },
+      ...fields,
+    });
+    const fake = fakeClient({
+      point: { ...pointRow, winner: "p1", ended_by: "p2", seed: null },
+      gamePoints: [{ server: "p2", point_index: 20 }],
+      shots: [
+        shotRow(SHOT_ID, {
+          event_id: 1,
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        shotRow(OTHER_SHOT, {
+          event_id: 2,
+          hitter: "p2",
+          stroke: "backhand",
+          video_time: 2,
+        }),
+        shotRow("dddddddd-dddd-4ddd-8ddd-dddddddddddd", {
+          event_id: 3,
+          hitter: "p1",
+          stroke: "forehand",
+          video_time: 3,
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "other",
+        }),
+        shotRow("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", {
+          event_id: null,
+          hitter: "p2",
+          stroke: "forehand",
+          video_time: 4,
+          status: "added",
+          seed: null,
+        }),
+      ],
+    });
+    const result = await writeLabelPointMove({
+      supabase: fake.supabase,
+      pointId: POINT_ID,
+      to: { setNumber: 1, gameNumber: 4 },
+      switchServer: true,
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "edited",
+      server: "p2",
+      setNumber: 1,
+      gameNumber: 4,
+      winner: "p2",
+      endedBy: "p1",
+      shots: [
+        {
+          id: SHOT_ID,
+          hitter: "p2",
+          status: "edited",
+          status_before_delete: null,
+        },
+        {
+          id: OTHER_SHOT,
+          hitter: "p1",
+          status: "edited",
+          status_before_delete: null,
+        },
+        {
+          id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          hitter: "p2",
+          status: "deleted",
+          status_before_delete: "edited",
+        },
+        {
+          id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          hitter: "p1",
+          status: "added",
+          status_before_delete: null,
+        },
+      ],
+    });
+    // The point first (compare-and-set), then one write per distinct
+    // value tuple, by id list, in the order the tuples first appear.
+    const updates = fake.calls.filter((c) => c.op === "update");
+    expect(updates.map((c) => c.table)).toEqual([
+      "label_points",
+      "label_shots",
+      "label_shots",
+      "label_shots",
+      "label_shots",
+    ]);
+    expect(updates[0]).toMatchObject({
+      filters: { id: POINT_ID, status: "unchanged" },
+      values: {
+        set_number: 1,
+        game_number: 4,
+        status: "edited",
+        server: "p2",
+        winner: "p2",
+        ended_by: "p1",
+      },
+    });
+    expect(updates.slice(1).map((c) => [c.values, c.in])).toEqual([
+      [
+        { hitter: "p2", status: "edited", status_before_delete: null },
+        { id: [SHOT_ID] },
+      ],
+      [
+        { hitter: "p1", status: "edited", status_before_delete: null },
+        { id: [OTHER_SHOT] },
+      ],
+      [
+        { hitter: "p2", status: "deleted", status_before_delete: "edited" },
+        { id: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"] },
+      ],
+      [
+        { hitter: "p1", status: "added", status_before_delete: null },
+        { id: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"] },
+      ],
+    ]);
+    for (const call of fake.calls) {
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
+      expect(["select", "update"]).toContain(call.op);
+    }
+
+    // Two strokes flipped the same way share one write.
+    const pair = fakeClient({
+      point: pointRow,
+      gamePoints: [{ server: "p2", point_index: 20 }],
+      shots: [
+        shotRow(SHOT_ID, {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        shotRow(OTHER_SHOT, {
+          hitter: "p1",
+          stroke: "forehand",
+          video_time: 3,
+        }),
+      ],
+    });
+    await writeLabelPointMove({
+      supabase: pair.supabase,
+      pointId: POINT_ID,
+      to: { setNumber: 1, gameNumber: 4 },
+      switchServer: true,
+    });
+    expect(
+      pair.calls.filter((c) => c.op === "update" && c.table === "label_shots"),
+    ).toHaveLength(1);
+    expect(
+      pair.calls.find((c) => c.op === "update" && c.table === "label_shots")
+        ?.in,
+    ).toEqual({ id: [SHOT_ID, OTHER_SHOT] });
+  });
+
+  test("a point that races away is not moved, and no stroke is touched", async () => {
+    const fake = fakeClient({
+      point: pointRow,
+      gamePoints: [{ server: "p2", point_index: 20 }],
+      shots: [
+        {
+          id: SHOT_ID,
+          label_point_id: POINT_ID,
+          event_id: 1,
+          after_event_id: null,
+          status: "kept",
+          status_before_delete: null,
+          delete_reason: null,
+          hitter: "p1",
+          stroke: "first_serve",
+          result: "in",
+          spin: null,
+          contact_x: null,
+          contact_y: null,
+          landing_x: null,
+          landing_y: null,
+          video_time: 1,
+          site_removal: null,
+          site_removal_restored_at: null,
+          seed: null,
+        },
+      ],
+      raced: true,
+    });
+    expect(
+      await writeLabelPointMove({
+        supabase: fake.supabase,
+        pointId: POINT_ID,
+        to: { setNumber: 1, gameNumber: 4 },
+        switchServer: true,
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(
+      fake.calls.filter((c) => c.op === "update").map((c) => c.table),
+    ).toEqual(["label_points"]);
   });
 
   test("a same-server move writes set and game only", async () => {
@@ -869,12 +1164,14 @@ test.describe("the services", () => {
         to: { setNumber: 1, gameNumber: 2 },
         switchServer: false,
       }),
-    ).toMatchObject({ ok: true, server: "p1" });
+    ).toMatchObject({ ok: true, server: "p1", shots: [] });
     expect(fake.calls.find((c) => c.op === "update")?.values).toEqual({
       set_number: 1,
       game_number: 2,
       status: "edited",
     });
+    // No switch, so the shots were never read.
+    expect(fake.calls.map((c) => c.table)).not.toContain("label_shots");
   });
 
   test("checked sets checked_at, and unchecking clears it", async () => {
@@ -950,6 +1247,8 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     "src/lib/services/labels/point-split-session.ts",
     "src/lib/services/labels/point-combine.ts",
     "src/lib/services/labels/point-combine-session.ts",
+    "src/lib/services/labels/player-swap.ts",
+    "src/lib/services/labels/player-swap-session.ts",
     "src/app/admin/labels/actions.ts",
   ]) {
     const source = readFileSync(path.resolve(file), "utf8");

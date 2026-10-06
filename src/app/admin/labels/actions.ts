@@ -60,6 +60,10 @@ import {
   combineLabelPoints,
   type LabelCombinePointsResult,
 } from "@/lib/services/labels/point-combine-session";
+import {
+  switchLabelPointPlayers,
+  type LabelPlayerSwitchResult,
+} from "@/lib/services/labels/player-swap-session";
 import type { LabelSessionFieldsPatch } from "@/lib/services/labels/session-fields";
 import {
   updateLabelSessionFields,
@@ -310,6 +314,19 @@ export async function combineLabelPointsAction(
   direction: CombineDirection,
 ): Promise<LabelCombinePointsResult> {
   return combineLabelPoints(pointId, direction);
+}
+
+/**
+ * Switch a point's players by hand (`player-swap.ts`): every stroke's
+ * hitter p1 ↔ p2, the winner and ended by flipped, statuses by the edit
+ * rule — `server`, set and game untouched. `label_points` and `label_shots`
+ * only, never a delete. Refused on a session that is not labelling, on a
+ * tombstone and on a point with no stroke that names a hitter.
+ */
+export async function switchLabelPointPlayersAction(
+  pointId: string,
+): Promise<LabelPlayerSwitchResult> {
+  return switchLabelPointPlayers(pointId);
 }
 
 /**

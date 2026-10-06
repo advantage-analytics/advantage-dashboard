@@ -21,6 +21,7 @@ import {
   setLabelPointCheckedAction,
   shiftLabelGameOverflowAction,
   splitLabelPointAction,
+  switchLabelPointPlayersAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -100,6 +101,7 @@ export default async function AdminLabelSessionPage({
           shiftGameOverflow: shiftLabelGameOverflowAction,
           splitPoint: splitLabelPointAction,
           combinePoints: combineLabelPointsAction,
+          switchPlayers: switchLabelPointPlayersAction,
           updateSessionFields: updateLabelSessionFieldsAction,
         }}
         headerAction={

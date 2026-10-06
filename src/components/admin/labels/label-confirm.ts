@@ -33,6 +33,13 @@ export type LabelConfirm =
       to: LabelGame;
       /** The destination game's server — who the point's server becomes. */
       server: LabelSide;
+      /**
+       * What a yes switches besides the server (player-swap.ts
+       * `moveSwapsPlayers`): every stroke's hitter, and the winner too when
+       * the point has one; null when the rows already agree with the new
+       * server and only `server` changes.
+       */
+      swaps: "shots" | "shots-and-winner" | null;
     }
   | {
       kind: "reset-shot";
@@ -81,9 +88,16 @@ export function labelConfirmCopy(
       };
     case "move-point": {
       const player = names[confirm.server];
+      const move = `Point ${confirm.pointNumber} moves to set ${confirm.to.setNumber}, game ${confirm.to.gameNumber}, and ${player} becomes its server.`;
+      const swap =
+        confirm.swaps === "shots-and-winner"
+          ? " Every shot in this point changes hands, and so does who won it."
+          : confirm.swaps === "shots"
+            ? " Every shot in this point changes hands."
+            : "";
       return {
         title: `${player} is serving this game, switch players?`,
-        description: `Point ${confirm.pointNumber} moves to set ${confirm.to.setNumber}, game ${confirm.to.gameNumber}, and ${player} becomes its server.`,
+        description: `${move}${swap}`,
         confirmLabel: "Switch players",
         pendingLabel: "Moving…",
         tone: "primary",

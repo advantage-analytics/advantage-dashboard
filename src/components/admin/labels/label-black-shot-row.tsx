@@ -146,7 +146,9 @@ export const SHOT_TRACKS =
   "grid-cols-[22px_minmax(44px,0.3fr)_minmax(36px,0.55fr)_minmax(52px,0.8fr)_minmax(30px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
 /** A stroke row: the tracks, the gap, the height and the padding. */
-const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px]`;
+// `text-[11px] leading-[14px]`: every cell's own line box is the size of its
+// text, so a value centres on the row instead of hanging from a 16px strut.
+const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
 
 /** The actions overlay's right edge: the padding, the tail and 4px of air. */
 const ACTIONS_RIGHT = "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]";

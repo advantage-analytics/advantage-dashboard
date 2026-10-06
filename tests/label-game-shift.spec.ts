@@ -19,6 +19,7 @@ import type {
   LabelGameType,
   LabelPoint,
   LabelSession,
+  LabelShot,
   LabelSide,
 } from "@/lib/services/labels/session";
 import { labelSessionFixture } from "./fixtures/label-session";
@@ -243,7 +244,10 @@ test.describe("planGameShift", () => {
         points: 2,
         games: 1,
         nextGame: { set: 1, gameInSet: 2 },
+        swapped: 0,
       });
+      // No strokes to read: the server moves, nobody's players do.
+      expect(plan.shots).toEqual([]);
 
       const after = applyGameShift(points, plan.writes);
       // Only game membership changed: the order and every index stand.
@@ -286,8 +290,116 @@ test.describe("planGameShift", () => {
       points: 6,
       games: 3,
       nextGame: { set: 1, gameInSet: 2 },
+      swapped: 0,
     });
     expect(gameOverflow(applyGameShift(points, plan.writes), true)).toEqual([]);
+  });
+
+  test("players switch on exactly the moved points whose strokes contradict their new server", () => {
+    // The cascade above with game 1's leftovers Vargas's, and a serve on
+    // four of the six moved points. The vendor read games 1 and 3 right and
+    // game 2 wrong: points 5 and 6 (game 1, Vargas serving) were served by
+    // Vargas and move under Lee — they switch, and with them who won;
+    // points 9 and 10 (game 2, Lee serving) show VARGAS serving, which is
+    // what game 3 has — they take the server alone; points 13 and 14 have
+    // no strokes — the server alone.
+    const serve = (id: string, hitter: LabelSide): LabelShot => ({
+      id,
+      labelPointId: "",
+      eventId: 1,
+      afterEventId: null,
+      status: "kept",
+      statusBeforeDelete: null,
+      deleteReason: null,
+      hitter,
+      stroke: "first_serve",
+      result: "in",
+      spin: null,
+      contactX: null,
+      contactY: null,
+      landingX: null,
+      landingY: null,
+      videoTime: 1,
+      siteRemoval: null,
+      siteRemovalRestoredAt: null,
+      seed: {
+        hitter,
+        stroke: "first_serve",
+        result: "in",
+        spin: null,
+        contact_x: null,
+        contact_y: null,
+        landing_x: null,
+        landing_y: null,
+        video_time: 1,
+      },
+    });
+    const served: Record<string, LabelSide> = {
+      [UUID(5)]: "p2",
+      [UUID(6)]: "p2",
+      [UUID(9)]: "p2",
+      [UUID(10)]: "p2",
+    };
+    const points = match([
+      { game: 1, server: "p2", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 3, server: "p2", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 4, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+    ]).map((p) =>
+      served[p.id]
+        ? { ...p, shots: [serve(`serve-${p.pointIndex + 1}`, served[p.id])] }
+        : p,
+    );
+    const plan = planGameShift(points, true, UUID(6));
+    if ("error" in plan) throw new Error(plan.error);
+    expect(
+      plan.writes.map((w) => [
+        w.id,
+        w.game_number,
+        w.server,
+        "winner" in w ? w.winner : "-",
+        "ended_by" in w ? w.ended_by : "-",
+      ]),
+    ).toEqual([
+      [UUID(5), 2, "p1", "p1", null],
+      [UUID(6), 2, "p1", "p1", null],
+      [UUID(9), 3, "p2", "-", "-"],
+      [UUID(10), 3, "p2", "-", "-"],
+      [UUID(13), 4, "p1", "-", "-"],
+      [UUID(14), 4, "p1", "-", "-"],
+    ]);
+    expect(plan.shots).toEqual([
+      {
+        id: "serve-5",
+        hitter: "p1",
+        status: "edited",
+        status_before_delete: null,
+      },
+      {
+        id: "serve-6",
+        hitter: "p1",
+        status: "edited",
+        status_before_delete: null,
+      },
+    ]);
+    expect(plan.summary).toEqual({
+      points: 6,
+      games: 3,
+      nextGame: { set: 1, gameInSet: 2 },
+      swapped: 2,
+    });
+    // The cascade reads the flipped winners: with 5 and 6 now Lee's, game 2
+    // is decided two rows early (Lee 4–0), and the rows past it move on.
+    // Had they stayed Vargas's, game 2 would have ended on its last row and
+    // the cascade with it — the swap is part of the score it reads.
+    const after = applyGameShift(points, plan.writes);
+    expect(after.find((p) => p.id === UUID(5))).toMatchObject({
+      winner: "p1",
+      endedBy: null,
+      server: "p1",
+      status: "edited",
+    });
+    expect(gameOverflow(after, true)).toEqual([]);
   });
 
   test("no game after: the leftovers open a new one, same set, the next number, the other side serving", () => {
@@ -315,6 +427,7 @@ test.describe("planGameShift", () => {
     expect(plan.summary).toMatchObject({
       games: 1,
       nextGame: { set: 1, gameInSet: 2 },
+      swapped: 0,
     });
     // The number is the session's highest plus one — a later set's included.
     const later = [
@@ -452,6 +565,8 @@ function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   job?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
+  /** The moved points' shot rows, when the shift asks for them. */
+  shots?: Record<string, unknown>[];
   failUpdate?: string;
 }) {
   const calls: Call[] = [];
@@ -490,6 +605,9 @@ function fakeClient(rows: {
         if (table === "label_points") {
           return { data: rows.points ?? rowsOf(usersCase()), error: null };
         }
+        if (table === "label_shots") {
+          return { data: rows.shots ?? [], error: null };
+        }
         return { data: null, error: { message: `unexpected ${table}` } };
       };
       const builder = {
@@ -526,7 +644,7 @@ const writes = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op !== "select");
 
 test.describe("writeLabelGameShift", () => {
-  test("the gate and the scoring in one read, the points, then one update per destination by id list — label_points only", async () => {
+  test("the gate and the scoring in one read, the points, the moved points' shots, then one update per destination by id list — label_points only when nothing switches players", async () => {
     const fake = fakeClient({});
     const result = await writeLabelGameShift({
       supabase: fake.supabase,
@@ -536,12 +654,20 @@ test.describe("writeLabelGameShift", () => {
     expect(result).toMatchObject({
       ok: true,
       writes: [expect.anything(), expect.anything()],
+      shots: [],
     });
+    // The moved points change server (Vargas's game 1 → Lee's game 2), so
+    // the session's shots are read — and found empty: nobody's players
+    // switch.
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_sessions", "select"],
       ["label_points", "select"],
+      ["label_shots", "select"],
       ["label_points", "update"],
     ]);
+    expect(fake.calls.find((c) => c.table === "label_shots")?.filters).toEqual({
+      session_id: SESSION_ID,
+    });
     // Both go to the same game with the same server: one write names both.
     expect(writes(fake).map((c) => c.in)).toEqual([{ id: [UUID(7), UUID(8)] }]);
     for (const call of writes(fake)) {
@@ -560,6 +686,181 @@ test.describe("writeLabelGameShift", () => {
         status: "edited",
       });
     }
+  });
+
+  test("a shift that changes no server never reads a shot", async () => {
+    // Both games Lee's: the leftovers keep their server.
+    const sameServer = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p1"] },
+      { game: 2, server: "p1", winners: ["p2", "p2"] },
+    ]);
+    const fake = fakeClient({ points: rowsOf(sameServer) });
+    expect(
+      await writeLabelGameShift({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(5),
+      }),
+    ).toMatchObject({ ok: true, shots: [] });
+    expect(fake.calls.map((c) => c.table)).not.toContain("label_shots");
+  });
+
+  test("moved points whose strokes contradict their new server: the points' writes carry the flipped winner, then the strokes in grouped writes — label_points and label_shots", async () => {
+    const shotRow = (id: string, pointId: string, hitter: LabelSide) => ({
+      id,
+      label_point_id: pointId,
+      event_id: 1,
+      after_event_id: null,
+      status: "kept",
+      status_before_delete: null,
+      delete_reason: null,
+      hitter,
+      stroke: "first_serve",
+      result: "in",
+      spin: null,
+      contact_x: null,
+      contact_y: null,
+      landing_x: null,
+      landing_y: null,
+      video_time: 1,
+      site_removal: null,
+      site_removal_restored_at: null,
+      seed: {
+        hitter,
+        stroke: "first_serve",
+        result: "in",
+        spin: null,
+        contact_x: null,
+        contact_y: null,
+        landing_x: null,
+        landing_y: null,
+        video_time: 1,
+      },
+    });
+    // The user's case: game 1 is Vargas's, game 2 Lee's. Point 7 was
+    // served by Vargas (it switches, and Lee won it); point 8 already shows
+    // Lee serving. With point 7 now Lee's, game 2 is won a row early and
+    // its last row — point 12, which the first plan never reached — opens
+    // game 3, Vargas's.
+    const fake = fakeClient({
+      shots: [shotRow("s-7", UUID(7), "p2"), shotRow("s-8", UUID(8), "p1")],
+    });
+    const result = await writeLabelGameShift({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      fromPointId: UUID(7),
+    });
+    expect(result).toEqual({
+      ok: true,
+      writes: [
+        {
+          id: UUID(7),
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+          winner: "p1",
+          ended_by: null,
+        },
+        {
+          id: UUID(8),
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+        {
+          id: UUID(12),
+          set_number: 1,
+          game_number: 3,
+          server: "p2",
+          game_type: "game",
+          status: "edited",
+        },
+      ],
+      shots: [
+        {
+          id: "s-7",
+          hitter: "p1",
+          status: "edited",
+          status_before_delete: null,
+        },
+      ],
+    });
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+    ]);
+    // The point that switches, the one that does not and the one moved on
+    // are three groups; the flipped stroke is written after them, by id
+    // list.
+    expect(writes(fake).map((c) => [c.table, c.values, c.in])).toEqual([
+      [
+        "label_points",
+        {
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+          winner: "p1",
+          ended_by: null,
+        },
+        { id: [UUID(7)] },
+      ],
+      [
+        "label_points",
+        {
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+        { id: [UUID(8)] },
+      ],
+      [
+        "label_points",
+        {
+          set_number: 1,
+          game_number: 3,
+          server: "p2",
+          game_type: "game",
+          status: "edited",
+        },
+        { id: [UUID(12)] },
+      ],
+      [
+        "label_shots",
+        { hitter: "p1", status: "edited", status_before_delete: null },
+        { id: ["s-7"] },
+      ],
+    ]);
+
+    // Two points switching the same way, with a stroke each flipped the
+    // same way: one write for the points, one for the strokes — and, both
+    // now Lee's, game 2 is won two rows early, so its last two move on in
+    // a write of their own.
+    const both = fakeClient({
+      shots: [shotRow("s-7", UUID(7), "p2"), shotRow("s-8", UUID(8), "p2")],
+    });
+    await writeLabelGameShift({
+      supabase: both.supabase,
+      sessionId: SESSION_ID,
+      fromPointId: UUID(7),
+    });
+    expect(writes(both).map((c) => [c.table, c.in])).toEqual([
+      ["label_points", { id: [UUID(7), UUID(8)] }],
+      ["label_points", { id: [UUID(11), UUID(12)] }],
+      ["label_shots", { id: ["s-7", "s-8"] }],
+    ]);
   });
 
   test("ad scoring is the session's, else the job's, else true", async () => {
@@ -939,6 +1240,73 @@ test.describe("the slot on the black rail", () => {
     expect(tooltip?.props).toMatchObject({
       label: "Move to game 2",
       detail: "Moves 4 points across 2 games",
+    });
+
+    // A moved point whose players switch: the tooltip says so — on its
+    // own when one game, beside the cascade's line otherwise.
+    const vargasServe = (pointId: string): LabelShot => ({
+      id: `serve-${pointId}`,
+      labelPointId: pointId,
+      eventId: 1,
+      afterEventId: null,
+      status: "kept",
+      statusBeforeDelete: null,
+      deleteReason: null,
+      hitter: "p2",
+      stroke: "first_serve",
+      result: "in",
+      spin: null,
+      contactX: null,
+      contactY: null,
+      landingX: null,
+      landingY: null,
+      videoTime: 1,
+      siteRemoval: null,
+      siteRemovalRestoredAt: null,
+      seed: null,
+    });
+    // Game 1 (Vargas's) runs over by one row, Vargas's point served by
+    // Vargas; moved under Lee it switches, and Lee's win does not reopen
+    // game 2 — one game.
+    const switching = match([
+      { game: 1, server: "p2", winners: ["p1", "p1", "p1", "p1", "p2"] },
+      { game: 2, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+    ]).map((p) =>
+      p.id === UUID(5) ? { ...p, shots: [vargasServe(p.id)] } : p,
+    );
+    const one = BlackGameOverflow({
+      overflow: gameOverflow(switching, true)[0],
+      summary: summaryOf(switching, switching[4].id),
+      point: switching[4],
+      edit: edit(switching),
+    });
+    expect(
+      findWhere(one, (p) => typeof p.detail === "string")?.props,
+    ).toMatchObject({
+      label: "Move to game 2",
+      detail: "Players switch on 1 point",
+    });
+    // Two of Vargas's served by Vargas, moved under Lee and now Lee's: game
+    // 2 is won two rows early, and its last two open game 3.
+    const cascadeSwitching = match([
+      { game: 1, server: "p2", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+      { game: 2, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 3, server: "p2", winners: ["p2", "p2", "p2", "p2"] },
+    ]).map((p) =>
+      p.id === UUID(5) || p.id === UUID(6)
+        ? { ...p, shots: [vargasServe(p.id)] }
+        : p,
+    );
+    const two = BlackGameOverflow({
+      overflow: gameOverflow(cascadeSwitching, true)[0],
+      summary: summaryOf(cascadeSwitching, cascadeSwitching[4].id),
+      point: cascadeSwitching[4],
+      edit: edit(cascadeSwitching),
+    });
+    expect(
+      findWhere(two, (p) => typeof p.detail === "string")?.props,
+    ).toMatchObject({
+      detail: "Moves 4 points across 2 games · Players switch on 2 points",
     });
   });
 });

@@ -560,7 +560,8 @@ export function BlackSuggestedPoint({
  * the console's `onShiftGameOverflow` from that first row. No Dismiss: the
  * score column keeps reading "Game–30" until the rows move, and that is the
  * cue. When the move cascades past one game, the button's tooltip says how
- * far. Absent on a session that cannot be written. Read off the labeller's
+ * far; when a moved point's players switch with its server, it says on how
+ * many. Absent on a session that cannot be written. Read off the labeller's
  * own rows, so it draws on every session — marks on or off.
  *
  * Built to fit the rail from 520px as the suggested point is: the two lines
@@ -593,6 +594,21 @@ export function BlackGameOverflow({
   const to = summary?.nextGame.gameInSet ?? (gameInSet ?? 0) + 1;
   const move = `Move to game ${to}`;
   const cascades = summary !== null && summary.games > 1;
+  // What the button's tooltip warns of: a cascade past one game, and any
+  // moved point whose players switch with its server (player-swap.ts).
+  const details: string[] = [];
+  if (summary !== null && cascades) {
+    details.push(
+      `Moves ${summary.points} points across ${summary.games} games`,
+    );
+  }
+  if (summary !== null && summary.swapped > 0) {
+    details.push(
+      summary.swapped === 1
+        ? "Players switch on 1 point"
+        : `Players switch on ${summary.swapped} points`,
+    );
+  }
   const button = (
     <BlackTextAction
       ink="amber"
@@ -639,10 +655,10 @@ export function BlackGameOverflow({
           data-game-overflow-actions=""
           className="flex shrink-0 items-center justify-end"
         >
-          {cascades ? (
+          {details.length > 0 ? (
             <ChromeTooltip
               label={move}
-              detail={`Moves ${summary.points} points across ${summary.games} games`}
+              detail={details.join(" · ")}
               side="top"
               align="end"
               wrap

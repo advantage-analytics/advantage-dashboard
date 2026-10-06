@@ -9,7 +9,11 @@ import {
   planGameServer,
 } from "@/lib/services/labels/game-operations";
 import { labelScores } from "@/lib/services/labels/score";
-import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
+import type {
+  LabelPoint,
+  LabelSession,
+  LabelVideo,
+} from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -55,6 +59,7 @@ function spies() {
     restorePoint: record("restorePoint", { ok: true, status: "unchanged" }),
     addShot: record("addShot", { error: "not in this spec" }),
     movePoint: record("movePoint", { error: "not in this spec" }),
+    switchPlayers: record("switchPlayers", { error: "not in this spec" }),
     setChecked: record("setChecked", { ok: true, checkedAt: null }),
     resetShot: record("resetShot", { ok: true, status: "kept" }),
     resetPoint: record("resetPoint", { ok: true, status: "unchanged" }),
@@ -209,6 +214,7 @@ function tableTree(overrides: Props = {}) {
     onAskResetShot: ask("onAskResetShot"),
     onAskResetPoint: ask("onAskResetPoint"),
     onInsertPoint: ask("onInsertPoint"),
+    onSwitchPlayers: ask("onSwitchPlayers"),
   };
   // The hook-free table: `LabelPointsTable` is this plus the scores' memo.
   const { LabelPointsTableView } = loader().load(
@@ -233,6 +239,11 @@ type MenuActions = {
   addAbove: () => void;
   addBelow: () => void;
   move: { label: string; description?: string; run: () => void }[];
+  switchPlayers: {
+    description: string;
+    contradicts: boolean;
+    run: () => void;
+  } | null;
   reset: (() => void) | null;
   remove: () => void;
 };
@@ -566,6 +577,7 @@ test.describe("move point", () => {
         pointNumber: 2,
         to: { setNumber: 1, gameNumber: 2 },
         server: "p2",
+        swaps: "shots-and-winner",
       },
     });
     const dialog = dialogs.at(-1)!;
@@ -573,6 +585,9 @@ test.describe("move point", () => {
     expect(dialog).toMatchObject({
       confirmLabel: "Switch players",
       tone: "primary",
+      // P2 is Lee's ace: a yes flips the ace and the point to Vargas.
+      description:
+        "Point 2 moves to set 1, game 2, and Vargas becomes its server. Every shot in this point changes hands, and so does who won it.",
     });
     expect(calls).toEqual({});
 
@@ -581,6 +596,256 @@ test.describe("move point", () => {
     expect(calls).toEqual({
       movePoint: [[P2, { setNumber: 1, gameNumber: 2 }, true]],
     });
+  });
+
+  test("the question's body says what a yes does: the players, or the server alone", () => {
+    const { labelConfirmCopy } = loader().load(
+      "src/components/admin/labels/label-confirm.ts",
+    ) as {
+      labelConfirmCopy: (
+        confirm: Record<string, unknown>,
+        names: Record<string, string>,
+      ) => { title: string; description: string };
+    };
+    const ask = (swaps: string | null) =>
+      labelConfirmCopy(
+        {
+          kind: "move-point",
+          pointId: P2,
+          pointNumber: 2,
+          to: { setNumber: 1, gameNumber: 2 },
+          server: "p2",
+          swaps,
+        },
+        NAMES,
+      );
+    // The title is the same question either way.
+    for (const swaps of ["shots-and-winner", "shots", null]) {
+      expect(ask(swaps).title).toBe(
+        "Vargas is serving this game, switch players?",
+      );
+    }
+    expect(ask("shots-and-winner").description).toBe(
+      "Point 2 moves to set 1, game 2, and Vargas becomes its server. Every shot in this point changes hands, and so does who won it.",
+    );
+    // A point with no winner yet: the shots alone change hands.
+    expect(ask("shots").description).toBe(
+      "Point 2 moves to set 1, game 2, and Vargas becomes its server. Every shot in this point changes hands.",
+    );
+    // Rows that already agree with the new server: only the server changes.
+    expect(ask(null).description).toBe(
+      "Point 2 moves to set 1, game 2, and Vargas becomes its server.",
+    );
+  });
+
+  test("the console decides the question from the point's own strokes, and applies the swap to the rows it holds", () => {
+    // The console cannot be re-rendered after a click under
+    // `renderToStaticMarkup`, so the rows it would hold are the pure apply
+    // it runs — over the fixture — and its wiring is read off the source.
+    const { planPointMove, applyPointMove } = loader().load(
+      "src/lib/services/labels/operations.ts",
+    ) as {
+      planPointMove: (
+        point: unknown,
+        to: unknown,
+        server: unknown,
+        switchServer: boolean,
+      ) =>
+        | { ok: true; write: Record<string, unknown>; shots: unknown[] }
+        | { error: string };
+      applyPointMove: (
+        point: unknown,
+        write: unknown,
+      ) => Record<string, unknown>;
+    };
+    const { applyShotSwaps, moveSwapsPlayers } = loader().load(
+      "src/lib/services/labels/player-swap.ts",
+    ) as {
+      applyShotSwaps: (points: unknown[], shots: unknown[]) => LabelPoint[];
+      moveSwapsPlayers: (point: unknown, server: unknown) => boolean;
+    };
+    const session = labelSessionFixture();
+    const p2 = session.points.find((p) => p.id === P2)!;
+    expect(moveSwapsPlayers(p2, "p2")).toBe(true);
+    const plan = planPointMove(p2, { setNumber: 1, gameNumber: 2 }, "p2", true);
+    if ("error" in plan) throw new Error(plan.error);
+    const rows = applyShotSwaps(
+      session.points.map((p) =>
+        p.id === P2 ? applyPointMove(p, plan.write) : p,
+      ),
+      plan.shots,
+    );
+    const moved = rows.find((p) => p.id === P2)!;
+    expect(moved).toMatchObject({
+      gameNumber: 2,
+      server: "p2",
+      winner: "p2",
+      endedBy: "p2",
+      status: "edited",
+    });
+    expect(moved.shots.map((s) => [s.id, s.hitter, s.status])).toEqual([
+      ["s-ace", "p2", "edited"],
+    ]);
+    // Every other row stands.
+    for (const id of [P1, P3, P4]) {
+      expect(rows.find((p) => p.id === id)).toBe(
+        session.points.find((p) => p.id === id),
+      );
+    }
+
+    const source = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    const requestMove = source.slice(
+      source.indexOf("function requestMove("),
+      source.indexOf("function movePoint("),
+    );
+    expect(requestMove).toContain("moveSwapsPlayers(point, server)");
+    const movePoint = source.slice(
+      source.indexOf("function movePoint("),
+      source.indexOf("function runGameOperation("),
+    );
+    expect(movePoint).toContain("applyPointMove(p, plan.write)");
+    expect(movePoint).toContain("plan.shots");
+    expect(movePoint).toContain("result.shots");
+    expect(movePoint).toContain("shotSwapsOf(before.shots)");
+    expect(movePoint).not.toContain("syncEnding");
+    const shiftStart = source.indexOf("function shiftGameOverflow(");
+    const shift = source.slice(
+      shiftStart,
+      source.indexOf("\n  /**", shiftStart),
+    );
+    expect(shift).toContain("applyShotSwaps(");
+    expect(shift).toContain("plan.shots");
+    expect(shift).toContain("result.shots");
+    expect(shift).not.toContain("syncEnding");
+  });
+});
+
+// ── Switch players ─────────────────────────────────────────────────────────
+
+test.describe("switch players", () => {
+  const MENU = "src/components/admin/labels/label-point-menu.tsx";
+
+  test("the ⋯ menu offers it on every live point with a hitter, saying what it does; not on a point with none", () => {
+    const { operations, asked } = tableTree();
+    // P2: Lee's ace, won by Lee — the shots and the winner change hands.
+    const p2 = menuActions(P2, operations).switchPlayers;
+    expect(p2).toMatchObject({
+      description: "Every shot changes hands, and so does who won it",
+      contradicts: false,
+    });
+    // P1 has a winner too; P4 has none, so only the shots are named.
+    expect(menuActions(P1, operations).switchPlayers?.description).toBe(
+      "Every shot changes hands, and so does who won it",
+    );
+    expect(menuActions(P4, operations).switchPlayers?.description).toBe(
+      "Every shot changes hands",
+    );
+    // Picking it asks the console, which plans and writes.
+    p2!.run();
+    expect(asked).toEqual({ onSwitchPlayers: [[P2]] });
+
+    // No stroke naming a hitter: not offered.
+    const session = labelSessionFixture();
+    session.points = session.points.map((point) =>
+      point.id === P2
+        ? {
+            ...point,
+            shots: point.shots.map((shot) => ({ ...shot, hitter: null })),
+          }
+        : point,
+    );
+    expect(menuActions(P2, operations, session).switchPlayers).toBeNull();
+  });
+
+  test("on a point whose rows contradict its server it comes first, and says who hits the serve", () => {
+    // P2 moved under Vargas before the swap rule existed: server p2, the
+    // ace still Lee's.
+    const session = labelSessionFixture();
+    session.points = session.points.map((point) =>
+      point.id === P2 ? { ...point, server: "p2" as const } : point,
+    );
+    const { operations } = tableTree();
+    expect(menuActions(P2, operations, session).switchPlayers).toMatchObject({
+      description: "Vargas serves this game, but Lee hits the serve here",
+      contradicts: true,
+    });
+
+    // The menu draws a contradicting point's item before everything else,
+    // and an agreeing one's after the Combine items, before Move to game….
+    const source = readFileSync(MENU, "utf8");
+    const first = source.indexOf("{switchFirst ? (");
+    const above = source.indexOf('label="Add point above"');
+    const combineBelow = source.indexOf('label="Combine with point below"');
+    const after = source.indexOf("{switchFirst ? null : switchItem}");
+    const move = source.indexOf('label="Move to game…"');
+    expect(first).toBeGreaterThan(-1);
+    expect(first).toBeLessThan(above);
+    expect(combineBelow).toBeLessThan(after);
+    expect(after).toBeLessThan(move);
+    expect(source).toContain('label="Switch players"');
+    expect(source).toContain("ArrowLeftRight");
+    // One menu serves both layouts: the dark rail and the light table.
+    expect(source).toContain('tone === "dark"');
+  });
+
+  test("read-only, there is no menu to offer it", () => {
+    const html = renderConsole({ initialExpandedPointId: P2 });
+    expect(html).not.toContain("data-point-menu");
+    expect(html).not.toContain("Switch players");
+  });
+
+  test("the console plans the switch on the client, calls the action, and applies the flip to the rows it holds — never the ending", async () => {
+    const { calls, operations } = spies();
+    let table: Props = {};
+    const { LabelConsole } = createLoader({
+      stubs: {
+        "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps },
+        "@/components/admin/labels/label-points-table": {
+          LabelPointsTable: (props: Props) => {
+            table = props;
+            return null;
+          },
+        },
+      },
+    }).load("src/components/admin/labels/label-console.tsx") as {
+      LabelConsole: React.ComponentType<Props>;
+    };
+    const session = labelSessionFixture();
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session,
+        video: null,
+        ...SAVES,
+        operations,
+      }),
+    );
+    const rows = table.operations as { onSwitchPlayers: (id: string) => void };
+    rows.onSwitchPlayers(P2);
+    await Promise.resolve();
+    expect(calls.switchPlayers).toEqual([[P2]]);
+    // A tombstone is refused on the client: nothing sent.
+    rows.onSwitchPlayers(P3);
+    await Promise.resolve();
+    expect(calls.switchPlayers).toHaveLength(1);
+
+    const source = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    const start = source.indexOf("function switchPlayers(");
+    expect(start).toBeGreaterThan(-1);
+    const fn = source.slice(start, source.indexOf("\n  /**", start));
+    expect(fn).toContain("planPlayerSwitch(before)");
+    expect(fn).toContain("applyPlayerSwitch(p, plan.write)");
+    expect(fn).toContain("plan.shots");
+    expect(fn).toContain("result.shots");
+    expect(fn).toContain("shotSwapsOf(before.shots)");
+    expect(fn).not.toContain("syncEnding");
+    expect(fn).not.toContain("server");
+    expect(source).toContain("onSwitchPlayers: switchPlayers,");
   });
 });
 

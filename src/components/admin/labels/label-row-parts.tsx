@@ -85,6 +85,13 @@ export interface LabelRowOperations {
    * becomes a tombstone. The ⋯ menu asks.
    */
   onCombinePoints: (pointId: string, direction: CombineDirection) => void;
+  /**
+   * Switch a point's players by hand (`player-swap.ts`): every stroke's
+   * hitter, the winner and ended by flipped; the server, set and game
+   * stay. The ⋯ menu asks — first of all on a point whose rows contradict
+   * its server.
+   */
+  onSwitchPlayers: (pointId: string) => void;
 }
 
 /** What every row needs to draw and save its editors. */

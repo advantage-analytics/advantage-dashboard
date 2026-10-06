@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
   ArrowUpToLine,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +27,11 @@ import {
   destinationServerIn,
   neighbourGames,
 } from "@/lib/services/labels/operations";
+import {
+  canSwitchPlayers,
+  rowsContradictServer,
+  servingShot,
+} from "@/lib/services/labels/player-swap";
 import { combineNeighbour } from "@/lib/services/labels/point-combine";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { canResetPoint } from "@/lib/services/labels/reset";
@@ -43,6 +49,13 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  *     kept; only when that neighbour is in the SAME game. Each carries the
  *     two numbers, so the labeller reads which point's shots go where. Three
  *     or more are combined by repeating.
+ *   · `switchPlayers` — every stroke's hitter, the winner and ended by
+ *     flipped by hand (`onSwitchPlayers`, player-swap.ts), the server left
+ *     alone; on every live point with a stroke that names a hitter. When
+ *     the point's rows contradict its server — its serve is hit by the
+ *     other side, as a point moved into another player's game before the
+ *     swap rule existed is — it `contradicts`, says so, and the menu lists
+ *     it FIRST so the stuck point advertises its fix.
  *   · `move` — the games either side of the point, each saying who serves it;
  *     picking one hands it to the console, which asks "switch players?" first
  *     when that is not this point's server. Empty when the point has no
@@ -66,6 +79,12 @@ export function pointMenuActions(
   addBelow: () => void;
   combineAbove: { description: string; run: () => void } | null;
   combineBelow: { description: string; run: () => void } | null;
+  switchPlayers: {
+    description: string;
+    /** The rows say the other side served: listed first, and why. */
+    contradicts: boolean;
+    run: () => void;
+  } | null;
   move: { key: string; label: string; description?: string; run: () => void }[];
   shiftOverflow: (() => void) | null;
   reset: (() => void) | null;
@@ -74,6 +93,8 @@ export function pointMenuActions(
   const number = point.pointIndex + 1;
   const above = combineNeighbour(context.points, point.id, "above");
   const below = combineNeighbour(context.points, point.id, "below");
+  const contradicts = rowsContradictServer(point);
+  const serveHitter = contradicts ? servingShot(point.shots)?.hitter : null;
   return {
     addAbove: () => operations.onInsertPoint(point.id, "before"),
     addBelow: () => operations.onInsertPoint(point.id, "after"),
@@ -87,6 +108,18 @@ export function pointMenuActions(
       ? {
           description: `Point ${below.pointIndex + 1}'s shots join point ${number}`,
           run: () => operations.onCombinePoints(point.id, "below"),
+        }
+      : null,
+    switchPlayers: canSwitchPlayers(point)
+      ? {
+          description:
+            contradicts && point.server && serveHitter
+              ? `${context.names[point.server]} serves this game, but ${context.names[serveHitter]} hits the serve here`
+              : point.winner
+                ? "Every shot changes hands, and so does who won it"
+                : "Every shot changes hands",
+          contradicts,
+          run: () => operations.onSwitchPlayers(point.id),
         }
       : null,
     shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
@@ -156,6 +189,23 @@ export function PointMenu({
     point.setNumber !== null && point.gameNumber !== null
       ? `Now in set ${point.setNumber} · game ${point.gameNumber}`
       : undefined;
+  // "Switch players": first of all when the rows contradict the server,
+  // after the Combine items otherwise.
+  const switchItem = actions?.switchPlayers ? (
+    <FloatMenuItem
+      label="Switch players"
+      description={actions.switchPlayers.description}
+      icon={
+        <ArrowLeftRight
+          className={iconClass}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      }
+      onSelect={pick(actions.switchPlayers.run)}
+    />
+  ) : null;
+  const switchFirst = actions?.switchPlayers?.contradicts === true;
   return (
     <span
       data-cell=""
@@ -231,6 +281,12 @@ export function PointMenu({
               </>
             ) : (
               <>
+                {switchFirst ? (
+                  <>
+                    {switchItem}
+                    <FloatMenuDivider />
+                  </>
+                ) : null}
                 <FloatMenuItem
                   label="Add point above"
                   description={`An empty point before point ${number}`}
@@ -283,6 +339,7 @@ export function PointMenu({
                     onSelect={pick(actions.combineBelow.run)}
                   />
                 ) : null}
+                {switchFirst ? null : switchItem}
                 <FloatMenuDivider />
                 {actions.move.length > 0 ? (
                   <FloatMenuItem

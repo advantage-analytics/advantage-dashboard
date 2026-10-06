@@ -39,11 +39,28 @@
  * A moved point's status is a move's: `labelPointStatusAfterChange` measured
  * against its seed, exactly as `planPointMove` does it, so a point shifted
  * back into the game it was seeded in reads `unchanged` again. Nothing here
- * touches `point_index`, `winner` or a tombstone.
+ * touches `point_index` or a tombstone.
+ *
+ * ── Players switch with the server ──────────────────────────────────────────
+ * A moved point whose server changes, and whose own strokes say the OLD
+ * server served it, switches players as a whole (player-swap.ts
+ * `planPlayerSwap`, the same rule as the point menu's move): its `winner`
+ * and `ended_by` flip on the write, and every stroke's hitter comes out in
+ * the plan's `shots`. A point whose rows already agree with its new server
+ * takes the server alone. Each point is read ONCE for this, against where it
+ * ends up — a point carried through two games along the cascade is compared
+ * with the last — so a cascade over games with alternating servers swaps
+ * exactly the points whose rows contradict their final game.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
 import { gameFirstServer, type GamePoint } from "./game-operations";
+import {
+  planPlayerSwap,
+  type PlayerSwap,
+  type ShotSwapWrite,
+  type SwapShot,
+} from "./player-swap";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import {
   opponent,
@@ -53,6 +70,9 @@ import {
 } from "./session";
 
 type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
+
+/** A point as the shift reads it: a game point with its strokes. */
+export type ShiftPoint = GamePoint & { shots: readonly SwapShot[] };
 
 /**
  * One ordinary game with rows sitting past the row that decided it. The
@@ -76,6 +96,9 @@ export interface GameShiftWrite {
   server: LabelSide | null;
   game_type: LabelGameType;
   status: LivePointStatus;
+  /** Present only when the point's players switch (player-swap.ts). */
+  winner?: LabelSide | null;
+  ended_by?: LabelSide | null;
 }
 
 /** A game as the console names it: its set and its rank within the set. */
@@ -91,10 +114,18 @@ export interface GameShiftSummary {
   games: number;
   /** The first game the leftovers move into — the button's name. */
   nextGame: GameShiftGameRef;
+  /** Moved points whose players switch — the tooltip's warning. */
+  swapped: number;
 }
 
 export type PlannedGameShift =
-  | { ok: true; writes: GameShiftWrite[]; summary: GameShiftSummary }
+  | {
+      ok: true;
+      writes: GameShiftWrite[];
+      /** The strokes flipped with their points' players; empty when none. */
+      shots: ShotSwapWrite[];
+      summary: GameShiftSummary;
+    }
   | { error: string };
 
 interface Accumulator {
@@ -231,24 +262,53 @@ function openGameAfter(
   };
 }
 
-function statusAfterShift(point: GamePoint, to: Destination): LivePointStatus {
+/**
+ * One moved point's write, measured from its ORIGINAL row: the destination's
+ * server (its own when the destination names none), the players' swap when
+ * that server is new and the rows contradict it, and the status the whole
+ * change implies.
+ */
+function shiftWrite(
+  point: ShiftPoint,
+  to: Destination,
+): { write: GameShiftWrite; swap: PlayerSwap | null } {
   const server = to.server ?? point.server;
+  const swap = planPlayerSwap(point, server);
+  const change = {
+    set_number: to.setNumber,
+    game_number: to.gameNumber,
+    server,
+    ...(swap ? swap.point : {}),
+  };
   const status = labelPointStatusAfterChange(
     { ...labelPointFields(point), status: point.status, seed: point.seed },
-    { set_number: to.setNumber, game_number: to.gameNumber, server },
+    change,
   );
-  // Only live points are ever moved, so the rule never hands back `deleted`.
-  return status as LivePointStatus;
+  const write: GameShiftWrite = {
+    id: point.id,
+    set_number: to.setNumber,
+    game_number: to.gameNumber,
+    server,
+    game_type: to.gameType,
+    // Only live points are ever moved, so the rule never hands back `deleted`.
+    status: status as LivePointStatus,
+  };
+  if (swap) {
+    write.winner = swap.point.winner;
+    write.ended_by = swap.point.ended_by;
+  }
+  return { write, swap };
 }
 
 /**
  * Plan the cascade from the game that holds `fromPointId`, which must be one
  * of that game's leftovers (see the file comment). Returns one write per
  * moved point — a point moved twice along the cascade appears once, with
- * where it ends up — and a summary for the button and its tooltip.
+ * where it ends up — the strokes flipped with any point whose players
+ * switch, and a summary for the button and its tooltip.
  */
 export function planGameShift(
-  points: readonly GamePoint[],
+  points: readonly ShiftPoint[],
   adScoring: boolean,
   fromPointId: string,
 ): PlannedGameShift {
@@ -289,8 +349,9 @@ export function planGameShift(
   // the writes so far applied. A point's status is always measured from its
   // ORIGINAL state, as one move would.
   const original = new Map(points.map((point) => [point.id, point]));
-  let working: GamePoint[] = [...points];
+  let working: ShiftPoint[] = [...points];
   const writes = new Map<string, GameShiftWrite>();
+  const swaps = new Map<string, PlayerSwap | null>();
   let current: GameOverflow = overflow;
   /** The game each step moved into, in order. */
   const steps: GameShiftGameRef[] = [];
@@ -307,15 +368,12 @@ export function planGameShift(
     steps.push(ref(to));
 
     for (const point of current.leftovers) {
-      const base = original.get(point.id) ?? point;
-      writes.set(point.id, {
-        id: point.id,
-        set_number: to.setNumber,
-        game_number: to.gameNumber,
-        server: to.server ?? base.server,
-        game_type: to.gameType,
-        status: statusAfterShift(base, to),
-      });
+      // Every leftover is one of `points`, read back by id.
+      const base = original.get(point.id);
+      if (!base) continue;
+      const { write, swap } = shiftWrite(base, to);
+      writes.set(point.id, write);
+      swaps.set(point.id, swap);
     }
     working = applyGameShift(working, [...writes.values()]);
 
@@ -330,25 +388,44 @@ export function planGameShift(
     current = next;
   }
 
+  const shots: ShotSwapWrite[] = [];
+  let swapped = 0;
+  for (const id of writes.keys()) {
+    const swap = swaps.get(id);
+    if (!swap) continue;
+    swapped += 1;
+    shots.push(...swap.shots);
+  }
   return {
     ok: true,
     writes: [...writes.values()],
+    shots,
     summary: {
       points: writes.size,
       games: steps.length,
       nextGame: steps[0],
+      swapped,
     },
   };
 }
 
 /**
- * The console's rows with `writes` applied — the optimistic update. A row no
- * write names is returned as it is; order is kept, since no index moves.
+ * The console's rows with `writes` applied — the optimistic update of the
+ * points' own columns; the flipped strokes go on through player-swap.ts
+ * `applyShotSwaps`. A row no write names is returned as it is; order is
+ * kept, since no index moves.
  */
 export function applyGameShift<
   T extends Pick<
     LabelPoint,
-    "id" | "setNumber" | "gameNumber" | "server" | "gameType" | "status"
+    | "id"
+    | "setNumber"
+    | "gameNumber"
+    | "server"
+    | "gameType"
+    | "status"
+    | "winner"
+    | "endedBy"
   >,
 >(points: readonly T[], writes: readonly GameShiftWrite[]): T[] {
   const byId = new Map(writes.map((write) => [write.id, write]));
@@ -362,6 +439,8 @@ export function applyGameShift<
       server: write.server,
       gameType: write.game_type,
       status: write.status,
+      winner: "winner" in write ? (write.winner ?? null) : point.winner,
+      endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
     };
   });
 }

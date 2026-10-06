@@ -23,6 +23,11 @@ import {
   type LabelSide,
 } from "./session";
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import {
+  planPlayerSwap,
+  type ShotSwapWrite,
+  type SwapShot,
+} from "./player-swap";
 import { gameKey } from "./score";
 
 // ── Delete and Undo ─────────────────────────────────────────────────────────
@@ -381,7 +386,15 @@ export interface PointMoveWrite {
   status: LivePointStatus;
   /** Present only when the move switches the point's server. */
   server?: LabelSide;
+  /** Present only when the move switches the point's players (player-swap.ts). */
+  winner?: LabelSide | null;
+  ended_by?: LabelSide | null;
 }
+
+/** A move's two tables: the point's columns, and its flipped strokes (if any). */
+export type PlannedPointMove =
+  | { ok: true; write: PointMoveWrite; shots: ShotSwapWrite[] }
+  | { error: string };
 
 /**
  * Move a point into another game.
@@ -393,17 +406,25 @@ export interface PointMoveWrite {
  * move (or a move into a game nobody else is in yet) needs no question and
  * leaves `server` alone.
  *
+ * When the server does switch and the point's own strokes say the OLD server
+ * served it, the players switch as a whole (player-swap.ts
+ * `planPlayerSwap`): every stroke's hitter, and the point's winner and ended
+ * by, come out in `shots` and `write` — so "switch players?" answered yes
+ * visibly switches them. Rows that already agree with the new server are
+ * left alone.
+ *
  * Moving is a labelled change, and its status comes from the same rule as an
  * edit (edit.ts `labelPointStatusAfterChange`): measured against the point's
- * seed, so a point moved away is `edited` and one moved back into its seeded
- * game (with its seeded server) is `unchanged` again.
+ * seed over the whole change (set, game, server, winner, ended by), so a
+ * point moved away is `edited` and one moved back into its seeded game (with
+ * its seeded server, and its players flipped back) is `unchanged` again.
  */
 export function planPointMove(
   point: MovablePoint,
   to: LabelGame,
   destinationServer: LabelSide | null,
   switchServer: boolean,
-): Planned<PointMoveWrite> {
+): PlannedPointMove {
   if (point.status === "deleted") {
     return { error: "Restore this point before moving it." };
   }
@@ -421,10 +442,12 @@ export function planPointMove(
         "Someone else serves that game. Confirm switching the server to move this point there.",
     };
   }
+  const swap = switches ? planPlayerSwap(point, destinationServer) : null;
   const change = {
     set_number: to.setNumber,
     game_number: to.gameNumber,
     ...(switches ? { server: destinationServer } : {}),
+    ...(swap ? swap.point : {}),
   };
   const status = labelPointStatusAfterChange(
     { ...labelPointFields(point), status: point.status, seed: point.seed },
@@ -437,10 +460,17 @@ export function planPointMove(
     status: status as LivePointStatus,
   };
   if (switches) write.server = destinationServer;
-  return { ok: true, write };
+  if (swap) {
+    write.winner = swap.point.winner;
+    write.ended_by = swap.point.ended_by;
+  }
+  return { ok: true, write, shots: swap ? swap.shots : [] };
 }
 
-/** What a move reads of a point: where it is, its fields, status and seed. */
+/**
+ * What a move reads of a point: where it is, its fields, status and seed —
+ * and its strokes, which say whether its players switch with its server.
+ */
 export type MovablePoint = Pick<
   LabelPoint,
   | "status"
@@ -452,7 +482,7 @@ export type MovablePoint = Pick<
   | "ending"
   | "endedBy"
   | "seed"
->;
+> & { shots: readonly SwapShot[] };
 
 /** Whether moving `point` to `to` would change its server — the dialog's cue. */
 export function moveNeedsServerSwitch(
@@ -523,7 +553,10 @@ export function neighbourGames(
   return games;
 }
 
-/** `point` after a move, as the console shows it. */
+/**
+ * `point` after a move, as the console shows it — its own columns only; the
+ * flipped strokes go on through player-swap.ts `applyShotSwaps`.
+ */
 export function applyPointMove(
   point: LabelPoint,
   write: PointMoveWrite,
@@ -534,6 +567,8 @@ export function applyPointMove(
     gameNumber: write.game_number,
     status: write.status,
     server: write.server ?? point.server,
+    winner: "winner" in write ? (write.winner ?? null) : point.winner,
+    endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
   };
 }
 

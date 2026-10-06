@@ -74,6 +74,14 @@ import type {
 } from "@/lib/services/labels/operations-session";
 import { playingRowAt } from "@/lib/services/labels/playback";
 import {
+  applyPlayerSwitch,
+  applyShotSwaps,
+  moveSwapsPlayers,
+  planPlayerSwitch,
+  shotSwapsOf,
+} from "@/lib/services/labels/player-swap";
+import type { LabelPlayerSwitchResult } from "@/lib/services/labels/player-swap-session";
+import {
   applyInsertedPoint,
   draftInsertedPoint,
   planInsertedPoint,
@@ -192,11 +200,17 @@ const PENDING_POINT_PREFIX = "pending-point-";
 /** One frozen `follow`, so re-following while following changes no identity. */
 const FOLLOW: PointFocus = { mode: "follow" };
 
-/** What a game operation writes back, and a game shift on top of it. */
+/**
+ * What a game operation writes back, and a game shift on top of it — a
+ * shift can switch a moved point's players too (player-swap.ts), so its
+ * winner and ended by are among what a revert puts back.
+ */
 const GAME_WRITE_FIELDS = ["server", "gameType", "status"] as const;
 const GAME_SHIFT_FIELDS = [
   "setNumber",
   "gameNumber",
+  "winner",
+  "endedBy",
   ...GAME_WRITE_FIELDS,
 ] as const;
 
@@ -1121,9 +1135,13 @@ export function LabelConsole({
    * down the match while games run over (`game-shift.ts`): the rows take
    * their new games at once (`applyGameShift` over the same plan the server
    * runs), the server's own writes are the last word, and on a refusal every
-   * moved row gets its old game, server and status back. No index moves, so
-   * nothing renumbers; the bands, scores and the score banner re-read the
-   * rows as they stand. Nothing is re-derived — no stroke changed.
+   * moved row gets its old game, server and status back. A moved point
+   * whose players switch with its server (player-swap.ts) takes its flipped
+   * winner, ended by and hitters the same way (`applyShotSwaps`), and gets
+   * them back on a refusal. No index moves, so nothing renumbers; the bands,
+   * scores and the score banner re-read the rows as they stand. The ending
+   * is not re-derived: a whole point's flip leaves what its rows say about
+   * the point unchanged.
    */
   function shiftGameOverflow(fromPointId: string) {
     if (!operations) return;
@@ -1136,12 +1154,19 @@ export function LabelConsole({
     const before = new Map(
       points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
     );
+    const shotsBefore = shotSwapsOf(
+      [...before.values()].flatMap((point) => point.shots),
+    );
     const revert = (rows: LabelPoint[]) =>
-      takeFields(rows, before, GAME_SHIFT_FIELDS);
+      applyShotSwaps(takeFields(rows, before, GAME_SHIFT_FIELDS), shotsBefore);
     void runOperation(
-      (rows) => applyGameShift(rows, plan.writes),
+      (rows) => applyShotSwaps(applyGameShift(rows, plan.writes), plan.shots),
       () => operations.shiftGameOverflow(session.id, fromPointId),
-      (rows, result) => applyGameShift(revert(rows), result.writes),
+      (rows, result) =>
+        applyShotSwaps(
+          applyGameShift(revert(rows), result.writes),
+          result.shots,
+        ),
       revert,
     );
   }
@@ -1219,6 +1244,54 @@ export function LabelConsole({
       );
       if (currentPointId === removed.id) setRestPointId(kept.id);
     });
+  }
+
+  /**
+   * Switch one point's players by hand (`planPlayerSwitch`): every stroke's
+   * hitter, the winner and ended by flip at once (`applyPlayerSwitch` and
+   * `applyShotSwaps`), the server's answer is the last word, and a refusal
+   * puts the point's columns and every stroke's hitter and status back. The
+   * server, set and game never move. The ending is not re-derived: a whole
+   * point's flip leaves what its rows say about the point unchanged.
+   */
+  function switchPlayers(pointId: string) {
+    const before = points.find((p) => p.id === pointId);
+    if (!before || !operations) return;
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
+    const plan = planPlayerSwitch(before);
+    if ("error" in plan) {
+      refuse(plan.error);
+      return;
+    }
+    const shotsBefore = shotSwapsOf(before.shots);
+    void runOperation(
+      (rows) =>
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => applyPlayerSwitch(p, plan.write)),
+          plan.shots,
+        ),
+      () => operations.switchPlayers(pointId),
+      (rows, result) =>
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => ({
+            ...p,
+            status: result.status,
+            winner: result.winner,
+            endedBy: result.endedBy,
+          })),
+          result.shots,
+        ),
+      (rows) =>
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => ({
+            ...p,
+            status: before.status,
+            winner: before.winner,
+            endedBy: before.endedBy,
+          })),
+          shotsBefore,
+        ),
+    );
   }
 
   /**
@@ -1395,7 +1468,11 @@ export function LabelConsole({
     });
   }
 
-  /** A move asks first only when someone else serves the destination. */
+  /**
+   * A move asks first only when someone else serves the destination — and
+   * the question says whether a yes switches the point's players too
+   * (player-swap.ts), or only its server.
+   */
   function requestMove(pointId: string, to: LabelGame) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
@@ -1407,12 +1484,25 @@ export function LabelConsole({
         pointNumber: point.pointIndex + 1,
         to,
         server,
+        swaps: moveSwapsPlayers(point, server)
+          ? point.winner === null
+            ? "shots"
+            : "shots-and-winner"
+          : null,
       });
       return;
     }
     movePoint(pointId, to, false);
   }
 
+  /**
+   * Move one point (`planPointMove`): its game, server and — when its own
+   * strokes contradict the new server — its players switch at once
+   * (`applyPointMove` and `applyShotSwaps`), the server's answer is the last
+   * word, and a refusal puts the point's columns and every stroke's hitter
+   * and status back. The ending is not re-derived: a whole point's flip
+   * leaves what its rows say about the point unchanged.
+   */
   function movePoint(pointId: string, to: LabelGame, switchServer: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
@@ -1426,26 +1516,40 @@ export function LabelConsole({
       refuse(plan.error);
       return;
     }
+    const shotsBefore = shotSwapsOf(before.shots);
     void runOperation(
       (rows) =>
-        replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
+          plan.shots,
+        ),
       () => operations.movePoint(pointId, to, switchServer),
       (rows, result) =>
-        replacePoint(rows, pointId, (p) => ({
-          ...p,
-          status: result.status,
-          server: result.server,
-          setNumber: result.setNumber,
-          gameNumber: result.gameNumber,
-        })),
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => ({
+            ...p,
+            status: result.status,
+            server: result.server,
+            setNumber: result.setNumber,
+            gameNumber: result.gameNumber,
+            winner: result.winner,
+            endedBy: result.endedBy,
+          })),
+          result.shots,
+        ),
       (rows) =>
-        replacePoint(rows, pointId, (p) => ({
-          ...p,
-          setNumber: before.setNumber,
-          gameNumber: before.gameNumber,
-          server: before.server,
-          status: before.status,
-        })),
+        applyShotSwaps(
+          replacePoint(rows, pointId, (p) => ({
+            ...p,
+            setNumber: before.setNumber,
+            gameNumber: before.gameNumber,
+            server: before.server,
+            status: before.status,
+            winner: before.winner,
+            endedBy: before.endedBy,
+          })),
+          shotsBefore,
+        ),
     );
   }
 
@@ -1609,6 +1713,7 @@ export function LabelConsole({
         onShiftGameOverflow: shiftGameOverflow,
         onSplitPoint: splitPoint,
         onCombinePoints: combinePoints,
+        onSwitchPlayers: switchPlayers,
         onMovePoint: requestMove,
         onSetChecked: setChecked,
         onAddShot: addShot,
@@ -2153,7 +2258,9 @@ export interface LabelConsoleOperations {
    * Move the rows left over past a game's end — from the game that holds
    * `fromPointId`, one of them — into the next game, and on while games run
    * over: `set_number`, `game_number`, `server`, `game_type` and `status` on
-   * each moved point, `label_points` only. Returns the moved rows.
+   * each moved point (plus `winner` and `ended_by` on one whose players
+   * switch), and the flipped strokes' `hitter` and status — `label_points`
+   * and `label_shots`. Returns the moved rows and the flipped strokes.
    */
   shiftGameOverflow: (
     sessionId: string,
@@ -2181,6 +2288,13 @@ export interface LabelConsoleOperations {
     pointId: string,
     direction: CombineDirection,
   ) => Promise<LabelCombinePointsResult>;
+  /**
+   * Switch `pointId`'s players by hand (`player-swap.ts`): `winner`,
+   * `ended_by` and `status` on the point, every stroke's `hitter` and
+   * status — `label_points` and `label_shots`; never `server`. Returns the
+   * point's columns and the flipped strokes as written.
+   */
+  switchPlayers: (pointId: string) => Promise<LabelPlayerSwitchResult>;
   /**
    * The score banner's answers (board 08m): `final_score` and
    * `video_ends_early` on `label_sessions`, the only table it writes.
