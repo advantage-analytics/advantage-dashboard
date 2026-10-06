@@ -764,6 +764,16 @@ export function LabelConsole({
     setRestPointId(playingPointId);
   }
 
+  // Ticking the current point folds its shot rows: it is done with. It stays
+  // folded until the labeller clicks its row or unticks it, or another point
+  // becomes current (adjusted during render, like `restPointId` above).
+  const [foldedPointId, setFoldedPointId] = useState<string | null>(null);
+  if (foldedPointId !== null && foldedPointId !== currentPointId) {
+    setFoldedPointId(null);
+  }
+  const unfoldedPointId =
+    currentPointId === foldedPointId ? null : currentPointId;
+
   // A deleted point is a marker, not a current point: nothing of it on the court.
   const expanded =
     points.find(
@@ -778,6 +788,7 @@ export function LabelConsole({
   function togglePoint(pointId: string) {
     setPlacement(NO_PLACEMENT);
     setRestPointId(pointId);
+    setFoldedPointId(null);
     if (pointId === playingPointId) followPlayback();
     else holdPoint(pointId);
     seekToPointStart(points.find((p) => p.id === pointId));
@@ -1484,6 +1495,7 @@ export function LabelConsole({
   function setChecked(pointId: string, value: boolean) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations || before.status === "deleted") return;
+    setFoldedPointId(value && pointId === currentPointId ? pointId : null);
     void runOperation(
       (rows) =>
         replacePoint(rows, pointId, (p) => ({
@@ -1733,7 +1745,7 @@ export function LabelConsole({
           points={points}
           adScoring={session.adScoring}
           names={names}
-          expandedPointId={currentPointId}
+          expandedPointId={unfoldedPointId}
           onTogglePoint={togglePoint}
           editable={editable}
           selectedShotId={placement.shotId}
@@ -1849,7 +1861,7 @@ export function LabelConsole({
       adScoring={session.adScoring}
       names={names}
       marks={liveMarks}
-      expandedPointId={currentPointId}
+      expandedPointId={unfoldedPointId}
       onTogglePoint={togglePoint}
       editable={editable}
       selectedShotId={placement.shotId}

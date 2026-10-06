@@ -6,10 +6,10 @@
  * Pure and import-free of anything server-side — the `"use client"` console
  * calls it around every shot change (label-console.tsx `syncEnding`).
  *
- * A last ball that missed also settles who won — the other side — so the
- * winner follows it and the scoreboard with it. A last ball that stayed in
- * settles nothing by itself (the vendor often never sees the miss that came
- * after it), so there the labelled `winner` is read and never written.
+ * The last ball also settles who won, so the winner follows the rows and the
+ * scoreboard with it: a ball that missed gives the point to the other side, a
+ * ball marked in gives it to its hitter. Only a last ball with no result yet
+ * settles nothing; there the labelled `winner` is read and never written.
  */
 
 import type { LabelPointPatch } from "./edit";
@@ -27,9 +27,9 @@ export interface DerivedEnding {
   /** The last live stroke's hitter. */
   endedBy: LabelSide | null;
   /**
-   * Who the rows say won: the other side from a last stroke that missed.
-   * Null when the rows do not settle it (the last stroke stayed in, has no
-   * result yet, or names no hitter).
+   * Who the rows say won: the other side from a last stroke that missed, the
+   * hitter of one marked in. Null when the rows do not settle it (the last
+   * stroke has no result yet, or names no hitter).
    */
   winner: LabelSide | null;
 }
@@ -54,9 +54,9 @@ function missed(shot: Pick<LabelShot, "result">): boolean {
  * - a serve otherwise (in, or no result yet) → `ace`: nothing came back
  * - any other stroke that missed → `service_winner` when it is the stroke
  *   right after the serve (the return), else `error`
- * - any other stroke that stayed in (or has no result yet) → `winner` when its
- *   hitter is the point's labelled `winner` or no winner is labelled, else
- *   `error`
+ * - any other stroke marked in → `winner`, by its hitter
+ * - any other stroke with no result yet → `winner` when its hitter is the
+ *   point's labelled `winner` or no winner is labelled, else `error`
  */
 export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   const live = orderLabelShots(
@@ -68,7 +68,9 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   const earlier = live.slice(0, -1);
 
   if (isServe(last)) {
-    if (!missed(last)) return { ending: "ace", endedBy, winner: null };
+    if (!missed(last)) {
+      return { ending: "ace", endedBy, winner: wonBy(last) };
+    }
     return last.stroke === "second_serve" || earlier.some(isServe)
       ? { ending: "double_fault", endedBy, winner: lostBy(endedBy) }
       : null;
@@ -83,6 +85,10 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
     };
   }
 
+  if (last.result === "in") {
+    return { ending: "winner", endedBy, winner: wonBy(last) };
+  }
+
   return {
     ending:
       point.winner === null || last.hitter === point.winner
@@ -91,6 +97,11 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
     endedBy,
     winner: null,
   };
+}
+
+/** The hitter of a last stroke marked in; null with no result or no hitter. */
+function wonBy(last: Pick<LabelShot, "result" | "hitter">): LabelSide | null {
+  return last.result === "in" ? last.hitter : null;
 }
 
 /** The side that won a point its `hitter` just lost; null with no hitter. */

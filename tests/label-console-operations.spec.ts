@@ -1157,7 +1157,8 @@ test.describe("how it ended follows the shot rows", () => {
   });
 
   test("Undo on the last stroke moves the ending back onto it, once", async () => {
-    // Lee's last forehand is a tombstone: the point ends on Vargas's return.
+    // Lee's last forehand is a tombstone: the point ends on Vargas's return,
+    // which stayed in, so Vargas won it.
     const session = winnerSession();
     const first = session.points[0];
     session.points[0] = {
@@ -1178,8 +1179,11 @@ test.describe("how it ended follows the shot rows", () => {
     rows.onRestoreShot("s-added");
     await settled();
     expect(calls.restoreShot).toEqual([["s-added"]]);
-    // In, but hit by the player labelled as having lost the point.
-    expect(point).toEqual([[P1, { ending: "error", ended_by: "p1" }]]);
+    // In, so Lee wins it with his forehand: the ending and the winner both move
+    // back onto the restored stroke.
+    expect(point).toEqual([
+      [P1, { ending: "winner", ended_by: "p1", winner: "p1" }],
+    ]);
   });
 
   test("a point reset is not a shot change: no ending patch follows it", async () => {
