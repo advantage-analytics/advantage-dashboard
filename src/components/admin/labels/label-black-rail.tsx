@@ -7,7 +7,14 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Minimize2, PanelRightClose, WandSparkles } from "lucide-react";
+import {
+  Flag,
+  Maximize,
+  Minimize,
+  Minimize2,
+  PanelRightClose,
+  WandSparkles,
+} from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
@@ -70,6 +77,10 @@ import type {
 } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import type { SaveStatus } from "./save-status";
+import {
+  WHOLE_SCREEN_COPY,
+  type BrowserFullscreenControl,
+} from "./use-browser-fullscreen";
 
 /**
  * The black view's points rail (board 08l's `.bk-rail`): the Video
@@ -84,8 +95,10 @@ import type { SaveStatus } from "./save-status";
  * the three answers as a dark menu; only with marks built, and not once the
  * labeller has said the video ends early), the save line in its dark tone,
  * in the film view a way to tuck the rail away (`PanelRightClose`, "Hide the
- * points list", only with `onHide`) and the way out (`Minimize2`, "Exit full
- * screen") — over the ONE scroller
+ * points list", only with `onHide`), the browser's own full screen
+ * (`Maximize` / `Minimize`, "Fill the whole screen", only where the browser
+ * has one — `use-browser-fullscreen.ts`) and the way out (`Minimize2`, "Exit
+ * full screen") — over the ONE scroller
  * (`data-label-rail-scroller`), which is what the console's follow scroll
  * moves: a `LabelGameBand` (dark) before each game's first live point, a
  * `BlackPointRow` per point with the score before it and its marks (board
@@ -110,7 +123,7 @@ import type { SaveStatus } from "./save-status";
  * file's.
  */
 
-/** The header's icon buttons: the hide and the exit, one recipe. */
+/** The header's icon buttons: the hide, the whole screen and the exit. */
 const HEADER_BUTTON =
   "flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
@@ -121,6 +134,7 @@ export function LabelBlackRail({
   total,
   saveStatus,
   onExit,
+  wholeScreen,
   onHide,
   hideButtonRef,
   scrollerRef,
@@ -164,6 +178,11 @@ export function LabelBlackRail({
   saveStatus: SaveStatus;
   /** Back to the layout the console was in before this one. */
   onExit: () => void;
+  /**
+   * The browser's own full screen (`useBrowserFullscreen`). Absent, or not
+   * supported, there is no button.
+   */
+  wholeScreen?: BrowserFullscreenControl;
   /**
    * Tuck the rail away (the film view, whose "Points" pill brings it back).
    * Absent — the black view — there is no hide button.
@@ -348,6 +367,45 @@ export function LabelBlackRail({
                 strokeWidth={1.6}
                 aria-hidden="true"
               />
+            </button>
+          </ChromeTooltip>
+        ) : null}
+        {wholeScreen?.supported ? (
+          <ChromeTooltip
+            label={
+              wholeScreen.active
+                ? WHOLE_SCREEN_COPY.leave
+                : WHOLE_SCREEN_COPY.enter
+            }
+            detail={WHOLE_SCREEN_COPY.detail}
+            side="bottom"
+            align="end"
+          >
+            <button
+              type="button"
+              data-label-whole-screen=""
+              aria-label={
+                wholeScreen.active
+                  ? WHOLE_SCREEN_COPY.leave
+                  : WHOLE_SCREEN_COPY.enter
+              }
+              aria-pressed={wholeScreen.active}
+              onClick={wholeScreen.toggle}
+              className={HEADER_BUTTON}
+            >
+              {wholeScreen.active ? (
+                <Minimize
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              ) : (
+                <Maximize
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              )}
             </button>
           </ChromeTooltip>
         ) : null}

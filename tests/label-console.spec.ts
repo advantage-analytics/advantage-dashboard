@@ -37,6 +37,7 @@ type ConsoleProps = {
   initialRailWidth?: number;
   initialFilmRailHidden?: boolean;
   initialFilmCourtHidden?: boolean;
+  initialFullscreenSupported?: boolean;
   onSaveShot?: (...args: unknown[]) => Promise<unknown>;
   onSavePoint?: (...args: unknown[]) => Promise<unknown>;
 };
@@ -2384,5 +2385,106 @@ test.describe("layout modes (T24)", () => {
       expect(tagOf(html, 'data-label-rail=""')).not.toContain(PANEL_GROUND);
       expect(tagOf(html, "data-label-video-frame")).toContain("aspect-video");
     });
+  });
+});
+
+/**
+ * The browser's own full screen (`use-browser-fullscreen.ts`): a second
+ * control beside the layout's exit, in the two full-screen layouts only, and
+ * only where the browser has one. A server render has no document, so the
+ * support is injected with `initialFullscreenSupported`.
+ */
+test.describe("the whole-screen control", () => {
+  const ENTER = 'aria-label="Fill the whole screen"';
+  const base = () => ({
+    session: labelSessionFixture(),
+    video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
+    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
+  });
+  const tag = (html: string, attr: string) => {
+    const at = html.indexOf(attr);
+    expect(at, attr).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+  };
+
+  test("both full-screen layouts draw it, off, left of the layout's own exit", () => {
+    for (const initialLayoutMode of ["black", "film"] as const) {
+      const html = render({
+        ...base(),
+        initialLayoutMode,
+        initialFullscreenSupported: true,
+      });
+      expect(count(html, /data-label-whole-screen/g), initialLayoutMode).toBe(
+        1,
+      );
+      const button = tag(html, "data-label-whole-screen");
+      expect(button).toContain("<button");
+      expect(button).toContain(ENTER);
+      expect(button).toContain('aria-pressed="false"');
+      // The rail header's own recipe.
+      expect(button).toContain("size-[26px]");
+      expect(html).toContain("lucide-maximize");
+      // The layout's exit keeps its label, once, and comes after it.
+      expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
+      expect(html.indexOf("data-label-whole-screen")).toBeLessThan(
+        html.indexOf('aria-label="Exit full screen"'),
+      );
+      expect(html.indexOf("data-label-whole-screen")).toBeGreaterThan(
+        html.indexOf("data-label-rail-header"),
+      );
+    }
+  });
+
+  test("the film view with its rail hidden: an icon pill beside the exit pill", () => {
+    const html = render({
+      ...base(),
+      initialLayoutMode: "film",
+      initialFilmRailHidden: true,
+      initialFullscreenSupported: true,
+    });
+    const pills = html.slice(html.indexOf("data-label-film-rail-pills"));
+    expect(count(html, /data-label-whole-screen/g)).toBe(1);
+    const button = tag(pills, "data-label-whole-screen");
+    expect(button).toContain(ENTER);
+    expect(button).toContain('aria-pressed="false"');
+    expect(button).toContain("bg-[rgba(13,13,13,0.72)]");
+    expect(pills.indexOf("data-label-film-rail-pill=")).toBeLessThan(
+      pills.indexOf("data-label-whole-screen"),
+    );
+    expect(pills.indexOf("data-label-whole-screen")).toBeLessThan(
+      pills.indexOf("data-label-film-exit"),
+    );
+    expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
+  });
+
+  test("not without support — the server render's default", () => {
+    for (const initialLayoutMode of ["black", "film"] as const) {
+      for (const initialFilmRailHidden of [false, true]) {
+        const html = render({
+          ...base(),
+          initialLayoutMode,
+          initialFilmRailHidden,
+        });
+        expect(html).not.toContain("data-label-whole-screen");
+        expect(html).not.toContain("the whole screen");
+        expect(count(html, /aria-label="Exit full screen"/g)).toBe(1);
+      }
+    }
+  });
+
+  test("never in the overlay or the docked layouts", () => {
+    for (const initialLayoutMode of [
+      "overlay",
+      "docked-top",
+      "docked-side",
+    ] as const) {
+      const html = render({
+        ...base(),
+        initialLayoutMode,
+        initialFullscreenSupported: true,
+      });
+      expect(html, initialLayoutMode).not.toContain("data-label-whole-screen");
+      expect(html, initialLayoutMode).not.toContain("the whole screen");
+    }
   });
 });

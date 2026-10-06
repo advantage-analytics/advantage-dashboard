@@ -191,6 +191,7 @@ import {
   parsePlayingRowKey,
   playingRowKey,
 } from "./video-clock";
+import { useBrowserFullscreen } from "./use-browser-fullscreen";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
@@ -406,6 +407,7 @@ export function LabelConsole({
   initialRailWidth,
   initialFilmRailHidden,
   initialFilmCourtHidden,
+  initialFullscreenSupported,
   headerAction,
 }: {
   session: LabelSession;
@@ -467,6 +469,12 @@ export function LabelConsole({
   /** The film view's rail and court tucked away on first render — for specs. */
   initialFilmRailHidden?: boolean;
   initialFilmCourtHidden?: boolean;
+  /**
+   * Whether the browser has a full screen of its own, on the server render —
+   * for specs. There is no document there, so it is false by default; once
+   * mounted the browser itself answers.
+   */
+  initialFullscreenSupported?: boolean;
   /** The header's trailing link, rendered by the page. */
   headerAction?: ReactNode;
 }) {
@@ -629,6 +637,28 @@ export function LabelConsole({
     () => chooseLayout(modeBeforeFullScreen.current),
     [chooseLayout],
   );
+  // The browser's own full screen, offered by the two full-screen layouts
+  // (use-browser-fullscreen.ts). It goes with them: leaving the layout — the
+  // exit button, or any other switch of mode — leaves it too, when this
+  // console is what entered it. The browser's Esc leaves only the browser's
+  // full screen; no key handler here reads Escape, so the layout stays.
+  const {
+    supported: wholeScreenSupported,
+    active: wholeScreenActive,
+    toggle: toggleWholeScreen,
+    leave: leaveWholeScreen,
+  } = useBrowserFullscreen(initialFullscreenSupported);
+  const wholeScreen = useMemo(
+    () => ({
+      supported: wholeScreenSupported,
+      active: wholeScreenActive,
+      toggle: toggleWholeScreen,
+    }),
+    [wholeScreenSupported, wholeScreenActive, toggleWholeScreen],
+  );
+  useEffect(() => {
+    if (!fullScreen) leaveWholeScreen();
+  }, [fullScreen, leaveWholeScreen]);
 
   // The dock's size as the labeller left it, per docked mode (T25). Read from
   // storage in the initialiser: the server has none and gets the defaults,
@@ -1956,6 +1986,7 @@ export function LabelConsole({
       total={total}
       saveStatus={saveStatus}
       onExit={exitFullScreen}
+      wholeScreen={wholeScreen}
       onHide={hide?.onHide}
       hideButtonRef={hide?.hideButtonRef}
       scrollerRef={scrollerRef}
@@ -2064,6 +2095,7 @@ export function LabelConsole({
           checked={checked}
           total={total}
           onExit={exitFullScreen}
+          wholeScreen={wholeScreen}
           placing={placing}
           video={(transportInset) => (
             <LabelVideoPlayer

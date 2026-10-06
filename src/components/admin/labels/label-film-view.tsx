@@ -9,7 +9,14 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { GripVertical, List, Minimize2, RectangleVertical } from "lucide-react";
+import {
+  GripVertical,
+  List,
+  Maximize,
+  Minimize,
+  Minimize2,
+  RectangleVertical,
+} from "lucide-react";
 import type {
   BoardAnchor,
   BoardSize,
@@ -36,6 +43,10 @@ import {
   type FilmRailLayout,
 } from "./label-film-position";
 import { LabelRailResize } from "./label-rail-resize";
+import {
+  WHOLE_SCREEN_COPY,
+  type BrowserFullscreenControl,
+} from "./use-browser-fullscreen";
 
 /**
  * The console's film full-screen view (board 08n) — the layout the Layout
@@ -78,8 +89,8 @@ import { LabelRailResize } from "./label-rail-resize";
  *
  * The rail's header gains "Hide the points list" and the card's header "Hide
  * the court"; hidden, each leaves a pill in its corner — "Points · n / N"
- * top-right (with the way out beside it, since the rail's exit went with the
- * rail) and "Court" top-left — that brings it back. Both are remembered per
+ * top-right (with the browser's own full screen and the way out beside it,
+ * since the rail's header went with the rail) and "Court" top-left — that brings it back. Both are remembered per
  * browser (`FILM_RAIL_HIDDEN_STORAGE_KEY`, `FILM_COURT_HIDDEN_STORAGE_KEY`),
  * read after mount as every stored choice here is. Focus follows a press
  * across the swap, as the overlay court's minimise does.
@@ -152,6 +163,7 @@ export function LabelFilmView({
   checked,
   total,
   onExit,
+  wholeScreen,
   video,
   court,
   placing = false,
@@ -168,6 +180,11 @@ export function LabelFilmView({
   total: number;
   /** Back to the layout the console was in before this one. */
   onExit: () => void;
+  /**
+   * The browser's own full screen (`useBrowserFullscreen`), for the pill
+   * beside the exit while the rail is hidden. Not supported: no pill.
+   */
+  wholeScreen?: BrowserFullscreenControl;
   /** The shared `LabelVideoPlayer`, with `fill` and this transport inset. */
   video: (transportInset: number) => ReactNode;
   /** The shared `LabelCourtPanel`, with `fill` and this header as its handle. */
@@ -300,6 +317,45 @@ export function LabelFilmView({
                 </span>
               </button>
             </ChromeTooltip>
+            {wholeScreen?.supported ? (
+              <ChromeTooltip
+                label={
+                  wholeScreen.active
+                    ? WHOLE_SCREEN_COPY.leave
+                    : WHOLE_SCREEN_COPY.enter
+                }
+                detail={WHOLE_SCREEN_COPY.detail}
+                side="bottom"
+                align="end"
+              >
+                <button
+                  type="button"
+                  data-label-whole-screen=""
+                  aria-label={
+                    wholeScreen.active
+                      ? WHOLE_SCREEN_COPY.leave
+                      : WHOLE_SCREEN_COPY.enter
+                  }
+                  aria-pressed={wholeScreen.active}
+                  onClick={wholeScreen.toggle}
+                  className={cn(PILL, "px-2")}
+                >
+                  {wholeScreen.active ? (
+                    <Minimize
+                      className="size-3.5 text-white/80"
+                      strokeWidth={1.6}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Maximize
+                      className="size-3.5 text-white/80"
+                      strokeWidth={1.6}
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              </ChromeTooltip>
+            ) : null}
             <ChromeTooltip label="Exit full screen" side="bottom" align="end">
               <button
                 type="button"
