@@ -42,21 +42,19 @@ export interface LabelRowOperations {
   onAskResetPoint: (pointId: string) => void;
   /**
    * Put a stroke the SITE removed (a ghost, board 08m §3) back into the
-   * rally. Only the black view draws ghosts, so only it asks; the light
-   * table shows them as ordinary rows and never calls this.
+   * rally. The shown ghost row's Restore asks.
    */
   onRestoreSiteRemoval: (shotId: string) => void;
   /**
    * Say no to a suggestion the marks made on a point (board 08m §4): `key`
-   * is the suggestion's own (`missing_shot:<vendor stroke id>`). Only the
-   * black view draws suggestions, so only it asks.
+   * is the suggestion's own (`missing_shot:<vendor stroke id>`). The dashed
+   * suggestion's Dismiss asks.
    */
   onDismissSuggestion: (pointId: string, key: string) => void;
   /**
    * Add a point the vendor never saw beside `anchorPointId`: BEFORE it (the
    * default — board 08m §5's slot on the second of two points served from
-   * one side, which only the black view draws, and the ⋯ menu's "Add point
-   * above") or AFTER it ("Add point below"). The later points move up one
+   * one side, and the ⋯ menu's "Add point above") or AFTER it ("Add point below"). The later points move up one
    * and the new one takes the slot, in the anchor's game.
    */
   onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
@@ -64,15 +62,14 @@ export interface LabelRowOperations {
    * Move the points left over past a game's end — the rows after the one
    * that decided it, which read "Game–30" — into the next game, and on down
    * the match while games run over (`game-shift.ts`). `fromPointId` is one of
-   * those leftovers. The black rail's slot before the first of them asks;
-   * so does a leftover's ⋯ menu in the light table.
+   * those leftovers. The rail's slot before the first of them asks; so does
+   * a leftover's ⋯ menu.
    */
   onShiftGameOverflow: (fromPointId: string) => void;
   /**
    * Split a point at one of its shots (`point-split.ts`): that shot and
    * every shot after it become a new point right below. A shot row's
-   * "Split point here" asks, in the black well and the light card alike;
-   * never on the point's first live shot.
+   * "Split point here" asks; never on the point's first live shot.
    */
   onSplitPoint: (pointId: string, shotId: string) => void;
   /**
@@ -90,7 +87,13 @@ export interface LabelRowOperations {
   onSwitchPlayers: (pointId: string) => void;
 }
 
-/** What every row needs to draw and save its editors. */
+/**
+ * What every row needs to draw and save its editors. The rail builds ONE of
+ * these per change of its inputs and hands the same object to every row, so
+ * a memoised row re-renders only when something in here moves. Nothing that
+ * moves with the film belongs in it: what is playing goes to the rows it
+ * touches as their own props.
+ */
 export interface EditContext {
   editable: boolean;
   names: SideNames;
@@ -99,14 +102,12 @@ export interface EditContext {
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;
-  openTombstoneIds: ReadonlySet<string>;
-  onToggleTombstone?: (id: string) => void;
-  /** Ghosts folded open to their struck-through row (the black view only). */
+  /** Ghosts folded open to their struck-through row. */
   openGhostIds?: ReadonlySet<string>;
   onToggleGhost?: (id: string) => void;
   /** Every row, for the move menu's neighbouring games. */
   points: readonly LabelPoint[];
-  /** `labelScores(points, adScoring).points`, computed once by the table. */
+  /** `labelScores(points, adScoring).points`, computed once by the console. */
   scores: ReadonlyMap<string, LabelPointScore>;
   /**
    * `session.adScoring`, for the rows that re-run the scoreboard's rule —
@@ -114,7 +115,6 @@ export interface EditContext {
    * Absent means ad scoring, as the loader's own fallback does.
    */
   adScoring?: boolean;
-  playingShotId: string | null;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: import("./label-rail-tone").RailTone;
 }

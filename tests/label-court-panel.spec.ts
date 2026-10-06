@@ -163,16 +163,13 @@ test.describe("the court panel", () => {
     expect(subtitle(empty)).toBe("No point open");
   });
 
-  test("`fill`: the court's box takes the panel's height and is its size container", () => {
-    const box = (html: string) =>
-      /class="([^"]*)"/.exec(tagOf(html, "data-court-box"))![1].split(/\s+/);
-    const card = box(render({}));
-    expect(card).toContain("h-[222px]");
-    expect(card).toContain("shrink-0");
-    const filled = box(render({ fill: true }));
-    expect(filled).not.toContain("h-[222px]");
+  test("the court's box takes the panel's height and is its size container", () => {
+    const box = /class="([^"]*)"/
+      .exec(tagOf(render({}), "data-court-box"))![1]
+      .split(/\s+/);
+    expect(box).not.toContain("h-[222px]");
     for (const token of ["[container-type:size]", "min-h-0", "flex-1"]) {
-      expect(filled, token).toContain(token);
+      expect(box, token).toContain(token);
     }
   });
 });

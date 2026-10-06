@@ -44,7 +44,6 @@ import {
   nextStop,
   prevStop,
   type FilmStop,
-  type StopPoint,
 } from "./film-timeline";
 import { PLAYBACK_RATES } from "./film-transport";
 import type {
@@ -168,9 +167,9 @@ interface FilmPlayerProps {
    * The stops the prev/next buttons step through — the currently applied cut
    * on the film clock, so the buttons walk what the list is showing.
    */
-  stops: FilmStop<StopPoint>[];
+  stops: FilmStop[];
   /** Every timed point, for the set-by-set track, loop and dead time. */
-  allStops: FilmStop<StopPoint>[];
+  allStops: FilmStop[];
   /** Whether the playing point is bookmarked; null when no point is playing. */
   saved: boolean | null;
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
@@ -196,17 +195,6 @@ interface FilmPlayerProps {
   onToggleSaved: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
-  /**
-   * Draw the Save point glyph. Default true — the film tab. The admin
-   * labelling console has no bookmarks, and a glyph that is disabled forever
-   * reads as broken rather than as "not here".
-   */
-  showSave?: boolean;
-  /**
-   * Draw the fullscreen glyph. Default true — the film tab. The labelling
-   * console has no film room to open.
-   */
-  showFullscreen?: boolean;
   /**
    * A point step is about to happen — the transport's Previous/Next point
    * glyphs, or `step` called through the handle (the tab's arrow keys, the
@@ -309,8 +297,6 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onRetry,
       onToggleSaved,
       onEnterFullscreen,
-      showSave = true,
-      showFullscreen = true,
       onStep,
       clockTargetRef,
     },
@@ -364,7 +350,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     /** The generation whose resume intent has already been taken. */
     const appliedRef = useRef(-1);
     /** The point the film was last inside, for Loop (see the file note). */
-    const loopStopRef = useRef<FilmStop<StopPoint> | null>(null);
+    const loopStopRef = useRef<FilmStop | null>(null);
 
     /** One place that moves the playhead everywhere it is read. */
     const pushTime = useCallback(
@@ -839,21 +825,19 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
               <div className="flex-1" />
 
-              {showSave && (
-                <Glyph
-                  label={saved ? "Saved — remove bookmark" : "Save point"}
-                  shortcut="S"
-                  pressed={saved === true}
-                  disabled={saved === null}
-                  onClick={onToggleSaved}
-                >
-                  <Bookmark
-                    {...ICON}
-                    aria-hidden="true"
-                    fill={saved ? "currentColor" : "none"}
-                  />
-                </Glyph>
-              )}
+              <Glyph
+                label={saved ? "Saved — remove bookmark" : "Save point"}
+                shortcut="S"
+                pressed={saved === true}
+                disabled={saved === null}
+                onClick={onToggleSaved}
+              >
+                <Bookmark
+                  {...ICON}
+                  aria-hidden="true"
+                  fill={saved ? "currentColor" : "none"}
+                />
+              </Glyph>
 
               <Glyph
                 label={
@@ -906,14 +890,12 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                 )}
               </Glyph>
 
-              {showFullscreen && (
-                <Glyph
-                  label="Open the film room fullscreen"
-                  onClick={onEnterFullscreen}
-                >
-                  <Maximize {...ICON} aria-hidden="true" />
-                </Glyph>
-              )}
+              <Glyph
+                label="Open the film room fullscreen"
+                onClick={onEnterFullscreen}
+              >
+                <Maximize {...ICON} aria-hidden="true" />
+              </Glyph>
             </div>
           </div>
         </div>

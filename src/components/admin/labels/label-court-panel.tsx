@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useMemo,
-  useSyncExternalStore,
-  type ComponentPropsWithoutRef,
-  type ReactNode,
-} from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
@@ -25,19 +20,23 @@ import type { SideNames } from "./label-format";
 import type { VideoClock } from "./video-clock";
 
 /**
- * The court card's body (board 08i), wherever the card is: the two-line
- * readout header, the court itself, and the foot — the Contact / Landing
- * switch and "Flip side" while placing, the Hit / Landed legend otherwise.
+ * The court panel's body (board 08i): the two-line readout header, the court
+ * itself, and the foot — the Contact / Landing switch and "Flip side" while
+ * placing, the Hit / Landed legend otherwise.
  *
- * `LabelCourtDock` renders it inside its floating shell (Overlay); the
- * console renders it straight into the docked band or column (T24). The
- * shell owns the dark card — ground, padding, radius, shadow and the blue
- * outline while placing — so this body never paints its own ground.
+ * The console renders it into each layout's court region, and the view owns
+ * that region — ground, padding, radius, shadow and the blue outline while
+ * placing — so this body never paints its own ground.
+ *
+ * The court box takes the rest of the panel's height and is the court's size
+ * container: the court scales to the largest box of its own proportions that
+ * fits (`LabelCourt`), centred, so a region shorter or taller than the art
+ * shrinks or grows the court rather than clipping it.
  *
  * ── Two states ──────────────────────────────────────────────────────────────
  * - **Not placing** (the film is playing, nothing is selected, or the session
  *   is read-only): the WHOLE court, read-only. A click does nothing. There is
- *   no shot list — the table is the list.
+ *   no shot list — the rail is the list.
  * - **Placing** (a stroke is selected and the console is editable): the court
  *   ZOOMS to the half the next click belongs on (court-placement.ts), with the
  *   run-off round it clickable for a ball that went out. The foot holds the
@@ -48,7 +47,7 @@ import type { VideoClock } from "./video-clock";
  * Never the whole point at once. With nothing selected the marks follow the
  * film the way the Video tab's court does (`label-court-marks.ts`): each
  * contact appears at its stroke, each landing when the ball comes down, holds,
- * fades and goes — so the card reads the rally one stroke at a time, and
+ * fades and goes — so the panel reads the rally one stroke at a time, and
  * pausing freezes it. The body subscribes to the console's `VideoClock`
  * itself, with the marks' string key as its snapshot, so an opacity step
  * re-renders this body and nothing else.
@@ -63,13 +62,13 @@ import type { VideoClock } from "./video-clock";
 /** No point open: one shared empty list, so the marks memo holds. */
 const NO_SHOTS: readonly LabelShot[] = [];
 
-export interface CourtReadout {
+interface CourtReadout {
   title: string;
   subtitle: string | null;
 }
 
 /**
- * The card's two header lines.
+ * The panel's two header lines.
  *
  * Placing: "Shot 3 · contact" over whose half is on screen — the hitter's
  * for a contact, the other player's for a landing, and "Flipped to <hitter>'s
@@ -78,7 +77,7 @@ export interface CourtReadout {
  * Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the lit (playing)
  * stroke, or just the stroke count; "Court" with no point open.
  */
-export function courtReadout(
+function courtReadout(
   point: LabelPoint | null,
   placement: PlacementState | null,
   litShotId: string | null,
@@ -130,7 +129,7 @@ export function courtReadout(
 }
 
 /** The selected stroke, if it is one of the open point's live strokes. */
-export function selectedStroke(
+function selectedStroke(
   point: LabelPoint | null,
   placement: PlacementState,
 ): LabelShot | null {
@@ -144,7 +143,7 @@ export function selectedStroke(
 
 /**
  * Whether the court is taking clicks: a live stroke of the open point is
- * selected and the console may write. The shell draws its blue outline from
+ * selected and the console may write. The view draws its blue outline from
  * this, the body its zoomed half and its foot.
  */
 export function isPlacing(
@@ -165,10 +164,6 @@ export function LabelCourtPanel({
   onPlace,
   onTarget,
   onFlip,
-  headerProps,
-  headerClassName,
-  headerTrailing,
-  fill = false,
 }: {
   /** The open point; its live strokes are the marks. Null: an empty court. */
   point: LabelPoint | null;
@@ -187,25 +182,6 @@ export function LabelCourtPanel({
   onTarget: (target: PlacementTarget) => void;
   /** "Flip side". */
   onFlip: () => void;
-  /**
-   * Spread onto the header row — the floating shell makes it the drag handle
-   * (`data-court-handle` and the hook's pointer props). Absent: a plain header.
-   */
-  headerProps?: ComponentPropsWithoutRef<"div"> & {
-    "data-court-handle"?: string;
-  };
-  headerClassName?: string;
-  /** The header's trailing cluster — the shell's grip and minimise button. */
-  headerTrailing?: ReactNode;
-  /**
-   * `false` (the floating card): the court box is the art's own 222px.
-   * `true` (a docked panel): the box takes the rest of the panel's height
-   * and is the court's size container — the court scales to the largest box
-   * of its own proportions that fits (`LabelCourt`'s `fit`), centred, so a
-   * panel the divider has made shorter or taller than the art shrinks or
-   * grows the court rather than clipping it.
-   */
-  fill?: boolean;
 }) {
   const shots = point?.shots ?? NO_SHOTS;
   const selected = selectedStroke(point, placement);
@@ -254,13 +230,7 @@ export function LabelCourtPanel({
         {prompt}
       </span>
 
-      <div
-        {...headerProps}
-        className={cn(
-          "flex h-[34px] shrink-0 items-start justify-between gap-2",
-          headerClassName,
-        )}
-      >
+      <div className="flex h-[34px] shrink-0 items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span
             data-court-title=""
@@ -275,17 +245,11 @@ export function LabelCourtPanel({
             {readout.subtitle}
           </span>
         </div>
-        {headerTrailing}
       </div>
 
       <div
         data-court-box=""
-        className={cn(
-          "my-2 flex justify-center",
-          fill
-            ? "[container-type:size] min-h-0 flex-1 items-center overflow-hidden"
-            : "h-[222px] shrink-0",
-        )}
+        className="[container-type:size] my-2 flex min-h-0 flex-1 items-center justify-center overflow-hidden"
       >
         <LabelCourt
           strokes={strokes}
@@ -294,7 +258,6 @@ export function LabelCourtPanel({
           target={placing ? placement.target : null}
           prompt={prompt}
           onPlace={placing ? onPlace : undefined}
-          fit={fill}
         />
       </div>
 

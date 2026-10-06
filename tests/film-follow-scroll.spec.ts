@@ -12,10 +12,10 @@ import {
 
 /**
  * The pure half of `useFollowScroll` — the hook the Film tab's point list
- * (a list element) and the labelling console's points table (the page) both
- * follow the video with. The DOM reads differ per scroller; what the hook
- * does with them is these three functions, so they are fed the same inputs a
- * list box and a viewport box would produce and must agree.
+ * and the labelling console's points rail both follow the video with, each
+ * on a scrolling element of its own. What the hook does with a scroller's
+ * box is these three functions, so they are fed two boxes of different
+ * sizes and must agree.
  */
 
 /** The report column's scroller: a 500px list, 120px down the page. */
@@ -26,8 +26,8 @@ const LIST_BOX: FollowBox = {
   maxScrollTop: 2000,
 };
 
-/** The console's scroller: the viewport, no insets. */
-const PAGE_BOX: FollowBox = {
+/** The console's rail: a 900px scroller from the top of the window. */
+const TALL_BOX: FollowBox = {
   top: 0,
   bottom: 900,
   scrollTop: 300,
@@ -64,9 +64,9 @@ test.describe("what the follow effect scrolls to", () => {
 });
 
 test.describe("the re-follow jump", () => {
-  test("puts the row 8px under the box's top, for a list and for the page alike", () => {
+  test("puts the row 8px under the box's top, in either box alike", () => {
     expect(REFOLLOW_JUMP_INSET_PX).toBe(8);
-    for (const box of [LIST_BOX, PAGE_BOX]) {
+    for (const box of [LIST_BOX, TALL_BOX]) {
       // The row is 200px into the box; the scroller moves 192px on.
       expect(followScrollTarget("jump", rowIn(box, 200), box)).toBe(
         300 + 200 - 8,
@@ -87,13 +87,13 @@ test.describe("the re-follow jump", () => {
     expect(followScrollTarget("jump", rowIn(LIST_BOX, 3000), LIST_BOX)).toBe(
       LIST_BOX.maxScrollTop,
     );
-    expect(followScrollTarget("jump", rowIn(PAGE_BOX, 9000), PAGE_BOX)).toBe(
-      PAGE_BOX.maxScrollTop,
+    expect(followScrollTarget("jump", rowIn(TALL_BOX, 9000), TALL_BOX)).toBe(
+      TALL_BOX.maxScrollTop,
     );
   });
 
   test("does nothing when the row is already where the jump would put it", () => {
-    for (const box of [LIST_BOX, PAGE_BOX]) {
+    for (const box of [LIST_BOX, TALL_BOX]) {
       expect(followScrollTarget("jump", rowIn(box, 8), box)).toBeNull();
       // Within a pixel counts as there.
       expect(followScrollTarget("jump", rowIn(box, 8.5), box)).toBeNull();
@@ -102,7 +102,7 @@ test.describe("the re-follow jump", () => {
   });
 
   test("takes the inset it is given", () => {
-    expect(followScrollTarget("jump", rowIn(PAGE_BOX, 200), PAGE_BOX, 56)).toBe(
+    expect(followScrollTarget("jump", rowIn(TALL_BOX, 200), TALL_BOX, 56)).toBe(
       300 + 200 - 56,
     );
   });
@@ -110,7 +110,7 @@ test.describe("the re-follow jump", () => {
 
 test.describe("continuous keep-in-view", () => {
   test("moves nothing while the row is wholly inside the box", () => {
-    for (const box of [LIST_BOX, PAGE_BOX]) {
+    for (const box of [LIST_BOX, TALL_BOX]) {
       expect(followScrollTarget("keep", rowIn(box, 0), box)).toBeNull();
       expect(followScrollTarget("keep", rowIn(box, 200), box)).toBeNull();
       const height = box.bottom - box.top;
@@ -121,7 +121,7 @@ test.describe("continuous keep-in-view", () => {
   });
 
   test("brings a row below the box up by the least it can — the same travel in both boxes", () => {
-    for (const box of [LIST_BOX, PAGE_BOX]) {
+    for (const box of [LIST_BOX, TALL_BOX]) {
       const height = box.bottom - box.top;
       // The row's bottom is 30px past the box's bottom.
       const row = rowIn(box, height - 52 + 30);
@@ -134,22 +134,10 @@ test.describe("continuous keep-in-view", () => {
   });
 
   test("brings a row above the box down by the least it can", () => {
-    for (const box of [LIST_BOX, PAGE_BOX]) {
+    for (const box of [LIST_BOX, TALL_BOX]) {
       expect(followScrollTarget("keep", rowIn(box, -70), box)).toBe(300 - 70);
       expect(followScrollTarget("keep", rowIn(box, -1), box)).toBe(299);
     }
-  });
-
-  test("a page box with fixed chrome is just a smaller box", () => {
-    // 56px of chrome over the viewport's top: the hook reads the box as
-    // starting under it, and the arithmetic is unchanged.
-    const inset = { ...PAGE_BOX, top: 56 };
-    expect(followScrollTarget("keep", { top: 30, bottom: 82 }, inset)).toBe(
-      300 + 30 - 56,
-    );
-    expect(
-      followScrollTarget("keep", { top: 56, bottom: 108 }, inset),
-    ).toBeNull();
   });
 });
 

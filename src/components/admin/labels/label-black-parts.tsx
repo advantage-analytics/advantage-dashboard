@@ -35,8 +35,8 @@ const TEXT_ACTION_INK: Record<BlackTextActionInk, string> = {
 };
 
 /**
- * A text action on black — the light table's blue words in the room's white
- * (or the slot's amber), to full white on hover. Its `onClick` is the
+ * A text action in the rail — words in the rail's ink (or the slot's amber),
+ * to full strength on hover. Its `onClick` is the
  * caller's own, so a click that must not reach the row under it stops
  * propagation there, where a spec can see it.
  */
@@ -57,9 +57,8 @@ export function BlackTextAction({
 }
 
 /**
- * Undo, on black: the light table's blue words are the room's white ones —
- * 70% to full on hover, as every text action in the dark tone. It never
- * reaches the row under it.
+ * Undo, in the rail: the plain text action — 70% of the rail's ink, to full
+ * on hover. It never reaches the row under it.
  */
 export function BlackUndoButton({
   label,

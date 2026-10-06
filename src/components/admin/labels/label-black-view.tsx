@@ -31,7 +31,7 @@ const RAIL_WIDTH_PERSIST_MS = 150;
  * it is NOT a portal: it stays a child of the console's root
  * (`data-label-console`), so the `--film-t` clock the player writes onto that
  * root still reaches the rail's rows, and every row handler is the one the
- * light table already has. The confirm dialog, the `FloatMenu`s and the
+ * docked rail has. The confirm dialog, the `FloatMenu`s and the
  * tooltips portal to `body` at the same `z-50`; appended after this layer in
  * the DOM, they paint above it, which is what a menu over a row needs.
  *
@@ -79,7 +79,7 @@ const RAIL_WIDTH_PERSIST_MS = 150;
  */
 
 /** What the court always keeps of the stage's height. */
-export const BLACK_COURT_MIN = "max(320px, 40cqh)";
+const BLACK_COURT_MIN = "max(320px, 40cqh)";
 
 /**
  * The film's width: the stage's, or — where that would crowd the court out —
@@ -127,7 +127,7 @@ export function inertOutside(
  * (`label-side-view.tsx`), whose rail is the same rail at the same width
  * under the same key.
  */
-export interface RailWidth {
+interface RailWidth {
   railWidth: number;
   /** The width asked for, in px; clamped here. */
   resizeRail: (px: number) => void;
@@ -207,7 +207,7 @@ export function LabelBlackView({
   initialRailWidth?: number;
   /** The shared `LabelVideoPlayer`. */
   video: ReactNode;
-  /** The shared `LabelCourtPanel`, with `fill`. */
+  /** The shared `LabelCourtPanel`. */
   court: ReactNode;
   /** A stroke is selected and a court click would write: the court's outline. */
   placing?: boolean;

@@ -25,7 +25,7 @@ import type { LabelShot } from "@/lib/services/labels/session";
  * tab's `toCourtPercent`, whose frame and orientation are different.
  */
 
-export interface CourtMarkOpacity {
+interface CourtMarkOpacity {
   shotId: string;
   /** `markOpacity` of the film time against the stroke's own `videoTime`. */
   contactOpacity: number;

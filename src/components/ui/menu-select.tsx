@@ -92,7 +92,7 @@ export function MenuSelect<T extends string>({
   scroll?: boolean;
   /**
    * The MENU's tone, handed straight to `FloatMenu`: `"dark"` for a select on
-   * a black surface (the label console's full-screen rows), where a white
+   * a black surface (the label console's rail in its dark tone), where a white
    * menu would be the brightest thing in the room. The trigger is not
    * touched — a dark surface styles its own through `className`. Default
    * `"light"`.

@@ -197,36 +197,28 @@ export function pointMenuActions(
 }
 
 /**
- * The row's ⋯ — board 08g's `.mo`, revealed on the row's hover, on focus and
- * on the open point. Two panels in one menu: the actions, and — behind
+ * The row's ⋯ — board 08l's `.bk-ib`, a 22px trigger in the rail's ink. The
+ * row's actions group owns the reveal (hover, focus, the playing row); inside
+ * it the ⋯ is just there. Two panels in one menu: the actions, and — behind
  * "Move to game…" — the games either side of the point.
- *
- * `tone="dark"` is the black full-screen view's rail (board 08l's `.bk-ib`):
- * the same menu on the dark surface behind a 22px white trigger. Paint only —
- * every row and every request is the light one's.
  */
 export function PointMenu({
   point,
   number,
-  open: rowOpen,
   edit,
   operations,
-  tone = "light",
-  menu = tone,
+  menu = "dark",
 }: {
   point: LabelPoint;
   number: number;
-  open: boolean;
   edit: EditContext;
   operations: LabelRowOperations;
-  tone?: FloatMenuTone;
   /**
-   * The menu's tone when it is not the trigger's: the rail on a light ground
-   * keeps its 22px trigger but opens a light menu (`label-rail-tone.ts`).
+   * The tone of the menu the ⋯ opens — the rail's. The menu is portalled, so
+   * the rail's palette does not reach it (`label-rail-tone.ts`).
    */
   menu?: FloatMenuTone;
 }) {
-  const dark = tone === "dark";
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"actions" | "move">("actions");
   // The requests are planned only while the menu is open: planning rescans
@@ -288,22 +280,12 @@ export function PointMenu({
                 aria-expanded={open}
                 data-point-menu=""
                 className={cn(
-                  "flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[opacity,color,background-color] duration-200 group-hover/row:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
-                  dark
-                    ? "size-[22px] hover:bg-white/[0.08] hover:text-white"
-                    : "size-7 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]",
-                  dark
-                    ? open
-                      ? "bg-white/[0.08] text-white"
-                      : "text-white/55"
-                    : open
-                      ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
-                      : "text-[var(--ink-500)]",
-                  open || rowOpen ? "opacity-100" : "opacity-0",
+                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[color,background-color] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+                  open ? "bg-white/[0.08] text-white" : "text-white/55",
                 )}
               >
                 <MoreHorizontal
-                  className={dark ? "size-3.5" : "size-[15px]"}
+                  className="size-3.5"
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />

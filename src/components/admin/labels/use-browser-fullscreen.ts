@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 /**
- * The browser's own full screen, for the console's two full-screen layouts.
+ * The browser's own full screen, for the console's full-screen layout.
  *
- * "Full screen" and "Film full screen" are `fixed inset-0` layers: they fill
- * the browser's viewport, and the browser's tabs and address bar stay above
- * them. This is the second step — the Fullscreen API — that takes those away
- * too, so the film has the whole display.
+ * "Full screen" is a `fixed inset-0` layer: it fills the browser's viewport,
+ * and the browser's tabs and address bar stay above it. This is the second
+ * step — the Fullscreen API — that takes those away too, so the console has
+ * the whole display.
  *
  * It is asked of `document.documentElement`, the whole page, never of the
  * layer: the Fullscreen API shows only the fullscreened element's subtree,

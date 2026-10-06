@@ -13,7 +13,7 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
 
 /**
  * The console's one confirm, drawn by the product's `ConfirmDialog`: delete a
- * stroke (with the reason the table requires), delete a point, move a point
+ * stroke (with the reason `label_shots` requires), delete a point, move a point
  * into a game someone else serves, or reset an edited stroke or point to its
  * seed.
  *
@@ -108,7 +108,7 @@ function LabelConfirmBody({
 
 /**
  * Why the stroke goes — the DS single-choice `Radio`: a check-dot beside each
- * reason, Signal Blue when chosen. Required: the table will not hold a
+ * reason, Signal Blue when chosen. Required: `label_shots` will not hold a
  * deleted stroke without one.
  */
 export function DeleteReasonChoice({

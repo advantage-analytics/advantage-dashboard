@@ -171,9 +171,6 @@ const PENDING_SHOT_PREFIX = "pending-shot-";
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
 
-/** Nothing covers the rail's rows: the follow scroll keeps clear of nothing. */
-const NO_INSETS = { top: 0, bottom: 0 };
-
 /** One frozen `follow`, so re-following while following changes no identity. */
 const FOLLOW: PointFocus = { mode: "follow" };
 
@@ -341,7 +338,6 @@ export function LabelConsole({
   onSavePoint,
   operations,
   initialConfirm = null,
-  initialOpenTombstoneIds,
   initialOpenGhostIds,
   initialVideoTime = null,
   initialPointFocus,
@@ -383,8 +379,6 @@ export function LabelConsole({
   operations?: LabelConsoleOperations;
   /** A confirm open on first render — for specs. */
   initialConfirm?: LabelConfirm | null;
-  /** Tombstones expanded to their ghost row on first render. */
-  initialOpenTombstoneIds?: readonly string[];
   /** Site-removed strokes shown as their struck-through row on first render. */
   initialOpenGhostIds?: readonly string[];
   /** The video's position on first render, on the analysis clock — for specs. */
@@ -462,9 +456,6 @@ export function LabelConsole({
     INITIAL_SAVE_STATUS,
   );
   const [confirm, setConfirm] = useState<LabelConfirm | null>(initialConfirm);
-  const [openTombstones, setOpenTombstones] = useState<ReadonlySet<string>>(
-    () => new Set(initialOpenTombstoneIds ?? []),
-  );
   // The ghosts (site-removed strokes, board 08m §3) the full-screen rail
   // shows as their struck-through row. Only that rail reads it.
   const [openGhosts, setOpenGhosts] = useState<ReadonlySet<string>>(
@@ -478,7 +469,7 @@ export function LabelConsole({
   const sideScrollerRef = useRef<HTMLDivElement | null>(null);
   const blackScrollerRef = useRef<HTMLDivElement | null>(null);
   // The root: the video writes the film's clock onto it (`--film-t`), so the
-  // playing row's progress rule and the transport read one clock (T21).
+  // playing row's progress rule and the transport read one clock.
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
@@ -603,7 +594,7 @@ export function LabelConsole({
     [points, playingKey],
   );
   // The scoreboard over the rows as they stand, once: the rail's scores and
-  // bands and the dock's readout all read this.
+  // bands and the player's readout all read this.
   const scores = useMemo(
     () => labelScores(points, session.adScoring),
     [points, session.adScoring],
@@ -901,7 +892,6 @@ export function LabelConsole({
     ).then((saved) => {
       if (saved) syncEnding(owner, change);
     });
-    closeTombstone(shotId);
   }
 
   /**
@@ -1268,7 +1258,6 @@ export function LabelConsole({
           statusBeforeDelete: before.statusBeforeDelete,
         })),
     );
-    closeTombstone(pointId);
   }
 
   function addShot(pointId: string, afterShotId: string | null) {
@@ -1525,9 +1514,7 @@ export function LabelConsole({
     );
   }
 
-  const toggleTombstone = toggleIn(setOpenTombstones);
-  const closeTombstone = removeFrom(setOpenTombstones);
-  const toggleGhost = toggleIn(setOpenGhosts);
+  const toggleGhost = useMemo(() => toggleIn(setOpenGhosts), []);
   const closeGhost = removeFrom(setOpenGhosts);
 
   function confirmed(question: LabelConfirm, reason: LabelDeleteReason | null) {
@@ -1552,46 +1539,64 @@ export function LabelConsole({
   }
 
   const operable = editable && operations !== undefined;
-  const rowOperations: LabelRowOperations | undefined = operable
-    ? {
-        onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
-          setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber }),
-        onAskDeletePoint: (pointId) => {
-          const point = points.find((p) => p.id === pointId);
-          if (!point) return;
-          setConfirm({
-            kind: "delete-point",
-            pointId,
-            pointNumber: point.pointIndex + 1,
-            shotCount: point.shots.filter((shot) => shot.status !== "deleted")
-              .length,
-          });
-        },
-        onRestoreShot: restoreShot,
-        onRestorePoint: restorePoint,
-        onRestoreSiteRemoval: restoreSiteRemoval,
-        onDismissSuggestion: dismissSuggestion,
-        onInsertPoint: insertPoint,
-        onShiftGameOverflow: shiftGameOverflow,
-        onSplitPoint: splitPoint,
-        onCombinePoints: combinePoints,
-        onSwitchPlayers: switchPlayers,
-        onMovePoint: requestMove,
-        onSetChecked: setChecked,
-        onAddShot: addShot,
-        onAskResetShot: (shotId, shotNumber, pointNumber) =>
-          setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
-        onAskResetPoint: (pointId) => {
-          const point = points.find((p) => p.id === pointId);
-          if (!point) return;
-          setConfirm({
-            kind: "reset-point",
-            pointId,
-            pointNumber: point.pointIndex + 1,
-          });
-        },
-      }
-    : undefined;
+
+  // ── What the rail is handed ───────────────────────────────────────────────
+  //
+  // The rail's rows are memoised, so every callback they receive keeps ONE
+  // identity for the console's life (`useLatestHandlers`) and runs whatever
+  // this render defined. Without that each render — one per stroke the film
+  // crosses — would hand every row new functions and re-render them all.
+  const rowOperations = useLatestHandlers<LabelRowOperations>({
+    onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
+      setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber }),
+    onAskDeletePoint: (pointId) => {
+      const point = points.find((p) => p.id === pointId);
+      if (!point) return;
+      setConfirm({
+        kind: "delete-point",
+        pointId,
+        pointNumber: point.pointIndex + 1,
+        shotCount: point.shots.filter((shot) => shot.status !== "deleted")
+          .length,
+      });
+    },
+    onRestoreShot: restoreShot,
+    onRestorePoint: restorePoint,
+    onRestoreSiteRemoval: restoreSiteRemoval,
+    onDismissSuggestion: dismissSuggestion,
+    onInsertPoint: insertPoint,
+    onShiftGameOverflow: shiftGameOverflow,
+    onSplitPoint: splitPoint,
+    onCombinePoints: combinePoints,
+    onSwitchPlayers: switchPlayers,
+    onMovePoint: requestMove,
+    onSetChecked: setChecked,
+    onAddShot: addShot,
+    onAskResetShot: (shotId, shotNumber, pointNumber) =>
+      setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
+    onAskResetPoint: (pointId) => {
+      const point = points.find((p) => p.id === pointId);
+      if (!point) return;
+      setConfirm({
+        kind: "reset-point",
+        pointId,
+        pointNumber: point.pointIndex + 1,
+      });
+    },
+  });
+  const railHandlers = useLatestHandlers({
+    togglePoint,
+    selectShot,
+    holdOnEditorFocus,
+    patchPoint,
+    patchShot,
+    setGameServer,
+    setGameType,
+    findGap,
+    fixEnteredScore: (sets: number[][]) =>
+      void updateSessionFields({ final_score: sets }),
+    videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
+  });
 
   // Enter marks the open point checked — but never from inside a control,
   // where Enter already means "open this cell" or "press this button". Space
@@ -1664,8 +1669,7 @@ export function LabelConsole({
 
   // The follow scroll, on the RAIL's scroller: the page is bounded to the
   // viewport and the rail is what scrolls, so the hook takes its element and
-  // measures rows against the rail's own box. Nothing floats over it and it
-  // has no stuck header, so there is nothing to keep clear of.
+  // measures rows against the rail's own box.
   useFollowScroll({
     scroller: scrollerRef,
     held,
@@ -1675,15 +1679,14 @@ export function LabelConsole({
     wellOpen: playingPointId !== null,
     displayedPointId: currentPointId,
     onHoldPoint: holdPoint,
-    insets: NO_INSETS,
     // The point row with its lit stroke: after a seek back to an earlier
     // point the stroke alone would park at the box's top, its row cut above.
     keepPointRow: true,
   });
 
-  // The way back while held and a point is playing (T23); nothing in follow
-  // mode, nothing in dead time. The number is the table's own (`pointIndex +
-  // 1`, the dock bar's "Point N").
+  // The way back while held and a point is playing; nothing in follow mode,
+  // nothing in dead time. The number is the rail's own (`pointIndex + 1`,
+  // the transport's "Point N").
   const affordance = followAffordance(
     pointFocus,
     playingPointId !== null && nowPlaying
@@ -1701,7 +1704,7 @@ export function LabelConsole({
     void patchShot(shot.id, step.patch);
   }
 
-  // The card's Contact / Landing switch: the stored contact, when there is
+  // The court panel's Contact / Landing switch: the stored contact, when there is
   // one, says which half the hitter was on.
   function setTarget(target: PlacementTarget) {
     const shot =
@@ -1738,7 +1741,6 @@ export function LabelConsole({
       onPlace={place}
       onTarget={setTarget}
       onFlip={() => setPlacement(flipPlacement)}
-      fill
     />
   );
   const rail = (
@@ -1755,7 +1757,7 @@ export function LabelConsole({
       onFullScreen={fullScreen ? undefined : enterFullScreen}
       wholeScreen={fullScreen ? wholeScreen : undefined}
       scrollerRef={scrollerRef}
-      onFocusCapture={holdOnEditorFocus}
+      onFocusCapture={railHandlers.holdOnEditorFocus}
       affordance={affordance}
       onFollow={followPlayback}
       points={points}
@@ -1763,17 +1765,15 @@ export function LabelConsole({
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}
-      onTogglePoint={togglePoint}
+      onTogglePoint={railHandlers.togglePoint}
       editable={editable}
       selectedShotId={placement.shotId}
-      onSelectShot={selectShot}
-      onPatchPoint={patchPoint}
-      onPatchShot={patchShot}
-      operations={rowOperations}
-      onSetGameServer={operable ? setGameServer : undefined}
-      onSetGameType={operable ? setGameType : undefined}
-      openTombstoneIds={openTombstones}
-      onToggleTombstone={toggleTombstone}
+      onSelectShot={railHandlers.selectShot}
+      onPatchPoint={railHandlers.patchPoint}
+      onPatchShot={railHandlers.patchShot}
+      operations={operable ? rowOperations : undefined}
+      onSetGameServer={operable ? railHandlers.setGameServer : undefined}
+      onSetGameType={operable ? railHandlers.setGameType : undefined}
       openGhostIds={openGhosts}
       onToggleGhost={toggleGhost}
       playingPointId={playingPointId}
@@ -1782,17 +1782,9 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
-      onFixEnteredScore={
-        operable
-          ? (sets) => void updateSessionFields({ final_score: sets })
-          : undefined
-      }
-      onVideoEndsEarly={
-        operable
-          ? () => void updateSessionFields({ video_ends_early: true })
-          : undefined
-      }
-      onFindGap={operable ? findGap : undefined}
+      onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
+      onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
+      onFindGap={operable ? railHandlers.findGap : undefined}
     />
   );
   const View = fullScreen ? LabelBlackView : LabelSideView;
@@ -1858,6 +1850,33 @@ export function LabelConsole({
       ) : null}
     </div>
   );
+}
+
+/**
+ * `handlers` as functions that keep ONE identity for the component's life
+ * and each run the handler of that name from the latest committed render —
+ * so a memoised child handed them never re-renders for a new closure, and
+ * never calls a stale one. The real handlers live in a ref written after
+ * each commit (an effect, as `checkOpenPoint` is: a handler runs on a later
+ * event, never inside the render that defined it); the proxies are made
+ * once, for the names the first render gave.
+ */
+export function useLatestHandlers<
+  T extends { [K in keyof T]: (...args: never[]) => unknown },
+>(handlers: T): T {
+  const latest = useRef(handlers);
+  useEffect(() => {
+    latest.current = handlers;
+  });
+  const [stable] = useState(() => {
+    const proxies = {} as T;
+    for (const name of Object.keys(handlers) as (keyof T)[]) {
+      proxies[name] = ((...args: never[]) =>
+        latest.current[name](...args)) as T[keyof T];
+    }
+    return proxies;
+  });
+  return stable;
 }
 
 /** The row operations' server actions, as the page hands them in. */

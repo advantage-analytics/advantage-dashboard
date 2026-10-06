@@ -19,7 +19,7 @@ import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
 } from "./fixtures/label-session";
-import { createLoader } from "./fixtures/vm-modules";
+import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
  * T7 in the console, rendered offline through `fixtures/vm-modules`: the ✕
@@ -232,10 +232,10 @@ function pointRowTree(pointId: string) {
   const { asked, operations } = askSpies();
   const { BlackPointRow } = loader().load(
     "src/components/admin/labels/label-black-point-row.tsx",
-  ) as { BlackPointRow: (p: Props) => React.ReactNode };
+  );
   const session: LabelSession = labelSessionFixture();
   const scores = labelScores(session.points, session.adScoring).points;
-  const tree = BlackPointRow({
+  const tree = renderFunction<Props>(BlackPointRow)({
     point: session.points.find((point) => point.id === pointId),
     open: false,
     playing: false,
@@ -245,10 +245,8 @@ function pointRowTree(pointId: string) {
       names: NAMES,
       selectedShotId: null,
       operations,
-      openTombstoneIds: new Set<string>(),
       points: session.points,
       scores,
-      playingShotId: null,
     },
   });
   return { tree, asked };
@@ -539,7 +537,6 @@ test.describe("tombstones", () => {
   test("read-only, a tombstone still shows — without Undo", () => {
     const html = renderConsole({
       initialExpandedPointId: P1,
-      initialOpenTombstoneIds: ["s-phantom"],
     });
     expect(html).toContain('data-tombstone-id="s-phantom"');
     expect(html).toContain(`data-tombstone-id="${P3}"`);
@@ -793,8 +790,8 @@ test.describe("switch players", () => {
     expect(after).toBeLessThan(move);
     expect(source).toContain('label="Switch players"');
     expect(source).toContain("ArrowLeftRight");
-    // One menu serves both of the rail's grounds.
-    expect(source).toContain('tone === "dark"');
+    // One menu serves both of the rail's grounds: its tone is the rail's.
+    expect(source).toContain("tone={menu}");
   });
 
   test("read-only, there is no menu to offer it", () => {

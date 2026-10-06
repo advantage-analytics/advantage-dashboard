@@ -15,7 +15,7 @@ export type LabelConfirm =
   | {
       kind: "delete-shot";
       shotId: string;
-      /** As the table numbers it: live strokes, 1…n. */
+      /** As the rail numbers it: live strokes, 1…n. */
       shotNumber: number;
       pointNumber: number;
     }
@@ -44,7 +44,7 @@ export type LabelConfirm =
   | {
       kind: "reset-shot";
       shotId: string;
-      /** As the table numbers it: live strokes, 1…n. */
+      /** As the rail numbers it: live strokes, 1…n. */
       shotNumber: number;
       pointNumber: number;
     }

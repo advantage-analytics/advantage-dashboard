@@ -47,8 +47,8 @@ export const LAYOUT_MODE_LABEL: Record<
 };
 
 /**
- * A stored mode. Anything else — nothing, or a mode this console no longer
- * has (the overlay, the docked band, the film full screen) — is the default.
+ * A stored mode. Anything else — nothing, or a value that names no mode of
+ * this console — is the default.
  */
 export function parseLayoutMode(
   raw: string | null | undefined,

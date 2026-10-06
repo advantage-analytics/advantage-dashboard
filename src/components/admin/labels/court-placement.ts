@@ -1,6 +1,6 @@
 /**
  * Placing the selected stroke on the court by clicking it — board 08i's
- * floating court card. Pure, so the click sequence is a spec rather than a
+ * court panel. Pure, so the click sequence is a spec rather than a
  * hope.
  *
  * The sequence cycles: the first click on a newly selected stroke is where it
@@ -190,7 +190,7 @@ export function nextPlacement(
 
 /**
  * What the next click will do, for the court's accessible name. `shotNumber`
- * is the number the table shows the stroke under (live strokes, 1…n).
+ * is the number the rail shows the stroke under (live strokes, 1…n).
  */
 export function placementPrompt(
   state: PlacementState,

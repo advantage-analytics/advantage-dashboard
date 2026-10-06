@@ -111,10 +111,8 @@ function editContext() {
     onPatchPoint: noop,
     onPatchShot: noop,
     operations: OPERATIONS,
-    openTombstoneIds: new Set<string>(),
     points: session.points,
     scores: labelScores(session.points, session.adScoring).points,
-    playingShotId: null,
   };
 }
 

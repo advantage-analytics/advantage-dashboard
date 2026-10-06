@@ -45,7 +45,7 @@ export function LabelSideView({
   initialRailWidth?: number;
   /** The shared `LabelVideoPlayer`. */
   video: ReactNode;
-  /** The shared `LabelCourtPanel`, with `fill`. */
+  /** The shared `LabelCourtPanel`. */
   court: ReactNode;
   /** A stroke is selected and a court click would write: the card's outline. */
   placing?: boolean;

@@ -193,7 +193,6 @@ test.describe("the rail's resize handle (T32)", () => {
   test("the hook's separator: ← widens and → narrows by one step, Home and End the bounds, Enter the default", () => {
     const { useSeparatorDrag } = createLoader().load(HANDLE) as {
       useSeparatorDrag: (options: {
-        axis: "x" | "y";
         value: number;
         min: number;
         max: number;
@@ -217,7 +216,6 @@ test.describe("the rail's resize handle (T32)", () => {
       null;
     function Probe() {
       const drag = useSeparatorDrag({
-        axis: "x",
         value: 640,
         min: RAIL_MIN_PX,
         max: RAIL_MAX_PX,

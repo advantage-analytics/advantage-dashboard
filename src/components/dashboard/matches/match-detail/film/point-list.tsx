@@ -487,8 +487,8 @@ export const PointList = memo(function PointList({
   // to the top on a re-follow (T26), and read the viewer's own scrolling —
   // wheel, touch drag, a press on the scroller's gutter, a scrolling key — as
   // intent to hold the displayed point (T24/T25). All of it is
-  // `useFollowScroll`, shared with the labelling console, which scrolls the
-  // page where this list scrolls itself; the hook's file carries the rules.
+  // `useFollowScroll`, shared with the labelling console's points rail; the
+  // hook's file carries the rules.
   //
   // Two things about the keys are this list's own. `ArrowUp`/`ArrowDown`
   // with focus on a drawer row hold here, and the room's window handler

@@ -1,7 +1,6 @@
 /**
- * The points rail's two grounds (`label-black-rail.tsx`): `dark` is the black
- * full-screen view's and the film view's, `light` a white card inside the
- * admin page. ONE rail — the same markup and the same class strings — in
+ * The points rail's two grounds (`label-black-rail.tsx`): `dark` is the
+ * full-screen view's, `light` a white card inside the admin page. ONE rail — the same markup and the same class strings — in
  * both; only the palette under it changes, and this file is that palette.
  *
  * ── How one set of classes paints two grounds ───────────────────────────────
@@ -31,6 +30,10 @@
  *    from the rail takes the rail's tone as its own prop (`FloatMenu`'s
  *    `tone`); anything else portalled that uses these classes wears
  *    `RAIL_TONE_CLASS[tone]` on a wrapper of its own (the note popover).
+ *  · A field or a trigger drawn INSIDE the rail has one compact recipe
+ *    (`FIELD_DARK`, the 22px ⋯, the band's trigger), sized for the rail's
+ *    rows. Its whites follow the palette, so on the light ground it is an
+ *    ink wash in an ink hairline.
  *
  * The amber is the frame's in the dark tone (not a palette colour, so
  * written as rgba) and the design system's warning triple in the light one.
@@ -70,13 +73,3 @@ export function railInk(alpha: number): string {
 export function railAmber(alpha: number): string {
   return `color-mix(in oklab, var(--rail-amber) ${+(alpha * 100).toFixed(2)}%, transparent)`;
 }
-
-/**
- * The chrome of a field or a trigger drawn INSIDE the rail, in both tones:
- * the compact "dark" recipe (`FIELD_DARK`, the 22px ⋯, the band's trigger),
- * sized for the rail's rows. Its whites follow the palette above, so on the
- * light ground it is an ink wash in an ink hairline; the light table's own
- * recipe is a third wider than these tracks. The MENU such a control opens is
- * portalled, so it takes the rail's real tone.
- */
-export const RAIL_CHROME_TONE = "dark" as const;

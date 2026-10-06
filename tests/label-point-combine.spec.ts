@@ -650,10 +650,8 @@ function editContext(
     onPatchPoint: noop,
     onPatchShot: noop,
     operations: editable ? OPERATIONS : undefined,
-    openTombstoneIds: new Set<string>(),
     points: rows,
     scores: labelScores(rows, session.adScoring).points,
-    playingShotId: null,
     ...overrides,
   };
 }

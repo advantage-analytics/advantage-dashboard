@@ -25,8 +25,8 @@ import {
 import type { PlacementTarget } from "./court-placement";
 
 /**
- * Board 08i's court, as it is drawn inside the floating card
- * (`label-court-dock.tsx`): white lines on the card's dark ground, the open
+ * Board 08i's court, as it is drawn inside the court panel
+ * (`label-court-panel.tsx`): white lines on the panel's dark ground, the open
  * point's strokes marked on it — a hollow ring where the ball was hit, a
  * filled dot where it landed, a dashed line between.
  *
@@ -48,30 +48,29 @@ import type { PlacementTarget } from "./court-placement";
  * tab's own `MARK_FADE_TRANSITION` and rises in on mount with its
  * `MARK_IN_ANIMATION`, so the two courts read as one.
  *
- * Floating, the box is the card's fixed art size (222 tall). Docked (`fit`),
- * it is the largest box of the same proportions that fits its size container
- * — the panel's court box — so it shrinks and grows with the dock. The marks
- * are placed in percent and a click is read against the box's own bounding
- * rect, so neither notices the scale.
+ * The box is the largest one of the art's proportions that fits its size
+ * container — the panel's court box — so it shrinks and grows with the
+ * panel. The marks are placed in percent and a click is read against the
+ * box's own bounding rect, so neither notices the scale.
  *
- * Both boxes keep the art's own proportions (0.4434 for the whole court,
+ * Both views keep the art's own proportions (0.4434 for the whole court,
  * 276 × 222 for a half), so a click converts to metres without distortion.
  * Marks whose end is off the zoomed half are clipped by the box, and their
  * dashed path runs out to the edge toward it.
  */
 
-/** One step up from the card's ground, for the court's surface. */
+/** One step up from the panel's ground, for the court's surface. */
 const SURFACE_FILL = "rgba(255,255,255,0.07)";
 const LINE_STRONG = "rgba(255,255,255,0.55)";
 const LINE_THIN = "rgba(255,255,255,0.32)";
 const NET_LINE = "rgba(255,255,255,0.85)";
 const MARK = "rgba(255,255,255,1)";
 
-/** The card's body height; both views fill it. */
+/** The art's own height; both views are proportioned against it. */
 const BOX_HEIGHT = 222;
 /** The whole court at that height, in the art's 14.53 × 32.77 proportions. */
 const WHOLE_WIDTH = (BOX_HEIGHT * COURT_WIDTH) / COURT_HEIGHT;
-/** A half at that height: the card's full inner width. */
+/** A half at that height. */
 const HALF_BOX_WIDTH = 276;
 
 export type CourtView = "whole" | CourtHalf;
@@ -82,7 +81,7 @@ export interface MarkOpacity {
   landed: number;
 }
 
-export const FULL_OPACITY: MarkOpacity = { hit: 1, landed: 1 };
+const FULL_OPACITY: MarkOpacity = { hit: 1, landed: 1 };
 
 /** One stroke to draw, with its ends' opacities (both 1 when left out). */
 export interface CourtStroke {
@@ -139,7 +138,6 @@ export function LabelCourt({
   target = null,
   prompt = null,
   onPlace,
-  fit = false,
 }: {
   /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
   strokes: readonly CourtStroke[];
@@ -153,11 +151,6 @@ export function LabelCourt({
   prompt?: string | null;
   /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
-  /**
-   * `false`: the floating card's fixed art box. `true`: scale to fit the
-   * nearest size container (`container-type: size`), proportions kept.
-   */
-  fit?: boolean;
 }) {
   const marks = marksFor(strokes, view);
   const placed = marks.length;
@@ -261,13 +254,12 @@ export function LabelCourt({
       "rounded-[8px] border border-dashed border-white/[0.22] bg-white/[0.07]",
   );
   const width = zoomed ? HALF_BOX_WIDTH : WHOLE_WIDTH;
-  const style = fit
-    ? {
-        // "Contain": as wide as the container, unless its height runs out first.
-        width: `min(100cqw, calc(100cqh * ${(width / BOX_HEIGHT).toFixed(4)}))`,
-        aspectRatio: `${width.toFixed(2)} / ${BOX_HEIGHT}`,
-      }
-    : { width, height: BOX_HEIGHT };
+  // "Contain" in the nearest size container (`container-type: size`): as
+  // wide as the container, unless its height runs out first.
+  const style = {
+    width: `min(100cqw, calc(100cqh * ${(width / BOX_HEIGHT).toFixed(4)}))`,
+    aspectRatio: `${width.toFixed(2)} / ${BOX_HEIGHT}`,
+  };
 
   return placing ? (
     <button

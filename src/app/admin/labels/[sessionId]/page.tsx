@@ -29,7 +29,7 @@ import {
 
 /**
  * Admin › Labels › one session — the hand-labelling console (board 08): the
- * header, the video + court band and the points table, every label field
+ * header, the video, the court and the points rail, every label field
  * autosaving through `updateLabelShot` / `updateLabelPoint`, and the row
  * operations (delete and Undo, add a shot, move a point, mark it checked,
  * reset an edited row to its seed, set a game's server or type, put back a
@@ -40,8 +40,8 @@ import {
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
  *
- * THIS PAGE DOES NOT SCROLL (T19): `main` is bounded to the viewport under
- * the admin header and clips, so the console's table card is the one thing
+ * THIS PAGE DOES NOT SCROLL: `main` is bounded to the viewport under the
+ * admin header and clips, so the console's points rail is the one thing
  * that scrolls — like the Film tab's points list. The bound is on this page's
  * `AdminPage` only; every other admin page keeps the growing column and its
  * 72px foot, which here is 24px since nothing scrolls up to it.

@@ -1745,3 +1745,120 @@ test.describe("the whole-screen control", () => {
     );
   });
 });
+
+/**
+ * The film crosses into another stroke every second or two, and each
+ * crossing renders the console. The rail's rows must not all render with it:
+ * they are `memo` components, handed one `edit` and callbacks that keep
+ * their identity.
+ *
+ * A static render has no second commit, so a row's bail-out cannot be
+ * counted here. What is pinned instead is each piece of the mechanism: the
+ * components are `memo`, the proxies keep one identity across renders of one
+ * mount (a render-phase update re-runs a component with its hooks kept), and
+ * the console and the rail are wired to them — the last read off the source.
+ */
+test.describe("the rail's rows hold still while the film moves", () => {
+  const MEMO = Symbol.for("react.memo");
+  const LABELS = "src/components/admin/labels";
+
+  test("the rows and the band are memo components; the well under the open row is not", () => {
+    const loader = createLoader();
+    const rows = loader.load(`${LABELS}/label-black-point-row.tsx`);
+    for (const name of [
+      "BlackPointRow",
+      "BlackDeletedPoint",
+      "BlackSuggestedPoint",
+      "BlackGameOverflow",
+    ]) {
+      expect((rows[name] as { $$typeof?: symbol }).$$typeof, name).toBe(MEMO);
+    }
+    const { LabelGameBand } = loader.load(`${LABELS}/label-game-band.tsx`);
+    expect((LabelGameBand as { $$typeof?: symbol }).$$typeof).toBe(MEMO);
+    // The open point's well renders with the playing stroke: a plain function.
+    const { BlackShotsWell } = loader.load(
+      `${LABELS}/label-black-shot-row.tsx`,
+    );
+    expect(typeof BlackShotsWell).toBe("function");
+  });
+
+  test("useLatestHandlers: one identity per name across renders, calling through to the handler", () => {
+    type Handlers = { a: (n: number) => number; b: () => string };
+    const { useLatestHandlers } = createLoader().load(
+      `${LABELS}/label-console.tsx`,
+    ) as { useLatestHandlers: (handlers: Handlers) => Handlers };
+    const seen: Handlers[] = [];
+    const given: Handlers[] = [];
+    function Probe() {
+      const [pass, setPass] = React.useState(0);
+      // Fresh closures on every render, as the console's handlers are.
+      const handlers: Handlers = { a: (n) => n + pass, b: () => `b${pass}` };
+      given.push(handlers);
+      seen.push(useLatestHandlers(handlers));
+      // A render-phase update: the same mount renders again, hooks kept.
+      if (pass < 2) setPass(pass + 1);
+      return null;
+    }
+    renderToStaticMarkup(React.createElement(Probe));
+    expect(seen).toHaveLength(3);
+    expect(given[1].a).not.toBe(given[0].a);
+    for (const later of seen.slice(1)) {
+      expect(later).toBe(seen[0]);
+      expect(later.a).toBe(seen[0].a);
+      expect(later.b).toBe(seen[0].b);
+    }
+    // A proxy, not the handler itself, and it calls through. (No effect runs
+    // in a static render, so it is the first render's handler that answers.)
+    expect(seen[0].a).not.toBe(given[0].a);
+    expect(Object.keys(seen[0])).toEqual(["a", "b"]);
+    expect(seen[0].a(40)).toBe(40);
+    expect(seen[0].b()).toBe("b0");
+  });
+
+  test("the console hands the rail its proxies, and the rail one memoised edit with no playhead in it", () => {
+    const source = readFileSync(`${LABELS}/label-console.tsx`, "utf8");
+    // The latest handlers are written after each commit, never in render.
+    expect(source).toMatch(
+      /const latest = useRef\(handlers\);\s+useEffect\(\(\) => \{\s+latest\.current = handlers;\s+\}\);/,
+    );
+    expect(source).toContain(
+      "const rowOperations = useLatestHandlers<LabelRowOperations>({",
+    );
+    expect(source).toContain("const railHandlers = useLatestHandlers({");
+    for (const prop of [
+      "onFocusCapture={railHandlers.holdOnEditorFocus}",
+      "onFollow={followPlayback}",
+      "onTogglePoint={railHandlers.togglePoint}",
+      "onSelectShot={railHandlers.selectShot}",
+      "onPatchPoint={railHandlers.patchPoint}",
+      "onPatchShot={railHandlers.patchShot}",
+      "operations={operable ? rowOperations : undefined}",
+      "onSetGameServer={operable ? railHandlers.setGameServer : undefined}",
+      "onSetGameType={operable ? railHandlers.setGameType : undefined}",
+      "onToggleGhost={toggleGhost}",
+      "onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}",
+      "onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}",
+      "onFindGap={operable ? railHandlers.findGap : undefined}",
+    ]) {
+      expect(source, prop).toContain(prop);
+    }
+    expect(source).toContain(
+      "const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);",
+    );
+    expect(source).toContain(
+      "const toggleGhost = useMemo(() => toggleIn(setOpenGhosts), []);",
+    );
+
+    const rail = readFileSync(`${LABELS}/label-black-rail.tsx`, "utf8");
+    expect(rail).toContain("const edit = useMemo<EditContext>(");
+    // What is playing reaches the rows it touches as their own props.
+    const context = /export interface EditContext \{[\s\S]*?\n\}/.exec(
+      readFileSync(`${LABELS}/label-row-parts.tsx`, "utf8"),
+    )![0];
+    expect(context).not.toMatch(/playing/i);
+    expect(rail).toMatch(
+      /<BlackShotsWell[\s\S]*?edit=\{edit\}[\s\S]*?playingShotId=\{playingShotId\}/,
+    );
+    expect(rail).toContain("playing={point.id === playingPointId}");
+  });
+});

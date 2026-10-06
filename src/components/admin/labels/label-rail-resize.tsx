@@ -10,8 +10,8 @@ import {
 
 /**
  * The pointer and key mechanics of a window splitter (`role="separator"` with
- * a value, in px), for the edge that wears them — the rail's
- * handle, below.
+ * a value, in px) on an edge that travels sideways — the rail's handle,
+ * below.
  *
  * - **Pointer**: `pointerdown` captures the pointer, `pointermove` reports the
  *   size the drag has reached (`sizeFromDrag`), `pointerup` / `pointercancel`
@@ -25,7 +25,6 @@ import {
  * Spread `separatorProps` on the element; `dragging` is for its styling.
  */
 export function useSeparatorDrag({
-  axis,
   value,
   min,
   max,
@@ -35,8 +34,6 @@ export function useSeparatorDrag({
   onResize,
   onReset,
 }: {
-  /** The way the edge travels: `y` for one under a band, `x` beside a column. */
-  axis: "x" | "y";
   /** The size now, in px. */
   value: number;
   min: number;
@@ -56,14 +53,11 @@ export function useSeparatorDrag({
   );
   const [dragging, setDragging] = useState(false);
 
-  const along = (event: PointerEvent<HTMLDivElement>) =>
-    axis === "y" ? event.clientY : event.clientX;
-
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     drag.current = {
       pointerId: event.pointerId,
-      from: along(event),
+      from: event.clientX,
       size: value,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -73,7 +67,7 @@ export function useSeparatorDrag({
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const held = drag.current;
     if (!held || held.pointerId !== event.pointerId) return;
-    onResize(sizeFromDrag(held.size, held.from, along(event)));
+    onResize(sizeFromDrag(held.size, held.from, event.clientX));
   }
 
   function release(event: PointerEvent<HTMLDivElement>) {
@@ -101,7 +95,7 @@ export function useSeparatorDrag({
     dragging,
     separatorProps: {
       role: "separator",
-      "aria-orientation": axis === "y" ? "horizontal" : "vertical",
+      "aria-orientation": "vertical",
       "aria-valuemin": min,
       "aria-valuemax": max,
       "aria-valuenow": value,
@@ -168,7 +162,6 @@ export function LabelRailResize({
   onReset: () => void;
 }) {
   const { separatorProps } = useSeparatorDrag({
-    axis: "x",
     value: width,
     min: RAIL_MIN_PX,
     max: RAIL_MAX_PX,

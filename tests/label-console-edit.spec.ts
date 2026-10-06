@@ -419,10 +419,8 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
         selectedShotId,
         onPatchShot: (id: string, patch: LabelShotPatch) =>
           patches.push([id, patch]),
-        openTombstoneIds: new Set<string>(),
         points: session.points,
         scores: labelScores(session.points, session.adScoring).points,
-        playingShotId: null,
       },
     });
     /** Type `value` into the position input named `label`, and commit. */

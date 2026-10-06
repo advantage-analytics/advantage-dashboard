@@ -10,10 +10,10 @@ import type { LabelPoint } from "@/lib/services/labels/session";
  * `lib/services/labels/playback.ts`), not the film tab's padded ones: a point
  * opens on its first live, timed stroke and closes at whichever comes first —
  * the next point's first stroke, or {@link POINT_TAIL_SECONDS} after its own
- * last stroke. So "Next point" lands on the serve the table's row will light
+ * last stroke. So "Next point" lands on the serve the rail's row will light
  * up for, Loop repeats exactly the span the row stays lit, and Skip dead time
  * skips exactly the stretch where no row is lit. A 1.5s lead-in like the film
- * tab's would put the playhead on a point the table says has not started.
+ * tab's would put the playhead on a point the rail says has not started.
  *
  * Tombstones and strokes without a `videoTime` have no place on the video's
  * clock and are left out, as they are there; a point with no timed stroke
@@ -30,7 +30,7 @@ import type { LabelPoint } from "@/lib/services/labels/session";
 export interface LabelStopPoint {
   id: string;
   setNumber: number | null;
-  /** 0-based, as the table numbers it (`pointIndex + 1`). */
+  /** 0-based; the rail numbers it `pointIndex + 1`. */
   pointIndex: number;
 }
 

@@ -13,7 +13,6 @@ import {
   Maximize2,
   Minimize,
   Minimize2,
-  PanelRightClose,
   WandSparkles,
 } from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
@@ -71,11 +70,7 @@ import {
 } from "./label-black-point-row";
 import { BlackShotsWell } from "./label-black-shot-row";
 import type { SideNames } from "./label-format";
-import {
-  RAIL_CHROME_TONE,
-  RAIL_TONE_CLASS,
-  type RailTone,
-} from "./label-rail-tone";
+import { RAIL_TONE_CLASS, type RailTone } from "./label-rail-tone";
 import type {
   EditContext,
   LabelRowOperations,
@@ -98,13 +93,12 @@ import {
  * made — `markSummary`, only with marks built), then, when the labelled
  * points make a set score the entered one disagrees with, the score chip
  * (`ScoreChip`: the labelled pair against the entered one, in amber, opening
- * the three answers as a dark menu; only with marks built, and not once the
- * labeller has said the video ends early), the save line in its dark tone,
- * in the film view a way to tuck the rail away (`PanelRightClose`, "Hide the
- * points list", only with `onHide`), the browser's own full screen
- * (`Maximize` / `Minimize`, "Fill the whole screen", only where the browser
- * has one — `use-browser-fullscreen.ts`) and the way out (`Minimize2`, "Exit
- * full screen") — over the ONE scroller
+ * the three answers as a menu in the rail's tone; only with marks built, and not once the
+ * labeller has said the video ends early), the save line in the rail's
+ * tone, the browser's own full screen (`Maximize` / `Minimize`, "Fill the
+ * whole screen", only where the browser has one —
+ * `use-browser-fullscreen.ts`) and the way in or out (`Maximize2`, "Full
+ * screen"; `Minimize2`, "Exit full screen") — over the ONE scroller
  * (`data-label-rail-scroller`), which is what the console's follow scroll
  * moves: a `LabelGameBand` (dark) before each game's first live point, a
  * `BlackPointRow` per point with the score before it and its marks (board
@@ -120,17 +114,24 @@ import {
  * anything off at 520: the names truncate first, the chip's words give way
  * to its dot under 600px of header, and everything else keeps its width.
  * The "Now playing" pill is pinned over the scroller's top-centre while held
- * and a point is playing, as it is over the light table.
+ * and a point is playing.
  *
- * Stateless but for the scoreboard memo and the chip's open state: every
- * callback is the console's, handed down unchanged, so follow and hold,
- * autosave, the row operations and the game menus are the console's — only
- * the paint is this file's.
+ * Stateless but for its memos and the chip's open state: every callback is
+ * the console's, handed down unchanged, so follow and hold, autosave, the
+ * row operations and the game menus are the console's — only the paint is
+ * this file's.
+ *
+ * The rows and the bands are memoised, and this file keeps what it hands
+ * them steady: one `edit` for all of them (a memo over its inputs), the
+ * console's callbacks as they arrive (identity-stable, `label-console.tsx`),
+ * and the playhead only as each row's own `playing` / `playingWindow` and the
+ * open well's `playingShotId`. So the film crossing into another stroke
+ * renders this rail and the rows it touches, not every row.
  *
  * ── Two grounds ─────────────────────────────────────────────────────────────
  *
  * `tone` (`label-rail-tone.ts`) is the ground the rail is drawn on: `dark`,
- * the black and film views', or `light`, a white card docked in the admin
+ * the full-screen view's, or `light`, a white card docked in the admin
  * page. The markup and the classes are the same; the rail wraps itself in a
  * box-less element (`display: contents`) that wears the tone's palette, hands
  * the tone to its rows through `edit.tone`, and gives every menu it opens —
@@ -143,7 +144,7 @@ import {
  * no `onExit` there is nothing to leave.
  */
 
-/** The header's icon buttons: the hide, the whole screen and the exit. */
+/** The header's icon buttons: the whole screen, the full screen and the exit. */
 const HEADER_BUTTON =
   "flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-white/70 transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
@@ -158,8 +159,6 @@ export function LabelBlackRail({
   onExit,
   onFullScreen,
   wholeScreen,
-  onHide,
-  hideButtonRef,
   scrollerRef,
   onFocusCapture,
   affordance,
@@ -179,8 +178,6 @@ export function LabelBlackRail({
   operations,
   onSetGameServer,
   onSetGameType,
-  openTombstoneIds = NO_IDS,
-  onToggleTombstone,
   openGhostIds = NO_IDS,
   onToggleGhost,
   playingPointId = null,
@@ -218,13 +215,6 @@ export function LabelBlackRail({
    * supported, there is no button.
    */
   wholeScreen?: BrowserFullscreenControl;
-  /**
-   * Tuck the rail away (the film view, whose "Points" pill brings it back).
-   * Absent — the black view — there is no hide button.
-   */
-  onHide?: () => void;
-  /** Lands on the hide button, so the view can hand focus to it. */
-  hideButtonRef?: RefObject<HTMLButtonElement | null>;
   /** Lands on the scroller, for the console's follow scroll. */
   scrollerRef?: RefObject<HTMLDivElement | null>;
   /** The console's editor-focus hold, on the rows' frame. */
@@ -254,8 +244,6 @@ export function LabelBlackRail({
   operations?: LabelRowOperations;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
-  openTombstoneIds?: ReadonlySet<string>;
-  onToggleTombstone?: (id: string) => void;
   /** Ghosts shown as their struck-through row (the console's state). */
   openGhostIds?: ReadonlySet<string>;
   onToggleGhost?: (id: string) => void;
@@ -296,24 +284,42 @@ export function LabelBlackRail({
     () => (marks ? markSummary(points, marks) : null),
     [points, marks],
   );
-  const edit: EditContext = {
-    editable,
-    names,
-    selectedShotId,
-    onSelectShot,
-    onPatchPoint,
-    onPatchShot,
-    operations: editable ? operations : undefined,
-    openTombstoneIds,
-    onToggleTombstone,
-    openGhostIds,
-    onToggleGhost,
-    points,
-    scores: scores.points,
-    adScoring,
-    playingShotId,
-    tone,
-  };
+  // One object for every row, the same one until an input moves: the rows
+  // are memoised, and a fresh context per render would re-render them all.
+  // Nothing of the playhead is in it (`EditContext`).
+  const pointScores = scores.points;
+  const edit = useMemo<EditContext>(
+    () => ({
+      editable,
+      names,
+      selectedShotId,
+      onSelectShot,
+      onPatchPoint,
+      onPatchShot,
+      operations: editable ? operations : undefined,
+      openGhostIds,
+      onToggleGhost,
+      points,
+      scores: pointScores,
+      adScoring,
+      tone,
+    }),
+    [
+      editable,
+      names,
+      selectedShotId,
+      onSelectShot,
+      onPatchPoint,
+      onPatchShot,
+      operations,
+      openGhostIds,
+      onToggleGhost,
+      points,
+      pointScores,
+      adScoring,
+      tone,
+    ],
+  );
   const bandBefore = useMemo(
     () => bandsBeforePoints(points, scores.games),
     [points, scores],
@@ -400,28 +406,6 @@ export function LabelBlackRail({
           <span className="flex-1" />
           {showSession ? (
             <LabelSaveStatus status={saveStatus} tone={tone} />
-          ) : null}
-          {onHide ? (
-            <ChromeTooltip
-              label="Hide the points list"
-              side="bottom"
-              align="end"
-            >
-              <button
-                type="button"
-                ref={hideButtonRef}
-                data-label-rail-hide=""
-                aria-label="Hide the points list"
-                onClick={onHide}
-                className={HEADER_BUTTON}
-              >
-                <PanelRightClose
-                  className="size-3.5"
-                  strokeWidth={1.6}
-                  aria-hidden="true"
-                />
-              </button>
-            </ChromeTooltip>
           ) : null}
           {wholeScreen?.supported ? (
             <ChromeTooltip
@@ -540,7 +524,6 @@ export function LabelBlackRail({
                         names={names}
                         onSetGameType={editable ? onSetGameType : undefined}
                         onSetGameServer={editable ? onSetGameServer : undefined}
-                        tone={RAIL_CHROME_TONE}
                         menu={tone}
                       />
                     ) : null}
@@ -580,6 +563,7 @@ export function LabelBlackRail({
                           point={point}
                           edit={edit}
                           marks={marks}
+                          playingShotId={playingShotId}
                         />
                       ) : null}
                     </BlackPointRow>
@@ -597,7 +581,6 @@ export function LabelBlackRail({
             <LabelFollowPill
               affordance={affordance}
               onFollow={onFollow}
-              placement="rail"
               tone={tone}
             />
           ) : null}

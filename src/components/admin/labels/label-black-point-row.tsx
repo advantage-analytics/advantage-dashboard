@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   Check,
   CornerDownRight,
@@ -49,7 +49,7 @@ import {
 } from "./label-black-parts";
 import { drawsGhosts } from "./label-black-shot-row";
 import { parseNote, pointSummary } from "./label-format";
-import { RAIL_CHROME_TONE, RAIL_TONE_CLASS, railInk } from "./label-rail-tone";
+import { RAIL_TONE_CLASS, railInk } from "./label-rail-tone";
 import {
   SIDES,
   sideInitial,
@@ -58,11 +58,10 @@ import {
 } from "./label-row-parts";
 
 /**
- * The black full-screen view's rows (board 08l): the film room's points rail
+ * The rail's point rows (board 08l): the film room's points rail
  * (`film/point-list.tsx`, `ROW_TONE.dark` / `LIST_TONE.dark`) carrying the
- * labelling console's point. Same labels, same writes and the same requests
- * as the table's row (`label-point-row.tsx`) — two lines instead of eleven
- * columns, on black.
+ * labelling console's point — its labels, its writes and its requests — in
+ * two lines.
  *
  * Colours are the frame's: white at an alpha on the room's black, `--blue`
  * for the one player's mark, the progress rule and the "changed" pencil,
@@ -114,8 +113,14 @@ export function pointChangedByYou(
  * move it.
  *
  * The strokes arrive as `children` and are drawn under the open row.
+ *
+ * Memoised, as the rail's other rows are: the film crosses into another
+ * stroke every second or two, and only the rows whose own props changed —
+ * the one it left, the one it entered, the open one — render for it. That
+ * holds because the rail hands every row the same `edit` and callbacks that
+ * keep their identity (`label-console.tsx`).
  */
-export function BlackPointRow({
+export const BlackPointRow = memo(function BlackPointRow({
   point,
   open,
   playing,
@@ -306,11 +311,8 @@ export function BlackPointRow({
             <PointMenu
               point={point}
               number={number}
-              // The group above owns the reveal; inside it the ⋯ is just there.
-              open
               edit={edit}
               operations={operations}
-              tone={RAIL_CHROME_TONE}
               menu={tone}
             />
           ) : null}
@@ -363,7 +365,7 @@ export function BlackPointRow({
       {open ? <div data-shots-for={point.id}>{children}</div> : null}
     </>
   );
-}
+});
 
 /** The second line's ink — the frame's `.bk-d`. */
 const DETAIL_INK = railInk(0.45);
@@ -381,7 +383,7 @@ const NEW_POINT_DETAIL = "Set who won, then add its shots";
  * ring, the title in blue, the detail saying what to do next. Setting the
  * winner or adding a stroke makes it an ordinary row.
  */
-export function isNewPoint(
+function isNewPoint(
   point: Pick<LabelPoint, "status" | "winner" | "shots">,
 ): boolean {
   return (
@@ -398,7 +400,7 @@ export function isNewPoint(
  * clock (`formatClockTime`). With only one neighbour timed it reads "after
  * t1" / "before t2"; with neither, the words alone.
  */
-export function newPointDetail(
+function newPointDetail(
   point: Pick<LabelPoint, "id">,
   points: readonly LabelPoint[],
 ): string {
@@ -470,7 +472,7 @@ export function openPointSuggestions(
  * three take about 215px of the slot's 440, so they sit on one line with the
  * words. Nothing is added until a click.
  */
-export function BlackSuggestedPoint({
+export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
   suggestion,
   point,
   edit,
@@ -557,7 +559,7 @@ export function BlackSuggestedPoint({
       ) : null}
     </div>
   );
-}
+});
 
 // ── A game that runs over ──────────────────────────────────────────────────
 
@@ -577,7 +579,7 @@ export function BlackSuggestedPoint({
  * Built to fit the rail from 520px as the suggested point is: the two lines
  * truncate, the one button never shrinks or wraps.
  */
-export function BlackGameOverflow({
+export const BlackGameOverflow = memo(function BlackGameOverflow({
   overflow,
   summary,
   point,
@@ -682,7 +684,7 @@ export function BlackGameOverflow({
       ) : null}
     </div>
   );
-}
+});
 
 // ── A deleted point ────────────────────────────────────────────────────────
 
@@ -691,19 +693,16 @@ export function BlackGameOverflow({
  * and padding — a dash where the number was, "Deleted point" and where it
  * was on the film — with Undo always at the right edge.
  *
- * The light table's tombstone (`DeletedPoint`) folds open to a ghost of the
- * row on the light table's eleven tracks, far wider than the rail, with Undo
- * in a column the rail never reaches and light-theme ink throughout. Nothing
- * folds open here, so `openTombstoneIds` is not read. A deleted point has no
- * score and no band. Undo is the same request (`onRestorePoint`), absent on
- * a session that cannot be written.
+ * Nothing folds open: the line is the whole tombstone. A deleted point has
+ * no score and no band. Undo is the console's request (`onRestorePoint`),
+ * absent on a session that cannot be written.
  *
  * A tombstone with no shot rows of its own is what a combine leaves behind
  * (`isCombinedTombstone`, point-combine.ts): its line reads "Combined into
  * the point above" and offers no Undo — restoring it would bring back an
  * empty point. The way back is "Split point here" on the first moved shot.
  */
-export function BlackDeletedPoint({
+export const BlackDeletedPoint = memo(function BlackDeletedPoint({
   point,
   edit,
 }: {
@@ -735,15 +734,15 @@ export function BlackDeletedPoint({
       ) : null}
     </div>
   );
-}
+});
 
 // ── The winner mark ────────────────────────────────────────────────────────
 
 /**
  * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
  * `--blue` (its letter white on either ground: `--rail-on-accent`), p2 on a
- * white wash. Two grounds, not two hues, as down the
- * table's own column. No winner yet is the wash with a dash — or, on a point
+ * white wash. Two grounds, not two hues, down the rail's own column. No
+ * winner yet is the wash with a dash — or, on a point
  * the labeller just added (`fresh`, the frame's `.fx-new .bk-mk`), a "?" in a
  * `--blue` ring on the room's own black: the one thing to set first.
  */
@@ -775,10 +774,9 @@ function BlackWinnerMark({
 }
 
 /**
- * The winner mark as the control that changes it — the table row's menu
- * (`label-point-row.tsx`'s `WinnerCell`) on the dark surface: the two players,
- * the current one checked; choosing the other saves `{ winner }`. Read-only,
- * it is the mark alone.
+ * The winner mark as the control that changes it — a menu in the rail's
+ * tone: the two players, the current one checked; choosing the other saves
+ * `{ winner }`. Read-only, it is the mark alone.
  */
 function BlackWinnerCell({
   point,
@@ -873,9 +871,8 @@ function BlackWinnerCell({
 
 /**
  * The row's Note action — the frame's `.bk-ib`, white once the point has a
- * note. It opens the table row's own note cell (`EditableCell` + `TextEditor`,
- * the same parse and the same `{ note }` patch) on the menu surface of the
- * rail's tone: the field is there at once, Enter or leaving it saves, and a
+ * note. It opens the note's cell (`EditableCell` + `TextEditor`, `parseNote`
+ * and a `{ note }` patch) on the menu surface of the rail's tone: the field is there at once, Enter or leaving it saves, and a
  * saved note closes the popover. Read-only, the popover is the note's text.
  *
  * The popover is portalled out of the rail, so the rail's palette does not
@@ -948,7 +945,6 @@ function BlackNoteAction({
               }
               editor={
                 <TextEditor
-                  tone={RAIL_CHROME_TONE}
                   label={label}
                   text={note ?? ""}
                   parse={parseNote}

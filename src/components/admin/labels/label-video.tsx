@@ -51,10 +51,10 @@ import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
  *   files, and bytes should move when somebody presses play.
  * - **The stops.** The label points, on the console's playing rule
  *   (`label-film-stops.ts`), so Previous/Next point, Loop and Skip dead time
- *   walk exactly the spans the table lights up.
+ *   walk exactly the spans the rail lights up.
  * - **What the bar leaves off** ({@link HIDDEN}): no bookmarks here, the
- *   court is a card of its own, the dock's bar minimises, and "More" is inert.
- *   No scoreboard either — the table already shows the score.
+ *   court is a panel of its own, the layout's way out is the rail's, and
+ *   "More" is inert. No scoreboard either — the rail already shows the score.
  *
  * ── Loading ─────────────────────────────────────────────────────────────────
  * Until the element can play (`canplay`, or `readyState` ≥ 3) the frame shows
@@ -71,11 +71,11 @@ import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
  * `useFilmClockVars` writes `--film-t` / `--film-d` (FILE seconds) onto the
  * frame every animation frame, for the transport's track. `clockTargetRef`
  * names a second element to write them onto — the console's root, so the
- * table's playing row can draw its progress rule from the same clock without
- * a render (`label-point-row.tsx`).
+ * rail's playing row can draw its progress rule from the same clock without
+ * a render (`label-black-point-row.tsx`).
  *
  * ── Selecting a shot ────────────────────────────────────────────────────────
- * A shot click in the table is a plain `seekTo` of the shot's time: the film
+ * A shot click in the rail is a plain `seekTo` of the shot's time: the film
  * goes there and then carries on as it was — playing on if it was playing,
  * resting there if it was paused. Nothing replays a shot on its own; the
  * Loop button, `looping` and the `L` key mean "loop the point", and that is
@@ -84,20 +84,15 @@ import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
  * ── The frame's corners ─────────────────────────────────────────────────────
  * The frame itself is square; the pending skeleton over it rounds its own
  * corners (`FilmFramePending`), which suits a card. `square` switches that
- * off for a frame flush to a black stage (the full-screen views).
+ * off for a frame flush to a black stage (the full-screen view).
  *
  * ── The frame's box ─────────────────────────────────────────────────────────
- * A 16:9 box as wide as its parent, for a card or a stage — or, with `fill`,
- * the whole of a positioned parent (the film view's layer), the picture
- * `object-contain` on black so it is never cropped, the transport at the
- * room's own scale on its foot and, with `transportInset`, stopping that many
- * px short of the right edge, where the view's rail sits.
+ * A 16:9 box as wide as its parent, for a card or a stage, the picture
+ * `object-contain` so it is never cropped and the transport on its foot.
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
   seekTo: (videoTime: number) => void;
-  /** Seek to a second of the FILE — what the transport's track speaks. */
-  seek: (seconds: number) => void;
   togglePlay: () => void;
   /** Whether the film is running — read before a remount that would stop it. */
   isPlaying: () => boolean;
@@ -105,10 +100,6 @@ export interface LabelVideoHandle {
   play: () => void;
   /** The previous (-1) or next (1) point, as the transport's glyphs step. */
   step: (direction: -1 | 1) => void;
-  cycleRate: () => void;
-  toggleLoop: () => void;
-  toggleMute: () => void;
-  toggleSkipDeadTime: () => void;
 }
 
 /** What the transport's title row says about the playing point. */
@@ -150,8 +141,6 @@ export const LabelVideoPlayer = forwardRef<
      * console decides what, if anything, to re-render.
      */
     onTime?: (videoTime: number) => void;
-    /** Play and pause as the element reports them — the minimised pill's glyph. */
-    onPlayingChange?: (playing: boolean) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /**
@@ -162,17 +151,9 @@ export const LabelVideoPlayer = forwardRef<
     /**
      * Square corners on everything in the frame, the loading skeleton
      * included — for a frame flush to the full-screen view's black stage.
-     * Off, the skeleton keeps its card radius for the docked and floating
-     * players.
+     * Off, the skeleton keeps its card radius for the docked player.
      */
     square?: boolean;
-    /**
-     * The frame fills its positioned parent instead of drawing a 16:9 box —
-     * the film view's layer — with the transport at the room's scale.
-     */
-    fill?: boolean;
-    /** How far short of the frame's right edge the transport stops, in px. */
-    transportInset?: number;
   }
 >(function LabelVideoPlayer(
   {
@@ -180,12 +161,9 @@ export const LabelVideoPlayer = forwardRef<
     points,
     readout = NO_READOUT,
     onTime,
-    onPlayingChange,
     initialReady = false,
     clockTargetRef,
     square = false,
-    fill = false,
-    transportInset = 0,
   },
   ref,
 ) {
@@ -380,7 +358,6 @@ export const LabelVideoPlayer = forwardRef<
       seekTo(videoTime) {
         seek(Math.max(0, videoTime - offset));
       },
-      seek,
       togglePlay,
       isPlaying() {
         const el = videoRef.current;
@@ -391,21 +368,8 @@ export const LabelVideoPlayer = forwardRef<
         if (el?.paused) void el.play().catch(noop);
       },
       step,
-      cycleRate,
-      toggleLoop,
-      toggleMute,
-      toggleSkipDeadTime,
     }),
-    [
-      offset,
-      seek,
-      togglePlay,
-      step,
-      cycleRate,
-      toggleLoop,
-      toggleMute,
-      toggleSkipDeadTime,
-    ],
+    [offset, seek, togglePlay, step],
   );
 
   if (!video) {
@@ -460,11 +424,7 @@ export const LabelVideoPlayer = forwardRef<
         ref={frameRef}
         data-label-video-frame=""
         data-video-ready={ready ? "true" : "false"}
-        className={
-          fill
-            ? "absolute inset-0 overflow-hidden bg-black"
-            : "relative aspect-video w-full overflow-hidden bg-[#1A1A1C]"
-        }
+        className="relative aspect-video w-full overflow-hidden bg-[#1A1A1C]"
       >
         <video
           ref={videoRef}
@@ -478,14 +438,8 @@ export const LabelVideoPlayer = forwardRef<
             settling.seeking ? "opacity-60" : "opacity-100",
           )}
           onClick={togglePlay}
-          onPlay={() => {
-            setPlaying(true);
-            onPlayingChange?.(true);
-          }}
-          onPause={() => {
-            setPlaying(false);
-            onPlayingChange?.(false);
-          }}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
           onLoadedMetadata={settle}
           onLoadedData={() => {
             settling.onLoadedData();
@@ -543,20 +497,15 @@ export const LabelVideoPlayer = forwardRef<
           </button>
         )}
 
-        {/* The room's scrim, at dock scale — or the room's own 240px when
-            the frame is the screen: the transport has no ground of its own. */}
+        {/* The room's scrim, at the frame's scale: the transport has no
+            ground of its own. */}
         <div
           aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-0",
-            fill ? "h-[240px]" : "h-[150px]",
-            "bg-[linear-gradient(180deg,rgba(13,13,13,0)_0%,rgba(13,13,13,0.78)_70%,rgba(13,13,13,0.88)_100%)]",
-          )}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[150px] bg-[linear-gradient(180deg,rgba(13,13,13,0)_0%,rgba(13,13,13,0.78)_70%,rgba(13,13,13,0.88)_100%)]"
         />
 
         <FilmTransport
-          className={fill ? undefined : "gap-[7px] px-4 pb-1.5"}
-          style={transportInset > 0 ? { right: transportInset } : undefined}
+          className="gap-[7px] px-4 pb-1.5"
           hide={HIDDEN}
           disabled={!ready}
           title={readout.title}

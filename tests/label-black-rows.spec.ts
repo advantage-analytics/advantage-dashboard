@@ -19,7 +19,7 @@ import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
 } from "./fixtures/label-session";
-import { createLoader } from "./fixtures/vm-modules";
+import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
  * The black full-screen view's rows (T30): the two lines a point reads as
@@ -303,10 +303,8 @@ function editContext(session: LabelSession, editable = true) {
     onPatchPoint: noop,
     onPatchShot: noop,
     operations: editable ? OPERATIONS : undefined,
-    openTombstoneIds: new Set<string>(),
     points: session.points,
     scores: labelScores(session.points, session.adScoring).points,
-    playingShotId: null,
   };
 }
 
@@ -558,7 +556,7 @@ test.describe("the black point row", () => {
       return find(el.props.children as React.ReactNode, attr);
     };
     const first = session.points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!;
-    const tree = (BlackPointRow as unknown as (p: unknown) => React.ReactNode)({
+    const tree = renderFunction<unknown>(BlackPointRow)({
       point: first,
       open: false,
       playing: false,
@@ -617,7 +615,6 @@ test.describe("the black game band", () => {
         band,
         points: session.points,
         names: NAMES,
-        tone: "dark",
         ...(editable ? { onSetGameType: noop, onSetGameServer: noop } : {}),
       }),
     );
@@ -662,7 +659,11 @@ test.describe("the black game band", () => {
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
 const CELLS = "src/components/admin/labels/label-cells.tsx";
 
-type WellProps = { point: LabelPoint; edit: Record<string, unknown> };
+type WellProps = {
+  point: LabelPoint;
+  edit: Record<string, unknown>;
+  playingShotId?: string | null;
+};
 
 function well() {
   return createLoader().load(WELL) as {
@@ -820,12 +821,14 @@ function wellEdit(overrides: Record<string, unknown> = {}, editable = true) {
 function renderWell(
   overrides: Record<string, unknown> = {},
   editable = true,
+  playingShotId: string | null = null,
 ): string {
   const { BlackShotsWell } = well();
   return renderToStaticMarkup(
     React.createElement(BlackShotsWell, {
       point: rally(),
       edit: wellEdit(overrides, editable),
+      playingShotId,
     }),
   );
 }
@@ -1135,7 +1138,7 @@ test.describe("the black shots well", () => {
     }
 
     // The playing stroke is lit too, and its stroke reads white.
-    const playing = shotRow(renderWell({ playingShotId: "w-lit" }), "w-lit");
+    const playing = shotRow(renderWell({}, true, "w-lit"), "w-lit");
     expect(tag(playing, 'data-row="shot"')).toContain('data-playing="true"');
     expect(tag(playing, 'data-row="shot"')).toContain("bg-white/[0.12]");
     expect(playing).not.toContain("data-select-editor");
@@ -1204,7 +1207,6 @@ test.describe("the black shots well", () => {
         (el) => el.props.label === label && "parse" in el.props,
       );
       expect(input, label).toBeDefined();
-      expect(input!.props.tone).toBe("dark");
       (input!.props.onCommit as (v: unknown) => void)(value);
     };
     const pick = (label: string, value: string) => {
@@ -1212,10 +1214,10 @@ test.describe("the black shots well", () => {
         (el) =>
           el.props.label === label &&
           "options" in el.props &&
-          "tone" in el.props,
+          // The editor, not the cell that mounts it.
+          !("text" in el.props),
       );
       expect(editor, label).toBeDefined();
-      expect(editor!.props.tone).toBe("dark");
       (editor!.props.onChange as (v: string) => void)(value);
     };
 
@@ -1511,11 +1513,11 @@ test.describe("the black shots well", () => {
 
   test("the dark fields: a menu in the dark tone, room for a position, danger while invalid", () => {
     const cells = readFileSync(CELLS, "utf8");
-    // The select hands its tone to the menu it opens — unless the menu is
-    // given one of its own (the rail on a light ground, `menu`).
-    expect(cells).toContain("menu = tone,");
+    // The select keeps the rail's compact trigger and hands the menu it
+    // opens the rail's tone (`menu`), dark unless told.
+    expect(cells).toContain('menu = "dark",');
     expect(cells).toMatch(
-      /<MenuSelect[\s\S]*?\btone=\{menu\}[\s\S]*?className=\{tone === "dark" \? SELECT_TRIGGER_DARK : SELECT_TRIGGER\}/,
+      /<MenuSelect[\s\S]*?\btone=\{menu\}[\s\S]*?className=\{SELECT_TRIGGER_DARK\}/,
     );
     const menu = readFileSync(MENU_SELECT, "utf8");
     expect(menu).toContain('tone = "light",');
@@ -1541,19 +1543,6 @@ test.describe("the black shots well", () => {
       "data-[invalid]:focus-within:border-[var(--danger)]",
     );
     expect(cells).toContain('data-invalid={invalid ? "" : undefined}');
-  });
-
-  test("the cells keep the light chrome to the class, with a tone beside it", () => {
-    const cells = readFileSync(CELLS, "utf8");
-    // The light chrome, to the class.
-    expect(cells).toContain(
-      '"-ml-[11px] flex h-[30px] w-[calc(100%+11px)] min-w-0 items-center rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] transition-colors duration-200 focus-within:border-[var(--blue)]"',
-    );
-    expect(cells).toContain(
-      '"-ml-[11px] w-[calc(100%+11px)] min-w-0 shrink px-[10px] text-[13px]"',
-    );
-    expect(cells.match(/tone = "light"/g)).toHaveLength(2);
-    expect(cells.match(/tone\?: EditorTone/g)).toHaveLength(2);
   });
 });
 
@@ -1643,14 +1632,13 @@ test.describe("the rail's two tones", () => {
   function palette() {
     return createLoader().load(RAIL_TONE) as {
       RAIL_TONE_CLASS: Record<"dark" | "light", string>;
-      RAIL_CHROME_TONE: string;
       railInk: (alpha: number) => string;
       railAmber: (alpha: number) => string;
     };
   }
 
   test("the palette: dark keeps the frame's amber, light re-points white at the page's ink", () => {
-    const { RAIL_TONE_CLASS, RAIL_CHROME_TONE, railInk, railAmber } = palette();
+    const { RAIL_TONE_CLASS, railInk, railAmber } = palette();
     // The same variables in both, so a row never reads one that is not set.
     const names = (classes: string) =>
       [...classes.matchAll(/\[(--rail-[a-z-]+):/g)].map((m) => m[1]).sort();
@@ -1707,7 +1695,6 @@ test.describe("the rail's two tones", () => {
     expect(railAmber(0.8)).toBe(
       "color-mix(in oklab, var(--rail-amber) 80%, transparent)",
     );
-    expect(RAIL_CHROME_TONE).toBe("dark");
   });
 
   test("dark by default: the palette on a box of no size, the session in the header, the way out", () => {
@@ -1782,12 +1769,10 @@ test.describe("the rail's two tones", () => {
         }),
       );
       const selects = wellElements.filter(
-        (el) =>
-          "options" in el.props && "menu" in el.props && "tone" in el.props,
+        (el) => "options" in el.props && "menu" in el.props,
       );
       expect(selects.length, tone).toBeGreaterThan(0);
       for (const select of selects) {
-        expect(select.props.tone, tone).toBe("dark");
         expect(select.props.menu, tone).toBe(tone);
       }
 
@@ -1797,7 +1782,7 @@ test.describe("the rail's two tones", () => {
       const row = session.points.find((p) => p.status !== "deleted")!;
       const { BlackPointRow } = components();
       const rowElements = elements(
-        (BlackPointRow as unknown as (p: RowProps) => React.ReactNode)({
+        renderFunction<RowProps>(BlackPointRow)({
           point: row,
           open: false,
           playing: false,
@@ -1809,7 +1794,6 @@ test.describe("the rail's two tones", () => {
         (el) => "operations" in el.props && "menu" in el.props,
       );
       expect(menu, tone).toBeDefined();
-      expect(menu!.props.tone, tone).toBe("dark");
       expect(menu!.props.menu, tone).toBe(tone);
     }
 
@@ -1824,9 +1808,7 @@ test.describe("the rail's two tones", () => {
     // that hold state, which cannot be walked outside a render.
     const rail = readFileSync(RAIL, "utf8");
     // The game band keeps the rail's paint and opens menus in the tone.
-    expect(rail).toMatch(
-      /<LabelGameBand[\s\S]*?tone=\{RAIL_CHROME_TONE\}\s+menu=\{tone\}/,
-    );
+    expect(rail).toMatch(/<LabelGameBand[\s\S]*?\bmenu=\{tone\}/);
     // The score chip's answers.
     expect(rail).toMatch(/<FloatMenu[\s\S]*?width=\{272\}\s+tone=\{tone\}/);
     expect(rail).not.toContain('tone="dark"');
@@ -1839,9 +1821,9 @@ test.describe("the rail's two tones", () => {
     );
     expect(row).not.toContain('tone="dark"');
     expect(readFileSync(WELL, "utf8")).not.toContain('tone="dark"');
-    // The band takes it: paint from `tone`, menus from `menu`.
+    // The band takes it: one paint, menus from `menu`.
     const band = readFileSync(BAND, "utf8");
-    expect(band).toContain("menu = tone,");
+    expect(band).toContain('menu = "dark",');
     expect(band.match(/\btone=\{menu\}/g)).toHaveLength(1);
   });
 

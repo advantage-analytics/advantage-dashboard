@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import {
   Bookmark,
   ChevronLeft,
@@ -86,12 +85,6 @@ export type FilmTransportControl = "saved" | "court" | "exit" | "more";
 export interface FilmTransportProps {
   /** Extra classes on the block — the room passes its pointer-events state. */
   className?: string;
-  /**
-   * Inline style on the block — a host that ends the bar short of its right
-   * edge (the labelling console's film view, whose rail sits there) passes a
-   * `right` in px, which no class can carry.
-   */
-  style?: CSSProperties;
   title: string;
   subtitle: string | null;
   /** 1-based position of the playing point in the walked sequence, and its size. */
@@ -127,15 +120,14 @@ export interface FilmTransportProps {
   onExit: () => void;
   /**
    * Controls to leave off the bar. Default none — the room draws all of them.
-   * The admin labelling console's video dock has no bookmarks, a court card of
-   * its own, its own minimise button and no use for an inert "More", and at
-   * 480px the full row would not fit.
+   * The admin labelling console's player has no bookmarks, a court panel of
+   * its own, its own way out of full screen and no use for an inert "More".
    */
   hide?: readonly FilmTransportControl[];
   /**
    * The film cannot play yet: the whole block is `inert` and dimmed. Default
-   * false — the room never does this (see `Glyph`). The dock sets it while its
-   * frame is still loading.
+   * false — the room never does this (see `Glyph`). The labelling console's
+   * player sets it while its frame is still loading.
    */
   disabled?: boolean;
 }
@@ -184,7 +176,6 @@ export function FilmTransport(p: FilmTransportProps) {
         p.disabled && "opacity-45",
         p.className,
       )}
-      style={p.style}
     >
       <div className="flex items-end gap-3 pb-px">
         <div className="flex min-w-0 flex-col gap-0.5">

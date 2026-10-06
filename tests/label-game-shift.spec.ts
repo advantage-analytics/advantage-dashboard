@@ -23,7 +23,7 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import { labelSessionFixture } from "./fixtures/label-session";
-import { createLoader } from "./fixtures/vm-modules";
+import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
  * "Move the leftover points to the next game" (`game-shift.ts`): a game
@@ -1186,9 +1186,9 @@ test.describe("the slot on the black rail", () => {
   });
 
   test("the answer is the console's request from the first leftover, on a click alone; a cascade says how far", () => {
-    const { BlackGameOverflow } = createLoader().load(ROW) as {
-      BlackGameOverflow: (props: Record<string, unknown>) => React.ReactNode;
-    };
+    const BlackGameOverflow = renderFunction<Record<string, unknown>>(
+      createLoader().load(ROW).BlackGameOverflow,
+    );
     const calls: unknown[][] = [];
     const edit = (points: LabelPoint[], adScoring = true) => ({
       editable: true,
@@ -1197,11 +1197,9 @@ test.describe("the slot on the black rail", () => {
       operations: {
         onShiftGameOverflow: (...args: unknown[]) => calls.push(args),
       },
-      openTombstoneIds: new Set<string>(),
       points,
       scores: labelScores(points, adScoring).points,
       adScoring,
-      playingShotId: null,
     });
     const summaryOf = (rows: LabelPoint[], from: string) => {
       const plan = planGameShift(rows, true, from);

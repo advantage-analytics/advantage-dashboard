@@ -56,18 +56,16 @@ import {
   spinLabel,
   spinOptions,
 } from "./label-format";
-import { RAIL_CHROME_TONE, railInk, type RailTone } from "./label-rail-tone";
+import { railInk, type RailTone } from "./label-rail-tone";
 import { sideLabel, type EditContext } from "./label-row-parts";
 
 /**
- * The black full-screen view's strokes (board 08l's `.bk-well` and `.bk-sr`):
- * the open point's shots in a recessed well under its row, on the room's
- * black.
+ * The rail's strokes (board 08l's `.bk-well` and `.bk-sr`): the open point's
+ * shots in a recessed well under its row, each edited in place with a
+ * single-field write.
  *
- * The same strokes, the same editors and the same single-field writes as the
- * light table's card (`label-shot-row.tsx`) — a third of its width, so there
- * is NO header row: a hollow ring says "hit at", a filled dot "landed at",
- * and every other column reads as what it is.
+ * The rail is narrow, so there is NO header row: a hollow ring says "hit
+ * at", a filled dot "landed at", and every other column reads as what it is.
  *
  * Colours are the frame's: white at an alpha on black, and `--blue` for the
  * "changed" pencil. The same classes draw the well on the light ground,
@@ -157,7 +155,7 @@ const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-
 const ACTIONS_RIGHT = "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]";
 
 /** The CSS variables the well sets once for every row in it. */
-export const WELL_STYLE = {
+const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
 } as React.CSSProperties;
 
@@ -189,11 +187,11 @@ const REASON_INK = railInk(0.5);
 const GONE_INK = railInk(0.32);
 
 /**
- * Whether the black view draws a site-removed stroke as a ghost (board 08m
- * §3): only while the session has marks. The loader builds them only for a
+ * Whether the rail draws a site-removed stroke as a ghost (board 08m §3):
+ * only while the session has marks. The loader builds them only for a
  * session that computes marks, so `marks` being there says both; otherwise
  * — the ground-truth session, or a build that failed — a ghost is an
- * ordinary numbered row, exactly as in the three light layouts.
+ * ordinary numbered row.
  */
 export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
   return marks !== null && marks !== undefined;
@@ -203,8 +201,8 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * The open point's strokes — the frame's `.bk-well`, drawn inside the point
  * row's own `data-shots-for` wrapper (`label-black-point-row.tsx`).
  *
- * The strokes are numbered 1…n among the live ones, as the light table
- * numbers them: a tombstone takes no number — and nor does a ghost while it
+ * The strokes are numbered 1…n among the live ones: a tombstone takes no
+ * number — and nor does a ghost while it
  * is drawn as one (`drawsGhosts`), which is also when the rally count, the
  * point's two lines and the marks' hover sentence skip it. The trailing "Add
  * shot" appends to the rally; it is there only while the session can be
@@ -219,11 +217,14 @@ export function BlackShotsWell({
   point,
   edit,
   marks = null,
+  playingShotId = null,
 }: {
   point: LabelPoint;
   edit: EditContext;
   /** The session's marks; null draws no chip on any stroke. */
   marks?: LabelMarks | null;
+  /** The stroke the film is on, when it is one of this point's. */
+  playingShotId?: string | null;
 }) {
   const { operations } = edit;
   const pointNumber = point.pointIndex + 1;
@@ -250,6 +251,7 @@ export function BlackShotsWell({
           point={point}
           pointNumber={pointNumber}
           edit={edit}
+          playing={shot.id === playingShotId}
           marks={shotRowMarks(shown, shot, marks, edit.names)}
         />,
       );
@@ -307,8 +309,8 @@ export function BlackShotsWell({
  * nobody types · the stroke's own marks (board 08m), an icon each, hover for
  * the reason · the blue pencil on a stroke the labeller changed or added.
  *
- * Time, Player, Stroke, Spin and the two positions are the light table's
- * `EditableCell`s with hover turned off: text until the row is SELECTED
+ * Time, Player, Stroke, Spin and the two positions are `EditableCell`s
+ * (`label-cells.tsx`): text until the row is SELECTED
  * (then every one is a field) or the cell itself is clicked or reached from
  * the keyboard. A hovered cell shows only its cursor and its word a step
  * brighter — no box: a field under a crossing pointer read as a field
@@ -319,8 +321,8 @@ export function BlackShotsWell({
  * live one), Reset (an edited stroke with a seed) and Delete — are an
  * overlay on the row's right edge, out of the grid, there only on hover, on
  * focus and on the selected row, so the row at rest is the frame's and no
- * column moves when they appear. Reset and Delete only ASK, as the light
- * row's do: the console opens the confirm. Split runs at once — it moves
+ * column moves when they appear. Reset and Delete only ASK: the console
+ * opens the confirm. Split runs at once — it moves
  * rows and deletes nothing, and "Split point here" on the first moved shot
  * is the way back from a combine.
  *
@@ -334,6 +336,7 @@ export function BlackShotRow({
   point,
   pointNumber,
   edit,
+  playing = false,
   marks = NO_MARKS,
 }: {
   shot: LabelShot;
@@ -346,6 +349,8 @@ export function BlackShotRow({
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
+  /** The film is on this stroke. */
+  playing?: boolean;
   /** This stroke's own marks (`shotRowMarks`), drawn after its result. */
   marks?: readonly ShotRowMark[];
 }) {
@@ -353,7 +358,6 @@ export function BlackShotRow({
   const tone = edit.tone ?? "dark";
   const operations = editable ? edit.operations : undefined;
   const selected = shot.id === edit.selectedShotId;
-  const playing = shot.id === edit.playingShotId;
   const lit = selected || playing;
   const fault = isFault(shot);
   const changed = shot.status === "edited" || shot.status === "added";
@@ -361,7 +365,7 @@ export function BlackShotRow({
     if (!selected) onSelectShot?.(shot.id);
   };
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
-  const cell = { editable, rowSelected: selected, hoverReveals: false };
+  const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const placement = shotPlacement(labelShotValues(shot));
@@ -418,7 +422,6 @@ export function BlackShotRow({
         }
         editor={
           <TextEditor
-            tone={RAIL_CHROME_TONE}
             label={`Shot ${number} time`}
             text={time ?? ""}
             parse={parseVideoTime}
@@ -600,12 +603,9 @@ export function BlackShotRow({
  * why it went — with Undo always at the right edge, on a track of its own so
  * the words truncate before it moves.
  *
- * The light table's tombstone (`DeletedShot`) folds open to a ghost of the
- * row on the light table's eleven tracks; in a rail a third that width the
- * ghost ran 1,195px and took Undo off-screen with it, in light-theme ink.
- * There is nothing to fold open here, so `openTombstoneIds` is not read. Undo
- * is the same request (`onRestoreShot`), and is absent on a session that
- * cannot be written.
+ * Nothing folds open: the line is the whole tombstone. Undo is the console's
+ * request (`onRestoreShot`), and is absent on a session that cannot be
+ * written.
  */
 export function BlackDeletedShot({
   shot,
@@ -681,7 +681,7 @@ const TEXT_AFFORDANCE =
  * At rest it is ONE quiet line where the stroke was, on the line a tombstone
  * takes: the fix's wand, "1 shot removed: {hitter} hit the fault back", and
  * Show. It takes no shot number and the rally count skips it. Shown
- * (`openGhostIds`, the console's state like `openTombstoneIds`), the removed
+ * (`openGhostIds`, the console's state), the removed
  * stroke comes back under the line struck through — its values at a third of
  * white, the em dashes not struck — with its reason, "Hit after the fault",
  * and Restore, which is the one request here: the console writes
@@ -806,7 +806,7 @@ type ShotSuggestion = Extract<LabelSuggestion, { kind: "missing_shot" }>;
  * and it is neither dismissed nor already answered with an added stroke
  * (`suggestionState`). With marks off, or none built, there is none.
  */
-export function openShotSuggestions(
+function openShotSuggestions(
   point: LabelPoint,
   marks: LabelMarks | null | undefined,
 ): ShotSuggestion[] {
@@ -1068,7 +1068,6 @@ function Dash({ label }: { label: string }) {
 function BlackSelectCell({
   editable,
   rowSelected,
-  hoverReveals,
   menu,
   label,
   value,
@@ -1080,7 +1079,6 @@ function BlackSelectCell({
 }: {
   editable: boolean;
   rowSelected: boolean;
-  hoverReveals: boolean;
   /** The tone of the menu the select opens — the rail's. */
   menu: RailTone;
   label: string;
@@ -1096,7 +1094,6 @@ function BlackSelectCell({
     <EditableCell
       editable={editable}
       rowSelected={rowSelected}
-      hoverReveals={hoverReveals}
       label={label}
       valueText={text ?? "Not set"}
       textClassName={TEXT_AFFORDANCE}
@@ -1111,7 +1108,6 @@ function BlackSelectCell({
       }
       editor={
         <SelectEditor
-          tone={RAIL_CHROME_TONE}
           menu={menu}
           label={label}
           value={value}
@@ -1133,15 +1129,14 @@ const NUM = "mono tabular w-8 flex-none text-right text-[10px]";
  * every row line up whatever the sign or the digits. A position not set is
  * one em dash in the first slot, the second left empty.
  *
- * The mark stays put while the two numbers give way to the light table's
- * field — "x, y" in metres, typed; the court click is the other way in. The
- * dark field (`FIELD_DARK`, label-cells.tsx) is sized for the longest pair,
+ * The mark stays put while the two numbers give way to the text field —
+ * "x, y" in metres, typed; the court click is the other way in. The field
+ * (`FIELD_DARK`, label-cells.tsx) is sized for the longest pair,
  * thirteen characters ("-10.10, 24.82"), in what this 88px track leaves.
  */
 function BlackPositionCell({
   editable,
   rowSelected,
-  hoverReveals,
   end,
   label,
   x,
@@ -1151,7 +1146,6 @@ function BlackPositionCell({
 }: {
   editable: boolean;
   rowSelected: boolean;
-  hoverReveals: boolean;
   end: "hit" | "landed";
   label: string;
   x: number | null;
@@ -1180,7 +1174,6 @@ function BlackPositionCell({
       <EditableCell
         editable={editable}
         rowSelected={rowSelected}
-        hoverReveals={hoverReveals}
         label={label}
         valueText={text ?? "Not set"}
         className="flex-1"
@@ -1214,7 +1207,6 @@ function BlackPositionCell({
         }
         editor={
           <TextEditor
-            tone={RAIL_CHROME_TONE}
             label={`${label}, metres x, y`}
             text={text ?? ""}
             parse={parseCourtPoint}

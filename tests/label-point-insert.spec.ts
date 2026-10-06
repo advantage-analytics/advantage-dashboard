@@ -31,7 +31,7 @@ import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
 } from "./fixtures/label-session";
-import { createLoader } from "./fixtures/vm-modules";
+import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
  * A suggested point (T40, board 08m §5): two points of a game served from the
@@ -873,9 +873,9 @@ test.describe("a suggested point on the black rail", () => {
   });
 
   test("the three answers are the console's requests, each made on a click alone", () => {
-    const { BlackSuggestedPoint } = createLoader().load(ROW) as {
-      BlackSuggestedPoint: (props: Record<string, unknown>) => React.ReactNode;
-    };
+    const BlackSuggestedPoint = renderFunction<Record<string, unknown>>(
+      createLoader().load(ROW).BlackSuggestedPoint,
+    );
     const calls: Array<[string, ...unknown[]]> = [];
     const record =
       (name: string) =>
@@ -892,10 +892,8 @@ test.describe("a suggested point on the black rail", () => {
         onInsertPoint: record("onInsertPoint"),
         onDismissSuggestion: record("onDismissSuggestion"),
       },
-      openTombstoneIds: new Set<string>(),
       points: session.points,
       scores: new Map(),
-      playingShotId: null,
     };
     const flagged = session.points.find((p) => p.id === P2)!;
     const tree = BlackSuggestedPoint({
