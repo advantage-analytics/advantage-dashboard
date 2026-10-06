@@ -304,7 +304,7 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     court: "ad",
     serveZone: ["T"],
     scoreType: ["setPoint", "matchPoint"],
-    serveResult: ["ace"],
+    serveResult: [],
     resultOutcome: ["lost"],
     resultRallyLength: ["long"],
   });
@@ -322,6 +322,10 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   ] as const)
     expect(applied[key]).toEqual([]);
   expect(applied.match).toBe(folded);
+  // Ace alone folds to Serve › Result; beside an outcome it is subsumed.
+  expect(
+    foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, result: ["ace"] }).serveResult,
+  ).toEqual(["ace"]);
   // Both Game values are no constraint.
   expect(
     foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, game: ["serving", "returning"] })

@@ -881,9 +881,12 @@ export function foldedMatchFilters(filters: VizFilters): MatchFilters {
           : (["setPoint", "matchPoint"] as const),
       ),
     ),
-    serveResult: filters.result.includes("ace")
-      ? add(base.serveResult, ["ace"] as const)
-      : base.serveResult,
+    // The pill group OR'd Ace with Won/Lost; advanced groups AND. An ace is
+    // a won point, so "Won + Ace" is just Won — Ace folds only on its own.
+    serveResult:
+      filters.result.includes("ace") && outcomes.length === 0
+        ? add(base.serveResult, ["ace"] as const)
+        : base.serveResult,
     resultOutcome: add(base.resultOutcome, outcomes),
     resultRallyLength: add(base.resultRallyLength, filters.rally),
   };
