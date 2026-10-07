@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, Roboto_Mono } from "next/font/google";
-import { siteUrl } from "@/lib/site-url";
+import { emailOrigin } from "@/lib/site-url";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,7 +22,14 @@ const mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl()),
+  // The production origin on every Vercel deployment, so a preview's canonical
+  // and OG URLs name production rather than itself — preview serves the same
+  // pages, and Search Console was reporting them as duplicates with no
+  // canonical. Locally it is the dev origin. `robots.ts` makes the same call.
+  metadataBase: new URL(emailOrigin()),
+  // `./` resolves to the current path, so each page declares itself (at the
+  // production origin above) as its own canonical, dropping query strings.
+  alternates: { canonical: "./" },
   // Pages name themselves ("Roster"); the template adds the brand once, so a
   // tab reads "Roster · Advantage" and the landing page keeps the full name.
   title: { default: "Advantage Analytics", template: "%s · Advantage" },

@@ -8,8 +8,34 @@
  * as defaults; serialize omits defaults to keep URLs readable.
  */
 
-import type { Cut, Chart, VizFilters } from "./viz-model";
-import { EMPTY_VIZ_FILTERS, chartAllowedOn, filterKeysFor } from "./viz-model";
+import {
+  EMPTY_VIZ_FILTERS,
+  chartAllowedOn,
+  filterKeysFor,
+  type Chart,
+  type Cut,
+  type PlayerFilter,
+  type VizFilters,
+} from "./viz-model";
+import {
+  appliedValues,
+  capitalizeFirst,
+  optionLabel,
+  phraseFor,
+  SENTENCE_KEYS,
+  type PhraseNames,
+} from "../match-filters/applied-words";
+import {
+  filtersEqual,
+  hasActiveMatchFilters,
+  MATCH_FILTER_KEYS,
+  parseMatchFilters,
+  serializeMatchFilters,
+  toggleMatchFilter,
+  type MatchFilterAvailability,
+  type MatchFilterKey,
+  type MatchFilterValue,
+} from "../match-filters/model";
 
 /* ── sameView ───────────────────────────────────────────────────────────── */
 
@@ -47,16 +73,32 @@ export function sameView(
   if (current.chart !== candidate.chart) return false;
 
   for (const key of filterKeysFor(candidate.cut)) {
-    if (key === "player") {
-      if (current.filters.player !== candidate.filters.player) return false;
-      continue;
-    }
-    if (!sameValues(current.filters[key], candidate.filters[key])) {
+    if (!sameFilterValue(key, current.filters, candidate.filters)) {
       return false;
     }
   }
 
   return true;
+}
+
+/**
+ * Whether `a` and `b` agree on one `VizFilters` key: `player` by value,
+ * `match` by `filtersEqual` (a candidate built before advanced filters
+ * existed may carry none — read as EMPTY), every list group as a set.
+ */
+export function sameFilterValue(
+  key: keyof VizFilters,
+  a: VizFilters,
+  b: VizFilters,
+): boolean {
+  if (key === "player") return a.player === b.player;
+  if (key === "match") {
+    return filtersEqual(
+      a.match ?? EMPTY_VIZ_FILTERS.match,
+      b.match ?? EMPTY_VIZ_FILTERS.match,
+    );
+  }
+  return sameValues(a[key] ?? [], b[key] ?? []);
 }
 
 /**
@@ -208,6 +250,11 @@ export const OPTIONS = {
   pressure: { break: "Break points", setMatch: "Set & match points" },
   result: { won: "Won", lost: "Lost", ace: "Aces" },
   rally: { short: "1–4 shots", medium: "5–8 shots", long: "9+ shots" },
+  error: {
+    unforced: "Unforced errors",
+    forced: "Forced errors",
+    doubleFault: "Double faults",
+  },
 } as const;
 
 const ORDER = [
@@ -219,7 +266,26 @@ const ORDER = [
   "pressure",
   "rally",
   "game",
+  "error",
 ] as const;
+
+/**
+ * The advanced (`MatchFilters`) half of `VizFilters`, in
+ * `serializeMatchFilters`' compact form. Its own key, never the Video tab's
+ * `?f=` (`MATCH_FILTERS_PARAM`): the two tabs filter independently, and
+ * sharing the param would have one silently narrow the other.
+ */
+export const VIZ_MATCH_FILTERS_PARAM = "vf";
+
+/**
+ * The URL param a filter key travels as. `error` is namespaced to `verr`
+ * for the same reason `set` is to `vset` (below): a bare `?error=` is the
+ * kind of name an auth or redirect flow puts on the page, and every viz
+ * write would strip it.
+ */
+export function paramFor(key: string): string {
+  return key === "error" ? "verr" : key;
+}
 
 // `set` (bare) is NOT a viz key: the match report already owns it
 // (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the day
@@ -233,7 +299,8 @@ const VIZ_KEYS = [
   "vset",
   "draft",
   "fullscreen",
-  ...ORDER,
+  VIZ_MATCH_FILTERS_PARAM,
+  ...ORDER.map(paramFor),
 ];
 
 type OptionKey = keyof typeof OPTIONS;
@@ -373,7 +440,8 @@ export function parseVizState(params: URLSearchParams): VizState {
     cutParam === "returnPlacement" ||
     cutParam === "returnContact" ||
     cutParam === "rallyPosition" ||
-    cutParam === "rallyPlacement"
+    cutParam === "rallyPlacement" ||
+    cutParam === "errors"
   ) {
     cut = cutParam;
   }
@@ -491,8 +559,13 @@ export function vizStateQuery(
 
     const values = state.filters[key] as readonly string[];
     for (const value of values) {
-      next.append(key, value);
+      next.append(paramFor(key), value);
     }
+  }
+
+  if (allowedKeys.has("match") && state.filters.match) {
+    const match = serializeMatchFilters(state.filters.match);
+    if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
   }
 
   return next.toString();
@@ -509,12 +582,94 @@ export function clearedFilters(state: VizState): VizState {
 }
 
 /**
+ * `state`'s filters with the court's player set to `player`. Nothing else
+ * changes: the advanced filters name players outright and Result › Outcome
+ * is yours — the Video tab's meaning — so whose court is drawn never
+ * rewrites a filter the user picked.
+ */
+export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
+  if (state.filters.player === player) return state.filters;
+  return { ...state.filters, player };
+}
+
+/**
+ * `availability` narrowed to the options the carry rule keeps on `cut` for
+ * `filters`' court player — what the advanced panel offers there. Each
+ * option is probed through `carryFilters` itself, so the panel can never
+ * offer a pick the cut then silently drops (Won on your Errors court, Aces
+ * off serve) and the two rules cannot drift apart.
+ */
+export function cutAvailability(
+  availability: MatchFilterAvailability,
+  filters: VizFilters,
+  cut: Cut,
+): MatchFilterAvailability {
+  const out: Record<string, ReadonlySet<unknown>> = {};
+  for (const key of MATCH_FILTER_KEYS) {
+    const kept = [...(availability[key] as ReadonlySet<unknown>)].filter(
+      (value) => {
+        const probe = toggleMatchFilter(
+          EMPTY_VIZ_FILTERS.match,
+          key,
+          value as MatchFilterValue<typeof key>,
+        );
+        const carried = carryFilters(
+          { ...EMPTY_VIZ_FILTERS, player: filters.player, match: probe },
+          cut,
+        );
+        return filtersEqual(carried.match, probe);
+      },
+    );
+    out[key] = new Set(kept);
+  }
+  return out as unknown as MatchFilterAvailability;
+}
+
+/** Serve › Result values for a serve no one returned (an ace, a service
+ * winner) — the points that leave no return, rally shot or error to draw. */
+const isUnreturnedServeResult = (v: string) =>
+  v === "ace" || v === "service-winner";
+
+/** `filters` without what can only match a point the court player won (see
+ * `carryFilters`). Result › Outcome is yours, so the court player's win is
+ * "won" on your court and "lost" on the opponent's. */
+function withoutWinningFilters(filters: VizFilters): VizFilters {
+  const match = filters.match ?? EMPTY_VIZ_FILTERS.match;
+  return {
+    ...filters,
+    // Every errors dot is a point the court player lost. Won (theirs, in
+    // the pills; either side, in Result › Outcome) could only empty the cut
+    // and their Lost would filter nothing while still counting as applied,
+    // so neither Outcome means anything here — both go, and the panel does
+    // not offer them (`cutAvailability`).
+    result: [],
+    match: {
+      ...match,
+      resultOutcome: [],
+      returnResult: match.returnResult.filter((v) => v !== "winner"),
+      resultEnding: match.resultEnding.filter((v) => v !== "winner"),
+    },
+  };
+}
+
+/**
  * Reset serve-only filter values when switching off serve: `zone` clears
  * entirely (it has no meaning off serve), and `"ace"` alone is dropped out
  * of `result` — any OTHER selected result value (`won`/`lost`) is kept,
  * since those still mean something off serve.
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
+  // Error kinds only mean something on the errors cut.
+  if (nextCut !== "errors" && filters.error?.length) {
+    filters = { ...filters, error: [] };
+  }
+  // Every errors dot is a point the court's player lost on their own
+  // error: anything carried in that asks for the court player's won points,
+  // aces or winners would empty the cut. Dropped — the pill group's Won and
+  // Aces, and the advanced filters' equivalents.
+  if (nextCut === "errors") {
+    filters = withoutWinningFilters(filters);
+  }
   if (nextCut === "serve") {
     return filters;
   }
@@ -527,8 +682,37 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (filters.result.includes("ace")) {
     next.result = filters.result.filter((v) => v !== "ace");
   }
+  // The advanced Serve › Result "Ace" and "Service winner" are points no
+  // one returned — no return, no rally shot, no error to draw off serve. A
+  // "Double fault" has no return or rally shot either; on the errors cut it
+  // IS the server's error, so it stays there.
+  const serveResult = next.match?.serveResult ?? [];
+  const drop = (v: (typeof serveResult)[number]) =>
+    isUnreturnedServeResult(v) ||
+    (v === "double-fault" && nextCut !== "errors");
+  if (serveResult.some(drop)) {
+    next.match = {
+      ...next.match,
+      serveResult: serveResult.filter((v) => !drop(v)),
+    };
+  }
   return next;
 }
+
+/**
+ * One applied-strip token. `match` tokens carry `matchKey` — the
+ * `MatchFilters` group the value belongs to — and the raw `matchValue`, so a
+ * token's X can toggle exactly that option back off.
+ */
+export interface ActiveFilterEntry {
+  key: keyof VizFilters;
+  value: string;
+  label: string;
+  matchKey?: MatchFilterKey;
+  matchValue?: unknown;
+}
+
+const DEFAULT_PHRASE_NAMES: PhraseNames = { you: "You", opponent: "Opponent" };
 
 /**
  * Active filter entries for the UI, ordered per ORDER then set, one entry
@@ -538,20 +722,26 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
  */
 export function activeFilterEntries(
   state: VizState,
-): { key: keyof VizFilters; value: string; label: string }[] {
+  /** Player names for the advanced filters' phrases ("Rudy serving"). */
+  names: PhraseNames = DEFAULT_PHRASE_NAMES,
+): ActiveFilterEntry[] {
   if (state.cut === null) {
     return [];
   }
 
   const allowedKeys = new Set(filterKeysFor(state.cut));
-  const result: { key: keyof VizFilters; value: string; label: string }[] = [];
+  const result: ActiveFilterEntry[] = [];
 
   for (const key of ORDER) {
     if (!allowedKeys.has(key)) continue;
 
     if (key === "player") {
       if (state.filters.player !== "you") {
-        result.push({ key: "player", value: "opponent", label: "Opponent" });
+        result.push({
+          key: "player",
+          value: "opponent",
+          label: names.opponent,
+        });
       }
       continue;
     }
@@ -570,6 +760,28 @@ export function activeFilterEntries(
         value: String(setNumber),
         label: `Set ${setNumber}`,
       });
+    }
+  }
+
+  const match = state.filters.match;
+  if (allowedKeys.has("match") && match && hasActiveMatchFilters(match)) {
+    for (const matchKey of SENTENCE_KEYS) {
+      for (const matchValue of appliedValues(match, matchKey)) {
+        result.push({
+          key: "match",
+          value: `${matchKey}:${String(matchValue)}`,
+          label: capitalizeFirst(
+            phraseFor(
+              matchKey,
+              optionLabel(matchKey, matchValue),
+              matchValue,
+              names,
+            ),
+          ),
+          matchKey,
+          matchValue,
+        });
+      }
     }
   }
 
@@ -597,7 +809,7 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
 
     const optionKey = key as MultiOptionKey;
     const raw = params
-      .getAll(key)
+      .getAll(paramFor(key))
       .filter((v) => Object.hasOwn(OPTIONS[optionKey], v));
     if (raw.length === 0) continue;
     filters[key] = canonicalOptionValues(optionKey, raw) as never;
@@ -612,6 +824,8 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   if (setValues.length > 0) {
     filters.set = canonicalSetValues(setValues);
   }
+
+  filters.match = parseMatchFilters(params.get(VIZ_MATCH_FILTERS_PARAM));
 
   return filters;
 }

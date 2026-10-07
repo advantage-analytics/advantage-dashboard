@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
+import { useMatchFilters } from "../match-filters/provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
@@ -59,7 +60,7 @@ import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
 // its own) — a shared, frozen empty array lets the `defaultTiles` memo below
-// skip `buildDefaultTiles`'s six `computeViz` scans entirely on that variant
+// skip `buildDefaultTiles`'s ten `computeViz` scans entirely on that variant
 // instead of running them for output nothing reads.
 const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
 
@@ -118,6 +119,7 @@ export function SavedViewsBand({
   const points = useVizPoints(useMatchData());
   const { bands, unit, contactHidden } = useVizBands();
   const { you, opp } = useMatchSides();
+  const { context: matchCtx } = useMatchFilters();
   const { state, hrefFor } = useVizState();
   const [, startTransition] = useTransition();
 
@@ -201,14 +203,18 @@ export function SavedViewsBand({
       view.filters,
       subjectIsPlayer1,
       view.chart,
+      matchCtx,
     );
     const subjectName = view.filters.player === "you" ? you.name : opp.name;
-    const entries = activeFilterEntries({
-      cut: view.cut,
-      chart: view.chart,
-      filters: view.filters,
-      viewId: null,
-    });
+    const entries = activeFilterEntries(
+      {
+        cut: view.cut,
+        chart: view.chart,
+        filters: view.filters,
+        viewId: null,
+      },
+      { you: you.shortName, opponent: opp.shortName },
+    );
     // Every active filter, unfolded — `CourtTile` folds by measured width.
     const pills = entries.map((entry) => entry.label);
     const countLabel = tileCountLabel(result);
@@ -285,6 +291,7 @@ export function SavedViewsBand({
     opp.name,
     hrefFor,
     viewsKey,
+    matchCtx,
     bands,
     unit,
     contactHidden,

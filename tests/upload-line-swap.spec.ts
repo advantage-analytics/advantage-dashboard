@@ -400,10 +400,6 @@ test.describe("a PinnedLineBar line swap", () => {
   // destination, and `wizardUploadEligibility()` refuses one outright.
 
   test("a draft-resumed line flow keeps the window the coach set after resuming", async () => {
-    test.fail(
-      true,
-      `Known regression, not fixed in T6 — see "Not fixed" in ${DOC}`,
-    );
     const draft: MatchDraft = {
       id: "draft-1",
       step: "trim",
@@ -425,8 +421,8 @@ test.describe("a PinnedLineBar line swap", () => {
 
     await swapTo(h, LINE_B);
 
-    // The seed re-spreads `draft.formData` on every run, so a swap puts the
-    // draft's 30 s window back over the 120 s one set since.
+    // The draft is seeded once per id (`seededDraftIdRef`), so a swap does not
+    // put its 30 s window back over the 120 s one set since.
     expect(h.current.formData.videoStartSeconds).toBe(120);
   });
 });

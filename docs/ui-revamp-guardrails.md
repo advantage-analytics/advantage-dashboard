@@ -724,6 +724,13 @@ bytes move, and `submit-match-video.ts` rewrites the job row to `[0, cut length]
 up and the row keeps the window the wizard wrote. Removing the trim step means
 every job bills — and stores — the full recording.
 
+**The video check is never persisted** (2026-10-07). The trim window and both
+camera answers (`VIDEO_CHECK_FIELDS` in `new-match-wizard/types.ts`) describe one
+picked file, which survives neither localStorage nor a `match_drafts` row, so
+they are stripped on write and on read. A stored copy could only be put back over
+a live answer — which is how a resumed draft once reverted
+`initialTopPlayerIsPlayer1` on a server re-render of the page.
+
 **`useUploadMatchWizard.ts` invariants:**
 
 - The `processing_jobs` insert must `.select("id").single()`, and every later

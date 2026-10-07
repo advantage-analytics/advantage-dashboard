@@ -1474,11 +1474,16 @@ function TrimStepContentImpl({
           label={`${who} at the start`}
           /* The answer is about one frame, so when that frame moves far enough
              the answer is dropped and the hint says so — an emptied question
-             with its usual hint reads as a bug rather than a request. */
+             with its usual hint reads as a bug rather than a request.
+             A window still starting at 0:00 has not been trimmed to the first
+             point, so its first frame is likely the warm-up — where the
+             players may not stand where they do for the first point. */
           hint={
             topPlayerAnswerStale
               ? "Your window start moved — answer again for its new first frame"
-              : "At the start of your selected window — ends change every odd game"
+              : committedStart === 0
+                ? "Your window still starts at 0:00. Cut the warm-up first — then answer for the first frame you keep."
+                : "At the start of your selected window — ends change every odd game"
           }
           value={initialTopPlayerIsPlayer1}
           options={[
