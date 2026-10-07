@@ -59,6 +59,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   tiebreak_score_off_six_all: {},
   result_type_unknown: {},
   serve_fault: {},
+  shot_after_point_end: { landed: 3, extra: 4, result: "out" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -115,6 +116,7 @@ test.describe("mark copy", () => {
       result_type_unknown: "Ending unknown",
       net_hit_contradicts_height: "Net or out?",
       serve_fault: "Serve fault?",
+      shot_after_point_end: "Shot after the point ended?",
       pick_winner: "Pick the winner",
       phantom_strokes_dropped: "1 shot removed",
       out_ball_rally_continued: "Out call ignored",
@@ -472,7 +474,7 @@ test.describe("the tiers on a point", () => {
 
   test("count marks are the chip's; hints the open point's line; hidden ones neither", () => {
     expect(COUNT.length).toBe(6);
-    expect(HINT.length).toBe(6);
+    expect(HINT.length).toBe(7);
     expect(HIDDEN.length).toBe(6);
     // Every code of every tier on one point, the shot-scoped ones on its
     // last stroke — the most a point could be handed.

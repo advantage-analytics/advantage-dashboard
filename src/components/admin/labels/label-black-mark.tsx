@@ -9,6 +9,7 @@ import {
   markStates,
   missingPointAdded,
   pointRowMarkList,
+  shotAfterPointEnd,
   rollupMarks,
   stateHoverParts,
   type MarkHoverParts,
@@ -347,7 +348,7 @@ export function pointRowMarks(
 
 /**
  * The open point's hints, for `PointHintLine` — `pointRowMarkList`'s `hints`
- * in their words. Empty when the session has no marks, and for a point that
+ * and then the one read off the rows (`shotAfterPointEnd`), in their words. Empty when the session has no marks, and for a point that
  * has none: the line is then not drawn.
  */
 export function pointHints(
@@ -356,7 +357,9 @@ export function pointHints(
   names: SideNames,
 ): PointHint[] {
   if (!marks) return [];
-  return pointRowMarkList(point, marks).hints.map((mark) => ({
+  const after = shotAfterPointEnd(point);
+  const hints = pointRowMarkList(point, marks).hints;
+  return (after ? [...hints, after] : hints).map((mark) => ({
     code: mark.code,
     label: MARK_LABEL[mark.code],
     detail: markHover(mark, names),

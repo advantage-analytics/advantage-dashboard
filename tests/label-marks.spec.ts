@@ -727,6 +727,8 @@ test.describe("the three tiers", () => {
       serve_fault: "hint",
       second_serve_called_out: "hint",
       result_type_unknown: "hint",
+      // Read off the labelled rows, not built here (`shotAfterPointEnd`).
+      shot_after_point_end: "hint",
       // A hint on the point's last stroke only (`netHitTier`).
       net_hit_contradicts_height: "hint",
       // Drawn nowhere, counted nowhere.

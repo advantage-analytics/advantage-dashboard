@@ -84,6 +84,12 @@ export const LABEL_ONLY_FLAGS = {
   SERVE_FAULT: "serve_fault",
   /** The fold never settled who won; the seed left `winner` null. */
   PICK_WINNER: "pick_winner",
+  /**
+   * A stroke lands out or in the net and exactly one more follows it: a swing
+   * after the point was over? Read off the labelled rows as they stand
+   * (marks-state.ts `shotAfterPointEnd`), never built from the vendor file.
+   */
+  SHOT_AFTER_POINT_END: "shot_after_point_end",
 } as const;
 
 /**
@@ -110,6 +116,7 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
@@ -156,6 +163,13 @@ export interface LabelMarkParams {
   tiebreak_score_off_six_all: NoParams;
   result_type_unknown: NoParams;
   serve_fault: NoParams;
+  shot_after_point_end: {
+    /** The stroke that lands out or in the net, as the rail numbers it. */
+    landed: number;
+    /** The one stroke after it. */
+    extra: number;
+    result: "out" | "net";
+  };
   pick_winner: NoParams;
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {

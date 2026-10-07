@@ -23,9 +23,16 @@
  * `components/` or a server file.
  */
 
+import { labelShotValues } from "./edit";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
-import { isGhostShot, type LabelPoint, type LabelShot } from "./session";
+import {
+  isGhostShot,
+  isServeStroke,
+  type LabelPoint,
+  type LabelShot,
+} from "./session";
+import { deriveShotResult } from "./shot-derived";
 import { addedPointBetween, type SuggestionNeighbour } from "./suggestions";
 
 export type MarkState =
@@ -272,6 +279,36 @@ export function pointRowMarkList(
       ...live.flatMap((shot) => marks.shots[shot.id] ?? []),
     ].filter((mark) => mark.tier === "count"),
     hints,
+  };
+}
+
+/**
+ * "Shot after the point ended?" — the one hint read off the labelled rows as
+ * they stand rather than off the vendor file: the point's second-to-last live
+ * stroke is not a serve and its own coordinates say it landed out or in the
+ * net, so the one stroke after it may be a swing at a dead ball. Deleting
+ * that stroke, or moving the landing back in, clears it at once.
+ *
+ * Live is as the rail numbers strokes with marks on: not deleted, not a
+ * ghost. In the one labelled match it was measured on, the trailing stroke
+ * was removed on 8 of the 14 points this matched — a hint, never an action.
+ */
+export function shotAfterPointEnd(
+  point: Pick<LabelPoint, "shots">,
+): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
+  const live = point.shots.filter(
+    (shot) => shot.status !== "deleted" && !isGhostShot(shot),
+  );
+  if (live.length < 2) return null;
+  const landed = live[live.length - 2];
+  if (isServeStroke(landed.stroke)) return null;
+  const result = deriveShotResult(labelShotValues(landed));
+  if (result !== "out" && result !== "net") return null;
+  return {
+    code: "shot_after_point_end",
+    tier: "hint",
+    scope: "point",
+    params: { landed: live.length - 1, extra: live.length, result },
   };
 }
 

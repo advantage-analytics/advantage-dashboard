@@ -40,6 +40,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   result_type_unknown: "Ending unknown",
   net_hit_contradicts_height: "Net or out?",
   serve_fault: "Serve fault?",
+  shot_after_point_end: "Shot after the point ended?",
   pick_winner: "Pick the winner",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
@@ -148,6 +149,11 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "Marked as hitting the net, but the ball’s height says it cleared it.";
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
+    case "shot_after_point_end": {
+      const { landed, extra, result } = mark.params;
+      const where = result === "net" ? "lands in the net" : "lands out";
+      return `Shot ${landed} ${where} and one more shot follows. Shot ${extra} may be a swing after the point ended.`;
+    }
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "phantom_strokes_dropped": {
