@@ -149,7 +149,7 @@ ready).
 
 ## T11 · SampleBanner component and BetaWelcome suppression on the sample path
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/onboarding/sample-banner.tsx (new), src/components/dashboard/dashboard-shell.tsx — guess
 - **done when:**

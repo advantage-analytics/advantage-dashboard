@@ -102,3 +102,11 @@ is the runner's. Newest entries at the bottom.
 1. Fixture/T12: carry `id = 00000000-0000-4000-8000-5a4d504c4531`, `version = 1` (`SAMPLE_VIDEO_ATTACHMENT`) in the sample's `MatchVideo`, or the first renewal reads as a replaced video and reloads the player once.
 2. After H1, set `SAMPLE_VIDEO_ATTACHMENT.durationSeconds` (and the OpenAPI example) to the measured clip length if the Film timeline needs a fixed clock.
 3. `npm run api:lint` needs the global Postman CLI; this container lacks it — worth adding to the environment setup.
+
+## T11 · SampleBanner component and BetaWelcome suppression on the sample path — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4370 passed / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass, with two deliberate deviations from the criteria's literal wording, both verified by the reviewer: (1) the copy reads "Sample match · Not your data" — lowercase "not" trips `check-design-drift`'s middot-segment sentence-case rule (seeded, must not rise), which criterion 3 requires to pass; (2) only the `<BetaWelcome />` guard (~line 147) gained the sample path — the ~line 102 check is the upload-wizard localStorage clear, unrelated to BetaWelcome, and changing it would have altered upload-draft behaviour.
+**changed:** new `src/components/dashboard/onboarding/sample-banner.tsx` — server component, sticky `top-0` strip on `--surface-card` with a `--border-card` hairline, `--ink-600` text, "Send your own match" link to `/dashboard/matches/new` in `--blue`/`--blue-hover`. `dashboard-shell.tsx` skips `<BetaWelcome />` on `/dashboard/matches/sample` too.
+**follow-ups:**
+
+1. T12 mounts `SampleBanner` (it sits at `top-0` of the scroll container, under the header). T12's queue text still says "not your data" lowercase — use the shipped copy.
