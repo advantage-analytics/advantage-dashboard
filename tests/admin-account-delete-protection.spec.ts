@@ -175,6 +175,17 @@ test("ordinary actor reaches existing owner refusal after protection check", asy
   });
   expect(h.effects).toEqual(["prepare"]);
 });
+test("a labelled personal match refuses in the prepare step, before anything is released", async () => {
+  const h = harness({
+    prepare: { code: "22023", message: "label-session-protected" },
+  });
+  const result = await h.run();
+  expect(result).toMatchObject({ ok: false });
+  expect(result?.error).toContain("Nothing was changed");
+  expect(result?.error).toContain("quality review");
+  // The refusal is the RPC's own: no match is listed, purged or deleted.
+  expect(h.effects).toEqual(["prepare"]);
+});
 test("unauthenticated caller cannot invoke the service protection lookup", async () => {
   const h = harness({ prepare: "retained", signedIn: false });
   expect((await h.run())?.ok).toBe(false);
