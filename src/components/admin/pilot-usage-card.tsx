@@ -588,6 +588,12 @@ function PoolAccess({
     });
   };
 
+  const onOpenChange = (next: boolean) => {
+    if (pending) return;
+    setOpen(next);
+    if (!next) setError(null);
+  };
+
   return (
     <>
       <button
@@ -601,11 +607,7 @@ function PoolAccess({
       {eligible ? (
         <ConfirmDialog
           open={open}
-          onOpenChange={(next) => {
-            if (pending) return;
-            setOpen(next);
-            if (!next) setError(null);
-          }}
+          onOpenChange={onOpenChange}
           tone="danger"
           title={`Take ${programName} off the team pool?`}
           description="The team goes back to the individual figure, and the change is recorded in the program's history."
@@ -633,11 +635,7 @@ function PoolAccess({
       ) : (
         <ConfirmDialog
           open={open}
-          onOpenChange={(next) => {
-            if (pending) return;
-            setOpen(next);
-            if (!next) setError(null);
-          }}
+          onOpenChange={onOpenChange}
           title={`Put ${programName} on the team pool?`}
           description="The team draws the program figure from now on, and the change is recorded in the program's history."
           confirmLabel="Grant pool"
