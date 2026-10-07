@@ -89,7 +89,7 @@ ready).
 
 ## T6 · Tests: offline state machine + live RLS probe
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T3, T4, T5
 - **files:** tests/join-link-state.spec.ts (new, offline), tests/join-link-rls.spec.ts (new, live — named like tests/match-share-links-rls.spec.ts), tests/fixtures/vm-modules.ts (read — `createLoader`), tests/fixtures/live-db.ts + tests/fixtures/live-db-pool.ts (read), tests/fixtures/live-db-specs.ts (guess — update if it enumerates live specs)
