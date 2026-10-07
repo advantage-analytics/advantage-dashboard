@@ -229,15 +229,19 @@ export const LabelGameBand = memo(function LabelGameBand({
       ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
       : null;
   const ended = outcome ? gameBandOutcome(outcome, names) : null;
+  // The tail's gap from the server is its own margin, not a leading space:
+  // with menus the server is a trigger whose `-mr-1.5` takes back its padding
+  // and the flex row drops a text space, so the dot would sit flush against
+  // the trigger's words; without them an inline margin reads the same.
   const tail = ended ? (
     <span
       data-game-outcome={outcome?.kind}
       className={cn(
         BAND_META,
+        "ml-1",
         ended.amber ? "text-[var(--rail-amber)]" : PAINT.metaInk,
       )}
     >
-      {" "}
       · {ended.text}
     </span>
   ) : null;

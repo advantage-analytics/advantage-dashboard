@@ -15,11 +15,11 @@
 
 import type { LabelPointPatch } from "./edit";
 import {
-  isLiveShot,
   isMissedResult,
+  isNonPointEnding,
   isServeStroke,
+  liveShotsInOrder,
   opponent,
-  orderLabelShots,
   type LabelEnding,
   type LabelPoint,
   type LabelShot,
@@ -59,9 +59,7 @@ export function deriveEnding(
   point: EndingPoint,
   ghosts: boolean,
 ): DerivedEnding | null {
-  const live = orderLabelShots(
-    point.shots.filter((shot) => isLiveShot(shot, ghosts)),
-  );
+  const live = liveShotsInOrder(point, ghosts);
   const last = live.at(-1);
   if (!last) return null;
   const endedBy = last.hitter;
@@ -111,12 +109,6 @@ function lostBy(hitter: LabelSide | null): LabelSide | null {
   return hitter === null ? null : opponent(hitter);
 }
 
-/** Endings that say the point was not played out — no stroke rewrites them. */
-const HELD_ENDINGS: readonly (LabelEnding | null)[] = [
-  "let_replayed",
-  "not_a_point",
-];
-
 /**
  * The point patch a shot change calls for, or `null`. `before` and `after` are
  * the same point around one shot change.
@@ -132,7 +124,7 @@ export function endingPatchForShotChange(
   after: EndingPoint & Pick<LabelPoint, "ending" | "endedBy">,
   ghosts: boolean,
 ): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> | null {
-  if (HELD_ENDINGS.includes(after.ending)) return null;
+  if (isNonPointEnding(after.ending)) return null;
   const was = deriveEnding(before, ghosts);
   const now = deriveEnding(after, ghosts);
   if (!now) return null;
@@ -144,12 +136,25 @@ export function endingPatchForShotChange(
   ) {
     return null;
   }
+  return endingPatchTo(after, now);
+}
+
+/**
+ * The patch that brings a point's ending and ended-by to `now`, the winner
+ * with them when `now` settles one the point does not hold (and
+ * `settleWinner` is on); null when nothing differs.
+ */
+export function endingPatchTo(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner">,
+  now: DerivedEnding,
+  settleWinner = true,
+): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> | null {
   const patch: Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> = {};
-  if (after.ending !== now.ending || after.endedBy !== now.endedBy) {
+  if (point.ending !== now.ending || point.endedBy !== now.endedBy) {
     patch.ending = now.ending;
     patch.ended_by = now.endedBy;
   }
-  if (now.winner !== null && after.winner !== now.winner) {
+  if (settleWinner && now.winner !== null && point.winner !== now.winner) {
     patch.winner = now.winner;
   }
   return Object.keys(patch).length > 0 ? patch : null;

@@ -10,6 +10,7 @@
  * labeller rejected a vendor stroke, not merely that it is missing.
  */
 
+import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import {
   isLiveShot,
   isMissedResult,
@@ -235,7 +236,7 @@ export function applyPointDelete(point: LabelPoint): LabelPoint {
  * point the vendor ran into this rally, which the hint line offers to split
  * instead.
  */
-export const DEAD_BALLS_REMOVED_WITH_MISS = 2;
+export const DEAD_BALLS_REMOVED_WITH_MISS = MAX_DEAD_TAIL;
 
 /**
  * The live strokes after `shotId` in video order (`isLiveShot`: no tombstone

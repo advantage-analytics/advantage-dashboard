@@ -328,24 +328,28 @@ test.describe("the players' swap", () => {
         hitter: "p2",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
       {
         id: "g-1-return",
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
       {
         id: "g-3-serve",
         hitter: "p2",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
       {
         id: "g-3-return",
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
     ]);
   });
@@ -383,6 +387,7 @@ test.describe("the players' swap", () => {
       hitter: "p2",
       status: "deleted",
       status_before_delete: "edited",
+      was: "deleted",
     });
   });
 
@@ -426,6 +431,7 @@ test.describe("the players' swap", () => {
         hitter: "p2",
         status: "kept",
         status_before_delete: null,
+        was: "edited",
       },
     ]);
   });
@@ -628,9 +634,20 @@ function fakeClient(rows: {
   sessionStatus?: string | null;
   /** Ids whose compare-and-set matches nothing — another tab got there first. */
   racedIds?: string[];
+  /** Shot ids a grouped swap's compare-and-set leaves out: deleted or restored since the read. */
+  racedShotIds?: string[];
 }) {
   return fakeLabelClient((call) => {
     if (call.op === "update") {
+      if (call.table === "label_shots" && call.in?.id) {
+        const raced = rows.racedShotIds ?? [];
+        return {
+          data: call.in.id
+            .filter((id) => !raced.includes(id as string))
+            .map((id) => ({ id })),
+          error: null,
+        };
+      }
       return (rows.racedIds ?? []).includes(call.filters.id as string)
         ? { data: [], error: null }
         : undefined;
@@ -937,24 +954,28 @@ test.describe("the services", () => {
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s-1b",
           hitter: "p1",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s-3a",
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s-3b",
           hitter: "p2",
           status: "deleted",
           status_before_delete: "edited",
+          was: "deleted",
         },
       ],
     });
@@ -1037,24 +1058,129 @@ test.describe("the services", () => {
     expect(fake.calls.some((c) => c.table === "label_shots")).toBe(false);
   });
 
-  test("a row that changed under the plan makes the game re-read; a persistent race is refused", async () => {
+  test("a row that changed under the plan before any landed makes the game re-read; a persistent race is refused", async () => {
     const fake = fakeClient({
       gamePoints: [gameRow(ROW_IDS[0], 1), gameRow(ROW_IDS[1], 2)],
-      racedIds: [ROW_IDS[1]],
+      racedIds: [ROW_IDS[0]],
     });
     const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
     expect(await setLabelGameServer(SESSION_ID, GAME, "p2", deps)).toEqual({
       error: "This game changed while it was saving. Try again.",
     });
-    // Three attempts, each a fresh read of the game.
+    // Three attempts, each a fresh read of the game and one write that
+    // misses; the second row is never reached, and no stroke is written.
     expect(
       fake.calls.filter((c) => c.table === "label_points" && c.op === "select")
         .length,
     ).toBe(3);
+    expect(
+      fake.calls.filter((c) => c.op === "update").map((c) => c.filters.id),
+    ).toEqual([ROW_IDS[0], ROW_IDS[0], ROW_IDS[0]]);
     // The session was checked once.
     expect(fake.calls.filter((c) => c.table === "label_sessions").length).toBe(
       1,
     );
+  });
+
+  test("a row that changed after an earlier one landed is reported, not retried: the landed rows get their flipped strokes, the rest of the game is left", async () => {
+    // Rows 1 and 3 were served by Lee and switch under p2; row 2 changed in
+    // another tab between the read and its write.
+    const fake = fakeClient({
+      gamePoints: [
+        gameRow(ROW_IDS[0], 1),
+        gameRow(ROW_IDS[1], 2),
+        gameRow(ROW_IDS[2], 3),
+      ],
+      shots: [
+        labelShotRow("s-1a", ROW_IDS[0], {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow("s-1b", ROW_IDS[0], {
+          hitter: "p2",
+          stroke: "backhand",
+          video_time: 2,
+        }),
+        labelShotRow("s-3a", ROW_IDS[2], {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 3,
+        }),
+      ],
+      racedIds: [ROW_IDS[1]],
+    });
+    const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
+    expect(await setLabelGameServer(SESSION_ID, GAME, "p2", deps)).toEqual({
+      error: "This row changed in another tab. Reload to see it.",
+    });
+    // One read of the game — no re-plan over a half-written game — then
+    // row 1 landed, row 2 missed, and only row 1's strokes were flipped:
+    // row 3's rows were never written, so its strokes stay as they are.
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "update"],
+    ]);
+    const updates = fake.calls.filter((c) => c.op === "update");
+    expect(updates.slice(0, 2).map((c) => c.filters.id)).toEqual([
+      ROW_IDS[0],
+      ROW_IDS[1],
+    ]);
+    expect(updates.slice(2).map((c) => [c.values, c.in, c.filters])).toEqual([
+      [
+        { hitter: "p2", status: "edited", status_before_delete: null },
+        { id: ["s-1a"] },
+        { status: "kept" },
+      ],
+      [
+        { hitter: "p1", status: "edited", status_before_delete: null },
+        { id: ["s-1b"] },
+        { status: "kept" },
+      ],
+    ]);
+  });
+
+  test("a stroke deleted or restored in another tab since the read stops the swap with the raced message: each group is compare-and-set on the status read", async () => {
+    const fake = fakeClient({
+      gamePoints: [gameRow(ROW_IDS[0], 1)],
+      shots: [
+        labelShotRow("s-1a", ROW_IDS[0], {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow("s-1b", ROW_IDS[0], {
+          hitter: "p1",
+          stroke: "forehand",
+          video_time: 2,
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "other",
+        }),
+      ],
+      racedShotIds: ["s-1b"],
+    });
+    const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
+    expect(await setLabelGameServer(SESSION_ID, GAME, "p2", deps)).toEqual({
+      error: "This row changed in another tab. Reload to see it.",
+    });
+    // The live serve's group landed on `kept`; the tombstone's, on
+    // `deleted`, matched nothing and was neither resurrected nor retried.
+    const swaps = fake.calls.filter(
+      (c) => c.table === "label_shots" && c.op === "update",
+    );
+    expect(swaps.map((c) => [c.in, c.filters])).toEqual([
+      [{ id: ["s-1a"] }, { status: "kept" }],
+      [{ id: ["s-1b"] }, { status: "deleted" }],
+    ]);
+    for (const swap of swaps) {
+      expect(Object.keys(swap.values ?? {})).not.toContain("was");
+    }
   });
 
   test("a game with no live rows, and a missing session, are refused", async () => {

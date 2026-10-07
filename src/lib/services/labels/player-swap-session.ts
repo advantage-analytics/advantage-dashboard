@@ -13,14 +13,14 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import { parseLabelPointSeed } from "./edit";
 import {
   defaultLabelWriteDependencies,
+  updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { readShotsOfPoints } from "./ending-session";
 import {
   gated,
   normaliseId,
   readPointState,
-  readShotsOfPoints,
-  updateIfUnchanged,
   writeShotSwaps,
   type LabelOpResult,
 } from "./operations-session";

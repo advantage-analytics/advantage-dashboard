@@ -150,12 +150,14 @@ test.describe("planPointReset", () => {
         hitter: "p1",
         status: "kept",
         status_before_delete: null,
+        was: "edited",
       },
       {
         id: "s-phantom",
         hitter: "p1",
         status: "deleted",
         status_before_delete: "kept",
+        was: "deleted",
       },
     ]);
     // A stroke edited elsewhere stays edited once its hitter is back.
@@ -171,6 +173,7 @@ test.describe("planPointReset", () => {
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "edited",
       },
     ]);
   });
@@ -587,7 +590,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     ).toEqual({ ok: true, status: "unchanged", shots: [] });
     expect(
       fake.calls.find((c) => c.table === "label_shots" && c.op === "select"),
-    ).toMatchObject({ in: { label_point_id: [POINT_ID] } });
+    ).toMatchObject({ filters: { label_point_id: POINT_ID } });
     const writes = fake.calls.filter((c) => c.op === "update");
     expect(writes).toEqual([
       {
@@ -639,14 +642,27 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
       ok: true,
       status: "unchanged",
       shots: [
-        { id: "s-1", hitter: "p1", status: "kept", status_before_delete: null },
+        {
+          id: "s-1",
+          hitter: "p1",
+          status: "kept",
+          status_before_delete: null,
+          was: "edited",
+        },
         {
           id: "s-2",
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "edited",
         },
-        { id: "s-3", hitter: "p1", status: "kept", status_before_delete: null },
+        {
+          id: "s-3",
+          hitter: "p1",
+          status: "kept",
+          status_before_delete: null,
+          was: "edited",
+        },
       ],
     });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([

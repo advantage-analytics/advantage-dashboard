@@ -240,13 +240,21 @@ export function BlackShotsWell({
       />,
     );
   }
-  for (const shot of point.shots) {
+  // The strokes that went as dead balls after the point, at the end of the
+  // rally: from each of them, Undo puts back every one to the end at once.
+  const runStart = deadBallRunStart(point.shots);
+  for (const [i, shot] of point.shots.entries()) {
     if (shot.status === "deleted") {
+      const run =
+        i >= runStart && point.shots.length - i >= 2
+          ? { pointId: point.id, ids: point.shots.slice(i).map((s) => s.id) }
+          : undefined;
       rows.push(
         <BlackDeletedShot
           key={shot.id}
           shot={shot}
           edit={edit}
+          run={run}
           arrive={arrive()}
         />,
       );
@@ -602,26 +610,54 @@ export function BlackShotRow({
 }
 
 /**
+ * Where the rally's trailing run of `dead_ball_after_point` tombstones
+ * starts: the index of its first row, or `shots.length` when the last row
+ * is anything else. A tombstone with another reason, or a live row, ends it.
+ */
+export function deadBallRunStart(shots: readonly LabelShot[]): number {
+  let start = shots.length;
+  while (
+    start > 0 &&
+    shots[start - 1].status === "deleted" &&
+    shots[start - 1].deleteReason === "dead_ball_after_point"
+  ) {
+    start -= 1;
+  }
+  return start;
+}
+
+/**
  * A deleted stroke: one quiet line (a dash, "Deleted shot", its time and why it
- * went) with Undo on a track of its own, so the words truncate first.
+ * went) with Undo on a track of its own, so the words truncate first. In a
+ * `run` — this row and every one after it went as dead balls after the point
+ * (`deadBallRunStart`) — Undo reads "Undo N" and puts the whole run back in
+ * one call (`onRestoreShots`), where the console can take one; a run of one
+ * is the plain Undo.
  */
 export function BlackDeletedShot({
   shot,
   edit,
+  run,
   arrive,
 }: {
   shot: LabelShot;
   edit: EditContext;
+  /** The run from this row to the end of the rally, two or more rows. */
+  run?: { pointId: string; ids: readonly string[] };
   /** Its place in the well; a tombstone also rises (`label-row-arrive`). */
   arrive?: number;
 }) {
   const arrival = rowArrival(arrive);
-  const { operations } = edit;
+  const { operations, onRestoreShots } = edit;
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const reason = isLabelDeleteReason(shot.deleteReason)
     ? DELETE_REASON_LABEL[shot.deleteReason]
     : null;
   const facts = [time, reason].filter(Boolean).join(" · ");
+  const batch =
+    run && run.ids.length >= 2 && onRestoreShots
+      ? { ...run, restore: onRestoreShots }
+      : null;
   return (
     <div
       data-row="deleted-shot"
@@ -645,7 +681,13 @@ export function BlackDeletedShot({
         Deleted shot
         {facts ? <span className="text-white/35"> · {facts}</span> : null}
       </span>
-      {operations ? (
+      {batch ? (
+        <BlackUndoButton
+          label={`Undo delete of the ${batch.ids.length} shots after the point`}
+          count={batch.ids.length}
+          onClick={() => batch.restore(batch.pointId, [...batch.ids])}
+        />
+      ) : operations ? (
         <BlackUndoButton
           label={time ? `Undo delete shot at ${time}` : "Undo delete shot"}
           onClick={() => operations.onRestoreShot(shot.id)}

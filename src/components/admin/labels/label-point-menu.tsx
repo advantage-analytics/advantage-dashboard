@@ -26,7 +26,10 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import type { LabelPointPatch } from "@/lib/services/labels/edit";
 import { deriveEnding } from "@/lib/services/labels/ending-derived";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import {
+  isNonPointEnding,
+  type LabelPoint,
+} from "@/lib/services/labels/session";
 import { leftoverIds } from "@/lib/services/labels/game-shift";
 import {
   destinationServerIn,
@@ -64,11 +67,7 @@ export function countPointPatch(
     };
   }
   const seeded = point.seed?.ending ?? null;
-  if (
-    seeded !== null &&
-    seeded !== "let_replayed" &&
-    seeded !== "not_a_point"
-  ) {
+  if (seeded !== null && !isNonPointEnding(seeded)) {
     return { ending: seeded, ended_by: point.seed?.ended_by ?? null };
   }
   return { ending: null };
@@ -128,8 +127,7 @@ export function pointMenuActions(
   const below = combineNeighbour(context.points, point.id, "below");
   const contradicts = rowsContradictServer(point);
   const serveHitter = contradicts ? servingShot(point.shots)?.hitter : null;
-  const uncounted =
-    point.ending === "let_replayed" || point.ending === "not_a_point";
+  const uncounted = isNonPointEnding(point.ending);
   const patch = (values: LabelPointPatch) => () =>
     context.onPatchPoint?.(point.id, values);
   return {

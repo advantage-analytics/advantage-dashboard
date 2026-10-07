@@ -7,7 +7,7 @@ import {
   type LabelGameOutcome,
 } from "@/lib/services/labels/score";
 import type { LabelPoint } from "@/lib/services/labels/session";
-import { tag, text } from "./fixtures/html-probe";
+import { inner, tag, text } from "./fixtures/html-probe";
 import { labelSessionFixture, noop } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -72,6 +72,19 @@ test.describe("the band's outcome", () => {
       expect(text(over)).toBe(
         "Set 1 · Game 1 0–0 · Lee serves · Lee · 4–1 · 2 extra",
       );
+    }
+  });
+
+  test("the tail's gap from the server is its own margin in both branches, never a leading space the flex row would drop", () => {
+    for (const editable of [true, false]) {
+      const html = renderBand(
+        { kind: "decided", winner: "p2", score: "4–2" },
+        editable,
+      );
+      const outcome = tag(html, 'data-game-outcome="decided"');
+      expect(outcome).toContain("ml-1");
+      // The tail's words start at the dot: no space inside the span.
+      expect(inner(html, 'data-game-outcome="decided"')).toBe("· Vargas · 4–2");
     }
   });
 

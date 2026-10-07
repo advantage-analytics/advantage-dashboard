@@ -261,6 +261,8 @@ function fakeClient(rows: {
   endingPoint?: Record<string, unknown>;
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
+  /** Only this point's compare-and-set matched nothing. */
+  racedId?: string;
 }) {
   let kept: Record<string, unknown> = {
     updated_at: "2026-10-01T10:00:00+00:00",
@@ -277,12 +279,18 @@ function fakeClient(rows: {
   };
   return fakeLabelClient((call) => {
     if (call.op === "update") {
-      if (call.table === "label_points" && !("status" in call.filters)) {
+      // The kept point's write (never the tombstone's, which carries
+      // `status_before_delete`) is what the reconcile reads back.
+      if (
+        call.table === "label_points" &&
+        !("status_before_delete" in (call.values ?? {}))
+      ) {
         kept = { ...kept, ...call.values };
       }
-      return rows.raced && "status" in call.filters
-        ? { data: [], error: null }
-        : undefined;
+      const raced =
+        "status" in call.filters &&
+        (rows.raced || call.filters.id === rows.racedId);
+      return raced ? { data: [], error: null } : undefined;
     }
     if (call.table === "label_sessions") {
       return {
@@ -381,6 +389,7 @@ test.describe("writeLabelPointCombine", () => {
       filters: {},
       in: { id: [SHOT(1)] },
     });
+    // Compare-and-set on the status the kept point was read with.
     expect(kept).toEqual({
       table: "label_points",
       op: "update",
@@ -391,7 +400,7 @@ test.describe("writeLabelPointCombine", () => {
         vendor_rally_ids: [1001, 1002],
         status: "edited",
       },
-      filters: { id: UUID(1) },
+      filters: { id: UUID(1), status: "edited" },
     });
     // The ordinary delete rule, compare-and-set on the status read.
     expect(removed).toEqual({
@@ -460,7 +469,7 @@ test.describe("writeLabelPointCombine", () => {
       "label_points",
       "label_points",
     ]);
-    const raced = fakeClient({ raced: true });
+    const raced = fakeClient({ racedId: UUID(2) });
     expect(
       await writeLabelPointCombine({
         supabase: raced.supabase,
@@ -468,6 +477,25 @@ test.describe("writeLabelPointCombine", () => {
         direction: "above",
       }),
     ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+  });
+
+  test("a race on the kept point is reported too: the shots already moved stand, the later point is not tombstoned and no ending is read", async () => {
+    const raced = fakeClient({ racedId: UUID(1) });
+    expect(
+      await writeLabelPointCombine({
+        supabase: raced.supabase,
+        pointId: UUID(2),
+        direction: "above",
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(raced.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
+      ["label_shots", "update"],
+      ["label_points", "update"],
+    ]);
+    expect(writes(raced).at(-1)?.filters).toEqual({
+      id: UUID(1),
+      status: "edited",
+    });
   });
 
   test("refused before anything is written: a bad id or direction, a missing point, a complete session, no neighbour", async () => {

@@ -14,14 +14,10 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
   defaultLabelWriteDependencies,
+  racedMessage,
   type LabelWriteDependencies,
 } from "./edit-session";
-import {
-  gated,
-  normaliseId,
-  racedMessage,
-  type LabelOpResult,
-} from "./operations-session";
+import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   parseLabelSessionPatch,
   type LabelSessionFieldsPatch,

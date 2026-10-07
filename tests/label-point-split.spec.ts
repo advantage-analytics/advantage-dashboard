@@ -323,6 +323,8 @@ function fakeClient(rows: {
   points?: Record<string, unknown>[];
   shots?: Record<string, unknown>[];
   endingShots?: Record<string, Record<string, unknown>[]>;
+  /** The anchor's compare-and-set matched nothing — another tab got there first. */
+  racedAnchor?: boolean;
 }) {
   const endingPoints: Record<string, Record<string, unknown>> = {};
   return fakeLabelClient((call) => {
@@ -330,6 +332,9 @@ function fakeClient(rows: {
       if (call.table === "label_points" && "updated_at" in call.filters) {
         const id = String(call.filters.id);
         endingPoints[id] = { ...endingPoints[id], ...call.values };
+      }
+      if (rows.racedAnchor && "status" in call.filters) {
+        return { data: [], error: null };
       }
       return undefined;
     }
@@ -479,16 +484,40 @@ test.describe("writeLabelPointSplit", () => {
       filters: {},
       in: { id: [SHOT(2), SHOT(3), SHOT(4)] },
     });
+    // Compare-and-set on the status the anchor was read with.
     expect(anchor).toEqual({
       table: "label_points",
       op: "update",
       values: { status: "edited", vendor_rally_ids: [1001] },
-      filters: { id: UUID(1) },
+      filters: { id: UUID(1), status: "edited" },
     });
     for (const call of fake.calls) {
       expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
       expect(["select", "update", "insert"]).toContain(call.op);
     }
+  });
+
+  test("an anchor changed in another tab since the read is reported: the shifted rows, the new point and its moved shots stand, and no ending is read", async () => {
+    const raced = fakeClient({ racedAnchor: true });
+    expect(
+      await writeLabelPointSplit({
+        supabase: raced.supabase,
+        pointId: UUID(1),
+        shotId: SHOT(2),
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(raced.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_points", "insert"],
+      ["label_shots", "update"],
+      ["label_points", "update"],
+    ]);
+    expect(writes(raced).at(-1)?.filters).toEqual({
+      id: UUID(1),
+      status: "edited",
+    });
   });
 
   test("both halves take the ending their rows now derive, statuses as the split wrote them", async () => {

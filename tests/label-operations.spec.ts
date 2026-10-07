@@ -458,6 +458,7 @@ test.describe("move point", () => {
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
       ],
     });
@@ -876,10 +877,11 @@ test.describe("the services", () => {
       shot: { hitter: "p2", status: "added" },
       point: { ending: "winner", endedBy: "p2", winner: "p2" },
     });
+    // The point's rows are read alongside its session's gate.
     expect(added.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_points", "select"],
-      ["label_sessions", "select"],
       ["label_shots", "select"],
+      ["label_sessions", "select"],
       ["label_shots", "insert"],
       ["label_points", "select"],
       ["label_points", "update"],
@@ -1349,24 +1351,28 @@ test.describe("the services", () => {
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: OTHER_SHOT,
           hitter: "p1",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
           hitter: "p2",
           status: "deleted",
           status_before_delete: "edited",
+          was: "deleted",
         },
         {
           id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
           hitter: "p1",
           status: "added",
           status_before_delete: null,
+          was: "added",
         },
       ],
     });
@@ -1391,22 +1397,28 @@ test.describe("the services", () => {
         ended_by: "p1",
       },
     });
-    expect(updates.slice(1).map((c) => [c.values, c.in])).toEqual([
+    // Each group compare-and-set on the status its strokes were read with;
+    // `was` itself is never a column written.
+    expect(updates.slice(1).map((c) => [c.values, c.in, c.filters])).toEqual([
       [
         { hitter: "p2", status: "edited", status_before_delete: null },
         { id: [SHOT_ID] },
+        { status: "kept" },
       ],
       [
         { hitter: "p1", status: "edited", status_before_delete: null },
         { id: [OTHER_SHOT] },
+        { status: "kept" },
       ],
       [
         { hitter: "p2", status: "deleted", status_before_delete: "edited" },
         { id: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"] },
+        { status: "deleted" },
       ],
       [
         { hitter: "p1", status: "added", status_before_delete: null },
         { id: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"] },
+        { status: "added" },
       ],
     ]);
     for (const call of fake.calls) {

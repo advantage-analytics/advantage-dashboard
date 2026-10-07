@@ -13,14 +13,10 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
   defaultLabelWriteDependencies,
+  updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
-import {
-  gated,
-  normaliseId,
-  updateIfUnchanged,
-  type LabelOpResult,
-} from "./operations-session";
+import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelPointStatus } from "./session";
 import { planDismiss } from "./suggestions";
 

@@ -854,7 +854,7 @@ test.describe("game bands", () => {
       },
     ];
     expect(bands(renderRail(session))).toEqual([
-      "Set 1 · Game 1 0–0 · Lee serves",
+      "Set 1 · Game 1 0–0 · Lee serves · Unfinished · 15–15",
       "Set 2 · Game 1 0–0 · Vargas serves",
       "Set 2 · Tiebreak 0–0 · Vargas serves first",
       "Match tiebreak 0–0 · Lee serves first",
@@ -1169,6 +1169,39 @@ test.describe("how it ended follows the shot rows", () => {
     (refused.onRemoveShotsAfter as RemoveAfter)(P1, "s-return");
     (refused.onRestoreShots as RestoreShots)(P1, ["s-phantom"]);
     await settled();
+  });
+
+  test("neither goes out for a draft point whose insert is still in flight: its rows settle by the id the server gives it", async () => {
+    // A split's draft row, still under its pending id, holding real shots.
+    const session = winnerSession();
+    const first = session.points[0];
+    session.points[0] = { ...first, id: "pending-point-7" };
+    const { calls, operations } = spies();
+    const table = consoleTable({ ...saveSpies().saves, operations, session });
+    (table.onRemoveShotsAfter as RemoveAfter)("pending-point-7", "s-return");
+    (table.onRestoreShots as RestoreShots)("pending-point-7", ["s-phantom"]);
+    await settled();
+    expect(calls).toEqual({});
+  });
+
+  test("a shot write lands its answer on the owning row as it stands when the write settles, not as it was when the write went out", () => {
+    // A split can replace the draft point a stroke sat in while its write
+    // is in flight; the answer's `point` and `removedAfter` must find the
+    // saved row. The console is one static render here, so the shape is
+    // pinned on the source: the owner is read inside the `setPoints`
+    // updater, after the await, and never captured before it.
+    const source = readFileSync(
+      "src/components/admin/labels/label-console.tsx",
+      "utf8",
+    );
+    const start = source.indexOf("const writeShot = useCallback(");
+    const end = source.indexOf("const patchShot = useCallback(");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, end);
+    const awaitAt = body.indexOf("await settle(onSaveShot(");
+    expect(body.slice(0, awaitAt)).not.toContain("pointOfShot(rows, shotId)");
+    const updater = body.slice(body.indexOf("setPoints((current) =>", awaitAt));
+    expect(updater).toContain("const owner = pointOfShot(current, shotId);");
   });
 
   test("a console that cannot write hands the rail neither", () => {

@@ -348,12 +348,14 @@ test.describe("planGameShift", () => {
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
       {
         id: "serve-6",
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
     ]);
     expect(plan.summary).toEqual({
@@ -533,6 +535,8 @@ function fakeClient(rows: {
   /** The moved points' shot rows, when the shift asks for them. */
   shots?: Record<string, unknown>[];
   failUpdate?: string;
+  /** Ids a grouped compare-and-set leaves out: changed in another tab since the read. */
+  racedIds?: string[];
 }) {
   return fakeLabelClient((call) => {
     if (call.op === "update") {
@@ -540,7 +544,15 @@ function fakeClient(rows: {
         rows.failUpdate &&
         (call.filters.id === rows.failUpdate ||
           call.in?.id?.includes(rows.failUpdate));
-      return failed ? { data: null, error: { message: "boom" } } : undefined;
+      if (failed) return { data: null, error: { message: "boom" } };
+      const raced = rows.racedIds ?? [];
+      const ids = call.in?.id ?? [call.filters.id];
+      return {
+        data: ids
+          .filter((id) => !raced.includes(id as string))
+          .map((id) => ({ id })),
+        error: null,
+      };
     }
     if (call.table === "label_sessions") {
       return {
@@ -673,6 +685,7 @@ test.describe("writeLabelGameShift", () => {
           hitter: "p1",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
       ],
     });
@@ -720,6 +733,108 @@ test.describe("writeLabelGameShift", () => {
         { hitter: "p1", status: "edited", status_before_delete: null },
         { id: ["s-7"] },
       ],
+    ]);
+  });
+
+  test("a switched point whose winner is blank never shares a group with an unswitched one: a column left out is keyed apart from one set to null", async () => {
+    // Point 7 switches with its winner still blank — its write carries
+    // `winner: null` — and point 8 moves beside it with no winner column at
+    // all. One UPDATE for both would null point 8's winner.
+    const fake = fakeClient({
+      points: rowsOf(
+        usersCase().map((p) =>
+          p.id === UUID(7) ? { ...p, winner: null, ending: null } : p,
+        ),
+      ),
+      shots: [
+        labelShotRow("s-7", UUID(7), {
+          hitter: "p2",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+      ],
+    });
+    const result = await writeLabelGameShift({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      fromPointId: UUID(7),
+    });
+    expect(result).toMatchObject({ ok: true });
+    const points = writes(fake).filter((c) => c.table === "label_points");
+    expect(points.map((c) => [c.values, c.in, c.filters])).toEqual([
+      [
+        {
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+          winner: null,
+          ended_by: null,
+        },
+        { id: [UUID(7)] },
+        { status: "unchanged" },
+      ],
+      [
+        {
+          set_number: 1,
+          game_number: 2,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+        { id: [UUID(8)] },
+        { status: "unchanged" },
+      ],
+    ]);
+  });
+
+  test("each group is compare-and-set on the status its points were read with: a point changed in another tab stops the run with the raced message, the groups before it landed", async () => {
+    // The three-group cascade above, with point 12 — the last group —
+    // tombstoned by another tab between the read and the write.
+    const fake = fakeClient({
+      shots: [
+        labelShotRow("s-7", UUID(7), {
+          hitter: "p2",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+      ],
+      racedIds: [UUID(12)],
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    // Points 7 and 8 were written; point 12's group matched nothing, and
+    // the flipped stroke was never reached.
+    expect(writes(fake).map((c) => [c.table, c.in, c.filters])).toEqual([
+      ["label_points", { id: [UUID(7)] }, { status: "unchanged" }],
+      ["label_points", { id: [UUID(8)] }, { status: "unchanged" }],
+      ["label_points", { id: [UUID(12)] }, { status: "unchanged" }],
+    ]);
+    // Two points written the same way but read with different statuses are
+    // two groups, each compare-and-set on its own.
+    const mixed = fakeClient({
+      points: rowsOf(
+        usersCase().map((p) =>
+          p.id === UUID(8) ? { ...p, status: "edited" as const } : p,
+        ),
+      ),
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: mixed.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(7),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(writes(mixed).map((c) => [c.in, c.filters])).toEqual([
+      [{ id: [UUID(7)] }, { status: "unchanged" }],
+      [{ id: [UUID(8)] }, { status: "edited" }],
     ]);
   });
 
@@ -1114,27 +1229,21 @@ const KEY = "1·1";
 
 test.describe("gameUnderflow", () => {
   test("an ordinary game with a counted point left short, with its call and its last row — never the last game of a set", () => {
-    expect(gameUnderflow(shortCase(), false, { videoEndsEarly: null })).toEqual(
-      [
-        {
-          setNumber: 1,
-          gameNumber: 1,
-          gameInSet: 1,
-          score: "30–40",
-          rows: shortCase().slice(0, 5),
-          lastPointId: UUID(5),
-        },
-      ],
-    );
+    expect(gameUnderflow(shortCase(), false)).toEqual([
+      {
+        setNumber: 1,
+        gameNumber: 1,
+        gameInSet: 1,
+        score: "30–40",
+        rows: shortCase().slice(0, 5),
+        lastPointId: UUID(5),
+      },
+    ]);
     // Under ad scoring 30–40 is short just the same; a settled game is not.
-    expect(
-      gameUnderflow(shortCase(), true, { videoEndsEarly: null }).map((g) =>
-        gameKey(g),
-      ),
-    ).toEqual([KEY]);
-    expect(gameUnderflow(usersCase(), true, { videoEndsEarly: null })).toEqual(
-      [],
-    );
+    expect(gameUnderflow(shortCase(), true).map((g) => gameKey(g))).toEqual([
+      KEY,
+    ]);
+    expect(gameUnderflow(usersCase(), true)).toEqual([]);
     // The last game of set 1 is short, but set 2 follows: not listed. A
     // tiebreak and a game of nothing but a blank winner are not either.
     const sets = match([
@@ -1150,20 +1259,24 @@ test.describe("gameUnderflow", () => {
       { set: 2, game: 4, server: "p2", winners: [null] },
       { set: 2, game: 5, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
     ]);
-    expect(gameUnderflow(sets, true, { videoEndsEarly: null })).toEqual([]);
+    expect(gameUnderflow(sets, true)).toEqual([]);
   });
 
-  test("the session's last game: listed while the video is not said to end early, and not once it is", () => {
+  test("the session's last game is never listed: the rail reads it as still being played, whatever the labeller has said of the video", () => {
     const tail = match([
       { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
       { game: 2, server: "p2", winners: ["p2", "p2", "p1"] },
     ]);
-    const listed = gameUnderflow(tail, true, { videoEndsEarly: null });
-    expect(listed.map((g) => [g.gameInSet, g.score])).toEqual([[2, "30–15"]]);
-    expect(gameUnderflow(tail, true, { videoEndsEarly: false })).toHaveLength(
-      1,
-    );
-    expect(gameUnderflow(tail, true, { videoEndsEarly: true })).toEqual([]);
+    expect(gameUnderflow(tail, true)).toEqual([]);
+    // The rail's band hides "Unfinished" on that same game; the two agree.
+    const { bandOutcomeShown } = createLoader().load(
+      "src/components/admin/labels/label-black-rail.tsx",
+    ) as {
+      bandOutcomeShown: (band: unknown, games: unknown[]) => boolean;
+    };
+    const { games } = labelScores(tail, true);
+    expect(bandOutcomeShown(games[1], games)).toBe(false);
+    expect(bandOutcomeShown(games[0], games)).toBe(true);
   });
 });
 
@@ -1263,11 +1376,15 @@ test.describe("planGamePull", () => {
       },
     ]);
     expect(planGamePull(tiebreak, KEY, false)).toEqual({ kind: "add_point" });
+    // The session's last game is not short (`gameUnderflow`): the row menu
+    // adds its points, and no slot asks about it.
     const last = match([
       { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
       { game: 2, server: "p2", winners: ["p2", "p2", "p1"] },
     ]);
-    expect(planGamePull(last, "1·2", true)).toEqual({ kind: "add_point" });
+    expect(planGamePull(last, "1·2", true)).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
   });
 
   test("a settled game, or a stranger, is refused", () => {
@@ -1320,6 +1437,7 @@ test.describe("planGamePull", () => {
           hitter: "p1",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
       ],
       summary: {
@@ -1460,16 +1578,15 @@ test.describe("the isn't-finished slot", () => {
       underflowAfterPoints: (
         points: LabelPoint[],
         adScoring: boolean,
-        videoEndsEarly: boolean | null,
       ) => Map<string, { underflow: { gameInSet: number }; plan: unknown }>;
     };
-    const after = underflowAfterPoints(shortCase(), false, null);
+    const after = underflowAfterPoints(shortCase(), false);
     expect([...after.keys()]).toEqual([UUID(5)]);
     expect(after.get(UUID(5))).toMatchObject({
       underflow: { gameInSet: 1, score: "30–40" },
       plan: { ok: true, summary: { points: 1 } },
     });
-    expect(underflowAfterPoints(usersCase(), true, null).size).toBe(0);
+    expect(underflowAfterPoints(usersCase(), true).size).toBe(0);
   });
 
   test("the two lines and the one answer — Move here from the plan, Add point without one — on a click alone; none read-only", () => {
@@ -1478,7 +1595,7 @@ test.describe("the isn't-finished slot", () => {
     );
     const calls: unknown[][] = [];
     const points = shortCase();
-    const [underflow] = gameUnderflow(points, false, { videoEndsEarly: null });
+    const [underflow] = gameUnderflow(points, false);
     const pull = {
       underflow,
       plan: planGamePull(points, KEY, false),
@@ -1537,7 +1654,7 @@ test.describe("the isn't-finished slot", () => {
     expect(html).not.toContain("<button");
   });
 
-  test("on the rail, behind `underflow`: the slot sits after the short game's last row, and the band says Unfinished", () => {
+  test("on the rail: the slot sits after the short game's last row, and the band says Unfinished", () => {
     const { LabelBlackRail } = createLoader().load(RAIL) as {
       LabelBlackRail: React.ComponentType<Record<string, unknown>>;
     };
@@ -1562,7 +1679,7 @@ test.describe("the isn't-finished slot", () => {
           ...extra,
         }),
       );
-    const html = render({ underflow: true });
+    const html = render({});
     const at = (attr: string) => html.indexOf(attr);
     expect(at(`data-point-id="${UUID(5)}"`)).toBeLessThan(
       at(`data-game-underflow="${UUID(5)}"`),
@@ -1580,12 +1697,7 @@ test.describe("the isn't-finished slot", () => {
       "text-[var(--rail-amber)]",
     );
 
-    // Not asked for: neither the slot nor the outcome. Read-only: neither.
-    const plain = render({});
-    expect(plain).not.toContain("data-game-underflow");
-    expect(plain).not.toContain("data-game-outcome");
-    expect(render({ underflow: true, editable: false })).not.toContain(
-      "data-game-underflow",
-    );
+    // Read-only: no slot.
+    expect(render({ editable: false })).not.toContain("data-game-underflow");
   });
 });

@@ -45,12 +45,14 @@ import {
   applyGameShift,
   planGamePull,
   planGameShift,
+  type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
+import { drawsGhosts } from "@/lib/services/labels/marks-state";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   applyPointDelete,
@@ -84,6 +86,7 @@ import {
   moveSwapsPlayers,
   planPlayerSwitch,
   shotSwapsOf,
+  type ShotSwapWrite,
 } from "@/lib/services/labels/player-swap";
 import type { LabelPlayerSwitchResult } from "@/lib/services/labels/player-swap-session";
 import {
@@ -647,7 +650,6 @@ export function LabelConsole({
     ): Promise<LabelPoint | null> => {
       const before = findShot(rows, shotId);
       if (!before || !onSaveShot) return null;
-      const owner = pointOfShot(rows, shotId);
       // A draft row has no id the server knows yet; its add is still in
       // flight, and the saved row replaces it when that lands.
       if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
@@ -684,6 +686,10 @@ export function LabelConsole({
           ...shot,
           status: result.status,
         }));
+        // The owning row as it stands now, not as it was when the write
+        // went out: a split's draft point may have been replaced by the
+        // saved one in the meantime, and the answer lands on that.
+        const owner = pointOfShot(current, shotId);
         const synced = owner
           ? replacePoint(saved, owner.id, (p) =>
               applyEndingSync(
@@ -708,6 +714,9 @@ export function LabelConsole({
         );
       }
       dispatchSave({ type: "success", at: Date.now() });
+      // The point the followers are planned from: the rows the write read,
+      // with the patch and the answer applied.
+      const owner = pointOfShot(rows, shotId);
       if (!owner) return null;
       const saved = change([owner])[0] ?? null;
       return saved && removed
@@ -732,7 +741,7 @@ export function LabelConsole({
         shotId,
         strokeBefore,
         patch,
-        ghosts: marks !== null,
+        ghosts: drawsGhosts(marks),
       })) {
         void writeShot([saved], follower.shotId, follower.patch);
       }
@@ -859,7 +868,10 @@ export function LabelConsole({
   function removeShotsAfter(pointId: string, shotId: string) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
-    const after = liveShotsAfter(point.shots, shotId, marks !== null);
+    // A draft point's insert is still in flight: its rows settle by the id
+    // the server gives it, which this call could not name.
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
+    const after = liveShotsAfter(point.shots, shotId, drawsGhosts(marks));
     if (after.length === 0) return;
     const ids = new Set(after.map((shot) => shot.id));
     if (placement.shotId !== null && ids.has(placement.shotId)) {
@@ -888,6 +900,7 @@ export function LabelConsole({
   function restoreShots(pointId: string, shotIds: string[]) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
+    if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
     const before = point.shots.filter(
       (shot) => shot.status === "deleted" && shotIds.includes(shot.id),
     );
@@ -986,14 +999,15 @@ export function LabelConsole({
   }
 
   /**
-   * Move the rows left over past a game's end into the next game, and on down
-   * the match (`game-shift.ts`). A moved point whose players switch takes its
-   * flipped winner, ended by and hitters too (`applyShotSwaps`).
+   * A planned game shift or pull, optimistic: the moved rows take their new
+   * game and server, and a moved point whose players switch takes its flipped
+   * winner, ended by and hitters too (`applyShotSwaps`). The action's rows
+   * are the last word.
    */
-  function shiftGameOverflow(fromPointId: string) {
-    if (!operations) return;
-    const plan = planGameShift(points, session.adScoring, fromPointId);
-    if ("error" in plan) return refuse(plan.error);
+  function runGameShift(
+    plan: { writes: GameShiftWrite[]; shots: ShotSwapWrite[] },
+    call: () => Promise<LabelGameShiftResult>,
+  ) {
     const written = new Set(plan.writes.map((write) => write.id));
     const before = new Map(
       points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
@@ -1005,13 +1019,26 @@ export function LabelConsole({
       applyShotSwaps(takeFields(rows, before, GAME_SHIFT_FIELDS), shotsBefore);
     void runOperation(
       (rows) => applyShotSwaps(applyGameShift(rows, plan.writes), plan.shots),
-      () => operations.shiftGameOverflow(session.id, fromPointId),
+      call,
       (rows, result) =>
         applyShotSwaps(
           applyGameShift(revert(rows), result.writes),
           result.shots,
         ),
       revert,
+    );
+  }
+
+  /**
+   * Move the rows left over past a game's end into the next game, and on down
+   * the match (`game-shift.ts`).
+   */
+  function shiftGameOverflow(fromPointId: string) {
+    if (!operations) return;
+    const plan = planGameShift(points, session.adScoring, fromPointId);
+    if ("error" in plan) return refuse(plan.error);
+    runGameShift(plan, () =>
+      operations.shiftGameOverflow(session.id, fromPointId),
     );
   }
 
@@ -1026,25 +1053,7 @@ export function LabelConsole({
     const plan = planGamePull(points, gameKey, session.adScoring);
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return;
-    const written = new Set(plan.writes.map((write) => write.id));
-    const before = new Map(
-      points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
-    );
-    const shotsBefore = shotSwapsOf(
-      [...before.values()].flatMap((point) => point.shots),
-    );
-    const revert = (rows: LabelPoint[]) =>
-      applyShotSwaps(takeFields(rows, before, GAME_SHIFT_FIELDS), shotsBefore);
-    void runOperation(
-      (rows) => applyShotSwaps(applyGameShift(rows, plan.writes), plan.shots),
-      () => operations.pullGamePoints(session.id, gameKey),
-      (rows, result) =>
-        applyShotSwaps(
-          applyGameShift(revert(rows), result.writes),
-          result.shots,
-        ),
-      revert,
-    );
+    runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
   }
 
   /**
@@ -1741,7 +1750,6 @@ export function LabelConsole({
       onRestoreShots={operable ? railHandlers.restoreShots : undefined}
       onSetGameServer={operable ? railHandlers.setGameServer : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
-      underflow
       onPullGame={operable ? railHandlers.pullGamePoints : undefined}
       onAddPoint={operable ? railHandlers.addPointAfter : undefined}
       onClearEnteredScore={

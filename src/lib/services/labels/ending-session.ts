@@ -26,9 +26,14 @@ import {
   type LabelPointFields,
   type LabelPointPatch,
 } from "./edit";
-import { deriveEnding, endingPatchForShotChange } from "./ending-derived";
+import {
+  deriveEnding,
+  endingPatchForShotChange,
+  endingPatchTo,
+} from "./ending-derived";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
+  isNonPointEnding,
   type LabelEnding,
   type LabelPointStatus,
   type LabelShot,
@@ -45,6 +50,18 @@ export interface LabelPointEndingSynced {
   endedBy: LabelSide | null;
   winner: LabelSide | null;
   status: LabelPointStatus;
+}
+
+/**
+ * A synced point as the `label_points` columns a split or combine answer
+ * carries; nothing when the ending was not moved.
+ */
+export function endingColumns(
+  point: LabelPointEndingSynced | null,
+): Partial<Pick<LabelPointFields, "winner" | "ending" | "ended_by">> {
+  return point
+    ? { winner: point.winner, ending: point.ending, ended_by: point.endedBy }
+    : {};
 }
 
 export type LabelEndingSyncResult =
@@ -66,27 +83,31 @@ const ENDING_COLUMNS = `id, updated_at, status, seed, ${LABEL_POINT_SEED_FIELDS.
 const MAX_SYNC_ATTEMPTS = 3;
 const BUSY = "The point changed while its ending was saving. Try again.";
 
-/** Endings that say the point was not played out — the rows never rewrite them. */
-const HELD_ENDINGS: readonly (LabelEnding | null)[] = [
-  "let_replayed",
-  "not_a_point",
-];
-
-/** Every shot row of one point, as the console's rows. */
-export async function readPointShots(
+/**
+ * Every shot row of `pointIds`' points, as the console's rows. `whose` words
+ * the failure: "points'" for several, "point's" for one.
+ */
+export async function readShotsOfPoints(
   supabase: AdminClient,
-  pointId: string,
+  pointIds: readonly string[],
+  whose = "points'",
 ): Promise<{ shots: LabelShot[] } | { error: string }> {
-  const { data, error } = await supabase
-    .from("label_shots")
-    .select(LABEL_SHOT_COLUMNS)
-    .eq("label_point_id", pointId)
-    .returns<LabelShotRow[]>();
+  if (pointIds.length === 0) return { shots: [] };
+  const shots = supabase.from("label_shots").select(LABEL_SHOT_COLUMNS);
+  const { data, error } = await (
+    pointIds.length === 1
+      ? shots.eq("label_point_id", pointIds[0])
+      : shots.in("label_point_id", pointIds)
+  ).returns<LabelShotRow[]>();
   if (error) {
-    return { error: `Could not read the point's shots: ${error.message}` };
+    return { error: `Could not read the ${whose} shots: ${error.message}` };
   }
   return { shots: (data ?? []).map(toLabelShot) };
 }
+
+/** Every shot row of one point, as the console's rows. */
+export const readPointShots = (supabase: AdminClient, pointId: string) =>
+  readShotsOfPoints(supabase, [pointId], "point's");
 
 /**
  * Read the point, let `decide` say what patch its stored values call for, and
@@ -198,27 +219,33 @@ export async function reconcileEnding(params: {
     supabase,
     pointId,
     (row) => {
-      if (HELD_ENDINGS.includes(row.ending)) return null;
+      if (isNonPointEnding(row.ending)) return null;
       const now = deriveEnding({ winner: row.winner, shots: rows }, ghosts);
       if (!now) return null;
-      const patch: EndingPatch = {};
-      if (row.ending !== now.ending || row.ended_by !== now.endedBy) {
-        patch.ending = now.ending;
-        patch.ended_by = now.endedBy;
-      }
-      if (settleWinner && now.winner !== null && row.winner !== now.winner) {
-        patch.winner = now.winner;
-      }
-      return Object.keys(patch).length > 0 ? patch : null;
+      return endingPatchTo(
+        { ending: row.ending, endedBy: row.ended_by, winner: row.winner },
+        now,
+        settleWinner,
+      );
     },
     { keepStatus },
   );
 }
 
 /**
- * The sentence a shot write answers with when its own write landed but the
- * point's did not: the rows and the point disagree until a reload.
+ * The sentence a write answers with when its own write landed (`landed`) but
+ * the point's did not: the rows and the point disagree until a reload.
  */
-export function endingSyncFailed(error: string): string {
-  return `${error} The shot was saved; reload to see the point as it stands.`;
+export function endingSyncFailed(
+  error: string,
+  landed = "The shot was saved",
+): string {
+  return `${error} ${landed}; reload to see the point as it stands.`;
+}
+
+/** The answer's `point`, when the write moved the ending; nothing otherwise. */
+export function withSyncedPoint(synced: {
+  point: LabelPointEndingSynced | null;
+}): { point?: LabelPointEndingSynced } {
+  return synced.point ? { point: synced.point } : {};
 }

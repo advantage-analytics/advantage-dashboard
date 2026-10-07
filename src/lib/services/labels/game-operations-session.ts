@@ -13,17 +13,21 @@
  *
  * A game is several rows with no transaction across them. Each row is written
  * compare-and-set on the `updated_at` it was read with; a row that changed
- * under the plan makes the whole game re-read and re-planned, up to {@link
- * MAX_GAME_ATTEMPTS} times. The plan is a function of the game as read, so a
- * retry converges.
+ * under the plan before any row landed makes the whole game re-read and
+ * re-planned, up to {@link MAX_GAME_ATTEMPTS} times. The plan is a function
+ * of the game as read, so a retry converges. Once a row has landed a race is
+ * reported instead (see `writeGame`): the rows that landed get their flipped
+ * strokes so each is whole, and the rest of the game is left as it was.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
   defaultLabelWriteDependencies,
+  racedMessage,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { readShotsOfPoints } from "./ending-session";
 import { LABEL_SIDES, parseLabelPointSeed } from "./edit";
 import {
   planGameServer,
@@ -37,7 +41,7 @@ import { isLabelGame, type LabelGame } from "./operations";
 import {
   gated,
   normaliseId,
-  readShotsOfPoints,
+  withShots,
   writeShotSwaps,
   type LabelOpResult,
 } from "./operations-session";
@@ -129,47 +133,57 @@ async function readGame(
 /**
  * Plan the game as read, with its strokes only when they can matter: a dry
  * plan over strokeless points says whether any server moves, and only then
- * are the game's shots read and the plan run again over them.
+ * are the game's shots read and the plan run again over them. `pointOfShot`
+ * says which point each stroke read belongs to; empty when none was read.
  */
 async function planGame(
   supabase: AdminClient,
   rows: readonly GameRow[],
   plan: (points: readonly GameServerPoint[]) => PlannedGameWrites,
   readsShots: boolean,
-): Promise<PlannedGameWrites> {
+): Promise<{
+  planned: PlannedGameWrites;
+  pointOfShot: ReadonlyMap<string, string>;
+}> {
   const points: GameServerPoint[] = rows.map((row) => ({
     ...toGamePoint(row),
     shots: [],
   }));
   const dry = plan(points);
-  if ("error" in dry || !readsShots) return dry;
+  const none = new Map<string, string>();
+  if ("error" in dry || !readsShots) return { planned: dry, pointOfShot: none };
   const serverOf = new Map(rows.map((row) => [row.id, row.server]));
   const moves = dry.writes.some(
     (write) => write.server !== serverOf.get(write.id),
   );
-  if (!moves) return dry;
+  if (!moves) return { planned: dry, pointOfShot: none };
 
   const owned = await readShotsOfPoints(
     supabase,
     rows.map((row) => row.id),
   );
-  if ("error" in owned) return owned;
-  const shotsOf = new Map<string, GameServerPoint["shots"][number][]>();
-  for (const shot of owned.shots) {
-    const list = shotsOf.get(shot.labelPointId) ?? [];
-    list.push(shot);
-    shotsOf.set(shot.labelPointId, list);
-  }
-  return plan(
-    points.map((point) => ({ ...point, shots: shotsOf.get(point.id) ?? [] })),
-  );
+  if ("error" in owned) return { planned: owned, pointOfShot: none };
+  return {
+    planned: plan(withShots(points, owned.shots)),
+    pointOfShot: new Map(
+      owned.shots.map((shot) => [shot.id, shot.labelPointId]),
+    ),
+  };
 }
 
 /**
  * Read the game, plan with `plan`, and write every row compare-and-set on
- * its `updated_at`; start over when one changed under the plan. The flipped
- * strokes, if any, are written once every point row is. The session is
- * checked once, before the first read.
+ * its `updated_at`. A row that changed under the plan before any row landed
+ * starts the game over from a fresh read; one that changed after some row
+ * did is reported instead. The rows that landed carry their new server and,
+ * where the players switched, a flipped winner, so their flipped strokes are
+ * written before the report and each landed row is whole — a re-plan over
+ * the half-written game would need this attempt's writes grafted onto a
+ * fresh read (their servers now match, so the rule would neither flip their
+ * strokes nor flip their winners back), whereas a second click after the
+ * reload converges on its own: the landed rows plan as no change, the rest
+ * as before. The flipped strokes of a full run are written once every point
+ * row is. The session is checked once, before the first read.
  */
 async function writeGame(
   supabase: AdminClient,
@@ -186,10 +200,17 @@ async function writeGame(
   for (let attempt = 0; attempt < MAX_GAME_ATTEMPTS; attempt += 1) {
     const read = await readGame(supabase, sessionId, game);
     if ("error" in read) return read;
-    const planned = await planGame(supabase, read.rows, plan, readsShots);
+    const { planned, pointOfShot } = await planGame(
+      supabase,
+      read.rows,
+      plan,
+      readsShots,
+    );
     if ("error" in planned) return planned;
 
     const byId = new Map(read.rows.map((row) => [row.id, row]));
+    /** The rows this attempt wrote, in order, before a race if one came. */
+    const landed = new Set<string>();
     let raced = false;
     for (const write of planned.writes) {
       const row = byId.get(write.id);
@@ -209,6 +230,7 @@ async function writeGame(
         raced = true;
         break;
       }
+      landed.add(id);
     }
     if (!raced) {
       const swapFailed = await writeShotSwaps(
@@ -222,6 +244,17 @@ async function writeGame(
         points: planned.writes.map((write) => toResult(write, byId)),
         shots: planned.shots,
       };
+    }
+    if (landed.size > 0) {
+      const swapFailed = await writeShotSwaps(
+        supabase,
+        planned.shots.filter((shot) =>
+          landed.has(pointOfShot.get(shot.id) ?? ""),
+        ),
+        "switch the points' players",
+      );
+      if (swapFailed) return { error: swapFailed };
+      return { error: racedMessage("row") };
     }
   }
   return { error: BUSY };

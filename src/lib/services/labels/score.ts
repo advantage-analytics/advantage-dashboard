@@ -18,6 +18,7 @@
 import {
   LABEL_GAME_TYPES,
   isLabelGameType,
+  isNonPointEnding,
   opponent,
   type LabelEnding,
   type LabelGameType,
@@ -101,19 +102,13 @@ export interface LabelScores {
   games: LabelGameBand[];
 }
 
-/** The endings that are not points: the score stands. */
-const UNCOUNTED_ENDINGS: ReadonlySet<LabelEnding> = new Set<LabelEnding>([
-  "let_replayed",
-  "not_a_point",
-]);
-
 export function isCountedPoint(
   point: Pick<ScorablePoint, "status" | "winner" | "ending">,
 ): point is typeof point & { winner: LabelSide } {
   return (
     point.status !== "deleted" &&
     point.winner !== null &&
-    !(point.ending !== null && UNCOUNTED_ENDINGS.has(point.ending))
+    !isNonPointEnding(point.ending)
   );
 }
 
@@ -128,14 +123,10 @@ interface GameAccumulator {
   /** Who won the game: the winner of its last counted point so far. */
   winner: LabelSide | null;
   /**
-   * Who the points so far have already settled an ordinary game for, once
-   * they have. Sticky: a stray point after that keeps reading "Game".
-   */
-  decidedBy: LabelSide | null;
-  /**
    * Who the points settled the game for, by its own rule — an ordinary
-   * game's (`decidedBy`) or a tiebreak's — and the tally as it stood then.
-   * What `outcome` reads; `extra` counts the live rows after that one.
+   * game's or a tiebreak's — and the tally as it stood then. Sticky: a stray
+   * point after that keeps reading "Game". What `outcome` reads; `extra`
+   * counts the live rows after that one.
    */
   won: { by: LabelSide; points: Record<LabelSide, number> } | null;
   extra: number;
@@ -204,7 +195,6 @@ export function labelScores(
         server: null,
         points: { p1: 0, p2: 0 },
         winner: null,
-        decidedBy: null,
         won: null,
         extra: 0,
       };
@@ -223,13 +213,6 @@ export function labelScores(
     if (isCountedPoint(point)) {
       game.points[point.winner] += 1;
       game.winner = point.winner;
-      if (
-        game.gameType === "game" &&
-        game.decidedBy === null &&
-        gameDecided(game.points, adScoring)
-      ) {
-        game.decidedBy = point.winner;
-      }
       if (game.won === null && settled(game, adScoring)) {
         game.won = { by: point.winner, points: { ...game.points } };
       }
@@ -260,7 +243,7 @@ export function labelScores(
       gamesBefore: `${set.won.p1}–${set.won.p2}`,
       winner: game.winner,
       points: { ...game.points },
-      decidedBy: game.decidedBy,
+      decidedBy: decidedBy(game),
       outcome: gameOutcome(game),
     });
     // The band's running count credits a game only once it is settled, as
@@ -282,17 +265,39 @@ export function labelScores(
 
 const CALLS = ["0", "15", "30", "40"] as const;
 
+/**
+ * Who the points have already settled an ordinary game for; null for a game
+ * they have not, and always for a tiebreak (whose "Game" call is not drawn).
+ */
+function decidedBy(game: GameAccumulator): LabelSide | null {
+  return game.gameType === "game" ? (game.won?.by ?? null) : null;
+}
+
 function formatScore(game: GameAccumulator, server: LabelSide): string {
   const receiver = opponent(server);
   const s = game.points[server];
   const r = game.points[receiver];
   if (game.gameType !== "game") return `${s}–${r}`;
-  if (game.decidedBy) {
+  return ordinaryGameScore(game.points, decidedBy(game), server);
+}
+
+/**
+ * An ordinary game's score as the scoreboard calls it, `server` first: the
+ * decided side says "Game", an open game its call. Exported for the scorecard,
+ * which names the games that end undecided or run past their end.
+ */
+export function ordinaryGameScore(
+  points: Record<LabelSide, number>,
+  decidedBy: LabelSide | null,
+  server: LabelSide,
+): string {
+  const receiver = opponent(server);
+  if (decidedBy) {
     const call = (side: LabelSide) =>
-      side === game.decidedBy ? "Game" : CALLS[Math.min(game.points[side], 3)];
+      side === decidedBy ? "Game" : CALLS[Math.min(points[side], 3)];
     return `${call(server)}–${call(receiver)}`;
   }
-  return gameCall(s, r);
+  return gameCall(points[server], points[receiver]);
 }
 
 /**
@@ -333,9 +338,9 @@ const TIEBREAK_TARGET: Record<Exclude<LabelGameType, "game">, number> = {
 
 /**
  * Whether the points so far have settled a tiebreak: its target reached and
- * two clear. Exported for the same reader as `gameDecided`.
+ * two clear.
  */
-export function tiebreakDecided(
+function tiebreakDecided(
   points: Record<LabelSide, number>,
   type: Exclude<LabelGameType, "game">,
 ): boolean {

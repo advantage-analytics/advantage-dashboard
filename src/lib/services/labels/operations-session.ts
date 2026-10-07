@@ -24,6 +24,7 @@ import { UUID_RE } from "@/lib/admin/validation";
 import {
   ADMIN_REQUIRED,
   defaultLabelWriteDependencies,
+  racedMessage,
   readSessionGate,
   updateIfUnchanged,
   writeShotTombstones,
@@ -31,6 +32,7 @@ import {
 } from "./edit-session";
 import {
   endingSyncFailed,
+  withSyncedPoint,
   readPointShots,
   syncEndingAfterShotChange,
   type LabelPointEndingSynced,
@@ -52,12 +54,8 @@ import {
   type LabelGame,
   type LabelShotRemoved,
   type LabelShotRestored,
+  type ShotRestoreWrite,
 } from "./operations";
-
-// The compare-and-set UPDATE and its race sentence live in edit-session.ts
-// (this file imports from there); the other `*-session.ts` writers take them
-// from here as they always have.
-export { racedMessage, updateIfUnchanged } from "./edit-session";
 import { parseLabelPointSeed } from "./edit";
 import type { ShotSwapWrite } from "./player-swap";
 import {
@@ -148,9 +146,13 @@ export async function gated<T extends object>(
 
 /**
  * Write a swap's flipped strokes (player-swap.ts): one UPDATE on
- * `label_shots` per distinct value tuple, by id list, in the order the
- * tuples first appear — as game-shift-session.ts groups its point writes.
- * Returns an error sentence, or null when every group was written.
+ * `label_shots` per distinct value tuple and status as read (`was`), by id
+ * list, in the order the tuples first appear — as game-shift-session.ts
+ * groups its point writes. Each group is compare-and-set on `was`, so a
+ * stroke another tab deleted or restored since the read is neither brought
+ * back nor written against the CHECK: a group that writes fewer rows than
+ * it named stops the rest with the raced message, the groups before it
+ * landed. Returns an error sentence, or null when every group was written.
  */
 export async function writeShotSwaps(
   supabase: AdminClient,
@@ -159,43 +161,47 @@ export async function writeShotSwaps(
 ): Promise<string | null> {
   const groups = new Map<
     string,
-    { values: Omit<ShotSwapWrite, "id">; ids: string[] }
+    { values: Omit<ShotSwapWrite, "id" | "was">; was: string; ids: string[] }
   >();
-  for (const { id, ...values } of shots) {
+  for (const { id, was, ...values } of shots) {
     const key = JSON.stringify([
       values.hitter,
       values.status,
       values.status_before_delete,
+      was,
     ]);
     const group = groups.get(key);
     if (group) group.ids.push(id);
-    else groups.set(key, { values, ids: [id] });
+    else groups.set(key, { values, was, ids: [id] });
   }
   for (const group of groups.values()) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("label_shots")
       .update(group.values)
-      .in("id", group.ids);
+      .in("id", group.ids)
+      .eq("status", group.was)
+      .select("id");
     if (error) return `Could not ${what}: ${error.message}`;
+    if (!data || data.length !== group.ids.length) return racedMessage("row");
   }
   return null;
 }
 
-/** Every shot row of `pointIds`' points, as the console's rows. */
-export async function readShotsOfPoints(
-  supabase: AdminClient,
-  pointIds: readonly string[],
-): Promise<{ shots: LabelShot[] } | { error: string }> {
-  if (pointIds.length === 0) return { shots: [] };
-  const { data, error } = await supabase
-    .from("label_shots")
-    .select(LABEL_SHOT_COLUMNS)
-    .in("label_point_id", pointIds)
-    .returns<LabelShotRow[]>();
-  if (error) {
-    return { error: `Could not read the points' shots: ${error.message}` };
+/** `points` each with its strokes from `shots`, matched on `labelPointId`. */
+export function withShots<P extends { id: string }>(
+  points: readonly P[],
+  shots: readonly LabelShot[],
+): (P & { shots: LabelShot[] })[] {
+  const shotsOf = new Map<string, LabelShot[]>();
+  for (const shot of shots) {
+    const list = shotsOf.get(shot.labelPointId);
+    if (list) list.push(shot);
+    else shotsOf.set(shot.labelPointId, [shot]);
   }
-  return { shots: (data ?? []).map(toLabelShot) };
+  return points.map((point) => ({
+    ...point,
+    shots: shotsOf.get(point.id) ?? [],
+  }));
 }
 
 // ── Shots ───────────────────────────────────────────────────────────────────
@@ -210,12 +216,16 @@ interface ShotStateRow {
 }
 
 /** The shot, its session's gate (`ghosts`) and its point's rows as read. */
+interface ShotState {
+  row: ShotStateRow;
+  ghosts: boolean;
+  shots: LabelShot[];
+}
+
 async function readShotState(
   supabase: AdminClient,
   shotId: string,
-): Promise<
-  { row: ShotStateRow; ghosts: boolean; shots: LabelShot[] } | { error: string }
-> {
+): Promise<ShotState | { error: string }> {
   const { data, error } = await supabase
     .from("label_shots")
     .select(
@@ -225,9 +235,11 @@ async function readShotState(
     .maybeSingle<ShotStateRow>();
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!data) return { error: "Shot not found." };
-  const gate = await readSessionGate(supabase, data.session_id);
+  const [gate, owned] = await Promise.all([
+    readSessionGate(supabase, data.session_id),
+    readPointShots(supabase, data.label_point_id),
+  ]);
   if ("error" in gate) return gate;
-  const owned = await readPointShots(supabase, data.label_point_id);
   if ("error" in owned) return owned;
   return { row: data, ghosts: gate.ghosts, shots: owned.shots };
 }
@@ -239,7 +251,7 @@ async function readShotState(
  */
 async function writeShotStatus(
   supabase: AdminClient,
-  read: { row: ShotStateRow; ghosts: boolean; shots: LabelShot[] },
+  read: ShotState,
   write: { status: LabelShotStatus },
   what: string,
 ): Promise<LabelShotStatusResult> {
@@ -265,7 +277,7 @@ async function writeShotStatus(
   return {
     ok: true,
     status: write.status,
-    ...(synced.point ? { point: synced.point } : {}),
+    ...withSyncedPoint(synced),
   };
 }
 
@@ -341,13 +353,13 @@ export async function writeLabelShotsRemoveAfter(params: {
   });
   if ("error" in synced) {
     return {
-      error: `${synced.error} The shots were removed; reload to see the point as it stands.`,
+      error: endingSyncFailed(synced.error, "The shots were removed"),
     };
   }
   return {
     ok: true,
     removed: written.removed,
-    ...(synced.point ? { point: synced.point } : {}),
+    ...withSyncedPoint(synced),
   };
 }
 
@@ -376,13 +388,15 @@ export async function writeLabelShotsRestore(params: {
   if (found.some((row) => row.label_point_id !== first.label_point_id)) {
     return { error: "The shots to restore must all be of one point." };
   }
-  const gate = await readSessionGate(supabase, first.session_id);
+  const [gate, owned] = await Promise.all([
+    readSessionGate(supabase, first.session_id),
+    readPointShots(supabase, first.label_point_id),
+  ]);
   if ("error" in gate) return gate;
-  const owned = await readPointShots(supabase, first.label_point_id);
   if ("error" in owned) return owned;
 
   const byId = new Map(owned.shots.map((shot) => [shot.id, shot]));
-  const plans: { shot: LabelShot; status: LabelShotRestored["status"] }[] = [];
+  const plans: { shot: LabelShot; write: ShotRestoreWrite }[] = [];
   for (const id of shotIds) {
     const shot = byId.get(id);
     if (!shot) return { error: "Shot not found." };
@@ -392,20 +406,20 @@ export async function writeLabelShotsRestore(params: {
       event_id: shot.eventId,
     });
     if ("error" in plan) return plan;
-    plans.push({ shot, status: plan.write.status });
+    plans.push({ shot, write: plan.write });
   }
   const restored: LabelShotRestored[] = [];
-  for (const { shot, status } of plans) {
+  for (const { shot, write } of plans) {
     const failed = await updateIfUnchanged(
       supabase,
       "label_shots",
       shot.id,
       shot.status,
-      { status, status_before_delete: null, delete_reason: null },
+      { ...write },
       "restore the shots",
     );
     if (failed) return { error: failed };
-    restored.push({ id: shot.id, status });
+    restored.push({ id: shot.id, status: write.status });
   }
   const synced = await syncEndingAfterShotChange({
     supabase,
@@ -416,13 +430,13 @@ export async function writeLabelShotsRestore(params: {
   });
   if ("error" in synced) {
     return {
-      error: `${synced.error} The shots were restored; reload to see the point as it stands.`,
+      error: endingSyncFailed(synced.error, "The shots were restored"),
     };
   }
   return {
     ok: true,
     restored,
-    ...(synced.point ? { point: synced.point } : {}),
+    ...withSyncedPoint(synced),
   };
 }
 
@@ -445,18 +459,13 @@ export async function writeLabelShotAdd(params: {
     if (!afterShotId) return { error: "Invalid shot id." };
   }
 
-  const read = await readPointState(supabase, pointId);
+  const [read, owned] = await Promise.all([
+    readPointState(supabase, pointId),
+    readPointShots(supabase, pointId),
+  ]);
   if ("error" in read) return read;
-
-  const { data: shotRows, error: shotsError } = await supabase
-    .from("label_shots")
-    .select(LABEL_SHOT_COLUMNS)
-    .eq("label_point_id", pointId)
-    .returns<LabelShotRow[]>();
-  if (shotsError) {
-    return { error: `Could not read the point's shots: ${shotsError.message}` };
-  }
-  const shots = orderLabelShots((shotRows ?? []).map(toLabelShot));
+  if ("error" in owned) return owned;
+  const shots = orderLabelShots(owned.shots);
   const plan = planAddedShot(
     { status: read.row.status, server: read.row.server, shots },
     afterShotId,
@@ -486,7 +495,7 @@ export async function writeLabelShotAdd(params: {
     after: [...shots, shot],
   });
   if ("error" in synced) return { error: endingSyncFailed(synced.error) };
-  return { ok: true, shot, ...(synced.point ? { point: synced.point } : {}) };
+  return { ok: true, shot, ...withSyncedPoint(synced) };
 }
 
 // ── Points ──────────────────────────────────────────────────────────────────
@@ -639,7 +648,7 @@ export async function writeLabelPointMove(params: {
     destination !== read.row.server;
   let shots: LabelShot[] = [];
   if (switches) {
-    const owned = await readShotsOfPoints(supabase, [pointId]);
+    const owned = await readPointShots(supabase, pointId);
     if ("error" in owned) return owned;
     shots = owned.shots;
   }

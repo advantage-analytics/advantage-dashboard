@@ -40,10 +40,12 @@ import {
   parseLabelShotPatch,
   parseLabelShotSeed,
   type LabelPointFields,
+  type LabelShotPatch,
   type LabelShotValues,
 } from "./edit";
 import {
   endingSyncFailed,
+  withSyncedPoint,
   readPointShots,
   reconcileEnding,
   syncEndingAfterShotChange,
@@ -208,6 +210,61 @@ export async function writeShotTombstones(
   return { removed };
 }
 
+/**
+ * Put a site-removed stroke back: UPDATE its `site_removal_restored_at`, but
+ * only while it is still a ghost. Answers whether this call did it (false:
+ * another tab got there first), or the database's message.
+ */
+export async function restoreGhostRow(
+  supabase: AdminClient,
+  id: string,
+  at: string,
+): Promise<{ restored: boolean } | { error: string }> {
+  const { data, error } = await supabase
+    .from("label_shots")
+    .update({ site_removal_restored_at: at })
+    .eq("id", id)
+    .not("site_removal", "is", null)
+    .is("site_removal_restored_at", null)
+    .select("id");
+  if (error) return { error: error.message };
+  return { restored: !!data && data.length > 0 };
+}
+
+/**
+ * A rally ball just marked out or into the net ended the point there: one or
+ * two live strokes still after it were hit after the point, and go as
+ * tombstones in this same call, with no click of their own (the other
+ * exception in the console's file comment). Three or more are left for the
+ * hint line's Remove or Split — more likely a second point in the rally. Read
+ * off the labeller's rows (`after`): with marks off a ghost is a stroke like
+ * any other. Answers the rows with them gone, and what went.
+ */
+async function removeDeadBalls(
+  supabase: AdminClient,
+  after: LabelShot[],
+  shotId: string,
+  row: Pick<LabelShot, "result">,
+  patch: LabelShotPatch,
+  ghosts: boolean,
+): Promise<
+  { after: LabelShot[]; removedAfter?: LabelShotRemoved[] } | { error: string }
+> {
+  const dead = deadBallsAfterMiss(after, shotId, row, patch, ghosts);
+  if (dead.length === 0) return { after };
+  const written = await writeShotTombstones(
+    supabase,
+    dead,
+    "dead_ball_after_point",
+    "remove the shots after it",
+  );
+  if ("error" in written) return { error: endingSyncFailed(written.error) };
+  return {
+    after: applyShotsRemoved(after, written.removed),
+    removedAfter: written.removed,
+  };
+}
+
 type ShotRow = LabelShotValues & {
   id: string;
   session_id: string;
@@ -217,6 +274,9 @@ type ShotRow = LabelShotValues & {
   /** Raw jsonb — parsed before the status rule trusts it. */
   seed: unknown;
 };
+
+/** The value fields a stroke's place in the rally and its ending are read from. */
+const MOVES_ENDING = ["hitter", "stroke", "result", "video_time"] as const;
 
 /**
  * Validate, then write `patch` and its status to one shot; then the ghost a
@@ -234,10 +294,16 @@ export async function writeLabelShotEdit(params: {
   const parsed = parseLabelShotPatch(params.patch);
   if ("error" in parsed) return parsed;
   const { patch } = parsed;
+  // Only these can change what the strokes say about how the point ended, so
+  // only they read the point's rows and settle its ending.
+  const settles = MOVES_ENDING.some((field) => field in patch);
 
   try {
-    // The session's gate and the point's rows, read once with the first
-    // attempt: what the ending is derived from before and after the write.
+    // The session's gate, read once with the first attempt, and, when the
+    // ending can move, the point's rows — what the ending is derived from
+    // before and after the write — read with every attempt: a retry means
+    // the row changed under the edit, and the rows it sits among may have
+    // too.
     let ghosts = false;
     let before: LabelShot[] = [];
     for (let attempt = 0; attempt < MAX_EDIT_ATTEMPTS; attempt += 1) {
@@ -255,11 +321,16 @@ export async function writeLabelShotEdit(params: {
       if (row.status === "deleted") {
         return { error: "Restore this shot before editing it." };
       }
-      if (attempt === 0) {
-        const gate = await readSessionGate(supabase, row.session_id);
+      // Independent reads, the gate's refusal first.
+      const [gate, owned] = await Promise.all([
+        attempt === 0 ? readSessionGate(supabase, row.session_id) : null,
+        settles ? readPointShots(supabase, row.label_point_id) : null,
+      ]);
+      if (gate) {
         if ("error" in gate) return gate;
         ghosts = gate.ghosts;
-        const owned = await readPointShots(supabase, row.label_point_id);
+      }
+      if (owned) {
         if ("error" in owned) return owned;
         before = owned.shots;
       }
@@ -278,6 +349,7 @@ export async function writeLabelShotEdit(params: {
         return { error: `Could not save the shot: ${writeError.message}` };
       }
       if (!written || written.length === 0) continue;
+      if (!settles) return { ok: true, status };
 
       let after = before.map((shot) =>
         shot.id === shotId ? applyLabelShotPatch(shot, patch) : shot,
@@ -291,50 +363,33 @@ export async function writeLabelShotEdit(params: {
       let restoredGhostId: string | undefined;
       if (freed) {
         const at = new Date().toISOString();
-        const { data: unghosted, error: ghostError } = await supabase
-          .from("label_shots")
-          .update({ site_removal_restored_at: at })
-          .eq("id", freed)
-          .not("site_removal", "is", null)
-          .is("site_removal_restored_at", null)
-          .select("id");
-        if (ghostError) {
+        const ghost = await restoreGhostRow(supabase, freed, at);
+        if ("error" in ghost) {
           return {
             error: endingSyncFailed(
-              `Could not restore the shot after the serve: ${ghostError.message}`,
+              `Could not restore the shot after the serve: ${ghost.error}`,
             ),
           };
         }
         // Matched nothing: another tab put it back first. Either way it is a
         // stroke of the rally now.
-        if (unghosted && unghosted.length > 0) restoredGhostId = freed;
+        if (ghost.restored) restoredGhostId = freed;
         after = after.map((shot) =>
           shot.id === freed ? applySiteRemovalRestore(shot, at) : shot,
         );
       }
 
-      // A rally ball just marked out or into the net ended the point there:
-      // one or two live strokes still after it were hit after the point, and
-      // go as tombstones in this same call, with no click of their own (the
-      // other exception in the console's file comment). Three or more are
-      // left for the hint line's Remove or Split — more likely a second
-      // point in the rally. Read off the labeller's rows: with marks off a
-      // ghost is a stroke like any other.
-      const dead = deadBallsAfterMiss(after, shotId, row, patch, ghosts);
-      let removedAfter: LabelShotRemoved[] | undefined;
-      if (dead.length > 0) {
-        const written = await writeShotTombstones(
-          supabase,
-          dead,
-          "dead_ball_after_point",
-          "remove the shots after it",
-        );
-        if ("error" in written) {
-          return { error: endingSyncFailed(written.error) };
-        }
-        removedAfter = written.removed;
-        after = applyShotsRemoved(after, written.removed);
-      }
+      const dead = await removeDeadBalls(
+        supabase,
+        after,
+        shotId,
+        row,
+        patch,
+        ghosts,
+      );
+      if ("error" in dead) return dead;
+      const { removedAfter } = dead;
+      after = dead.after;
 
       const synced = await syncEndingAfterShotChange({
         supabase,
@@ -347,7 +402,7 @@ export async function writeLabelShotEdit(params: {
       return {
         ok: true,
         status,
-        ...(synced.point ? { point: synced.point } : {}),
+        ...withSyncedPoint(synced),
         ...(restoredGhostId ? { restoredGhostId } : {}),
         ...(removedAfter ? { removedAfter } : {}),
       };
@@ -374,7 +429,9 @@ type PointRow = LabelPointFields & {
  * names the `winner` then lets the ending follow (`reconcileEnding`): a last
  * stroke with no result reads the winner to say winner or error, so a pick
  * must not leave the ending saying the other. The winner itself is never
- * written back — the labeller just chose it. Never throws.
+ * written back — the labeller just chose it. A patch that sets the ending
+ * or who ended it by hand along with the winner is taken as written, with
+ * no reconcile to overwrite it. Never throws.
  */
 export async function writeLabelPointEdit(params: {
   supabase: AdminClient;
@@ -426,7 +483,9 @@ export async function writeLabelPointEdit(params: {
         return { error: `Could not save the point: ${writeError.message}` };
       }
       if (!written || written.length === 0) continue;
-      if (!("winner" in patch)) return { ok: true, status };
+      if (!("winner" in patch) || "ending" in patch || "ended_by" in patch) {
+        return { ok: true, status };
+      }
 
       const synced = await reconcileEnding({
         supabase,
@@ -436,7 +495,7 @@ export async function writeLabelPointEdit(params: {
       });
       if ("error" in synced) {
         return {
-          error: `${synced.error} The winner was saved; reload to see the point as it stands.`,
+          error: endingSyncFailed(synced.error, "The winner was saved"),
         };
       }
       return synced.point

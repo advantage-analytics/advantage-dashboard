@@ -62,13 +62,18 @@ export type SwappablePoint = Pick<
   shots: readonly SwapShot[];
 };
 
-/** The `label_shots` columns one flipped stroke is written with. */
+/**
+ * The `label_shots` columns one flipped stroke is written with, and `was`:
+ * the status the stroke was read with, which the write is compare-and-set
+ * on (operations-session.ts `writeShotSwaps`) and never written.
+ */
 export interface ShotSwapWrite {
   id: string;
   hitter: LabelSide | null;
   status: LabelShotStatus;
   /** Recomputed on a tombstone; null on a live stroke, as the CHECK pairs it. */
   status_before_delete: LiveShotStatus | null;
+  was: LabelShotStatus;
 }
 
 /** The whole swap: the point's two flipped columns, and every stroke's. */
@@ -251,6 +256,7 @@ export function planShotHitter(
       hitter,
       status: "deleted",
       status_before_delete: before,
+      was: shot.status,
     };
   }
   return {
@@ -261,6 +267,7 @@ export function planShotHitter(
       patch,
     ),
     status_before_delete: null,
+    was: shot.status,
   };
 }
 
@@ -322,5 +329,6 @@ export function shotSwapsOf(shots: readonly LabelShot[]): ShotSwapWrite[] {
     hitter: shot.hitter,
     status: shot.status,
     status_before_delete: shot.statusBeforeDelete,
+    was: shot.status,
   }));
 }

@@ -23,7 +23,11 @@ import type {
   GameShiftSummary,
 } from "@/lib/services/labels/game-shift";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
-import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
+import {
+  isNonPointEnding,
+  type LabelPoint,
+  type LabelSide,
+} from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { canResetPoint } from "@/lib/services/labels/reset";
 import { suggestionState } from "@/lib/services/labels/suggestions";
@@ -43,6 +47,8 @@ import {
   RAIL_PRESS,
   BlackTextAction,
   BlackUndoButton,
+  gameSlot,
+  playersSwitchDetail,
 } from "./label-black-parts";
 import { drawsGhosts } from "./label-black-shot-row";
 import { pointSummary } from "./label-format";
@@ -573,11 +579,7 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
     );
   }
   if (summary !== null && summary.swapped > 0) {
-    details.push(
-      summary.swapped === 1
-        ? "Players switch on 1 point"
-        : `Players switch on ${summary.swapped} points`,
-    );
+    details.push(playersSwitchDetail(summary.swapped));
   }
   const button = (
     <BlackTextAction
@@ -592,56 +594,16 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
       {move}
     </BlackTextAction>
   );
-  return (
-    <div
-      data-row="game-overflow"
-      data-game-overflow={point.id}
-      className={BLACK_SLOT}
-    >
-      <CornerDownRight
-        className="size-3"
-        style={{ color: AMBER_SLOT_ICON_INK }}
-        strokeWidth={2}
-        aria-hidden="true"
-      />
-      <span className="flex min-w-0 flex-col gap-px">
-        <span
-          data-game-overflow-title=""
-          className="truncate text-[12px] font-medium text-white"
-        >
-          {title}
-        </span>
-        <ChromeTooltip label={reason} side="top" wrap>
-          <span
-            data-game-overflow-detail=""
-            className="truncate text-[11px] text-white/50"
-          >
-            {reason}
-          </span>
-        </ChromeTooltip>
-      </span>
-      {operations ? (
-        <span
-          data-game-overflow-actions=""
-          className="flex shrink-0 items-center justify-end"
-        >
-          {details.length > 0 ? (
-            <ChromeTooltip
-              label={move}
-              detail={details.join(" · ")}
-              side="top"
-              align="end"
-              wrap
-            >
-              {button}
-            </ChromeTooltip>
-          ) : (
-            button
-          )}
-        </span>
-      ) : null}
-    </div>
-  );
+  return gameSlot({
+    icon: CornerDownRight,
+    row: "game-overflow",
+    anchor: point.id,
+    title,
+    reason,
+    action: operations ? button : null,
+    actionLabel: move,
+    details,
+  });
 });
 
 // ── A deleted point ────────────────────────────────────────────────────────
@@ -740,8 +702,7 @@ function BlackWinnerCell({
     : `Point ${number} winner not labelled`;
   // A let or a non-point keeps its winner — so counting it again restores a
   // whole point — but nobody won it: the mark steps back.
-  const uncounted =
-    point.ending === "let_replayed" || point.ending === "not_a_point";
+  const uncounted = isNonPointEnding(point.ending);
   if (!edit.editable) {
     return (
       <span

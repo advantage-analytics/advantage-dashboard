@@ -1,5 +1,3 @@
-"use client";
-
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { InsertPosition } from "@/lib/services/labels/point-insert";

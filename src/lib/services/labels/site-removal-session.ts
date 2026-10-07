@@ -14,18 +14,20 @@
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   defaultLabelWriteDependencies,
+  racedMessage,
   readSessionGate,
+  restoreGhostRow,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
   endingSyncFailed,
+  withSyncedPoint,
   readPointShots,
   syncEndingAfterShotChange,
 } from "./ending-session";
 import {
   gated,
   normaliseId,
-  racedMessage,
   type LabelOpResult,
   type WithSyncedPoint,
 } from "./operations-session";
@@ -76,11 +78,11 @@ export async function writeLabelSiteRemovalRestore(params: {
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!row) return { error: "Shot not found." };
 
-  const gate = await readSessionGate(supabase, row.session_id, {
-    blind: BLIND,
-  });
+  const [gate, owned] = await Promise.all([
+    readSessionGate(supabase, row.session_id, { blind: BLIND }),
+    readPointShots(supabase, row.label_point_id),
+  ]);
   if ("error" in gate) return gate;
-  const owned = await readPointShots(supabase, row.label_point_id);
   if ("error" in owned) return owned;
 
   const at = params.at ?? new Date().toISOString();
@@ -94,17 +96,15 @@ export async function writeLabelSiteRemovalRestore(params: {
   );
   if ("error" in plan) return plan;
 
-  const { data: written, error: writeError } = await supabase
-    .from("label_shots")
-    .update({ ...plan.write })
-    .eq("id", shotId)
-    .not("site_removal", "is", null)
-    .is("site_removal_restored_at", null)
-    .select("id");
-  if (writeError) {
-    return { error: `Could not restore the shot: ${writeError.message}` };
+  const ghost = await restoreGhostRow(
+    supabase,
+    shotId,
+    plan.write.site_removal_restored_at,
+  );
+  if ("error" in ghost) {
+    return { error: `Could not restore the shot: ${ghost.error}` };
   }
-  if (!written || written.length === 0) return { error: RACED };
+  if (!ghost.restored) return { error: RACED };
   const synced = await syncEndingAfterShotChange({
     supabase,
     pointId: row.label_point_id,
@@ -118,7 +118,7 @@ export async function writeLabelSiteRemovalRestore(params: {
   return {
     ok: true,
     siteRemovalRestoredAt: plan.write.site_removal_restored_at,
-    ...(synced.point ? { point: synced.point } : {}),
+    ...withSyncedPoint(synced),
   };
 }
 

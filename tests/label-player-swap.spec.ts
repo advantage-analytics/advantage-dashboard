@@ -237,6 +237,7 @@ test.describe("statuses", () => {
       hitter: "p2",
       status: "edited",
       status_before_delete: null,
+      was: "kept",
     });
     // s-return was already edited (a stroke and a position differ from its
     // seed); a flipped hitter keeps it so.
@@ -246,6 +247,7 @@ test.describe("statuses", () => {
       hitter: "p2",
       status: "added",
       status_before_delete: null,
+      was: "added",
     });
 
     // Back: the serve is its seed's again.
@@ -273,6 +275,7 @@ test.describe("statuses", () => {
       hitter: "p2",
       status: "deleted",
       status_before_delete: "edited",
+      was: "deleted",
     });
     const moved = applyShotSwaps([fixturePoint(P1)], away.shots)[0];
     const back = planPlayerSwap({ ...moved, server: "p2" }, "p1")!;
@@ -281,6 +284,7 @@ test.describe("statuses", () => {
       hitter: "p1",
       status: "deleted",
       status_before_delete: "kept",
+      was: "deleted",
     });
 
     // A tombstone of an added stroke stays added either way; one without a
@@ -318,12 +322,14 @@ test.describe("statuses", () => {
       hitter: "p2",
       status: "deleted",
       status_before_delete: "added",
+      was: "deleted",
     });
     expect(swap.shots.find((s) => s.id === "u")).toEqual({
       id: "u",
       hitter: "p2",
       status: "deleted",
       status_before_delete: "edited",
+      was: "deleted",
     });
   });
 
@@ -346,6 +352,7 @@ test.describe("statuses", () => {
         hitter: "p2",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
     ]);
     const moved = applyShotSwaps(
@@ -444,6 +451,7 @@ test.describe("switch players", () => {
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
       ],
     });
@@ -481,24 +489,28 @@ test.describe("switch players", () => {
         hitter: "p2",
         status: "edited",
         status_before_delete: null,
+        was: "kept",
       },
       "s-return": {
         id: "s-return",
         hitter: "p1",
         status: "edited",
         status_before_delete: null,
+        was: "edited",
       },
       "s-phantom": {
         id: "s-phantom",
         hitter: "p2",
         status: "deleted",
         status_before_delete: "edited",
+        was: "deleted",
       },
       "s-added": {
         id: "s-added",
         hitter: "p2",
         status: "added",
         status_before_delete: null,
+        was: "added",
       },
     });
     const p4 = planPlayerSwitch(fixturePoint(P4));
@@ -659,24 +671,28 @@ test.describe("writeLabelPlayerSwitch", () => {
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s2",
           hitter: "p1",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s3",
           hitter: "p2",
           status: "edited",
           status_before_delete: null,
+          was: "kept",
         },
         {
           id: "s4",
           hitter: "p1",
           status: "deleted",
           status_before_delete: "edited",
+          was: "deleted",
         },
       ],
     });

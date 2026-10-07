@@ -4,9 +4,10 @@
  *
  * Its writes, in order, on `label_shots` and `label_points` only: one UPDATE
  * moving the later point's shots (`label_point_id`, by id list), their statuses
- * untouched; one UPDATE of the kept point's winner, ending, ended by, rally ids
- * and status; one compare-and-set UPDATE tombstoning the later point
- * (`updateIfUnchanged`); then the kept point's ending as its joined rows
+ * untouched; one compare-and-set UPDATE of the kept point's winner, ending,
+ * ended by, rally ids and status, and one tombstoning the later point (both
+ * `updateIfUnchanged` — the writes before a miss stand); then the kept
+ * point's ending as its joined rows
  * derive it (`reconcileEnding`, ending-session.ts), where the later point's
  * stored ending did not already say so. No row is ever removed.
  */
@@ -15,15 +16,11 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import {
   defaultLabelWriteDependencies,
   readSessionGate,
+  updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { reconcileEnding } from "./ending-session";
-import {
-  gated,
-  normaliseId,
-  updateIfUnchanged,
-  type LabelOpResult,
-} from "./operations-session";
+import { endingColumns, reconcileEnding } from "./ending-session";
+import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   isCombineDirection,
   planPointCombine,
@@ -72,15 +69,17 @@ export async function writeLabelPointCombine(params: {
     return { error: `Could not read the point: ${pointError.message}` };
   }
   if (!point) return { error: "Point not found." };
-  const gate = await readSessionGate(supabase, point.session_id);
+  // Independent reads; the gate's refusal is taken first.
+  const [gate, { data: rows, error: rowsError }] = await Promise.all([
+    readSessionGate(supabase, point.session_id),
+    supabase
+      .from("label_points")
+      .select(POINT_COLUMNS)
+      .eq("session_id", point.session_id)
+      .order("point_index")
+      .returns<PointRow[]>(),
+  ]);
   if ("error" in gate) return gate;
-
-  const { data: rows, error: rowsError } = await supabase
-    .from("label_points")
-    .select(POINT_COLUMNS)
-    .eq("session_id", point.session_id)
-    .order("point_index")
-    .returns<PointRow[]>();
   if (rowsError) {
     return {
       error: `Could not read the session's points: ${rowsError.message}`,
@@ -132,15 +131,18 @@ export async function writeLabelPointCombine(params: {
     }
   }
 
-  const { error: keptError } = await supabase
-    .from("label_points")
-    .update({ ...write.kept })
-    .eq("id", write.keptId);
-  if (keptError) {
-    return {
-      error: `Could not write the combined point: ${keptError.message}`,
-    };
-  }
+  // Both points were read above; the plan refuses a tombstone, so each
+  // status as read is a live one.
+  const kept = points.find((p) => p.id === write.keptId);
+  const keptFailed = await updateIfUnchanged(
+    supabase,
+    "label_points",
+    write.keptId,
+    kept?.status ?? "deleted",
+    { ...write.kept },
+    "write the combined point",
+  );
+  if (keptFailed) return { error: keptFailed };
 
   const later = points.find((p) => p.id === write.removedId);
   const failed = await updateIfUnchanged(
@@ -168,13 +170,7 @@ export async function writeLabelPointCombine(params: {
     kept: {
       id: write.keptId,
       ...write.kept,
-      ...(synced.point
-        ? {
-            winner: synced.point.winner,
-            ending: synced.point.ending,
-            ended_by: synced.point.endedBy,
-          }
-        : {}),
+      ...endingColumns(synced.point),
     },
     removed: { id: write.removedId, ...write.removed },
   };

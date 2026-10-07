@@ -14,6 +14,7 @@ import {
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
+  drawsGhosts,
   endingStale,
   hoverLine,
   lastLandingMissing,
@@ -324,10 +325,8 @@ export function pointRowMarks(
  */
 export type HintEdit = Pick<
   EditContext,
-  "onPatchPoint" | "onPatchShot" | "operations"
-> & {
-  onRemoveShotsAfter?: (pointId: string, shotId: string) => void;
-};
+  "onPatchPoint" | "onPatchShot" | "onRemoveShotsAfter" | "operations"
+>;
 
 /**
  * The open point's hints: the marks' own, then the five read off the rows —
@@ -344,12 +343,13 @@ export function pointHints(
   edit?: HintEdit,
 ): PointHint[] {
   if (!marks) return [];
+  const ghosts = drawsGhosts(marks);
   const live: (LabelMark | null)[] = [
-    pointEndedEarly(point, true),
-    endingStale(point, true),
-    secondServeAsFirst(point, true),
-    lastLandingMissing(point, true),
-    serveAfterServeIn(point, true),
+    pointEndedEarly(point, ghosts),
+    endingStale(point, ghosts),
+    secondServeAsFirst(point, ghosts),
+    lastLandingMissing(point, ghosts),
+    serveAfterServeIn(point, ghosts),
   ];
   const hints = [
     ...pointRowMarkList(point, marks).hints,

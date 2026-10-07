@@ -11,19 +11,23 @@
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
-import { defaultLabelWriteDependencies, readSessionGate } from "./edit-session";
-import type { LabelWriteDependencies } from "./edit-session";
+import {
+  defaultLabelWriteDependencies,
+  readSessionGate,
+  updateIfUnchanged,
+  type LabelWriteDependencies,
+} from "./edit-session";
 import { parseLabelPointSeed, parseLabelShotSeed } from "./edit";
 import {
   endingSyncFailed,
+  withSyncedPoint,
   readPointShots,
+  readShotsOfPoints,
   syncEndingAfterShotChange,
 } from "./ending-session";
 import {
   gated,
   normaliseId,
-  readShotsOfPoints,
-  updateIfUnchanged,
   writeShotSwaps,
   type LabelOpResult,
   type LabelShotStatusResult,
@@ -41,20 +45,18 @@ export type LabelPointResetResult = LabelOpResult<{
 interface ResetRow<S> {
   id: string;
   session_id: string;
-  /** A shot's point; a point row carries none. */
-  label_point_id?: string;
   status: S;
   /** Raw jsonb — parsed before anything is written from it. */
   seed: unknown;
 }
 
-/** The row and its session's gate (`ghosts`, edit-session.ts). */
-async function readResetRow<S>(
+/** The row; a shot's also names its point (`E`), which a point row cannot. */
+async function readResetRow<S, E extends object = object>(
   supabase: AdminClient,
   table: "label_shots" | "label_points",
   id: string,
   what: "shot" | "point",
-): Promise<{ row: ResetRow<S>; ghosts: boolean } | { error: string }> {
+): Promise<{ row: ResetRow<S> & E } | { error: string }> {
   const { data, error } = await supabase
     .from(table)
     .select(
@@ -63,13 +65,11 @@ async function readResetRow<S>(
         : "id, session_id, status, seed",
     )
     .eq("id", id)
-    .maybeSingle<ResetRow<S>>();
+    .maybeSingle<ResetRow<S> & E>();
   if (error) return { error: `Could not read the ${what}: ${error.message}` };
   if (!data)
     return { error: what === "shot" ? "Shot not found." : "Point not found." };
-  const gate = await readSessionGate(supabase, data.session_id);
-  if ("error" in gate) return gate;
-  return { row: data, ghosts: gate.ghosts };
+  return { row: data };
 }
 
 /**
@@ -82,20 +82,25 @@ export async function writeLabelShotReset(params: {
 }): Promise<LabelShotStatusResult> {
   const shotId = normaliseId(params.shotId);
   if (!shotId) return { error: "Invalid shot id." };
-  const read = await readResetRow<LabelShotStatus>(
+  const read = await readResetRow<LabelShotStatus, { label_point_id: string }>(
     params.supabase,
     "label_shots",
     shotId,
     "shot",
   );
   if ("error" in read) return read;
+  const pointId = read.row.label_point_id;
+  // Independent reads, the gate's refusal first.
+  const [gate, owned] = await Promise.all([
+    readSessionGate(params.supabase, read.row.session_id),
+    readPointShots(params.supabase, pointId),
+  ]);
+  if ("error" in gate) return gate;
   const plan = planShotReset({
     status: read.row.status,
     seed: parseLabelShotSeed(read.row.seed ?? null),
   });
   if ("error" in plan) return plan;
-  const pointId = read.row.label_point_id ?? "";
-  const owned = await readPointShots(params.supabase, pointId);
   if ("error" in owned) return owned;
   const failed = await updateIfUnchanged(
     params.supabase,
@@ -109,7 +114,7 @@ export async function writeLabelShotReset(params: {
   const synced = await syncEndingAfterShotChange({
     supabase: params.supabase,
     pointId,
-    ghosts: read.ghosts,
+    ghosts: gate.ghosts,
     before: owned.shots,
     after: owned.shots.map((shot) =>
       shot.id === shotId ? applyShotReset(shot) : shot,
@@ -119,7 +124,7 @@ export async function writeLabelShotReset(params: {
   return {
     ok: true,
     status: plan.write.status,
-    ...(synced.point ? { point: synced.point } : {}),
+    ...withSyncedPoint(synced),
   };
 }
 
@@ -141,7 +146,11 @@ export async function writeLabelPointReset(params: {
     "point",
   );
   if ("error" in read) return read;
-  const owned = await readShotsOfPoints(params.supabase, [pointId]);
+  const [gate, owned] = await Promise.all([
+    readSessionGate(params.supabase, read.row.session_id),
+    readShotsOfPoints(params.supabase, [pointId]),
+  ]);
+  if ("error" in gate) return gate;
   if ("error" in owned) return owned;
   const plan = planPointReset({
     status: read.row.status,

@@ -21,8 +21,9 @@ import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   isLiveShot,
   isMissedResult,
+  isNonPointEnding,
   isServeStroke,
-  orderLabelShots,
+  liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
 } from "./session";
@@ -250,11 +251,14 @@ export function pointRowMarkList(
   };
 }
 
-/** The point's live strokes in video order; `ghosts` as `isLiveShot` takes it. */
-function liveShots(point: Pick<LabelPoint, "shots">, ghosts: boolean) {
-  return orderLabelShots(
-    point.shots.filter((shot) => isLiveShot(shot, ghosts)),
-  );
+/**
+ * Whether the session draws the site's removed strokes as ghosts — the
+ * `ghosts` every reading of a point's rows takes (`isLiveShot`). The marks
+ * are built for a session labelled with marks on and not otherwise, so the
+ * marks' presence is the answer.
+ */
+export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
+  return !!marks;
 }
 
 /**
@@ -276,7 +280,7 @@ export function pointEndedEarly(
   point: Pick<LabelPoint, "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
-  const live = liveShots(point, ghosts);
+  const live = liveShotsInOrder(point, ghosts);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
     if (isServeStroke(shot.stroke)) continue;
@@ -294,9 +298,11 @@ export function pointEndedEarly(
   return null;
 }
 
-/** Whether the labeller marked the stroke's landing as not readable. */
-const landingUnclear = (shot: LabelShot) =>
-  shot.unclear.some((f) => f === "landing_x" || f === "landing_y");
+/** A stroke with no landing placed, the labeller not having called it unclear. */
+function landingMissingOn(shot: LabelShot): boolean {
+  if (shot.landingX !== null && shot.landingY !== null) return false;
+  return !shot.unclear.some((f) => f === "landing_x" || f === "landing_y");
+}
 
 /**
  * "No landing on the last shot": the point's last live stroke has no landing
@@ -308,10 +314,8 @@ export function lastLandingMissing(
   point: Pick<LabelPoint, "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "last_landing_missing" }> | null {
-  const last = liveShots(point, ghosts).at(-1);
-  if (!last) return null;
-  if (last.landingX !== null && last.landingY !== null) return null;
-  if (landingUnclear(last)) return null;
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || !landingMissingOn(last)) return null;
   return {
     code: "last_landing_missing",
     tier: "hint",
@@ -330,9 +334,18 @@ export function lastShotUnresolved(
   point: Pick<LabelPoint, "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "last_shot_unresolved" }> | null {
-  if (!lastLandingMissing(point, ghosts)) return null;
-  const last = liveShots(point, ghosts).at(-1);
-  if (!last || last.result !== null) return null;
+  // Cheap exit before the sort: some stroke must have neither.
+  if (
+    !point.shots.some(
+      (shot) =>
+        shot.result === null &&
+        (shot.landingX === null || shot.landingY === null),
+    )
+  ) {
+    return null;
+  }
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || last.result !== null || !landingMissingOn(last)) return null;
   return {
     code: "last_shot_unresolved",
     tier: "count",
@@ -351,7 +364,7 @@ export function serveAfterServeIn(
   point: Pick<LabelPoint, "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "serve_after_serve_in" }> | null {
-  const live = liveShots(point, ghosts);
+  const live = liveShotsInOrder(point, ghosts);
   for (let i = 1; i < live.length; i += 1) {
     const before = live[i - 1];
     if (!isServeStroke(live[i].stroke)) continue;
@@ -379,9 +392,7 @@ export function endingStale(
   point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "ending_stale" }> | null {
-  if (point.ending === "let_replayed" || point.ending === "not_a_point") {
-    return null;
-  }
+  if (isNonPointEnding(point.ending)) return null;
   const derived = deriveEnding(point, ghosts);
   if (!derived) return null;
   if (
@@ -413,7 +424,7 @@ export function secondServeAsFirst(
   point: Pick<LabelPoint, "shots">,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "second_serve_as_first" }> | null {
-  const live = liveShots(point, ghosts);
+  const live = liveShotsInOrder(point, ghosts);
   let faulted = false;
   for (const shot of live) {
     if (!isServeStroke(shot.stroke)) continue;

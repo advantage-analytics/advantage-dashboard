@@ -2,19 +2,18 @@
 
 import { memo } from "react";
 import { CornerUpLeft } from "lucide-react";
-import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
   gameUnderflow,
-  planGamePull,
+  planGamePullFrom,
   type GameUnderflow,
   type PlannedGamePull,
 } from "@/lib/services/labels/game-shift";
 import { gameKey } from "@/lib/services/labels/score";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
-  AMBER_SLOT_ICON_INK,
-  BLACK_SLOT,
   BlackTextAction,
+  gameSlot,
+  playersSwitchDetail,
 } from "./label-black-parts";
 
 /**
@@ -31,7 +30,7 @@ import {
 
 export interface UnderflowSlot {
   underflow: GameUnderflow;
-  /** `planGamePull` for the game, planned once here, not per render. */
+  /** `planGamePullFrom` for the game, planned once here, not per render. */
   plan: PlannedGamePull;
 }
 
@@ -42,22 +41,19 @@ export interface UnderflowSlot {
 export function underflowAfterPoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
-  videoEndsEarly: boolean | null,
 ): ReadonlyMap<string, UnderflowSlot> {
   const after = new Map<string, UnderflowSlot>();
-  for (const underflow of gameUnderflow(points, adScoring, {
-    videoEndsEarly,
-  })) {
+  for (const underflow of gameUnderflow(points, adScoring)) {
     after.set(underflow.lastPointId, {
       underflow,
-      plan: planGamePull(points, gameKey(underflow), adScoring),
+      plan: planGamePullFrom(points, underflow, adScoring),
     });
   }
   return after;
 }
 
 /** The slot's words: its title, its reason and the one answer's label. */
-export function underflowWords(slot: UnderflowSlot): {
+function underflowWords(slot: UnderflowSlot): {
   title: string;
   reason: string;
   answer: "pull" | "add";
@@ -105,11 +101,7 @@ export const BlackGameUnderflow = memo(function BlackGameUnderflow({
     );
   }
   if ("ok" in plan && plan.summary.swapped > 0) {
-    details.push(
-      plan.summary.swapped === 1
-        ? "Players switch on 1 point"
-        : `Players switch on ${plan.summary.swapped} points`,
-    );
+    details.push(playersSwitchDetail(plan.summary.swapped));
   }
   const handler = words.answer === "pull" ? onPull : onAddPoint;
   const button = handler ? (
@@ -126,55 +118,15 @@ export const BlackGameUnderflow = memo(function BlackGameUnderflow({
       {words.action}
     </BlackTextAction>
   ) : null;
-  return (
-    <div
-      data-row="game-underflow"
-      data-game-underflow={underflow.lastPointId}
-      data-game-key={key}
-      className={BLACK_SLOT}
-    >
-      <CornerUpLeft
-        className="size-3"
-        style={{ color: AMBER_SLOT_ICON_INK }}
-        strokeWidth={2}
-        aria-hidden="true"
-      />
-      <span className="flex min-w-0 flex-col gap-px">
-        <span
-          data-game-underflow-title=""
-          className="truncate text-[12px] font-medium text-white"
-        >
-          {words.title}
-        </span>
-        <ChromeTooltip label={words.reason} side="top" wrap>
-          <span
-            data-game-underflow-detail=""
-            className="truncate text-[11px] text-white/50"
-          >
-            {words.reason}
-          </span>
-        </ChromeTooltip>
-      </span>
-      {button ? (
-        <span
-          data-game-underflow-actions=""
-          className="flex shrink-0 items-center justify-end"
-        >
-          {details.length > 0 ? (
-            <ChromeTooltip
-              label={words.action}
-              detail={details.join(" · ")}
-              side="top"
-              align="end"
-              wrap
-            >
-              {button}
-            </ChromeTooltip>
-          ) : (
-            button
-          )}
-        </span>
-      ) : null}
-    </div>
-  );
+  return gameSlot({
+    icon: CornerUpLeft,
+    row: "game-underflow",
+    anchor: underflow.lastPointId,
+    rootData: { "data-game-key": key },
+    title: words.title,
+    reason: words.reason,
+    action: button,
+    actionLabel: words.action,
+    details,
+  });
 });

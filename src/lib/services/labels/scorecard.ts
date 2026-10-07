@@ -26,6 +26,7 @@
  * reads and hands in; without it those sections read nothing.
  */
 
+import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import { isPlausibleCourtPosition } from "../splitstep/derivation/court";
 import { NUMERIC_SENTINEL, num } from "../splitstep/derivation/parse";
 import {
@@ -42,7 +43,8 @@ import {
   type LabelMarkTier,
 } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
-import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
+import { serveAfterServeIn } from "./marks-state";
+import { gameKey, labelScores, ordinaryGameScore } from "./score";
 import { withLiveScoreMarks, type ScoreMarkPoint } from "./score-marks";
 import type { LabelEnding, LabelShotResult } from "./seed";
 import {
@@ -51,7 +53,6 @@ import {
   isLiveShot,
   isMissedResult,
   isServeStroke,
-  opponent,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -404,107 +405,47 @@ function fieldChanges(
   return any ? change : null;
 }
 
-const CALLS = ["0", "15", "30", "40"] as const;
-
-/**
- * An ordinary game's score after its last point, server first, the way the
- * scoreboard reads it: the decided side says "Game".
- */
-function gameScore(
-  counts: Record<LabelSide, number>,
-  decidedBy: LabelSide | null,
-  server: LabelSide,
-): string {
-  const receiver = opponent(server);
-  if (decidedBy) {
-    const call = (side: LabelSide) =>
-      side === decidedBy ? "Game" : CALLS[Math.min(counts[side], 3)];
-    return `${call(server)}–${call(receiver)}`;
-  }
-  const s = counts[server];
-  const r = counts[receiver];
-  if (s >= 3 && r >= 3) {
-    if (s === r) return "40–40";
-    return s > r ? "Ad–40" : "40–Ad";
-  }
-  return `${CALLS[Math.min(s, 3)]}–${CALLS[Math.min(r, 3)]}`;
-}
-
 /**
  * The ordinary games that end undecided, and the ones with live points after
  * the point that decided them — the same reading as the scoreboard's
- * "Game–30" and game-shift.ts, by the session's scoring.
+ * "Game–30" and game-shift.ts, by the session's scoring. The band says which
+ * games; the walk only names the points concerned.
  */
 function gameFindings(
   points: readonly LabelPoint[],
   adScoring: boolean,
 ): Scorecard["games"] {
-  const rank = new Map<string, number>();
-  for (const band of labelScores(points, adScoring).games) {
-    rank.set(gameKey(band), band.gameInSet);
-  }
-  interface Game {
-    set: number;
-    gameNumber: number;
-    key: string;
-    server: LabelSide | null;
-    counts: Record<LabelSide, number>;
-    decidedBy: LabelSide | null;
-    members: LabelPoint[];
-    leftovers: LabelPoint[];
-    ordinary: boolean;
-  }
-  const games: Game[] = [];
-  const byKey = new Map<string, Game>();
+  const members = new Map<string, LabelPoint[]>();
   for (const point of points) {
     if (point.status === "deleted") continue;
     if (point.setNumber === null || point.gameNumber === null) continue;
     const key = gameKey(point);
-    let game = byKey.get(key);
-    if (!game) {
-      game = {
-        set: point.setNumber,
-        gameNumber: point.gameNumber,
-        key,
-        server: point.server,
-        counts: { p1: 0, p2: 0 },
-        decidedBy: null,
-        members: [],
-        leftovers: [],
-        ordinary: point.gameType === "game",
-      };
-      byKey.set(key, game);
-      games.push(game);
-    }
-    game.members.push(point);
-    if (game.decidedBy) game.leftovers.push(point);
-    // A stray point still counts, as on the scoreboard: "Game–30" says how
-    // many sit past the end.
-    if (isCountedPoint(point)) {
-      game.counts[point.winner] += 1;
-      if (!game.decidedBy && gameDecided(game.counts, adScoring)) {
-        game.decidedBy = point.winner;
-      }
+    const list = members.get(key);
+    if (list) list.push(point);
+    else members.set(key, [point]);
+  }
+  const undecided: GameRow[] = [];
+  const overflow: GameRow[] = [];
+  for (const band of labelScores(points, adScoring).games) {
+    if (band.gameType !== "game") continue;
+    const game = members.get(gameKey(band)) ?? [];
+    const server = game[0]?.server ?? null;
+    const row = (concerned: LabelPoint[]): GameRow => ({
+      set: band.setNumber,
+      gameInSet: band.gameInSet,
+      gameNumber: band.gameNumber,
+      from: concerned[0].pointIndex + 1,
+      to: concerned[concerned.length - 1].pointIndex + 1,
+      score: ordinaryGameScore(band.points, band.decidedBy, server ?? "p1"),
+      server,
+    });
+    if (band.decidedBy === null) undecided.push(row(game));
+    // The live rows past the settling one are the game's last `extra`.
+    if (band.outcome.kind === "overflow") {
+      overflow.push(row(game.slice(-band.outcome.extra)));
     }
   }
-  const row = (game: Game, concerned: LabelPoint[]): GameRow => ({
-    set: game.set,
-    gameInSet: rank.get(game.key) ?? 0,
-    gameNumber: game.gameNumber,
-    from: concerned[0].pointIndex + 1,
-    to: concerned[concerned.length - 1].pointIndex + 1,
-    score: gameScore(game.counts, game.decidedBy, game.server ?? "p1"),
-    server: game.server,
-  });
-  const ordinary = games.filter((game) => game.ordinary);
-  return {
-    undecided: ordinary
-      .filter((game) => game.decidedBy === null)
-      .map((game) => row(game, game.members)),
-    overflow: ordinary
-      .filter((game) => game.leftovers.length > 0)
-      .map((game) => row(game, game.leftovers)),
-  };
+  return { undecided, overflow };
 }
 
 /** `"p1→p2"`, the one key a direction goes by. */
@@ -516,22 +457,22 @@ function lastLiveShot(point: LabelPoint, ghosts: boolean): LabelShot | null {
 }
 
 /**
- * The checked point's out-call tail: how many vendor strokes follow the
- * vendor's last non-serve stroke called `in: false`, and whether the labeller
- * removed them. Null when there is no such stroke or the tail is not 1–2.
+ * The checked point's out-call tail: how many vendor strokes of `rally` (its
+ * `seededOrder`) follow the vendor's last non-serve stroke called `in: false`,
+ * and whether the labeller removed them. Null when there is no such stroke or
+ * the tail is not 1–2.
  */
 function outCallTail(
-  point: LabelPoint,
+  rally: readonly LabelShot[],
   vendor: ReadonlyMap<string, VendorStrokeFacts>,
 ): Omit<OutCallTailRow, "number"> | null {
-  const rally = seededOrder(point);
   const outCall = rally.findLastIndex((shot) => {
     const facts = vendor.get(shot.id);
     return facts !== undefined && !facts.isServe && facts.in === false;
   });
   if (outCall < 0) return null;
   const tail = rally.slice(outCall + 1);
-  if (tail.length < 1 || tail.length > 2) return null;
+  if (tail.length < 1 || tail.length > MAX_DEAD_TAIL) return null;
   const removed = tail.filter(
     (shot) => shot.status === "deleted" || isGhostShot(shot),
   ).length;
@@ -680,8 +621,9 @@ export function buildScorecard(
       }
     }
 
+    const seeded = seededOrder(point);
     if (point.status !== "deleted" && point.checkedAt !== null) {
-      const tail = outCallTail(point, vendor);
+      const tail = outCallTail(seeded, vendor);
       if (tail) outCallTails.push({ number, ...tail });
     }
 
@@ -694,21 +636,10 @@ export function buildScorecard(
         (shot) => shot.eventId !== null && isVendorServe(shot, vendor),
       ).length;
       if (liveServes >= 3 || vendorServes >= 3) serves.threeOrMore.push(number);
-      if (
-        live.some(
-          (shot, index) =>
-            index > 0 &&
-            isServeStroke(shot.stroke) &&
-            isServeStroke(live[index - 1].stroke) &&
-            live[index - 1].result === "in",
-        )
-      ) {
-        serves.serveAfterIn.push(number);
-      }
+      if (serveAfterServeIn(point, ghosts)) serves.serveAfterIn.push(number);
     }
 
     // The last stroke as it was SEEDED: by seeded time, with a seeded result.
-    const seeded = seededOrder(point);
     const seededLast = seeded.findLast(
       (shot) => shot.seed !== null && shot.seed.result !== null,
     );

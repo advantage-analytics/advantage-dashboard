@@ -36,6 +36,7 @@ import { markSummary } from "@/lib/services/labels/marks-state";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   bandsBeforePoints,
+  gameKey,
   type LabelScores,
 } from "@/lib/services/labels/score";
 import type {
@@ -53,7 +54,6 @@ import {
   scoreMismatchSentence,
   scoreReasonText,
   type LabelScoreMismatch,
-  type LabelScoreReason,
 } from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
@@ -148,7 +148,6 @@ export function LabelBlackRail({
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
-  underflow = false,
   onPullGame,
   onAddPoint,
 }: {
@@ -219,12 +218,10 @@ export function LabelBlackRail({
    */
   onClearEnteredScore?: () => void;
   /**
-   * Draw how each game ended at its band's end and, on an editable rail, the
-   * "isn't finished" slot after each game that ends short
-   * (label-game-underflow.tsx). `onPullGame` gets the short game's key;
+   * On an editable rail, the "isn't finished" slot after each game that ends
+   * short (label-game-underflow.tsx). `onPullGame` gets the short game's key;
    * `onAddPoint` the row to insert after.
    */
-  underflow?: boolean;
   onPullGame?: (gameKey: string) => void;
   onAddPoint?: (afterPointId: string) => void;
 }) {
@@ -306,14 +303,11 @@ export function LabelBlackRail({
     () => (editable ? overflowBeforePoints(points, adScoring) : NO_OVERFLOW),
     [editable, points, adScoring],
   );
-  // The games that end short, by their last live point. Opt-in (`underflow`),
-  // on the same sessions as the slot above.
+  // The games that end short, by their last live point. On the same sessions
+  // as the slot above.
   const underflowAfter = useMemo(
-    () =>
-      editable && underflow
-        ? underflowAfterPoints(points, adScoring, videoEndsEarly)
-        : NO_UNDERFLOW,
-    [editable, underflow, points, adScoring, videoEndsEarly],
+    () => (editable ? underflowAfterPoints(points, adScoring) : NO_UNDERFLOW),
+    [editable, points, adScoring],
   );
   // The chip's "Go to game": the band (or slot) carrying the game's key,
   // brought to the scroller's top.
@@ -463,7 +457,7 @@ export function LabelBlackRail({
                         points={points}
                         names={names}
                         outcome={
-                          underflow && bandOutcomeShown(band, scores.games)
+                          bandOutcomeShown(band, scores.games)
                             ? band.outcome
                             : undefined
                         }
@@ -608,9 +602,8 @@ function ScoreChip({
   const answers = onFixEnteredScore && onVideoEndsEarly && onFindGap;
   const text = scoreMismatchSentence(mismatch);
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
-  const [reason] = mismatch.reasons;
-  const game = reason ? mismatchGameKey(mismatch) : null;
-  const gameInSet = reason?.gameInSet ?? null;
+  const game = mismatchGameKey(mismatch);
+  const gameInSet = mismatch.reasons[0]?.gameInSet ?? null;
   const control = Boolean(answers) || game !== null;
   const chip = cn(
     "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[var(--rail-amber-wash)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[var(--rail-amber)]",
@@ -668,9 +661,6 @@ function ScoreChip({
             <ScoreChipMenu
               mismatch={mismatch}
               stored={stored}
-              reason={reason}
-              game={game}
-              gameInSet={gameInSet}
               close={() => setOpen(false)}
               onGoToGame={onGoToGame}
               onFixEnteredScore={onFixEnteredScore}
@@ -712,9 +702,6 @@ function ScoreChip({
 export function ScoreChipMenu({
   mismatch,
   stored,
-  reason,
-  game,
-  gameInSet,
   close,
   onGoToGame,
   onFixEnteredScore,
@@ -724,10 +711,6 @@ export function ScoreChipMenu({
 }: {
   mismatch: LabelScoreMismatch;
   stored: string;
-  /** The first reason, its game's key and the number the band names it by. */
-  reason: LabelScoreReason | undefined;
-  game: string | null;
-  gameInSet: number | null;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
   onFixEnteredScore: () => void;
@@ -736,15 +719,16 @@ export function ScoreChipMenu({
   onClearEnteredScore?: () => void;
 }) {
   const { setNumber, firstPointId } = mismatch;
+  const [reason] = mismatch.reasons;
   return (
     <>
-      {game !== null && reason ? (
+      {reason ? (
         <FloatMenuItem
-          label={`Go to game ${gameInSet}`}
+          label={`Go to game ${reason.gameInSet}`}
           description={scoreReasonText(reason)}
           onSelect={() => {
             close();
-            onGoToGame(game);
+            onGoToGame(gameKey(reason));
           }}
         />
       ) : null}
@@ -796,9 +780,11 @@ interface OverflowSlot {
  * Whether a band ends with its game's outcome. A settled game always does; an
  * unfinished one only when it is behind the labeller — the last game of the
  * session is still being played, and a game with no counted point has
- * nothing to say yet.
+ * nothing to say yet. `gameUnderflow` (game-shift.ts) skips the session's
+ * last game for the same reason, so no slot asks about a game the band
+ * does not call unfinished.
  */
-function bandOutcomeShown(
+export function bandOutcomeShown(
   band: LabelScores["games"][number],
   games: LabelScores["games"],
 ): boolean {

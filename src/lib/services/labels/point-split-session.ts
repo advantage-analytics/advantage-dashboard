@@ -5,8 +5,9 @@
  * Its writes, in order, on `label_points` and `label_shots` only: one UPDATE of
  * `point_index` per later point, HIGHEST first (the rail numbers rows by it);
  * one INSERT of the new row; one UPDATE moving the shots (`label_point_id`, by
- * id list), their statuses untouched; one UPDATE of the anchor's status and
- * rally ids; then each half's ending as its rows now derive it
+ * id list), their statuses untouched; one compare-and-set UPDATE of the
+ * anchor's status and rally ids (`updateIfUnchanged` — the writes before it
+ * stand when it misses); then each half's ending as its rows now derive it
  * (`reconcileEnding`, ending-session.ts) — the new point's, which starts
  * blank, and the anchor's, where its last stroke changed. No row is ever
  * removed.
@@ -16,9 +17,10 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import {
   defaultLabelWriteDependencies,
   readSessionGate,
+  updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { reconcileEnding } from "./ending-session";
+import { endingColumns, reconcileEnding } from "./ending-session";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   planPointSplit,
@@ -129,35 +131,40 @@ export async function writeLabelPointSplit(params: {
     return { error: `Could not read the point: ${anchorError.message}` };
   }
   if (!anchor) return { error: "Point not found." };
-  const gate = await readSessionGate(supabase, anchor.session_id);
+  // Three independent reads; their refusals are taken in this order.
+  const [gate, { data: rows, error: rowsError }, shotsRead] = await Promise.all(
+    [
+      readSessionGate(supabase, anchor.session_id),
+      supabase
+        .from("label_points")
+        .select(POINT_INDEX_COLUMNS)
+        .eq("session_id", anchor.session_id)
+        .order("point_index")
+        .returns<PointRow[]>(),
+      supabase
+        .from("label_shots")
+        .select(SHOT_COLUMNS)
+        .eq("label_point_id", pointId)
+        .returns<ShotRow[]>(),
+    ],
+  );
   if ("error" in gate) return gate;
-
-  const { data: rows, error: rowsError } = await supabase
-    .from("label_points")
-    .select(POINT_INDEX_COLUMNS)
-    .eq("session_id", anchor.session_id)
-    .order("point_index")
-    .returns<PointRow[]>();
   if (rowsError) {
     return {
       error: `Could not read the session's points: ${rowsError.message}`,
     };
   }
-  const { data: shotRows, error: shotsError } = await supabase
-    .from("label_shots")
-    .select(SHOT_COLUMNS)
-    .eq("label_point_id", pointId)
-    .returns<ShotRow[]>();
+  const { data: shotRows, error: shotsError } = shotsRead;
   if (shotsError) {
     return { error: `Could not read the point's shots: ${shotsError.message}` };
   }
-  const plan = planPointSplit(
-    toSplittable(rows ?? [], pointId, shotRows ?? []),
-    pointId,
-    shotId,
-  );
+  const points = toSplittable(rows ?? [], pointId, shotRows ?? []);
+  const plan = planPointSplit(points, pointId, shotId);
   if ("error" in plan) return plan;
   const { write } = plan;
+  // The plan found the anchor among the rows, so its status as read is here.
+  const anchorStatus =
+    points.find((p) => p.id === pointId)?.status ?? "deleted";
 
   // Highest first (the plan's order), one row at a time: an index is never
   // taken by two rows between one update and the next.
@@ -201,15 +208,17 @@ export async function writeLabelPointSplit(params: {
     return { error: `Could not move the shots: ${moveError.message}` };
   }
 
-  const { error: anchorWriteError } = await supabase
-    .from("label_points")
-    .update({ ...write.anchor })
-    .eq("id", pointId);
-  if (anchorWriteError) {
-    return {
-      error: `Could not mark the point edited: ${anchorWriteError.message}`,
-    };
-  }
+  // Compare-and-set on the anchor's status as read: a race here leaves the
+  // shifted rows, the new point and its moved shots as they are, and says so.
+  const anchorFailed = await updateIfUnchanged(
+    supabase,
+    "label_points",
+    pointId,
+    anchorStatus,
+    { ...write.anchor },
+    "mark the point edited",
+  );
+  if (anchorFailed) return { error: anchorFailed };
 
   // Both halves' endings, off the rows each now holds. The statuses stay as
   // just written: a split's anchor is `edited` whatever its fields say.
@@ -244,13 +253,7 @@ export async function writeLabelPointSplit(params: {
     anchor: {
       id: pointId,
       ...write.anchor,
-      ...(kept.point
-        ? {
-            ending: kept.point.ending,
-            ended_by: kept.point.endedBy,
-            winner: kept.point.winner,
-          }
-        : {}),
+      ...endingColumns(kept.point),
     },
   };
 }

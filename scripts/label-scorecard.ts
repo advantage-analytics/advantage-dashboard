@@ -55,23 +55,24 @@ async function main() {
     );
   }
 
-  // The marks as today's code raises them, every code — never a stored flag.
-  const fileMarks = (await buildJobMarks(db, built.jobId))(built.points, {
-    hidden: true,
-  });
+  // The marks as today's code raises them, every code — never a stored flag —
+  // and the vendor's stroke, frozen on each row: the loader's column list
+  // leaves it out, since the console never reads it. Independent reads.
+  const [markFor, vendorRows] = await Promise.all([
+    buildJobMarks(db, built.jobId),
+    readAllPages<{ id: string; vendor: unknown }>(
+      db
+        .from("label_shots")
+        .select("id, vendor")
+        .eq("session_id", built.id)
+        .order("id"),
+      "Could not read the vendor strokes",
+    ),
+  ]);
+  const fileMarks = markFor(built.points, { hidden: true });
   const marks = openingMarks(fileMarks, built.points, built.adScoring);
 
-  // The vendor's stroke, frozen on each row: the loader's column list leaves
-  // it out, since the console never reads it.
   const vendor = new Map<string, VendorStrokeFacts>();
-  const vendorRows = await readAllPages<{ id: string; vendor: unknown }>(
-    db
-      .from("label_shots")
-      .select("id, vendor")
-      .eq("session_id", built.id)
-      .order("id"),
-    "Could not read the vendor strokes",
-  );
   for (const row of vendorRows) {
     const facts = vendorStrokeFacts(row.vendor);
     if (facts) vendor.set(row.id, facts);

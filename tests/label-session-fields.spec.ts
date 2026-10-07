@@ -516,9 +516,6 @@ test.describe("the score chip in the rail header", () => {
     const props = {
       mismatch,
       stored: "0–0",
-      reason: mismatch.reasons[0],
-      game: "1·1",
-      gameInSet: 1,
       close: () => calls.push("close"),
       onGoToGame: (key: string) => calls.push(`go ${key}`),
       onFixEnteredScore: () => calls.push("fix"),
@@ -562,9 +559,7 @@ test.describe("the score chip in the rail header", () => {
     // No game named: no Go to row.
     const noGame = ScoreChipMenu({
       ...props,
-      reason: undefined,
-      game: null,
-      gameInSet: null,
+      mismatch: { ...mismatch, reasons: [] },
     });
     expect(rows(noGame)[0][0]).toBe("Fix the entered score");
   });

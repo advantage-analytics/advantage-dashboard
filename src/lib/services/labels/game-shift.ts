@@ -167,10 +167,7 @@ export function gameOverflow(
 ): GameOverflow[] {
   const games: Accumulator[] = [];
   const byKey = new Map<string, Accumulator>();
-  const live = [...points]
-    .filter((p) => p.status !== "deleted")
-    .sort((a, b) => a.pointIndex - b.pointIndex);
-  for (const point of live) {
+  for (const point of liveRows(points)) {
     if (point.setNumber === null || point.gameNumber === null) continue;
     const key = gameKey(point);
     let game = byKey.get(key);
@@ -406,14 +403,7 @@ export function planGameShift(
     current = next;
   }
 
-  const shots: ShotSwapWrite[] = [];
-  let swapped = 0;
-  for (const id of writes.keys()) {
-    const swap = swaps.get(id);
-    if (!swap) continue;
-    swapped += 1;
-    shots.push(...swap.shots);
-  }
+  const { shots, swapped } = flippedShots(swaps);
   return {
     ok: true,
     writes: [...writes.values()],
@@ -425,6 +415,21 @@ export function planGameShift(
       swapped,
     },
   };
+}
+
+/** The strokes the cascade's swaps flip, and how many points switched. */
+function flippedShots(swaps: ReadonlyMap<string, PlayerSwap | null>): {
+  shots: ShotSwapWrite[];
+  swapped: number;
+} {
+  const shots: ShotSwapWrite[] = [];
+  let swapped = 0;
+  for (const swap of swaps.values()) {
+    if (!swap) continue;
+    swapped += 1;
+    shots.push(...swap.shots);
+  }
+  return { shots, swapped };
 }
 
 /**
@@ -475,6 +480,18 @@ function liveRows<T extends GamePoint>(points: readonly T[]): T[] {
     .sort((a, b) => a.pointIndex - b.pointIndex);
 }
 
+/** `live` grouped by game, each in `point_index` order. */
+function rowsByGame<T extends GamePoint>(live: readonly T[]): Map<string, T[]> {
+  const byGame = new Map<string, T[]>();
+  for (const point of live) {
+    const key = gameKey(point);
+    const list = byGame.get(key);
+    if (list) list.push(point);
+    else byGame.set(key, [point]);
+  }
+  return byGame;
+}
+
 /** Whether a band's game is an ordinary one left short with a point in it. */
 function bandIsShort(band: LabelGameBand): boolean {
   return (
@@ -487,30 +504,28 @@ function bandIsShort(band: LabelGameBand): boolean {
 /**
  * Every ordinary game with a counted point whose rows stop short of settling
  * it, in the order the games appear — except the last game of each set,
- * which has no game of its own set after it to read from. The last game of
- * the session is the last of its set too, so it is listed only when the
- * labeller has not said the video ends early: then the rows end on an
- * unfinished game the vendor cut, not the film.
+ * which has no game of its own set after it to read from. That takes in the
+ * session's last game: the rail reads it as still being played
+ * (`bandOutcomeShown`, label-black-rail.tsx) and never says "Unfinished" on
+ * it, so no slot asks about it either — the labeller adds its points by the
+ * row menu.
  */
 export function gameUnderflow(
   points: readonly GamePoint[],
   adScoring: boolean,
-  opts: { videoEndsEarly: boolean | null },
 ): GameUnderflow[] {
   const live = liveRows(points);
   const bands = labelScores(live, adScoring).games;
   if (bands.length === 0) return [];
+  const byGame = rowsByGame(live);
   const lastOfSet = new Map<number, string>();
   for (const band of bands) lastOfSet.set(band.setNumber, gameKey(band));
-  const lastOfSession = gameKey(bands[bands.length - 1]);
   const out: GameUnderflow[] = [];
   for (const band of bands) {
     if (!bandIsShort(band)) continue;
     const key = gameKey(band);
-    if (lastOfSet.get(band.setNumber) === key) {
-      if (key !== lastOfSession || opts.videoEndsEarly === true) continue;
-    }
-    const rows = live.filter((p) => gameKey(p) === key);
+    if (lastOfSet.get(band.setNumber) === key) continue;
+    const rows = byGame.get(key) ?? [];
     out.push({
       setNumber: band.setNumber,
       gameNumber: band.gameNumber,
@@ -524,24 +539,33 @@ export function gameUnderflow(
 }
 
 /**
- * Plan the pull into the short game `key` (`"{set}·{game}"`): one write per
- * pulled row with where it ends up, the strokes flipped with any row whose
- * players switch, and a summary for the slot. `add_point` when no plan is
- * sound (see the file comment); an error when the game is not short.
+ * Plan the pull into the short game `key` (`"{set}·{game}"`); see
+ * `planGamePullFrom`. An error when the game is not short.
  */
 export function planGamePull(
   points: readonly ShiftPoint[],
   key: string,
   adScoring: boolean,
 ): PlannedGamePull {
-  // The session's last game is listed here too: with nothing after it the
-  // plan is `add_point`, which is what the slot on it offers.
-  const short = gameUnderflow(points, adScoring, { videoEndsEarly: false });
+  const short = gameUnderflow(points, adScoring);
   const from = short.find((game) => gameKey(game) === key);
   if (!from) {
     return { error: "That game is not short — there is nothing to pull in." };
   }
+  return planGamePullFrom(points, from, adScoring);
+}
 
+/**
+ * Plan the pull into the short game `from` (one `gameUnderflow` listed): one
+ * write per pulled row with where it ends up, the strokes flipped with any
+ * row whose players switch, and a summary for the slot. `add_point` when no
+ * plan is sound (see the file comment).
+ */
+export function planGamePullFrom(
+  points: readonly ShiftPoint[],
+  from: { setNumber: number; gameNumber: number },
+  adScoring: boolean,
+): PlannedGamePull {
   // The game ranks the console names games by, on the rows as they stand.
   const rank = new Map<string, number>();
   for (const band of labelScores(points, adScoring).games) {
@@ -565,6 +589,7 @@ export function planGamePull(
   let current: { setNumber: number; gameNumber: number } = from;
   /** The games pulled from, in order; a game is listed once. */
   const donors: string[] = [];
+  let fromGame: GameShiftGameRef | null = null;
 
   // Bounded for safety: every step either pulls a row or ends the loop.
   const bound = working.filter((p) => p.status !== "deleted").length + 2;
@@ -587,7 +612,8 @@ export function planGamePull(
       continue;
     }
 
-    const rows = live.filter((p) => gameKey(p) === gameKey(current));
+    const byGame = rowsByGame(live);
+    const rows = byGame.get(gameKey(current)) ?? [];
     const to = gameAfter(live, current, rows);
     // No game after, one in another set, or a tiebreak — never split.
     if (!to || to.setNumber !== current.setNumber || to.gameType !== "game") {
@@ -597,8 +623,9 @@ export function planGamePull(
     if (donors[donors.length - 1] !== donorKey) {
       if (donors.length >= 2) return { kind: "add_point" };
       donors.push(donorKey);
+      fromGame ??= ref(to);
     }
-    const donorRows = live.filter((p) => gameKey(p) === donorKey);
+    const donorRows = byGame.get(donorKey) ?? [];
     const first = original.get(donorRows[0].id);
     if (!first) return { kind: "add_point" };
     const { write, swap } = shiftWrite(first, {
@@ -623,27 +650,13 @@ export function planGamePull(
       }
     }
   }
-  if (writes.size === 0) return { kind: "add_point" };
+  if (writes.size === 0 || !fromGame) return { kind: "add_point" };
 
-  const shots: ShotSwapWrite[] = [];
-  let swapped = 0;
-  for (const id of writes.keys()) {
-    const swap = swaps.get(id);
-    if (!swap) continue;
-    swapped += 1;
-    shots.push(...swap.shots);
-  }
-  const [firstDonor] = donors;
-  const [set, game] = firstDonor.split("·").map(Number);
+  const { shots, swapped } = flippedShots(swaps);
   return {
     ok: true,
     writes: [...writes.values()],
     shots,
-    summary: {
-      points: writes.size,
-      games: donors.length,
-      fromGame: ref({ setNumber: set, gameNumber: game }),
-      swapped,
-    },
+    summary: { points: writes.size, games: donors.length, fromGame, swapped },
   };
 }

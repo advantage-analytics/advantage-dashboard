@@ -75,6 +75,15 @@ export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
   return stroke === "first_serve" || stroke === "second_serve";
 }
 
+/**
+ * Whether an ending says the point was not played out — a replayed let or a
+ * non-point: the score stands, the server's turn does not move, and no stroke
+ * rewrites it.
+ */
+export function isNonPointEnding(ending: LabelEnding | null): boolean {
+  return ending === "let_replayed" || ending === "not_a_point";
+}
+
 /** Whether a result is a missed ball: out, or in the net. */
 export function isMissedResult(result: unknown): result is "out" | "net" {
   return result === "out" || result === "net";
@@ -165,6 +174,16 @@ export function isLiveShot(
   ghosts = true,
 ): boolean {
   return shot.status !== "deleted" && !(ghosts && isGhostShot(shot));
+}
+
+/** The point's live strokes (`isLiveShot`) in video order. */
+export function liveShotsInOrder(
+  point: { shots: readonly LabelShot[] },
+  ghosts: boolean,
+): LabelShot[] {
+  return orderLabelShots(
+    point.shots.filter((shot) => isLiveShot(shot, ghosts)),
+  );
 }
 
 /** One `label_points` row with its strokes, already in video order. */

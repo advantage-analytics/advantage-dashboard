@@ -58,7 +58,7 @@ const ENDING_PHRASE: Record<LabelEnding, string> = {
 };
 
 /** "an error by Goodman", or the ending alone when nobody is named. */
-export function endingPhrase(
+function endingPhrase(
   ending: LabelEnding,
   endedBy: LabelSide | null,
   names: MarkNames,

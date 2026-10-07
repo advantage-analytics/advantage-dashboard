@@ -11,7 +11,7 @@ import type {
   LabelSession,
   LabelShot,
 } from "@/lib/services/labels/session";
-import { inner, tag, text } from "./fixtures/html-probe";
+import { count, inner, tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -977,6 +977,105 @@ test.describe("the black shots well", () => {
       expect(frozen).toContain('data-tombstone-id="w-gone"');
       expect(frozen).not.toContain("data-undo-delete");
     }
+  });
+
+  test("a trailing run of strokes removed as dead balls after the point: Undo N from each but the last puts the run back in one call", () => {
+    const { BlackShotsWell, deadBallRunStart } = well() as unknown as {
+      BlackShotsWell: React.ComponentType<Record<string, unknown>>;
+      deadBallRunStart: (shots: LabelShot[]) => number;
+    };
+    const dead = (id: string, videoTime: number) =>
+      shot(id, {
+        hitter: "p1",
+        stroke: "forehand",
+        status: "deleted",
+        statusBeforeDelete: "kept",
+        deleteReason: "dead_ball_after_point",
+        videoTime,
+      });
+    const base = rally();
+    const point = {
+      ...base,
+      shots: [
+        ...base.shots,
+        dead("w-d1", 970),
+        dead("w-d2", 971),
+        dead("w-d3", 972),
+      ],
+    };
+    // The run is the last three rows; w-gone, before a live row and with
+    // another reason, is not in it.
+    expect(deadBallRunStart(point.shots)).toBe(base.shots.length);
+    expect(deadBallRunStart(base.shots)).toBe(base.shots.length);
+
+    const restored: unknown[][] = [];
+    const single: string[] = [];
+    const edit = wellEdit({
+      operations: {
+        ...OPERATIONS,
+        onRestoreShot: (id: string) => single.push(id),
+      },
+      onRestoreShots: (...args: unknown[]) => restored.push(args),
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, { point, edit }),
+    );
+    const undoOf = (id: string) => {
+      const at = html.indexOf(`data-tombstone-id="${id}"`);
+      const line = html.slice(at, html.indexOf("</button>", at));
+      return [
+        tag(line, "data-undo-delete"),
+        text(line.slice(line.lastIndexOf(">") + 1)),
+      ];
+    };
+    expect(undoOf("w-d1")[0]).toContain('data-undo-count="3"');
+    expect(undoOf("w-d1")[0]).toContain(
+      'aria-label="Undo delete of the 3 shots after the point"',
+    );
+    expect(undoOf("w-d1")[1]).toBe("Undo 3");
+    expect(undoOf("w-d2")[0]).toContain('data-undo-count="2"');
+    expect(undoOf("w-d2")[1]).toBe("Undo 2");
+    // The last of the run, and w-gone outside it: the plain Undo.
+    expect(undoOf("w-d3")[0]).not.toContain("data-undo-count");
+    expect(undoOf("w-d3")[1]).toBe("Undo");
+    expect(undoOf("w-gone")[1]).toBe("Undo");
+
+    // Undo 3 asks for the whole run at once, on the point; Undo on the
+    // last row is the single restore.
+    const tree = elements(React.createElement(BlackShotsWell, { point, edit }));
+    const clickUndo = (id: string) => {
+      const row = tree.find((e) => e.props["data-tombstone-id"] === id)!;
+      const button = elements(row.props.children).find(
+        (e) => "data-undo-delete" in e.props,
+      )!;
+      (button.props.onClick as (e: unknown) => void)({
+        stopPropagation: noop,
+      });
+    };
+    clickUndo("w-d1");
+    clickUndo("w-d3");
+    expect(restored).toEqual([["p-well", ["w-d1", "w-d2", "w-d3"]]]);
+    expect(single).toEqual(["w-d3"]);
+
+    // With no batched restore to call, every row keeps its own Undo.
+    const alone = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point,
+        edit: wellEdit({ onRestoreShots: undefined }),
+      }),
+    );
+    expect(alone).not.toContain("data-undo-count");
+    expect(count(alone, /data-undo-delete/g)).toBe(4);
+    // A live row after the tombstones, or another reason among them, ends
+    // the run before it starts.
+    const broken = {
+      ...point,
+      shots: [
+        ...point.shots.slice(0, -1),
+        { ...point.shots.at(-1)!, deleteReason: "other" },
+      ],
+    };
+    expect(deadBallRunStart(broken.shots)).toBe(broken.shots.length);
   });
 
   test("a deleted point is the same line in the rail", () => {

@@ -9,8 +9,9 @@
  * rows attached so the players' swap (player-swap.ts) can read them.
  *
  * Writes `label_points` and `label_shots` only: one UPDATE per destination by
- * id list (`groupWrites`), then the flipped strokes (`writeShotSwaps`). Nothing
- * is inserted or removed and no `point_index` moves.
+ * id list (`groupWrites`), each compare-and-set on the status its points were
+ * read with, then the flipped strokes (`writeShotSwaps`). Nothing is inserted
+ * or removed and no `point_index` moves.
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -19,6 +20,7 @@ import { readJobAdScoring, resolveLabelAdScoring } from "./ad-scoring";
 import {
   FROZEN,
   defaultLabelWriteDependencies,
+  racedMessage,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
@@ -35,12 +37,13 @@ import {
 import {
   gated,
   normaliseId,
+  withShots,
   writeShotSwaps,
   type LabelOpResult,
 } from "./operations-session";
 import type { ShotSwapWrite } from "./player-swap";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
-import type { LabelShot } from "./session";
+import type { LabelPointStatus, LabelShot } from "./session";
 
 /**
  * Every shot row of the session, as the console's rows. Paged
@@ -84,33 +87,49 @@ interface ShiftSessionRow {
   job_id: string | null;
 }
 
+/** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
+interface WriteGroup {
+  values: Omit<GameShiftWrite, "id">;
+  was: LabelPointStatus;
+  ids: string[];
+}
+
 /**
  * The plan's writes grouped by what they write — every point moving into
- * one game with one server takes the same values — in the order the plan
- * first names each destination, so one UPDATE by id list serves each group.
+ * one game with one server takes the same values — and by the status each
+ * point was read with (`statusOf`), in the order the plan first names each
+ * destination, so one compare-and-set UPDATE by id list serves each group.
  * A point whose players switch carries its flipped winner and ended by, and
- * groups only with points flipped the same way.
+ * groups only with points flipped the same way: a column the write leaves
+ * out is keyed apart from one it sets to null (JSON would print both as
+ * null), so a swapped point whose winner is blank never nulls the winner of
+ * an unswapped one.
  */
 function groupWrites(
   writes: readonly GameShiftWrite[],
-): { values: Omit<GameShiftWrite, "id">; ids: string[] }[] {
-  const groups = new Map<
-    string,
-    { values: Omit<GameShiftWrite, "id">; ids: string[] }
-  >();
+  statusOf: ReadonlyMap<string, LabelPointStatus>,
+): WriteGroup[] {
+  const groups = new Map<string, WriteGroup>();
+  const presence = (
+    name: "winner" | "ended_by",
+    values: Omit<GameShiftWrite, "id">,
+  ) => (name in values ? ["set", values[name] ?? null] : ["absent"]);
   for (const { id, ...values } of writes) {
+    // Every write names a point the plan was handed; the fallback never runs.
+    const was = statusOf.get(id) ?? "unchanged";
     const key = JSON.stringify([
       values.set_number,
       values.game_number,
       values.server,
       values.game_type,
       values.status,
-      "winner" in values ? values.winner : undefined,
-      "ended_by" in values ? values.ended_by : undefined,
+      presence("winner", values),
+      presence("ended_by", values),
+      was,
     ]);
     const group = groups.get(key);
     if (group) group.ids.push(id);
-    else groups.set(key, { values, ids: [id] });
+    else groups.set(key, { values, was, ids: [id] });
   }
   return [...groups.values()];
 }
@@ -184,28 +203,32 @@ async function runGamePlan(
   if (switching) {
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
-    const shotsOf = new Map<string, ShiftPoint["shots"][number][]>();
-    for (const shot of owned.shots) {
-      const list = shotsOf.get(shot.labelPointId) ?? [];
-      list.push(shot);
-      shotsOf.set(shot.labelPointId, list);
-    }
-    shiftPoints = shiftPoints.map((point) => ({
-      ...point,
-      shots: shotsOf.get(point.id) ?? [],
-    }));
+    shiftPoints = withShots(shiftPoints, owned.shots);
     const full = plan(shiftPoints, adScoring);
     if ("error" in full) return full;
     planned = full;
   }
 
-  for (const group of groupWrites(planned.writes)) {
-    const { error: writeError } = await supabase
+  // Each group compare-and-set on the status its points were read with: a
+  // group that writes fewer rows than it named hit a point another tab
+  // tombstoned or edited since the read, and stops the run with the raced
+  // message. The groups before it landed — the partial semantics every
+  // status writer here has — and the labeller reloads to see what did.
+  const statusOf = new Map(
+    shiftPoints.map((point) => [point.id, point.status]),
+  );
+  for (const group of groupWrites(planned.writes, statusOf)) {
+    const { data, error: writeError } = await supabase
       .from("label_points")
       .update(group.values)
-      .in("id", group.ids);
+      .in("id", group.ids)
+      .eq("status", group.was)
+      .select("id");
     if (writeError) {
       return { error: `${failed}: ${writeError.message}` };
+    }
+    if (!data || data.length !== group.ids.length) {
+      return { error: racedMessage("row") };
     }
   }
   const swapFailed = await writeShotSwaps(

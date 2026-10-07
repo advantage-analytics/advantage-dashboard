@@ -412,7 +412,8 @@ type FakeLabelAnswer = { data: unknown; error: { message: string } | null };
 /**
  * A Supabase client for the labels services' specs: it records every chain
  * and answers each from `answer`. A chain `answer` leaves unanswered succeeds
- * when it is an update (one row, the id it filtered on) and fails otherwise.
+ * when it is an update (one row per id it named — the `.in` list, else the
+ * id it filtered on) and fails otherwise.
  */
 export function fakeLabelClient(
   answer: (call: FakeLabelCall) => FakeLabelAnswer | undefined,
@@ -425,7 +426,10 @@ export function fakeLabelClient(
       const settle = async (): Promise<FakeLabelAnswer> =>
         answer(call) ??
         (call.op === "update"
-          ? { data: [{ id: call.filters.id }], error: null }
+          ? {
+              data: (call.in?.id ?? [call.filters.id]).map((id) => ({ id })),
+              error: null,
+            }
           : { data: null, error: { message: `unexpected ${table}` } });
       const builder = {
         select: (columns?: string) => {

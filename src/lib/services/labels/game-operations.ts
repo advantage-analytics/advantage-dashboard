@@ -22,6 +22,7 @@
  */
 
 import {
+  isNonPointEnding,
   opponent,
   type LabelGameType,
   type LabelPoint,
@@ -79,18 +80,11 @@ export type PlannedGameWrites =
     }
   | { error: string };
 
-/** The endings that are not served points: the rotation does not move. */
-const UNSERVED_ENDINGS: ReadonlySet<NonNullable<LabelPoint["ending"]>> =
-  new Set(["let_replayed", "not_a_point"]);
-
 /** Whether a live point takes a serve turn: not a let or `not_a_point`. */
 export function takesServeTurn(
   point: Pick<GamePoint, "status" | "ending">,
 ): boolean {
-  return (
-    point.status !== "deleted" &&
-    !(point.ending !== null && UNSERVED_ENDINGS.has(point.ending))
-  );
+  return point.status !== "deleted" && !isNonPointEnding(point.ending);
 }
 
 export function livePointsOfGame<T extends GamePoint>(
@@ -185,13 +179,6 @@ function statusAfterChange(
   return status as LivePointStatus;
 }
 
-function statusAfterServer(
-  point: GamePoint,
-  server: LabelSide,
-): LivePointStatus {
-  return statusAfterChange(point, { server });
-}
-
 /**
  * Give game `game` the server `server`: one write per live point. In an
  * ordinary game every point gets `server`; in a tiebreak `server` is who serves
@@ -210,23 +197,16 @@ export function planGameServer(
   if (live.length === 0) return { error: "That game has no live points." };
   const servers = rotateServers(live, gameTypeOf(live), server);
   const shots: ShotSwapWrite[] = [];
-  const writes = live.map((point, i) => {
+  const writes = live.map((point, i): GamePointWrite => {
     const swap = planPlayerSwap(point, servers[i]);
-    if (!swap) {
-      return {
-        id: point.id,
-        server: servers[i],
-        status: statusAfterServer(point, servers[i]),
-      };
-    }
-    shots.push(...swap.shots);
-    const change = { server: servers[i], ...swap.point };
+    if (swap) shots.push(...swap.shots);
     return {
       id: point.id,
       server: servers[i],
-      status: statusAfterChange(point, change),
-      winner: swap.point.winner,
-      ended_by: swap.point.ended_by,
+      status: statusAfterChange(point, { server: servers[i], ...swap?.point }),
+      ...(swap
+        ? { winner: swap.point.winner, ended_by: swap.point.ended_by }
+        : {}),
     };
   });
   return { ok: true, writes, shots };
@@ -257,7 +237,7 @@ export function planGameType(
       id: point.id,
       server: servers[i],
       game_type: type,
-      status: statusAfterServer(point, servers[i]),
+      status: statusAfterChange(point, { server: servers[i] }),
     })),
     shots: [],
   };
