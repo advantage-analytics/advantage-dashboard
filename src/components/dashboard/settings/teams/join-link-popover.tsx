@@ -399,7 +399,10 @@ function JoinLinkPanel({
           label="Anyone with the link"
           description="Joins as a player right away"
           trailing={
-            <span className="flex shrink-0 self-center">
+            // A fixed 8-boxes-wide column, so a 25-seat program wraps into
+            // three short rows instead of taking the row's width and forcing
+            // the label to break one word per line (seen on ZZ Test Program).
+            <span className="flex w-[85px] shrink-0 justify-end self-center">
               <SeatBoxes seats={seats} />
               <span className="sr-only">
                 {free === 1 ? "1 seat free" : `${free} seats free`}
