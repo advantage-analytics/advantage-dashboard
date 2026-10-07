@@ -525,6 +525,9 @@ export type AcceptOutcome =
        *   requested        approve mode — a `program_requests` row now waits
        *                    for staff; the action sends them back to the link,
        *                    which resolves to `link_requested`
+       *   removed          the session's only roster row here is archived or
+       *                    merged away — a coach removed them, and a link is
+       *                    not the way back in
        *
        * Each has its own sentence and its own way forward, which is why they
        * come back as a status rather than as a raised exception.
@@ -538,7 +541,8 @@ export type AcceptOutcome =
         | "no_seats"
         | "already_claimed"
         | "player_gone"
-        | "requested";
+        | "requested"
+        | "removed";
     }
   | { ok: false; status: "error"; message: string };
 

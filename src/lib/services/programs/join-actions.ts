@@ -93,6 +93,10 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       // back to the link, which now renders `link_requested`. Here only so the
       // switch stays exhaustive.
       return "Your request to join has been sent to the program's coaches.";
+    case "removed":
+      // A coach archived their roster row. The restore lives on the Roster,
+      // in the coach's hands — the link cannot undo a removal.
+      return "You were removed from this team. Ask a coach to add you back.";
     case "error":
       return outcome.message;
     default:
@@ -601,9 +605,31 @@ export async function createAccountAndJoinByLink(
     password: string;
   },
 ): Promise<JoinLinkSignUpResult> {
+  // Re-resolved at submit, so the answer is the one the page would give now:
+  // the team may have filled or the link been turned off while the form was
+  // open, and each of those has its own sentence rather than one shrug.
   const state = await resolveJoinState(token);
   if (state.kind !== "link_sign_up") {
-    return { ok: false, error: "That link can't be used that way." };
+    switch (state.kind) {
+      case "link_full":
+        return {
+          ok: false,
+          error: `${state.programName} is full. Ask a coach to free a seat, then open this link again.`,
+        };
+      case "not_found":
+        return {
+          ok: false,
+          error:
+            "That link isn't valid any more. Ask whoever shared it for a new one.",
+        };
+      default:
+        // A session appeared under the form (another tab signed in): the page
+        // now renders the one-click screen, so reload is the honest answer.
+        return {
+          ok: false,
+          error: "You're signed in now — reload this page to join.",
+        };
+    }
   }
 
   const email = input.email.trim().toLowerCase();
@@ -617,17 +643,15 @@ export async function createAccountAndJoinByLink(
   const passwordProblem = validatePassword(input.password);
   if (passwordProblem) return { ok: false, error: passwordProblem };
 
-  // Same outcome as the invite path, for the same reason: an account that
-  // exists signs in, it never sets a password from a link. (`signUp` on a
-  // confirmed address would also come back looking like success without
-  // creating anything — this check is what turns that into a sentence.)
-  if (await accountExists(email)) {
-    return {
-      ok: false,
-      error: "There's already an account for that address. Sign in instead.",
-    };
-  }
-
+  // Deliberately NO `accountExists()` check here, unlike the invite path. An
+  // invitation names one address, so "that address has an account" tells the
+  // invitee nothing they did not know. A join link is pasted into group chats,
+  // so the same sentence would let anyone holding it probe arbitrary addresses
+  // against `users`. Supabase's `signUp` already answers an existing address
+  // with the same shape as a new one (an obfuscated user, no session, nothing
+  // written), so one neutral screen covers both: "if this address is new, a
+  // confirmation is on its way; if not, sign in". The existing account is
+  // never offered a password box either way.
   const supabase = await createClient();
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
 

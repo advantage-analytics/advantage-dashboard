@@ -464,16 +464,24 @@ export function JoinLinkSignUp({
 
   // Confirmations on (the deployed configuration): the account exists but
   // cannot join until its address is proven. The mail's link comes back to
-  // this token signed in, where the page answers `link_ready`.
+  // this token signed in, where the page answers `link_ready`. The sentence
+  // is deliberately the same whether the address was new or already had an
+  // account — see `createAccountAndJoinByLink` for why this screen must not
+  // say which.
   if (sentTo) {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-body max-w-[58ch]" role="status">
-          Check your email. We sent a confirmation to{" "}
-          <span className="text-[var(--ink-900)]">{sentTo}</span> — open it and
-          you&apos;ll land back here to finish joining.
+          Check your email. If{" "}
+          <span className="text-[var(--ink-900)]">{sentTo}</span> is new to
+          Advantage, a confirmation is on its way — open it and you&apos;ll land
+          back here to finish joining. If you already have an account, sign in
+          instead.
         </p>
         <ClaimActions>
+          <Link href={signInThenHref(joinHref(token))} className={CLAIM_BUTTON}>
+            Sign in
+          </Link>
           <Link href="/claim/exit" className={advButton("ghost")}>
             Close
           </Link>
