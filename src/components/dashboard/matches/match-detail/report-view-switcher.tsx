@@ -59,6 +59,11 @@ export function MatchReportViewSwitcher() {
             type="button"
             role="tab"
             aria-selected={isActive}
+            data-tour={
+              view.value === "shots" || view.value === "film"
+                ? view.value
+                : undefined
+            }
             onClick={() => actions.selectView(view.value)}
             className={viewRowClass(isActive)}
           >

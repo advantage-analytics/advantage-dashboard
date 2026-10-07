@@ -78,3 +78,8 @@ is the runner's. Newest entries at the bottom.
 2. `VizEmpty` still shows "Open the Video tab" on read-only reports (navigation, not a writer).
 3. Only the predicate is spec-covered; once `/dashboard/matches/sample` exists, a browser spec should assert no "Create view" / "Save this view…" / "Edit bands…".
 4. The non-readOnly "canManageSavedView per view" test is close to a tautology — strengthen it.
+
+## T8 · Add data-tour attributes to the five tour targets — done
+
+**gate:** mechanical — lint pass, typecheck pass, format:check pass, tests 4359 passed / 380 skipped (design-drift included); failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass. widget-states: attribute-only, no state change.
+**changed:** attribute-only. `data-tour="scoreboard"` on `RailScoreboard`'s root div (`rail-scoreboard.tsx` — `MatchReportScoreboard` only forwards props to it); `data-tour="insight"` on `MatchReportInsight`'s root section and on its `InsightEmpty` variant (only one renders at a time); `data-tour="head-to-head"` on `HeadToHeadCard`'s root section; `data-tour` = "shots" / "film" on those two tabs in `report-view-switcher.tsx` (undefined for Statistics).

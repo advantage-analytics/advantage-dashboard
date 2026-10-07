@@ -116,6 +116,7 @@ export function MatchReportInsight() {
   return (
     <section
       aria-label="Advantage Intelligence summary"
+      data-tour="insight"
       className={INSIGHT_SURFACE}
     >
       {/* The tween runs inside the border, so the measured content height is
@@ -184,6 +185,7 @@ function InsightEmpty() {
       aria-label="Advantage Intelligence summary"
       role="status"
       data-testid="insight-empty"
+      data-tour="insight"
       className={INSIGHT_SURFACE}
     >
       <div className="flex flex-col gap-2 p-[16px_20px_12px]">

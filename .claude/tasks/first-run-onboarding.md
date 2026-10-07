@@ -111,7 +111,7 @@ ready).
 
 ## T8 · Add data-tour attributes to the five tour targets
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/match-detail/report-scoreboard.tsx, report-insight-card.tsx, head-to-head-card.tsx, report-view-switcher.tsx — guess
 - **done when:**
