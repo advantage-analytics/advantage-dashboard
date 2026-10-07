@@ -124,7 +124,7 @@ ready).
 
 - **status:** todo
 - **model:** fable
-- **needs:** T1, T2, T4
+- **needs:** T1, T2, T4, T19
 - **files:** src/components/dashboard/onboarding/tour-runner.tsx (new), src/app/dashboard/onboarding-actions.ts (new), tests/tour-runner.spec.ts (new), tests/fixtures/tour-runner-harness.tsx (new) — guess
 - **done when:**
   - [ ] `TourRunner({ tour, start })` is a client component that, when `start` is true, queries `[data-tour]` elements, calls `resolveSteps`, and drives `TourPopover` through the steps; a step with a `tab` calls `useMatchReport().actions.selectView(tab)` before anchoring, and each target is `scrollIntoView`'d (`behavior: "auto"` under `prefers-reduced-motion`)
@@ -253,3 +253,16 @@ ready).
   - [ ] `npm run test -- trim-step-navigation upload-wizard-pending wizard-keys-form-control match-video-trim-window`, `npm run typecheck`, `npm run lint`, `npm run format:check` pass
 - **routes:** /dashboard/matches/new
 - **notes:** Plan step 17 (guardrails §3.1, §4). No sketch asset (deferred). Read the design SKILL.md and `docs/ui-revamp-guardrails.md`; run `pipeline-guardrails-reviewer`. The wizard currently has no match count anywhere — that is why the read must be added at the entry page.
+
+## T19 · Grant UPDATE on the two onboarding-tour columns to authenticated
+
+- **status:** next
+- **model:** fable
+- **files:** supabase/migrations/<YYYYMMDDHHMMSS>_users_onboarding_tours_column_grants.sql (guess)
+- **done when:**
+  - [ ] A new migration file `supabase/migrations/<ts>_users_onboarding_tours_column_grants.sql` contains exactly one statement, `grant update (sample_tour_done_at, first_report_tour_done_at) on public.users to authenticated;`, in lowercase SQL like `20260926201548_onboarding_intake_column_grants.sql`
+  - [ ] The migration creates or alters no column, function, trigger or RLS policy and grants nothing to `anon` or `public` (the only `grant` is the one above, and it is column-scoped, not table-wide)
+  - [ ] The header comment states the real reason: `20260914100000_users_block_admin_self_update.sql` replaced the table-wide UPDATE grant on `public.users` with a column list, so the two columns added by `20261007024333_users_onboarding_tours.sql` are readable but not writable by `authenticated` until named in a grant; that the own-row ALL policy still scopes the write; and that the earlier migration's "already covers own-row reads and writes" line is inaccurate for writes
+  - [ ] The header records the version stamp passed to `apply_migration` and matches the filename timestamp, following the "Applied to the live database via the Supabase MCP as `<name>` (version <ts>)" line in `20260926201548_onboarding_intake_column_grants.sql`; `supabase/migrations/20261007024333_users_onboarding_tours.sql` is not in the diff
+  - [ ] `npm run format:check` and `npm run lint` pass
+- **notes:** Unblocks T9's cookie-client `markTourDone` server action. Without this grant, the update to `sample_tour_done_at` / `first_report_tour_done_at` for the signed-in user fails with `permission denied for table users`. Marked `next` so it runs before T9; T9 also lists it under `needs:`. Mirror `supabase/migrations/20260926201548_onboarding_intake_column_grants.sql` in style. Do not edit T1's migration: applied migrations are immutable. No policy change: the existing own-row ALL policy on `auth.uid() = id` scopes the write. Apply to the live project `pouxujkhtbvkdwbzfvka` with the Supabase MCP `apply_migration`, using the same name and version as the file. Load the tools with ToolSearch `select:mcp__Supabase__apply_migration,mcp__Supabase__execute_sql,mcp__Supabase__list_migrations`. If `list_migrations` records a different version, rename the file and fix the header to match. Then verify with `execute_sql` against `information_schema.column_privileges` that `authenticated` has UPDATE on both columns and that `anon` gains nothing. Report the MCP outcome in the final report, including a connection failure, since subagents cannot write the run log; a human applies it if the MCP cannot connect. The gate judges only the diff criteria above, not the live check. Run `rls-boundary-reviewer` on the diff before finishing.
