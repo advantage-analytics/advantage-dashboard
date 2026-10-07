@@ -307,19 +307,15 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     serveZone: [],
     scoreType: ["setPoint", "matchPoint"],
     serveResult: [],
-    resultOutcome: ["lost"],
+    resultOutcome: [],
     resultRallyLength: ["long"],
   });
   const applied = withFoldedFilters(filters, match, folded);
   expect(applied.player).toBe("opponent");
-  for (const key of [
-    "set",
-    "game",
-    "ball",
-    "pressure",
-    "result",
-    "rally",
-  ] as const)
+  // Won/Lost are the court player's; Result › Outcome is always yours, so
+  // the group stays a pill group rather than coming back named "lost".
+  expect(applied.result).toEqual(["won", "ace"]);
+  for (const key of ["set", "game", "ball", "pressure", "rally"] as const)
     expect(applied[key]).toEqual([]);
   // Zone and Court measure the serve's landing; the advanced Zone and Court
   // do not, so they stay pill groups.
@@ -516,5 +512,33 @@ test("the stats noun follows Serve › Type in the advanced filters", () => {
 
 test("the errors legend never calls a serve or volley a forehand", () => {
   const labels = legendItemsFor("errors", "scatter").map((i) => i.label);
-  expect(labels).toEqual(["Error", "Forehand · serve · other", "Backhand"]);
+  expect(labels).toEqual(["Error", "Forehand, serve or other", "Backhand"]);
+});
+
+test("switching to Errors drops advanced filters that ask for the court player's wins", () => {
+  const winning = {
+    ...EMPTY_MATCH_FILTERS,
+    resultOutcome: ["won" as const],
+    serveResult: ["ace" as const, "double-fault" as const],
+    returnResult: ["winner" as const],
+    resultEnding: ["winner" as const, "error" as const],
+  };
+  const mine = carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "errors");
+  expect(mine.match).toMatchObject({
+    resultOutcome: [],
+    serveResult: ["double-fault"],
+    returnResult: [],
+    resultEnding: ["error"],
+  });
+  // On the opponent's court "won" (yours) is their loss: it stays.
+  const theirs = carryFilters(
+    { ...EMPTY_VIZ_FILTERS, player: "opponent", match: winning },
+    "errors",
+  );
+  expect(theirs.match.resultOutcome).toEqual(["won"]);
+  // Other cuts carry everything.
+  expect(
+    carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "rallyPlacement")
+      .match,
+  ).toEqual(winning);
 });

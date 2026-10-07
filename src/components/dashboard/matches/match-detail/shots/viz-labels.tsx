@@ -109,7 +109,7 @@ const OTHER_STROKE_ITEM: LegendItem = {
   key: "other-stroke",
   glyph: "circle",
   color: "var(--ink-500)",
-  label: "Forehand · serve · other",
+  label: "Forehand, serve or other",
   outline: true,
 };
 

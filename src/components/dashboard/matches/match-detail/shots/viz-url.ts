@@ -566,21 +566,38 @@ export function clearedFilters(state: VizState): VizState {
  * of `result` — any OTHER selected result value (`won`/`lost`) is kept,
  * since those still mean something off serve.
  */
+/** `filters` without what can only match a point the court player won (see
+ * `carryFilters`). Result › Outcome is yours, so the court player's win is
+ * "won" on your court and "lost" on the opponent's. */
+function withoutWinningFilters(filters: VizFilters): VizFilters {
+  const match = filters.match ?? EMPTY_VIZ_FILTERS.match;
+  const courtWon = filters.player === "you" ? "won" : "lost";
+  return {
+    ...filters,
+    result: filters.result.filter((v) => v === "lost"),
+    match: {
+      ...match,
+      resultOutcome: match.resultOutcome.filter((v) => v !== courtWon),
+      serveResult: match.serveResult.filter(
+        (v) => v !== "ace" && v !== "service-winner",
+      ),
+      returnResult: match.returnResult.filter((v) => v !== "winner"),
+      resultEnding: match.resultEnding.filter((v) => v !== "winner"),
+    },
+  };
+}
+
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error.length) {
     filters = { ...filters, error: [] };
   }
-  // Every errors dot is a point the court's player lost: a carried "Won" or
-  // "Aces" would empty the cut with no pill left in the popover to undo it.
-  if (
-    nextCut === "errors" &&
-    filters.result.some((v) => v === "won" || v === "ace")
-  ) {
-    filters = {
-      ...filters,
-      result: filters.result.filter((v) => v === "lost"),
-    };
+  // Every errors dot is a point the court's player lost on their own
+  // error: anything carried in that asks for the court player's won points,
+  // aces or winners would empty the cut. Dropped — the pill group's Won and
+  // Aces, and the advanced filters' equivalents.
+  if (nextCut === "errors") {
+    filters = withoutWinningFilters(filters);
   }
   if (nextCut === "serve") {
     return filters;

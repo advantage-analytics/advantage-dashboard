@@ -46,7 +46,7 @@ import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 /** The `VizFilters` keys still drawn as live pills here — everything else
  *  lives in the advanced panel. */
-type OptionFilterKey = "error";
+type OptionFilterKey = "error" | "zone" | "court";
 
 const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   serves: { one: "serve", many: "serves" },
@@ -56,17 +56,17 @@ const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
 };
 
 /**
- * The Filters popover: whose court it is (Player), on the errors cut which
- * errors (Error type) — both applied live on click, since they pick what is
- * plotted rather than narrow it — and "Advanced filters", which swaps the
+ * The Filters popover: whose court it is (Player); the serve's measured
+ * Zone and Court (Court on every cut); on the errors cut which errors
+ * (Error type) — all applied live on click — and "Advanced filters", which swaps the
  * popover's body for the Video tab's own `FiltersPanel` (Score / Serve /
  * Return / Result / Custom, the same catalog, wording and draft-then-Show
  * behaviour as the Video tab's drawer). The panel edits `VizFilters.match`;
  * its count is this court's (`computeViz` under the draft), so "Show 12
  * serves" is exactly what the court will draw.
  *
- * The pill groups this popover used to draw (Ball, Court, Zone, Result,
- * Pressure, Rally, Set, Game) are all advanced options now. A default tile
+ * The other pill groups this popover used to draw (Ball, Result, Pressure,
+ * Rally, Set, Game) are advanced options now. A default tile
  * or an older saved view can still carry them: the panel opens on them
  * folded in (`foldedMatchFilters`), and its Show writes them back as
  * advanced filters (`withFoldedFilters`). A group the advanced filters
@@ -177,7 +177,7 @@ export function FiltersPopover({
     }));
   }
 
-  // Error type toggles membership, kept in canonical (OPTIONS) order so the
+  // Zone, Court and Error type toggle membership, kept in canonical (OPTIONS) order so the
   // same set of picks always serialises identically.
   function toggle<K extends OptionFilterKey>(
     key: K,
@@ -325,6 +325,28 @@ export function FiltersPopover({
                   />
                 </FilterGroup>
 
+                {/* Zone and Court read the serve's MEASURED landing on the
+                    serve cut (the score's court elsewhere) — what the
+                    advanced Zone and Court, off the tracker's label and the
+                    score, cannot say — so they stay quick pills. */}
+                {cut === "serve" && (
+                  <OptionsGroup
+                    filterKey="zone"
+                    label="Zone"
+                    dark={dark}
+                    active={filters.zone}
+                    onToggle={(value) => toggle("zone", value)}
+                  />
+                )}
+
+                <OptionsGroup
+                  filterKey="court"
+                  label="Court"
+                  dark={dark}
+                  active={filters.court}
+                  onToggle={(value) => toggle("court", value)}
+                />
+
                 {cut === "errors" && (
                   <OptionsGroup
                     filterKey="error"
@@ -383,7 +405,7 @@ export function FiltersPopover({
                   className="text-micro"
                   style={dark ? { color: "rgba(255,255,255,0.55)" } : undefined}
                 >
-                  Player and error type apply as you pick.
+                  These apply as you pick.
                 </span>
                 <button
                   type="button"
@@ -465,7 +487,7 @@ function AdvancedPanel({
 }
 
 /**
- * One `OPTIONS`-backed group — Error type (Player stays hand-written above:
+ * One `OPTIONS`-backed group — Zone, Court, Error type (Player stays hand-written above:
  * it's single-select, not an `OPTIONS` group). `keys` overrides the default
  * "every key in this OPTIONS group" order.
  */

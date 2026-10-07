@@ -842,9 +842,11 @@ export type FoldedKey =
  * removable token in the strip):
  * - its advanced group must be empty. Within a group values OR, while the
  *   pill group was AND'd against it, so merging the two could widen the cut.
- * - Result's Aces OR'd with Won/Lost; advanced groups AND. "Won + Aces" is
- *   just Won (an ace is a won point), Aces alone is Serve › Result's ace,
- *   but "Lost + Aces" has no advanced equivalent and stays.
+ * - Result's Won/Lost never fold. They are the COURT player's, while
+ *   Result › Outcome is always yours (`withPlayer` never flips it), so on
+ *   the opponent's court a folded "Won" would come back named "Points
+ *   lost" and stop following the court. Aces alone is Serve › Result's
+ *   ace; with Won or Lost picked too the whole group stays a pill group.
  * - Game or Result with every value picked is no constraint: it folds to
  *   nothing.
  * - Zone and Court never fold. On the serve cut the pills read the serve's
@@ -910,13 +912,7 @@ export function foldedMatchFilters(filters: VizFilters): {
   const lost = filters.result.includes("lost");
   const ace = filters.result.includes("ace");
   if (won && lost) folded.push("result");
-  else if (won || lost) {
-    if (!(lost && ace) && base.resultOutcome.length === 0) {
-      // Won/Lost are the court player's; the outcome is yours.
-      match.resultOutcome = [won === (subject === "you") ? "won" : "lost"];
-      folded.push("result");
-    }
-  } else if (ace && base.serveResult.length === 0) {
+  else if (!won && !lost && ace && base.serveResult.length === 0) {
     match.serveResult = ["ace"];
     folded.push("result");
   }
