@@ -629,6 +629,17 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (filters.result.includes("ace")) {
     next.result = filters.result.filter((v) => v !== "ace");
   }
+  // The advanced Serve › Result "Ace" and "Service winner" are points no
+  // one returned — no return, no rally shot, no error to draw off serve.
+  const serveResult = next.match?.serveResult ?? [];
+  if (serveResult.some((v) => v === "ace" || v === "service-winner")) {
+    next.match = {
+      ...next.match,
+      serveResult: serveResult.filter(
+        (v) => v !== "ace" && v !== "service-winner",
+      ),
+    };
+  }
   return next;
 }
 

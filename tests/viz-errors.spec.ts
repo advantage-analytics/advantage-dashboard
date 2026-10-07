@@ -303,7 +303,7 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   expect(match).toMatchObject({
     sets: [1],
     server: "opponent",
-    serveType: ["first"],
+    serveType: [],
     court: null,
     serveZone: [],
     scoreType: ["setPoint", "matchPoint"],
@@ -316,8 +316,11 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   // Won/Lost are the court player's; Result › Outcome is always yours, so
   // the group stays a pill group rather than coming back named "lost".
   expect(applied.result).toEqual(["won", "ace"]);
-  for (const key of ["set", "game", "ball", "pressure", "rally"] as const)
+  for (const key of ["set", "game", "pressure", "rally"] as const)
     expect(applied[key]).toEqual([]);
+  // Ball's "1st" counts a point with no serve type as a first serve, which
+  // Serve › Type does not: it stays a pill group.
+  expect(applied.ball).toEqual(["first"]);
   // Zone and Court measure the serve's landing; the advanced Zone and Court
   // do not, so they stay pill groups.
   expect(applied.court).toEqual(["ad"]);
@@ -537,20 +540,21 @@ test("switching to Errors drops advanced filters that ask for the court player's
     "errors",
   );
   expect(theirs.match.resultOutcome).toEqual(["won"]);
-  // Other cuts carry everything.
+  // The serve cut carries everything; other cuts drop only the
+  // no-return serves (an ace has no rally shot to draw).
+  expect(
+    carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "serve").match,
+  ).toEqual(winning);
   expect(
     carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "rallyPlacement")
       .match,
-  ).toEqual(winning);
+  ).toEqual({ ...winning, serveResult: ["double-fault"] });
 });
 
-test("Ball stays a pill on the return cuts, where Serve › Type means other points", () => {
+test("Ball never folds, and return nouns never read Serve › Type", () => {
   const ball = { ...EMPTY_VIZ_FILTERS, ball: ["first" as const] };
-  expect(foldedMatchFilters(ball, "returnContact").folded).toEqual([]);
-  expect(foldedMatchFilters(ball, "returnPlacement").match.serveType).toEqual(
-    [],
-  );
-  expect(foldedMatchFilters(ball, "serve").folded).toEqual(["ball"]);
+  expect(foldedMatchFilters(ball).folded).toEqual([]);
+  expect(foldedMatchFilters(ball).match.serveType).toEqual([]);
   // And the return nouns never read Serve › Type as "first-serve returns".
   const stats = computeVizStats(
     [],
@@ -584,4 +588,49 @@ test("switching player on Errors drops an Outcome that would empty it", () => {
   expect(
     courtFor({ ...state, cut: "serve" }, "opponent").match.resultOutcome,
   ).toEqual(["lost"]);
+});
+
+test("leaving serve drops advanced Aces and service winners: they have no return", () => {
+  const filters = {
+    ...EMPTY_VIZ_FILTERS,
+    match: {
+      ...EMPTY_MATCH_FILTERS,
+      serveResult: [
+        "ace" as const,
+        "service-winner" as const,
+        "double-fault" as const,
+      ],
+    },
+  };
+  expect(carryFilters(filters, "returnPlacement").match.serveResult).toEqual([
+    "double-fault",
+  ]);
+  expect(carryFilters(filters, "serve").match.serveResult).toEqual([
+    "ace",
+    "service-winner",
+    "double-fault",
+  ]);
+});
+
+test("Show on Errors writes what a reload reads back", () => {
+  // An advanced "Won" on your Errors court is dropped by the URL parse;
+  // the panel's Show runs the same carry, so the two agree.
+  const shown = carryFilters(
+    {
+      ...EMPTY_VIZ_FILTERS,
+      match: { ...EMPTY_MATCH_FILTERS, resultOutcome: ["won"] },
+    },
+    "errors",
+  );
+  const state = {
+    cut: "errors" as const,
+    chart: "scatter" as const,
+    filters: shown,
+    viewId: null,
+  };
+  const reread = parseVizState(
+    new URLSearchParams(vizStateQuery(new URLSearchParams(), state)),
+  );
+  expect(reread.filters.match.resultOutcome).toEqual(shown.match.resultOutcome);
+  expect(shown.match.resultOutcome).toEqual([]);
 });

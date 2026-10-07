@@ -36,6 +36,7 @@ import {
 import {
   activeFilterEntries,
   canonicalOptionValues,
+  carryFilters,
   clearedFilters,
   courtFor,
   OPTIONS,
@@ -163,7 +164,7 @@ export function FiltersPopover({
   }
 
   const applied = activeFilterEntries(state).length;
-  const fold = foldedMatchFilters(filters, cut);
+  const fold = foldedMatchFilters(filters);
   const advancedCount = activeFilterCount(fold.match);
 
   // Player stays single-select: choosing one always replaces the other,
@@ -204,15 +205,20 @@ export function FiltersPopover({
   }
 
   function applyAdvanced(next: MatchFilters) {
-    setState((prev) => ({
-      ...prev,
-      filters: withFoldedFilters(
+    setState((prev) => {
+      const applied = withFoldedFilters(
         prev.filters,
         next,
-        foldedMatchFilters(prev.filters, prev.cut).folded,
-      ),
-      viewId: null,
-    }));
+        foldedMatchFilters(prev.filters).folded,
+      );
+      // Through the same carry rule a URL parse applies (`parseVizState`),
+      // so the state Show writes is the state a reload reads back.
+      return {
+        ...prev,
+        filters: prev.cut ? carryFilters(applied, prev.cut) : applied,
+        viewId: null,
+      };
+    });
     backToQuick();
   }
 
@@ -462,7 +468,7 @@ function AdvancedPanel({
       computeViz(
         points,
         cut,
-        withFoldedFilters(filters, draft, folded),
+        carryFilters(withFoldedFilters(filters, draft, folded), cut),
         subjectIsPlayer1,
         chart,
         context,

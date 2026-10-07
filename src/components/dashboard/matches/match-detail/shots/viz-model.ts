@@ -826,8 +826,7 @@ function matchFilterPass(
 }
 
 /** The pill groups the advanced filters replaced in the Filters popover. */
-export type FoldedKey =
-  "set" | "game" | "ball" | "pressure" | "result" | "rally";
+export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
 
 /**
  * `filters`' pill groups (Ball, Court, Zone, …) restated as the advanced
@@ -849,7 +848,11 @@ export type FoldedKey =
  *   ace; with Won or Lost picked too the whole group stays a pill group.
  * - Game or Result with every value picked is no constraint: it folds to
  *   nothing.
- * - Ball never folds on a return cut (see the comment at its fold).
+ * - Ball never folds. Its "1st" counts a point with no recorded serve type
+ *   as a first serve (`isFirstServeShotType`), where Serve › Type needs a
+ *   "First Serve" row; and on a return cut it is the return of a first
+ *   serve that went IN (`isReturnOnFirstServe`), which Serve › Type cannot
+ *   say at all.
  * - Zone and Court never fold. On the serve cut the pills read the serve's
  *   measured landing (its zone, the box it landed in); the advanced Zone
  *   reads the tracker's zone label and Court the score's service court —
@@ -861,11 +864,7 @@ export type FoldedKey =
  * the opponent's flips them. `withPlayer` keeps them following the court
  * when its player changes later.
  */
-export function foldedMatchFilters(
-  filters: VizFilters,
-  /** The cut on screen: Ball folds on every cut but the two return cuts. */
-  cut: Cut | null = null,
-): {
+export function foldedMatchFilters(filters: VizFilters): {
   match: MatchFilters;
   folded: FoldedKey[];
 } {
@@ -889,12 +888,6 @@ export function foldedMatchFilters(
   }
 
   list("set", base.sets, filters.set, (v) => (match.sets = v));
-  // On a return cut "1st" is the return of a first serve that went IN
-  // (`isReturnOnFirstServe`); Serve › Type also admits a second-serve return
-  // after a first-serve fault. Different points, so Ball stays a pill there.
-  if (cut !== "returnPlacement" && cut !== "returnContact") {
-    list("ball", base.serveType, filters.ball, (v) => (match.serveType = v));
-  }
   list(
     "pressure",
     base.scoreType,
