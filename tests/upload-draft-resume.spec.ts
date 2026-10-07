@@ -822,10 +822,10 @@ test.describe("the video check is never persisted", () => {
   });
 });
 
-test("an untrimmed window says the first frame may be the warm-up", () => {
+test("an untrimmed window says to cut the warm-up before answering", () => {
   const trim = source(`${WIZARD}/TrimStepContent.tsx`);
   expect(trim).toContain(
-    "Yours starts at 0:00: trim to just before the first point, or answer for that first frame even if it is the warm-up.",
+    "Your window still starts at 0:00. Cut the warm-up first — then answer for the first frame you keep.",
   );
   expect(trim).toMatch(
     /topPlayerAnswerStale\s*\?[^:]+:\s*committedStart === 0/,

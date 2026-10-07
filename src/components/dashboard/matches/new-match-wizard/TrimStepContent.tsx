@@ -1482,7 +1482,7 @@ function TrimStepContentImpl({
             topPlayerAnswerStale
               ? "Your window start moved — answer again for its new first frame"
               : committedStart === 0
-                ? "At the start of your selected window — ends change every odd game. Yours starts at 0:00: trim to just before the first point, or answer for that first frame even if it is the warm-up."
+                ? "Your window still starts at 0:00. Cut the warm-up first — then answer for the first frame you keep."
                 : "At the start of your selected window — ends change every odd game"
           }
           value={initialTopPlayerIsPlayer1}
