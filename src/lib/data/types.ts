@@ -53,6 +53,14 @@ export interface Match {
    * for why the two columns cannot be compared directly.
    */
   uploadedBy?: string | null;
+  /**
+   * `matches.created_by` — the login that filed this match, or null for a row
+   * minted with none. Set by `match-detail-server.ts` only; the report page
+   * compares it with the viewer's id to decide whether the first-report tour
+   * is theirs to see. Not a display field: whose match it is on screen is
+   * `isUserPlayer1`'s question, never this one's.
+   */
+  createdBy?: string | null;
   player1: Player;
   player2: Player;
   score: MatchScore;

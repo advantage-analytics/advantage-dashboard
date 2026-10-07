@@ -215,7 +215,7 @@ ready).
 
 ## T16 · First-report tour on the match page
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T8, T9
 - **files:** src/app/dashboard/matches/(detail)/[matchId]/page.tsx (full-report branch), src/lib/data/finished-match-count-server.ts (new, or an existing count helper in src/lib/data/) — guess

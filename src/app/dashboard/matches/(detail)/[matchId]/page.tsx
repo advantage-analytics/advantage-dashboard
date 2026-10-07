@@ -66,6 +66,9 @@ import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
+import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
+import { firstReportTourEligible } from "@/lib/onboarding/tours";
+import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 
 // Statistics is the default view and loads eagerly with the page; Shots and
 // Film are each a substantial subtree (filters, an SVG court, a video
@@ -332,6 +335,43 @@ export default async function MatchDetailPage({
     );
   }
 
+  // The first-report tour (design §8): offered once, on the first report a
+  // personal player can read of a match they filed themselves. Decided here,
+  // below the short-circuit, because a match still analysing has no report
+  // to tour and must not spend these reads. The two facts the pure rule
+  // cannot know — how many finished matches the viewer has, and whether they
+  // already saw the tour — are read only when the cheaper facts already
+  // allow it: a team workspace, a lost session, or a match somebody else
+  // filed answers "no" without a query. Both reads are RLS-scoped through
+  // the cookie client. A failed read means no tour, never a failed page:
+  // the report is the thing, the tour is a courtesy over it.
+  const viewerId = workspace?.viewer.id ?? null;
+  const isCreator = viewerId !== null && match.createdBy === viewerId;
+  let firstReportTour = false;
+  if (activeWorkspace?.kind === "personal" && viewerId && isCreator) {
+    const [finishedMatchCount, doneAt] = await Promise.all([
+      countFinishedMatchesFor(viewerId),
+      createClient().then(async (supabase) => {
+        const { data: row, error } = await supabase
+          .from("users")
+          .select("first_report_tour_done_at")
+          .eq("id", viewerId)
+          .single();
+        if (error) throw error;
+        return (row.first_report_tour_done_at as string | null) ?? null;
+      }),
+    ]).catch((cause: unknown) => {
+      console.error("[first-report tour] eligibility read failed", cause);
+      return [0, null] as const;
+    });
+    firstReportTour = firstReportTourEligible({
+      workspaceKind: "personal",
+      isCreator,
+      finishedMatchCount,
+      doneAt,
+    });
+  }
+
   return (
     <>
       <MarkReportSeen matchId={matchId} />
@@ -406,6 +446,11 @@ export default async function MatchDetailPage({
               </MatchReportWhen>
             </MatchReportPane>
           </MatchReportFrame>
+          {/* After the frame, inside the provider: the runner reads
+              `useMatchReport()` to switch views and finds the `[data-tour]`
+              targets the report above has rendered. Mounted only when
+              eligible, so every other render carries nothing of it. */}
+          {firstReportTour && <TourRunner tour="first-report" start />}
         </MatchReportProvider>
       </MatchFiltersProvider>
     </>

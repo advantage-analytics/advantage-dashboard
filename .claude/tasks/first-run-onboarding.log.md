@@ -119,3 +119,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Until T12 lands, a solo player who answers "I don't record yet" (or skips) is redirected to `/dashboard/matches/sample?tour=1`, which doesn't exist yet — T12 must land before this branch merges.
 2. Confirm end-to-end that `/dashboard/matches/new?source=swing-vision` preselects SwingVision (not traced here).
+
+## T16 · First-report tour on the match page — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4376 passed / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass. pipeline-guardrails checklist (by hand): clean — short-circuit untouched, no wizard input or attribution change.
+**changed:** new `src/lib/data/finished-match-count-server.ts` — `countFinishedMatchesFor(userId)` (cached; cookie client; counts the viewer's personal matches, `created_by = userId AND program_id IS NULL`, that have a `match_stats` row via `match_stats!inner`, `head: true, count: "exact"` — the same "stats published" signal as `withStatsPublished()`; `matches.status` is null on every live row so it was unusable). `[matchId]/page.tsx`: below the `isAwaitingAnalysis` return only, and only for a personal workspace whose viewer created the match, reads the count and `users.first_report_tour_done_at` in parallel (failure → no tour), computes `firstReportTourEligible`, mounts `<TourRunner tour="first-report" start />` inside `MatchReportProvider`. `Match.createdBy` added to `types.ts` and populated in `match-detail-server.ts` (already selected).
+**follow-ups:**
+
+1. T17 can reuse `countFinishedMatchesFor` (cached, so Home shares one query).
+2. `/pr-check` Stage 3b: the verifier account needs exactly one finished personal match and a null `first_report_tour_done_at` to see the tour.
+3. Consider moving the inline `users` read for `first_report_tour_done_at` into a data helper.
