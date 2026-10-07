@@ -122,6 +122,12 @@ export interface LabelShot {
   /** Seconds on the analysis clock — the same clock as `shots.video_time`. */
   videoTime: number | null;
   /**
+   * The value columns the video cannot settle (`label_shots.unclear`): names
+   * from edit.ts `LABEL_SHOT_VALUE_FIELDS`, such as `landing_x`. Excluded from
+   * scoring, and a landing named here is not asked for again.
+   */
+  unclear: string[];
+  /**
    * Set when the site removed this vendor stroke before the transcript was
    * built ({@link LabelSiteRemoval}); null for a stroke the derivation kept
    * and for one the labeller added. A labeller's own removal is

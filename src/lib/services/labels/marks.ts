@@ -12,8 +12,9 @@
  * `serve_fault` and `pick_winner` exist only here. "Wrong side for the score"
  * and "Same side twice" describe the vendor's score, which the labeller is
  * correcting, so they are raised live from `serveSides` against the labelled
- * score (score-marks.ts); "Shot after the point ended?", "Ending looks stale"
- * and "Second serve?" are read off the labelled rows themselves
+ * score (score-marks.ts, with "Ending can't be read"); "Point ended here",
+ * "Ending looks stale", "Second serve?", "No landing on the last shot" and
+ * "Serve after a serve in play" are read off the labelled rows themselves
  * (marks-state.ts).
  *
  * Every code has a tier, decided once in `LABEL_MARK_META`: `count` (amber
@@ -32,7 +33,7 @@ import {
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import {
-  MAX_DEAD_TAIL as SERVE_FAULT_MAX_TAIL,
+  MAX_DEAD_TAIL,
   SIDE_DEAD_ZONE_M,
 } from "@/lib/services/splitstep/derivation/flags";
 import {
@@ -55,12 +56,18 @@ export const LABEL_ONLY_FLAGS = {
   SERVE_FAULT: "serve_fault",
   /** The fold never settled who won; the seed left `winner` null. */
   PICK_WINNER: "pick_winner",
-  /** A stroke lands out or in the net and exactly one more follows it. */
+  /** A stroke lands out or in the net and one or more strokes follow it. */
   SHOT_AFTER_POINT_END: "shot_after_point_end",
   /** The stored ending is not what the point's strokes now derive. */
   ENDING_STALE: "ending_stale",
   /** A first serve that follows a faulted serve of the same point. */
   SECOND_SERVE_AS_FIRST: "second_serve_as_first",
+  /** The point's last stroke has no landing, and it is not marked unclear. */
+  LAST_LANDING_MISSING: "last_landing_missing",
+  /** The point's last stroke has neither a landing nor a result. */
+  LAST_SHOT_UNRESOLVED: "last_shot_unresolved",
+  /** A serve right after a serve that was in: a played let, or two points. */
+  SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
 } as const;
 
 /**
@@ -69,9 +76,10 @@ export const LABEL_ONLY_FLAGS = {
  * here produces nothing.
  *
  * `net_hit_contradicts_height` is a `hint` only on the point's last stroke and
- * `hidden` before it (`netHitTier`). `same_player_consecutive` and
- * `phantom_strokes_dropped` are hidden as chips only: the missing-stroke slot
- * and the struck-through removed stroke are still drawn.
+ * `hidden` before it (`netHitTier`). `phantom_strokes_dropped` is hidden as a
+ * chip only: the struck-through removed stroke is still drawn.
+ * `same_player_consecutive` is counted AND keeps its missing-stroke slot; the
+ * slot's "Dismiss" settles the chip (marks-state.ts `markState`).
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -80,16 +88,19 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SCORE_SIDE_MISMATCH]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
-  [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
@@ -127,11 +138,10 @@ export interface LabelMarkParams {
   result_type_unknown: NoParams;
   serve_fault: NoParams;
   shot_after_point_end: {
-    /** The stroke that lands out or in the net, as the rail numbers it. */
-    landed: number;
-    /** The one stroke after it. */
-    extra: number;
-    result: "out" | "net";
+    /** The last live stroke that lands out or in the net. */
+    shotId: string;
+    /** The live strokes after it, in video order — "Split here" starts at the first. */
+    after: string[];
   };
   pick_winner: NoParams;
   /** What the strokes derive (ending-derived.ts) — the "Use it" patch. */
@@ -143,6 +153,10 @@ export interface LabelMarkParams {
   };
   /** The serve typed as a first serve that follows a faulted one. */
   second_serve_as_first: { shotId: string };
+  last_landing_missing: NoParams;
+  last_shot_unresolved: NoParams;
+  /** The serve that follows a serve in play — where "Split here" cuts. */
+  serve_after_serve_in: { shotId: string };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */
@@ -208,10 +222,11 @@ const SERVE_SHOT_TYPES = new Set(["First Serve", "Second Serve"]);
 const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
   shot.shot_type !== null && SERVE_SHOT_TYPES.has(shot.shot_type);
 
-// A `serve_fault` tail — strokes after the lone serve, at most this many —
-// is flags.ts's `MAX_DEAD_TAIL`, and a server within `SIDE_DEAD_ZONE_M` of
-// the centre mark says nothing reliable about the side: the cut flags.ts's
-// own `score_side_mismatch` makes. Both are imported so they cannot drift.
+// A dead tail — strokes after a ball called out, at most this many — is
+// flags.ts's `MAX_DEAD_TAIL` for `serve_fault` and `withoutDeadTail` alike,
+// and a server within `SIDE_DEAD_ZONE_M` of the centre mark says nothing
+// reliable about the side: the cut flags.ts's own `score_side_mismatch`
+// makes. Both are imported so they cannot drift.
 
 function mark<C extends LabelMarkCode>(
   code: C,
@@ -332,6 +347,21 @@ function pointMarks(
     }
   }
 
+  // The derivation reads the last stroke's winner off the rally as the vendor
+  // segmented it, so a swing at a dead ball at the end hides a flip. With the
+  // tail dropped the same rule disagrees with the score: the same mark.
+  if (rally && winner && !point.flags.includes(POINT_FLAGS.WINNER_DISPUTED)) {
+    const trimmed = withoutDeadTail(rally);
+    const byFlag = trimmed ? lastStrokeWinner(trimmed) : null;
+    if (byFlag && sideOf(byFlag) !== winner) {
+      marks.push(
+        mark(POINT_FLAGS.WINNER_DISPUTED, {
+          scoreWinner: winner,
+          lastStrokeWinner: sideOf(byFlag),
+        }),
+      );
+    }
+  }
   if (rally && isServeFault(rally)) {
     marks.push(mark(LABEL_ONLY_FLAGS.SERVE_FAULT, {}));
   }
@@ -409,7 +439,30 @@ export function isServeFault(rally: SplitStepRally): boolean {
   if (serve.in) return false;
   const serveIndex = rally.strokes.indexOf(serve);
   const tail = rally.strokes.length - serveIndex - 1;
-  return tail >= 1 && tail <= SERVE_FAULT_MAX_TAIL;
+  return tail >= 1 && tail <= MAX_DEAD_TAIL;
+}
+
+/**
+ * The rally cut after its last non-serve stroke the vendor called out, when
+ * one to `MAX_DEAD_TAIL` strokes follow it and none of them is a serve: the
+ * ball was dead, so what came after was a swing at it. Null when the rally has
+ * no such tail — the out ball is its last stroke, the tail is long enough to
+ * be a rally, or a serve in it says a new point started (`reserve_after_in`'s
+ * business).
+ */
+export function withoutDeadTail(rally: SplitStepRally): SplitStepRally | null {
+  const { strokes } = rally;
+  const last = strokes.findLastIndex((s) => s.strokeType !== "serve" && !s.in);
+  if (last === -1) return null;
+  const tail = strokes.slice(last + 1);
+  if (tail.length === 0 || tail.length > MAX_DEAD_TAIL) return null;
+  if (tail.some((s) => s.strokeType === "serve")) return null;
+  const kept = strokes.slice(0, last + 1);
+  return {
+    ...rally,
+    strokes: kept,
+    serves: rally.serves.filter((s) => kept.includes(s)),
+  };
 }
 
 function midpoint(a: number | null, b: number | null): number | null {

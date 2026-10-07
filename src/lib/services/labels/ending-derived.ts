@@ -10,7 +10,7 @@
  *
  * `ghosts` says whether a stroke the site removed (`isGhostShot`) is still a
  * ghost — no stroke at all — or, on a session labelled without marks, an
- * ordinary stroke: the same flag `shotAfterPointEnd` and the volley link take.
+ * ordinary stroke: the same flag `pointEndedEarly` and the volley link take.
  */
 
 import type { LabelPointPatch } from "./edit";

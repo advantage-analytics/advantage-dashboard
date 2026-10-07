@@ -11,14 +11,22 @@
  */
 
 import {
+  isLiveShot,
+  isMissedResult,
+  isServeStroke,
   opponent,
+  orderLabelShots,
   type LabelPoint,
   type LabelPointStatus,
   type LabelShot,
   type LabelShotStatus,
   type LabelSide,
 } from "./session";
-import { labelPointFields, labelPointStatusAfterChange } from "./edit";
+import {
+  labelPointFields,
+  labelPointStatusAfterChange,
+  type LabelShotPatch,
+} from "./edit";
 import {
   planPlayerSwap,
   type ShotSwapWrite,
@@ -216,6 +224,108 @@ export function applyShotRestore(shot: LabelShot): LabelShot {
 export function applyPointDelete(point: LabelPoint): LabelPoint {
   if (point.status === "deleted") return point;
   return { ...point, status: "deleted", statusBeforeDelete: point.status };
+}
+
+// ── Dead balls after the point ──────────────────────────────────────────────
+
+/**
+ * How many strokes after a rally ball the labeller just marked out (or into
+ * the net) go with it, at most. One or two swings after the point ended are
+ * the players playing the ball out; three or more are more likely a second
+ * point the vendor ran into this rally, which the hint line offers to split
+ * instead.
+ */
+export const DEAD_BALLS_REMOVED_WITH_MISS = 2;
+
+/**
+ * The live strokes after `shotId` in video order (`isLiveShot`: no tombstone
+ * and, while `ghosts` is on, no ghost). Empty when the stroke is not among
+ * the rows.
+ */
+export function liveShotsAfter(
+  shots: readonly LabelShot[],
+  shotId: string,
+  ghosts: boolean,
+): LabelShot[] {
+  const ordered = orderLabelShots(shots);
+  const at = ordered.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return [];
+  return ordered.slice(at + 1).filter((shot) => isLiveShot(shot, ghosts));
+}
+
+/**
+ * The strokes an edit that marks a rally ball out or into the net takes with
+ * it: the live strokes after it, when there are one or two of them. `shots`
+ * are the point's rows with the edit applied, `before` the stroke's result as
+ * read. Nothing when the patch carries no `result` (a court click with one
+ * end still missing), when the ball was a miss already, when the stroke is a
+ * serve (a fault ends nothing), or with three or more strokes after.
+ */
+export function deadBallsAfterMiss(
+  shots: readonly LabelShot[],
+  shotId: string,
+  before: Pick<LabelShot, "result">,
+  patch: LabelShotPatch,
+  ghosts: boolean,
+): LabelShot[] {
+  if (!isMissedResult(patch.result) || isMissedResult(before.result)) {
+    return [];
+  }
+  const shot = shots.find((s) => s.id === shotId);
+  if (!shot || isServeStroke(shot.stroke)) return [];
+  const after = liveShotsAfter(shots, shotId, ghosts);
+  return after.length > 0 && after.length <= DEAD_BALLS_REMOVED_WITH_MISS
+    ? after
+    : [];
+}
+
+/** What a batched remove answers about each stroke it tombstoned. */
+export interface LabelShotRemoved {
+  id: string;
+  statusBeforeDelete: LiveShotStatus;
+}
+/** What a batched restore answers about each stroke it put back. */
+export interface LabelShotRestored {
+  id: string;
+  status: LiveShotStatus;
+}
+
+/** The rows with each of `removed` the tombstone the server wrote. */
+export function applyShotsRemoved(
+  shots: readonly LabelShot[],
+  removed: readonly LabelShotRemoved[],
+): LabelShot[] {
+  const by = new Map(removed.map((r) => [r.id, r]));
+  return shots.map((shot) => {
+    const r = by.get(shot.id);
+    return r
+      ? {
+          ...shot,
+          status: "deleted",
+          statusBeforeDelete: r.statusBeforeDelete,
+          deleteReason: "dead_ball_after_point",
+        }
+      : shot;
+  });
+}
+
+/** The rows with each of `restored` live again at the status the server wrote. */
+export function applyShotsRestored(
+  shots: readonly LabelShot[],
+  restored: readonly LabelShotRestored[],
+): LabelShot[] {
+  const by = new Map(restored.map((r) => [r.id, r]));
+  return shots.map((shot) => {
+    const r = by.get(shot.id);
+    return r
+      ? {
+          ...shot,
+          status: r.status,
+          statusBeforeDelete: null,
+          deleteReason: null,
+        }
+      : shot;
+  });
 }
 
 export function applyPointRestore(point: LabelPoint): LabelPoint {

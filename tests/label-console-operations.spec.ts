@@ -41,6 +41,8 @@ function spies() {
   const operations = {
     deleteShot: record("deleteShot", { ok: true, status: "deleted" }),
     restoreShot: record("restoreShot", { ok: true, status: "kept" }),
+    removeShotsAfter: record("removeShotsAfter", { ok: true, removed: [] }),
+    restoreShots: record("restoreShots", { ok: true, restored: [] }),
     deletePoint: record("deletePoint", { ok: true, status: "deleted" }),
     restorePoint: record("restorePoint", { ok: true, status: "unchanged" }),
     addShot: record("addShot", { error: "not in this spec" }),
@@ -1106,5 +1108,78 @@ test.describe("how it ended follows the shot rows", () => {
     await settled();
     expect(calls).toEqual({ resetPoint: [[P1]] });
     expect(point).toEqual([]);
+  });
+
+  // ── The dead balls after a rally ball marked out ──────────────────────────
+
+  type RemoveAfter = (pointId: string, shotId: string) => void;
+  type RestoreShots = (pointId: string, shotIds: string[]) => void;
+
+  test("the return placed out: the strokes it took come back in the shot write's own answer, never as a delete request", async () => {
+    const out = { landing_x: 9, landing_y: 30, result: "out" };
+    const { shot, point, saves } = saveSpies({
+      ok: true,
+      status: "edited",
+      removedAfter: [{ id: "s-added", statusBeforeDelete: "added" }],
+      point: {
+        ending: "service_winner",
+        endedBy: "p2",
+        winner: "p1",
+        status: "edited",
+      },
+    });
+    const { calls, operations } = spies();
+    const table = consoleTable({ ...saves, operations });
+    await (table.onPatchShot as PatchShot)("s-return", out);
+    await settled();
+    expect(shot).toEqual([["s-return", out]]);
+    expect(point).toEqual([]);
+    expect(calls).toEqual({});
+  });
+
+  test("Remove and Restore under the hint line each go out as one call, with what the point's rows say is there", async () => {
+    const { saves } = saveSpies();
+    const { calls, operations } = spies();
+    const table = consoleTable({ ...saves, operations });
+    // Point 1: serve, return, a tombstone, the added forehand. After the
+    // return, one live stroke; the tombstone is the one to put back.
+    (table.onRemoveShotsAfter as RemoveAfter)(P1, "s-return");
+    (table.onRestoreShots as RestoreShots)(P1, ["s-phantom", "s-serve"]);
+    await settled();
+    expect(calls.removeShotsAfter).toEqual([["s-return"]]);
+    // A live id among them is dropped before the call.
+    expect(calls.restoreShots).toEqual([[["s-phantom"]]]);
+
+    // Nothing after the last stroke, and no tombstone among the ids: no call.
+    (table.onRemoveShotsAfter as RemoveAfter)(P1, "s-added");
+    (table.onRestoreShots as RestoreShots)(P1, ["s-serve"]);
+    await settled();
+    expect(calls.removeShotsAfter).toHaveLength(1);
+    expect(calls.restoreShots).toHaveLength(1);
+
+    // A refused call is reported on the save line and nothing throws.
+    const refused = consoleTable({
+      ...saves,
+      operations: {
+        ...operations,
+        removeShotsAfter: async () => ({ error: "refused" }),
+        restoreShots: async () => ({ error: "refused" }),
+      },
+    });
+    (refused.onRemoveShotsAfter as RemoveAfter)(P1, "s-return");
+    (refused.onRestoreShots as RestoreShots)(P1, ["s-phantom"]);
+    await settled();
+  });
+
+  test("a console that cannot write hands the rail neither", () => {
+    const readOnly = railProps({});
+    expect(readOnly.onRemoveShotsAfter).toBeUndefined();
+    expect(readOnly.onRestoreShots).toBeUndefined();
+    const writable = consoleTable({
+      ...saveSpies().saves,
+      operations: spies().operations,
+    });
+    expect(typeof writable.onRemoveShotsAfter).toBe("function");
+    expect(typeof writable.onRestoreShots).toBe("function");
   });
 });

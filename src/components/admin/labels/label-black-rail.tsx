@@ -132,6 +132,8 @@ export function LabelBlackRail({
   onPatchPoint,
   onPatchShot,
   operations,
+  onRemoveShotsAfter,
+  onRestoreShots,
   onSetGameServer,
   onSetGameType,
   openGhostIds = NO_IDS,
@@ -185,6 +187,9 @@ export function LabelBlackRail({
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   /** Absent: no ⋯ menu, no tick, no Add shot — the rows are read-only. */
   operations?: LabelRowOperations;
+  /** The hint line's Remove and Restore (`EditContext`); absent read-only. */
+  onRemoveShotsAfter?: EditContext["onRemoveShotsAfter"];
+  onRestoreShots?: EditContext["onRestoreShots"];
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   /** Ghosts shown as their struck-through row (the console's state). */
@@ -259,6 +264,8 @@ export function LabelBlackRail({
       onPatchPoint,
       onPatchShot,
       operations: editable ? operations : undefined,
+      onRemoveShotsAfter: editable ? onRemoveShotsAfter : undefined,
+      onRestoreShots: editable ? onRestoreShots : undefined,
       openGhostIds,
       onToggleGhost,
       points,
@@ -274,6 +281,8 @@ export function LabelBlackRail({
       onPatchPoint,
       onPatchShot,
       operations,
+      onRemoveShotsAfter,
+      onRestoreShots,
       openGhostIds,
       onToggleGhost,
       points,

@@ -16,14 +16,18 @@ import {
   deleteLabelShot,
   markLabelPointChecked,
   moveLabelPoint,
+  removeLabelShotsAfter,
   restoreLabelPoint,
   restoreLabelShot,
+  restoreLabelShots,
   unmarkLabelPointChecked,
   type LabelAddShotResult,
   type LabelCheckedResult,
   type LabelMovePointResult,
   type LabelPointStatusResult,
   type LabelShotStatusResult,
+  type LabelShotsRemoveResult,
+  type LabelShotsRestoreResult,
 } from "@/lib/services/labels/operations-session";
 import {
   resetLabelPoint,
@@ -126,6 +130,25 @@ export async function restoreLabelShotAction(
   shotId: string,
 ): Promise<LabelShotStatusResult> {
   return restoreLabelShot(shotId);
+}
+
+/**
+ * Remove every live shot after `shotId` in its point as hit after the point
+ * ended (`dead_ball_after_point`): one tombstone each, never a removed row,
+ * and the point's ending settled in the same call. Undo is
+ * `restoreLabelShotsAction` with the ids it answers.
+ */
+export async function removeLabelShotsAfterAction(
+  shotId: string,
+): Promise<LabelShotsRemoveResult> {
+  return removeLabelShotsAfter(shotId);
+}
+
+/** Undo a batched removal: each tombstone's status before it comes back. */
+export async function restoreLabelShotsAction(
+  shotIds: string[],
+): Promise<LabelShotsRestoreResult> {
+  return restoreLabelShots(shotIds);
 }
 
 /**

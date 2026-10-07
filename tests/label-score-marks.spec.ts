@@ -5,14 +5,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { markSummary } from "@/lib/services/labels/marks-state";
 import {
+  liveRowMarks,
   liveScoreMarks,
   withLiveScoreMarks,
   type ScoreMarkPoint,
 } from "@/lib/services/labels/score-marks";
 import type {
   LabelEnding,
+  LabelPoint,
   LabelServeSide,
   LabelSession,
+  LabelShot,
   LabelSide,
 } from "@/lib/services/labels/session";
 import {
@@ -398,6 +401,77 @@ const EMPTY: LabelMarks = {
   suggestions: [],
   serveSides: {},
 };
+
+test.describe("Ending can't be read", () => {
+  /** The fixture's second point — Lee's ace — with its one serve as `over`. */
+  const withLast = (over: Partial<LabelShot>): LabelPoint => {
+    const seeded = labelSessionFixture().points.find(
+      (p) => p.id === FIXTURE_POINT_IDS.P2,
+    )!;
+    return {
+      ...seeded,
+      checkedAt: null,
+      shots: [{ ...seeded.shots[0], ...over }],
+    };
+  };
+  const UNRESOLVED = {
+    code: "last_shot_unresolved",
+    tier: "count",
+    scope: "point",
+    params: {},
+  };
+
+  test("raised on a live point whose last stroke has no landing and no result, by id", () => {
+    const open = withLast({ result: null });
+    expect(liveRowMarks([open])).toEqual({ [open.id]: [UNRESOLVED] });
+    // A result, a landing, or the landing marked unclear: nothing.
+    expect(liveRowMarks([withLast({ result: "in" })])).toEqual({});
+    expect(
+      liveRowMarks([withLast({ result: null, landingX: 0.6, landingY: 17.8 })]),
+    ).toEqual({});
+    expect(
+      liveRowMarks([withLast({ result: null, unclear: ["landing_y"] })]),
+    ).toEqual({});
+    // A tombstone, or a point handed without its strokes: nothing.
+    expect(liveRowMarks([{ ...open, status: "deleted" }])).toEqual({});
+    expect(liveRowMarks([{ id: open.id, status: "unchanged" }])).toEqual({});
+  });
+
+  test("withLiveScoreMarks appends it after the score marks; the header counts it until the landing is set", () => {
+    const open = withLast({ result: null });
+    const file: LabelMarks = {
+      points: {
+        [open.id]: [
+          {
+            code: "winner_disputed",
+            tier: "count",
+            scope: "point",
+            params: { scoreWinner: "p2", lastStrokeWinner: "p1" },
+          },
+        ],
+      },
+      shots: {},
+      suggestions: [],
+      serveSides: {},
+    };
+    const merged = withLiveScoreMarks(file, [open], true);
+    expect(merged.points[open.id].map((m) => m.code)).toEqual([
+      "winner_disputed",
+      "last_shot_unresolved",
+    ]);
+    expect(markSummary([open], merged)).toEqual({ open: 2, openPoints: 1 });
+
+    // The bounce placed: the mark is simply not raised again.
+    const placed = withLast({ result: null, landingX: 0.6, landingY: 17.8 });
+    const after = withLiveScoreMarks(file, [placed], true);
+    expect(after.points[placed.id].map((m) => m.code)).toEqual([
+      "winner_disputed",
+    ]);
+    expect(markSummary([placed], after)).toEqual({ open: 1, openPoints: 1 });
+    // The file's marks are left as they were.
+    expect(file.points[open.id]).toHaveLength(1);
+  });
+});
 
 test.describe("the console reads them live", () => {
   const { P1, P2 } = FIXTURE_POINT_IDS;

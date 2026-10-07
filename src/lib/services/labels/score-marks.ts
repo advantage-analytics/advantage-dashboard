@@ -18,9 +18,14 @@
  *   through a point with no known side (an added point has none, which is how
  *   "Add point" answers it). A `not_a_point` row is neither a point nor a
  *   break.
+ *
+ * `withLiveScoreMarks` also runs `liveRowMarks`, the one other `count` mark
+ * read off the rows: "Ending can't be read" (`lastShotUnresolved`,
+ * marks-state.ts) on a point whose strokes it is handed.
  */
 
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
+import { lastShotUnresolved } from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import type {
   LabelGameType,
@@ -181,21 +186,46 @@ export function liveScoreMarks(
   return out;
 }
 
+/** A point `liveRowMarks` can read: its strokes, when the caller has them. */
+export type RowMarkPoint = Pick<LabelPoint, "id" | "status"> &
+  Partial<Pick<LabelPoint, "shots">>;
+
 /**
- * The session's marks with the two score marks read off the live rows appended
- * after each point's other marks, and their `missing_point` suggestions after
- * the file's. Everything else passes through untouched.
+ * "Ending can't be read" on every live point whose last stroke has neither a
+ * landing nor a result, by point id. A point handed without its strokes (the
+ * scorecard's seeded rows) raises nothing. Ghosts are not strokes here, as in
+ * the console.
+ */
+export function liveRowMarks(
+  points: readonly RowMarkPoint[],
+): Record<string, LabelMark[]> {
+  const out: Record<string, LabelMark[]> = {};
+  for (const point of points) {
+    if (point.status === "deleted" || !point.shots) continue;
+    const mark = lastShotUnresolved({ shots: point.shots }, true);
+    if (mark) out[point.id] = [mark];
+  }
+  return out;
+}
+
+/**
+ * The session's marks with the two score marks read off the live rows, then
+ * `liveRowMarks`, appended after each point's other marks, and the score
+ * marks' `missing_point` suggestions after the file's. Everything else passes
+ * through untouched.
  */
 export function withLiveScoreMarks(
   marks: LabelMarks,
-  points: readonly ScoreMarkPoint[],
+  points: readonly (ScoreMarkPoint & RowMarkPoint)[],
   adScoring: boolean,
   scores?: ReturnType<typeof labelScores>,
 ): LabelMarks {
   const live = liveScoreMarks(points, adScoring, marks.serveSides, scores);
   const merged: Record<string, LabelMark[]> = { ...marks.points };
-  for (const [id, list] of Object.entries(live.points)) {
-    merged[id] = [...(merged[id] ?? []), ...list];
+  for (const list of [live.points, liveRowMarks(points)]) {
+    for (const [id, own] of Object.entries(list)) {
+      merged[id] = [...(merged[id] ?? []), ...own];
+    }
   }
   return {
     ...marks,

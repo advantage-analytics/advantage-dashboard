@@ -58,7 +58,10 @@ import {
   applyPointRestore,
   applyShotDelete,
   applyShotRestore,
+  applyShotsRemoved,
+  applyShotsRestored,
   destinationServerIn,
+  liveShotsAfter,
   moveNeedsServerSwitch,
   planAddedShot,
   planPointMove,
@@ -71,6 +74,8 @@ import type {
   LabelMovePointResult,
   LabelPointStatusResult,
   LabelShotStatusResult,
+  LabelShotsRemoveResult,
+  LabelShotsRestoreResult,
 } from "@/lib/services/labels/operations-session";
 import { playbackSpans, playingRowIn } from "@/lib/services/labels/playback";
 import {
@@ -249,13 +254,19 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *   reset always ask first, a move only into another player's game; the write
  *   happens on the dialog's action.
  * - Nothing is written to the database without the labeller's click — never on
- *   load, never from a hint by itself. Two sanctioned exceptions, inverses of
- *   each other: the ghost marking the site makes at seeding, and a serve
- *   relabelled in putting back the ghost the site removed after it
- *   (`ghostFreedByServeIn`, done by the shot write's own server call and
- *   answered as `restoredGhostId`). A shot write also settles its point's
- *   ending in that same call (ending-session.ts); the server's `point` is the
- *   last word over the optimistic rows here.
+ *   load, never from a hint by itself. Three sanctioned exceptions, each done
+ *   by the shot write's own server call: the ghost marking the site makes at
+ *   seeding, and its inverse, a serve relabelled in putting back the ghost the
+ *   site removed after it (`ghostFreedByServeIn`, answered as
+ *   `restoredGhostId`); and a rally ball the labeller marks out or into the
+ *   net taking the one or two live strokes after it as tombstones
+ *   (`deadBallsAfterMiss`, answered as `removedAfter`) — the players playing
+ *   a dead ball out, which used to cost a dialog each. Three or more are
+ *   never removed by themselves: the hint line offers Remove or Split, and
+ *   Restore for a removal, each a click (`removeShotsAfter` /
+ *   `restoreShots`). A shot write also settles its point's ending in that
+ *   same call (ending-session.ts); the server's `point` is the last word over
+ *   the optimistic rows here.
  * - Outside a control: Enter checks the open point, Space plays or pauses, ← /
  *   → step points.
  * - Two layouts (`label-layout.ts`) mount the same player, court panel and rail
@@ -625,7 +636,8 @@ export function LabelConsole({
    * Answers the stroke's point with the patch applied once the write has saved,
    * and null when it did not. "How it ended" follows the shot rows on the
    * server, in the same call: its `point` lands on the owning row here, as
-   * does the ghost a serve relabelled in put back (`restoredGhostId`).
+   * do the ghost a serve relabelled in put back (`restoredGhostId`) and the
+   * strokes a rally ball marked out took with it (`removedAfter`).
    */
   const writeShot = useCallback(
     async (
@@ -666,6 +678,7 @@ export function LabelConsole({
         dispatchSave({ type: "failure", message: result.error });
         return null;
       }
+      const removed = result.removedAfter;
       setPoints((current) => {
         const saved = updateShot(current, shotId, false, (shot) => ({
           ...shot,
@@ -673,7 +686,12 @@ export function LabelConsole({
         }));
         const synced = owner
           ? replacePoint(saved, owner.id, (p) =>
-              applyEndingSync(p, result.point),
+              applyEndingSync(
+                removed
+                  ? { ...p, shots: applyShotsRemoved(p.shots, removed) }
+                  : p,
+                result.point,
+              ),
             )
           : saved;
         const freed = result.restoredGhostId;
@@ -683,8 +701,18 @@ export function LabelConsole({
             )
           : synced;
       });
+      // A stroke that went with the ball is no longer one to place.
+      if (removed) {
+        setPlacement((current) =>
+          removed.some((r) => r.id === current.shotId) ? NO_PLACEMENT : current,
+        );
+      }
       dispatchSave({ type: "success", at: Date.now() });
-      return owner ? (change([owner])[0] ?? null) : null;
+      if (!owner) return null;
+      const saved = change([owner])[0] ?? null;
+      return saved && removed
+        ? { ...saved, shots: applyShotsRemoved(saved.shots, removed) }
+        : saved;
     },
     [onSaveShot],
   );
@@ -808,6 +836,78 @@ export function LabelConsole({
           result,
         ),
       putBackShot(shotId, before),
+    );
+  }
+
+  /** The revert of a many-stroke operation: each row as it was read. */
+  const putBackShots =
+    (pointId: string, before: readonly LabelShot[]) => (rows: LabelPoint[]) => {
+      const byId = new Map(before.map((shot) => [shot.id, shot]));
+      return replacePoint(rows, pointId, (p) => ({
+        ...p,
+        shots: p.shots.map((shot) => byId.get(shot.id) ?? shot),
+      }));
+    };
+
+  /**
+   * The hint line's answers under a rally ball marked out: every live stroke
+   * after it removed as hit after the point ended (`dead_ball_after_point`),
+   * and a removal's tombstones put back — one call each, the point's ending
+   * settled in it. The server's rows are the last word over the optimistic
+   * ones (`applyShotsRemoved` / `applyShotsRestored`).
+   */
+  function removeShotsAfter(pointId: string, shotId: string) {
+    const point = points.find((p) => p.id === pointId);
+    if (!point || !operations) return;
+    const after = liveShotsAfter(point.shots, shotId, marks !== null);
+    if (after.length === 0) return;
+    const ids = new Set(after.map((shot) => shot.id));
+    if (placement.shotId !== null && ids.has(placement.shotId)) {
+      setPlacement(NO_PLACEMENT);
+    }
+    void runOperation(
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          shots: p.shots.map((s) =>
+            ids.has(s.id) ? applyShotDelete(s, "dead_ball_after_point") : s,
+          ),
+        })),
+      () => operations.removeShotsAfter(shotId),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) =>
+          applyEndingSync(
+            { ...p, shots: applyShotsRemoved(p.shots, result.removed) },
+            result.point,
+          ),
+        ),
+      putBackShots(pointId, after),
+    );
+  }
+
+  function restoreShots(pointId: string, shotIds: string[]) {
+    const point = points.find((p) => p.id === pointId);
+    if (!point || !operations) return;
+    const before = point.shots.filter(
+      (shot) => shot.status === "deleted" && shotIds.includes(shot.id),
+    );
+    if (before.length === 0) return;
+    const ids = new Set(before.map((shot) => shot.id));
+    void runOperation(
+      (rows) =>
+        replacePoint(rows, pointId, (p) => ({
+          ...p,
+          shots: p.shots.map((s) => (ids.has(s.id) ? applyShotRestore(s) : s)),
+        })),
+      () => operations.restoreShots([...ids]),
+      (rows, result) =>
+        replacePoint(rows, pointId, (p) =>
+          applyEndingSync(
+            { ...p, shots: applyShotsRestored(p.shots, result.restored) },
+            result.point,
+          ),
+        ),
+      putBackShots(pointId, before),
     );
   }
 
@@ -1158,6 +1258,7 @@ export function LabelConsole({
       landingX: null,
       landingY: null,
       videoTime: plan.write.video_time,
+      unclear: [],
       siteRemoval: null,
       siteRemovalRestoredAt: null,
       seed: null,
@@ -1465,6 +1566,8 @@ export function LabelConsole({
     holdOnEditorFocus,
     patchPoint,
     patchShot,
+    removeShotsAfter,
+    restoreShots,
     setGameServer,
     setGameType,
     findGap,
@@ -1634,6 +1737,8 @@ export function LabelConsole({
       onPatchPoint={railHandlers.patchPoint}
       onPatchShot={railHandlers.patchShot}
       operations={operable ? rowOperations : undefined}
+      onRemoveShotsAfter={operable ? railHandlers.removeShotsAfter : undefined}
+      onRestoreShots={operable ? railHandlers.restoreShots : undefined}
       onSetGameServer={operable ? railHandlers.setGameServer : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
       underflow
@@ -1748,6 +1853,13 @@ export interface LabelConsoleOperations {
     reason: LabelDeleteReason,
   ) => Promise<LabelShotStatusResult>;
   restoreShot: (shotId: string) => Promise<LabelShotStatusResult>;
+  /**
+   * Every live stroke after `shotId` in its point, tombstoned as hit after
+   * the point ended; and a removal's tombstones put back. `label_shots` and
+   * the point's ending only.
+   */
+  removeShotsAfter: (shotId: string) => Promise<LabelShotsRemoveResult>;
+  restoreShots: (shotIds: string[]) => Promise<LabelShotsRestoreResult>;
   deletePoint: (pointId: string) => Promise<LabelPointStatusResult>;
   restorePoint: (pointId: string) => Promise<LabelPointStatusResult>;
   addShot: (

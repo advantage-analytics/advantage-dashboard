@@ -4,14 +4,19 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 
 import {
+  DEAD_BALLS_REMOVED_WITH_MISS,
   LABEL_DELETE_REASONS,
   applyPointDelete,
   applyPointRestore,
   applyShotDelete,
   applyShotRestore,
+  applyShotsRemoved,
+  applyShotsRestored,
+  deadBallsAfterMiss,
   destinationServerIn,
   gameServer,
   applyPointMove,
+  liveShotsAfter,
   moveNeedsServerSwitch,
   neighbourGames,
   planAddedShot,
@@ -28,19 +33,25 @@ import {
   deleteLabelShot,
   markLabelPointChecked,
   moveLabelPoint,
+  removeLabelShotsAfter,
   restoreLabelShot,
+  restoreLabelShots,
   unmarkLabelPointChecked,
   writeLabelPointMove,
   writeLabelShotAdd,
   writeLabelShotDelete,
   writeLabelShotRestore,
+  writeLabelShotsRemoveAfter,
+  writeLabelShotsRestore,
 } from "@/lib/services/labels/operations-session";
-import type { LabelShot } from "@/lib/services/labels/session";
+import { orderLabelShots, type LabelShot } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
+  POINT_4_SHOTS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShot,
   labelShotRow,
 } from "./fixtures/label-session";
 
@@ -181,6 +192,83 @@ test.describe("delete and Undo", () => {
 });
 
 // ── Add a stroke ────────────────────────────────────────────────────────────
+
+// ── Dead balls after the point ─────────────────────────────────────────────
+
+test.describe("dead balls after a ball marked out", () => {
+  const shots = orderLabelShots(POINT_1_SHOTS);
+  const back = shots.find((s) => s.id === "s-return")!;
+
+  test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {
+    // Serve, return, the deleted phantom, the added forehand.
+    expect(liveShotsAfter(shots, "s-serve", true).map((s) => s.id)).toEqual([
+      "s-return",
+      "s-added",
+    ]);
+    expect(liveShotsAfter(shots, "s-return", true).map((s) => s.id)).toEqual([
+      "s-added",
+    ]);
+    expect(liveShotsAfter(shots, "s-added", true)).toEqual([]);
+    expect(liveShotsAfter(shots, "nope", true)).toEqual([]);
+    // A ghost is no stroke with marks on, and one with them off.
+    expect(
+      liveShotsAfter(POINT_4_SHOTS, "s-p4-fault", true).map((s) => s.id),
+    ).toEqual(["s-p4-serve"]);
+    expect(
+      liveShotsAfter(POINT_4_SHOTS, "s-p4-fault", false).map((s) => s.id),
+    ).toEqual(["s-p4-ghost", "s-p4-serve"]);
+  });
+
+  test("a rally ball newly out or in the net takes one or two strokes after it, never a serve's, never three", () => {
+    const out = { result: "out" as const };
+    expect(
+      deadBallsAfterMiss(shots, "s-return", back, out, true).map((s) => s.id),
+    ).toEqual(["s-added"]);
+    expect(
+      deadBallsAfterMiss(shots, "s-return", back, { result: "net" }, true),
+    ).toHaveLength(1);
+    // Already a miss, a patch with no result, or a serve: nothing.
+    expect(
+      deadBallsAfterMiss(shots, "s-return", { result: "out" }, out, true),
+    ).toEqual([]);
+    expect(
+      deadBallsAfterMiss(shots, "s-return", back, { spin: "flat" }, true),
+    ).toEqual([]);
+    expect(
+      deadBallsAfterMiss(shots, "s-serve", { result: "in" }, out, true),
+    ).toEqual([]);
+    // Two go; three stay.
+    const more = (n: number) => [
+      ...shots,
+      ...Array.from({ length: n }, (_, i) =>
+        labelShot(`s-more-${i}`, "p-0001", { videoTime: 2480 + i }),
+      ),
+    ];
+    expect(
+      deadBallsAfterMiss(more(1), "s-return", back, out, true),
+    ).toHaveLength(DEAD_BALLS_REMOVED_WITH_MISS);
+    expect(deadBallsAfterMiss(more(2), "s-return", back, out, true)).toEqual(
+      [],
+    );
+  });
+
+  test("the console's rows take the server's tombstones and restores as written", () => {
+    const removed = applyShotsRemoved(shots, [
+      { id: "s-added", statusBeforeDelete: "added" },
+    ]);
+    expect(removed.find((s) => s.id === "s-added")).toMatchObject({
+      status: "deleted",
+      statusBeforeDelete: "added",
+      deleteReason: "dead_ball_after_point",
+    });
+    expect(removed.filter((s) => s.id !== "s-added")).toEqual(
+      shots.filter((s) => s.id !== "s-added"),
+    );
+    expect(
+      applyShotsRestored(removed, [{ id: "s-added", status: "added" }]),
+    ).toEqual(shots);
+  });
+});
 
 test.describe("add shot", () => {
   const point = labelSessionFixture().points[0];
@@ -580,6 +668,14 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_shots") {
+      // A read by id list answers with those of the point's rows.
+      const ids = call.in?.id;
+      if (ids) {
+        return {
+          data: (rows.shots ?? []).filter((s) => ids.includes(s.id)),
+          error: null,
+        };
+      }
       return "label_point_id" in call.filters || call.in?.label_point_id
         ? { data: rows.shots ?? [], error: null }
         : { data: rows.shot ?? null, error: null };
@@ -609,6 +705,8 @@ test.describe("the services", () => {
     const results = await Promise.all([
       deleteLabelShot(SHOT_ID, "other", deps),
       restoreLabelShot(SHOT_ID, deps),
+      removeLabelShotsAfter(SHOT_ID, deps),
+      restoreLabelShots([SHOT_ID], deps),
       addLabelShot(POINT_ID, null, deps),
       deleteLabelPoint(POINT_ID, deps),
       moveLabelPoint(POINT_ID, { setNumber: 1, gameNumber: 2 }, false, deps),
@@ -803,6 +901,263 @@ test.describe("the services", () => {
       }),
     ).toEqual({ ok: true, status: "deleted" });
     expect(same.calls.filter((c) => c.op === "update")).toHaveLength(1);
+  });
+
+  test("Remove N tombstones every live stroke after one in a single call, then the point's ending once", async () => {
+    // Lee's serve, Vargas's return out, then Lee's swing, a tombstone and
+    // Vargas's edited swing: the two live ones were hit after the point.
+    const AFTER_1 = "cccccccc-cccc-4ccc-8ccc-000000000011";
+    const GONE = "cccccccc-cccc-4ccc-8ccc-000000000012";
+    const AFTER_2 = "cccccccc-cccc-4ccc-8ccc-000000000013";
+    const serve = labelShotRow(OTHER_SHOT, POINT_ID, {
+      stroke: "first_serve",
+      video_time: 1,
+    });
+    const back = labelShotRow(SHOT_ID, POINT_ID, {
+      hitter: "p2",
+      stroke: "backhand",
+      result: "out",
+      video_time: 2,
+    });
+    const rows = [
+      serve,
+      back,
+      labelShotRow(AFTER_1, POINT_ID, { result: null, video_time: 3 }),
+      labelShotRow(GONE, POINT_ID, {
+        status: "deleted",
+        status_before_delete: "kept",
+        delete_reason: "other",
+        video_time: 4,
+      }),
+      labelShotRow(AFTER_2, POINT_ID, {
+        hitter: "p2",
+        result: null,
+        status: "edited",
+        video_time: 5,
+      }),
+    ];
+    const anchor = { ...back, session_id: SESSION_ID };
+    const point = {
+      ...OWNING_POINT,
+      winner: "p1",
+      ending: "winner",
+      ended_by: "p1",
+    };
+
+    const fake = fakeClient({ shot: anchor, shots: rows, point });
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: fake.supabase,
+        shotId: SHOT_ID,
+      }),
+    ).toEqual({
+      ok: true,
+      removed: [
+        { id: AFTER_1, statusBeforeDelete: "kept" },
+        { id: AFTER_2, statusBeforeDelete: "edited" },
+      ],
+      // The return, out, right after the serve: a service winner.
+      point: {
+        ending: "service_winner",
+        endedBy: "p2",
+        winner: "p1",
+        status: "edited",
+      },
+    });
+    const tombstone = (id: string, was: string) => ({
+      table: "label_shots",
+      op: "update",
+      values: {
+        status: "deleted",
+        status_before_delete: was,
+        delete_reason: "dead_ball_after_point",
+      },
+      filters: { id, status: was },
+    });
+    expect(fake.calls.filter((c) => c.op === "update")).toEqual([
+      tombstone(AFTER_1, "kept"),
+      tombstone(AFTER_2, "edited"),
+      {
+        table: "label_points",
+        op: "update",
+        values: { ending: "service_winner", ended_by: "p2", status: "edited" },
+        filters: { id: POINT_ID, updated_at: OWNING_POINT.updated_at },
+      },
+    ]);
+    for (const call of fake.calls) {
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
+    }
+
+    // Nothing live after the last stroke, a tombstone as the anchor, a
+    // complete session and a race: refused, and nothing written past the
+    // refusal.
+    const last = { ...rows[4], session_id: SESSION_ID };
+    const none = fakeClient({ shot: last, shots: rows, point });
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: none.supabase,
+        shotId: AFTER_2,
+      }),
+    ).toEqual({ error: "There is no live shot after this one to remove." });
+    expect(none.calls.some((c) => c.op === "update")).toBe(false);
+
+    const gone = fakeClient({
+      shot: { ...rows[3], session_id: SESSION_ID },
+      shots: rows,
+      point,
+    });
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: gone.supabase,
+        shotId: GONE,
+      }),
+    ).toEqual({
+      error: "Restore this shot before removing the shots after it.",
+    });
+
+    const frozen = fakeClient({
+      shot: anchor,
+      shots: rows,
+      point,
+      sessionStatus: "complete",
+    });
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: frozen.supabase,
+        shotId: SHOT_ID,
+      }),
+    ).toHaveProperty("error");
+    expect(frozen.calls.some((c) => c.op === "update")).toBe(false);
+
+    const raced = fakeClient({ shot: anchor, shots: rows, point, raced: true });
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: raced.supabase,
+        shotId: SHOT_ID,
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(raced.calls.filter((c) => c.op === "update")).toHaveLength(1);
+
+    expect(
+      await writeLabelShotsRemoveAfter({
+        supabase: fake.supabase,
+        shotId: "x",
+      }),
+    ).toEqual({ error: "Invalid shot id." });
+  });
+
+  test("Restore N puts a removal's tombstones back in a single call, every plan checked before the first write", async () => {
+    const AFTER_1 = "cccccccc-cccc-4ccc-8ccc-000000000011";
+    const AFTER_2 = "cccccccc-cccc-4ccc-8ccc-000000000013";
+    const ELSEWHERE = "cccccccc-cccc-4ccc-8ccc-000000000099";
+    const serve = labelShotRow(OTHER_SHOT, POINT_ID, {
+      stroke: "first_serve",
+      video_time: 1,
+    });
+    const back = labelShotRow(SHOT_ID, POINT_ID, {
+      hitter: "p2",
+      stroke: "backhand",
+      result: "out",
+      video_time: 2,
+    });
+    const dead = (id: string, was: string, fields: Record<string, unknown>) =>
+      labelShotRow(id, POINT_ID, {
+        status: "deleted",
+        status_before_delete: was,
+        delete_reason: "dead_ball_after_point",
+        result: null,
+        ...fields,
+      });
+    const rows = [
+      serve,
+      back,
+      dead(AFTER_1, "kept", { video_time: 3 }),
+      dead(AFTER_2, "edited", { hitter: "p2", video_time: 4 }),
+      // A tombstone of another point: never restored with these.
+      { ...dead(ELSEWHERE, "kept", {}), label_point_id: "other-point" },
+    ];
+    const point = {
+      ...OWNING_POINT,
+      winner: "p1",
+      ending: "service_winner",
+      ended_by: "p2",
+    };
+
+    const fake = fakeClient({ shots: rows, point });
+    expect(
+      await writeLabelShotsRestore({
+        supabase: fake.supabase,
+        shotIds: [AFTER_1, AFTER_2, AFTER_1],
+      }),
+    ).toEqual({
+      ok: true,
+      restored: [
+        { id: AFTER_1, status: "kept" },
+        { id: AFTER_2, status: "edited" },
+      ],
+      // Vargas's swing, with nothing on it, is the last stroke again: by
+      // the side the point says lost, so her error.
+      point: { ending: "error", endedBy: "p2", winner: "p1", status: "edited" },
+    });
+    const restore = (id: string, status: string) => ({
+      table: "label_shots",
+      op: "update",
+      values: { status, status_before_delete: null, delete_reason: null },
+      filters: { id, status: "deleted" },
+    });
+    expect(fake.calls.filter((c) => c.op === "update")).toEqual([
+      restore(AFTER_1, "kept"),
+      restore(AFTER_2, "edited"),
+      {
+        table: "label_points",
+        op: "update",
+        values: { ending: "error", ended_by: "p2", status: "edited" },
+        filters: { id: POINT_ID, updated_at: OWNING_POINT.updated_at },
+      },
+    ]);
+    // The rows were read by id list first, the session's gate after.
+    expect(fake.calls[0]).toMatchObject({
+      table: "label_shots",
+      op: "select",
+      in: { id: [AFTER_1, AFTER_2] },
+    });
+    for (const call of fake.calls) {
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
+    }
+
+    // A live stroke among the ids, ids of two points, one not found, and a
+    // list that is empty or malformed: refused before any write.
+    const live = fakeClient({ shots: rows, point });
+    expect(
+      await writeLabelShotsRestore({
+        supabase: live.supabase,
+        shotIds: [AFTER_1, SHOT_ID],
+      }),
+    ).toEqual({ error: "This shot is not deleted." });
+    expect(live.calls.some((c) => c.op === "update")).toBe(false);
+
+    const twoPoints = fakeClient({ shots: rows, point });
+    expect(
+      await writeLabelShotsRestore({
+        supabase: twoPoints.supabase,
+        shotIds: [AFTER_1, ELSEWHERE],
+      }),
+    ).toEqual({ error: "The shots to restore must all be of one point." });
+    expect(twoPoints.calls.some((c) => c.op === "update")).toBe(false);
+
+    const missing = fakeClient({ shots: rows, point });
+    expect(
+      await writeLabelShotsRestore({
+        supabase: missing.supabase,
+        shotIds: [AFTER_1, "cccccccc-cccc-4ccc-8ccc-000000000077"],
+      }),
+    ).toEqual({ error: "Shot not found." });
+
+    for (const bad of [[], ["x"], "not a list", [AFTER_1, 7]]) {
+      expect(
+        await writeLabelShotsRestore({ supabase: fake.supabase, shotIds: bad }),
+      ).toEqual({ error: "Invalid shot ids." });
+    }
   });
 
   test("a race, a complete session and a missing row are refused", async () => {

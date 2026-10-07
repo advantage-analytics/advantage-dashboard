@@ -71,6 +71,13 @@ export interface EditContext {
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;
+  /**
+   * The hint line's answers under a rally ball marked out: remove every live
+   * stroke after `shotId` in its point as hit after the point ended, and put
+   * a removal's tombstones back. Absent where the console cannot write.
+   */
+  onRemoveShotsAfter?: (pointId: string, shotId: string) => void;
+  onRestoreShots?: (pointId: string, shotIds: string[]) => void;
   /** Ghosts folded open to their struck-through row. */
   openGhostIds?: ReadonlySet<string>;
   onToggleGhost?: (id: string) => void;

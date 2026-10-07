@@ -14,6 +14,7 @@ import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
   editContext,
+  ROW_OPERATIONS,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -57,13 +58,20 @@ const DISPUTED_HOVER =
 
 /**
  * The fixture's second point — Lee's ace, one kept serve — as it was seeded:
- * unchanged and not yet checked. Each test changes what it is about.
+ * unchanged and not yet checked, with the ace's bounce placed so the line
+ * does not ask for it. Each test changes what it is about.
  */
 function fixturePoint(fields: Partial<LabelPoint> = {}): LabelPoint {
   const seeded = labelSessionFixture().points.find(
     (p) => p.id === FIXTURE_POINT_IDS.P2,
   )!;
-  return { ...seeded, checkedAt: null, note: null, ...fields };
+  return {
+    ...seeded,
+    checkedAt: null,
+    note: null,
+    shots: seeded.shots.map((s) => ({ ...s, landingX: 0.6, landingY: 17.79 })),
+    ...fields,
+  };
 }
 
 function marksOf(
@@ -179,7 +187,6 @@ function hintLine(
 
 /** One mark of every code, on the fixture's point and its one stroke. */
 const EVERY_HIDDEN: LabelMark[] = [
-  mark("same_player_consecutive", { hitter: "p1" }),
   mark("phantom_strokes_dropped", { eventIds: [41], hitter: "p2" }),
   mark("winner_guessed", {}),
   mark("score_frozen", {}),
@@ -291,7 +298,6 @@ test.describe("a closed row draws only what can change the score", () => {
       expect(html).not.toContain("data-mark-chip");
       expect(html).not.toContain("data-point-hint");
       for (const words of [
-        "Missing shot?",
         "shot removed",
         "Winner guessed",
         "Score not read",
@@ -416,13 +422,13 @@ test.describe("a session with no marks", () => {
   });
 });
 
-test.describe("the two hints read off the rows, with their one answer", () => {
+test.describe("the hints read off the rows, with their answers", () => {
   const MARK = "src/components/admin/labels/label-black-mark.tsx";
   type Hint = {
     code: string;
     label: string;
     detail: string;
-    action?: { label: string; run: () => void };
+    actions: { label: string; run: () => void }[];
   };
   type Hints = (
     point: LabelPoint,
@@ -487,8 +493,8 @@ test.describe("the two hints read off the rows, with their one answer", () => {
     };
     const point = stale();
     const [ending] = pointHints(point, marksOf(point, []), NAMES, edit);
-    expect(ending.action?.label).toBe("Use it");
-    ending.action?.run();
+    expect(ending.actions.map((a) => a.label)).toEqual(["Use it"]);
+    ending.actions[0].run();
     // The rows settle the winner too — Lee's ace — so the patch carries it.
     expect(patched).toEqual([
       ["point", point.id, { ending: "ace", ended_by: "p1", winner: "p1" }],
@@ -496,7 +502,7 @@ test.describe("the two hints read off the rows, with their one answer", () => {
 
     patched.length = 0;
     const [second] = pointHints(retyped(), marksOf(retyped(), []), NAMES, edit);
-    second.action?.run();
+    second.actions[0].run();
     expect(patched).toEqual([["shot", "s-second", { stroke: "second_serve" }]]);
 
     // A last stroke with no result settles no winner: none in the patch.
@@ -517,9 +523,146 @@ test.describe("the two hints read off the rows, with their one answer", () => {
       winner: "p1" as const,
     };
     const [hint] = pointHints(open, marksOf(open, []), NAMES, edit);
-    hint.action?.run();
+    hint.actions[0].run();
     expect(patched).toEqual([
       ["point", point.id, { ending: "error", ended_by: "p2" }],
+    ]);
+  });
+
+  /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */
+  const endedEarly = () => {
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    return {
+      ...point,
+      shots: [
+        { ...ace, videoTime: 1 },
+        {
+          ...ace,
+          id: "s-long",
+          eventId: 202,
+          hitter: "p2" as const,
+          stroke: "backhand" as const,
+          result: "out" as const,
+          videoTime: 2,
+        },
+        {
+          ...ace,
+          id: "s-dead-1",
+          eventId: 203,
+          stroke: "forehand" as const,
+          result: null,
+          videoTime: 3,
+        },
+        {
+          ...ace,
+          id: "s-dead-2",
+          eventId: 204,
+          hitter: "p2" as const,
+          stroke: "forehand" as const,
+          result: null,
+          landingX: null,
+          landingY: null,
+          videoTime: 4,
+        },
+      ],
+      winner: "p1" as const,
+      ending: "error" as const,
+      endedBy: "p2" as const,
+    };
+  };
+
+  /** Lee's serve in, then another serve of his: a let played on. */
+  const letPlayed = () => {
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    return {
+      ...point,
+      shots: [
+        { ...ace, videoTime: 1 },
+        { ...ace, id: "s-again", eventId: 202, videoTime: 2 },
+      ],
+    };
+  };
+
+  test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const calls: unknown[][] = [];
+    const edit = {
+      onRemoveShotsAfter: (...args: unknown[]) =>
+        calls.push(["remove", ...args]),
+      operations: {
+        ...ROW_OPERATIONS,
+        onSplitPoint: (...args: unknown[]) => calls.push(["split", ...args]),
+      },
+    };
+    const point = endedEarly();
+    const hints = pointHints(point, marksOf(point, []), NAMES, edit);
+    const ended = hints.find((h) => h.code === "shot_after_point_end")!;
+    expect(ended.label).toBe("Point ended here · 2 shots after it");
+    expect(ended.actions.map((a) => a.label)).toEqual([
+      "Remove 2",
+      "Split here",
+    ]);
+    ended.actions[0].run();
+    ended.actions[1].run();
+    expect(calls).toEqual([
+      ["remove", point.id, "s-long"],
+      ["split", point.id, "s-dead-1"],
+    ]);
+    // The last swing has no landing: that hint rides beside it, with no answer.
+    expect(hints.map((h) => h.code)).toEqual([
+      "shot_after_point_end",
+      "last_landing_missing",
+    ]);
+    expect(hints[1].actions).toEqual([]);
+
+    calls.length = 0;
+    const let_ = letPlayed();
+    const again = pointHints(let_, marksOf(let_, []), NAMES, edit).find(
+      (h) => h.code === "serve_after_serve_in",
+    )!;
+    expect(again.actions.map((a) => a.label)).toEqual(["Split here"]);
+    again.actions[0].run();
+    expect(calls).toEqual([["split", let_.id, "s-again"]]);
+
+    // Only the writes the console has.
+    const removeOnly = pointHints(point, marksOf(point, []), NAMES, {
+      onRemoveShotsAfter: edit.onRemoveShotsAfter,
+    });
+    expect(
+      removeOnly
+        .find((h) => h.code === "shot_after_point_end")!
+        .actions.map((a) => a.label),
+    ).toEqual(["Remove 2"]);
+    const splitOnly = pointHints(point, marksOf(point, []), NAMES, {
+      operations: edit.operations,
+    });
+    expect(
+      splitOnly
+        .find((h) => h.code === "shot_after_point_end")!
+        .actions.map((a) => a.label),
+    ).toEqual(["Split here"]);
+    expect(
+      pointHints(let_, marksOf(let_, []), NAMES, {}).find(
+        (h) => h.code === "serve_after_serve_in",
+      )!.actions,
+    ).toEqual([]);
+
+    // Drawn: the words with the count, and a button for each answer.
+    const html = renderWell(point, marksOf(point, []), edit);
+    expect(hintLine(html).map((h) => [h.code, h.text])).toEqual([
+      ["shot_after_point_end", "Point ended here · 2 shots after it"],
+      ["last_landing_missing", "No landing on the last shot"],
+    ]);
+    const buttons = [
+      ...html.matchAll(
+        /<button[^>]*data-point-hint-action="([^"]*)"[^>]*>([^<]*)</g,
+      ),
+    ].map((m) => [m[1], m[2]]);
+    expect(buttons).toEqual([
+      ["shot_after_point_end", "Remove 2"],
+      ["shot_after_point_end", "Split here"],
     ]);
   });
 

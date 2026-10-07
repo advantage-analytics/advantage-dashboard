@@ -9,17 +9,20 @@ import type {
 } from "@/lib/services/labels/marks";
 import {
   HINT_ACTION_LABEL,
-  MARK_LABEL,
+  hintLabel,
   markHover,
+  removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
   endingStale,
   hoverLine,
+  lastLandingMissing,
   markStates,
   missingPointAdded,
+  pointEndedEarly,
   pointRowMarkList,
   secondServeAsFirst,
-  shotAfterPointEnd,
+  serveAfterServeIn,
   rollupMarks,
   stateHoverParts,
   type MarkHoverParts,
@@ -36,10 +39,10 @@ import type { EditContext } from "./label-row-parts";
  * The rail's marks, drawn by tier (`LabelMarkTier`, marks.ts): a mark that can
  * change the score is the amber chip on the point's row (`MarkChip`), the only
  * thing the header counts; a mark about how the point ended is a word on one
- * quiet line in the open point (`PointHintLine`), two of them with the one
- * answer they offer beside the word. These components only draw:
- * `pointRowMarks` and `pointHints` decide what, with words and states from
- * marks-copy.ts and marks-state.ts.
+ * quiet line in the open point (`PointHintLine`), some with the answers they
+ * offer beside the word. These components only draw: `pointRowMarks` and
+ * `pointHints` decide what, with words and states from marks-copy.ts and
+ * marks-state.ts.
  */
 
 export interface MarkChipProps {
@@ -103,15 +106,21 @@ export function MarkChip({
   );
 }
 
+/** One answer a hint offers: a text action after its word. */
+export interface PointHintAction {
+  label: string;
+  run: () => void;
+}
+
 /** One word of the open point's quiet line: a hint's label and its sentence. */
 export interface PointHint {
   code: LabelMarkCode;
-  /** The hint's words — its `MARK_LABEL`. */
+  /** The hint's words — `hintLabel`. */
   label: string;
   /** Its hover sentence — `markHover`, with the players' names. */
   detail: string;
-  /** The one answer the hint offers, when the console can write it. */
-  action?: { label: string; run: () => void };
+  /** The answers the hint offers, when the console can write them. */
+  actions: readonly PointHintAction[];
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -121,7 +130,7 @@ const HINT_DOT_INK = railInk(0.25);
 
 /**
  * The open point's quiet line: its hints by their labels, each with its
- * sentence on hover, and a hint's one answer as a text action after its word
+ * sentence on hover, and a hint's answers as text actions after its word
  * (`RAIL_PRESS`, through `BlackTextAction`). Counted nowhere. Drawn as the
  * first row of the shots well, it takes the well's own arrival (`className` /
  * `style`).
@@ -167,19 +176,20 @@ export function PointHintLine({
               {hint.label}
             </span>
           </ChromeTooltip>
-          {hint.action ? (
+          {hint.actions.map((action) => (
             <BlackTextAction
+              key={action.label}
               ink="quiet"
               data-point-hint-action={hint.code}
-              aria-label={`${hint.action.label}: ${hint.detail}`}
+              aria-label={`${action.label}: ${hint.detail}`}
               onClick={(event) => {
                 event.stopPropagation();
-                hint.action?.run();
+                action.run();
               }}
             >
-              {hint.action.label}
+              {action.label}
             </BlackTextAction>
-          ) : null}
+          ))}
         </span>
       ))}
     </div>
@@ -309,25 +319,37 @@ export function pointRowMarks(
 }
 
 /**
- * The open point's hints: the marks' own, then the three read off the rows —
- * "Shot after the point ended?", "Ending looks stale" and "Second serve?".
- * The last two carry their one answer when `edit` can write it: the derived
- * ending as a point patch (the winner only when the rows settle one), and
- * `{ stroke: "second_serve" }` on the serve. Nothing without marks: a session
- * labelled blind reads none of these, and its ghosts are strokes, which is
- * why `ghosts` is true here.
+ * What a hint's answers write through. `onRemoveShotsAfter` drops the live
+ * strokes after one of the point's shots — "Point ended here"'s "Remove N".
+ */
+export type HintEdit = Pick<
+  EditContext,
+  "onPatchPoint" | "onPatchShot" | "operations"
+> & {
+  onRemoveShotsAfter?: (pointId: string, shotId: string) => void;
+};
+
+/**
+ * The open point's hints: the marks' own, then the five read off the rows —
+ * "Point ended here", "Ending looks stale", "Second serve?", "No landing on
+ * the last shot" and "Serve after a serve in play". Each carries its answers
+ * when `edit` can write them (`hintActions`). Nothing without marks: a
+ * session labelled blind reads none of these, and its ghosts are strokes,
+ * which is why `ghosts` is true here.
  */
 export function pointHints(
   point: LabelPoint,
   marks: LabelMarks | null | undefined,
   names: SideNames,
-  edit?: Pick<EditContext, "onPatchPoint" | "onPatchShot">,
+  edit?: HintEdit,
 ): PointHint[] {
   if (!marks) return [];
   const live: (LabelMark | null)[] = [
-    shotAfterPointEnd(point),
+    pointEndedEarly(point, true),
     endingStale(point, true),
     secondServeAsFirst(point, true),
+    lastLandingMissing(point, true),
+    serveAfterServeIn(point, true),
   ];
   const hints = [
     ...pointRowMarkList(point, marks).hints,
@@ -335,42 +357,75 @@ export function pointHints(
   ];
   return hints.map((mark) => ({
     code: mark.code,
-    label: MARK_LABEL[mark.code],
+    label: hintLabel(mark),
     detail: markHover(mark, names),
-    ...hintAction(mark, point, edit),
+    actions: hintActions(mark, point, edit),
   }));
 }
 
-/** A hint's answer as `PointHint.action`, or nothing. */
-function hintAction(
+/**
+ * A hint's answers, each only where the console has the write for it: the
+ * derived ending as a point patch (the winner only when the rows settle one),
+ * `{ stroke: "second_serve" }` on the serve, the strokes after the out ball
+ * removed, and a split at the first stroke of the second point.
+ */
+function hintActions(
   mark: LabelMark,
   point: LabelPoint,
-  edit: Pick<EditContext, "onPatchPoint" | "onPatchShot"> | undefined,
-): Pick<PointHint, "action"> {
-  if (mark.code === "ending_stale" && edit?.onPatchPoint) {
-    const { onPatchPoint } = edit;
-    const { ending, endedBy, winner } = mark.params;
-    return {
-      action: {
-        label: HINT_ACTION_LABEL.ending_stale,
-        run: () =>
-          onPatchPoint(point.id, {
-            ending,
-            ended_by: endedBy,
-            ...(winner !== null ? { winner } : {}),
-          }),
-      },
-    };
+  edit: HintEdit | undefined,
+): PointHintAction[] {
+  if (!edit) return [];
+  const { onPatchPoint, onPatchShot, onRemoveShotsAfter, operations } = edit;
+  const splitAt = (label: string, shotId: string): PointHintAction[] =>
+    operations
+      ? [{ label, run: () => operations.onSplitPoint(point.id, shotId) }]
+      : [];
+  switch (mark.code) {
+    case "ending_stale": {
+      if (!onPatchPoint) return [];
+      const { ending, endedBy, winner } = mark.params;
+      return [
+        {
+          label: HINT_ACTION_LABEL.ending_stale,
+          run: () =>
+            onPatchPoint(point.id, {
+              ending,
+              ended_by: endedBy,
+              ...(winner !== null ? { winner } : {}),
+            }),
+        },
+      ];
+    }
+    case "second_serve_as_first": {
+      if (!onPatchShot) return [];
+      const { shotId } = mark.params;
+      return [
+        {
+          label: HINT_ACTION_LABEL.second_serve_as_first,
+          run: () => onPatchShot(shotId, { stroke: "second_serve" }),
+        },
+      ];
+    }
+    case "shot_after_point_end": {
+      const { shotId, after } = mark.params;
+      return [
+        ...(onRemoveShotsAfter
+          ? [
+              {
+                label: removeAfterLabel(after.length),
+                run: () => onRemoveShotsAfter(point.id, shotId),
+              },
+            ]
+          : []),
+        ...splitAt(HINT_ACTION_LABEL.shot_after_point_end, after[0]),
+      ];
+    }
+    case "serve_after_serve_in":
+      return splitAt(
+        HINT_ACTION_LABEL.serve_after_serve_in,
+        mark.params.shotId,
+      );
+    default:
+      return [];
   }
-  if (mark.code === "second_serve_as_first" && edit?.onPatchShot) {
-    const { onPatchShot } = edit;
-    const { shotId } = mark.params;
-    return {
-      action: {
-        label: HINT_ACTION_LABEL.second_serve_as_first,
-        run: () => onPatchShot(shotId, { stroke: "second_serve" }),
-      },
-    };
-  }
-  return {};
 }

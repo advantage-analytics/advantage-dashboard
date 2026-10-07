@@ -8,9 +8,12 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import {
+  HINT_ACTION_LABEL,
+  hintLabel,
   MARK_LABEL,
   markHover,
   onPointsDetail,
+  removeAfterLabel,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
@@ -51,9 +54,12 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   tiebreak_score_off_six_all: {},
   result_type_unknown: {},
   serve_fault: {},
-  shot_after_point_end: { landed: 3, extra: 4, result: "out" },
+  shot_after_point_end: { shotId: "s-3", after: ["s-4"] },
   ending_stale: { ending: "error", endedBy: "p2", winner: "p1" },
   second_serve_as_first: { shotId: "s-2" },
+  last_landing_missing: {},
+  last_shot_unresolved: {},
+  serve_after_serve_in: { shotId: "s-2" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -110,9 +116,12 @@ test.describe("mark copy", () => {
       result_type_unknown: "Ending unknown",
       net_hit_contradicts_height: "Net or out?",
       serve_fault: "Serve fault?",
-      shot_after_point_end: "Shot after the point ended?",
+      shot_after_point_end: "Point ended here",
       ending_stale: "Ending looks stale",
       second_serve_as_first: "Second serve?",
+      last_landing_missing: "No landing on the last shot",
+      last_shot_unresolved: "Ending can’t be read",
+      serve_after_serve_in: "Serve after a serve in play",
       pick_winner: "Pick the winner",
       phantom_strokes_dropped: "1 shot removed",
       out_ball_rally_continued: "Out call ignored",
@@ -168,6 +177,38 @@ test.describe("mark copy", () => {
     expect(markHover(sample("second_serve_as_first"), names)).toBe(
       "Follows a faulted serve, so it is the second serve.",
     );
+    expect(markHover(sample("shot_after_point_end"), names)).toBe(
+      "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.",
+    );
+    expect(markHover(sample("last_landing_missing"), names)).toBe(
+      "Place the last bounce to settle Out, Net or In.",
+    );
+    expect(markHover(sample("last_shot_unresolved"), names)).toBe(
+      "The last shot has no landing and no result, so the point’s ending is unknown.",
+    );
+    expect(markHover(sample("serve_after_serve_in"), names)).toBe(
+      "A let that was played, or two points in one rally.",
+    );
+  });
+
+  test("a hint's words on the line: the label, and for “Point ended here” the count after it", () => {
+    expect(hintLabel(sample("ending_stale"))).toBe("Ending looks stale");
+    expect(hintLabel(sample("shot_after_point_end"))).toBe(
+      "Point ended here · 1 shot after it",
+    );
+    expect(
+      hintLabel(
+        mark("shot_after_point_end", { shotId: "s-1", after: ["a", "b", "c"] }),
+      ),
+    ).toBe("Point ended here · 3 shots after it");
+    expect(HINT_ACTION_LABEL).toEqual({
+      ending_stale: "Use it",
+      second_serve_as_first: "Make it a second serve",
+      shot_after_point_end: "Split here",
+      serve_after_serve_in: "Split here",
+    });
+    expect(removeAfterLabel(1)).toBe("Remove 1");
+    expect(removeAfterLabel(3)).toBe("Remove 3");
   });
 
   test("a mark the derivation could not fill still reads as a sentence", () => {
@@ -300,6 +341,97 @@ test.describe("a flag's life", () => {
     expect(
       markStates([sameSide, flag], point(), [suggestion], rows("added")),
     ).toEqual(["settled", "open"]);
+  });
+
+  test("'Missing shot?' is counted, and its slot answers it: added settles, every one dismissed dismisses", () => {
+    const missing = sample("same_player_consecutive");
+    expect(LABEL_MARK_META.same_player_consecutive.tier).toBe("count");
+    const slot = (afterEventId: number): LabelSuggestion => ({
+      kind: "missing_shot",
+      key: `missing_shot:${afterEventId}`,
+      pointId: "point-1",
+      afterShotId: `s-${afterEventId}`,
+      hitter: "p2",
+      videoTime: null,
+    });
+    const slots = [slot(7), slot(9)];
+    expect(markState(missing, point(), slots)).toBe("open");
+    // Dismissing one slot of two leaves the question open; both, dismissed.
+    expect(
+      markState(missing, point({ dismissed: ["missing_shot:7"] }), slots),
+    ).toBe("open");
+    expect(
+      markState(
+        missing,
+        point({ dismissed: ["missing_shot:7", "missing_shot:9"] }),
+        slots,
+      ),
+    ).toBe("dismissed");
+    expect(
+      markState(
+        missing,
+        point({
+          dismissed: ["missing_shot:7", "missing_shot:9"],
+          checkedAt: CHECKED_AT,
+        }),
+        slots,
+      ),
+    ).toBe("dismissed");
+    // "Add shot" on a slot settles it, and outranks a dismissal.
+    const added = point({
+      dismissed: ["missing_shot:7", "missing_shot:9"],
+      shots: [shot(), shot({ status: "added", afterEventId: 7 }), shot()],
+    });
+    expect(markState(missing, added, slots)).toBe("settled");
+    expect(markState(missing, { ...added, checkedAt: CHECKED_AT }, slots)).toBe(
+      "checked",
+    );
+    // Without the session's suggestions a dismissal cannot be seen, and any
+    // change to the point settles it as it does every mark.
+    expect(markState(missing, point({ dismissed: ["missing_shot:7"] }))).toBe(
+      "open",
+    );
+    expect(markState(missing, point({ status: "edited" }), slots)).toBe(
+      "settled",
+    );
+    // Another mark on the point is untouched by the slots.
+    expect(
+      markState(
+        flag,
+        point({ dismissed: ["missing_shot:7", "missing_shot:9"] }),
+        slots,
+      ),
+    ).toBe("open");
+    // Counted by the header, and not once dismissed.
+    const p = {
+      ...point({ dismissed: [] }),
+      shots: [
+        {
+          id: "s1",
+          status: "kept",
+          siteRemoval: null,
+          siteRemovalRestoredAt: null,
+        },
+      ],
+    } as unknown as LabelPoint;
+    const marks = {
+      points: { "point-1": [missing] },
+      shots: {},
+      suggestions: slots,
+      serveSides: {},
+    };
+    expect(markSummary([p], marks)).toEqual({ open: 1, openPoints: 1 });
+    expect(
+      markSummary(
+        [{ ...p, dismissed: ["missing_shot:7", "missing_shot:9"] }],
+        marks,
+      ),
+    ).toEqual({ open: 0, openPoints: 0 });
+    expect(rollupMarks([missing], markStates([missing], p, slots))).toEqual({
+      text: "Missing shot?",
+      count: 1,
+      state: "open",
+    });
   });
 
   const stateHover = (...args: Parameters<typeof stateHoverParts>) =>

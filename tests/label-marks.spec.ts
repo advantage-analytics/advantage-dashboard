@@ -24,6 +24,7 @@ import {
   LABEL_MARK_META,
   LABEL_ONLY_FLAGS,
   netHitTier,
+  withoutDeadTail,
   type LabelMark,
   type LabelMarks,
   type MarkablePoint,
@@ -635,6 +636,130 @@ test.describe("the labels-only flags", () => {
     }
   });
 
+  test("winner_disputed: a dead tail hides a flip the derivation missed, so the rally is re-read without it", () => {
+    // B's ball out, then one swing by A at the dead ball: as segmented, the
+    // last stroke is A's (in), so the derivation agrees with the score "A"
+    // — but B's out ball says A won anyway. No dispute there.
+    const agreed = rallyOf(1, [
+      ["A", "serve"],
+      ["B", "groundstroke", false],
+      ["A", "groundstroke"],
+    ]);
+    // The same rally scored to B, with no flag from the derivation (a
+    // hand-built transcript carries none): the cut rally says A, so the
+    // mark is raised here.
+    const flipped = rallyOf(2, [
+      ["A", "serve"],
+      ["B", "groundstroke", false],
+      ["A", "groundstroke"],
+    ]);
+    // A's out ball, then B's and A's swings at it (the full dead tail): the
+    // last stroke A (in) backs the score "A"; dropped, B won.
+    const twoBack = rallyOf(3, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke", false],
+      ["B", "groundstroke"],
+      ["A", "groundstroke"],
+    ]);
+    const marks = marksFor([agreed, flipped, twoBack], ["A", "B", "A"]);
+    expect(marks.points.p1).toBeUndefined();
+    expect(marks.points.p2).toEqual([
+      {
+        code: "winner_disputed",
+        tier: "count",
+        scope: "point",
+        params: { scoreWinner: "p2", lastStrokeWinner: "p1" },
+      },
+    ]);
+    expect(marks.points.p3).toEqual([
+      {
+        code: "winner_disputed",
+        tier: "count",
+        scope: "point",
+        params: { scoreWinner: "p1", lastStrokeWinner: "p2" },
+      },
+    ]);
+    // Already flagged by the derivation: the one mark, read as it reads it.
+    const already = marksFor(
+      [twoBack],
+      ["A"],
+      [{ flags: [POINT_FLAGS.WINNER_DISPUTED] }],
+    );
+    expect(already.points.p1).toHaveLength(1);
+    expect(already.points.p1[0].params).toEqual({
+      scoreWinner: "p1",
+      lastStrokeWinner: "p1",
+    });
+    // No winner settled: nothing to dispute (a pick instead).
+    expect(codesOf(marksFor([twoBack], [null]).points.p1)).toEqual([
+      "pick_winner",
+    ]);
+  });
+
+  test("withoutDeadTail: one to two non-serve strokes after the last out ball, and nothing else", () => {
+    const tail = (spec: Parameters<typeof rallyOf>[1]): number[] | null =>
+      withoutDeadTail(rallyOf(9, spec))?.strokes.map((s) => s.strokeNumber) ??
+      null;
+    expect(
+      tail([
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+        ["A", "groundstroke"],
+      ]),
+    ).toEqual([1, 2]);
+    expect(
+      tail([
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+        ["A", "groundstroke"],
+        ["B", "groundstroke"],
+      ]),
+    ).toEqual([1, 2]);
+    // Three after it is a rally; the out ball last is nothing to cut; an out
+    // call on a serve is a fault, not a dead rally ball; a serve in the tail
+    // is a new point, not a swing at a dead ball.
+    expect(
+      tail([
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+        ["A", "groundstroke"],
+        ["B", "groundstroke"],
+        ["A", "groundstroke"],
+      ]),
+    ).toBeNull();
+    expect(
+      tail([
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+      ]),
+    ).toBeNull();
+    expect(
+      tail([
+        ["A", "serve", false],
+        ["B", "groundstroke"],
+      ]),
+    ).toBeNull();
+    expect(
+      tail([
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+        ["A", "serve"],
+      ]),
+    ).toBeNull();
+    expect(tail([])).toBeNull();
+    // The cut rally keeps only the serves it still holds.
+    const cut = withoutDeadTail(
+      rallyOf(9, [
+        ["A", "serve"],
+        ["B", "groundstroke", false],
+        ["A", "groundstroke"],
+      ]),
+    )!;
+    expect(cut.serves.map((s) => s.strokeNumber)).toEqual([1]);
+    expect(cut.rallyId).toBe(9);
+  });
+
   test("pick_winner: the fold settled no winner — and only then", () => {
     const rally = rallyOf(1, [
       ["A", "serve"],
@@ -657,13 +782,15 @@ test.describe("the labels-only flags", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("six codes can change the score, and only they are counted", () => {
+  test("eight codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
     expect(counted.sort()).toEqual([
+      "last_shot_unresolved",
       "pick_winner",
       "reserve_after_in",
+      "same_player_consecutive",
       "score_side_mismatch",
       "service_court_repeat",
       "tiebreak_score_off_six_all",
@@ -684,11 +811,19 @@ test.describe("the three tiers", () => {
     );
     expect([...hiddenSeen]).toEqual(
       expect.arrayContaining([
-        "same_player_consecutive",
         "phantom_strokes_dropped",
         "out_ball_rally_continued",
       ]),
     );
+    // "Missing shot?" is counted now: a chip, with its slot still beside it.
+    expect(hiddenSeen.has("same_player_consecutive")).toBe(false);
+    expect(
+      Object.values(shownMarks.points)
+        .flat()
+        .some(
+          (m) => m.code === "same_player_consecutive" && m.tier === "count",
+        ),
+    ).toBe(true);
 
     const shown = [
       ...Object.values(shownMarks.points),

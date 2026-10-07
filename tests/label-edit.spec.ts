@@ -1081,6 +1081,237 @@ test.describe("a shot write settles its point's ending in the same call", () => 
   });
 });
 
+// ── A rally ball marked out takes the dead balls after it ──────────────────
+
+const SERVE_ID = "eeeeeeee-eeee-4eee-8eee-000000000000";
+const AFTER_1 = "eeeeeeee-eeee-4eee-8eee-000000000001";
+const AFTER_2 = "eeeeeeee-eeee-4eee-8eee-000000000002";
+const AFTER_3 = "eeeeeeee-eeee-4eee-8eee-000000000003";
+
+test.describe("a rally ball marked out takes the one or two strokes after it", () => {
+  /** A court click that lands the ball out: the result rides with the pair. */
+  const OUT = { landing_x: 9, landing_y: 30, result: "out" };
+  const serve = pointShot(SERVE_ID, { stroke: "first_serve", video_time: 1 });
+  /** The tombstone `writeShotTombstones` writes, compare-and-set on the status read. */
+  const tombstone = (id: string, was = "kept") => ({
+    table: "label_shots",
+    op: "update",
+    values: {
+      status: "deleted",
+      status_before_delete: was,
+      delete_reason: "dead_ball_after_point",
+    },
+    filters: { id, status: was },
+  });
+
+  test("one stroke after the return marked out: tombstoned, and the point ends on the return", async () => {
+    // Lee's serve, Vargas's return (in), Lee's forehand with nothing on it
+    // yet. The return placed out: the forehand was hit after the point.
+    const fake = fakeClient({
+      shot: shotRow(),
+      shots: [
+        serve,
+        pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand", video_time: 2 }),
+        pointShot(AFTER_1, { result: null, video_time: 3 }),
+      ],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: OUT,
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "edited",
+      removedAfter: [{ id: AFTER_1, statusBeforeDelete: "kept" }],
+      // A miss on the stroke right after the serve: a service winner.
+      point: {
+        ending: "service_winner",
+        endedBy: "p2",
+        winner: "p1",
+        status: "edited",
+      },
+    });
+    expect(updates(fake)).toEqual([
+      {
+        table: "label_shots",
+        op: "update",
+        values: { ...OUT, status: "edited" },
+        filters: { id: SHOT_ID, updated_at: UPDATED_AT },
+      },
+      tombstone(AFTER_1),
+      {
+        table: "label_points",
+        op: "update",
+        values: { ending: "service_winner", ended_by: "p2", status: "edited" },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+  });
+
+  test("two strokes after: both go, each remembering its status, and the winner follows", async () => {
+    // Serve, return, Lee's forehand placed out, then a swing each.
+    const fake = fakeClient({
+      shot: shotRow({ hitter: "p1", stroke: "forehand" }),
+      shots: [
+        serve,
+        pointShot(AFTER_3, { hitter: "p2", stroke: "backhand", video_time: 2 }),
+        pointShot(SHOT_ID, { video_time: 3 }),
+        pointShot(AFTER_1, { hitter: "p2", result: null, video_time: 4 }),
+        pointShot(AFTER_2, { result: null, status: "edited", video_time: 5 }),
+      ],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: OUT,
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "edited",
+      removedAfter: [
+        { id: AFTER_1, statusBeforeDelete: "kept" },
+        { id: AFTER_2, statusBeforeDelete: "edited" },
+      ],
+      // Lee's error: the point goes to Vargas, which the row did not say.
+      point: { ending: "error", endedBy: "p1", winner: "p2", status: "edited" },
+    });
+    expect(updates(fake).slice(1)).toEqual([
+      tombstone(AFTER_1),
+      tombstone(AFTER_2, "edited"),
+      {
+        table: "label_points",
+        op: "update",
+        values: {
+          ending: "error",
+          ended_by: "p1",
+          winner: "p2",
+          status: "edited",
+        },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+  });
+
+  test("three or more strokes after are left alone, and the ending stands", async () => {
+    const fake = fakeClient({
+      shot: shotRow(),
+      shots: [
+        serve,
+        pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand", video_time: 2 }),
+        pointShot(AFTER_1, { result: null, video_time: 3 }),
+        pointShot(AFTER_2, { hitter: "p2", result: null, video_time: 4 }),
+        pointShot(AFTER_3, { result: null, video_time: 5 }),
+      ],
+    });
+    expect(
+      await writeLabelShotEdit({
+        supabase: fake.supabase,
+        shotId: SHOT_ID,
+        patch: OUT,
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+    expect(updates(fake).map((w) => w.table)).toEqual(["label_shots"]);
+  });
+
+  test("a ghost after it is no stroke with marks on, and one with them off", async () => {
+    // Return, then the swing the site removed, then two more strokes.
+    const rows = [
+      serve,
+      pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand", video_time: 2 }),
+      pointShot(GHOST_ID, {
+        result: null,
+        video_time: 3,
+        site_removal: "hit_after_fault",
+      }),
+      pointShot(AFTER_1, { hitter: "p2", result: null, video_time: 4 }),
+      pointShot(AFTER_2, { result: null, video_time: 5 }),
+    ];
+    const marks = fakeClient({
+      shot: shotRow(),
+      shots: rows,
+      marksEnabled: true,
+    });
+    const seen = await writeLabelShotEdit({
+      supabase: marks.supabase,
+      shotId: SHOT_ID,
+      patch: OUT,
+    });
+    expect(seen).toMatchObject({
+      removedAfter: [{ id: AFTER_1 }, { id: AFTER_2 }],
+    });
+    expect(updates(marks).some((w) => w.filters.id === GHOST_ID)).toBe(false);
+
+    // Labelled blind: the swing is a third stroke after, so nothing goes.
+    const blind = fakeClient({ shot: shotRow(), shots: rows });
+    expect(
+      await writeLabelShotEdit({
+        supabase: blind.supabase,
+        shotId: SHOT_ID,
+        patch: OUT,
+      }),
+    ).not.toHaveProperty("removedAfter");
+    expect(updates(blind).map((w) => w.table)).toEqual(["label_shots"]);
+  });
+
+  test("a serve going out, a ball already out and a patch with no result never trigger it", async () => {
+    const back = pointShot(AFTER_1, {
+      hitter: "p2",
+      stroke: "backhand",
+      result: null,
+      video_time: 2,
+    });
+    const faulted = fakeClient({
+      shot: shotRow({ hitter: "p1", stroke: "first_serve" }),
+      shots: [
+        pointShot(SHOT_ID, { stroke: "first_serve", video_time: 1 }),
+        back,
+      ],
+    });
+    await writeLabelShotEdit({
+      supabase: faulted.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.6, landing_y: 20, result: "out" },
+    });
+    expect(updates(faulted).some((w) => w.filters.id === AFTER_1)).toBe(false);
+
+    const wasOut = fakeClient({
+      shot: shotRow({ result: "out" }),
+      shots: [
+        serve,
+        pointShot(SHOT_ID, {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "out",
+          video_time: 2,
+        }),
+        { ...back, video_time: 3 },
+      ],
+    });
+    await writeLabelShotEdit({
+      supabase: wasOut.supabase,
+      shotId: SHOT_ID,
+      patch: OUT,
+    });
+    expect(updates(wasOut).map((w) => w.table)).toEqual(["label_shots"]);
+
+    const halfPlaced = fakeClient({
+      shot: shotRow(),
+      shots: [
+        serve,
+        pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand", video_time: 2 }),
+        { ...back, video_time: 3 },
+      ],
+    });
+    await writeLabelShotEdit({
+      supabase: halfPlaced.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 9, landing_y: 30 },
+    });
+    expect(updates(halfPlaced).map((w) => w.table)).toEqual(["label_shots"]);
+  });
+});
+
 test.describe("a winner pick lets the ending follow the rows", () => {
   // Lee's serve, then Vargas's backhand with no result yet: the last stroke
   // settles nothing, so the ending reads the winner.

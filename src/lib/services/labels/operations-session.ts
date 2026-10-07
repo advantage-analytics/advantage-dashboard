@@ -13,6 +13,10 @@
  * each of those settles the point's ending in the same call
  * (`syncEndingAfterShotChange`, ending-session.ts) and answers with the point
  * when that moved it.
+ *
+ * Two batched forms for the hint line under a rally ball marked out: every
+ * live stroke after it removed as hit after the point, and a removal's
+ * tombstones put back — one call each, the ending settled once.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -21,6 +25,8 @@ import {
   ADMIN_REQUIRED,
   defaultLabelWriteDependencies,
   readSessionGate,
+  updateIfUnchanged,
+  writeShotTombstones,
   type LabelWriteDependencies,
 } from "./edit-session";
 import {
@@ -31,8 +37,11 @@ import {
 } from "./ending-session";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
+  applyShotsRemoved,
+  applyShotsRestored,
   gameServer,
   isLabelGame,
+  liveShotsAfter,
   planAddedShot,
   planPointChecked,
   planPointDelete,
@@ -41,7 +50,14 @@ import {
   planShotDelete,
   planShotRestore,
   type LabelGame,
+  type LabelShotRemoved,
+  type LabelShotRestored,
 } from "./operations";
+
+// The compare-and-set UPDATE and its race sentence live in edit-session.ts
+// (this file imports from there); the other `*-session.ts` writers take them
+// from here as they always have.
+export { racedMessage, updateIfUnchanged } from "./edit-session";
 import { parseLabelPointSeed } from "./edit";
 import type { ShotSwapWrite } from "./player-swap";
 import {
@@ -83,18 +99,31 @@ export type LabelMovePointResult = LabelOpResult<{
   shots: ShotSwapWrite[];
 }>;
 export type LabelCheckedResult = LabelOpResult<{ checkedAt: string | null }>;
-
-/** The row (or session) the write was aimed at is no longer in the state it was read in. */
-export function racedMessage(noun: "row" | "session"): string {
-  return `This ${noun} changed in another tab. Reload to see it.`;
-}
-
-const RACED = racedMessage("row");
+/** Every live stroke after one, tombstoned; the point when that moved its ending. */
+export type LabelShotsRemoveResult = LabelOpResult<
+  { removed: LabelShotRemoved[] } & WithSyncedPoint
+>;
+/** A removal's tombstones put back; the point when that moved its ending. */
+export type LabelShotsRestoreResult = LabelOpResult<
+  { restored: LabelShotRestored[] } & WithSyncedPoint
+>;
 
 export function normaliseId(id: unknown): string | null {
   if (typeof id !== "string") return null;
   const lower = id.toLowerCase();
   return UUID_RE.test(lower) ? lower : null;
+}
+
+/** `normaliseId` over a list: one or more, each valid, duplicates dropped. */
+function normaliseIds(ids: unknown): string[] | null {
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  const out: string[] = [];
+  for (const id of ids) {
+    const lower = normaliseId(id);
+    if (!lower) return null;
+    if (!out.includes(lower)) out.push(lower);
+  }
+  return out;
 }
 
 function message(err: unknown): string {
@@ -115,29 +144,6 @@ export async function gated<T extends object>(
     console.error(`${LOG} ${what} threw`, { message: message(err) });
     return { error: `Could not ${what}: ${message(err)}` };
   }
-}
-
-/**
- * UPDATE one row, but only while it still has the status it was read with.
- * Returns an error sentence, or null when exactly that row was written.
- */
-export async function updateIfUnchanged(
-  supabase: AdminClient,
-  table: "label_points" | "label_shots",
-  id: string,
-  readStatus: string,
-  values: Record<string, unknown>,
-  what: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from(table)
-    .update(values)
-    .eq("id", id)
-    .eq("status", readStatus)
-    .select("id");
-  if (error) return `Could not ${what}: ${error.message}`;
-  if (!data || data.length === 0) return RACED;
-  return null;
 }
 
 /**
@@ -294,6 +300,130 @@ export async function writeLabelShotRestore(params: {
   const plan = planShotRestore(read.row);
   if ("error" in plan) return plan;
   return writeShotStatus(params.supabase, read, plan.write, "restore the shot");
+}
+
+/**
+ * Tombstone every live stroke after `shotId` in its point, as hit after the
+ * point ended (`dead_ball_after_point`) — any number of them, the hint line's
+ * "Remove N" where an edit left three or more alone. One tombstone per
+ * stroke, compare-and-set (`writeShotTombstones`), then the point's ending
+ * once. Refused on a tombstone and with no live stroke after. Never throws.
+ */
+export async function writeLabelShotsRemoveAfter(params: {
+  supabase: AdminClient;
+  shotId: unknown;
+}): Promise<LabelShotsRemoveResult> {
+  const { supabase } = params;
+  const shotId = normaliseId(params.shotId);
+  if (!shotId) return { error: "Invalid shot id." };
+  const read = await readShotState(supabase, shotId);
+  if ("error" in read) return read;
+  if (read.row.status === "deleted") {
+    return { error: "Restore this shot before removing the shots after it." };
+  }
+  const after = liveShotsAfter(read.shots, shotId, read.ghosts);
+  if (after.length === 0) {
+    return { error: "There is no live shot after this one to remove." };
+  }
+  const written = await writeShotTombstones(
+    supabase,
+    after,
+    "dead_ball_after_point",
+    "remove the shots after it",
+  );
+  if ("error" in written) return written;
+  const synced = await syncEndingAfterShotChange({
+    supabase,
+    pointId: read.row.label_point_id,
+    ghosts: read.ghosts,
+    before: read.shots,
+    after: applyShotsRemoved(read.shots, written.removed),
+  });
+  if ("error" in synced) {
+    return {
+      error: `${synced.error} The shots were removed; reload to see the point as it stands.`,
+    };
+  }
+  return {
+    ok: true,
+    removed: written.removed,
+    ...(synced.point ? { point: synced.point } : {}),
+  };
+}
+
+/**
+ * Undo a batched removal: every tombstone in `shotIds` — all of one point —
+ * back to the status it had (`planShotRestore`, the single Undo's rule), each
+ * compare-and-set, then the point's ending once. Every plan is checked before
+ * the first write, so a refused id leaves nothing half done. Never throws.
+ */
+export async function writeLabelShotsRestore(params: {
+  supabase: AdminClient;
+  shotIds: unknown;
+}): Promise<LabelShotsRestoreResult> {
+  const { supabase } = params;
+  const shotIds = normaliseIds(params.shotIds);
+  if (!shotIds) return { error: "Invalid shot ids." };
+  const { data, error } = await supabase
+    .from("label_shots")
+    .select("id, session_id, label_point_id")
+    .in("id", shotIds)
+    .returns<{ id: string; session_id: string; label_point_id: string }[]>();
+  if (error) return { error: `Could not read the shots: ${error.message}` };
+  const found = data ?? [];
+  if (found.length !== shotIds.length) return { error: "Shot not found." };
+  const first = found[0];
+  if (found.some((row) => row.label_point_id !== first.label_point_id)) {
+    return { error: "The shots to restore must all be of one point." };
+  }
+  const gate = await readSessionGate(supabase, first.session_id);
+  if ("error" in gate) return gate;
+  const owned = await readPointShots(supabase, first.label_point_id);
+  if ("error" in owned) return owned;
+
+  const byId = new Map(owned.shots.map((shot) => [shot.id, shot]));
+  const plans: { shot: LabelShot; status: LabelShotRestored["status"] }[] = [];
+  for (const id of shotIds) {
+    const shot = byId.get(id);
+    if (!shot) return { error: "Shot not found." };
+    const plan = planShotRestore({
+      status: shot.status,
+      status_before_delete: shot.statusBeforeDelete,
+      event_id: shot.eventId,
+    });
+    if ("error" in plan) return plan;
+    plans.push({ shot, status: plan.write.status });
+  }
+  const restored: LabelShotRestored[] = [];
+  for (const { shot, status } of plans) {
+    const failed = await updateIfUnchanged(
+      supabase,
+      "label_shots",
+      shot.id,
+      shot.status,
+      { status, status_before_delete: null, delete_reason: null },
+      "restore the shots",
+    );
+    if (failed) return { error: failed };
+    restored.push({ id: shot.id, status });
+  }
+  const synced = await syncEndingAfterShotChange({
+    supabase,
+    pointId: first.label_point_id,
+    ghosts: gate.ghosts,
+    before: owned.shots,
+    after: applyShotsRestored(owned.shots, restored),
+  });
+  if ("error" in synced) {
+    return {
+      error: `${synced.error} The shots were restored; reload to see the point as it stands.`,
+    };
+  }
+  return {
+    ok: true,
+    restored,
+    ...(synced.point ? { point: synced.point } : {}),
+  };
 }
 
 /**
@@ -617,6 +747,28 @@ export function restoreLabelShot(
     deps,
     (supabase) => writeLabelShotRestore({ supabase, shotId }),
     "restore the shot",
+  );
+}
+
+export function removeLabelShotsAfter(
+  shotId: unknown,
+  deps: LabelWriteDependencies = defaults,
+): Promise<LabelShotsRemoveResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelShotsRemoveAfter({ supabase, shotId }),
+    "remove the shots after it",
+  );
+}
+
+export function restoreLabelShots(
+  shotIds: unknown,
+  deps: LabelWriteDependencies = defaults,
+): Promise<LabelShotsRestoreResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelShotsRestore({ supabase, shotIds }),
+    "restore the shots",
   );
 }
 
