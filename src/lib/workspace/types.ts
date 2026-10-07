@@ -16,6 +16,7 @@
  * entitlement out of a field nothing validates.
  */
 
+import { squadLabel, type Squad } from "@/lib/data/squad";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type { RecordingSource } from "@/app/onboarding/answers";
 
@@ -106,11 +107,12 @@ export interface Workspace {
   /** "Personal", or the school name for a program. */
   name: string;
   /**
-   * Which squad, where a school fields both. Null for personal workspaces —
-   * and for team workspaces backed by a custom org (club / high school /
-   * academy; `programs.org_type` other than 'college'), which field no squad.
+   * Which squad — `programs.team`. A college is always men's or women's; a
+   * club, high school or academy may also be co-ed. Null for personal
+   * workspaces, and for a custom org that has never said (the ones created
+   * before setup asked). Null is "not set", never a squad: see `lib/data/squad.ts`.
    */
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   /**
    * The backing program's `org_type` for a team workspace; null for personal.
    *
@@ -689,9 +691,7 @@ export function squadDisambiguator(
  * only "Meridian State" would be a coin flip.
  */
 export function teamLabel(team: Workspace["team"]): string | null {
-  if (team === "mens") return "Men's";
-  if (team === "womens") return "Women's";
-  return null;
+  return squadLabel(team);
 }
 
 /**

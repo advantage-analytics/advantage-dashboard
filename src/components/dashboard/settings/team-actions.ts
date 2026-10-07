@@ -1,5 +1,6 @@
 "use server";
 
+import type { Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -122,7 +123,8 @@ function programLabel(workspace: Workspace): string {
 
 export interface TeamSettingsInput {
   schoolName: string;
-  team: "mens" | "womens";
+  /** Null leaves the stored squad alone — the RPC coalesces it. */
+  team: Squad | null;
   conference: string;
   homeVenue: string;
   defaultSurface: string | null;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Squad } from "@/lib/data/squad";
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EyeOff, Upload, UserRound } from "lucide-react";
@@ -62,7 +63,7 @@ export function LeaveTeamCard({
 }: {
   programId: string;
   programName: string;
-  team: "mens" | "womens";
+  team: Squad | null;
   conference: string | null;
   crestUrl: string | null;
   ownerName: string | null;
@@ -147,7 +148,7 @@ function LeaveTeamDialog({
   onOpenChange: (open: boolean) => void;
   programId: string;
   programName: string;
-  team: "mens" | "womens";
+  team: Squad | null;
   conference: string | null;
   crestUrl: string | null;
   ownerName: string | null;

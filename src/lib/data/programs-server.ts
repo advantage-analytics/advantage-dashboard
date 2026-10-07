@@ -14,6 +14,12 @@ import {
   isCustomOrgType,
   type CustomOrgType,
 } from "@/lib/services/programs/custom-org";
+import {
+  squadLabel,
+  toGenderedSquad,
+  toSquad,
+  type GenderedSquad,
+} from "@/lib/data/squad";
 
 /**
  * The published facts about a program — the columns every result row carries,
@@ -22,7 +28,7 @@ import {
 export interface ProgramDirectoryRow {
   programKey: string;
   schoolName: string;
-  team: "mens" | "womens";
+  team: GenderedSquad;
   division: string | null;
   conference: string | null;
   state: string | null;
@@ -75,9 +81,15 @@ export interface ProgramPublicStatus extends ProgramSearchResult {
   claimedAt: string | null;
 }
 
-/** "mens" → "Men's". The dataset stores the key; the UI never shows it raw. */
+/**
+ * "mens" → "Men's". The dataset stores the key; the UI never shows it raw.
+ *
+ * For a DIRECTORY row, which always has a squad: anything unrecognised falls
+ * back to "Men's" as it always has. A program that may have none — any custom
+ * org — goes through `squadLabel()`, which answers null rather than guessing.
+ */
 export function teamLabel(team: string): string {
-  return team === "womens" ? "Women's" : "Men's";
+  return squadLabel(toSquad(team)) ?? "Men's";
 }
 
 /**
@@ -93,8 +105,12 @@ export function programDisplayName(
   schoolName: string,
   team: string | null,
 ): string {
-  if (!team) return schoolName;
-  return `${schoolName} ${teamLabel(team)} Tennis`;
+  // A co-ed program is called what it is called: "Riverside Tennis Club",
+  // not "Riverside Tennis Club Co-ed Tennis". The possessive exists to tell a
+  // school's two squads apart, and a co-ed program has no twin to be told from.
+  const squad = toGenderedSquad(team);
+  if (!squad) return schoolName;
+  return `${schoolName} ${teamLabel(squad)} Tennis`;
 }
 
 /**
@@ -176,7 +192,7 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
   return {
     programKey: row.program_key as string,
     schoolName: row.school_name as string,
-    team: row.team as "mens" | "womens",
+    team: row.team as GenderedSquad,
     division: row.division as string | null,
     conference: row.conference as string | null,
     state: row.state as string | null,

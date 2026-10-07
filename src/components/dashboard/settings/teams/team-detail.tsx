@@ -139,6 +139,7 @@ export function TeamDetail({
         canEdit={isStaff}
         isOwner={isOwner}
         ownerName={data.ownerName}
+        orgType={data.program.orgType}
         division={data.program.division}
         conferenceOptions={conferenceOptions}
         onCrestError={setError}

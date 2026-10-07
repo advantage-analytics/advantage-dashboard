@@ -1,3 +1,4 @@
+import { toSquad } from "@/lib/data/squad";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
@@ -189,15 +190,10 @@ async function listProgramWorkspaces(
         id: program.id,
         kind: "team" as const,
         name: program.school_name,
-        // Null for a custom org (club/high school/academy), which fields no
-        // squad — `teamLabel(null)` then renders the name alone rather than
-        // inventing "Men's" for a workspace that never chose one.
-        team:
-          program.team === "womens"
-            ? ("womens" as const)
-            : program.team === "mens"
-              ? ("mens" as const)
-              : null,
+        // Null for a custom org that never said — `teamLabel(null)` then
+        // renders the name alone rather than inventing "Men's" for a
+        // workspace that never chose one.
+        team: toSquad(program.team),
         // NOT NULL with default 'college' in the schema, and the CHECK pins
         // the value set, so the cast is a naming ceremony rather than a guess.
         // The quota tier hangs off this — see `quotaTierFor()`.

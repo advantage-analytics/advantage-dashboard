@@ -1,5 +1,6 @@
 "use client";
 
+import { squadLabel } from "@/lib/data/squad";
 import { useState, useTransition } from "react";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
@@ -92,7 +93,10 @@ export function AdminDualResultForm({
   const checked = validateDualDraft(dual, drafts, existing);
   const savedCount = statuses.filter((s) => s.status === "succeeded").length;
   const complete = !!request && savedCount === request.items.length;
-  const team = `${context.workspace.name}${context.workspace.team === "mens" ? " Men’s" : context.workspace.team === "womens" ? " Women’s" : ""}`;
+  const squad = squadLabel(context.workspace.team);
+  const team = squad
+    ? `${context.workspace.name} ${squad}`
+    : context.workspace.name;
   function update(index: number, patch: Partial<DualResultDraft>) {
     setDrafts((old) =>
       old.map((d, i) => (i === index ? { ...d, ...patch } : d)),

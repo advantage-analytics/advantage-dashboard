@@ -32,6 +32,7 @@
  * `tests/client-bundle-boundary.spec.ts`.
  */
 
+import { squadMark, toSquad } from "@/lib/data/squad";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { titleCaseName } from "@/lib/data/person-name";
@@ -155,12 +156,7 @@ export function expiryWarningDedupeKey(
 function teamLabelOf(row: ExpiryWarningRow): string | null {
   if (!row.program_id || !row.program_school_name?.trim()) return null;
   const name = row.program_school_name.trim();
-  const squad =
-    row.program_team === "mens"
-      ? "M"
-      : row.program_team === "womens"
-        ? "W"
-        : null;
+  const squad = squadMark(toSquad(row.program_team));
   return squad ? `${name} · ${squad}` : name;
 }
 
