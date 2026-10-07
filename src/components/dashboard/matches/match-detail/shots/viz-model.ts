@@ -35,10 +35,10 @@ import {
 import type { DistanceUnit } from "@/lib/format/distance";
 import {
   applyMatchFilters,
-  decidingShotOf,
   EMPTY_MATCH_FILTERS,
   errorMadeBy,
   hasActiveMatchFilters,
+  lastShotOf,
   type MatchFilterContext,
   type MatchFilters,
 } from "../match-filters/model";
@@ -1102,7 +1102,7 @@ function computeRallyViz(
  * card use — a double fault is the server's), drawn where the erring shot
  * landed, from behind its hitter, on the same full-court landing frame as
  * rally placement. The erring shot is the point's deciding row
- * (`decidingShotOf`): its last, or a double fault's last serve. A point
+ * (`lastShotOf`): its last, or a double fault's last serve. A point
  * whose deciding shot has no measured landing is not drawable and stays out
  * of `total`, as with every other cut.
  *
@@ -1123,7 +1123,7 @@ function computeErrorsViz(
 
   for (const p of points) {
     if (errorMadeBy(p) !== subjectIsPlayer1) continue;
-    const shot = decidingShotOf(p);
+    const shot = lastShotOf(p);
     if (!shot || shot.isPlayer1 !== subjectIsPlayer1) continue;
     const landing = rallyLandingMetrics(shot);
     if (!landing) continue;
@@ -2015,8 +2015,7 @@ export function bandZonesFor(
   contactHidden = false,
 ): VizBandZones | null {
   if (cut === "serve" || cut === "errors") return null;
-  const kind =
-    cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact";
+  const kind = isPlacementCut(cut) ? "depth" : "contact";
   if (kind === "contact" && contactHidden) return null;
   const rows =
     kind === "depth"

@@ -631,7 +631,7 @@ export function CourtArt({
     : showHeat
       ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
       : chart === "zones" && cut !== "serve"
-        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
+        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (isPlacementCut(cut) ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
         : showZones
           ? "Serve placement by zone: six service-box zones shaded by serve frequency"
           : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "errors" ? `error${dots.length === 1 ? "" : "s"}` : cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;

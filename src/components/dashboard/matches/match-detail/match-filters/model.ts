@@ -713,7 +713,7 @@ export function finalShotOf(
  * Return, hit by the returner — out of the Error + Serve cut that the
  * head-to-head and Point endings Double faults figures open.
  */
-function lastShotOf(point: MatchPoint): MatchShot | undefined {
+export function lastShotOf(point: MatchPoint): MatchShot | undefined {
   const shots = point.shots ?? [];
   if (lower(point.resultType) === "double fault") {
     for (let i = shots.length - 1; i >= 0; i -= 1) {
@@ -722,10 +722,6 @@ function lastShotOf(point: MatchPoint): MatchShot | undefined {
   }
   return shots[shots.length - 1];
 }
-
-/** The point's deciding shot row (`lastShotOf`) — the Visualizations errors
- * cut plots where it landed. */
-export const decidingShotOf = lastShotOf;
 
 /**
  * Result › Missed: the point's LAST shot row went Out or into the Net
