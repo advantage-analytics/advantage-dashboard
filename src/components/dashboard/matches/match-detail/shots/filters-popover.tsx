@@ -244,6 +244,13 @@ export function FiltersPopover({
         )}
       </PopoverTrigger>
       <PopoverContent
+        // In the advanced panel Escape steps back to the quick view, as the
+        // panel's own X does — never closing the popover over a draft.
+        onEscapeKeyDown={(event) => {
+          if (!advanced) return;
+          event.preventDefault();
+          backToQuick();
+        }}
         align="end"
         side={side}
         sideOffset={6}
@@ -525,23 +532,20 @@ function AdvancedPanel({
 }
 
 /**
- * One `OPTIONS`-backed group — Zone, Court, Error type (Player stays hand-written above:
- * it's single-select, not an `OPTIONS` group). `keys` overrides the default
- * "every key in this OPTIONS group" order.
+ * One `OPTIONS`-backed group — Serve, Zone, Court, Error type (Player stays
+ * hand-written above: it's single-select, not an `OPTIONS` group).
  */
 function OptionsGroup<K extends OptionFilterKey>({
   filterKey,
   label,
   dark,
   active,
-  keys,
   onToggle,
 }: {
   filterKey: K;
   label: string;
   dark: boolean;
   active: VizFilters[K];
-  keys?: readonly (keyof (typeof OPTIONS)[K])[];
   /** Already closed over `filterKey` at the call site (`toggle(filterKey,
    *  value)`) — kept to one argument here so TS doesn't have to unify a
    *  second `K`-typed parameter position against a caller-supplied generic
@@ -558,7 +562,7 @@ function OptionsGroup<K extends OptionFilterKey>({
   // exist, also leaned on by `canonicalOptionValues` above). One local
   // `unknown` cast per generic call site restates that rather than asserting
   // past a real mismatch.
-  const entries = (keys ?? Object.keys(options)) as readonly unknown[];
+  const entries = Object.keys(options) as readonly unknown[];
   return (
     <FilterGroup label={label} dark={dark}>
       {entries.map((key) => (

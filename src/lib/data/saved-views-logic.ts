@@ -114,15 +114,11 @@ export function filtersToParams(filters: unknown): URLSearchParams {
 
       // The advanced filters are an object, stored as `VizFilters.match`
       // itself; they travel as the URL layer's one compact `vf` param, which
-      // `parseMatchFilters` then narrows to known groups and options. A
-      // hand-edited blob that will not serialize is no advanced filter.
+      // `parseMatchFilters` then narrows to known groups and options, so a
+      // hand-edited blob reads as whatever it validly names, or nothing.
       if (key === "match") {
-        try {
-          const match = serializeMatchFilters(value as MatchFilters);
-          if (match) params.set(VIZ_MATCH_FILTERS_PARAM, match);
-        } catch {
-          // Unreadable: dropped, like any other value outside its enum.
-        }
+        const match = serializeMatchFilters(value as MatchFilters);
+        if (match) params.set(VIZ_MATCH_FILTERS_PARAM, match);
         continue;
       }
 

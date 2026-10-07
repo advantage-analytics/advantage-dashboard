@@ -859,8 +859,9 @@ export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
  * - Result's Won/Lost never fold. They are the COURT player's, while
  *   Result › Outcome is always yours (`courtFor` never flips it off Errors), so on
  *   the opponent's court a folded "Won" would come back named "Points
- *   lost" and stop following the court. Aces alone is Serve › Result's
- *   ace; with Won or Lost picked too the whole group stays a pill group.
+ *   lost" and stop following the court. Aces never fold either: the pill
+ *   reads the result type "Ace", while Serve › Result's ace on a video match
+ *   is any unreturned serve — different points.
  * - Game folds only with both values picked (no constraint, so nothing).
  *   "Serving" is the COURT player's serve; Serve › Player names a player
  *   outright and never follows the court (`courtFor`), so a folded
@@ -936,18 +937,8 @@ export function foldedMatchFilters(
 
   const won = filters.result.includes("won");
   const lost = filters.result.includes("lost");
-  const ace = filters.result.includes("ace");
+  // Won + Lost is every point — aces included — so no constraint at all.
   if (won && lost) folded.push("result");
-  else if (
-    !won &&
-    !lost &&
-    ace &&
-    base.serveResult.length === 0 &&
-    isOffered("serveResult", "ace")
-  ) {
-    match.serveResult = ["ace"];
-    folded.push("result");
-  }
 
   return { match, folded };
 }
@@ -1144,10 +1135,10 @@ function computeErrorsViz(
     if (matchPass !== null && !matchPass.point(p)) continue;
     if (matchPass?.shot && !matchPass.shot(shot)) continue;
     if (filters.error.length) {
-      // Strictly by the recorded result type, as the Point endings card's
-      // unforced-error count reads it — so "Unforced errors" means the same
-      // number on both. An error the source left unclassified is drawn on
-      // the unfiltered cut, under no kind.
+      // Strictly by the recorded result type — the rule the Point endings
+      // card's unforced-error count uses. (The tile can still read fewer:
+      // it draws only errors with a measured landing.) An error the source
+      // left unclassified is drawn on the unfiltered cut, under no kind.
       const kind = errorKindOf(p);
       if (kind === null || !filters.error.includes(kind)) continue;
     }

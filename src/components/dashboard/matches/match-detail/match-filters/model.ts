@@ -586,7 +586,7 @@ export function serveResultOf(
   const rt = lower(point.resultType);
   if (ctx.isDerived ? isUnreturnedServe(point) : rt === "ace") return "ace";
   if (rt === "service winner" && !ctx.isDerived) return "service-winner";
-  if (rt === "double fault") return "double-fault";
+  if (rt.includes("double fault")) return "double-fault";
   const ret = point.secondShotResult;
   if (ret === "Out" || ret === "Net") return "return-error";
   if (ret === "In") return "in-play";
@@ -635,7 +635,7 @@ export function isReturnWinner(point: MatchPoint): boolean {
 export function returnResultOf(point: MatchPoint): ReturnResult | null {
   // No serve landed, so there was no return — whatever the returner's swing
   // at the dead ball recorded (see `lastShotOf`).
-  if (lower(point.resultType) === "double fault") return null;
+  if (lower(point.resultType).includes("double fault")) return null;
   if (isReturnWinner(point)) return "winner";
   const ret = point.secondShotResult;
   if (ret === "Out" || ret === "Net") return "error";

@@ -330,11 +330,11 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   expect(applied.court).toEqual(["ad"]);
   expect(applied.zone).toEqual(["t"]);
   expect(applied.match).toBe(match);
-  // Ace alone folds to Serve › Result; beside Won it is subsumed.
-  expect(
-    foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, result: ["ace"] }).match
-      .serveResult,
-  ).toEqual(["ace"]);
+  // Aces never fold: the pill reads the result type "Ace", Serve › Result's
+  // ace on a video match is any unreturned serve — different points.
+  const aces = foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, result: ["ace"] });
+  expect(aces.folded).toEqual([]);
+  expect(aces.match.serveResult).toEqual([]);
   // Both Game values are no constraint: folded away, nothing set.
   const both = foldedMatchFilters({
     ...EMPTY_VIZ_FILTERS,
