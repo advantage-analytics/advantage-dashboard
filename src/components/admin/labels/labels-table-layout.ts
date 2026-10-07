@@ -1,6 +1,6 @@
 export const COL = {
   players: "min-w-0 flex-1",
-  job: "w-[168px] shrink-0",
+  job: "w-[200px] shrink-0",
   points: "w-[90px] shrink-0 text-right",
   progress: "w-[200px] shrink-0",
   action: "w-[136px] shrink-0 flex justify-end",

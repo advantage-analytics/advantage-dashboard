@@ -10,6 +10,7 @@ import type {
 } from "@/lib/services/labels/edit";
 import type { LabelPointScore } from "@/lib/services/labels/score";
 import type { SideNames } from "./label-format";
+import type { RailTone } from "./label-rail-tone";
 
 /**
  * What the rail's rows share: the context every row draws and saves from,
@@ -80,7 +81,7 @@ export interface EditContext {
   /** `session.adScoring`. Absent means ad scoring. */
   adScoring?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
-  tone?: import("./label-rail-tone").RailTone;
+  tone?: RailTone;
 }
 
 /** The playing point's span on the FILE clock, which `--film-t` carries. */

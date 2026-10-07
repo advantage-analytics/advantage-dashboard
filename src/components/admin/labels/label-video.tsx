@@ -32,6 +32,7 @@ import type { LabelPoint, LabelVideo } from "@/lib/services/labels/session";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
+import { KEY_OWNER_SELECTOR } from "./label-layout";
 
 /**
  * The console's video: the labelled job's own file, with the Video tab's
@@ -291,13 +292,7 @@ export const LabelVideoPlayer = forwardRef<
       const key = event.key.toLowerCase();
       if (key !== "d" && key !== "l" && key !== "m") return;
       const target = event.target as Element | null;
-      if (
-        target?.closest?.(
-          "input, select, textarea, button, a, [role='button'], [role='menu'], [role='dialog'], [role='alertdialog'], [contenteditable='true']",
-        )
-      ) {
-        return;
-      }
+      if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       if (key === "d") toggleSkipDeadTime();
       else if (key === "l") toggleLoop();

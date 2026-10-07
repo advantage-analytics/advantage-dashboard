@@ -27,9 +27,9 @@
  * SUPABASE_SERVICE_ROLE_KEY.
  */
 
-import { readFileSync } from "node:fs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import { buildTranscriptForJob } from "@/lib/services/splitstep/persist-transcript";
 import {
   DERIVATION_VERSION,
@@ -49,19 +49,9 @@ import {
   type LabelPointFields,
   type LabelShotValues,
 } from "@/lib/services/labels/edit";
+import { loadEnvLocal } from "./lib/env";
 
-try {
-  for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (!m) continue;
-    if (!process.env[m[1]])
-      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "").trim();
-  }
-} catch {
-  /* already exported */
-}
-
-const PAGE = 1000;
+loadEnvLocal();
 
 type Supabase = ReturnType<typeof createAdminClient>;
 
@@ -87,26 +77,6 @@ type ShotRow = LabelShotValues & {
   status: string;
   label_point_id: string;
 };
-
-/** Every row a query returns, a page at a time. */
-async function readAll<T>(
-  query: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{
-    data: T[] | null;
-    error: { message: string } | null;
-  }>,
-  what: string,
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await query(from, from + PAGE - 1);
-    if (error) throw new Error(`Could not read ${what}: ${error.message}`);
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) return rows;
-  }
-}
 
 function diff<K extends string>(
   fields: readonly K[],
@@ -206,34 +176,30 @@ async function main() {
       shotSeedByEvent.set(shot.event_id, shot.seed);
   }
 
-  const points = await readAll<PointRow>(
-    (from, to) =>
-      supabase
-        .from("label_points")
-        .select(
-          `id, point_index, vendor_rally_ids, status, status_before_delete, ${LABEL_POINT_SEED_FIELDS.join(", ")}`,
-        )
-        .eq("session_id", session.id)
-        .is("seed", null)
-        .order("point_index")
-        .range(from, to)
-        .returns<PointRow[]>(),
-    "label points",
+  const points = await readAllPages<PointRow>(
+    supabase
+      .from("label_points")
+      .select(
+        `id, point_index, vendor_rally_ids, status, status_before_delete, ${LABEL_POINT_SEED_FIELDS.join(", ")}`,
+      )
+      .eq("session_id", session.id)
+      .is("seed", null)
+      .order("point_index")
+      .returns<PointRow[]>(),
+    "Could not read label points",
   );
-  const shots = await readAll<ShotRow>(
-    (from, to) =>
-      supabase
-        .from("label_shots")
-        .select(
-          `id, event_id, status, label_point_id, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
-        )
-        .eq("session_id", session.id)
-        .is("seed", null)
-        .not("event_id", "is", null)
-        .order("event_id")
-        .range(from, to)
-        .returns<ShotRow[]>(),
-    "label shots",
+  const shots = await readAllPages<ShotRow>(
+    supabase
+      .from("label_shots")
+      .select(
+        `id, event_id, status, label_point_id, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
+      )
+      .eq("session_id", session.id)
+      .is("seed", null)
+      .not("event_id", "is", null)
+      .order("event_id")
+      .returns<ShotRow[]>(),
+    "Could not read label shots",
   );
 
   // Added points (live or tombstoned) never had a seed to rebuild.

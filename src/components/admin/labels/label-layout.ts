@@ -81,3 +81,7 @@ export function parseRailWidth(raw: string | null | undefined): number {
   }
   return clampRailWidth(Number(raw));
 }
+
+/** Targets a window key handler leaves alone: the key belongs to the control. */
+export const KEY_OWNER_SELECTOR =
+  "input, select, textarea, button, a, [role='button'], [role='menu'], [role='dialog'], [role='alertdialog'], [contenteditable='true']";

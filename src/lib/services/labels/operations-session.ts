@@ -14,7 +14,6 @@ import type { AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
 import {
   ADMIN_REQUIRED,
-  FROZEN,
   checkSessionOpen,
   defaultLabelWriteDependencies,
   type LabelWriteDependencies,

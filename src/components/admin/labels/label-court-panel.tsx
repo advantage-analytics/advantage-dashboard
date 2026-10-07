@@ -2,7 +2,11 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
-import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import {
+  opponent,
+  type LabelPoint,
+  type LabelShot,
+} from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
@@ -69,7 +73,7 @@ function courtReadout(
     const hitter = live[placing - 1].hitter;
     const own = hitter ? `${names[hitter]}’s side` : "The hitter’s side";
     const other = hitter
-      ? `${names[hitter === "p1" ? "p2" : "p1"]}’s side`
+      ? `${names[opponent(hitter)]}’s side`
       : "The other side";
     return {
       title: `Shot ${placing} · ${placement.target}`,

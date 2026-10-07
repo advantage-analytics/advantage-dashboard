@@ -8,8 +8,8 @@ import {
   FloatMenuItem,
   FloatMenuLabel,
   FloatMenuNote,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
-import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
 export interface MenuOption<T extends string> {

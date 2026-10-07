@@ -34,6 +34,7 @@ import {
   SIDE_DEAD_ZONE_M,
 } from "@/lib/services/splitstep/derivation/flags";
 import {
+  labelSideOf,
   opponent,
   type LabelPoint,
   type LabelServeSide,
@@ -146,9 +147,6 @@ export type LabelMark = {
   };
 }[LabelMarkCode];
 
-/** The key `label_points.dismissed` stores for a suggestion. */
-export type LabelSuggestionKey = `missing_shot:${number}` | "missing_point";
-
 export type LabelSuggestion =
   | {
       kind: "missing_shot";
@@ -187,8 +185,6 @@ export interface LabelMarks {
 export type MarkablePoint = Pick<LabelPoint, "id" | "vendorRallyIds"> & {
   shots: Pick<LabelShot, "id" | "eventId">[];
 };
-
-const side = (isPlayer1: boolean): LabelSide => (isPlayer1 ? "p1" : "p2");
 
 const SERVE_SHOT_TYPES = new Set(["First Serve", "Second Serve"]);
 const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
@@ -240,7 +236,7 @@ function labelSides(
   for (const stroke of rally.strokes) {
     const shot = shotByEvent.get(stroke.eventId);
     if (shot && !known.has(stroke.playerLabel)) {
-      known.set(stroke.playerLabel, side(shot.is_player1));
+      known.set(stroke.playerLabel, labelSideOf(shot.is_player1));
     }
   }
   return (label) => {
@@ -264,7 +260,7 @@ function pointMarks(
   const winner: LabelSide | null =
     settledWinner === null || settledWinner === undefined
       ? null
-      : side(point.won_by_player1);
+      : labelSideOf(point.won_by_player1);
 
   for (const code of point.flags) {
     if (!isLabelMarkCode(code)) continue;
@@ -285,7 +281,7 @@ function pointMarks(
       case POINT_FLAGS.SAME_PLAYER_CONSECUTIVE: {
         const pair = samePlayerPairs(point.shots)[0];
         if (!pair) break;
-        marks.push(mark(code, { hitter: side(pair[0].is_player1) }));
+        marks.push(mark(code, { hitter: labelSideOf(pair[0].is_player1) }));
         break;
       }
       case POINT_FLAGS.PHANTOM_STROKES_DROPPED: {
@@ -338,7 +334,9 @@ function shotMarks(shots: DerivedShot[], index: number): LabelMark[] {
       case SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED: {
         const next = shots[index + 1];
         marks.push(
-          mark(code, { nextHitter: next ? side(next.is_player1) : null }),
+          mark(code, {
+            nextHitter: next ? labelSideOf(next.is_player1) : null,
+          }),
         );
         break;
       }
@@ -494,7 +492,7 @@ export function buildLabelMarks(
           key: `missing_shot:${a.event_id}`,
           pointId,
           afterShotId,
-          hitter: opponent(side(a.is_player1)),
+          hitter: opponent(labelSideOf(a.is_player1)),
           videoTime: midpoint(a.video_time, b.video_time),
         });
       }

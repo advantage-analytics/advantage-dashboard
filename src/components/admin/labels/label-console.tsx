@@ -128,7 +128,6 @@ import {
   followScrollTarget,
   useFollowScroll,
 } from "@/components/dashboard/matches/match-detail/film/use-follow-scroll";
-import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
 import {
   NO_PLACEMENT,
@@ -149,6 +148,7 @@ import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import { labelFilmStops } from "./label-film-stops";
 import {
   DEFAULT_LAYOUT_MODE,
+  KEY_OWNER_SELECTOR,
   layoutAfterFullscreenRequest,
   type LabelLayoutMode,
 } from "./label-layout";
@@ -1446,13 +1446,7 @@ export function LabelConsole({
         return;
       }
       const target = event.target as Element | null;
-      if (
-        target?.closest?.(
-          "input, select, textarea, button, a, [role='button'], [role='menu'], [role='dialog'], [role='alertdialog'], [contenteditable='true']",
-        )
-      ) {
-        return;
-      }
+      if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       if (key === "Enter") checkOpenPoint.current();
       else if (key === " ") player.current?.togglePlay();

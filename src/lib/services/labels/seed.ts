@@ -24,6 +24,7 @@ import {
 import {
   compareNullsLast,
   isLabelSpin,
+  labelSideOf,
   type LabelSiteRemoval,
   type LabelSpin,
 } from "./session";
@@ -146,8 +147,6 @@ export interface LabelSeed {
   points: LabelPointSeed[];
 }
 
-const side = (isPlayer1: boolean): LabelSide => (isPlayer1 ? "p1" : "p2");
-
 /**
  * `points.result_type` → `label_points.ending`.
  *
@@ -233,7 +232,7 @@ export function endedBy(
   shots: ReadonlyArray<Pick<DerivedShot, "result" | "is_player1">>,
 ): LabelSide | null {
   for (let i = shots.length - 1; i >= 0; i -= 1) {
-    if (shots[i].result !== null) return side(shots[i].is_player1);
+    if (shots[i].result !== null) return labelSideOf(shots[i].is_player1);
   }
   return null;
 }
@@ -378,7 +377,7 @@ export function buildLabelSeed(
         );
       }
       const values = {
-        hitter: side(shot.is_player1),
+        hitter: labelSideOf(shot.is_player1),
         stroke: labelStroke(shot.shot_type, vendor.stroke_side),
         result: labelShotResult(shot.result),
         // Off the raw stroke, so a transcript shot and a dropped stroke read
@@ -404,8 +403,10 @@ export function buildLabelSeed(
     const row = {
       set_number: point.set_number,
       game_number: point.game_number,
-      server: side(point.server_is_player1),
-      winner: resolved.get(point.rally_id) ? side(point.won_by_player1) : null,
+      server: labelSideOf(point.server_is_player1),
+      winner: resolved.get(point.rally_id)
+        ? labelSideOf(point.won_by_player1)
+        : null,
       ending: labelEnding(point.result_type),
       ended_by: endedBy(ordered),
     };

@@ -173,7 +173,7 @@ export function labelScores(
     rows.push({
       id: point.id,
       game,
-      scoreBefore: formatScore(game, point.server ?? "p1", adScoring),
+      scoreBefore: formatScore(game, point.server ?? "p1"),
     });
     if (isCountedPoint(point)) {
       game.points[point.winner] += 1;
@@ -228,11 +228,7 @@ export function labelScores(
 
 const CALLS = ["0", "15", "30", "40"] as const;
 
-function formatScore(
-  game: GameAccumulator,
-  server: LabelSide,
-  adScoring: boolean,
-): string {
+function formatScore(game: GameAccumulator, server: LabelSide): string {
   const receiver = opponent(server);
   const s = game.points[server];
   const r = game.points[receiver];

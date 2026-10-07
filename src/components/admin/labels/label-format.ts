@@ -1,9 +1,5 @@
 import { shotSpinLabel } from "@/components/dashboard/matches/match-detail/film/film-shots";
-import {
-  LABEL_STROKES,
-  labelShotValues,
-  type LabelShotPatch,
-} from "@/lib/services/labels/edit";
+import { LABEL_STROKES } from "@/lib/services/labels/edit";
 import {
   LABEL_SPINS,
   isMissedResult,
@@ -16,7 +12,6 @@ import {
   type LabelSpin,
   type LabelStroke,
 } from "@/lib/services/labels/session";
-import { deriveShotResult } from "@/lib/services/labels/shot-derived";
 import type { LabelDeleteReason } from "@/lib/services/labels/operations";
 import { surnameLabels } from "@/lib/data/match-utils";
 

@@ -84,6 +84,11 @@ export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";
 }
 
+/** The side a vendor `is_player1` boolean names. */
+export function labelSideOf(isPlayer1: boolean): LabelSide {
+  return isPlayer1 ? "p1" : "p2";
+}
+
 /**
  * `label_shots.site_removal`, the CHECK vocabulary
  * (supabase/migrations/..._label_marks_and_site_removals.sql): why the SITE
