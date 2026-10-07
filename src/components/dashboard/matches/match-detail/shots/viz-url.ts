@@ -8,12 +8,14 @@
  * as defaults; serialize omits defaults to keep URLs readable.
  */
 
-import type { Cut, Chart, VizFilters } from "./viz-model";
 import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
   filterKeysFor,
+  type Chart,
+  type Cut,
   type PlayerFilter,
+  type VizFilters,
 } from "./viz-model";
 import {
   appliedValues,
@@ -25,14 +27,14 @@ import {
 } from "../match-filters/applied-words";
 import {
   filtersEqual,
-  MATCH_FILTER_KEYS,
-  toggleMatchFilter,
-  type MatchFilterAvailability,
-  type MatchFilterValue,
   hasActiveMatchFilters,
+  MATCH_FILTER_KEYS,
   parseMatchFilters,
   serializeMatchFilters,
+  toggleMatchFilter,
+  type MatchFilterAvailability,
   type MatchFilterKey,
+  type MatchFilterValue,
 } from "../match-filters/model";
 
 /* ── sameView ───────────────────────────────────────────────────────────── */

@@ -31,6 +31,7 @@ import {
 } from "../match-filters/provider";
 import {
   computeViz,
+  EMPTY_VIZ_FILTERS,
   foldedMatchFilters,
   type FoldedKey,
   subjectFor,
@@ -484,9 +485,12 @@ function AdvancedPanel({
   const { availability, youName, oppName } = useFiltersPanelData();
   // Only what this cut keeps for this court — never an option Show would
   // then silently drop (`cutAvailability`).
+  // Only the court player decides what the carry rule keeps — not every
+  // pill toggle — so the probe reruns on that alone.
+  const player = filters.player;
   const offered = useMemo(
-    () => cutAvailability(availability, filters, cut),
-    [availability, filters, cut],
+    () => cutAvailability(availability, { ...EMPTY_VIZ_FILTERS, player }, cut),
+    [availability, player, cut],
   );
   const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
   // Fold only into options this panel draws (`foldedMatchFilters`), so no

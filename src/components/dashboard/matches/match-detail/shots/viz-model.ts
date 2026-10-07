@@ -1132,8 +1132,10 @@ function computeErrorsViz(
     if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return")) {
       continue;
     }
-    if (matchPass !== null && !matchPass.point(p)) continue;
-    if (matchPass?.shot && !matchPass.shot(shot)) continue;
+    if (matchPass !== null) {
+      if (!matchPass.point(p)) continue;
+      if (matchPass.shot && !matchPass.shot(shot)) continue;
+    }
     if (filters.error.length) {
       // Strictly by the recorded result type — the rule the Point endings
       // card's unforced-error count uses. (The tile can still read fewer:
