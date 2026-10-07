@@ -51,6 +51,7 @@ export const ADMIN_ACTIVITY_LABELS: Record<string, string> = {
   "join_request.declined": "Join request declined",
   "pilot.end_changed": "Pilot end date changed",
   "pilot.ended": "Pilot ended",
+  "pilot.eligibility_changed": "Team pool changed",
 };
 
 /** The label for `action`, or the raw value when nothing maps it yet. */
