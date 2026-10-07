@@ -9,7 +9,6 @@ import {
   foldedMatchFilters,
   statRowAnnouncement,
   withFoldedFilters,
-  withPlayer,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { legendItemsFor } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
@@ -384,13 +383,19 @@ test("switching the court's player never rewrites the advanced filters", () => {
       serveType: ["second"],
     },
   };
-  const theirs = withPlayer(mine, "opponent");
+  const onServe = (filters: VizFilters) => ({
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    viewId: null,
+    filters,
+  });
+  const theirs = courtFor(onServe(mine), "opponent");
   expect(theirs.player).toBe("opponent");
   // Named players and your Outcome stay exactly as picked, as on the Video
   // tab; only the subject-relative pill groups follow the court.
   expect(theirs.match).toBe(mine.match);
   expect(theirs.game).toEqual(["serving"]);
-  expect(withPlayer(mine, "you")).toBe(mine);
+  expect(courtFor(onServe(mine), "you")).toBe(mine);
 
   // The Game pill keeps drawing the court player's serves on either court.
   const serves = [
@@ -408,7 +413,7 @@ test("switching the court's player never rewrites the advanced filters", () => {
     computeViz(
       serves,
       "serve",
-      withPlayer(serving, "opponent"),
+      courtFor(onServe(serving), "opponent"),
       false,
       "scatter",
       ctx,
@@ -543,7 +548,7 @@ test("switching to Errors drops advanced filters that ask for the court player's
   expect(
     carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "rallyPlacement")
       .match,
-  ).toEqual({ ...winning, serveResult: ["double-fault"] });
+  ).toEqual({ ...winning, serveResult: [] });
 });
 
 test("Ball never folds, and return nouns never read Serve › Type", () => {
@@ -601,7 +606,12 @@ test("leaving serve drops advanced Aces and service winners: they have no return
       ],
     },
   };
-  expect(carryFilters(filters, "returnPlacement").match.serveResult).toEqual([
+  // No return either: a double fault leaves nothing to draw off serve…
+  expect(carryFilters(filters, "returnPlacement").match.serveResult).toEqual(
+    [],
+  );
+  // …except on Errors, where it is the server's own error.
+  expect(carryFilters(filters, "errors").match.serveResult).toEqual([
     "double-fault",
   ]);
   expect(carryFilters(filters, "serve").match.serveResult).toEqual([
@@ -679,5 +689,56 @@ test("the advanced panel offers only what the cut keeps", () => {
   );
   expect([...serve.resultOutcome].sort()).toEqual(["lost", "won"]);
   const rally = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "rallyPlacement");
-  expect([...rally.serveResult]).toEqual(["double-fault"]);
+  expect([...rally.serveResult]).toEqual([]);
+});
+
+test("error type travels as verr, leaving a page-level ?error= alone", () => {
+  const state = {
+    cut: "errors" as const,
+    chart: "scatter" as const,
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, error: ["forced" as const] },
+  };
+  const params = new URLSearchParams(
+    vizStateQuery(new URLSearchParams("error=auth_failed"), state),
+  );
+  expect(params.get("error")).toBe("auth_failed");
+  expect(params.getAll("verr")).toEqual(["forced"]);
+  expect(parseVizState(params).filters.error).toEqual(["forced"]);
+  // Saved views round-trip it through the same param.
+  expect(
+    validateVizInput({
+      cut: "errors",
+      chart: "scatter",
+      filters: state.filters,
+    })?.filters.error,
+  ).toEqual(["forced"]);
+});
+
+test("an error the tracker called Out never reads as landed in", () => {
+  const nearSideline = errorPoint("out-side", "Forehand Unforced Error", true, {
+    lateral: 4.05,
+    depth: 6,
+    result: "Out",
+    shotType: "Forehand",
+  });
+  const nearBaseline = errorPoint("out-base", "Forehand Unforced Error", true, {
+    lateral: 0.5,
+    depth: 11.8,
+    result: "Out",
+    shotType: "Forehand",
+  });
+  const stats = computeVizStats(
+    [nearSideline, nearBaseline],
+    "errors",
+    EMPTY_VIZ_FILTERS,
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  const miss = Object.fromEntries(
+    stats.groups[0].rows.map((r) => [r.key, r.count]),
+  );
+  expect(miss).toEqual({ long: 1, wide: 1, net: 0 });
 });

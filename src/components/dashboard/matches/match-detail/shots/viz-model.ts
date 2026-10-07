@@ -233,14 +233,8 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
   );
 }
 
-/** Cuts plotted where the ball LANDED, on the full-court landing frame
- * (rally placement, return placement, errors) — as against the contact-side
- * cuts. Serve lands too, but on its own service-box frame, so it is not here. */
-export function isPlacementCut(cut: Cut): boolean {
-  return (
-    cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors"
-  );
-}
+export { isPlacementCut } from "./cut-kinds";
+import { isPlacementCut } from "./cut-kinds";
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
@@ -843,13 +837,13 @@ export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
  * - its advanced group must be empty. Within a group values OR, while the
  *   pill group was AND'd against it, so merging the two could widen the cut.
  * - Result's Won/Lost never fold. They are the COURT player's, while
- *   Result › Outcome is always yours (`withPlayer` never flips it), so on
+ *   Result › Outcome is always yours (`courtFor` never flips it off Errors), so on
  *   the opponent's court a folded "Won" would come back named "Points
  *   lost" and stop following the court. Aces alone is Serve › Result's
  *   ace; with Won or Lost picked too the whole group stays a pill group.
  * - Game folds only with both values picked (no constraint, so nothing).
  *   "Serving" is the COURT player's serve; Serve › Player names a player
- *   outright and never follows the court (`withPlayer`), so a folded
+ *   outright and never follows the court (`courtFor`), so a folded
  *   "Serving" would stop following it.
  * - Result with every value picked is no constraint: it folds to nothing.
  * - Ball never folds. Its "1st" counts a point with no recorded serve type
@@ -930,21 +924,6 @@ export function withFoldedFilters(
   const next: VizFilters = { ...filters, match };
   for (const key of folded) next[key] = [];
   return next;
-}
-
-/**
- * `filters` with the court's player set to `player`. The advanced filters
- * are left exactly as picked: they name players outright ("Hit by Rudy",
- * "Rudy serving") and Result › Outcome is read from your side
- * (`matchesOutcome`), the Video tab's meaning everywhere — switching whose
- * court is drawn never rewrites a filter the user chose.
- */
-export function withPlayer(
-  filters: VizFilters,
-  player: PlayerFilter,
-): VizFilters {
-  if (filters.player === player) return filters;
-  return { ...filters, player };
 }
 
 /**
@@ -1956,6 +1935,15 @@ function errorStats(result: VizResult): StatGroup[] {
     } else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
     else if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
       wide++;
+    else if (dot.meta?.result === "Out") {
+      // The tracker's call is the authority (as `rallyLandingMetrics`'s):
+      // an Out whose landing reads just inside — imputed onto a line — is
+      // out over whichever line it sits nearer.
+      const toBaseline = REAL_NET_Y - dot.depthM;
+      const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
+      if (toBaseline <= toSideline) long++;
+      else wide++;
+    } else if (dot.meta?.result === "Net") net++;
     else inCourt++;
     const stroke = errorStrokeLabel(dot.meta?.shotType);
     strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);

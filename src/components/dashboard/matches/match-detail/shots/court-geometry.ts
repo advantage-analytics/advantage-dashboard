@@ -12,6 +12,7 @@
  */
 
 import type { Cut, VizDot } from "./viz-model";
+import { isLandingCut } from "./cut-kinds";
 import {
   clamp as clampNum,
   clampPan,
@@ -748,17 +749,6 @@ export function starPoints(cx: number, cy: number, outerR: number): string {
  * constants and the real service-box depth/half-width, not hard-coded
  * results, so a future frame resize keeps them in sync automatically.
  */
-
-/** Cuts plotted where the ball landed (`viz-model.ts`'s `isPlacementCut`
- * plus serve) — restated over `Cut` here to keep this module value-import-free. */
-function isLandingCut(cut: Cut): boolean {
-  return (
-    cut === "serve" ||
-    cut === "returnPlacement" ||
-    cut === "rallyPlacement" ||
-    cut === "errors"
-  );
-}
 
 // Real-world metres, matching `viz-model.ts`'s own (private) constants of
 // the same names — kept as a separate local copy rather than a VALUE import

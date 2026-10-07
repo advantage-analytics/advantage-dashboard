@@ -15,6 +15,7 @@ import {
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
+  paramFor,
   parseVizState,
   VIZ_MATCH_FILTERS_PARAM,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -103,7 +104,7 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       // is the one place a stored view's `filters.set` becomes a param, so it
       // has to follow the same mapping or a saved view's set filter would
       // silently fail to round-trip through `parseVizState`.
-      const paramKey = key === "set" ? "vset" : key;
+      const paramKey = key === "set" ? "vset" : paramFor(key);
 
       if (key === "player") {
         // The one scalar filter, old or new shape alike.

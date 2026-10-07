@@ -13,7 +13,6 @@ import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
   filterKeysFor,
-  withPlayer,
   type PlayerFilter,
 } from "./viz-model";
 import {
@@ -276,6 +275,16 @@ const ORDER = [
  */
 export const VIZ_MATCH_FILTERS_PARAM = "vf";
 
+/**
+ * The URL param a filter key travels as. `error` is namespaced to `verr`
+ * for the same reason `set` is to `vset` (below): a bare `?error=` is the
+ * kind of name an auth or redirect flow puts on the page, and every viz
+ * write would strip it.
+ */
+export function paramFor(key: string): string {
+  return key === "error" ? "verr" : key;
+}
+
 // `set` (bare) is NOT a viz key: the match report already owns it
 // (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the day
 // it's re-enabled. The viz filter's set value is namespaced to `vset` in the
@@ -289,7 +298,7 @@ const VIZ_KEYS = [
   "draft",
   "fullscreen",
   VIZ_MATCH_FILTERS_PARAM,
-  ...ORDER,
+  ...ORDER.map(paramFor),
 ];
 
 type OptionKey = keyof typeof OPTIONS;
@@ -548,7 +557,7 @@ export function vizStateQuery(
 
     const values = state.filters[key] as readonly string[];
     for (const value of values) {
-      next.append(key, value);
+      next.append(paramFor(key), value);
     }
   }
 
@@ -571,7 +580,7 @@ export function clearedFilters(state: VizState): VizState {
 }
 
 /**
- * `state`'s filters with the court's player set to `player` (`withPlayer`).
+ * `state`'s filters with the court's player set to `player`.
  * On the errors cut Result › Outcome can only ever say "the court player
  * lost" (every errors dot is their lost point; the panel hides the other
  * value — `cutAvailability`). It is yours, so it names the opposite word on
@@ -580,14 +589,18 @@ export function clearedFilters(state: VizState): VizState {
  * cut. Everywhere else Outcome stays yours, as on the Video tab.
  */
 export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
-  const next = withPlayer(state.filters, player);
-  if (state.cut !== "errors" || next === state.filters) return next;
+  // The advanced filters stay as picked: they name players outright and
+  // Outcome is yours — the Video tab's meaning — so only the court changes.
+  if (state.filters.player === player) return state.filters;
+  const next: VizFilters = { ...state.filters, player };
+  if (state.cut !== "errors") return next;
+  const match = next.match ?? EMPTY_VIZ_FILTERS.match;
   return carryFilters(
     {
       ...next,
       match: {
-        ...next.match,
-        resultOutcome: next.match.resultOutcome.map((v) =>
+        ...match,
+        resultOutcome: match.resultOutcome.map((v) =>
           v === "won" ? "lost" : "won",
         ),
       },
@@ -663,7 +676,7 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Error kinds only mean something on the errors cut.
-  if (nextCut !== "errors" && filters.error.length) {
+  if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };
   }
   // Every errors dot is a point the court's player lost on their own
@@ -686,12 +699,17 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
     next.result = filters.result.filter((v) => v !== "ace");
   }
   // The advanced Serve › Result "Ace" and "Service winner" are points no
-  // one returned — no return, no rally shot, no error to draw off serve.
+  // one returned — no return, no rally shot, no error to draw off serve. A
+  // "Double fault" has no return or rally shot either; on the errors cut it
+  // IS the server's error, so it stays there.
   const serveResult = next.match?.serveResult ?? [];
-  if (serveResult.some(isUnreturnedServeResult)) {
+  const drop = (v: (typeof serveResult)[number]) =>
+    isUnreturnedServeResult(v) ||
+    (v === "double-fault" && nextCut !== "errors");
+  if (serveResult.some(drop)) {
     next.match = {
       ...next.match,
-      serveResult: serveResult.filter((v) => !isUnreturnedServeResult(v)),
+      serveResult: serveResult.filter((v) => !drop(v)),
     };
   }
   return next;
@@ -803,7 +821,7 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
 
     const optionKey = key as MultiOptionKey;
     const raw = params
-      .getAll(key)
+      .getAll(paramFor(key))
       .filter((v) => Object.hasOwn(OPTIONS[optionKey], v));
     if (raw.length === 0) continue;
     filters[key] = canonicalOptionValues(optionKey, raw) as never;
