@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Roster Invite dialog: "Share a join link instead"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/team/roster-invite-dialog.tsx, src/components/dashboard/team/roster-header-buttons.tsx, src/components/dashboard/team/roster-view.tsx (guess — prop plumbing), src/app/dashboard/team/roster/page.tsx + src/lib/data/roster-server.ts (guess — load `joinLink` for the roster page)
