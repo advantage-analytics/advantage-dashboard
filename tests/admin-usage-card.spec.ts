@@ -113,7 +113,7 @@ test("the footer never prints the canvas' false ordering", () => {
     expect(poolRuleNote({ orgType })).not.toContain("before the team pool");
   }
   const onPool =
-    "Uploads here draw on the team pool. A member’s own 2 h covers their personal uploads only.";
+    "Uploads here draw on the team pool; there is no per-member cap. Each member’s own 2 h applies to their personal workspace, outside this team.";
   const shared =
     "This team is on the individual 2 h figure, shared by every member.";
   expect(poolRuleNote({ orgType: "college" })).toBe(onPool);

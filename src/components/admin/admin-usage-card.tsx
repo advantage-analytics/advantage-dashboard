@@ -112,8 +112,9 @@ export function AdminUsageCard({
  *
  * - A verified college draws the program figure, and every upload inside it
  *   files under the team pool. The individual figure is still worth naming,
- *   because it is easy to read as spent first; it covers a member's personal
- *   uploads only (Pilot's "Personal uploads" row says the same).
+ *   because it is easy to read as a per-member cap; it covers a member's
+ *   PERSONAL workspace only, outside the team (Pilot's "Members' own
+ *   workspaces" row says the same).
  * - Every other org type (and an unset one) is on the individual figure for
  *   the whole team — one allowance on the program ledger, shared.
  *
@@ -125,7 +126,7 @@ export function poolRuleNote(
 ): string {
   const cap = formatHoursShort(getMonthlyCapSeconds("individual"));
   if (quotaTierFor({ kind: "team", ...tier }) === "program") {
-    return `Uploads here draw on the team pool. A member’s own ${cap} h covers their personal uploads only.`;
+    return `Uploads here draw on the team pool; there is no per-member cap. Each member’s own ${cap} h applies to their personal workspace, outside this team.`;
   }
   return `This team is on the individual ${cap} h figure, shared by every member.`;
 }

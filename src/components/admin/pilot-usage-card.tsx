@@ -175,14 +175,17 @@ export function PilotUsageCard({
         />
         {/* Only where the team draws its own pool. On the individual figure
             the whole team shares one allowance (`quotaTierFor`), so a
-            per-member row would contradict the Usage card beside it; and even
-            on the program pool a member's own figure covers their personal
-            uploads, never this team's — hence the label. The figure is the
-            tier's own, never a literal 2 beside a cap that moves. */}
+            per-member row would contradict the Usage card beside it. Even on
+            the program pool there is NO per-member cap on team uploads: the
+            figure here is each member's own PERSONAL workspace allowance,
+            which never touches this team — the label says "outside this
+            team" because "2 h per member" read as a cap on the roster. The
+            figure is the tier's own, never a literal 2 beside a cap that
+            moves. */}
         {teamPool && (
           <Kv
-            label="Personal uploads"
-            value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h per member`}
+            label="Members' own workspaces"
+            value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h each, outside this team`}
           />
         )}
         <Kv label="Ends" value={endsValue(pilot, today)} />
