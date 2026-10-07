@@ -31,7 +31,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { validateVizInput } from "@/lib/data/saved-views-logic";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
-import { rallyShot } from "./fixtures/viz-rally-points";
+import { RALLY_POINTS, rallyShot } from "./fixtures/viz-rally-points";
 import { servePoint } from "./fixtures/viz-serve-points";
 
 /**
@@ -497,7 +497,7 @@ test("switching to Errors drops the whole Result pill group", () => {
   expect(carryFilters(won, "serve").result).toEqual(["won", "ace"]);
 });
 
-test("the stats noun follows Serve › Type in the advanced filters", () => {
+test("the stats noun names first serves only for the Ball pill", () => {
   const first = servePoint({ id: "first" });
   const stats = computeVizStats(
     [first],
@@ -511,7 +511,20 @@ test("the stats noun follows Serve › Type in the advanced filters", () => {
     DEFAULT_BANDS,
     "ft",
   );
-  expect(stats.subtitle).toContain("1 first serve");
+  // Serve › Type selects other points than Ball's "1st" (no recorded type
+  // is not a first serve there), so it never borrows Ball's wording.
+  expect(stats.subtitle).toContain("1 serve");
+  expect(stats.subtitle).not.toContain("first");
+  const ball = computeVizStats(
+    [first],
+    "serve",
+    { ...EMPTY_VIZ_FILTERS, ball: ["first"] },
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  expect(ball.subtitle).toContain("1 first serve");
 });
 
 test("the errors legend never calls a serve or volley a forehand", () => {
@@ -788,4 +801,39 @@ test("a pill group folds only into options the panel draws", () => {
   expect(hidden.folded).toEqual([]);
   expect(hidden.match.scoreType).toEqual([]);
   expect(foldedMatchFilters(pressure).folded).toEqual(["pressure"]);
+});
+
+test("on the rally cuts a Custom filter narrows the shots, not just their points", () => {
+  // Custom › Rally shot 4 is one shot per point: only that shot may draw.
+  const match = { ...EMPTY_MATCH_FILTERS, customRallyShot: [4] };
+  const rally = RALLY_POINTS.map((p) => ({
+    ...p,
+    shots: p.shots!.map((s, i) => ({ ...s, shotNumber: i })),
+  }));
+  const all = computeViz(rally, "rallyPosition", EMPTY_VIZ_FILTERS, true);
+  const one = computeViz(
+    rally,
+    "rallyPosition",
+    { ...EMPTY_VIZ_FILTERS, match },
+    true,
+    "scatter",
+    CTX_P1,
+  );
+  expect(all.count).toBeGreaterThan(one.count);
+  expect(one.count).toBeLessThanOrEqual(rally.length);
+});
+
+test("a double fault with extra result text is still the server's error", () => {
+  const df: MatchPoint = {
+    ...DOUBLE_FAULT_WIDE,
+    id: "df-text",
+    resultType: "Double Fault (foot fault)",
+    shots: [
+      ...DOUBLE_FAULT_WIDE.shots!,
+      rallyShot("df-text-swing", false, true, 1, 3, { shotType: "Backhand" }),
+    ],
+  };
+  expect(
+    computeViz([df], "errors", EMPTY_VIZ_FILTERS, true).dots.map((d) => d.id),
+  ).toEqual(["df-text"]);
 });

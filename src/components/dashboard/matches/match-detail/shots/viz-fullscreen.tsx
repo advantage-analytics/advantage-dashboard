@@ -59,7 +59,8 @@ import {
   VizBandsEditorSlab,
   editorContext,
 } from "./viz-bands-editor";
-import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
+import { VizBandsMenu } from "./viz-bands-menu";
+import { bandKindFor } from "./cut-kinds";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
 import { HeatRampSwatches } from "./viz-focused";

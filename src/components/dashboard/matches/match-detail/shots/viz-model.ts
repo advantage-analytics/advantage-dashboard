@@ -38,6 +38,8 @@ import {
   EMPTY_MATCH_FILTERS,
   errorMadeBy,
   hasActiveMatchFilters,
+  hasCustom,
+  shotMatchesCustom,
   finalShotOf,
   lastShotOf,
   type MatchFilterContext,
@@ -812,17 +814,30 @@ function matchFilterPass(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   ctx: MatchFilterContext | undefined,
-): ((p: MatchPoint) => boolean) | null {
+): MatchPass | null {
   if (!filters.match || !hasActiveMatchFilters(filters.match)) return null;
   const context: MatchFilterContext = ctx ?? {
     youIsPlayer1:
       filters.player === "you" ? subjectIsPlayer1 : !subjectIsPlayer1,
     hands: { player1: null, player2: null },
   };
+  const match = filters.match;
   const ids = new Set(
-    applyMatchFilters(points, filters.match, context).map((p) => p.id),
+    applyMatchFilters(points, match, context).map((p) => p.id),
   );
-  return (p) => ids.has(p.id);
+  return {
+    point: (p) => ids.has(p.id),
+    shot: hasCustom(match) ? (s) => shotMatchesCustom(s, match, context) : null,
+  };
+}
+
+/** `matchFilterPass`' answer: the points the advanced filters keep, and —
+ * when a Custom group is chosen — whether a drawn SHOT is the one it names
+ * (`shotMatchesCustom`). The point cuts need only `point`; the rally and
+ * errors cuts plot a shot, so they test that shot too. */
+interface MatchPass {
+  point: (p: MatchPoint) => boolean;
+  shot: ((s: MatchShot) => boolean) | null;
 }
 
 /** The pill groups the advanced filters replaced in the Filters popover. */
@@ -1033,7 +1048,7 @@ function computeRallyViz(
   filters: VizFilters,
   subjectIsPlayer1: boolean,
   placement: boolean,
-  matchPass: ((p: MatchPoint) => boolean) | null,
+  matchPass: MatchPass | null,
 ): VizResult {
   let total = 0;
   let count = 0;
@@ -1047,7 +1062,7 @@ function computeRallyViz(
     // has no serve-box landing side of its own, unlike the actual serve cut.
     const passes =
       pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return") &&
-      (matchPass === null || matchPass(p));
+      (matchPass === null || matchPass.point(p));
     const subjectWon = p.wonByPlayer1 === subjectIsPlayer1;
 
     const rallyShots = pickRallyShots(p.shots ?? [], (s) => s.shotType);
@@ -1062,6 +1077,7 @@ function computeRallyViz(
 
       total++;
       if (!passes) continue;
+      if (matchPass?.shot && !matchPass.shot(shot)) continue;
       count++;
 
       dots.push({
@@ -1104,7 +1120,7 @@ function computeErrorsViz(
   points: MatchPoint[],
   filters: VizFilters,
   subjectIsPlayer1: boolean,
-  matchPass: ((p: MatchPoint) => boolean) | null,
+  matchPass: MatchPass | null,
 ): VizResult {
   let total = 0;
   let count = 0;
@@ -1125,7 +1141,8 @@ function computeErrorsViz(
     if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return")) {
       continue;
     }
-    if (matchPass !== null && !matchPass(p)) continue;
+    if (matchPass !== null && !matchPass.point(p)) continue;
+    if (matchPass?.shot && !matchPass.shot(shot)) continue;
     if (filters.error.length) {
       // Strictly by the recorded result type, as the Point endings card's
       // unforced-error count reads it — so "Unforced errors" means the same
@@ -1249,7 +1266,7 @@ export function computeViz(
 
       total++;
       if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
-      if (matchPass !== null && !matchPass(p)) continue;
+      if (matchPass !== null && !matchPass.point(p)) continue;
       count++;
       if (metrics.kind === "out" || metrics.kind === "net") {
         serveOutOrNetCount++;
@@ -1308,7 +1325,7 @@ export function computeViz(
       total++;
       if (!pointMatchesFilters(p, filters, "return", subjectIsPlayer1))
         continue;
-      if (matchPass !== null && !matchPass(p)) continue;
+      if (matchPass !== null && !matchPass.point(p)) continue;
       count++;
       const o = returnOutcome(p, subjectIsPlayer1);
       // `pointReturnShot` reads `p.shots` by role — but plenty of fixtures
@@ -1539,14 +1556,6 @@ function buildSentence(groups: StatGroup[], noun: string): string | null {
   // group row can equal it but never exceed it).
   const tiedOther = sameGroupOthers.find((e) => e.row.winPct === ceiling)!;
   return `${headline} — level with ${tiedOther.row.label}.`;
-}
-
-/** The serve the serve cut is narrowed to — the Ball pills, or Serve › Type
- * in the advanced filters where the ball now lives. Serve cut only: on a
- * return cut Serve › Type is not "first-serve returns" (see
- * `foldedMatchFilters`), so the return nouns read the Ball pills alone. */
-function ballOf(filters: VizFilters): BallFilter {
-  return filters.ball.length ? filters.ball : (filters.match?.serveType ?? []);
 }
 
 /** Singular when `count === 1` ("1 serve", "1 first serve", "1 second
@@ -1808,7 +1817,10 @@ export function computeVizStats(
   const total = result.count;
 
   if (cut === "serve") {
-    const noun = serveNoun(ballOf(filters), total);
+    // The Ball pills only: Serve › Type selects different points (no
+    // recorded serve type is not a first serve there), so it never names
+    // the serves as "first".
+    const noun = serveNoun(filters.ball, total);
     const groups = [serveStatsGroup(result.zoneStats)];
     // Zone percentages use measured in-serves; total includes every drawable
     // serve. State the excluded out/net count alongside the full pool.

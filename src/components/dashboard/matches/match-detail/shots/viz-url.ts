@@ -644,7 +644,6 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
     match: {
       ...match,
       resultOutcome: [],
-      serveResult: match.serveResult.filter((v) => !isUnreturnedServeResult(v)),
       returnResult: match.returnResult.filter((v) => v !== "winner"),
       resultEnding: match.resultEnding.filter((v) => v !== "winner"),
     },

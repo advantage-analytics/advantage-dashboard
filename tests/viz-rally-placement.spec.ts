@@ -11,7 +11,7 @@ import {
   viewerInitialTransform,
   VIEWER_COURT,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
-import { bandKindFor } from "@/components/dashboard/matches/match-detail/shots/viz-bands-menu";
+import { bandKindFor } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   parseVizState,
   vizStateQuery,

@@ -715,7 +715,7 @@ export function finalShotOf(
  */
 export function lastShotOf(point: MatchPoint): MatchShot | undefined {
   const shots = point.shots ?? [];
-  if (lower(point.resultType) === "double fault") {
+  if (lower(point.resultType).includes("double fault")) {
     for (let i = shots.length - 1; i >= 0; i -= 1) {
       if (isServeShotType(shots[i].shotType)) return shots[i];
     }
@@ -801,7 +801,7 @@ function matchesEnding(
   return by !== null && (pov === null || by === pov);
 }
 
-function hasCustom(f: MatchFilters): boolean {
+export function hasCustom(f: MatchFilters): boolean {
   return (
     f.customPlayer !== null ||
     f.customSide.length > 0 ||
@@ -819,23 +819,35 @@ function matchesCustom(
   f: MatchFilters,
   ctx: MatchFilterContext,
 ): boolean {
+  return (point.shots ?? []).some((shot) => shotMatchesCustom(shot, f, ctx));
+}
+
+/**
+ * Whether ONE shot satisfies every chosen Custom group — `matchesCustom`'s
+ * per-shot test, for a host that draws shots rather than points (the
+ * Visualizations rally and errors cuts plot the shot itself, so it is the
+ * shot, not merely its point, that must match).
+ */
+export function shotMatchesCustom(
+  shot: MatchShot,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean {
+  if (!(shot.shotNumber >= 1)) return false;
   const player = f.customPlayer === null ? null : seatOf(f.customPlayer, ctx);
-  return (point.shots ?? []).some((shot) => {
-    if (!(shot.shotNumber >= 1)) return false;
-    if (player !== null && shot.isPlayer1 !== player) return false;
-    if (f.customRallyShot.length > 0) {
-      if (!f.customRallyShot.includes(shot.shotNumber)) return false;
-    }
-    if (f.customSide.length > 0) {
-      const half = hitterHalf(shot);
-      if (half === null || !f.customSide.includes(half)) return false;
-    }
-    if (f.customDirection.length > 0) {
-      const dir = shotDirection(shot, handOf(shot.isPlayer1, ctx));
-      if (dir === null || !f.customDirection.includes(dir)) return false;
-    }
-    return true;
-  });
+  if (player !== null && shot.isPlayer1 !== player) return false;
+  if (f.customRallyShot.length > 0) {
+    if (!f.customRallyShot.includes(shot.shotNumber)) return false;
+  }
+  if (f.customSide.length > 0) {
+    const half = hitterHalf(shot);
+    if (half === null || !f.customSide.includes(half)) return false;
+  }
+  if (f.customDirection.length > 0) {
+    const dir = shotDirection(shot, handOf(shot.isPlayer1, ctx));
+    if (dir === null || !f.customDirection.includes(dir)) return false;
+  }
+  return true;
 }
 
 function anyOf<T>(

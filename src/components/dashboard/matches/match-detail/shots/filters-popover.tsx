@@ -263,7 +263,6 @@ export function FiltersPopover({
                 Advanced filters
               </span>
               <AdvancedPanel
-                key={JSON.stringify(filters)}
                 filters={filters}
                 cut={cut}
                 chart={state.chart}
@@ -507,6 +506,9 @@ function AdvancedPanel({
   );
   return (
     <FiltersPanel
+      // Re-seeds the draft whenever the applied filters change; the
+      // availability above stays mounted, so it is not recomputed per Show.
+      key={JSON.stringify(filters)}
       className="min-h-0 flex-1"
       tone={dark ? "dark" : "light"}
       filters={fold.match}

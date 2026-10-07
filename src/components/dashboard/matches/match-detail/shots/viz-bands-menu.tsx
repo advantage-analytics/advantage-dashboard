@@ -85,8 +85,6 @@ function contactDividersLabel(
   return `${side(c0)} · ${side(c1)}`.toUpperCase();
 }
 
-export { bandKindFor };
-
 export function VizBandsMenu({
   cut,
   onEdit,
