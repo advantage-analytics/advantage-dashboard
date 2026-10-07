@@ -122,7 +122,7 @@ ready).
 
 ## T9 · TourRunner component and markTourDone server action
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1, T2, T4, T19
 - **files:** src/components/dashboard/onboarding/tour-runner.tsx (new), src/app/dashboard/onboarding-actions.ts (new), tests/tour-runner.spec.ts (new), tests/fixtures/tour-runner-harness.tsx (new) — guess

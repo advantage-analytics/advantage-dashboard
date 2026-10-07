@@ -83,3 +83,12 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical — lint pass, typecheck pass, format:check pass, tests 4359 passed / 380 skipped (design-drift included); failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass. widget-states: attribute-only, no state change.
 **changed:** attribute-only. `data-tour="scoreboard"` on `RailScoreboard`'s root div (`rail-scoreboard.tsx` — `MatchReportScoreboard` only forwards props to it); `data-tour="insight"` on `MatchReportInsight`'s root section and on its `InsightEmpty` variant (only one renders at a time); `data-tour="head-to-head"` on `HeadToHeadCard`'s root section; `data-tour` = "shots" / "film" on those two tabs in `report-view-switcher.tsx` (undefined for Statistics).
+
+## T9 · TourRunner component and markTourDone server action — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4359 passed / 380 skipped; failures are the environmental browser-spec set (missing Playwright Chromium headless shell 1200, per the author's ruling), now including the new `tour-runner.spec.ts` (same `Executable doesn't exist` error; 3/3 passed under a temporary, removed 1194 shim). completion — VERDICT: pass. RLS checklist (by hand): no findings.
+**changed:** new `src/app/dashboard/onboarding-actions.ts` — `"use server"` `markTourDone(tour)` (const tour→column map with `Object.hasOwn`, cookie client, `.eq("id", user.id)`, returns `{ error, code? }`, never throws). New `src/components/dashboard/onboarding/tour-runner.tsx` — `TourRunner({ tour, start })`: resolves present `[data-tour]` targets via `resolveSteps`, switches tab via `selectView` before anchoring (rAF poll for the target, skips a target that never mounts), drives `TourPopover` (which owns reduced-motion-aware scrolling); Done/Skip set the sessionStorage guard and fire `markTourDone`, closing even on failure. New harness, recording action mock and browser spec.
+**follow-ups:**
+
+1. `markTourDone` doesn't `revalidatePath("/dashboard")`; add it if a client-cached Home shows the sample step undone right after the tour (T17).
+2. Nothing mounts `TourRunner` yet — T12 (sample page) and T16 (first-report) do.
