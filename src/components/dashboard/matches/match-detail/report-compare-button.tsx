@@ -9,7 +9,9 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
  *
  * A scope control, so it is drawn only once there is something to compare
  * against — `meta.canCompare`, a second analysed match — and is absent, never
- * greyed, before that (F5; spec › Decisions 3).
+ * greyed, before that (F5; spec › Decisions 3). A read-only report
+ * (`meta.readOnly` — the public link, the sample match) never draws it either:
+ * there is no second match of the reader's to compare against.
  *
  * No compare feature exists yet, so the control is inert: `aria-disabled` at
  * the frame's full strength, with the tooltip saying why. `aria-disabled`
@@ -22,7 +24,7 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
  */
 export function MatchReportCompareButton() {
   const { meta } = useMatchReport();
-  if (!meta.canCompare) return null;
+  if (meta.readOnly || !meta.canCompare) return null;
 
   return (
     <ChromeTooltip label="Comparing matches isn't available yet">

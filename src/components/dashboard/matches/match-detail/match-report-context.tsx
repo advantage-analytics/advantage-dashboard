@@ -150,10 +150,28 @@ export interface MatchReportMeta {
    * workspace, no session and nowhere else in the app to go. A part that
    * offers a way onward into the dashboard — the insight card's "Why this"
    * link, the empty Statistics view's "Open the Video tab" — draws nothing
-   * instead. Everything else reads the same. `false` everywhere under
+   * instead, and so does every control that changes or hands out the match:
+   * the More menu, Compare and Share each return `null` here, so a page may
+   * mount them unconditionally. Everything else reads the same. The sample
+   * match (`sample`) sets it too; `false` on every real match under
    * `/dashboard`.
    */
   readOnly: boolean;
+  /**
+   * The sample match (`/dashboard/matches/sample`): an anonymised, bundled
+   * report a new player tours before their own exists. It always rides with
+   * `readOnly` — nothing on it belongs to the viewer, so nothing on it may be
+   * changed — and adds only what is true of the sample alone (the banner, the
+   * tour). Defaults to `false`; `/m/[token]` and every real match leave it.
+   */
+  sample: boolean;
+  /**
+   * Where the Video view renews its short-lived playback credential, when that
+   * is not the match's own `/api/matches/${matchId}/video` — the sample
+   * match's clip is minted by `/api/sample-match/video`, since its placeholder
+   * id names no row. `null` means the match's own route. Defaults to `null`.
+   */
+  playbackEndpoint: string | null;
 }
 
 export interface MatchReportContextValue {
@@ -174,7 +192,11 @@ export function useMatchReport(): MatchReportContextValue {
 
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
-  "readOnly" | "statsUnavailable" | "foldUnreconciled"
+  | "readOnly"
+  | "sample"
+  | "playbackEndpoint"
+  | "statsUnavailable"
+  | "foldUnreconciled"
 > {
   /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
   statsUnavailable?: boolean;
@@ -182,6 +204,10 @@ export interface MatchReportProviderProps extends Omit<
   foldUnreconciled?: boolean;
   /** See `MatchReportMeta.readOnly`. Defaults to `false`. */
   readOnly?: boolean;
+  /** See `MatchReportMeta.sample`. Defaults to `false`. */
+  sample?: boolean;
+  /** See `MatchReportMeta.playbackEndpoint`. Defaults to `null`. */
+  playbackEndpoint?: string | null;
   /**
    * The view a URL without `?tab=` opens at — the reader's "Match report opens
    * at" preference, resolved in `page.tsx`. An explicit `?tab=` still wins.
@@ -207,6 +233,8 @@ export function MatchReportProvider({
   canEditBands,
   unit,
   readOnly = false,
+  sample = false,
+  playbackEndpoint = null,
   defaultView = "statistics",
   children,
 }: MatchReportProviderProps) {
@@ -282,6 +310,8 @@ export function MatchReportProvider({
       canEditBands,
       unit,
       readOnly,
+      sample,
+      playbackEndpoint,
     }),
     [
       matchId,
@@ -300,6 +330,8 @@ export function MatchReportProvider({
       canEditBands,
       unit,
       readOnly,
+      sample,
+      playbackEndpoint,
     ],
   );
 

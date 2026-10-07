@@ -11,6 +11,7 @@ import {
 } from "react";
 import { ArrowUpRight, Check, Copy, Lock, Mail, Share2 } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   Popover,
   PopoverContent,
@@ -78,10 +79,26 @@ interface ShareMatchButtonProps {
  *   <ShareMatchButton trigger={ShareRailTrigger} side="top" align="start" />
  *
  * It owns the popover, its panel and the ⌘⇧L / Ctrl+Shift+L shortcut; the
- * trigger owns only how it looks. The match comes from `MatchDataProvider`, so
- * this must render under the match detail layout.
+ * trigger owns only how it looks. The match comes from `MatchDataProvider`
+ * and the report's meta from `MatchReportProvider`, so this must render under
+ * both — the match detail layout and the report page's provider.
+ *
+ * On a read-only report (`meta.readOnly` — the public link, the sample match)
+ * it draws nothing and binds no shortcut: there is nothing of the reader's to
+ * hand out. The check lives here rather than in the Server Component that
+ * mounts it, so a page may mount it unconditionally.
  */
-export function ShareMatchButton({
+export function ShareMatchButton(
+  props: ShareMatchButtonProps,
+): React.JSX.Element | null {
+  // Guard first, then the popover in its own component, so none of its hooks
+  // is ever called conditionally.
+  const { meta } = useMatchReport();
+  if (meta.readOnly) return null;
+  return <SharePopover {...props} />;
+}
+
+function SharePopover({
   trigger: Trigger,
   side = "bottom",
   align = "end",

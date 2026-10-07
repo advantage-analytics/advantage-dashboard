@@ -68,7 +68,15 @@ const NOT_AVAILABLE = () => undefined;
  * classes: `focus.css` rings buttons.
  */
 export function MatchReportMoreMenu() {
+  // A read-only report (the public link, the sample match) offers nothing to
+  // edit, re-run or delete, so the menu is absent rather than empty. The guard
+  // sits out here so the menu's own hooks below are never called conditionally.
   const { meta } = useMatchReport();
+  if (meta.readOnly) return null;
+  return <MoreMenu matchId={meta.matchId} />;
+}
+
+function MoreMenu({ matchId }: { matchId: string }) {
   const sides = useMatchSides();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -172,14 +180,14 @@ export function MatchReportMoreMenu() {
 
       {editOpen && (
         <EditMatchDialog
-          matchId={meta.matchId}
+          matchId={matchId}
           open={editOpen}
           onOpenChange={setEditOpen}
         />
       )}
       {deleteOpen && (
         <DeleteMatchDialog
-          matchId={meta.matchId}
+          matchId={matchId}
           matchLabel={`${sides.you.name} vs ${sides.opp.name}`}
           open={deleteOpen}
           onOpenChange={setDeleteOpen}

@@ -71,7 +71,7 @@ ready).
 
 ## T5 · Read-only report chrome: sample and playbackEndpoint meta, hide menu/share/compare
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/match-report-context.tsx, match-report.tsx, report-more-menu.tsx, report-compare-button.tsx, share-match-button.tsx — guess
 - **done when:**

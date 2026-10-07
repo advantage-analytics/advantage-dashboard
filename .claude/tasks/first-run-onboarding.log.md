@@ -49,3 +49,12 @@ is the runner's. Newest entries at the bottom.
 
 1. T9: close via `open={false}` or unmount (both return focus); never null `anchor` while open. Outside clicks are ignored by design — add an opt-in prop if T9 wants them to end the tour.
 2. The popover's look and the `/design` preview have not been checked by eye (the spec bundles no Tailwind) — `/pr-check` Stage 3b should open `/design`.
+
+## T5 · Read-only report chrome: sample and playbackEndpoint meta, hide menu/share/compare — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4354 passed / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. `match-share-format share-popover film-cut-intent` 25/25. completion — VERDICT: pass. widget-states: action controls only, the new `return null`s are deliberate read-only hides; no loader/Suspense change.
+**changed:** `match-report-context.tsx`: `MatchReportMeta.sample` (default false) and `playbackEndpoint` (default null), documented beside `readOnly`. `MatchReportCompareButton` returns null on `readOnly`; `MatchReportMoreMenu` and `ShareMatchButton` split into a readOnly guard + inner component so no hook runs conditionally. `[matchId]/page.tsx` and `/m/[token]/page.tsx` untouched.
+**follow-ups:**
+
+1. T12: `MatchReportTitleActions` still draws its wrapper `div` when both children return null — check for a stray gap on the sample page, or leave the cluster out as `/m/[token]` does.
+2. `meta.playbackEndpoint` has no reader yet — T6 consumes it.
