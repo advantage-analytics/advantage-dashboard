@@ -28,3 +28,15 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. T17: the tour steps' `phrase`/`link` copy ("Open sample", "Open matches") was invented here — review when wiring `SetupLine`; its hand-written all-outstanding sentence needs rewording for four steps.
+
+## T3 · Sample-match build script, pure anonymiser and fixture guard spec — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4354 passed (+11 new) / 380 skipped (+1: fixture guard waiting on H3); failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass.
+**changed:** new `src/lib/sample-match/anonymise.ts` (`anonymiseMatchDetail`, `assertSampleClean`, `SAMPLE_NAMES`, `isSampleId`), `scripts/build-sample-match.ts` (admin client + real loader → anonymise → assert → write `fixture.json`; `--check` dry run), `tests/fixtures/sample-match-synthetic.ts`, `tests/sample-match-fixture.spec.ts` (11 unit tests + committed-fixture block that skips until H3). `src/lib/data/match-detail-server.ts`: body of `getMatchDetailData` extracted to exported `loadMatchDetail(client, matchId, options)`; the cached export delegates with identical semantics; optional `pinnedSeat` on `resolveYouSide`/`transformDbMatchToMatch`; exported `MatchDetailData` type.
+**follow-ups:**
+
+1. H3 (human, prod service-role key in `.env.local`): `npx tsx scripts/build-sample-match.ts --check` (expect "Jordan Avery d. Sam Ellis", 6-2 6-2, 87 points, 532 shots), then run without `--check`, `npm run test -- sample-match-fixture` (12 passed, 0 skipped), commit `src/lib/sample-match/fixture.json`, promote T12.
+2. T12: the anonymiser turns `sourceProvider` "splitstep" into "Advantage Intelligence", but the UI branches on `sourceProvider === "splitstep"` (`isDerivedMatch`, film court overlay, `ProviderFact`) — `sampleMatchData()` should map it back at load time.
+3. T12: fixture `kpiHistory` is `[]` but consumers type it `MatchKpiHistory | null` — coerce to `null` in `sampleMatchData()`.
+4. `assertSampleClean` is substring-based, so "Quan" also flags words like "quantity" in insight text; the error names the JSON path, so a false positive will be obvious at H3.
+5. `loadMatchDetail` is exported from a `-server` module for the script; consider a guard against other `src/` callers.

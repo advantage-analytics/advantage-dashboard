@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Sample-match build script, pure anonymiser and fixture guard spec
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** scripts/build-sample-match.ts (new), src/lib/sample-match/anonymise.ts (new), tests/sample-match-fixture.spec.ts (new), tests/fixtures/sample-match-synthetic.ts (new); possibly src/lib/data/match-detail-server.ts, match-stats-server.ts, match-points-server.ts if the loaders need a client parameter — guess
 - **done when:**

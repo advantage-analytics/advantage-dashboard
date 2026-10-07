@@ -116,8 +116,11 @@ function resolveYouSide(
   row: Pick<DbMatch, "player1_id" | "player2_id">,
   myPlayerIds: readonly string[],
   rosterIds: readonly string[],
+  /** A seat pinned by the caller (`LoadMatchDetailOptions.youSeat`). */
+  pinnedSeat?: "player1" | "player2",
 ): { isUserPlayer1: boolean; playerId: string | null } {
-  const isUserPlayer1 = youSeat(row, myPlayerIds, rosterIds) === "player1";
+  const isUserPlayer1 =
+    (pinnedSeat ?? youSeat(row, myPlayerIds, rosterIds)) === "player1";
   return {
     isUserPlayer1,
     playerId: isUserPlayer1 ? row.player1_id : row.player2_id,
@@ -159,13 +162,24 @@ export function transformDbMatchToMatch(
   profiles: Map<string, PlayerProfile>,
   /** The row's seat ids that are on its program's roster (`youSeat`). */
   rosterIds: readonly string[],
+  /**
+   * A seat to call "you" regardless of viewer and roster. Only the sample-match
+   * build script sets it (`scripts/build-sample-match.ts`), which has no viewer
+   * to orient from; every request-time caller leaves it unset.
+   */
+  pinnedSeat?: "player1" | "player2",
 ): Match {
   const sets = buildSets(row);
   // The shared rule (a stored winner, then sets). A level score has always
   // read as player2 here.
   const winner = scoreWinner(row.score) ?? "player2";
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  const { isUserPlayer1 } = resolveYouSide(row, playerIds, rosterIds);
+  const { isUserPlayer1 } = resolveYouSide(
+    row,
+    playerIds,
+    rosterIds,
+    pinnedSeat,
+  );
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";
 
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
@@ -256,7 +270,7 @@ const FILLER_KEY_MOMENTS = [
  * outside the program gets no row, and the link simply does not render.
  */
 async function getEventIdForEntry(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   entryId: string | null,
 ): Promise<string | null> {
   if (!entryId) return null;
@@ -303,7 +317,7 @@ interface DbRosterMember {
  * uploader is the player.
  */
 async function resolveUploadedBy(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   row: Pick<DbMatch, "program_id" | "created_by" | "player1_id">,
 ): Promise<string | null> {
   if (!row.program_id || !row.created_by) return null;
@@ -370,11 +384,6 @@ async function resolveKpiHistory(
   return history ? { ...history, viewerIsPlayer } : null;
 }
 
-/**
- * Cached data fetcher for match detail pages.
- * React.cache deduplicates calls within the same request,
- * so both layout.tsx and page.tsx can call this without double-fetching.
- */
 /**
  * The analysed window of a video match with no stored duration, in seconds.
  *
@@ -459,13 +468,49 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
 export const MATCH_DETAIL_COLUMNS =
   "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights";
 
-export const getMatchDetailData = cache(async (matchId: string) => {
-  const supabase = await createClient();
+/**
+ * How `loadMatchDetail` orients and scopes one read. The cached export below
+ * fills this in from the request; the sample-match build script
+ * (`scripts/build-sample-match.ts`) fills it in by hand, because it runs
+ * through the service-role client with no viewer at all.
+ */
+export interface LoadMatchDetailOptions {
+  /**
+   * Every id that names the viewer as a player, or `[]` when nobody is signed
+   * in. A thunk, not a value: the cached export resolves it INSIDE the fetch
+   * batch so the lookup never sits serially in front of it, and `cache()` on
+   * `getMyPlayerIds` makes the second call a map lookup.
+   */
+  myPlayerIds: () => Promise<readonly string[]>;
+  /**
+   * A seat to call "you" regardless of viewer and roster. Unset for every
+   * request-time read — `youSeat` decides there. The build script pins
+   * `player1`, the sample's "you" side, since it has no viewer to orient from.
+   */
+  youSeat?: "player1" | "player2";
+  /**
+   * Whether to read the KPI strip's baseline and sparklines. `true` at
+   * request time; the build script passes `false` because that read goes
+   * through the cookie client (`getMatchKpiHistory`) and the sample ships an
+   * empty history anyway.
+   */
+  kpiHistory: boolean;
+}
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+/**
+ * The match detail page's data, read through the client handed in.
+ *
+ * This is the whole fetch; `getMatchDetailData` is only the request-time
+ * wrapper that supplies the cookie client and the viewer. It is exported for
+ * the sample-match build script and nothing else in `src` should call it —
+ * the page's two call sites go through the cached export so they share one
+ * read per request.
+ */
+export async function loadMatchDetail(
+  supabase: SupabaseClient,
+  matchId: string,
+  options: LoadMatchDetailOptions,
+) {
   const { data: row, error } = await supabase
     .from("matches")
     .select(MATCH_DETAIL_COLUMNS)
@@ -501,18 +546,20 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     windowSeconds,
     foldUnreconciled,
   ] = await Promise.all([
-    getMatchStatisticsFromSupabase(matchId),
-    getMatchPointsFromSupabase(matchId),
+    getMatchStatisticsFromSupabase(matchId, supabase),
+    getMatchPointsFromSupabase(matchId, supabase),
     // The history needs to know which ids mean "me" — a coach may have
     // recorded this athlete's earlier matches against a roster profile they
     // only claimed later. Chained inside the batch rather than awaited in
     // front of it, so only this branch waits on the lookup.
-    (async () =>
-      resolveKpiHistory(
-        dbRow,
-        user?.id ? await getMyPlayerIds() : [],
-        await rosterIdsPromise,
-      ))(),
+    options.kpiHistory
+      ? (async () =>
+          resolveKpiHistory(
+            dbRow,
+            await options.myPlayerIds(),
+            await rosterIdsPromise,
+          ))()
+      : Promise.resolve(null),
     // The entry lookup rides this wave rather than following it: it needs only
     // `dbRow`, which is already in hand, and nothing else here reads its answer.
     // It resolves to null for every match with no line behind it, which is every
@@ -543,12 +590,13 @@ export const getMatchDetailData = cache(async (matchId: string) => {
 
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
   // so this is a map lookup rather than a second round trip.
-  const myPlayerIds = user?.id ? await getMyPlayerIds() : [];
+  const myPlayerIds = await options.myPlayerIds();
   const match = transformDbMatchToMatch(
     dbRow,
     myPlayerIds,
     profiles,
     await rosterIdsPromise,
+    options.youSeat,
   );
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
@@ -575,4 +623,27 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     kpiHistory,
     foldUnreconciled,
   };
+}
+
+/** What `getMatchDetailData` resolves to for a match that exists. */
+export type MatchDetailData = NonNullable<
+  Awaited<ReturnType<typeof loadMatchDetail>>
+>;
+
+/**
+ * Cached data fetcher for match detail pages.
+ * React.cache deduplicates calls within the same request,
+ * so both layout.tsx and page.tsx can call this without double-fetching.
+ */
+export const getMatchDetailData = cache(async (matchId: string) => {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return loadMatchDetail(supabase, matchId, {
+    myPlayerIds: () => (user?.id ? getMyPlayerIds() : Promise.resolve([])),
+    kpiHistory: true,
+  });
 });
