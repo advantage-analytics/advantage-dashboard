@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add sample_tour_done_at and first_report_tour_done_at to users
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<YYYYMMDDHHMMSS>\_users_onboarding_tours.sql (guess)
 - **done when:**
