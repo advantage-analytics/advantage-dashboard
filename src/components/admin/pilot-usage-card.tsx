@@ -37,10 +37,7 @@ import {
   adminSetPilotEligible,
   adminSetPilotEnd,
 } from "@/lib/services/programs/admin-team-actions";
-import {
-  getMonthlyCapHours,
-  getMonthlyCapSeconds,
-} from "@/lib/services/splitstep/config";
+import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import type { AdminTeamPilot } from "@/lib/data/admin-team-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
@@ -569,10 +566,8 @@ function PoolAccess({
   const [error, setError] = useState<string | null>(null);
   const [pending, startChange] = useTransition();
 
-  const programHours = formatHoursShort(getMonthlyCapHours("program") * 3600);
-  const individualHours = formatHoursShort(
-    getMonthlyCapHours("individual") * 3600,
-  );
+  const programHours = formatHoursShort(getMonthlyCapSeconds("program"));
+  const individualHours = formatHoursShort(getMonthlyCapSeconds("individual"));
 
   const change = () => {
     if (pending) return;
