@@ -48,7 +48,8 @@ export function parseConfirmLink(params: {
 }): ConfirmLink {
   const read = (name: string): string | null => {
     const value = params.get(name);
-    return typeof value === "string" && value.trim() ? value.trim() : null;
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return trimmed || null;
   };
 
   const next = safeNext(read("next"));

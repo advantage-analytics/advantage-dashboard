@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { Redirect, redirectStub } from "./fixtures/next-redirect-stub";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -16,12 +17,6 @@ import { createLoader } from "./fixtures/vm-modules";
  * built, and the form carries everything the action needs.
  */
 
-class Redirect extends Error {
-  constructor(readonly to: string) {
-    super(`redirect ${to}`);
-  }
-}
-
 function load() {
   const loader = createLoader({
     globals: { URL, URLSearchParams },
@@ -31,11 +26,7 @@ function load() {
           throw new Error("createClient must not run on a GET of /confirm");
         },
       },
-      "next/navigation": {
-        redirect: (to: string) => {
-          throw new Redirect(to);
-        },
-      },
+      "next/navigation": redirectStub,
       "./actions": { confirmLinkForm: async () => {} },
     },
   });

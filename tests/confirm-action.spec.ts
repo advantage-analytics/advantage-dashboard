@@ -1,17 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+import { Redirect, redirectStub } from "./fixtures/next-redirect-stub";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
  * The POST half of `/confirm`: the only thing that spends an auth token.
  * `confirm-page.spec.ts` pins that the GET never does.
  */
-
-class Redirect extends Error {
-  constructor(readonly to: string) {
-    super(`redirect ${to}`);
-  }
-}
 
 type Verify = { type: string; token_hash: string };
 
@@ -26,11 +21,7 @@ function load(auth: {
     globals: { URL, URLSearchParams, Error },
     stubs: {
       "@/lib/supabase/server": { createClient: async () => ({ auth }) },
-      "next/navigation": {
-        redirect: (to: string) => {
-          throw new Redirect(to);
-        },
-      },
+      "next/navigation": redirectStub,
     },
   });
   return loader.load("src/app/(auth)/confirm/actions.ts") as {
