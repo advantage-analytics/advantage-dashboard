@@ -58,3 +58,12 @@ is the runner's. Newest entries at the bottom.
 
 1. T12: `MatchReportTitleActions` still draws its wrapper `div` when both children return null — check for a stray gap on the sample page, or leave the cluster out as `/m/[token]` does.
 2. `meta.playbackEndpoint` has no reader yet — T6 consumes it.
+
+## T6 · Read-only film tab: context playback endpoint, no viewed/bookmark/ball-path writes — blocked
+
+**gate:** completion — VERDICT: needs-work (mechanical gate was stopped once completion failed). Unmet criterion: "`FilmEntryActions` is not rendered" when `readOnly` — it is still rendered by `film/film-unavailable-state.tsx` (~line 100), which `FilmTab` reaches through its no-video branch (`film-tab.tsx` ~line 165) with no `readOnly` guard. Secondary note from the reviewer: the new spec's `/__api-hits` filters on `/api/matches/<matchId>/`, narrower than "any `/api/matches/*` path" (the server records all of them; widen the assertion).
+**stash:** 225c9d845f40d5cc33d73ecf1df866206ee3378f (`blocked: T6`) — the full implementation: endpoint threading through `useAttachmentPlayback` (`playbackEndpointFor`), `useOptionalMatchReport()` in `match-report-context.tsx`, readOnly guards on first-play view recording, bookmark writes/controls (optional `onToggleSaved` on player/transport/point list/drawer/fullscreen), `useBallPaths` enable, and `FilmEntryActions` in the player column; harness `?readOnly=1` + new spec case. Browser evidence under a temporary 1194 shim: failing set identical to HEAD baseline (all H.264-decode timeouts) plus the new case for the same reason; new case passed on a throwaway VP9 copy.
+**follow-ups:**
+
+1. To resume: `git stash apply 225c9d84`, guard the `FilmEntryActions` render in `film-unavailable-state.tsx` (or pass `readOnly` from the no-video branch), widen `/__api-hits` to every `/api/matches/` path, reset T6 to `todo`.
+2. The harness pins every browser case to H.264; an opt-in VP9 fixture (`tests/fixtures/match-video/vp9.webm`) would make them runnable in containers without proprietary codecs.
