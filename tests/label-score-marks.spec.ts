@@ -91,18 +91,84 @@ test.describe("Wrong side for the score", () => {
     ]);
     expect(marks.points.p2[0]).toEqual({
       code: "score_side_mismatch",
-      kind: "flag",
+      tier: "count",
       scope: "point",
       params: { score: "15–0", expected: "ad", actual: "deuce" },
     });
-    // Point 3 at 15–15 (two played) wants the deuce side: wrong again.
-    expect(codes(marks, "p3")).toEqual(["score_side_mismatch"]);
-    expect(marks.points.p3[0].params).toEqual({
-      score: "15–15",
+    // Point 3 at 15–15 (two played) wants the deuce side and came from the
+    // ad: wrong again — but it follows from point 2, so it is not marked.
+    expect(codes(marks, "p3")).toEqual([]);
+    expect(codes(marks, "p1")).toEqual([]);
+  });
+
+  test("once per game: one wrong winner upstream marks the first point it throws off, not every point after", () => {
+    // Served deuce, ad, deuce, ad, deuce — as a game is. Point 1 is labelled
+    // a let, so every later point is one behind the score it is held against.
+    const cascade = game(
+      ["p1", "p2", "p1", "p2", "p1"],
+      ["deuce", "ad", "deuce", "ad", "deuce"],
+    );
+    cascade.points[0].ending = "let_replayed";
+    const marks = liveScoreMarks(cascade.points, true, cascade.serveSides);
+    const mismatched = cascade.points
+      .map((p) => p.id)
+      .filter((id) => codes(marks, id).includes("score_side_mismatch"));
+    expect(mismatched).toEqual(["p2"]);
+    expect(marks.points.p2[0].params).toEqual({
+      score: "0–0",
       expected: "deuce",
       actual: "ad",
     });
-    expect(codes(marks, "p1")).toEqual([]);
+
+    // Fix it — the let was a point after all — and the whole game clears.
+    cascade.points[0].ending = "winner";
+    expect(
+      liveScoreMarks(cascade.points, true, cascade.serveSides).points,
+    ).toEqual({});
+  });
+
+  test("once per game: the next game starts over, and a first mismatch that is fixed hands the mark to the next", () => {
+    n = 0;
+    const two = [
+      point("a1"),
+      point("a2", { winner: "p2" }),
+      point("a3"),
+      point("b1", { gameNumber: 2 }),
+      point("b2", { gameNumber: 2 }),
+    ];
+    // Game 1: point 2 and point 3 both on the wrong side. Game 2: point 1.
+    const sides: Record<string, LabelServeSide> = {
+      a1: "deuce",
+      a2: "deuce",
+      a3: "ad",
+      b1: "ad",
+      b2: "ad",
+    };
+    const marks = liveScoreMarks(two, true, sides);
+    const marked = (m: ReturnType<typeof liveScoreMarks>) =>
+      two
+        .map((p) => p.id)
+        .filter((id) => codes(m, id).includes("score_side_mismatch"));
+    expect(marked(marks)).toEqual(["a2", "b1"]);
+    // Point 2's own side read right: point 3 is now the game's first.
+    expect(marked(liveScoreMarks(two, true, { ...sides, a2: "ad" }))).toEqual([
+      "a3",
+      "b1",
+    ]);
+  });
+
+  test("“Same side twice” is not once per game: it compares two serves, so each repeat stands", () => {
+    const { points, serveSides } = game(
+      ["p1", "p2", "p1", "p2"],
+      ["deuce", "deuce", "ad", "ad"],
+    );
+    const marks = liveScoreMarks(points, true, serveSides);
+    expect(
+      points
+        .map((p) => p.id)
+        .filter((id) => codes(marks, id).includes("service_court_repeat")),
+    ).toEqual(["p2", "p4"]);
+    expect(marks.suggestions.map((s) => s.pointId)).toEqual(["p2", "p4"]);
   });
 
   test("the score is the labelled one: change a winner and the flag follows", () => {
@@ -176,7 +242,7 @@ test.describe("Same side twice", () => {
     expect(codes(marks, "b")).toEqual(["service_court_repeat"]);
     expect(marks.points.b[0]).toEqual({
       code: "service_court_repeat",
-      kind: "flag",
+      tier: "count",
       scope: "point",
       params: { side: "ad" },
     });
@@ -267,13 +333,13 @@ test.describe("withLiveScoreMarks", () => {
     const points = [point("a"), point("b", { winner: "p2" })];
     const file: LabelMarks = {
       points: {
-        b: [{ code: "pick_winner", kind: "flag", scope: "point", params: {} }],
+        b: [{ code: "pick_winner", tier: "count", scope: "point", params: {} }],
       },
       shots: {
         s1: [
           {
-            code: "geometry_discarded",
-            kind: "fix",
+            code: "net_hit_contradicts_height",
+            tier: "hint",
             scope: "shot",
             params: {},
           },
@@ -365,16 +431,16 @@ test.describe("the console reads them live", () => {
     });
     // Point 2 is checked, so its flags read checked-as-is — present, quiet.
     const p2 = row(html, P2);
-    expect(p2).toContain('data-mark-kind="flag"');
+    expect(p2).toContain("data-mark-chip");
     expect(p2).toContain('data-mark-state="checked-as-is"');
     expect(p2).toMatch(/aria-label="[^"]*Same side twice · checked as is/);
     expect(p2).toMatch(
       /aria-label="[^"]*Wrong side for the score · checked as is/,
     );
-    expect(row(html, P1)).not.toContain("data-mark-kind");
+    expect(row(html, P1)).not.toContain("data-mark-chip");
     // The slot between the two.
     expect(html).toContain('data-row="suggested-point"');
-    // The header: nothing OPEN to check (the point is checked), and no fix.
+    // The header: nothing OPEN to check (the point is checked).
     expect(html).toContain('aria-label="Nothing left to check"');
     const marks: LabelMarks = {
       ...EMPTY,
@@ -383,7 +449,7 @@ test.describe("the console reads them live", () => {
     const points = labelSessionFixture().points;
     expect(
       markSummary(points, withLiveScoreMarks(marks, points, true)),
-    ).toEqual({ open: 0, openPoints: 0, fixes: 0, fixPoints: 0 });
+    ).toEqual({ open: 0, openPoints: 0 });
   });
 
   test("unchecked, the same two flags are open and counted; with the sides agreeing, nothing is drawn", () => {
@@ -412,12 +478,7 @@ test.describe("the console reads them live", () => {
         unchecked.points,
         withLiveScoreMarks(marks, unchecked.points, true),
       ),
-    ).toEqual({
-      open: 2,
-      openPoints: 1,
-      fixes: 0,
-      fixPoints: 0,
-    });
+    ).toEqual({ open: 2, openPoints: 1 });
 
     // The ad side for the second point: the labelled score agrees, and the
     // flags are simply not there — not grey, gone.
@@ -425,7 +486,7 @@ test.describe("the console reads them live", () => {
       ...EMPTY,
       serveSides: { [P1]: "deuce", [P2]: "ad" },
     });
-    expect(agreed).not.toContain("data-mark-kind");
+    expect(agreed).not.toContain("data-mark-chip");
     expect(agreed).not.toContain('data-row="suggested-point"');
     expect(agreed).toContain('aria-label="Nothing left to check"');
   });

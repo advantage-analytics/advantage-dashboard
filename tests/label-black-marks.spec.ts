@@ -20,11 +20,13 @@ import {
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The marks on the black rail's rows (T37, board 08m): the chip
- * (`label-black-mark.tsx`), the point row's roll-up in its tail and a
- * stroke's own marks after its result — rendered offline through
- * `fixtures/vm-modules`, nothing stubbed. The words and the life-cycle are
- * T35's and pinned in `label-marks-copy.spec.ts`; this pins what is DRAWN.
+ * The marks on the black rail's rows (T37, board 08m), by tier: the amber
+ * chip in the point row's tail for the marks that can change the score, ONE
+ * quiet line in the open point for the hints, and nothing anywhere for a
+ * hidden mark — no chip on a stroke, no chip for what the site did by
+ * itself. Rendered offline through `fixtures/vm-modules`, nothing stubbed.
+ * The words and the life-cycle are pinned in `label-marks-copy.spec.ts`;
+ * this pins what is DRAWN.
  */
 
 const MARK = "src/components/admin/labels/label-black-mark.tsx";
@@ -54,7 +56,7 @@ function mark<C extends LabelMarkCode>(
   params: LabelMarkParams[C],
 ): LabelMark {
   const meta = LABEL_MARK_META[code];
-  return { code, kind: meta.kind, scope: meta.scope, params } as LabelMark;
+  return { code, tier: meta.tier, scope: meta.scope, params } as LabelMark;
 }
 
 const DISPUTED = mark("winner_disputed", {
@@ -159,14 +161,11 @@ function tail(html: string): string {
 }
 
 interface Chip {
-  kind: string;
   state: string;
   /** The accessible name — the hover line. */
   label: string;
   /** The words drawn, or null for the icon-only form. */
   text: string | null;
-  /** The bare count drawn, or null. */
-  count: string | null;
   /** The opening tag, for its classes. */
   tag: string;
   /** Where the chip starts in the markup it was read from. */
@@ -181,7 +180,7 @@ const unescape = (s: string) =>
 
 /** Every chip in a stretch of markup, in order. */
 function chips(html: string): Chip[] {
-  const starts = [...html.matchAll(/<span[^>]*data-mark-kind="[^>]*>/g)];
+  const starts = [...html.matchAll(/<span[^>]*data-mark-chip=""[^>]*>/g)];
   return starts.map((match, i) => {
     const tag = match[0];
     const at = match.index;
@@ -192,11 +191,9 @@ function chips(html: string): Chip[] {
     const attr = (name: string) =>
       unescape(new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "");
     return {
-      kind: attr("data-mark-kind"),
       state: attr("data-mark-state"),
       label: attr("aria-label"),
       text: /data-mark-text=""[^>]*>([^<]*)</.exec(body)?.[1] ?? null,
-      count: /<b[^>]*>(\d+)<\/b>/.exec(body)?.[1] ?? null,
       tag,
       at,
     };
@@ -212,24 +209,55 @@ function tagOf(html: string, attr: string): string {
 
 const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
 
+/** The open point's hint line: each hint's code, words and accessible name. */
+function hintLine(
+  html: string,
+): { code: string; text: string; label: string }[] {
+  return [
+    ...html.matchAll(/<span[^>]*data-point-hint="([^"]*)"[^>]*>([^<]*)</g),
+  ].map((m) => ({
+    code: m[1],
+    text: unescape(m[2]),
+    label: unescape(/aria-label="([^"]*)"/.exec(m[0])?.[1] ?? ""),
+  }));
+}
+
+/** One mark of every code, on the fixture's point and its one stroke. */
+const EVERY_HIDDEN: LabelMark[] = [
+  mark("same_player_consecutive", { hitter: "p1" }),
+  mark("phantom_strokes_dropped", { eventIds: [41], hitter: "p2" }),
+  mark("winner_guessed", {}),
+  mark("score_frozen", {}),
+];
+const HIDDEN_ON_SHOT: LabelMark[] = [
+  mark("out_ball_rally_continued", { nextHitter: "p2" }),
+  mark("geometry_discarded", {}),
+];
+const EVERY_HINT: LabelMark[] = [
+  mark("ending_suspect_line", {}),
+  mark("winner_to_error_by_bounce", { loser: "p1" }),
+  mark("serve_fault", {}),
+  mark("second_serve_called_out", {}),
+  mark("result_type_unknown", {}),
+];
+const NET_HIT = mark("net_hit_contradicts_height", {});
+
 // The rail's palette (`label-rail-tone.ts`): its amber wash, and its ink at
 // 14% — written so the light ground can re-point both.
 const AMBER = "bg-[var(--rail-amber-wash)]";
 const QUIET =
   "shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-white)_14%,transparent)]";
 
-test.describe("a flag on the point row", () => {
+test.describe("the chip on the point row", () => {
   test("open: amber, its words, and the hover with the fixture's names", () => {
     const point = fixturePoint();
     const html = renderRow(point, marksOf(point, [DISPUTED]));
     const [chip, ...rest] = chips(tail(html));
     expect(rest).toHaveLength(0);
-    expect(chip.kind).toBe("flag");
     expect(chip.state).toBe("open");
     expect(chip.text).toBe("Check the ending");
     // The accessible name is the tooltip's two lines as one.
     expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
-    expect(chip.count).toBeNull();
     // The frame's pill: 18px, 10px/500, amber on an amber wash.
     for (const cls of [
       "h-[18px]",
@@ -268,7 +296,6 @@ test.describe("a flag on the point row", () => {
     expect(rest).toHaveLength(0);
     expect(chip.state).toBe("settled");
     expect(chip.text).toBeNull();
-    expect(chip.count).toBeNull();
     expect(chip.tag).toContain(QUIET);
     expect(chip.tag).toContain("text-white/[0.38]");
     expect(chip.tag).not.toContain(AMBER);
@@ -307,28 +334,28 @@ test.describe("a flag on the point row", () => {
     expect(pencils(html)).toBe(0);
   });
 
-  test("three open flags are one chip that counts them", () => {
+  test("three open marks are one chip that counts them", () => {
     const point = fixturePoint();
     const html = renderRow(
       point,
       marksOf(point, [
         DISPUTED,
-        mark("ending_suspect_line", {}),
-        mark("second_serve_called_out", {}),
+        mark("pick_winner", {}),
+        mark("reserve_after_in", {}),
       ]),
     );
     const all = chips(tail(html));
     expect(all).toHaveLength(1);
-    expect(all[0].kind).toBe("flag");
     expect(all[0].state).toBe("open");
     expect(all[0].text).toBe("3 to check");
+    expect(all[0].tag).toContain('data-mark-count="3"');
     // The hover is every line the chip stands for.
     expect(all[0].label).toContain(DISPUTED_HOVER);
-    expect(all[0].label).toContain("within 1 m of a line");
-    expect(all[0].label).toContain("Check whether it was a double fault.");
+    expect(all[0].label).toContain("Watch the clip and choose.");
+    expect(all[0].label).toContain("Could be a let.");
   });
 
-  test("a dismissed suggestion's flag reads dismissed", () => {
+  test("a dismissed suggestion's mark reads dismissed", () => {
     const point = fixturePoint({ dismissed: ["missing_point"] });
     const html = renderRow(
       point,
@@ -342,257 +369,233 @@ test.describe("a flag on the point row", () => {
   });
 });
 
-test.describe("a fix on the point row", () => {
-  test("beside a flag: the flag keeps its words, the fix folds to its icon", () => {
+test.describe("a closed row draws only what can change the score", () => {
+  test("a hint is no chip on the row, and takes nothing from the count beside it", () => {
     const point = fixturePoint();
-    const html = renderRow(
+    const shot = point.shots[0];
+    // Hints alone: the row is the row with no marks at all.
+    const hintsOnly = renderRow(
       point,
-      marksOf(point, [DISPUTED, mark("winner_guessed", {})]),
+      marksOf(point, EVERY_HINT, { [shot.id]: [NET_HIT] }),
     );
-    const [flag, fix, ...rest] = chips(tail(html));
+    expect(chips(hintsOnly)).toHaveLength(0);
+    expect(hintsOnly).not.toContain("data-point-hint");
+    expect(hintsOnly).toBe(renderRow(point, marksOf(point, [])));
+
+    // Beside a counted mark, the chip is that mark's alone — not "N to check".
+    const withCount = renderRow(
+      point,
+      marksOf(point, [DISPUTED, ...EVERY_HINT], { [shot.id]: [NET_HIT] }),
+    );
+    const [chip, ...rest] = chips(withCount);
     expect(rest).toHaveLength(0);
-    expect(flag.kind).toBe("flag");
-    expect(flag.text).toBe("Check the ending");
-    expect(fix.kind).toBe("fix");
-    expect(fix.state).toBe("settled");
-    expect(fix.text).toBeNull();
-    expect(fix.count).toBeNull();
-    // Grey, not quiet: the site acted and the point is not checked yet.
-    expect(fix.tag).toContain("bg-white/10");
-    expect(fix.tag).toContain("text-white/[0.78]");
-    expect(fix.tag).toContain("px-1.5");
-    expect(fix.label).toContain("That guess is right about 4 times in 5.");
+    expect(chip.text).toBe("Check the ending");
+    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+    expect(withCount).not.toContain("data-point-hint");
   });
 
-  test("alone it keeps its words; past one of a kind, a bare count", () => {
+  test("a hidden mark is drawn nowhere: not on the row, not in the well, not on a stroke", () => {
     const point = fixturePoint();
-    const alone = chips(
-      tail(renderRow(point, marksOf(point, [mark("winner_guessed", {})]))),
-    );
-    expect(alone).toHaveLength(1);
-    expect(alone[0].text).toBe("Winner guessed");
-    expect(alone[0].state).toBe("settled");
-
-    const two = chips(
-      tail(
-        renderRow(
-          point,
-          marksOf(point, [
-            DISPUTED,
-            mark("winner_guessed", {}),
-            mark("score_frozen", {}),
-          ]),
-        ),
-      ),
-    );
-    expect(two.map((c) => c.kind)).toEqual(["flag", "fix"]);
-    expect(two[1].text).toBeNull();
-    expect(two[1].count).toBe("2");
-    expect(tail(renderRow(point, marksOf(point, [DISPUTED])))).not.toContain(
-      "<b",
-    );
+    const shot = point.shots[0];
+    const marks = marksOf(point, EVERY_HIDDEN, { [shot.id]: HIDDEN_ON_SHOT });
+    const none = marksOf(point, []);
+    expect(renderRow(point, marks)).toBe(renderRow(point, none));
+    expect(renderWell(point, marks)).toBe(renderWell(point, none));
+    for (const html of [renderRow(point, marks), renderWell(point, marks)]) {
+      expect(html).not.toContain("data-mark-chip");
+      expect(html).not.toContain("data-point-hint");
+      for (const words of [
+        "Missing shot?",
+        "shot removed",
+        "Winner guessed",
+        "Score not read",
+        "Out call ignored",
+        "No position",
+      ]) {
+        expect(html, words).not.toContain(words);
+      }
+    }
   });
 
-  test("on a checked point it goes quiet: the icon only", () => {
-    const point = fixturePoint({ checkedAt: "2026-10-01T10:00:00Z" });
-    const [chip] = chips(
-      tail(renderRow(point, marksOf(point, [mark("winner_guessed", {})]))),
-    );
-    expect(chip.kind).toBe("fix");
-    expect(chip.state).toBe("checked");
-    expect(chip.text).toBeNull();
-    expect(chip.tag).toContain(QUIET);
-    // The hover still says what the site did.
-    expect(chip.label).toContain("the winner comes from the last shot");
+  test("there is no chip for what the site did, and no wand on a point row", () => {
+    for (const file of [MARK, ROW]) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toContain("WandSparkles");
+      expect(source, file).not.toMatch(/\bfix\b/);
+    }
+    const well = readFileSync(WELL, "utf8");
+    // A stroke row draws no chip at all — the well's only mark is the line.
+    expect(well).not.toContain("MarkChip");
+    expect(well).not.toContain("shotRowMarks");
   });
 });
 
-test.describe("a stroke's own marks", () => {
-  const SERVE = "s-ace";
-  const IGNORED = mark("out_ball_rally_continued", { nextHitter: "p2" });
-
-  /** The markup of the stroke row for `shotId`. */
-  function shotRow(html: string, shotId: string): string {
-    const at = html.indexOf(`data-shot-id="${shotId}"`);
-    expect(at, shotId).toBeGreaterThan(-1);
-    const next = html.indexOf('data-row="shot"', at);
-    const add = html.indexOf("data-add-shot", at);
-    const ends = [next, add].filter((i) => i > -1);
-    return html.slice(
-      html.lastIndexOf("<div", at),
-      Math.min(html.length, ...ends),
-    );
-  }
-
-  /** The ace, and a return after it, so there are two rows to tell apart. */
-  function twoShots(): LabelPoint {
+test.describe("the open point's quiet line", () => {
+  test("lists the point's hints by their labels, each with its sentence — and no chip", () => {
     const point = fixturePoint();
+    const shot = point.shots[0];
+    const html = renderWell(
+      point,
+      marksOf(
+        point,
+        [mark("ending_suspect_line", {}), mark("serve_fault", {})],
+        {
+          [shot.id]: [NET_HIT],
+        },
+      ),
+    );
+    expect(hintLine(html)).toEqual([
+      {
+        code: "ending_suspect_line",
+        text: "Close to the line",
+        label:
+          "Close to the line. The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
+      },
+      {
+        code: "serve_fault",
+        text: "Serve fault?",
+        label:
+          "Serve fault? The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
+      },
+      {
+        code: "net_hit_contradicts_height",
+        text: "Net or out?",
+        label:
+          "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
+      },
+    ]);
+    // One line, with a middle dot between two hints and none at either end.
+    expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
+    const line = html.slice(
+      html.indexOf("data-point-hints"),
+      html.indexOf('data-row="shot"'),
+    );
+    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(2);
+    expect(chips(html)).toHaveLength(0);
+  });
+
+  test("the names are the session's: “Winner or error?” says who", () => {
+    const point = fixturePoint();
+    const [hint] = hintLine(
+      renderWell(
+        point,
+        marksOf(point, [mark("winner_to_error_by_bounce", { loser: "p1" })]),
+      ),
+    );
+    expect(hint.text).toBe("Winner or error?");
+    expect(hint.label).toBe(
+      "Winner or error? The ball before this winner landed out. The point may be an error by Lee instead.",
+    );
+  });
+
+  test("it is the well's first row, on the quiet line a ghost takes, and arrives with the rally", () => {
+    const point = fixturePoint();
+    const html = renderWell(point, marksOf(point, [mark("serve_fault", {})]));
+    // First inside the well's clipped column, before any stroke.
+    const column = html.indexOf("overflow-hidden");
+    const lineAt = html.indexOf("data-point-hints");
+    expect(lineAt).toBeGreaterThan(column);
+    expect(lineAt).toBeLessThan(html.indexOf('data-row="shot"'));
+    expect(html.slice(column, lineAt)).not.toContain("data-row=");
+    const line = tagOf(html, "data-point-hints");
+    for (const cls of [
+      "h-[26px]",
+      "pl-[44px]",
+      "pr-[14px]",
+      "text-[11px]",
+      "whitespace-nowrap",
+      "overflow-hidden",
+    ]) {
+      expect(line, cls).toContain(cls);
+    }
+    // The rail's ink at an alpha: white on black, the page's ink on white.
+    expect(line).toContain(
+      "color:color-mix(in oklab, var(--color-white) 45%, transparent)",
+    );
+    expect(line).not.toContain("rail-amber");
+    // The well's own arrival, as its first row: with the rally, not after.
+    expect(line).toContain("film-shot-row-in");
+    expect(line).toContain("animation-delay:0ms");
+    const firstShot = tagOf(html, 'data-row="shot"');
+    expect(firstShot).toContain("film-shot-row-in");
+    expect(firstShot).not.toContain("animation-delay:0ms");
+    // A well that does not animate has a line that does not either.
+    const { BlackShotsWell } = createLoader().load(WELL) as {
+      BlackShotsWell: React.ComponentType<WellProps & { animate: boolean }>;
+    };
+    const still = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point,
+        edit: editContext(),
+        marks: marksOf(point, [mark("serve_fault", {})]),
+        animate: false,
+      }),
+    );
+    expect(tagOf(still, "data-point-hints")).not.toContain("film-shot-row-in");
+  });
+
+  test("it is not a control: no button, no tab stop, nothing to dismiss", () => {
+    const point = fixturePoint();
+    const html = renderWell(point, marksOf(point, EVERY_HINT));
+    const line = html.slice(
+      html.indexOf("data-point-hints"),
+      html.indexOf('data-row="shot"'),
+    );
+    expect(line).not.toContain("<button");
+    expect(line).not.toContain("tabindex");
+    expect(line).not.toContain("data-cell");
+    expect(line).not.toMatch(/Dismiss/);
+    expect(hintLine(html).map((h) => h.code)).toEqual(
+      EVERY_HINT.map((m) => m.code),
+    );
+  });
+
+  test("a point with no hints draws no line: counted and hidden marks are not hints", () => {
+    const point = fixturePoint();
+    const shot = point.shots[0];
+    const bare = renderWell(point, marksOf(point, []));
+    expect(bare).not.toContain("data-point-hints");
+    expect(
+      renderWell(
+        point,
+        marksOf(point, [DISPUTED, ...EVERY_HIDDEN], {
+          [shot.id]: HIDDEN_ON_SHOT,
+        }),
+      ),
+    ).toBe(bare);
+  });
+
+  test("“Net or out?” joins the line only from the point's last live stroke", () => {
+    const point = fixturePoint();
+    const serve = point.shots[0];
     const reply: LabelShot = {
-      ...point.shots[0],
+      ...serve,
       id: "s-reply",
       eventId: 202,
       hitter: "p2",
       stroke: "forehand",
       videoTime: 2491.1,
     };
-    return { ...point, shots: [...point.shots, reply] };
-  }
-
-  test("“Out call ignored” sits in its shot's row, after the result", () => {
-    const point = twoShots();
-    const marks = marksOf(point, [], { [SERVE]: [IGNORED] });
-    const html = renderWell(point, marks);
-
-    const row = shotRow(html, SERVE);
-    const result = row.slice(row.indexOf('data-calculated="result"'));
-    const [chip, ...rest] = chips(result);
-    expect(rest).toHaveLength(0);
-    expect(chip.kind).toBe("fix");
-    expect(chip.state).toBe("settled");
-    // An icon: no words, no count, and an 18px disc at every rail width —
-    // the result track has no room for more until the rail passes 640.
-    expect(chip.text).toBeNull();
-    expect(chip.count).toBeNull();
-    expect(chip.tag).toContain("w-[18px]");
-    expect(chip.tag).toContain("px-0");
-    expect(chip.tag).not.toContain("@min-[600px]");
-    expect(chip.tag).not.toContain("data-mark-count");
-
-    // The cell: the word in a column that can go to nothing, the marks in
-    // a fixed right-aligned slot, and the cell clips — so the slot never
-    // grows the grid and the word truncates before a mark is cut.
-    const cell = tagOf(row, 'data-calculated="result"');
-    for (const cls of [
-      "grid",
-      "grid-cols-[minmax(0,1fr)_auto]",
-      "min-w-0",
-      "overflow-hidden",
-    ]) {
-      expect(cell, cls).toContain(cls);
-    }
-    expect(result).toMatch(
-      /data-calculated="result"[^>]*><span class="min-w-0 truncate">In<\/span>/,
-    );
-    const slot = tagOf(result, "data-shot-marks");
-    expect(slot).toContain("shrink-0");
-    expect(slot).toContain("justify-self-end");
-    expect(result.indexOf("data-shot-marks")).toBeLessThan(chip.at);
-    expect(chip.label).toBe(
-      "Out call ignored. The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.",
-    );
-    expect(row.slice(0, row.indexOf(">") + 1)).toContain("@container");
-
-    // Nowhere else in the well.
-    expect(chips(shotRow(html, "s-reply"))).toHaveLength(0);
-    expect(chips(html)).toHaveLength(1);
-  });
-
-  test("two or more marks on a stroke collapse to one disc carrying their count", () => {
-    const point = twoShots();
-    const net = mark("net_hit_contradicts_height", {});
-    const html = renderWell(
-      point,
-      marksOf(point, [], { [SERVE]: [IGNORED, net] }),
-    );
-    const row = shotRow(html, SERVE);
-    const all = chips(row);
-    expect(all).toHaveLength(1);
-    const [chip] = all;
-    // As loud as its loudest member: the open flag.
-    expect(chip.kind).toBe("flag");
-    expect(chip.state).toBe("open");
-    expect(chip.tag).toContain(AMBER);
-    expect(chip.tag).toContain("w-[18px]");
-    expect(chip.tag).toContain('data-mark-count="2"');
-    // The count stands in for the icon; the hover reads both lines.
-    expect(chip.count).toBe("2");
-    expect(row.slice(chip.at, row.indexOf("</span>", chip.at))).not.toContain(
-      "<svg",
-    );
-    expect(chip.label).toContain("Marked as hitting the net");
-    expect(chip.label).toContain("The vendor called this ball out");
-    // One slot, the pencil beside it on a changed stroke.
-    expect(row.match(/data-shot-marks/g)).toHaveLength(1);
-    const edited: LabelPoint = {
+    const two: LabelPoint = { ...point, shots: [serve, reply] };
+    expect(
+      hintLine(renderWell(two, marksOf(two, [], { [reply.id]: [NET_HIT] }))),
+    ).toHaveLength(1);
+    // On the serve the rally went on from: nothing, and no chip on its row.
+    const mid = renderWell(two, marksOf(two, [], { [serve.id]: [NET_HIT] }));
+    expect(mid).not.toContain("data-point-hints");
+    expect(mid).not.toContain("data-mark-chip");
+    // The reply deleted: the serve is the last live stroke again.
+    const cut: LabelPoint = {
       ...point,
-      shots: point.shots.map((s) =>
-        s.id === SERVE ? { ...s, status: "edited" } : s,
-      ),
+      shots: [serve, { ...reply, status: "deleted" }],
     };
-    const changed = shotRow(
-      renderWell(edited, marksOf(edited, [], { [SERVE]: [IGNORED, net] })),
-      SERVE,
-    );
-    const slot = changed.slice(changed.indexOf("data-shot-marks"));
-    expect(chips(slot)).toHaveLength(1);
-    expect(pencils(slot)).toBe(1);
-    // Two fixes: a fix disc, still counted.
-    const fixes = chips(
-      shotRow(
-        renderWell(
-          point,
-          marksOf(point, [], {
-            [SERVE]: [IGNORED, mark("geometry_discarded", {})],
-          }),
-        ),
-        SERVE,
-      ),
-    );
-    expect(fixes).toHaveLength(1);
-    expect(fixes[0].kind).toBe("fix");
-    expect(fixes[0].count).toBe("2");
-  });
-
-  test("it is never raised to the point row; any other shot mark is", () => {
-    const point = twoShots();
-    const ignoredOnly = renderRow(
-      point,
-      marksOf(point, [], { [SERVE]: [IGNORED] }),
-    );
-    expect(ignoredOnly).not.toContain("data-mark-kind");
-
-    const withNet = renderRow(
-      point,
-      marksOf(point, [], {
-        [SERVE]: [IGNORED],
-        "s-reply": [mark("net_hit_contradicts_height", {})],
-      }),
-    );
-    const all = chips(tail(withNet));
-    expect(all).toHaveLength(1);
-    expect(all[0].kind).toBe("flag");
-    expect(all[0].text).toBe("Net or out?");
-  });
-
-  test("an open flag on a stroke is amber, and settles with its row", () => {
-    const point = twoShots();
-    const net = mark("net_hit_contradicts_height", {});
-    const open = chips(
-      renderWell(point, marksOf(point, [], { "s-reply": [net] })),
-    );
-    expect(open).toHaveLength(1);
-    expect(open[0].state).toBe("open");
-    expect(open[0].tag).toContain(AMBER);
-    expect(open[0].label).toBe(
-      "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
-    );
-
-    const edited: LabelPoint = {
-      ...point,
-      shots: point.shots.map((s) =>
-        s.id === "s-reply" ? { ...s, status: "edited" } : s,
-      ),
-    };
-    const html = renderWell(edited, marksOf(edited, [], { "s-reply": [net] }));
-    const [chip] = chips(html);
-    expect(chip.state).toBe("settled");
-    expect(chip.tag).toContain(QUIET);
-    // The stroke's own pencil is still the only one in its row.
-    expect(pencils(shotRow(html, "s-reply"))).toBe(1);
+    expect(
+      hintLine(renderWell(cut, marksOf(cut, [], { [serve.id]: [NET_HIT] }))),
+    ).toHaveLength(1);
   });
 });
 
-test.describe("a mark's hover is the dark tooltip's two lines", () => {
+test.describe("a chip's hover is the dark tooltip's two lines", () => {
   type Hover = {
     hover: string;
     name: string;
@@ -601,43 +604,25 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
   type MarkModule = {
     pointRowMarks: (
       point: LabelPoint,
-      marks: LabelMarks,
+      marks: LabelMarks | null,
       names: typeof NAMES,
       sentence?: string,
-    ) => { flag: Hover | null; fix: Hover | null };
-    shotRowMarks: (
+    ) => { flag: Hover | null; pencil: boolean } | null;
+    pointHints: (
       point: LabelPoint,
-      shot: LabelShot,
-      marks: LabelMarks,
+      marks: LabelMarks | null,
       names: typeof NAMES,
-    ) => { name: string; detail: string | null }[];
-    collapseShotMarks: (
-      marks: readonly { name: string; detail: string | null }[],
-    ) => Hover | null;
+    ) => { code: string; label: string; detail: string }[];
   };
   const load = () => createLoader().load(MARK) as MarkModule;
-  const IGNORED = mark("out_ball_rally_continued", { nextHitter: "p2" });
-  const IGNORED_HOVER =
-    "The vendor called this ball out, but Vargas played the next shot, so it’s stored as in.";
 
   test("one mark: its name over its sentence", () => {
-    const { pointRowMarks, shotRowMarks } = load();
+    const { pointRowMarks } = load();
     const point = fixturePoint();
-
     const open = pointRowMarks(point, marksOf(point, [DISPUTED]), NAMES)!.flag!;
     expect(open.name).toBe("Check the ending");
     expect(open.detail).toBe(DISPUTED_HOVER);
     expect(open.hover).toBe(`Check the ending. ${DISPUTED_HOVER}`);
-
-    const shot = point.shots[0];
-    const [fix] = shotRowMarks(
-      point,
-      shot,
-      marksOf(point, [], { [shot.id]: [IGNORED] }),
-      NAMES,
-    );
-    expect(fix.name).toBe("Out call ignored");
-    expect(fix.detail).toBe(IGNORED_HOVER);
   });
 
   test("a state rides on the name; the sentence is what the labeller did", () => {
@@ -682,35 +667,32 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
   });
 
   test("a chip standing for several names the count, a line per mark", () => {
-    const { pointRowMarks, shotRowMarks, collapseShotMarks } = load();
+    const { pointRowMarks } = load();
     const point = fixturePoint();
     const three = pointRowMarks(
       point,
       marksOf(point, [
         DISPUTED,
-        mark("ending_suspect_line", {}),
-        mark("second_serve_called_out", {}),
+        mark("pick_winner", {}),
+        mark("reserve_after_in", {}),
       ]),
       NAMES,
     )!.flag!;
     expect(three.name).toBe("3 to check");
     expect(three.detail).toEqual([
       `Check the ending — ${DISPUTED_HOVER}`,
-      "Close to the line — The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
-      "Double fault? — The second serve was called out, but one or two shots followed. Check whether it was a double fault.",
+      "Pick the winner — The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.",
+      "Serve replayed — The first serve was in, then another serve followed. Could be a let.",
     ]);
     expect(three.hover.startsWith("3 to check. Check the ending. ")).toBe(true);
+  });
 
-    const shot = point.shots[0];
-    const marks = marksOf(point, [], {
-      [shot.id]: [IGNORED, mark("net_hit_contradicts_height", {})],
-    });
-    const disc = collapseShotMarks(shotRowMarks(point, shot, marks, NAMES))!;
-    expect(disc.name).toBe("2 marks");
-    expect(disc.detail).toEqual([
-      `Out call ignored — ${IGNORED_HOVER}`,
-      "Net or out? — Marked as hitting the net, but the ball’s height says it cleared it.",
-    ]);
+  test("with no marks there is nothing to roll up, and no hints", () => {
+    const { pointRowMarks, pointHints } = load();
+    const point = fixturePoint();
+    expect(pointRowMarks(point, null, NAMES)).toBeNull();
+    expect(pointHints(point, null, NAMES)).toEqual([]);
+    expect(pointHints(point, marksOf(point, [DISPUTED]), NAMES)).toEqual([]);
   });
 
   test("the tooltip keeps the name on one line and wraps the sentence under it", () => {
@@ -798,6 +780,9 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
     expect(source).toContain("detail={detail}");
     expect(source).toContain("wrap={detail !== undefined}");
     expect(source).toContain("aria-label={hover}");
+    // A hint's sentence is the same tooltip's second line.
+    expect(source).toContain("label={hint.label}");
+    expect(source).toContain("detail={hint.detail}");
   });
 
   test("no raw tooltip is left in the black view", () => {
@@ -825,25 +810,27 @@ test.describe("a mark's hover is the dark tooltip's two lines", () => {
   });
 });
 
-test.describe("a selected stroke's mark stays in reach", () => {
-  test("the row's requests end left of the marks slot, and nothing sits over it", () => {
+test.describe("a stroke row's tail", () => {
+  test("holds the pencil alone, and the row's requests end left of it", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    const fix = mark("out_ball_rally_continued", { nextHitter: "p2" });
     const edited: LabelPoint = {
       ...point,
       shots: [{ ...shot, status: "edited" }],
     };
-    const html = renderWell(edited, marksOf(edited, [], { [shot.id]: [fix] }), {
-      selectedShotId: shot.id,
-    });
+    const html = renderWell(
+      edited,
+      marksOf(edited, [], { [shot.id]: HIDDEN_ON_SHOT }),
+      { selectedShotId: shot.id },
+    );
     const row = tagOf(html, 'data-row="shot"');
     expect(row).toContain('data-selected=""');
     expect(row).toContain("relative");
 
     // The result is the row's LAST track, inside 14px of padding: its right
-    // edge is the row's at every rail width, and its floor is the marks
-    // slot — read off the well's `--shot-tail` — plus the cell's gap.
+    // edge is the row's at every rail width, and its floor is the tail —
+    // read off the well's `--shot-tail` — plus the cell's gap. The tail is
+    // the frame's width still, so no track moved when the stroke's disc went.
     const { SHOT_TRACKS, SHOT_TAIL_PX, SHOT_TAIL_AIR_PX } = createLoader().load(
       WELL,
     ) as {
@@ -851,6 +838,7 @@ test.describe("a selected stroke's mark stays in reach", () => {
       SHOT_TAIL_PX: number;
       SHOT_TAIL_AIR_PX: number;
     };
+    expect(SHOT_TAIL_PX).toBe(33);
     expect(row).toContain(SHOT_TRACKS);
     expect(SHOT_TRACKS).toMatch(
       new RegExp(
@@ -860,23 +848,33 @@ test.describe("a selected stroke's mark stays in reach", () => {
     expect(row).toContain("px-[14px]");
 
     // The slot is pinned to that edge, the cell's last child, and holds the
-    // disc and the pencil — both drawn on the selected row.
+    // pencil — and no chip, whatever the marks say of the stroke.
     const cellAt = html.indexOf('data-calculated="result"');
     const actionsAt = html.indexOf("data-shot-actions");
     expect(actionsAt).toBeGreaterThan(cellAt);
     const cell = html.slice(cellAt, actionsAt);
     const resultTag = tagOf(html, 'data-calculated="result"');
+    for (const cls of [
+      "grid",
+      "grid-cols-[minmax(0,1fr)_auto]",
+      "min-w-0",
+      "overflow-hidden",
+    ]) {
+      expect(resultTag, cls).toContain(cls);
+    }
     const slot = tagOf(cell, "data-shot-marks");
     expect(slot).toContain("justify-self-end");
     expect(slot).toContain("shrink-0");
-    const [chip] = chips(cell);
-    expect(chip.kind).toBe("fix");
+    expect(chips(html)).toHaveLength(0);
     expect(pencils(cell)).toBe(1);
+    // An untouched stroke has no slot at all.
+    expect(renderWell(point, marksOf(point, []))).not.toContain(
+      "data-shot-marks",
+    );
 
     // The overlay stops 4px short of the slot at its widest: the row's
-    // padding, the well's `--shot-tail` (the disc, the gap and the pencil)
-    // and 4px — the same variable the result's floor reads, set once on the
-    // well, so the two cannot drift apart.
+    // padding, the well's `--shot-tail` and 4px — the same variable the
+    // result's floor reads, set once on the well, so the two cannot drift.
     const overlay = tagOf(html, "data-shot-actions");
     expect(overlay).toContain(
       `right-[calc(14px_+_var(--shot-tail,${SHOT_TAIL_PX}px)_+_4px)]`,
@@ -886,14 +884,9 @@ test.describe("a selected stroke's mark stays in reach", () => {
     expect(overlay).not.toMatch(/\binset-0\b|\binset-x-0\b|\bleft-/);
     const wellTag = tagOf(html, "data-shots-well");
     expect(wellTag).toContain(`--shot-tail:${SHOT_TAIL_PX}px`);
-    // The slot fits the cell at its floor, gap included.
-    const gap = Number(/ gap-\[(\d+)px\]/.exec(resultTag)![1]);
-    expect(SHOT_TAIL_PX + gap).toBeLessThanOrEqual(
-      SHOT_TAIL_PX + SHOT_TAIL_AIR_PX,
-    );
 
-    // Nothing takes the pointer from the chip or lifts itself over it.
-    for (const tag of [slot, chip.tag, resultTag]) {
+    // Nothing takes the pointer from the pencil or lifts itself over it.
+    for (const tag of [slot, resultTag]) {
       expect(tag).not.toContain("pointer-events-none");
     }
     expect(row + cell + overlay).not.toMatch(/\bz-(\d|\[)/);
@@ -901,17 +894,17 @@ test.describe("a selected stroke's mark stays in reach", () => {
 });
 
 test.describe("a session with no marks", () => {
-  test("the same rows carry nothing: no chip, and the pencil as before", () => {
+  test("the same rows carry nothing: no chip, no hint line, and the pencil as before", () => {
     const point = fixturePoint();
-    const withMarks = renderRow(
-      point,
-      marksOf(point, [DISPUTED], {
-        "s-ace": [mark("geometry_discarded", {})],
-      }),
-    );
-    expect(withMarks).toContain("data-mark-kind");
+    const shot = point.shots[0];
+    const marks = marksOf(point, [DISPUTED, mark("serve_fault", {})], {
+      [shot.id]: [NET_HIT],
+    });
+    expect(renderRow(point, marks)).toContain("data-mark-chip");
+    expect(renderWell(point, marks)).toContain("data-point-hints");
+
     const without = renderRow(point, null);
-    expect(without).not.toContain("data-mark-kind");
+    expect(without).not.toContain("data-mark-chip");
     expect(without).not.toContain("data-mark-state");
     expect(without).not.toContain(DISPUTED_HOVER);
     expect(pencils(without)).toBe(0);
@@ -925,7 +918,9 @@ test.describe("a session with no marks", () => {
       }),
     ).toBe(without);
 
-    expect(renderWell(point, null)).not.toContain("data-mark-kind");
+    const well = renderWell(point, null);
+    expect(well).not.toContain("data-mark-chip");
+    expect(well).not.toContain("data-point-hint");
 
     // The fixture's edited first point: its one pencil, marks or none.
     const first = labelSessionFixture().points.find(
@@ -940,11 +935,12 @@ test("the marks use the palette's tokens and the type scale", () => {
   const scale = new Set([8, 9, 10, 11, 12, 13, 14, 16, 28, 30, 40, 56]);
   const source = readFileSync(MARK, "utf8");
   expect(source.match(/#[0-9a-fA-F]{6}\b/g)).toBeNull();
+  expect(source).not.toMatch(/rgba?\(/);
   for (const match of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {
     expect(scale.has(Number(match[1])), match[0]).toBe(true);
   }
-  // The frame's icons, and the DS dark tooltip as every chip's hover.
-  for (const name of ["Flag", "WandSparkles", "Pencil", "ChromeTooltip"]) {
+  // The frame's icons, and the DS dark tooltip as every hover.
+  for (const name of ["Flag", "Pencil", "ChromeTooltip"]) {
     expect(source).toContain(name);
   }
 });

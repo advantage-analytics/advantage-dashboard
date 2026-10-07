@@ -557,7 +557,7 @@ test.describe("the score chip in the rail header", () => {
     );
   });
 
-  test("never without marks: a session labelled blind shows no chip and no totals", () => {
+  test("never without marks: a session labelled blind shows no chip and no total", () => {
     for (const html of [
       black(labelSessionFixture(), null),
       black({ ...labelSessionFixture(), marksEnabled: false }, null),
@@ -604,71 +604,103 @@ test.describe("the score chip in the rail header", () => {
   });
 });
 
-test.describe("the header's totals", () => {
-  test("a flag and a wand with the match's counts, named for a reader; nothing with no marks", () => {
+test.describe("the header's total", () => {
+  test("a flag with the match's count, named for a reader; no automatic-fixes total in either tone", () => {
     const html = black(labelSessionFixture(), EMPTY_MARKS);
     const head = header(html);
-    // Nothing on any row: both read zero, in the quiet inks.
+    // Nothing on any row: it reads zero, in the quiet ink.
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('role="img"');
     expect(toCheck).toContain('aria-label="Nothing left to check"');
     expect(toCheck).toContain("text-white/45");
     expect(head).toContain("lucide-flag");
-    const fixes = tag(head, 'data-label-rail-fixes=""');
-    expect(fixes).toContain('aria-label="No automatic fixes"');
-    expect(fixes).toContain("text-white/55");
-    expect(head).toContain("lucide-wand-sparkles");
+    // The wand and its count are gone: one total, not two.
+    expect(head).not.toContain("data-label-rail-fixes");
+    expect(head).not.toContain("lucide-wand-sparkles");
+    expect(head).not.toContain("automatic fix");
     // After the checked count, before the save line.
     expect(head.indexOf("data-label-rail-to-check")).toBeGreaterThan(
       head.indexOf("data-label-rail-progress"),
     );
-    expect(head.indexOf("data-label-rail-fixes")).toBeLessThan(
+    expect(head.indexOf("data-label-rail-to-check")).toBeLessThan(
       head.indexOf("data-save-status"),
     );
     // The mono the progress line uses, and nothing that could push the way
     // out off a 520px rail.
     expect(toCheck).toMatch(/class="[^"]*\bmono\b[^"]*\btext-\[10px\]/);
     expect(toCheck).toContain("shrink-0");
-    expect(fixes).toContain("shrink-0");
+
+    // ONE rail draws both tones, so the source says it for the light one:
+    // no wand, no fixes copy, one total.
+    const rail = readFileSync(
+      "src/components/admin/labels/label-black-rail.tsx",
+      "utf8",
+    );
+    expect(rail).not.toContain("WandSparkles");
+    expect(rail).not.toContain("fixesLabel");
+    expect(rail).not.toContain("data-label-rail-fixes");
+    expect(rail.match(/<RailTotal\b/g)).toHaveLength(1);
+    expect(
+      readFileSync("src/lib/services/labels/marks-copy.ts", "utf8"),
+    ).not.toContain("automatic");
   });
 
-  test("counts marks, not points: open flags in amber, every fix, a drawn ghost among them", () => {
+  test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
     const session = labelSessionFixture();
     const [p1, p2, , p4] = session.points;
     const marks: LabelMarks = {
       ...EMPTY_MARKS,
       points: {
-        // Two flags on the edited point: one settled by its edit, one a fix.
+        // The edited point: its counted mark is settled by the edit.
         [p1.id]: [
           {
             code: "winner_disputed",
-            kind: "flag",
+            tier: "count",
             scope: "point",
             params: { scoreWinner: "p2", lastStrokeWinner: "p1" },
           },
-          { code: "winner_guessed", kind: "fix", scope: "point", params: {} },
+          {
+            code: "winner_guessed",
+            tier: "hidden",
+            scope: "point",
+            params: {},
+          },
         ],
-        // Two open flags on the checked-as-is point: not open, so not counted.
+        // The checked-as-is point: its counted mark is not open; a hint
+        // beside it was never counted.
         [p2.id]: [
-          { code: "serve_fault", kind: "flag", scope: "point", params: {} },
-          { code: "pick_winner", kind: "flag", scope: "point", params: {} },
+          { code: "serve_fault", tier: "hint", scope: "point", params: {} },
+          { code: "pick_winner", tier: "count", scope: "point", params: {} },
         ],
-        // The ghost's fix on point 4, still drawn: one fix.
+        // Point 4, untouched: two counted marks open, a hint and a hidden one.
         [p4.id]: [
+          { code: "pick_winner", tier: "count", scope: "point", params: {} },
+          {
+            code: "reserve_after_in",
+            tier: "count",
+            scope: "point",
+            params: {},
+          },
+          {
+            code: "ending_suspect_line",
+            tier: "hint",
+            scope: "point",
+            params: {},
+          },
           {
             code: "phantom_strokes_dropped",
-            kind: "fix",
+            tier: "hidden",
             scope: "point",
             params: { eventIds: [402], hitter: "p1" },
           },
         ],
       },
       shots: {
-        // An open flag on a live stroke of point 4 counts for its point.
+        // A hint on a stroke of point 4 is a hint still: not counted.
         "s-p4-serve": [
           {
             code: "net_hit_contradicts_height",
-            kind: "flag",
+            tier: "hint",
             scope: "shot",
             params: {},
           },
@@ -677,30 +709,18 @@ test.describe("the header's totals", () => {
     };
     const head = header(black(session, marks));
     const toCheck = tag(head, 'data-label-rail-to-check=""');
-    expect(toCheck).toContain('aria-label="1 flag to check"');
+    expect(toCheck).toContain('aria-label="2 flags to check"');
     expect(toCheck).toContain("text-[var(--rail-amber)]");
-    expect(tag(head, 'data-label-rail-fixes=""')).toContain(
-      'aria-label="2 automatic fixes"',
-    );
 
-    // The ghost put back: its fix is gone from the count.
-    const restored = {
-      ...session,
-      points: session.points.map((point) =>
-        point.id === p4.id
-          ? {
-              ...point,
-              shots: point.shots.map((shot) =>
-                shot.id === "s-p4-ghost"
-                  ? { ...shot, siteRemovalRestoredAt: "2026-10-05T10:00:00Z" }
-                  : shot,
-              ),
-            }
-          : point,
-      ),
+    // Hints and hidden marks alone: nothing to check.
+    const quiet: LabelMarks = {
+      ...marks,
+      points: {
+        [p4.id]: marks.points[p4.id].filter((m) => m.tier !== "count"),
+      },
     };
     expect(
-      tag(header(black(restored, marks)), 'data-label-rail-fixes=""'),
-    ).toContain('aria-label="1 automatic fix"');
+      tag(header(black(session, quiet)), 'data-label-rail-to-check=""'),
+    ).toContain('aria-label="Nothing left to check"');
   });
 });

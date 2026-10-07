@@ -126,12 +126,16 @@ const SUGGESTION: Extract<LabelSuggestion, { kind: "missing_shot" }> = {
   videoTime: 1681.5,
 };
 
-/** The flag that opened the suggestion. */
+/**
+ * The mark the derivation raises beside the suggestion. Its CHIP is hidden
+ * (marks.ts `LABEL_MARK_META`): the console is never handed it, and a row
+ * handed it anyway draws nothing for it — the dashed slot is the question.
+ */
 function pairMark(): LabelMark {
   const meta = LABEL_MARK_META.same_player_consecutive;
   return {
     code: "same_player_consecutive",
-    kind: meta.kind,
+    tier: meta.tier,
     scope: meta.scope,
     params: { hitter: "p2" },
   } as LabelMark;
@@ -697,11 +701,12 @@ test.describe("a suggested shot in the black well", () => {
       inner(without, "data-point-detail"),
     );
     expect(inner(withIt, "data-point-detail")).toContain("4 shot rally");
-    // The flag that opened it is open on the row.
-    expect(tag(withIt, 'data-mark-kind="flag"')).toContain(
-      'data-mark-state="open"',
+    // No chip on the row for it: the slot in the well is the whole question.
+    expect(withIt).not.toContain("data-mark-chip");
+    expect(text(withIt)).not.toContain("Missing shot?");
+    expect(renderWell(point, marksOf(point))).toContain(
+      "data-shot-suggestion=",
     );
-    expect(text(withIt)).toContain("Missing shot?");
   });
 
   test("nothing is added until a click; the two buttons are the console's requests", () => {
@@ -737,7 +742,7 @@ test.describe("a suggested shot in the black well", () => {
     ]);
   });
 
-  test("after Add shot: the row is gone, the new stroke is an ordinary added row in its place, the chip reads settled", () => {
+  test("after Add shot: the row is gone, the new stroke is an ordinary added row in its place, and the point row has its pencil", () => {
     const point = withAdded(pairPoint());
     const marks = marksOf(point);
     const well = renderWell(point, marks);
@@ -754,13 +759,11 @@ test.describe("a suggested shot in the black well", () => {
     );
 
     const row = renderRow(point, marks);
-    expect(tag(row, 'data-mark-kind="flag"')).toContain(
-      'data-mark-state="settled"',
-    );
+    expect(row).not.toContain("data-mark-chip");
     expect(row).toContain("data-pencil");
   });
 
-  test("after Dismiss: the row is gone and the chip reads dismissed, never gone", () => {
+  test("after Dismiss: the row is gone, and the point row is untouched", () => {
     const point: LabelPoint = { ...pairPoint(), dismissed: [KEY] };
     const marks = marksOf(point);
     const well = renderWell(point, marks);
@@ -768,9 +771,7 @@ test.describe("a suggested shot in the black well", () => {
     expect(well.match(/data-row="shot"/g)).toHaveLength(4);
 
     const row = renderRow(point, marks);
-    expect(tag(row, 'data-mark-kind="flag"')).toContain(
-      'data-mark-state="dismissed"',
-    );
+    expect(row).not.toContain("data-mark-chip");
     // A dismissal is not a change to the point.
     expect(row).not.toContain("data-pencil");
   });

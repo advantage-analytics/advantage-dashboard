@@ -1826,7 +1826,7 @@ test.describe("the rail's two tones", () => {
     expect(band.match(/\btone=\{menu\}/g)).toHaveLength(1);
   });
 
-  test("showSession off: 'Points' in place of the title, no progress, no save line; the totals stay", () => {
+  test("showSession off: 'Points' in place of the title, no progress, no save line; the total stays", () => {
     const marks = { points: {}, shots: {}, suggestions: [] };
     const html = renderRail({ showSession: false, tone: "light", marks });
     expect(inner(html, "data-label-rail-title")).toBe("Points");
@@ -1834,7 +1834,7 @@ test.describe("the rail's two tones", () => {
     expect(html).not.toContain("data-label-rail-progress");
     expect(html).not.toContain("data-save-status");
     expect(html).toContain("data-label-rail-to-check");
-    expect(html).toContain("data-label-rail-fixes");
+    expect(html).not.toContain("data-label-rail-fixes");
     // With it on (the default) all three are there.
     const whole = renderRail({ marks });
     expect(whole).toContain("data-label-rail-progress");

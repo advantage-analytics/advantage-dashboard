@@ -392,12 +392,16 @@ function editContext(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** The point's one fix: the site removed its ghost (vendor stroke 402). */
+/**
+ * The mark that describes the ghost (vendor stroke 402). It is `hidden`: the
+ * console is never handed it, and a row handed it anyway draws no chip —
+ * the ghost is the struck-through row, and that is all there is to draw.
+ */
 function phantomMark(eventIds: number[] = [402]): LabelMark {
   const meta = LABEL_MARK_META.phantom_strokes_dropped;
   return {
     code: "phantom_strokes_dropped",
-    kind: meta.kind,
+    tier: meta.tier,
     scope: meta.scope,
     params: { eventIds, hitter: "p1" },
   } as LabelMark;
@@ -741,14 +745,20 @@ test.describe("the point row over a ghost", () => {
     expect(html).toContain("data-pencil");
   });
 
-  test("the removed-shot chip stands while the ghost does, and goes with Restore", () => {
+  test("no chip stands for the ghost on the point row; the ghost row and Restore are all there is", () => {
     const point = point4();
     const marks = marksOf(point, [phantomMark()]);
     const before = renderRow(point, marks);
-    const chip = tag(before, 'data-mark-kind="fix"');
-    expect(chip).toContain('data-mark-state="settled"');
-    expect(before).toContain(">1 shot removed<");
+    // The removed-shot chip is hidden: the row is the row with no mark.
+    expect(before).not.toContain("data-mark-chip");
+    expect(before).not.toContain("shot removed");
+    expect(before).toBe(renderRow(point, marksOf(point, [])));
     expect(before).not.toContain("data-pencil");
+    // The ghost itself is drawn exactly as it was, in the well.
+    const ghostWell = renderWell(point, marks);
+    expect(ghostWell).toContain(`data-shot-ghost="${GHOST}"`);
+    expect(ghostWell).toContain("1 shot removed: ");
+    expect(ghostWell).toBe(renderWell(point, marksOf(point, [])));
 
     const restored: LabelPoint = {
       ...point,
@@ -757,7 +767,7 @@ test.describe("the point row over a ghost", () => {
       ),
     };
     const after = renderRow(restored, marksOf(restored, [phantomMark()]));
-    expect(after).not.toContain("data-mark-kind");
+    expect(after).not.toContain("data-mark-chip");
     expect(after).not.toContain("1 shot removed");
     // Restore is a change the labeller made: the pencil shows.
     expect(after).toContain("data-pencil");
@@ -766,21 +776,6 @@ test.describe("the point row over a ghost", () => {
     expect(well).not.toContain("data-shot-ghost");
     expect(numberOf(well, GHOST)).toBe("2");
     expect(numberOf(well, "s-p4-serve")).toBe("3");
-  });
-
-  test("a fix for two removed strokes counts the ghosts still live", () => {
-    const point = point4();
-    const twin: LabelShot = {
-      ...ghostOf(point),
-      id: "s-p4-ghost-2",
-      eventId: 404,
-      siteRemovalRestoredAt: AT,
-    };
-    const two: LabelPoint = { ...point, shots: [...point.shots, twin] };
-    const html = renderRow(two, marksOf(two, [phantomMark([402, 404])]));
-    // One of the two is back: the chip reads one.
-    expect(html).toContain(">1 shot removed<");
-    expect(html).toContain("data-pencil");
   });
 });
 

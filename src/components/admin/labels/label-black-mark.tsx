@@ -1,47 +1,54 @@
 "use client";
 
-import { Flag, Pencil, WandSparkles } from "lucide-react";
+import { Flag, Pencil } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import type { LabelMarkKind, LabelMarks } from "@/lib/services/labels/marks";
+import type { LabelMarkCode, LabelMarks } from "@/lib/services/labels/marks";
+import { MARK_LABEL, markHover } from "@/lib/services/labels/marks-copy";
 import {
   hoverLine,
-  markState,
   markStates,
   missingPointAdded,
-  mostOpen,
   pointRowMarkList,
   rollupMarks,
   stateHoverParts,
   type MarkHoverParts,
   type MarkState,
 } from "@/lib/services/labels/marks-state";
-import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import { pointSentence } from "./label-black-format";
 import type { SideNames } from "./label-format";
+import { railInk } from "./label-rail-tone";
 
 /**
- * The marks of the black rail (board 08m): what the derivation flagged or
- * fixed on a point, drawn beside the row it came from.
+ * The marks of the black rail (board 08m): what the derivation questioned on
+ * a point, drawn beside the row it came from — in two voices, by the mark's
+ * tier (`LabelMarkTier`, marks.ts).
  *
- * Two things live here. `MarkChip` and `PencilMark` only DRAW — the frame's
- * `.bk-flag`, `.fx-auto`, `.fx-io`, `.fx-res` and `.fx-pen`. `pointRowMarks`
- * and `shotRowMarks` turn a row and the session's `LabelMarks` into the chips
- * to draw; every word, state and hover line in them is `marks-copy.ts`'s and
+ * A mark that can change the score is the amber chip on the point's row
+ * (`MarkChip`, the frame's `.bk-flag`), and the only thing the rail header
+ * counts. A mark about how the point ended is a word on ONE quiet grey line
+ * in the open point (`PointHintLine`): no chip, no count, nothing on a
+ * closed row. A stroke row draws no mark of its own, and what the site did
+ * by itself has no chip anywhere — the strokes it removed are still the
+ * well's struck-through rows (`BlackGhostShot`).
+ *
+ * `MarkChip`, `PointHintLine` and `PencilMark` only DRAW. `pointRowMarks`
+ * and `pointHints` turn a row and the session's `LabelMarks` into what to
+ * draw; every word, state and hover line in them is `marks-copy.ts`'s and
  * `marks-state.ts`'s.
  *
  * Colours are the rail's (`label-rail-tone.ts`): its amber on its amber wash
- * for a flag still open, its ink on a wash of that ink for a fix, and one
- * quiet outline once either is answered — white on black, the page's ink on
+ * for a mark still open, one quiet outline once it is answered, and the
+ * rail's ink at an alpha for the line — white on black, the page's ink on
  * the light ground.
  */
 
 /** What `MarkChip` draws. */
 export interface MarkChipProps {
-  kind: LabelMarkKind;
   /** The chip's words; null for the icon-only short form. */
   text: string | null;
-  /** How many marks it stands for — drawn only without words, past one. */
+  /** How many marks it stands for. */
   count: number;
   state: MarkState;
   /**
@@ -50,7 +57,7 @@ export interface MarkChipProps {
    */
   hover: string;
   /**
-   * The tooltip's first line: the mark's short name ("Out call ignored"),
+   * The tooltip's first line: the mark's short name ("Check the ending"),
    * with its state once it has one ("Check the ending · settled"), or what a
    * chip standing for several says ("3 to check").
    */
@@ -61,26 +68,11 @@ export interface MarkChipProps {
    * all (a dismissed question).
    */
   detail?: string | readonly string[];
-  /**
-   * A stroke row's chip: its result track is 36px at the rail's narrowest
-   * and grows only past 640, so the pill gives up its words and its side
-   * padding for good and is an 18px disc — the icon, or the count when it
-   * stands for more than one mark (`collapseShotMarks`). The hover says the
-   * rest.
-   */
-  compact?: boolean;
 }
 
 /**
- * A flag is quiet once it is no longer open; a fix — which the site already
- * acted on, so is `settled` by nature — once its point is checked.
- */
-function isQuiet(kind: LabelMarkKind, state: MarkState): boolean {
-  return kind === "flag" ? state !== "open" : state !== "settled";
-}
-
-/**
- * One mark — the frame's 18px pill.
+ * One chip — the frame's 18px pill. Amber while a mark it stands for is
+ * open; a quiet outline, and no words, once none is.
  *
  * Its words are the first thing to give when the rail narrows: under a 600px
  * row (the nearest `@container`, which each black row is) they are not drawn
@@ -92,21 +84,15 @@ function isQuiet(kind: LabelMarkKind, state: MarkState): boolean {
  * double them. A click on it is a click on its row.
  */
 export function MarkChip({
-  kind,
   text,
   count,
   state,
   hover,
   name,
   detail,
-  compact = false,
 }: MarkChipProps) {
-  const quiet = isQuiet(kind, state);
+  const quiet = state !== "open";
   const words = quiet ? null : text;
-  const Icon = kind === "flag" ? Flag : WandSparkles;
-  // A disc standing for several marks has room for the count or the icon,
-  // not both; the count says more.
-  const counted = compact && count > 1;
   return (
     <ChromeTooltip
       label={name}
@@ -116,43 +102,100 @@ export function MarkChip({
     >
       <span
         role="img"
-        data-mark-kind={kind}
+        data-mark-chip=""
         data-mark-state={state}
-        data-mark-count={counted ? count : undefined}
+        data-mark-count={count}
         aria-label={hover}
         className={cn(
-          "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full text-[10px] font-medium whitespace-nowrap",
+          "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full px-1.5 text-[10px] font-medium whitespace-nowrap",
           quiet
             ? "bg-transparent text-white/[0.38] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-white)_14%,transparent)]"
-            : kind === "flag"
-              ? "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]"
-              : "bg-white/10 text-white/[0.78]",
-          compact
-            ? "w-[18px] justify-center px-0"
-            : words
-              ? "px-1.5 @min-[600px]:px-[7px]"
-              : "px-1.5",
+            : "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]",
+          words && "@min-[600px]:px-[7px]",
         )}
       >
-        {counted ? (
-          <b className="font-medium tabular-nums">{count}</b>
-        ) : (
-          <Icon
-            className={kind === "flag" ? "size-2.5" : "size-[11px]"}
-            strokeWidth={1.8}
-            aria-hidden="true"
-          />
-        )}
+        <Flag className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
         {words ? (
           <span data-mark-text="" className="hidden @min-[600px]:inline">
             {words}
           </span>
         ) : null}
-        {!compact && !quiet && text === null && count > 1 ? (
-          <b className="font-medium tabular-nums">{count}</b>
-        ) : null}
       </span>
     </ChromeTooltip>
+  );
+}
+
+/** One word of the open point's quiet line: a hint's label and its sentence. */
+export interface PointHint {
+  code: LabelMarkCode;
+  /** The hint's words — its `MARK_LABEL`. */
+  label: string;
+  /** Its hover sentence — `markHover`, with the players' names. */
+  detail: string;
+}
+
+/** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
+const HINT_INK = railInk(0.45);
+/** The dot between two hints: a step quieter than the words it separates. */
+const HINT_DOT_INK = railInk(0.25);
+
+/**
+ * The open point's quiet line: its hints by their labels, a middle dot
+ * between them — "Close to the line · Serve fault?" — each with its sentence
+ * on hover, in the dark tooltip the chips use.
+ *
+ * It is not a control: nothing to click, nothing to dismiss, no tab stop,
+ * and it is counted nowhere. A point with no hints draws nothing at all.
+ * It is drawn as the FIRST row of the shots well (`BlackShotsWell`), on the
+ * line a ghost or a tombstone takes and indented to the times, so it reads
+ * as the point's and the strokes under it keep their tracks; it takes the
+ * well's own arrival (`className` / `style`, the row's `film-shot-row-in`),
+ * so it comes in with the rally rather than by itself.
+ */
+export function PointHintLine({
+  hints,
+  className,
+  style,
+}: {
+  hints: readonly PointHint[];
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  if (hints.length === 0) return null;
+  return (
+    <div
+      data-point-hints=""
+      className={cn(
+        "flex h-[26px] shrink-0 items-center gap-[6px] overflow-hidden pr-[14px] pl-[44px] text-[11px] whitespace-nowrap",
+        className,
+      )}
+      style={{ color: HINT_INK, ...style }}
+    >
+      {hints.map((hint, index) => (
+        <span key={hint.code} className="contents">
+          {index > 0 ? (
+            <span aria-hidden="true" style={{ color: HINT_DOT_INK }}>
+              ·
+            </span>
+          ) : null}
+          <ChromeTooltip
+            label={hint.label}
+            detail={hint.detail}
+            side="top"
+            wrap
+          >
+            <span
+              role="img"
+              data-point-hint={hint.code}
+              aria-label={hoverLine({ name: hint.label, detail: hint.detail })}
+              className="min-w-0 truncate"
+            >
+              {hint.label}
+            </span>
+          </ChromeTooltip>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -215,10 +258,9 @@ export function PencilMark({
 
 // ── What a row shows ───────────────────────────────────────────────────────
 
-/** The point row's tail: at most one flag chip, one fix chip and the pencil. */
+/** The point row's tail: at most one chip, and the pencil. */
 export interface PointRowMarks {
   flag: MarkChipProps | null;
-  fix: MarkChipProps | null;
   pencil: boolean;
 }
 
@@ -256,11 +298,10 @@ function chipHover(parts: readonly MarkHoverParts[], many: string): ChipHover {
 }
 
 /**
- * What the point row draws of its marks — `rollupMarks` over the point's own
- * marks and those of its live strokes (`pointRowMarkList`, marks-state.ts:
- * the removed-shot fix counts the ghosts still live, the shot-only code
- * stays on its shot) — or null when the session has no marks at all, which
- * is the row exactly as it was before them.
+ * What the point row draws of its marks — `rollupMarks` over the point's
+ * `count` marks (`pointRowMarkList`, marks-state.ts) — or null when the
+ * session has no marks at all, which is the row exactly as it was before
+ * them. Hints are not here: a closed row shows none (`pointHints`).
  *
  * `point` is the row as stored, ghosts and all: the life-cycle reads every
  * stroke's status. `sentence` is the point as the row READS it
@@ -271,7 +312,7 @@ function chipHover(parts: readonly MarkHoverParts[], many: string): ChipHover {
  * hover saying so.
  *
  * A chip standing for several marks hovers every line it stands for: the
- * open ones while any flag is open, every flag once none is, every fix.
+ * open ones while any is open, every one once none is.
  */
 export function pointRowMarks(
   point: LabelPoint,
@@ -281,106 +322,43 @@ export function pointRowMarks(
   points?: readonly LabelPoint[],
 ): PointRowMarks | null {
   if (!marks) return null;
-  const { point: pointMarks, shots: shotMarks } = pointRowMarkList(
-    point,
-    marks,
-  );
-  const states = markStates(
-    pointMarks,
-    shotMarks,
-    point,
-    marks.suggestions,
-    points,
-  );
+  const { count } = pointRowMarkList(point, marks);
+  const states = markStates(count, point, marks.suggestions, points);
   const pointAdded = missingPointAdded(point, marks.suggestions, points);
-  const rollup = rollupMarks(pointMarks, shotMarks, states);
+  const rollup = rollupMarks(count, states);
+  if (!rollup.flag) return { flag: null, pencil: rollup.pencil };
 
-  const all = [
-    ...pointMarks.map((mark, i) => ({ mark, state: states.point[i] })),
-    ...shotMarks.map((mark, i) => ({ mark, state: states.shots[i] })),
-  ];
-  const hoverOf = (kind: LabelMarkKind, many: string): ChipHover => {
-    const members = all.filter((m) => m.mark.kind === kind);
-    const open = members.filter((m) => m.state === "open");
-    return chipHover(
-      (open.length > 0 ? open : members).map((m) =>
-        stateHoverParts(m.mark, m.state, names, sentence, pointAdded),
-      ),
-      many,
-    );
-  };
-
+  const members = count.map((mark, i) => ({ mark, state: states.marks[i] }));
+  const open = members.filter((m) => m.state === "open");
   return {
-    flag: rollup.flag
-      ? {
-          kind: "flag",
-          ...rollup.flag,
-          // Several still open are the chip's own words, "3 to check".
-          ...hoverOf("flag", rollup.flag.text ?? "Nothing left to check"),
-        }
-      : null,
-    fix: rollup.fix
-      ? {
-          kind: "fix",
-          ...rollup.fix,
-          ...hoverOf("fix", `${rollup.fix.count} fixes`),
-        }
-      : null,
+    flag: {
+      ...rollup.flag,
+      ...chipHover(
+        (open.length > 0 ? open : members).map((m) =>
+          stateHoverParts(m.mark, m.state, names, sentence, pointAdded),
+        ),
+        // Several still open are the chip's own words, "3 to check".
+        rollup.flag.text ?? "Nothing left to check",
+      ),
+    },
     pencil: rollup.pencil,
   };
 }
 
-/** One of a stroke row's marks: its kind, its state and its hover's two parts. */
-export interface ShotRowMark extends MarkHoverParts {
-  kind: LabelMarkKind;
-  state: MarkState;
-}
-
 /**
- * A stroke's own marks, in the derivation's order — what `collapseShotMarks`
- * draws as one disc. Empty when the session has no marks.
+ * The open point's hints, for `PointHintLine` — `pointRowMarkList`'s `hints`
+ * in their words. Empty when the session has no marks, and for a point that
+ * has none: the line is then not drawn.
  */
-export function shotRowMarks(
+export function pointHints(
   point: LabelPoint,
-  shot: LabelShot,
   marks: LabelMarks | null | undefined,
   names: SideNames,
-): ShotRowMark[] {
-  const own = marks?.shots[shot.id];
-  if (!marks || !own || own.length === 0) return [];
-  const sentence = pointSentence(point, names);
-  return own.map((mark) => {
-    const state = markState(mark, point, shot, marks.suggestions);
-    return {
-      kind: mark.kind,
-      state,
-      ...stateHoverParts(mark, state, names, sentence),
-    };
-  });
-}
-
-/**
- * What the stroke row draws of its marks: ONE 18px disc, or nothing. Its
- * result track is 36px at the rail's narrowest and no wider until the rail
- * passes 640, so the row never has room for a chip per mark — one mark is
- * its icon, several are their count, and the hover reads every line. The
- * disc is as loud as its loudest member: a flag if any is one, in the most
- * open state among them.
- */
-export function collapseShotMarks(
-  marks: readonly ShotRowMark[],
-): MarkChipProps | null {
-  if (marks.length === 0) return null;
-  const kind: LabelMarkKind = marks.some((m) => m.kind === "flag")
-    ? "flag"
-    : "fix";
-  const same = marks.filter((m) => m.kind === kind);
-  return {
-    kind,
-    text: null,
-    count: marks.length,
-    state: mostOpen(same.map((m) => m.state)),
-    ...chipHover(marks, marks.length === 1 ? "" : `${marks.length} marks`),
-    compact: true,
-  };
+): PointHint[] {
+  if (!marks) return [];
+  return pointRowMarkList(point, marks).hints.map((mark) => ({
+    code: mark.code,
+    label: MARK_LABEL[mark.code],
+    detail: markHover(mark, names),
+  }));
 }

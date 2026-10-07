@@ -1,14 +1,20 @@
 /**
  * A mark's life-cycle and what the point row shows of its marks.
  *
- * Derived, never stored. A flag is never deleted, only quietened: it is
- * `open` until the labeller changes the point (`settled`), confirms it
- * unchanged (`checked-as-is`), does both (`checked`) or dismisses the
- * suggestion it opened (`dismissed`). Unchecking a point turns every flag the
- * labeller did not settle amber again. The one stored piece is
- * `label_points.dismissed`; everything else reads the rows' own status.
+ * Derived, never stored. Only a `count` mark (marks.ts `LabelMarkTier`) has a
+ * life: it is never deleted, only quietened — `open` until the labeller
+ * changes the point (`settled`), confirms it unchanged (`checked-as-is`),
+ * does both (`checked`) or dismisses the suggestion it opened (`dismissed`).
+ * Unchecking a point turns every mark the labeller did not settle amber
+ * again. The one stored piece is `label_points.dismissed`; everything else
+ * reads the rows' own status.
  *
- * The one exception to "never deleted" is the pair of score flags
+ * A `hint` has no state: it is a word on the open point's quiet line, there
+ * whatever the labeller has done, and counted nowhere. A `hidden` mark is
+ * nothing here at all — `pointRowMarkList` drops one even if it is handed
+ * one.
+ *
+ * The one exception to "never deleted" is the pair of score marks
  * (score-marks.ts): they are read off the labelled score on every render,
  * so one that no longer disagrees is simply not there. While one is, it has
  * this life-cycle like any other.
@@ -18,13 +24,9 @@
  */
 
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
-import { fixLabel, MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
+import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import { isGhostShot, type LabelPoint, type LabelShot } from "./session";
-import {
-  addedPointBetween,
-  MISSING_SHOT_PREFIX,
-  type SuggestionNeighbour,
-} from "./suggestions";
+import { addedPointBetween, type SuggestionNeighbour } from "./suggestions";
 
 export type MarkState =
   "open" | "settled" | "checked" | "checked-as-is" | "dismissed";
@@ -39,47 +41,33 @@ export type MarkStatePoint = Pick<
 > & { shots: readonly MarkStateShot[] };
 
 /** A ghost the labeller put back, or a shot they edited, added or removed. */
-function shotChanged(shot: MarkStateShot, asMarked = false): boolean {
+function shotChanged(shot: MarkStateShot): boolean {
   if (shot.siteRemovalRestoredAt !== null) return true;
-  if (shot.status === "edited" || shot.status === "deleted") return true;
-  // A mark never sits on a shot the labeller added, so `added` only counts
-  // for the point as a whole.
-  return !asMarked && shot.status === "added";
+  return (
+    shot.status === "edited" ||
+    shot.status === "deleted" ||
+    shot.status === "added"
+  );
 }
 
 /**
  * Whether the labeller changed the point or any of its shots — what settles a
- * flag, and what draws the row's pencil.
+ * mark, and what draws the row's pencil.
  */
 export function pointChanged(point: MarkStatePoint): boolean {
   if (point.status === "edited" || point.status === "added") return true;
-  return point.shots.some((shot) => shotChanged(shot));
+  return point.shots.some(shotChanged);
 }
 
 /**
- * Whether the suggestion a flag opened was dismissed.
- *
- * `same_player_consecutive` opens one `missing_shot:<afterEventId>` per pair
- * and the mark does not say which. With the session's `suggestions` the flag
- * is dismissed once every one of the point's own is; without them, once any
- * `missing_shot:` key is on the point.
+ * Whether the suggestion a mark opened was dismissed: "Same side twice" opens
+ * the missing-point slot, and "Dismiss" on it stores `missing_point`.
  */
-function flagDismissed(
-  mark: LabelMark,
-  point: MarkStatePoint,
-  suggestions?: readonly LabelSuggestion[],
-): boolean {
-  if (mark.code === "service_court_repeat") {
-    return point.dismissed.includes("missing_point");
-  }
-  if (mark.code !== "same_player_consecutive") return false;
-  const own = suggestions?.filter(
-    (s) => s.kind === "missing_shot" && s.pointId === point.id,
+function markDismissed(mark: LabelMark, point: MarkStatePoint): boolean {
+  return (
+    mark.code === "service_court_repeat" &&
+    point.dismissed.includes("missing_point")
   );
-  if (own && own.length > 0) {
-    return own.every((s) => point.dismissed.includes(s.key));
-  }
-  return point.dismissed.some((key) => key.startsWith(MISSING_SHOT_PREFIX));
 }
 
 /**
@@ -105,24 +93,18 @@ export function missingPointAdded(
 }
 
 /**
- * Where a mark is in its life. `shot` is the row a shot mark sits on; it only
- * matters when that row is not among `point.shots`. `points` — the session's
- * rows in rail order — lets a "Same side twice" question read settled once a
- * point was added between the two (`missingPointAdded`); without them that
- * answer is not seen.
- *
- * A fix is never `open`: the site already acted, so it is `settled` by nature
- * and `checked` once the point is.
+ * Where a `count` mark is in its life. `points` — the session's rows in rail
+ * order — lets a "Same side twice" question read settled once a point was
+ * added between the two (`missingPointAdded`); without them that answer is
+ * not seen.
  */
 export function markState(
   mark: LabelMark,
   point: MarkStatePoint,
-  shot?: MarkStateShot,
   suggestions?: readonly LabelSuggestion[],
   points?: readonly SuggestionNeighbour[],
 ): MarkState {
   const checked = point.checkedAt !== null;
-  if (mark.kind === "fix") return checked ? "checked" : "settled";
 
   // Answered outranks dismissed, as it does for the suggestion itself: the
   // point is there either way.
@@ -133,11 +115,9 @@ export function markState(
     return checked ? "checked" : "settled";
   }
 
-  if (flagDismissed(mark, point, suggestions)) return "dismissed";
+  if (markDismissed(mark, point)) return "dismissed";
 
-  const changed =
-    pointChanged(point) || (shot !== undefined && shotChanged(shot, true));
-  if (changed) return checked ? "checked" : "settled";
+  if (pointChanged(point)) return checked ? "checked" : "settled";
   return checked ? "checked-as-is" : "open";
 }
 
@@ -146,11 +126,10 @@ export function markState(
  * reads it now (the console's `pointSentence`), passed as a string so `lib/`
  * never imports from `components/`.
  *
- * An open flag reads its own line. A fix reads its own line in every state —
- * the hover still says what the site did. A flag settled and then checked
- * keeps the settled line: the row still shows what was questioned and what
- * the labeller did. A "Same side twice" settled by "Add point" (`pointAdded`,
- * from `missingPointAdded`) says that instead — the flagged point's ending
+ * An open mark reads its own line. One settled and then checked keeps the
+ * settled line: the row still shows what was questioned and what the
+ * labeller did. A "Same side twice" settled by "Add point" (`pointAdded`,
+ * from `missingPointAdded`) says that instead — the marked point's ending
  * never changed, so the ordinary settled line would be false.
  */
 export function stateHover(
@@ -160,12 +139,12 @@ export function stateHover(
   sentence: string,
   pointAdded = false,
 ): string {
-  if (mark.kind === "fix" || state === "open") return markHover(mark, names);
+  if (state === "open") return markHover(mark, names);
   return hoverLine(answeredParts(mark, state, sentence, pointAdded));
 }
 
 /**
- * A flag's line once it is answered, in its two parts: "{label} · {state}"
+ * A mark's line once it is answered, in its two parts: "{label} · {state}"
  * over what the labeller did — nothing under a dismissal, which says it all.
  */
 function answeredParts(
@@ -208,9 +187,9 @@ export interface MarkHoverParts {
 
 /**
  * `stateHover` in two parts, for a tooltip that names first and explains
- * second. An open flag and a fix are named by their chip label
- * (`fixLabel`) over their own line; every other state is the answered line
- * — "Check the ending · settled" over "You changed the ending to …".
+ * second. An open mark is named by its label over its own line; every other
+ * state is the answered line — "Check the ending · settled" over "You
+ * changed the ending to …".
  */
 export function stateHoverParts(
   mark: LabelMark,
@@ -219,8 +198,8 @@ export function stateHoverParts(
   sentence: string,
   pointAdded = false,
 ): MarkHoverParts {
-  if (mark.kind === "fix" || state === "open") {
-    return { name: fixLabel(mark), detail: markHover(mark, names) };
+  if (state === "open") {
+    return { name: MARK_LABEL[mark.code], detail: markHover(mark, names) };
   }
   return answeredParts(mark, state, sentence, pointAdded);
 }
@@ -234,150 +213,125 @@ export function hoverLine({ name, detail }: MarkHoverParts): string {
   return detail ? `${name}${stop} ${detail}` : `${name}${stop}`;
 }
 
-/**
- * "Out call ignored" is the vendor file's commonest defect — on up to a
- * third of all strokes — so it is shown on its shot only and never raised to
- * the point row, nor counted in the match's totals (board 08m).
- */
-export const SHOT_ONLY_CODE: LabelMark["code"] = "out_ball_rally_continued";
+/** What the roll-up reads off a label point. A `LabelPoint` satisfies it. */
+export type MarkListPoint = Pick<LabelPoint, "id"> & {
+  shots: readonly Pick<
+    LabelShot,
+    "id" | "status" | "siteRemoval" | "siteRemovalRestoredAt"
+  >[];
+};
 
 /**
- * "1 shot removed" stands for the point's ghosts — the strokes the site
- * removed that are still out of the rally (`isGhostShot`). Restore puts one
- * back and the chip must follow: it counts the ghosts still live, and goes
- * when none is (board 08m §3: "Restore … drops the grey mark from the
- * point"). The mark's `eventIds` are narrowed to the live ghosts' vendor ids
- * where they line up, so "2 shots removed" reads "1 shot removed" after one
- * Restore; where they do not, the mark keeps its own count.
+ * The point's last stroke still in the rally: not deleted, and not one the
+ * site removed that is still drawn as a ghost (`isGhostShot`).
  */
-export function liveGhostFixes(
-  point: Pick<LabelPoint, "shots">,
-  pointMarks: readonly LabelMark[],
-): LabelMark[] {
-  const ghosts = point.shots.filter(isGhostShot);
-  return pointMarks.flatMap((mark): LabelMark[] => {
-    if (mark.code !== "phantom_strokes_dropped") return [mark];
-    if (ghosts.length === 0) return [];
-    const live = new Set(ghosts.map((shot) => shot.eventId));
-    const eventIds = mark.params.eventIds.filter((id) => live.has(id));
-    if (eventIds.length === 0) return [mark];
-    const narrowed: LabelMark = {
-      ...mark,
-      params: { ...mark.params, eventIds },
-    };
-    return [narrowed];
-  });
+function lastLiveShot(
+  point: MarkListPoint,
+): MarkListPoint["shots"][number] | undefined {
+  return point.shots.findLast(
+    (shot) => shot.status !== "deleted" && !isGhostShot(shot),
+  );
+}
+
+/** What a point shows of the session's marks, by tier. */
+export interface PointRowMarkList {
+  /** The amber chip's marks, which the header counts. */
+  count: LabelMark[];
+  /** The open point's quiet line. Never on a closed row, never counted. */
+  hints: LabelMark[];
 }
 
 /**
- * The marks a point row stands for, as the rail rolls them up: the point's
- * own (ghost fixes counted for the ghosts still live) and those of its live
- * strokes, the shot-only code left out.
+ * The marks a point stands for, by tier — the ONE roll-up the row, the well
+ * and the header all read.
+ *
+ * `count` is the point's own count marks and those of its live strokes (a
+ * deleted stroke's row is a tombstone and carries nothing). `hints` is the
+ * point's own hints and then those of its LAST live stroke only: a hint on a
+ * stroke is about how the point ended, and a stroke the labeller has since
+ * played on from — or removed — no longer ends it. Each hint code is listed
+ * once, however many rallies the point was combined from. A `hidden` mark is
+ * in neither list, whoever built the marks.
  */
 export function pointRowMarkList(
-  point: LabelPoint,
+  point: MarkListPoint,
   marks: LabelMarks,
-): { point: LabelMark[]; shots: LabelMark[] } {
+): PointRowMarkList {
+  const own = marks.points[point.id] ?? [];
+  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const last = lastLiveShot(point);
+  const hints: LabelMark[] = [];
+  for (const mark of [...own, ...(last ? (marks.shots[last.id] ?? []) : [])]) {
+    if (mark.tier !== "hint") continue;
+    if (hints.some((seen) => seen.code === mark.code)) continue;
+    hints.push(mark);
+  }
   return {
-    point: liveGhostFixes(point, marks.points[point.id] ?? []),
-    shots: point.shots
-      // A deleted stroke's row is a tombstone and carries no chip, so its
-      // marks are not counted toward what "open the point" would show.
-      .filter((shot) => shot.status !== "deleted")
-      .flatMap((shot) => marks.shots[shot.id] ?? [])
-      .filter((mark) => mark.code !== SHOT_ONLY_CODE),
+    count: [
+      ...own,
+      ...live.flatMap((shot) => marks.shots[shot.id] ?? []),
+    ].filter((mark) => mark.tier === "count"),
+    hints,
   };
 }
 
 /** What the rail header counts across the match. */
 export interface MarkSummary {
-  /** Flags still open — what is left to check. */
+  /** `count` marks still open — what is left to check. */
   open: number;
-  /** Live points carrying at least one open flag. */
+  /** Live points carrying at least one open mark. */
   openPoints: number;
-  /** Automatic fixes, in every state: a ghost still drawn counts, a restored one does not. */
-  fixes: number;
-  /** Live points carrying at least one fix. */
-  fixPoints: number;
 }
 
 /**
- * The match's totals, over every live point — marks, not points, counted
- * exactly as the rows roll them up (`pointRowMarkList`, `markStates`).
+ * The match's total, over every live point — marks, not points, counted
+ * exactly as the rows roll them up (`pointRowMarkList`, `markStates`). Hints
+ * and hidden marks are not in it.
  */
 export function markSummary(
   points: readonly LabelPoint[],
   marks: LabelMarks,
 ): MarkSummary {
-  const summary: MarkSummary = {
-    open: 0,
-    openPoints: 0,
-    fixes: 0,
-    fixPoints: 0,
-  };
+  const summary: MarkSummary = { open: 0, openPoints: 0 };
   for (const point of points) {
     if (point.status === "deleted") continue;
-    const own = pointRowMarkList(point, marks);
-    const states = markStates(
-      own.point,
-      own.shots,
-      point,
-      marks.suggestions,
-      points,
-    );
-    const all = [
-      ...own.point.map((mark, i) => ({ mark, state: states.point[i] })),
-      ...own.shots.map((mark, i) => ({ mark, state: states.shots[i] })),
-    ];
-    const open = all.filter(
-      (m) => m.mark.kind === "flag" && m.state === "open",
-    ).length;
-    const fixes = all.filter((m) => m.mark.kind === "fix").length;
+    const { count } = pointRowMarkList(point, marks);
+    const states = markStates(count, point, marks.suggestions, points);
+    const open = states.marks.filter((state) => state === "open").length;
     summary.open += open;
-    summary.fixes += fixes;
     if (open > 0) summary.openPoints += 1;
-    if (fixes > 0) summary.fixPoints += 1;
   }
   return summary;
 }
 
-/** The states of a point's marks, and whether the labeller changed it. */
+/** The states of a point's count marks, and whether the labeller changed it. */
 export interface MarkStates {
-  /** One per point mark, in order. */
-  point: MarkState[];
-  /** One per shot mark, in order. */
-  shots: MarkState[];
+  /** One per mark, in order. */
+  marks: MarkState[];
   /** The point or one of its shots was changed by the labeller. */
   changed: boolean;
 }
 
-/**
- * The states `rollupMarks` reads. `shotMarks` is every mark on the point's
- * shots, flattened in rail order — a shot inside the point shares the point's
- * life, so no per-shot row is needed here.
- */
+/** The states `rollupMarks` reads, for `pointRowMarkList`'s `count`. */
 export function markStates(
-  pointMarks: readonly LabelMark[],
-  shotMarks: readonly LabelMark[],
+  countMarks: readonly LabelMark[],
   point: MarkStatePoint,
   suggestions?: readonly LabelSuggestion[],
   points?: readonly SuggestionNeighbour[],
 ): MarkStates {
-  const stateOf = (mark: LabelMark) =>
-    markState(mark, point, undefined, suggestions, points);
   return {
-    point: pointMarks.map(stateOf),
-    shots: shotMarks.map(stateOf),
+    marks: countMarks.map((mark) =>
+      markState(mark, point, suggestions, points),
+    ),
     changed: pointChanged(point),
   };
 }
 
 /**
- * One chip on the point row.
+ * The chip on the point row.
  *
  * `text` is the words, or null for the icon-only form. `count` is how many
- * marks the chip stands for; the chip draws it as a bare number only when
- * `text` is null and it is past one.
+ * marks the chip stands for.
  */
 export interface MarkRollupChip {
   text: string | null;
@@ -387,7 +341,6 @@ export interface MarkRollupChip {
 
 export interface MarkRollup {
   flag: MarkRollupChip | null;
-  fix: MarkRollupChip | null;
   /** The blue "Changed by you" pencil. */
   pencil: boolean;
 }
@@ -406,54 +359,28 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
 }
 
 /**
- * What the point row shows: at most one flag chip and one fix chip.
+ * What the point row shows: at most one chip, for its `count` marks.
  *
- * The first chip keeps its words and the rest fold to icons, so a fix beside
- * a worded flag is icon-only. Past one of a kind the words give way to a
- * count — "N to check" for the flags still open, a bare number for fixes. A
- * quiet chip (nothing open; a fix on a checked point) has no words at all.
- * Shot marks count toward the point's totals.
+ * One mark still open is its own words; past one the words give way to
+ * "N to check". A quiet chip (nothing open) has no words at all.
  */
 export function rollupMarks(
-  pointMarks: readonly LabelMark[],
-  shotMarks: readonly LabelMark[],
+  countMarks: readonly LabelMark[],
   states: MarkStates,
 ): MarkRollup {
-  const all = [
-    ...pointMarks.map((mark, i) => ({ mark, state: states.point[i] })),
-    ...shotMarks.map((mark, i) => ({ mark, state: states.shots[i] })),
-  ];
-  const flags = all.filter((m) => m.mark.kind === "flag");
-  const fixes = all.filter((m) => m.mark.kind === "fix");
-
   let flag: MarkRollupChip | null = null;
-  if (flags.length > 0) {
-    const open = flags.filter((m) => m.state === "open");
+  if (countMarks.length > 0) {
+    const open = countMarks.filter((_, i) => states.marks[i] === "open");
     flag = {
       text:
         open.length === 0
           ? null
           : open.length === 1
-            ? MARK_LABEL[open[0].mark.code]
+            ? MARK_LABEL[open[0].code]
             : `${open.length} to check`,
-      count: flags.length,
-      state: mostOpen(flags.map((m) => m.state)),
+      count: countMarks.length,
+      state: mostOpen(states.marks),
     };
   }
-
-  let fix: MarkRollupChip | null = null;
-  if (fixes.length > 0) {
-    const state = mostOpen(fixes.map((m) => m.state));
-    const worded =
-      fixes.length === 1 &&
-      state === "settled" &&
-      (flag?.text ?? null) === null;
-    fix = {
-      text: worded ? fixLabel(fixes[0].mark) : null,
-      count: fixes.length,
-      state,
-    };
-  }
-
-  return { flag, fix, pencil: states.changed };
+  return { flag, pencil: states.changed };
 }

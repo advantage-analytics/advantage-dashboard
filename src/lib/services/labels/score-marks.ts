@@ -23,6 +23,14 @@
  *   there. Once an ordinary game is already decided (score.ts `gameDecided`)
  *   the rows past its end read "Game–30" and the overflow slot owns them: no
  *   expectation either.
+ * - **Once per game.** One wrong winner flips the parity of every point after
+ *   it in the game, so each of them disagrees with its serve too. Only the
+ *   FIRST point of a game that mismatches carries the mark: the later ones
+ *   follow from it, and clear with it when it is fixed. A later mismatch of
+ *   the same game is not drawn while the first stands; once the first agrees,
+ *   the next point that still disagrees is the first, and carries it.
+ *   "Same side twice" needs no such rule: it compares two SERVES, not a serve
+ *   with the score, so a wrong score upstream does not repeat it.
  * - **Repeat.** Two consecutive live points of one game served from one
  *   known side. Not when the second sits at 40–40 under no-ad, not across a
  *   let (the point was replayed from the same side, as it should be), and
@@ -70,6 +78,8 @@ interface GameRun {
   type: LabelGameType;
   points: Record<LabelSide, number>;
   decided: boolean;
+  /** A point of this game already carries "Wrong side for the score". */
+  mismatched: boolean;
   /** The last live point of the game with a known side, for the repeat. */
   previous: {
     id: string;
@@ -119,6 +129,7 @@ export function liveScoreMarks(
         type: point.gameType ?? "game",
         points: { p1: 0, p2: 0 },
         decided: false,
+        mismatched: false,
         previous: null,
       };
       runs.set(key, run);
@@ -127,10 +138,16 @@ export function liveScoreMarks(
     if (point.ending !== "not_a_point") {
       const actual = serveSides[point.id] ?? null;
       const expected = expectedSide(run, adScoring);
-      if (actual !== null && expected !== null && actual !== expected) {
+      if (
+        !run.mismatched &&
+        actual !== null &&
+        expected !== null &&
+        actual !== expected
+      ) {
+        run.mismatched = true;
         (out.points[point.id] ??= []).push({
           code: "score_side_mismatch",
-          kind: "flag",
+          tier: "count",
           scope: "point",
           params: {
             score: scores.get(point.id)?.scoreBefore ?? null,
@@ -155,7 +172,7 @@ export function liveScoreMarks(
         ) {
           (out.points[point.id] ??= []).push({
             code: "service_court_repeat",
-            kind: "flag",
+            tier: "count",
             scope: "point",
             params: { side: actual },
           });

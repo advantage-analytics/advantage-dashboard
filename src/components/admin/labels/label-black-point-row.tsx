@@ -123,8 +123,8 @@ export function pointChangedByYou(
  * Left to right: the point's number · the
  * WINNER mark, which is the menu that changes who won · how the point ended
  * as a sentence over the deciding shot, the time and the rally · a tail slot
- * carrying the point's marks (board 08m: what to check, what the site fixed)
- * and the blue pencil on a point the labeller has changed · the score
+ * carrying the point's chip (board 08m: what to check, for the marks that
+ * can change the score) and the blue pencil on a point the labeller has changed · the score
  * before the point · the row's actions (⋯), there only on hover, on
  * focus and on the playing row · the tick that marks the point checked.
  *
@@ -257,14 +257,15 @@ export const BlackPointRow = memo(function BlackPointRow({
           </span>
         </button>
 
-        {/* The marks, in the frame's order: what to check, what was fixed,
-            then the pencil — which is the point's Reset as well, when its
-            own fields have changed and it has a seed to go back to (the
-            same ask as the menu's). A chip's words go before the two lines
-            do — see `MarkChip` — so the tail never takes the score's room. */}
+        {/* The tail: what to check — the one chip, for the marks that can
+            change the score — then the pencil, which is the point's Reset
+            as well, when its own fields have changed and it has a seed to
+            go back to (the same ask as the menu's). A chip's words go
+            before the two lines do — see `MarkChip` — so the tail never
+            takes the score's room. A hint is not here: it is a word in the
+            open point's well (`PointHintLine`). */}
         <span data-row-tail="" className="inline-flex items-center gap-2">
           {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
-          {rowMarks?.fix ? <MarkChip {...rowMarks.fix} /> : null}
           {changed ? (
             <PencilMark
               reset={

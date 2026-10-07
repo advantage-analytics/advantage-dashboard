@@ -71,7 +71,7 @@ function sameSideMark(): LabelMark {
   const meta = LABEL_MARK_META.service_court_repeat;
   return {
     code: "service_court_repeat",
-    kind: meta.kind,
+    tier: meta.tier,
     scope: meta.scope,
     params: { side: "ad" },
   } as LabelMark;
@@ -865,7 +865,7 @@ test.describe("a suggested point on the black rail", () => {
     expect(at).toBeLessThan(html.indexOf(`data-point-id="${P2}"`));
     expect(html.match(/data-point-suggestion=/g)).toHaveLength(1);
     // The flagged point still carries its open question.
-    expect(tag(pointRow(html, P2), 'data-mark-kind="flag"')).toContain(
+    expect(tag(pointRow(html, P2), 'data-mark-chip=""')).toContain(
       'data-mark-state="open"',
     );
     expect(numberOf(html, P2)).toBe("2");
@@ -958,7 +958,7 @@ test.describe("a suggested point on the black rail", () => {
     // The flagged point's question goes grey, never away: settled by the
     // point now between the two, and the hover says that — not "changed the
     // ending", which it did not.
-    const chip = tag(pointRow(html, P2), 'data-mark-kind="flag"');
+    const chip = tag(pointRow(html, P2), 'data-mark-chip=""');
     expect(chip).toContain('data-mark-state="settled"');
     expect(chip).toContain(
       'aria-label="Same side twice · settled. You added the missing point."',
@@ -979,7 +979,7 @@ test.describe("a suggested point on the black rail", () => {
     };
     const html = black(let_, marksOf());
     expect(html).not.toContain("data-point-suggestion=");
-    expect(tag(pointRow(html, P2), 'data-mark-kind="flag"')).toContain(
+    expect(tag(pointRow(html, P2), 'data-mark-chip=""')).toContain(
       'data-mark-state="settled"',
     );
     expect(inner(pointRow(html, P2), "data-point-sentence")).toBe(
@@ -994,7 +994,7 @@ test.describe("a suggested point on the black rail", () => {
     };
     const after = black(dismissed, marksOf());
     expect(after).not.toContain("data-point-suggestion=");
-    expect(tag(pointRow(after, P2), 'data-mark-kind="flag"')).toContain(
+    expect(tag(pointRow(after, P2), 'data-mark-chip=""')).toContain(
       'data-mark-state="dismissed"',
     );
     expect(pointRow(after, P2)).not.toContain("data-pencil");

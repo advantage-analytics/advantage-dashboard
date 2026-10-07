@@ -23,6 +23,7 @@ import {
   isServeFault,
   LABEL_MARK_META,
   LABEL_ONLY_FLAGS,
+  netHitTier,
   type LabelMark,
   type LabelMarks,
   type MarkablePoint,
@@ -87,7 +88,16 @@ const codesOf = (marks: LabelMark[] | undefined) =>
 
 const clean = load("clean-match.json");
 const cleanPoints = labelPointsFrom(clean.transcript, clean.raw);
+// Every code the derivation raises, hidden ones too — the scorecard's
+// reading, and what the join itself is pinned against.
 const cleanMarks = buildLabelMarks(
+  clean.transcript,
+  clean.analysis.rallies,
+  cleanPoints,
+  { hidden: true },
+);
+// What the console is handed: no hidden mark at all.
+const shownMarks = buildLabelMarks(
   clean.transcript,
   clean.analysis.rallies,
   cleanPoints,
@@ -129,7 +139,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       // Point marks carry point-scoped codes only, in the derivation's order.
       for (const m of cleanMarks.points[labelId]) {
         expect(m.scope).toBe("point");
-        expect(m.kind).toBe(LABEL_MARK_META[m.code].kind);
+        expect(m.tier).toBe(LABEL_MARK_META[m.code].tier);
       }
     }
     expect(flagged).toBeGreaterThan(20);
@@ -155,7 +165,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       const m = marks.find((x) => x.code === "winner_disputed");
       expect(m).toBeDefined();
       if (m?.code !== "winner_disputed") throw new Error("narrowing");
-      expect(m.kind).toBe("flag");
+      expect(m.tier).toBe("count");
       expect(m.params.scoreWinner).toBe(side(point.won_by_player1));
       const byFlag = lastStrokeWinner(rallyById.get(point.rally_id)!);
       expect(m.params.lastStrokeWinner).toBe(side(byFlag === player1));
@@ -178,14 +188,18 @@ test.describe("buildLabelMarks on the clean fixture", () => {
         for (const m of marks) {
           expect(m.scope).toBe("shot");
           if (m.code === "out_ball_rally_continued") {
-            expect(m.kind).toBe("fix");
+            expect(m.tier).toBe("hidden");
             expect(m.params.nextHitter).toBe(
               side(point.shots[i + 1].is_player1),
             );
           }
-          if (m.code === "net_hit_contradicts_height")
-            expect(m.kind).toBe("flag");
-          if (m.code === "geometry_discarded") expect(m.kind).toBe("fix");
+          if (m.code === "net_hit_contradicts_height") {
+            // A hint only where it bears on the ending: the last stroke.
+            expect(m.tier).toBe(
+              i === point.shots.length - 1 ? "hint" : "hidden",
+            );
+          }
+          if (m.code === "geometry_discarded") expect(m.tier).toBe("hidden");
         }
       });
     }
@@ -208,7 +222,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
         (x) => x.code === "phantom_strokes_dropped",
       );
       if (m?.code !== "phantom_strokes_dropped") throw new Error("missing");
-      expect(m.kind).toBe("fix");
+      expect(m.tier).toBe("hidden");
       const kept = new Set(point.shots.map((s) => s.event_id));
       const rally = rallyById.get(point.rally_id)!;
       expect(m.params.eventIds).toEqual(
@@ -276,6 +290,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       clean.transcript,
       clean.analysis.rallies,
       without,
+      { hidden: true },
     );
     expect(cleanMarks.points[gone]).toBeDefined();
     expect(marks.points[gone]).toBeUndefined();
@@ -303,6 +318,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       clean.transcript,
       clean.analysis.rallies,
       pruned,
+      { hidden: true },
     );
     expect(marks2.shots[pair.afterShotId]).toBeUndefined();
     expect(marks2.suggestions.some((s) => s.key === pair.key)).toBe(false);
@@ -338,6 +354,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
       doctored,
       clean.analysis.rallies,
       cleanPoints,
+      { hidden: true },
     );
     expect(marks).toEqual(cleanMarks);
     const all = [
@@ -347,7 +364,6 @@ test.describe("buildLabelMarks on the clean fixture", () => {
     for (const m of all) {
       expect(m.code).not.toBe("hitter_switched");
       expect(m.code in LABEL_MARK_META).toBe(true);
-      expect(m.kind).toBe(LABEL_MARK_META[m.code].kind);
       expect(m.scope).toBe(LABEL_MARK_META[m.code].scope);
     }
   });
@@ -612,7 +628,7 @@ test.describe("the labels-only flags", () => {
     const m = marks.points.p1[0];
     expect(m).toEqual({
       code: "serve_fault",
-      kind: "flag",
+      tier: "hint",
       scope: "point",
       params: {},
     });
@@ -656,7 +672,7 @@ test.describe("the labels-only flags", () => {
     ]);
     const open = marksFor([rally], [null]);
     expect(open.points.p1).toEqual([
-      { code: "pick_winner", kind: "flag", scope: "point", params: {} },
+      { code: "pick_winner", tier: "count", scope: "point", params: {} },
     ]);
     const settled = marksFor([rally], ["B"]);
     expect(settled.points.p1).toBeUndefined();
@@ -683,11 +699,134 @@ test.describe("the labels-only flags", () => {
     expect(marks.points.p1).toEqual([
       {
         code: "winner_disputed",
-        kind: "flag",
+        tier: "count",
         scope: "point",
         params: { scoreWinner: "p1", lastStrokeWinner: "p2" },
       },
-      { code: "serve_fault", kind: "flag", scope: "point", params: {} },
+      { code: "serve_fault", tier: "hint", scope: "point", params: {} },
     ]);
+  });
+});
+
+test.describe("the three tiers", () => {
+  test("each code's tier is decided in LABEL_MARK_META, and nowhere else", () => {
+    const tiers = Object.fromEntries(
+      Object.entries(LABEL_MARK_META).map(([code, meta]) => [code, meta.tier]),
+    );
+    expect(tiers).toEqual({
+      // Can change the score: the amber chip, counted in the header.
+      winner_disputed: "count",
+      pick_winner: "count",
+      reserve_after_in: "count",
+      tiebreak_score_off_six_all: "count",
+      score_side_mismatch: "count",
+      service_court_repeat: "count",
+      // How the point ended: the open point's quiet line.
+      ending_suspect_line: "hint",
+      winner_to_error_by_bounce: "hint",
+      serve_fault: "hint",
+      second_serve_called_out: "hint",
+      result_type_unknown: "hint",
+      // A hint on the point's last stroke only (`netHitTier`).
+      net_hit_contradicts_height: "hint",
+      // Drawn nowhere, counted nowhere.
+      same_player_consecutive: "hidden",
+      phantom_strokes_dropped: "hidden",
+      winner_guessed: "hidden",
+      score_frozen: "hidden",
+      out_ball_rally_continued: "hidden",
+      geometry_discarded: "hidden",
+    });
+    expect(netHitTier(true)).toBe("hint");
+    expect(netHitTier(false)).toBe("hidden");
+  });
+
+  test("a hidden mark never reaches the rows: the default output carries none", () => {
+    // The fixture raises every hidden code, so this is not vacuous.
+    const hiddenSeen = new Set(
+      [...Object.values(cleanMarks.points), ...Object.values(cleanMarks.shots)]
+        .flat()
+        .filter((m) => m.tier === "hidden")
+        .map((m) => m.code),
+    );
+    expect([...hiddenSeen]).toEqual(
+      expect.arrayContaining([
+        "same_player_consecutive",
+        "phantom_strokes_dropped",
+        "out_ball_rally_continued",
+      ]),
+    );
+
+    const shown = [
+      ...Object.values(shownMarks.points),
+      ...Object.values(shownMarks.shots),
+    ];
+    for (const list of shown) {
+      // No row is left holding an empty list.
+      expect(list.length).toBeGreaterThan(0);
+      for (const m of list) expect(m.tier).not.toBe("hidden");
+    }
+    // Exactly the full reading with the hidden marks taken out.
+    const strip = (into: Record<string, LabelMark[]>) =>
+      Object.fromEntries(
+        Object.entries(into)
+          .map(([id, list]) => [id, list.filter((m) => m.tier !== "hidden")])
+          .filter(([, list]) => list.length > 0),
+      );
+    expect(shownMarks.points).toEqual(strip(cleanMarks.points));
+    expect(shownMarks.shots).toEqual(strip(cleanMarks.shots));
+  });
+
+  test("hiding the chips takes nothing from the slots or the serve sides", () => {
+    // `same_player_consecutive`'s missing-stroke slot and `serveSides` are
+    // built beside the marks, not from them.
+    expect(shownMarks.suggestions).toEqual(cleanMarks.suggestions);
+    expect(
+      shownMarks.suggestions.filter((s) => s.kind === "missing_shot").length,
+    ).toBeGreaterThan(0);
+    expect(shownMarks.serveSides).toEqual(cleanMarks.serveSides);
+  });
+
+  test("“Net or out?” is a hint on the point's last stroke only", () => {
+    const rally = rallyOf(1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke"],
+    ]);
+    const netHit = (at: number[]): Array<Partial<DerivedPoint>> => [
+      {
+        shots: rally.strokes.map((s, i) => ({
+          ...shotOf(s, i),
+          flags: at.includes(i) ? [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT] : [],
+        })),
+      },
+    ];
+    const [first, , last] = rally.strokes.map((s) => `s${s.eventId}`);
+
+    // On the last stroke: a hint, on that shot.
+    const onLast = marksFor([rally], ["A"], netHit([2]));
+    expect(onLast.shots).toEqual({
+      [last]: [
+        {
+          code: "net_hit_contradicts_height",
+          tier: "hint",
+          scope: "shot",
+          params: {},
+        },
+      ],
+    });
+
+    // Mid-rally: nothing at all in what the console is handed…
+    const mid = marksFor([rally], ["A"], netHit([0, 2]));
+    expect(Object.keys(mid.shots)).toEqual([last]);
+    // …and hidden in the full reading.
+    const full = buildLabelMarks(
+      transcriptOf([rally], ["A"], netHit([0, 2])),
+      [rally],
+      labelRows([rally]),
+      { hidden: true },
+    );
+    expect(full.shots[first].map((m) => m.tier)).toEqual(["hidden"]);
+    expect(full.shots[last].map((m) => m.tier)).toEqual(["hint"]);
   });
 });

@@ -1,6 +1,6 @@
 /**
- * The marks the black rail draws beside a label row: what the derivation
- * flagged or fixed on the point the row came from, joined back onto the label
+ * The marks the black rail draws on a label row: what the derivation
+ * questioned on the point the row came from, joined back onto the label
  * tables through the vendor ids each row froze.
  *
  * Pure. It reads a transcript built from the raw vendor file with the CURRENT
@@ -23,6 +23,16 @@
  * was actually hit from — and the console raises those two flags from it
  * against the LIVE labelled score (score-marks.ts), so a corrected winner or
  * an added point re-reads them at once.
+ *
+ * Every code has a TIER, decided in one place (`LABEL_MARK_META`): `count`
+ * can change the score and is the amber chip the header counts; `hint` is
+ * about how a point ended and is one quiet line in the open point; `hidden`
+ * is not drawn or counted anywhere and, by default, is not in this module's
+ * output at all — the labeller changed almost nothing on the points those
+ * marked. The suggestions (`same_player_consecutive`'s missing stroke) and
+ * `serveSides` are built beside the marks, not from them, so a hidden chip
+ * takes neither away; the strokes the site removed are label rows of their
+ * own (site-removal.ts) and never depended on a mark.
  *
  * The result is plain data — records and arrays, no Map, Set or class —
  * because it is built in a Server Component and handed to the `"use client"`
@@ -55,7 +65,17 @@ import {
   type LabelSide,
 } from "./session";
 
-export type LabelMarkKind = "flag" | "fix";
+/**
+ * How loudly a mark is drawn.
+ *
+ * - `count` — can change the score: an amber chip on the point's row, counted
+ *   in the rail header's total.
+ * - `hint` — about HOW the point ended, rarely who won: no chip and no count,
+ *   one quiet line in the open point (marks-state.ts `pointRowMarkList`).
+ * - `hidden` — drawn nowhere and counted nowhere; left out of
+ *   `buildLabelMarks` unless asked for (`hidden`, the scorecard's reading).
+ */
+export type LabelMarkTier = "count" | "hint" | "hidden";
 export type LabelMarkScope = "point" | "shot";
 
 /** Labels-only flags, computed from the rally rather than read off a row. */
@@ -67,33 +87,41 @@ export const LABEL_ONLY_FLAGS = {
 } as const;
 
 /**
- * Every code that becomes a mark, with what it is and where it sits. A code in
- * a transcript's `flags[]` that is not a key here produces nothing — the
- * withdrawn fixes, and anything the derivation adds later, stay invisible
- * until a row is written for them deliberately.
+ * Every code that becomes a mark, with how loudly it is drawn and where it
+ * sits — the ONE place a code's tier is decided. A code in a transcript's
+ * `flags[]` that is not a key here produces nothing — the withdrawn fixes,
+ * and anything the derivation adds later, stay invisible until a row is
+ * written for them deliberately.
+ *
+ * One code has two tiers: `net_hit_contradicts_height` is a `hint` only on
+ * the point's last stroke, where it bears on the ending, and `hidden` on any
+ * stroke before it (`netHitTier`). `same_player_consecutive` and
+ * `phantom_strokes_dropped` are hidden as CHIPS only: the dashed
+ * missing-stroke slot and the struck-through removed stroke they describe
+ * are drawn as before.
  */
 export const LABEL_MARK_META = {
-  [POINT_FLAGS.WINNER_DISPUTED]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.ENDING_SUSPECT_LINE]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.RESERVE_AFTER_IN]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.SERVICE_COURT_REPEAT]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.SCORE_SIDE_MISMATCH]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL]: { kind: "flag", scope: "point" },
-  [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { kind: "flag", scope: "point" },
-  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { kind: "flag", scope: "point" },
-  [LABEL_ONLY_FLAGS.PICK_WINNER]: { kind: "flag", scope: "point" },
-  [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { kind: "flag", scope: "shot" },
-  [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { kind: "fix", scope: "point" },
-  [POINT_FLAGS.WINNER_GUESSED]: { kind: "fix", scope: "point" },
-  [POINT_FLAGS.SCORE_FROZEN]: { kind: "fix", scope: "point" },
-  [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { kind: "fix", scope: "shot" },
-  [SHOT_FLAGS.GEOMETRY_DISCARDED]: { kind: "fix", scope: "shot" },
+  [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.PICK_WINNER]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.RESERVE_AFTER_IN]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.TIEBREAK_SCORE_OFF_SIX_ALL]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.SCORE_SIDE_MISMATCH]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
+  [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
+  [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
+  [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
+  [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
+  [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "hidden", scope: "point" },
+  [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
+  [POINT_FLAGS.WINNER_GUESSED]: { tier: "hidden", scope: "point" },
+  [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
+  [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
+  [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },
 } as const satisfies Record<
   string,
-  { kind: LabelMarkKind; scope: LabelMarkScope }
+  { tier: LabelMarkTier; scope: LabelMarkScope }
 >;
 
 export type LabelMarkCode = keyof typeof LABEL_MARK_META;
@@ -141,11 +169,15 @@ export interface LabelMarkParams {
   geometry_discarded: NoParams;
 }
 
-/** One mark on a point or a shot. `kind` and `scope` follow from `code`. */
+/**
+ * One mark on a point or a shot. `scope` follows from `code`; so does `tier`,
+ * but for the one code that is quieter off the point's last stroke
+ * (`netHitTier`).
+ */
 export type LabelMark = {
   [C in LabelMarkCode]: {
     code: C;
-    kind: (typeof LABEL_MARK_META)[C]["kind"];
+    tier: LabelMarkTier;
     scope: (typeof LABEL_MARK_META)[C]["scope"];
     params: LabelMarkParams[C];
   };
@@ -213,9 +245,25 @@ const isServeShot = (shot: Pick<DerivedShot, "shot_type">) =>
 function mark<C extends LabelMarkCode>(
   code: C,
   params: LabelMarkParams[C],
+  tier: LabelMarkTier = LABEL_MARK_META[code].tier,
 ): LabelMark {
-  const meta = LABEL_MARK_META[code];
-  return { code, kind: meta.kind, scope: meta.scope, params } as LabelMark;
+  return {
+    code,
+    tier,
+    scope: LABEL_MARK_META[code].scope,
+    params,
+  } as LabelMark;
+}
+
+/**
+ * "Net or out?" bears on how the point ended only on its last stroke; on a
+ * stroke the rally went on from, it is the vendor's height disagreeing with
+ * itself about a ball that was plainly played.
+ */
+export function netHitTier(isLastStroke: boolean): LabelMarkTier {
+  return isLastStroke
+    ? LABEL_MARK_META[SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT].tier
+    : "hidden";
 }
 
 /**
@@ -326,7 +374,10 @@ function pointMarks(
   return marks;
 }
 
-/** The marks of one derived shot, from its own flags. */
+/**
+ * The marks of one derived shot, from its own flags. `shots` are the point's
+ * kept strokes, so the last of them is the point's last stroke.
+ */
 function shotMarks(shots: DerivedShot[], index: number): LabelMark[] {
   const shot = shots[index];
   const marks: LabelMark[] = [];
@@ -341,6 +392,8 @@ function shotMarks(shots: DerivedShot[], index: number): LabelMark[] {
         break;
       }
       case SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT:
+        marks.push(mark(code, {}, netHitTier(index === shots.length - 1)));
+        break;
       case SHOT_FLAGS.GEOMETRY_DISCARDED:
         marks.push(mark(code, {}));
         break;
@@ -417,11 +470,17 @@ function midpoint(a: number | null, b: number | null): number | null {
  *
  * `serveSides` is read off the first transcript point that lands on each
  * label point — a point built from several rallies opened with the first.
+ *
+ * A `hidden` mark is left out: it never reaches a row. `hidden: true` keeps
+ * them, for the one reader that measures every code against what the
+ * labeller did (labels/scorecard.ts) — never for the console. The
+ * suggestions and `serveSides` are the same either way.
  */
 export function buildLabelMarks(
   transcript: Transcript,
   rallies: readonly SplitStepRally[],
   points: readonly MarkablePoint[],
+  { hidden = false }: { hidden?: boolean } = {},
 ): LabelMarks {
   const pointIdByRally = new Map<number, string>();
   const shotIdByEvent = new Map<number, string>();
@@ -457,8 +516,9 @@ export function buildLabelMarks(
     id: string,
     list: LabelMark[],
   ) => {
-    if (list.length === 0) return;
-    (into[id] ??= []).push(...list);
+    const kept = hidden ? list : list.filter((m) => m.tier !== "hidden");
+    if (kept.length === 0) return;
+    (into[id] ??= []).push(...kept);
   };
 
   for (const point of transcript.points) {

@@ -7,14 +7,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import {
-  Flag,
-  Maximize,
-  Maximize2,
-  Minimize,
-  Minimize2,
-  WandSparkles,
-} from "lucide-react";
+import { Flag, Maximize, Maximize2, Minimize, Minimize2 } from "lucide-react";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
@@ -34,7 +27,6 @@ import {
   SCORE_MISMATCH_ANSWERS,
   SCORE_MISMATCH_LABEL,
   findGapDescription,
-  fixesLabel,
   onPointsDetail,
   scoreMismatchDetail,
   scoreMismatchText,
@@ -84,9 +76,10 @@ import type { SaveStatus } from "./save-status";
  * tab's points list in its dark tone, carrying labels.
  *
  * A 46px header — "{player1} vs {player2}", "{checked} / {total} checked",
- * then the match's two totals in the same mono (a flag glyph with how many
- * marks are still to check, a wand with how many automatic fixes the site
- * made — `markSummary`, only with marks built), then, when the labelled
+ * then the match's one total in the same mono (a flag glyph with how many
+ * marks that can change the score are still to check — `markSummary`, only
+ * with marks built; hints and what the site did by itself are not counted),
+ * then, when the labelled
  * points make a set score the entered one disagrees with, the score chip
  * (`ScoreChip`: the labelled pair against the entered one, in amber, opening
  * the three answers as a menu in the rail's tone; only with marks built, and not once the
@@ -135,7 +128,7 @@ import type { SaveStatus } from "./save-status";
  *
  * The docked rail sits under the page's own header, which already names the
  * match, counts the checked points and shows the save line: `showSession`
- * off drops those three for a plain "Points", and keeps the two totals and
+ * off drops those three for a plain "Points", and keeps the total and
  * the score chip. `onFullScreen` is its way into the full-screen view; with
  * no `onExit` there is nothing to leave.
  */
@@ -276,8 +269,8 @@ export function LabelBlackRail({
     marks !== null && videoEndsEarly !== true
       ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
       : null;
-  // The header's two totals, over every live row — marks, not points, as
-  // the rows roll them up. Nothing on the marks-off session.
+  // The header's total, over every live row — marks, not points, as the
+  // rows roll them up. Nothing on the marks-off session.
   const summary = useMemo(
     () => (marks ? markSummary(points, marks) : null),
     [points, marks],
@@ -362,28 +355,14 @@ export function LabelBlackRail({
             </span>
           ) : null}
           {summary ? (
-            <>
-              <RailTotal
-                attr="data-label-rail-to-check"
-                icon={Flag}
-                count={summary.open}
-                label={toCheckLabel(summary.open)}
-                detail={onPointsDetail(summary.openPoints)}
-                className={
-                  summary.open > 0
-                    ? "text-[var(--rail-amber)]"
-                    : "text-white/45"
-                }
-              />
-              <RailTotal
-                attr="data-label-rail-fixes"
-                icon={WandSparkles}
-                count={summary.fixes}
-                label={fixesLabel(summary.fixes)}
-                detail={onPointsDetail(summary.fixPoints)}
-                className="text-white/55"
-              />
-            </>
+            <RailTotal
+              count={summary.open}
+              label={toCheckLabel(summary.open)}
+              detail={onPointsDetail(summary.openPoints)}
+              className={
+                summary.open > 0 ? "text-[var(--rail-amber)]" : "text-white/45"
+              }
+            />
           ) : null}
           {mismatch ? (
             <ScoreChip
@@ -551,21 +530,16 @@ export function LabelBlackRail({
 }
 
 /**
- * One of the header's two totals: a glyph and a count in the progress
- * line's mono, named for a screen reader and the dark tooltip — the
- * marks-copy sentence over "On 30 points". Not a control: nothing happens on
- * a click.
+ * The header's total: a flag glyph and a count in the progress line's mono,
+ * named for a screen reader and the dark tooltip — the marks-copy sentence
+ * over "On 30 points". Not a control: nothing happens on a click.
  */
 function RailTotal({
-  attr,
-  icon: Icon,
   count,
   label,
   detail,
   className,
 }: {
-  attr: string;
-  icon: typeof Flag;
   count: number;
   label: string;
   detail: string | undefined;
@@ -576,13 +550,13 @@ function RailTotal({
       <span
         role="img"
         aria-label={label}
-        {...{ [attr]: "" }}
+        data-label-rail-to-check=""
         className={cn(
           "mono tabular inline-flex shrink-0 items-center gap-1 text-[10px] whitespace-nowrap",
           className,
         )}
       >
-        <Icon className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
+        <Flag className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
         {count}
       </span>
     </ChromeTooltip>

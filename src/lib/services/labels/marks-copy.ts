@@ -1,5 +1,10 @@
 /**
- * The words of a mark: the two-or-three-word chip label and the hover line.
+ * The words of a mark: its two-or-three-word label — a `count` mark's chip, a
+ * `hint`'s word on the open point's quiet line — and the hover line.
+ *
+ * A `hidden` mark (marks.ts `LABEL_MARK_META`) is drawn nowhere; its words
+ * are kept because the scorecard names every code by them
+ * (labels/scorecard.ts), and so a code that is promoted again needs no copy.
  *
  * Board 08m is the source and the copy is its, word for word — the label
  * names the doubt, not the rule; the hover says what was seen, then what was
@@ -21,7 +26,7 @@ import type { LabelSide } from "./session";
  */
 export type MarkNames = Record<LabelSide, string>;
 
-/** The chip's words. A fix that removed several shots reads through `fixLabel`. */
+/** A mark's words. */
 export const MARK_LABEL: Record<LabelMarkCode, string> = {
   winner_disputed: "Check the ending",
   winner_to_error_by_bounce: "Winner or error?",
@@ -43,24 +48,10 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   geometry_discarded: "No position",
 };
 
-/**
- * A mark's label, counting what a fix removed: "1 shot removed" becomes
- * "N shots removed" past one. Every other mark reads `MARK_LABEL`.
- */
-export function fixLabel(mark: LabelMark): string {
-  if (
-    mark.code === "phantom_strokes_dropped" &&
-    mark.params.eventIds.length > 1
-  ) {
-    return `${mark.params.eventIds.length} shots removed`;
-  }
-  return MARK_LABEL[mark.code];
-}
-
 /** A point score ("0-15") as the board writes one ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
 
-// ── The rail header's totals ────────────────────────────────────────────────
+// ── The rail header's total ─────────────────────────────────────────────────
 
 /** "41 flags to check" — the header's open-flag count, as a sentence. */
 export function toCheckLabel(count: number): string {
@@ -68,13 +59,7 @@ export function toCheckLabel(count: number): string {
   return `${count} ${count === 1 ? "flag" : "flags"} to check`;
 }
 
-/** "62 automatic fixes" — the header's fix count, as a sentence. */
-export function fixesLabel(count: number): string {
-  if (count === 0) return "No automatic fixes";
-  return `${count} automatic ${count === 1 ? "fix" : "fixes"}`;
-}
-
-/** "On 30 points" — how many points a header count is spread over. */
+/** "On 30 points" — how many points the header's count is spread over. */
 export function onPointsDetail(count: number): string | undefined {
   if (count === 0) return undefined;
   return `On ${count} ${count === 1 ? "point" : "points"}`;
@@ -129,8 +114,8 @@ export function findGapDescription(
  * names where the board writes its sample ones.
  *
  * Four lines have a second form for what the board's single sample cannot
- * show — a mark whose side or score the derivation could not read, and a fix
- * that removed more than one shot.
+ * show — a mark whose side or score the derivation could not read, and a
+ * removal of more than one shot.
  */
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {

@@ -130,7 +130,7 @@ const FIXTURE_MARKS: LabelMarks = {
     "p-0001": [
       {
         code: "winner_disputed",
-        kind: "flag",
+        tier: "count",
         scope: "point",
         params: { scoreWinner: "p2", lastStrokeWinner: "p1" },
       },

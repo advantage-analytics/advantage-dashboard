@@ -23,7 +23,7 @@ import { canSplitAtShot } from "@/lib/services/labels/point-split";
 import { canResetShot } from "@/lib/services/labels/reset";
 import { shotPlacement } from "@/lib/services/labels/shot-derived";
 import { suggestionState } from "@/lib/services/labels/suggestions";
-import { courtPair, withoutGhosts } from "./label-black-format";
+import { courtPair } from "./label-black-format";
 import {
   AMBER_SUGGESTION_INK,
   RAIL_PRESS,
@@ -31,13 +31,7 @@ import {
   BlackUndoButton,
 } from "./label-black-parts";
 import { positionPatch } from "@/lib/services/labels/shot-derived";
-import {
-  MarkChip,
-  PencilMark,
-  collapseShotMarks,
-  shotRowMarks,
-  type ShotRowMark,
-} from "./label-black-mark";
+import { PencilMark, PointHintLine, pointHints } from "./label-black-mark";
 import {
   EditableCell,
   SelectEditor,
@@ -103,18 +97,20 @@ import { sideLabel, type EditContext } from "./label-row-parts";
  * passes its edge, and a word that no longer fits truncates (a select's
  * whole word is in its menu, the placement's in a tooltip).
  *
- * The result's floor is its tail's room: one 18px mark disc, a 4px gap and
- * the 11px pencil (`SHOT_TAIL_PX`, set once on the well as `--shot-tail`)
- * plus the cell's own 3px gap and 2px of air — so the tail never grows the
- * grid; the result word truncates first. The same variable places the
- * row's actions overlay (`data-shot-actions`), which takes NO track and
- * stops short of the tail (padding + `--shot-tail` + 4px), so a chip and
- * the pencil stay under the pointer while the row is hovered. The ghost
+ * The result's floor is its tail's room (`SHOT_TAIL_PX`, set once on the
+ * well as `--shot-tail`) plus the cell's own 3px gap and 2px of air — so
+ * the tail never grows the grid; the result word truncates first. The tail
+ * holds the 11px pencil, right-aligned; its 33px are the frame's, from when
+ * a stroke also carried an 18px mark disc, and are kept so that no track of
+ * the row moved when the disc went. The same variable places the row's
+ * actions overlay (`data-shot-actions`), which takes NO track and stops
+ * short of the tail (padding + `--shot-tail` + 4px), so the pencil stays
+ * under the pointer while the row is hovered. The ghost
  * row's tail — the placement and result tracks spanned, with the gap
  * between them — is at its narrowest `30 + 8 + 38 = 76`, which holds
  * Restore whole.
  */
-/** The widest the result cell's tail gets: 18px disc + 4px gap + 11px pencil. */
+/** The result cell's tail: the frame's 33px, of which the pencil takes 11. */
 export const SHOT_TAIL_PX = 33;
 /** What the result track adds around the tail: the cell's 3px gap and 2px. */
 export const SHOT_TAIL_AIR_PX = 5;
@@ -172,8 +168,8 @@ const WELL_STYLE = {
  * (`shotRowRevealDelay`, the Video tab's own function). Same classes, so the
  * same durations, curve and reduced-motion behaviour.
  *
- * `order` is the row's place in the well, 1-based, tombstones, ghosts and
- * suggestions included — the stagger only. Undefined (a well that was
+ * `order` is the row's place in the well, 1-based, the point's hint line,
+ * tombstones, ghosts and suggestions included — the stagger only. Undefined (a well that was
  * already open when the page loaded, or a row drawn outside a well) is no
  * arrival at all.
  *
@@ -234,8 +230,6 @@ function actionsGround(lit: boolean): string {
   return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
 }
 
-const NO_MARKS: readonly ShotRowMark[] = [];
-
 /** The frame's `.bk-em`: a value that is not there. */
 const EMPTY_INK = railInk(0.25);
 /** `.bk-tm`'s ink, and a faulted serve's stroke and numbers. */
@@ -265,7 +259,9 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * The strokes are numbered 1…n among the live ones: a tombstone takes no
  * number — and nor does a ghost while it
  * is drawn as one (`drawsGhosts`), which is also when the rally count, the
- * point's two lines and the marks' hover sentence skip it. The trailing "Add
+ * point's two lines and the marks' hover sentence skip it. Over them, as the
+ * well's first row, is the point's quiet line of hints (`PointHintLine`) —
+ * only when the point has any, and never on a session without marks. The trailing "Add
  * shot" appends to the rally; it is there only while the session can be
  * written.
  *
@@ -289,7 +285,7 @@ export function BlackShotsWell({
    * open when the page loaded.
    */
   animate?: boolean;
-  /** The session's marks; null draws no chip on any stroke. */
+  /** The session's marks; null draws no hint line, slot or ghost. */
   marks?: LabelMarks | null;
   /** The stroke the film is on, when it is one of this point's. */
   playingShotId?: string | null;
@@ -297,14 +293,25 @@ export function BlackShotsWell({
   const { operations } = edit;
   const pointNumber = point.pointIndex + 1;
   const ghosts = drawsGhosts(marks);
-  // The point as the rail reads it: without its ghosts while they are ghosts.
-  const shown = ghosts ? withoutGhosts(point) : point;
   const suggested = openShotSuggestions(point, marks);
   const rows: React.ReactNode[] = [];
   let n = 0;
   // The next row's place in the well, for the stagger; none when the well
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
+  // The point's hints, as the well's first row: it arrives with the rally.
+  const hints = pointHints(point, marks, edit.names);
+  if (hints.length > 0) {
+    const arrival = rowArrival(arrive());
+    rows.push(
+      <PointHintLine
+        key="hints"
+        hints={hints}
+        className={arrival.className}
+        style={arrival.style}
+      />,
+    );
+  }
   for (const shot of point.shots) {
     if (shot.status === "deleted") {
       rows.push(
@@ -337,7 +344,6 @@ export function BlackShotsWell({
           pointNumber={pointNumber}
           edit={edit}
           playing={shot.id === playingShotId}
-          marks={shotRowMarks(shown, shot, marks, edit.names)}
           arrive={arrive()}
         />,
       );
@@ -406,8 +412,9 @@ export function BlackShotsWell({
  * Left to right: its number · its time on the film, to the tenth · who hit
  * it · the stroke · its spin · where it was hit (the ring) · where it landed
  * (the dot) · the placement and the result those two positions give, which
- * nobody types · the stroke's own marks (board 08m), an icon each, hover for
- * the reason · the blue pencil on a stroke the labeller changed or added.
+ * nobody types · the blue pencil on a stroke the labeller changed or added.
+ * A stroke draws no mark of its own: what the derivation doubts about the
+ * point's last stroke is a word on the point's hint line.
  *
  * Time, Player, Stroke, Spin and the two positions are `EditableCell`s
  * (`label-cells.tsx`): text until the row is SELECTED
@@ -437,7 +444,6 @@ export function BlackShotRow({
   pointNumber,
   edit,
   playing = false,
-  marks = NO_MARKS,
   arrive,
 }: {
   shot: LabelShot;
@@ -454,8 +460,6 @@ export function BlackShotRow({
   edit: EditContext;
   /** The film is on this stroke. */
   playing?: boolean;
-  /** This stroke's own marks (`shotRowMarks`), drawn after its result. */
-  marks?: readonly ShotRowMark[];
 }) {
   const { names, editable, onSelectShot, onPatchShot } = edit;
   const tone = edit.tone ?? "dark";
@@ -474,8 +478,6 @@ export function BlackShotRow({
   const placement = shotPlacement(labelShotValues(shot));
   /** The words' ink — `.bk-pl`, `.bk-sp`, `.bk-cv` — a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
-  // ONE disc for the row's marks, however many (`collapseShotMarks`).
-  const mark = collapseShotMarks(marks);
   const arrival = rowArrival(arrive);
 
   return (
@@ -493,7 +495,6 @@ export function BlackShotRow({
       className={cn(
         ROW_GRID,
         arrival.className,
-        // A size container, for a mark that narrows with the rail.
         "group/row @container transition-colors duration-200",
         lit
           ? "bg-white/[0.12]"
@@ -602,10 +603,10 @@ export function BlackShotRow({
           <Dash label="No placement" />
         </span>
       )}
-      {/* The word, then a fixed right-aligned slot for the row's marks and
+      {/* The word, then a fixed right-aligned slot for the row's
           pencil. The word's column can go to nothing and the cell clips, so
           the slot never grows the grid and never passes the rail's edge: the
-          word truncates before a mark is touched. The 3px between them is
+          word truncates before the pencil is touched. The 3px between them is
           what the cell's 36px minimum leaves beside the slot's 33
           (`SHOT_TAIL_PX`) — at 4 the pencil's last pixel was clipped. */}
       <span
@@ -618,32 +619,25 @@ export function BlackShotRow({
         <span className="min-w-0 truncate">
           {shot.result ? RESULT_LABEL[shot.result] : <Dash label="No result" />}
         </span>
-        {mark || changed ? (
+        {changed ? (
           <span
             data-shot-marks=""
             className="inline-flex shrink-0 items-center gap-1 justify-self-end"
           >
-            {mark ? <MarkChip {...mark} /> : null}
             {/* The pencil is the row's Reset too, when there is one to
                 offer — the same ask as the overlay's button, in the slot
                 the overlay stops short of. */}
-            {changed ? (
-              <PencilMark
-                reset={
-                  operations && canResetShot(shot)
-                    ? {
-                        label: `Reset shot ${number}`,
-                        onClick: () =>
-                          operations.onAskResetShot(
-                            shot.id,
-                            number,
-                            pointNumber,
-                          ),
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
+            <PencilMark
+              reset={
+                operations && canResetShot(shot)
+                  ? {
+                      label: `Reset shot ${number}`,
+                      onClick: () =>
+                        operations.onAskResetShot(shot.id, number, pointNumber),
+                    }
+                  : undefined
+              }
+            />
           </span>
         ) : null}
       </span>
@@ -798,7 +792,7 @@ const TEXT_AFFORDANCE =
  * had already faulted — that the labeller has neither restored nor deleted.
  *
  * At rest it is ONE quiet line where the stroke was, on the line a tombstone
- * takes: the fix's wand, "1 shot removed: {hitter} hit the fault back", and
+ * takes: a wand, "1 shot removed: {hitter} hit the fault back", and
  * Show. It takes no shot number and the rally count skips it. Shown
  * (`openGhostIds`, the console's state), the removed
  * stroke comes back under the line struck through — its values at a third of
