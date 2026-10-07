@@ -91,6 +91,21 @@ trailing slash or an app page. Consequences for callers:
   it before the template ever sees it — same fallback.
 - `recovery` stays static on purpose: its caller sends a bare path.
 
+**The link lands on a page, not a handler.** `/confirm`
+(`src/app/(auth)/confirm/page.tsx`) renders one button and carries the token
+as hidden fields; only pressing it — `confirmLinkForm`, a Server Action, POST
+only — spends the token. Everything that opens emailed links without a person
+only ever GETs or HEADs: a school's click-time URL scanner (Safe Links, Cisco
+Secure Email), a messaging app drawing a preview of a pasted link, a mail
+client's prefetch. And Next answers a HEAD by running the GET handler. When
+`/confirm` was a Route Handler that verified on GET, a coach lost three magic
+links in a row on 2026-10-07 — the first hit on each was a scanner's HEAD, the
+coach's own tap two seconds later read "That link has expired". The page's doc
+comment tells it; `tests/confirm-page.spec.ts` pins that a GET builds no
+Supabase client, and `tests/confirm-action.spec.ts` pins the POST. The same
+rule already governs `/claim/verify-identity`. If you ever add an emailed link
+that performs a one-shot action, it lands on a page with a button.
+
 `tests/auth-email-links.spec.ts` pins the link shapes. It cannot render a
 template; to see real output, point a throwaway local Supabase project's
 `[auth.email.template.*]` at these files and read the mail in Mailpit, sending
