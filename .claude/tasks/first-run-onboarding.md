@@ -256,7 +256,7 @@ ready).
 
 ## T19 · Grant UPDATE on the two onboarding-tour columns to authenticated
 
-- **status:** next
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<YYYYMMDDHHMMSS>_users_onboarding_tours_column_grants.sql (guess)
 - **done when:**
