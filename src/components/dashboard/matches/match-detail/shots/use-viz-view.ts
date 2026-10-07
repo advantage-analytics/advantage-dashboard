@@ -64,7 +64,7 @@ export interface VizView {
   subjectName: string;
   you: MatchSide;
   opp: MatchSide;
-  /** Every point in the match — for `availableSets(points)` and nothing else. */
+  /** Every point in the match. */
   points: MatchPoint[];
   /** At least one filter beyond the defaults is applied. */
   hasFilters: boolean;

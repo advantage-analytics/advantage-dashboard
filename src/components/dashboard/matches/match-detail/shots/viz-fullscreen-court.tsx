@@ -136,14 +136,22 @@ function fillFor(dot: VizDot): string {
  */
 function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
   const keys = new Set<ZoneKey>();
-  if (filters.zone.length === 0) return keys;
+  // The Zone pill, else Serve › Zone in the advanced filters ("Wide" →
+  // "wide"); the Court pill, else the advanced service court.
+  const zones: readonly string[] = filters.zone.length
+    ? filters.zone
+    : (filters.match?.serveZone ?? []).map((z) => z.toLowerCase());
+  const courts: readonly string[] = filters.court.length
+    ? filters.court
+    : filters.match?.court
+      ? [filters.match.court]
+      : [];
+  if (zones.length === 0) return keys;
   for (const zone of ZONES) {
     const family = zone.label.toLowerCase(); // "wide" | "body" | "t"
     const side = zone.key.startsWith("ad-") ? "ad" : "deuce";
-    if (!filters.zone.some((v) => v === family)) continue;
-    if (filters.court.length > 0 && !filters.court.some((v) => v === side)) {
-      continue;
-    }
+    if (!zones.includes(family)) continue;
+    if (courts.length > 0 && !courts.includes(side)) continue;
     keys.add(zone.key);
   }
   return keys;

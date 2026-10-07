@@ -571,6 +571,17 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   if (nextCut !== "errors" && filters.error.length) {
     filters = { ...filters, error: [] };
   }
+  // Every errors dot is a point the court's player lost: a carried "Won" or
+  // "Aces" would empty the cut with no pill left in the popover to undo it.
+  if (
+    nextCut === "errors" &&
+    filters.result.some((v) => v === "won" || v === "ace")
+  ) {
+    filters = {
+      ...filters,
+      result: filters.result.filter((v) => v === "lost"),
+    };
+  }
   if (nextCut === "serve") {
     return filters;
   }

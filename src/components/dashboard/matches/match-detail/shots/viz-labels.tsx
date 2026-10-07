@@ -105,6 +105,14 @@ const BACKHAND_ITEM: LegendItem = {
   outline: true,
 };
 
+const OTHER_STROKE_ITEM: LegendItem = {
+  key: "other-stroke",
+  glyph: "circle",
+  color: "var(--ink-500)",
+  label: "Forehand · serve · other",
+  outline: true,
+};
+
 // G3b: the one entry `chart === "heat"` ever returns — see `LegendItem`'s
 // own doc comment for why its non-key fields are empty.
 const RAMP_ITEM: LegendItem = {
@@ -141,8 +149,10 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
   }
   // Every errors dot is a lost point — one swatch, named for what it is.
+  // Only backhands draw as triangles here; double-fault serves, volleys and
+  // overheads share the circle, so it is not labelled "Forehand".
   if (cut === "errors") {
-    return [ERROR_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
+    return [ERROR_ITEM, OTHER_STROKE_ITEM, BACKHAND_ITEM];
   }
   if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
   return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];

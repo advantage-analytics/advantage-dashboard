@@ -492,7 +492,10 @@ export function VizFullscreen() {
 
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
-  const applied = activeFilterEntries(state);
+  const applied = activeFilterEntries(state, {
+    you: you.shortName,
+    opponent: opp.shortName,
+  });
   const pillLabel =
     applied.length > 0 ? applied[0].label : `All ${result.noun}`;
   // P2e/P2f: a saved view that hasn't been edited since it loaded shows its

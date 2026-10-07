@@ -257,8 +257,6 @@ export function FiltersPopover({
                 cut={cut}
                 chart={state.chart}
                 dark={dark}
-                youName={youName}
-                oppName={opponentName}
                 total={total}
                 noun={noun}
                 onApply={applyAdvanced}
@@ -415,8 +413,6 @@ function AdvancedPanel({
   cut,
   chart,
   dark,
-  youName,
-  oppName,
   total,
   noun,
   onApply,
@@ -427,8 +423,6 @@ function AdvancedPanel({
   cut: Cut;
   chart: Chart;
   dark: boolean;
-  youName: string;
-  oppName: string;
   total: number;
   noun: VizResult["noun"];
   onApply: (next: MatchFilters) => void;
@@ -437,7 +431,8 @@ function AdvancedPanel({
   const points = useVizPoints(useMatchData());
   const { you } = useMatchSides();
   const { context } = useMatchFilters();
-  const { availability } = useFiltersPanelData();
+  // Short names, as the strip tokens and the Video tab's panel word them.
+  const { availability, youName, oppName } = useFiltersPanelData();
   const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
   const { folded } = fold;
   const countFor = useCallback(

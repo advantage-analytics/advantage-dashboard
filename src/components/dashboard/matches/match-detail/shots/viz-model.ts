@@ -827,7 +827,7 @@ function matchFilterPass(
 
 /** The pill groups the advanced filters replaced in the Filters popover. */
 export type FoldedKey =
-  "set" | "game" | "ball" | "court" | "zone" | "pressure" | "result" | "rally";
+  "set" | "game" | "ball" | "pressure" | "result" | "rally";
 
 /**
  * `filters`' pill groups (Ball, Court, Zone, …) restated as the advanced
@@ -845,8 +845,13 @@ export type FoldedKey =
  * - Result's Aces OR'd with Won/Lost; advanced groups AND. "Won + Aces" is
  *   just Won (an ace is a won point), Aces alone is Serve › Result's ace,
  *   but "Lost + Aces" has no advanced equivalent and stays.
- * - Game, Court or Result with every value picked is no constraint: it
- *   folds to nothing.
+ * - Game or Result with every value picked is no constraint: it folds to
+ *   nothing.
+ * - Zone and Court never fold. On the serve cut the pills read the serve's
+ *   measured landing (its zone, the box it landed in); the advanced Zone
+ *   reads the tracker's zone label and Court the score's service court —
+ *   different answers on the same serve, and no label at all on a video
+ *   match.
  *
  * The pill groups are SUBJECT-relative (Game "Serving", Result "Won" are
  * the court's player); the advanced filters are YOU-relative, so a court of
@@ -878,13 +883,6 @@ export function foldedMatchFilters(filters: VizFilters): {
 
   list("set", base.sets, filters.set, (v) => (match.sets = v));
   list("ball", base.serveType, filters.ball, (v) => (match.serveType = v));
-  const zoneOf = { t: "T", body: "Body", wide: "Wide" } as const;
-  list(
-    "zone",
-    base.serveZone,
-    filters.zone.map((z) => zoneOf[z]),
-    (v) => (match.serveZone = v),
-  );
   list(
     "pressure",
     base.scoreType,
@@ -906,12 +904,6 @@ export function foldedMatchFilters(filters: VizFilters): {
   else if (filters.game.length === 1 && base.server === null) {
     match.server = filters.game[0] === "serving" ? subject : other;
     folded.push("game");
-  }
-
-  if (filters.court.length === 2) folded.push("court");
-  else if (filters.court.length === 1 && base.court === null) {
-    match.court = filters.court[0];
-    folded.push("court");
   }
 
   const won = filters.result.includes("won");
@@ -945,11 +937,12 @@ export function withFoldedFilters(
 }
 
 /**
- * `filters` with the court's player set to `player`. The advanced filters
- * are you-relative, so when the player changes every you/opponent value in
- * them swaps, and Result › Outcome's won/lost with it — they keep meaning
- * the same thing relative to the court ("serving" stays the court player's
- * serve), exactly as the subject-relative pill groups always have.
+ * `filters` with the court's player set to `player`. Who served, hit the
+ * last shot or hit the Custom shot swap with it, so they keep naming the
+ * court's player ("serving" stays the court player's serve) as the
+ * subject-relative pill groups always have. Result › Outcome does NOT: it
+ * is read from your side everywhere (`matchesOutcome`), so "Won" stays the
+ * points you won whichever court is drawn — the Video tab's meaning.
  */
 export function withPlayer(
   filters: VizFilters,
@@ -967,9 +960,6 @@ export function withPlayer(
       server: swap(match.server),
       resultPlayer: swap(match.resultPlayer),
       customPlayer: swap(match.customPlayer),
-      resultOutcome: match.resultOutcome.map((v) =>
-        v === "won" ? "lost" : "won",
-      ),
     },
   };
 }
@@ -1375,12 +1365,6 @@ export function tileCountLabel(result: {
   return `${result.count} of ${result.total}`;
 }
 
-export function availableSets(points: MatchPoint[]): number[] {
-  const sets = new Set<number>();
-  for (const p of points) sets.add(p.setNumber);
-  return [...sets].sort((a, b) => a - b);
-}
-
 /* ── Stats card ────────────────────────────────────────────────────────────
  * Row builders for the focused-view stats card. Every function below reads
  * the SAME `points`/`cut`/`filters`/`subjectIsPlayer1` a caller passed to
@@ -1566,6 +1550,12 @@ function buildSentence(groups: StatGroup[], noun: string): string | null {
  * "first"/"second" wording only applies when the ball filter narrows to
  * EXACTLY one value; two selected (or none) reads as the plain noun, since
  * "first and second serves" is just "serves". */
+/** The serve the cut is narrowed to — the Ball pills, or Serve › Type in
+ * the advanced filters where the ball now lives. */
+function ballOf(filters: VizFilters): BallFilter {
+  return filters.ball.length ? filters.ball : (filters.match?.serveType ?? []);
+}
+
 function serveNoun(ball: BallFilter, count: number): string {
   const serve = count === 1 ? "serve" : "serves";
   if (ball.length === 1 && ball[0] === "first") return `first ${serve}`;
@@ -1817,7 +1807,7 @@ export function computeVizStats(
   const total = result.count;
 
   if (cut === "serve") {
-    const noun = serveNoun(filters.ball, total);
+    const noun = serveNoun(ballOf(filters), total);
     const groups = [serveStatsGroup(result.zoneStats)];
     // Zone percentages use measured in-serves; total includes every drawable
     // serve. State the excluded out/net count alongside the full pool.
@@ -1842,7 +1832,7 @@ export function computeVizStats(
       bands,
       unit,
     );
-    const noun = returnNoun(filters.ball, subtitleCount);
+    const noun = returnNoun(ballOf(filters), subtitleCount);
     // The rows' denominator (subtitleCount) can be smaller than the total
     // drawable pool (total) when some returns landed out/net — say so
     // instead of printing a bare count that looks orphaned next to a court
@@ -1851,7 +1841,7 @@ export function computeVizStats(
     const subtitle =
       subtitleCount === total
         ? `Points won by placement · ${subtitleCount} ${noun}`
-        : `Points won by placement · ${subtitleCount} of ${total} ${returnNoun(filters.ball, total)} landed in`;
+        : `Points won by placement · ${subtitleCount} of ${total} ${returnNoun(ballOf(filters), total)} landed in`;
     return {
       title: "Where the return went",
       subtitle,
@@ -1928,7 +1918,7 @@ export function computeVizStats(
 
   // The contact-cut subtitle noun follows the ball filter exactly as
   // returnPlacement's does, instead of hardcoding "returns".
-  const noun = returnNoun(filters.ball, total);
+  const noun = returnNoun(ballOf(filters), total);
   const groups = returnContactStats(result, bands, unit);
   return {
     title: "Where the return was struck",

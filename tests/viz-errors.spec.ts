@@ -12,6 +12,7 @@ import {
   withPlayer,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { legendItemsFor } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
 import {
   activeFilterEntries,
@@ -302,8 +303,8 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     sets: [1],
     server: "opponent",
     serveType: ["first"],
-    court: "ad",
-    serveZone: ["T"],
+    court: null,
+    serveZone: [],
     scoreType: ["setPoint", "matchPoint"],
     serveResult: [],
     resultOutcome: ["lost"],
@@ -315,13 +316,15 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     "set",
     "game",
     "ball",
-    "court",
-    "zone",
     "pressure",
     "result",
     "rally",
   ] as const)
     expect(applied[key]).toEqual([]);
+  // Zone and Court measure the serve's landing; the advanced Zone and Court
+  // do not, so they stay pill groups.
+  expect(applied.court).toEqual(["ad"]);
+  expect(applied.zone).toEqual(["t"]);
   expect(applied.match).toBe(match);
   // Ace alone folds to Serve › Result; beside Won it is subsumed.
   expect(
@@ -363,7 +366,7 @@ test("a pill group the advanced filters cannot say exactly stays a pill group", 
   expect(withFoldedFilters(both, kept.match, kept.folded)).toEqual(both);
 });
 
-test("switching the court's player mirrors the advanced filters", () => {
+test("switching the court's player swaps who served, never who won", () => {
   const mine: VizFilters = {
     ...EMPTY_VIZ_FILTERS,
     match: {
@@ -381,7 +384,8 @@ test("switching the court's player mirrors the advanced filters", () => {
     server: "opponent",
     resultPlayer: "you",
     customPlayer: "opponent",
-    resultOutcome: ["lost"],
+    // Result › Outcome is yours on every court, as on the Video tab.
+    resultOutcome: ["won"],
     serveType: ["second"],
   });
   expect(withPlayer(theirs, "you")).toEqual(mine);
@@ -480,4 +484,37 @@ test("saved views keep the errors cut and advanced filters, and drop garbage", (
   });
   expect(stale?.filters.ball).toEqual(["first"]);
   expect(stale?.filters.match).toEqual(EMPTY_MATCH_FILTERS);
+});
+
+test("switching to Errors drops a carried Won or Aces, keeps Lost", () => {
+  const won = {
+    ...EMPTY_VIZ_FILTERS,
+    result: ["won" as const, "ace" as const],
+  };
+  expect(carryFilters(won, "errors").result).toEqual([]);
+  const lost = { ...EMPTY_VIZ_FILTERS, result: ["lost" as const] };
+  expect(carryFilters(lost, "errors").result).toEqual(["lost"]);
+  expect(carryFilters(won, "serve").result).toEqual(["won", "ace"]);
+});
+
+test("the stats noun follows Serve › Type in the advanced filters", () => {
+  const first = servePoint({ id: "first" });
+  const stats = computeVizStats(
+    [first],
+    "serve",
+    {
+      ...EMPTY_VIZ_FILTERS,
+      match: { ...EMPTY_MATCH_FILTERS, serveType: ["first"] },
+    },
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  expect(stats.subtitle).toContain("1 first serve");
+});
+
+test("the errors legend never calls a serve or volley a forehand", () => {
+  const labels = legendItemsFor("errors", "scatter").map((i) => i.label);
+  expect(labels).toEqual(["Error", "Forehand · serve · other", "Backhand"]);
 });
