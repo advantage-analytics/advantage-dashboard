@@ -626,6 +626,12 @@ export function CourtArt({
     : 0;
   const apronFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
   const courtFillColor = showHeat ? HEAT_COURT_FILL : COURT_FILL;
+  const dotNoun =
+    cut === "errors"
+      ? "error"
+      : cut === "rallyPosition" || cut === "rallyPlacement"
+        ? "shot"
+        : "point";
   const ariaLabel = draft
     ? "Empty court — pick what to plot"
     : showHeat
@@ -634,7 +640,7 @@ export function CourtArt({
         ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (isPlacementCut(cut) ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
         : showZones
           ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-          : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "errors" ? `error${dots.length === 1 ? "" : "s"}` : cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;
+          : `${CUT_NOUN[cut]} court, ${dots.length} ${dotNoun}${dots.length === 1 ? "" : "s"} shown`;
   // Zero dots ⇒ drawing the filter would still paint the floor tint over
   // the whole view (every pixel of the filter region gets touched, dots or
   // not — see `HeatFilterDef`'s doc comment), which would wash an empty

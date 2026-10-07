@@ -578,6 +578,10 @@ export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
   return state.cut === "errors" ? carryFilters(next, "errors") : next;
 }
 
+/** Serve › Result values for a serve no one returned (an ace, a service
+ * winner) — the points that leave no return, rally shot or error to draw. */
+const isUnreturnedServe = (v: string) => v === "ace" || v === "service-winner";
+
 /** `filters` without what can only match a point the court player won (see
  * `carryFilters`). Result › Outcome is yours, so the court player's win is
  * "won" on your court and "lost" on the opponent's. */
@@ -590,9 +594,7 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
     match: {
       ...match,
       resultOutcome: match.resultOutcome.filter((v) => v !== courtWon),
-      serveResult: match.serveResult.filter(
-        (v) => v !== "ace" && v !== "service-winner",
-      ),
+      serveResult: match.serveResult.filter((v) => !isUnreturnedServe(v)),
       returnResult: match.returnResult.filter((v) => v !== "winner"),
       resultEnding: match.resultEnding.filter((v) => v !== "winner"),
     },
@@ -632,12 +634,10 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // The advanced Serve › Result "Ace" and "Service winner" are points no
   // one returned — no return, no rally shot, no error to draw off serve.
   const serveResult = next.match?.serveResult ?? [];
-  if (serveResult.some((v) => v === "ace" || v === "service-winner")) {
+  if (serveResult.some(isUnreturnedServe)) {
     next.match = {
       ...next.match,
-      serveResult: serveResult.filter(
-        (v) => v !== "ace" && v !== "service-winner",
-      ),
+      serveResult: serveResult.filter((v) => !isUnreturnedServe(v)),
     };
   }
   return next;
