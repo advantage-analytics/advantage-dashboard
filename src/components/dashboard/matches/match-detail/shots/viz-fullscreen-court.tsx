@@ -36,7 +36,13 @@ import {
 } from "./viz-bands-overlay";
 import { buildReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
-import type { Chart, Cut, VizDot, VizFilters } from "./viz-model";
+import {
+  isPlacementCut,
+  type Chart,
+  type Cut,
+  type VizDot,
+  type VizFilters,
+} from "./viz-model";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
@@ -389,7 +395,7 @@ export function VizFullscreenCourt({
             fontFamily="var(--font-sans)"
             fontSize={8}
           >
-            {cut === "returnPlacement" || cut === "rallyPlacement"
+            {isPlacementCut(cut)
               ? "No depth bands selected"
               : "No contact bands selected"}
           </text>
