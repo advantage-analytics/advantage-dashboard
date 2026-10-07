@@ -110,3 +110,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. T12 mounts `SampleBanner` (it sits at `top-0` of the scroll container, under the header). T12's queue text still says "not your data" lowercase — use the shipped copy.
+
+## T13 · Route solo onboarding by recording source — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4376 passed (+6) / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. `onboarding-answers onboarding-steps` 41 passed. completion — VERDICT: pass.
+**changed:** `src/app/onboarding/answers.ts` gains pure `resolveDestination(choice, recordingSource)` (coach → `/claim/team`, college → `/claim/program?intent=join`, solo → `soloDestination(recordingSource)`); `OnboardingChoice` moved here from `actions.ts` (a pure module can't import from a `"use server"` file) and `onboarding-flow.tsx`'s type import follows. `actions.ts`: `RESOLUTION` keeps its keys (the allowlist) and `role` values, loses `destination`; `finishOnboarding` redirects to `resolveDestination(choice, intake.recording_source)` — the validated value also written to `users.recording_source`. Guardian/invite paths untouched. New spec cases in `tests/onboarding-answers.spec.ts`.
+**follow-ups:**
+
+1. Until T12 lands, a solo player who answers "I don't record yet" (or skips) is redirected to `/dashboard/matches/sample?tour=1`, which doesn't exist yet — T12 must land before this branch merges.
+2. Confirm end-to-end that `/dashboard/matches/new?source=swing-vision` preselects SwingVision (not traced here).

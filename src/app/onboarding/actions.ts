@@ -8,7 +8,9 @@ import {
   ACQUISITION_DETAIL_MAX,
   isAcquisitionSource,
   isRecordingSource,
+  resolveDestination,
   type AcquisitionSource,
+  type OnboardingChoice,
   type RecordingSource,
 } from "./answers";
 import {
@@ -17,41 +19,21 @@ import {
 } from "./guardian-options";
 
 /**
- * The three ways `finishOnboarding` resolves. The persona step's "I coach"
- * finishes immediately; "I play" branches into the college question, whose
- * answers collapse to `college` (on a roster) or `solo` (everything else,
- * including Skip — a recruit is a club player with a college in their future).
- *
- * "I manage a junior's account" is deliberately NOT here. That persona
- * continues into the guardian step (screen 3.1) and resolves only through
- * `finishGuardianOnboarding` below, where consent is recorded. Listing it in
- * RESOLUTION would leave a raw-RPC path that stamps `onboarded_at` for a
- * guardian who never saw the consent screen.
- */
-export type OnboardingChoice = "coach" | "college" | "solo";
-
-/**
- * What each resolution writes and where it lands.
+ * What each resolution writes: the persona `role`.
  *
  * `role` is the persona vocabulary (player, coach, parent, academy): play →
  * player, coach → coach, junior → parent. Onboarding is the only writer —
  * Settings no longer edits it. Persona only — entitlement lives in
  * `users.plan` and team roles in `program_members`; neither is touched here.
  *
- * A coach lands on the team-workspace fork (`/claim/team`, screen 5.1), where
- * college-vs-other is decided; the earlier interim `/claim/program` skipped
- * that junction and sent every coach down the collegiate claim. A college
- * player keeps `intent=join`, which keeps them on the program search but off
- * the "Set up this program" action — see `claim/role-choice.tsx` for why that
- * routing matters.
+ * Where each resolution lands is `resolveDestination` in `answers.ts`, which
+ * also routes a solo player by their recording-source answer. This table's
+ * own keys remain the allowlist for `choice`.
  */
-const RESOLUTION: Record<
-  OnboardingChoice,
-  { role: "player" | "coach"; destination: string }
-> = {
-  coach: { role: "coach", destination: "/claim/team" },
-  college: { role: "player", destination: "/claim/program?intent=join" },
-  solo: { role: "player", destination: "/dashboard" },
+const RESOLUTION: Record<OnboardingChoice, { role: "player" | "coach" }> = {
+  coach: { role: "coach" },
+  college: { role: "player" },
+  solo: { role: "player" },
 };
 
 /**
@@ -212,7 +194,9 @@ export async function finishOnboarding(input: {
 
   // The dashboard layout read the null stamp when it bounced them here.
   revalidatePath("/dashboard", "layout");
-  redirect(resolution.destination);
+  // The validated answer just written to `users.recording_source`, never the
+  // raw input — a solo player lands in the wizard or the sample tour by it.
+  redirect(resolveDestination(choice, intake.recording_source));
 }
 
 /**

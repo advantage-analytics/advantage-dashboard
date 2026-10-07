@@ -32,16 +32,13 @@ import {
 import { GUARDIAN_TERMS_URL } from "@/lib/constants";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import { cn } from "@/lib/utils";
-import {
-  finishGuardianOnboarding,
-  finishOnboarding,
-  type OnboardingChoice,
-} from "./actions";
+import { finishGuardianOnboarding, finishOnboarding } from "./actions";
 import {
   ACQUISITION_DETAIL_MAX,
   ACQUISITION_SOURCES,
   RECORDING_SOURCES,
   type AcquisitionSource,
+  type OnboardingChoice,
   type RecordingSource,
 } from "./answers";
 import { guardianClassYears } from "./guardian-options";

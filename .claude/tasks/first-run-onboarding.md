@@ -175,7 +175,7 @@ ready).
 
 ## T13 · Route solo onboarding by recording source
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/app/onboarding/actions.ts, tests/onboarding-answers.spec.ts — guess
