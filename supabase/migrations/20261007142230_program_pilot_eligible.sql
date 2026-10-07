@@ -251,12 +251,21 @@ $function$;
 -- ── pending_program_invites — carry pilot_eligible to the join footer ──────
 -- `quotaHours()` (src/lib/services/programs/join-quota.ts) quotes an invitee
 -- the allowance `reserveQuota()` will enforce, and that now depends on both
--- columns. A RETURNS TABLE change needs drop + create; grants re-applied as
--- `20260902032248_pending_invites.sql` set them. Body otherwise the live one.
+-- columns. A RETURNS TABLE change cannot go through `create or replace`, and
+-- the Supabase MCP refuses `drop function` outright (it ran everything else
+-- in this file on 2026-10-07, including the constraint drop), so the old
+-- 10-column body is RENAMED aside and stripped of every grant rather than
+-- dropped. `pending_program_invites_v1_retired` is dead weight that can be
+-- dropped by hand from the SQL editor whenever convenient; nothing calls it.
+-- Grants on the new function re-applied as `20260902032248_pending_invites.sql`
+-- set them. Body otherwise the live one.
 
-drop function if exists public.pending_program_invites();
+alter function public.pending_program_invites()
+  rename to pending_program_invites_v1_retired;
+revoke all on function public.pending_program_invites_v1_retired()
+  from public, anon, authenticated;
 
-CREATE OR REPLACE FUNCTION public.pending_program_invites()
+CREATE FUNCTION public.pending_program_invites()
  RETURNS TABLE(invite_id uuid, program_id uuid, school_name text, team text, org_type text, role text, invited_by uuid, inviter_first_name text, inviter_last_name text, expires_at timestamp with time zone, pilot_eligible boolean)
  LANGUAGE plpgsql
  SECURITY DEFINER
