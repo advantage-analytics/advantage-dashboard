@@ -36,8 +36,8 @@ import {
 } from "./viz-bands-overlay";
 import { buildReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
+import { isPlacementCut } from "./cut-kinds";
 import {
-  isPlacementCut,
   type Chart,
   type Cut,
   type VizDot,

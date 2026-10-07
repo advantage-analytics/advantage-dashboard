@@ -580,33 +580,14 @@ export function clearedFilters(state: VizState): VizState {
 }
 
 /**
- * `state`'s filters with the court's player set to `player`.
- * On the errors cut Result › Outcome can only ever say "the court player
- * lost" (every errors dot is their lost point; the panel hides the other
- * value — `cutAvailability`). It is yours, so it names the opposite word on
- * the opponent's court: mirroring it with the court keeps it meaning the
- * same thing, so switching away and back restores it and never empties the
- * cut. Everywhere else Outcome stays yours, as on the Video tab.
+ * `state`'s filters with the court's player set to `player`. Nothing else
+ * changes: the advanced filters name players outright and Result › Outcome
+ * is yours — the Video tab's meaning — so whose court is drawn never
+ * rewrites a filter the user picked.
  */
 export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
-  // The advanced filters stay as picked: they name players outright and
-  // Outcome is yours — the Video tab's meaning — so only the court changes.
   if (state.filters.player === player) return state.filters;
-  const next: VizFilters = { ...state.filters, player };
-  if (state.cut !== "errors") return next;
-  const match = next.match ?? EMPTY_VIZ_FILTERS.match;
-  return carryFilters(
-    {
-      ...next,
-      match: {
-        ...match,
-        resultOutcome: match.resultOutcome.map((v) =>
-          v === "won" ? "lost" : "won",
-        ),
-      },
-    },
-    "errors",
-  );
+  return { ...state.filters, player };
 }
 
 /**
@@ -652,15 +633,17 @@ const isUnreturnedServeResult = (v: string) =>
  * "won" on your court and "lost" on the opponent's. */
 function withoutWinningFilters(filters: VizFilters): VizFilters {
   const match = filters.match ?? EMPTY_VIZ_FILTERS.match;
-  const courtWon = filters.player === "you" ? "won" : "lost";
   return {
     ...filters,
-    // Every errors dot is a lost point: Won/Aces could only empty the cut,
-    // and Lost would filter nothing while still counting as applied.
+    // Every errors dot is a point the court player lost. Won (theirs, in
+    // the pills; either side, in Result › Outcome) could only empty the cut
+    // and their Lost would filter nothing while still counting as applied,
+    // so neither Outcome means anything here — both go, and the panel does
+    // not offer them (`cutAvailability`).
     result: [],
     match: {
       ...match,
-      resultOutcome: match.resultOutcome.filter((v) => v !== courtWon),
+      resultOutcome: [],
       serveResult: match.serveResult.filter((v) => !isUnreturnedServeResult(v)),
       returnResult: match.returnResult.filter((v) => v !== "winner"),
       resultEnding: match.resultEnding.filter((v) => v !== "winner"),

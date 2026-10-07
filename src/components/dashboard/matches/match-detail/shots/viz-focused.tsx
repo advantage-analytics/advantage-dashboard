@@ -28,7 +28,8 @@ import { VizToolbar } from "./viz-toolbar";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
-import { EMPTY_VIZ_FILTERS, isPlacementCut, type Cut } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, type Cut } from "./viz-model";
+import { isPlacementCut } from "./cut-kinds";
 import { clearedFilters, viewIdentityKey } from "./viz-url";
 import {
   CUT_LABEL,

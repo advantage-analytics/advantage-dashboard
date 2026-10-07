@@ -534,12 +534,13 @@ test("switching to Errors drops advanced filters that ask for the court player's
     returnResult: [],
     resultEnding: ["error"],
   });
-  // On the opponent's court "won" (yours) is their loss: it stays.
+  // Outcome means nothing on Errors (every dot is the court player's lost
+  // point): it goes on either court.
   const theirs = carryFilters(
     { ...EMPTY_VIZ_FILTERS, player: "opponent", match: winning },
     "errors",
   );
-  expect(theirs.match.resultOutcome).toEqual(["won"]);
+  expect(theirs.match.resultOutcome).toEqual([]);
   // The serve cut carries everything; other cuts drop only the
   // no-return serves (an ace has no rally shot to draw).
   expect(
@@ -571,27 +572,22 @@ test("Ball never folds, and return nouns never read Serve › Type", () => {
   expect(stats.subtitle).not.toContain("first-serve");
 });
 
-test("switching player on Errors keeps the Outcome, round trip included", () => {
+test("switching player changes only the court, on Errors too", () => {
   const state = {
     cut: "errors" as const,
     chart: "scatter" as const,
     viewId: null,
     filters: {
       ...EMPTY_VIZ_FILTERS,
-      match: { ...EMPTY_MATCH_FILTERS, resultOutcome: ["lost" as const] },
+      match: { ...EMPTY_MATCH_FILTERS, server: "you" as const },
     },
   };
   const theirs = courtFor(state, "opponent");
   expect(theirs.player).toBe("opponent");
-  // The opponent's errors are points you won: "lost" on your court is
-  // "won" on theirs, and switching back restores it.
-  expect(theirs.match.resultOutcome).toEqual(["won"]);
-  const back = courtFor({ ...state, filters: theirs }, "you");
-  expect(back.match.resultOutcome).toEqual(["lost"]);
-  // Off Errors the outcome is left alone.
-  expect(
-    courtFor({ ...state, cut: "serve" }, "opponent").match.resultOutcome,
-  ).toEqual(["lost"]);
+  expect(theirs.match).toBe(state.filters.match);
+  expect(courtFor({ ...state, filters: theirs }, "you").match).toBe(
+    state.filters.match,
+  );
 });
 
 test("leaving serve drops advanced Aces and service winners: they have no return", () => {
@@ -675,14 +671,14 @@ test("the advanced panel offers only what the cut keeps", () => {
     serveResult: new Set(["ace", "service-winner", "double-fault"] as const),
   };
   const mine = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "errors");
-  expect([...mine.resultOutcome]).toEqual(["lost"]);
+  expect([...mine.resultOutcome]).toEqual([]);
   expect([...mine.serveResult]).toEqual(["double-fault"]);
   const theirs = cutAvailability(
     withAll,
     { ...EMPTY_VIZ_FILTERS, player: "opponent" },
     "errors",
   );
-  expect([...theirs.resultOutcome]).toEqual(["won"]);
+  expect([...theirs.resultOutcome]).toEqual([]);
   const serve = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "serve");
   expect([...serve.serveResult].sort()).toEqual(
     ["ace", "double-fault", "service-winner"].sort(),
@@ -741,4 +737,17 @@ test("an error the tracker called Out never reads as landed in", () => {
     stats.groups[0].rows.map((r) => [r.key, r.count]),
   );
   expect(miss).toEqual({ long: 1, wide: 1, net: 0 });
+});
+
+test("a pill group folds only into options the panel draws", () => {
+  const pressure = { ...EMPTY_VIZ_FILTERS, pressure: ["setMatch" as const] };
+  // Match point not offered: the group stays a pill, nothing hidden in the
+  // draft.
+  const hidden = foldedMatchFilters(
+    pressure,
+    (key, value) => !(key === "scoreType" && value === "matchPoint"),
+  );
+  expect(hidden.folded).toEqual([]);
+  expect(hidden.match.scoreType).toEqual([]);
+  expect(foldedMatchFilters(pressure).folded).toEqual(["pressure"]);
 });

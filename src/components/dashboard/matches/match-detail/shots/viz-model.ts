@@ -41,8 +41,10 @@ import {
   lastShotOf,
   strokeOf,
   type MatchFilterContext,
+  type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
+import { isPlacementCut } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -232,9 +234,6 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
     ].includes(cut) && ["scatter", "heat", "zones"].includes(chart)
   );
 }
-
-export { isPlacementCut } from "./cut-kinds";
-import { isPlacementCut } from "./cut-kinds";
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
@@ -861,7 +860,15 @@ export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
  * the court's player); the advanced filters name players outright, as on
  * the Video tab — which is why neither of those groups ever folds.
  */
-export function foldedMatchFilters(filters: VizFilters): {
+export function foldedMatchFilters(
+  filters: VizFilters,
+  /**
+   * Whether the panel can draw an option (`cutAvailability`). A group folds
+   * only when every value it becomes is offered: one the panel hides would
+   * sit in the draft, applied, with no control to remove it.
+   */
+  isOffered: (key: MatchFilterKey, value: unknown) => boolean = () => true,
+): {
   match: MatchFilters;
   folded: FoldedKey[];
 } {
@@ -873,18 +880,21 @@ export function foldedMatchFilters(filters: VizFilters): {
 
   function list<T>(
     key: FoldedKey,
+    matchKey: MatchFilterKey,
     held: readonly T[],
     values: readonly T[],
     write: (values: T[]) => void,
   ) {
     if (values.length === 0 || held.length > 0) return;
+    if (!values.every((v) => isOffered(matchKey, v))) return;
     write([...new Set(values)]);
     folded.push(key);
   }
 
-  list("set", base.sets, filters.set, (v) => (match.sets = v));
+  list("set", "sets", base.sets, filters.set, (v) => (match.sets = v));
   list(
     "pressure",
+    "scoreType",
     base.scoreType,
     filters.pressure.flatMap((v) =>
       v === "break"
@@ -895,6 +905,7 @@ export function foldedMatchFilters(filters: VizFilters): {
   );
   list(
     "rally",
+    "resultRallyLength",
     base.resultRallyLength,
     filters.rally,
     (v) => (match.resultRallyLength = v),
@@ -906,7 +917,13 @@ export function foldedMatchFilters(filters: VizFilters): {
   const lost = filters.result.includes("lost");
   const ace = filters.result.includes("ace");
   if (won && lost) folded.push("result");
-  else if (!won && !lost && ace && base.serveResult.length === 0) {
+  else if (
+    !won &&
+    !lost &&
+    ace &&
+    base.serveResult.length === 0 &&
+    isOffered("serveResult", "ace")
+  ) {
     match.serveResult = ["ace"];
     folded.push("result");
   }
@@ -1770,9 +1787,12 @@ export function computeVizStats(
   precomputed: VizResult | undefined,
   bands: BandSettings,
   unit: DistanceUnit,
+  /** For the fallback `computeViz` only — see that function's `matchCtx`. */
+  matchCtx?: MatchFilterContext,
 ): VizStats {
   const result =
-    precomputed ?? computeViz(points, cut, filters, subjectIsPlayer1);
+    precomputed ??
+    computeViz(points, cut, filters, subjectIsPlayer1, "scatter", matchCtx);
   const total = result.count;
 
   if (cut === "serve") {
@@ -1943,8 +1963,7 @@ function errorStats(result: VizResult): StatGroup[] {
       const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
       if (toBaseline <= toSideline) long++;
       else wide++;
-    } else if (dot.meta?.result === "Net") net++;
-    else inCourt++;
+    } else inCourt++;
     const stroke = errorStrokeLabel(dot.meta?.shotType);
     strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
   }

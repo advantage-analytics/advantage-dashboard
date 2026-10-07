@@ -22,7 +22,7 @@ import { FiltersPanel } from "../match-filters/filters-panel";
 import type { CountNoun } from "../match-filters/panel-draft";
 import {
   activeFilterCount,
-  serializeMatchFilters,
+  EMPTY_MATCH_FILTERS,
   type MatchFilters,
 } from "../match-filters/model";
 import {
@@ -32,6 +32,7 @@ import {
 import {
   computeViz,
   foldedMatchFilters,
+  type FoldedKey,
   subjectFor,
   withFoldedFilters,
   type Chart,
@@ -172,8 +173,9 @@ export function FiltersPopover({
   }
 
   const applied = activeFilterEntries(state).length;
-  const fold = foldedMatchFilters(filters);
-  const advancedCount = activeFilterCount(fold.match);
+  // The advanced filters actually applied. Pill groups the panel would
+  // fold in already count as their own strip tokens — never twice.
+  const advancedCount = activeFilterCount(filters.match ?? EMPTY_MATCH_FILTERS);
 
   // Player stays single-select: choosing one always replaces the other,
   // it never toggles off to "neither subject" — a court always has to
@@ -212,13 +214,9 @@ export function FiltersPopover({
     setState((prev) => clearedFilters(prev));
   }
 
-  function applyAdvanced(next: MatchFilters) {
+  function applyAdvanced(next: MatchFilters, folded: readonly FoldedKey[]) {
     setState((prev) => {
-      const applied = withFoldedFilters(
-        prev.filters,
-        next,
-        foldedMatchFilters(prev.filters).folded,
-      );
+      const applied = withFoldedFilters(prev.filters, next, folded);
       // Through the same carry rule a URL parse applies (`parseVizState`),
       // so the state Show writes is the state a reload reads back.
       return {
@@ -265,9 +263,8 @@ export function FiltersPopover({
                 Advanced filters
               </span>
               <AdvancedPanel
-                key={serializeMatchFilters(fold.match)}
+                key={JSON.stringify(filters)}
                 filters={filters}
-                fold={fold}
                 cut={cut}
                 chart={state.chart}
                 dark={dark}
@@ -456,7 +453,6 @@ export function FiltersPopover({
  */
 function AdvancedPanel({
   filters,
-  fold,
   cut,
   chart,
   dark,
@@ -466,13 +462,13 @@ function AdvancedPanel({
   onClose,
 }: {
   filters: VizFilters;
-  fold: ReturnType<typeof foldedMatchFilters>;
   cut: Cut;
   chart: Chart;
   dark: boolean;
   total: number;
   noun: VizResult["noun"];
-  onApply: (next: MatchFilters) => void;
+  /** The panel's Show, with the pill groups its draft folded in. */
+  onApply: (next: MatchFilters, folded: readonly FoldedKey[]) => void;
   onClose: () => void;
 }) {
   const points = useVizPoints(useMatchData());
@@ -487,6 +483,15 @@ function AdvancedPanel({
     [availability, filters, cut],
   );
   const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
+  // Fold only into options this panel draws (`foldedMatchFilters`), so no
+  // applied value is ever hidden in the draft.
+  const fold = useMemo(
+    () =>
+      foldedMatchFilters(filters, (key, value) =>
+        (offered[key] as ReadonlySet<unknown>).has(value),
+      ),
+    [filters, offered],
+  );
   const { folded } = fold;
   const countFor = useCallback(
     (draft: MatchFilters) =>
@@ -511,7 +516,7 @@ function AdvancedPanel({
       countFor={countFor}
       total={total}
       noun={COUNT_NOUN[noun]}
-      onApply={onApply}
+      onApply={(next) => onApply(next, folded)}
       onClose={onClose}
     />
   );

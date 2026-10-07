@@ -22,8 +22,8 @@ import {
   trianglePointsFor,
   starPoints,
 } from "./court-geometry";
+import { isPlacementCut } from "./cut-kinds";
 import {
-  isPlacementCut,
   type Chart,
   type Cut,
   type VizDot,
