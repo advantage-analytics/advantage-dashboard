@@ -66,6 +66,7 @@ export type JoinState =
       kind: "ready";
       programName: string;
       programOrgType: ProgramOrgType;
+      programPilotEligible: boolean;
       role: JoinRole;
       email: string;
       inviterName: InviterName;
@@ -85,6 +86,7 @@ export type JoinState =
       kind: "sign_up";
       programName: string;
       programOrgType: ProgramOrgType;
+      programPilotEligible: boolean;
       role: JoinRole;
       email: string;
       inviterName: InviterName;
@@ -102,6 +104,13 @@ export interface InviteRecord {
    * when the program row went missing, alongside `programName`'s own fallback.
    */
   programOrgType: ProgramOrgType;
+  /**
+   * `programs.pilot_eligible` — the other half of `quotaTierFor()`: a custom
+   * org an admin put on the program pool quotes the program figure. False
+   * when the row went missing, which with the 'college' fallback above still
+   * reads as the program tier.
+   */
+  programPilotEligible: boolean;
   email: string;
   role: JoinRole;
   expiresAt: string;
@@ -147,7 +156,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
   const [{ data: program }, { data: inviter }] = await Promise.all([
     admin
       .from("programs")
-      .select("school_name, team, org_type")
+      .select("school_name, team, org_type, pilot_eligible")
       .eq("id", invite.program_id as string)
       .maybeSingle(),
     invitedBy
@@ -169,6 +178,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
         )
       : "your program",
     programOrgType: program ? (program.org_type as ProgramOrgType) : "college",
+    programPilotEligible: program?.pilot_eligible === true,
     email: (invite.email as string).toLowerCase(),
     role: invite.role as JoinRole,
     expiresAt: invite.expires_at as string,
@@ -232,7 +242,14 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   const invite = await loadInvite(token);
   if (!invite) return { kind: "not_found" };
 
-  const { programName, programOrgType, role, email, inviterName } = invite;
+  const {
+    programName,
+    programOrgType,
+    programPilotEligible,
+    role,
+    email,
+    inviterName,
+  } = invite;
 
   // Same order as `accept_program_invite`, and for the same reason: "you
   // already did this" is more use to someone than "it expired" when both are
@@ -254,6 +271,7 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
         kind: "ready",
         programName,
         programOrgType,
+        programPilotEligible,
         role,
         email,
         inviterName,
@@ -273,6 +291,7 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
     kind: "sign_up",
     programName,
     programOrgType,
+    programPilotEligible,
     role,
     email,
     inviterName,

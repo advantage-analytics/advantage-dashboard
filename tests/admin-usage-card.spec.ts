@@ -14,9 +14,11 @@ import { createLoader } from "./fixtures/vm-modules";
  * `getMonthlyCapSeconds` / `quotaTierFor`.
  */
 
-type CardProps = {
+type Tier = { orgType: ProgramOrgType | null; pilotEligible?: boolean };
+
+type CardProps = Tier & {
   usage: ProgramUsage;
-  orgType: ProgramOrgType | null;
+  pilotEligible: boolean;
   members: { userId: string; avatarUrl: string | null }[];
 };
 
@@ -24,7 +26,7 @@ function load() {
   const loader = createLoader();
   return loader.load("src/components/admin/admin-usage-card.tsx") as {
     AdminUsageCard: React.ComponentType<CardProps>;
-    poolRuleNote: (orgType: ProgramOrgType | null) => string;
+    poolRuleNote: (tier: Tier) => string;
   };
 }
 
@@ -63,13 +65,23 @@ const SEPTEMBER: ProgramUsage = {
 };
 
 test("titles the month and counts the videos from data.usage", () => {
-  const out = render({ usage: SEPTEMBER, orgType: "college", members: [] });
+  const out = render({
+    usage: SEPTEMBER,
+    orgType: "college",
+    pilotEligible: false,
+    members: [],
+  });
   expect(out).toContain("Usage in September");
   expect(out).toContain("9 videos");
 });
 
 test("draws one row per member with their hours", () => {
-  const out = render({ usage: SEPTEMBER, orgType: "college", members: [] });
+  const out = render({
+    usage: SEPTEMBER,
+    orgType: "college",
+    pilotEligible: false,
+    members: [],
+  });
   expect(out).toContain("AL Avery Lin 22.6 h");
   expect(out).toContain("JP Jordan Park 17.1 h");
   // No per-member cap: team uploads never draw an individual allowance.
@@ -80,6 +92,7 @@ test("a quiet month keeps the card and says so", () => {
   const out = render({
     usage: { ...SEPTEMBER, usedSeconds: 0, lines: [] },
     orgType: "college",
+    pilotEligible: false,
     members: [],
   });
   expect(out).toContain("Usage in September");
@@ -97,13 +110,16 @@ test("the footer never prints the canvas' false ordering", () => {
     "other",
     null,
   ] as const) {
-    expect(poolRuleNote(orgType)).not.toContain("before the team pool");
+    expect(poolRuleNote({ orgType })).not.toContain("before the team pool");
   }
-  expect(poolRuleNote("college")).toBe(
-    "Uploads here draw on the team pool. A member’s own 2 h covers their personal uploads only.",
-  );
-  expect(poolRuleNote("club")).toBe(
-    "This team is on the individual 2 h figure, shared by every member.",
-  );
-  expect(poolRuleNote(null)).toBe(poolRuleNote("club"));
+  const onPool =
+    "Uploads here draw on the team pool. A member’s own 2 h covers their personal uploads only.";
+  const shared =
+    "This team is on the individual 2 h figure, shared by every member.";
+  expect(poolRuleNote({ orgType: "college" })).toBe(onPool);
+  expect(poolRuleNote({ orgType: "club" })).toBe(shared);
+  expect(poolRuleNote({ orgType: null })).toBe(shared);
+  // The admin-granted half of the tier: an eligible club reads as a college.
+  expect(poolRuleNote({ orgType: "club", pilotEligible: true })).toBe(onPool);
+  expect(poolRuleNote({ orgType: "club", pilotEligible: false })).toBe(shared);
 });

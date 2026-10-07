@@ -149,7 +149,7 @@ async function listProgramWorkspaces(
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone, crest_path)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
@@ -178,6 +178,7 @@ async function listProgramWorkspaces(
           upload_policy: string;
           events_policy: string;
           org_type: string;
+          pilot_eligible: boolean;
           time_zone: string;
           crest_path: string | null;
         }
@@ -202,6 +203,9 @@ async function listProgramWorkspaces(
         // the value set, so the cast is a naming ceremony rather than a guess.
         // The quota tier hangs off this — see `quotaTierFor()`.
         orgType: program.org_type as ProgramOrgType,
+        // NOT NULL with default false. The admin-granted half of the quota
+        // tier: a custom org on the program pool — see `quotaTierFor()`.
+        pilotEligible: program.pilot_eligible === true,
         // NOT NULL with default 'UTC', so a program that never set one still
         // reads as a real zone. Rides on the workspace for the reason the
         // fields around it do: "what day is it for this program" has to be

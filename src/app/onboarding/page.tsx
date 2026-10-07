@@ -78,7 +78,10 @@ export default async function OnboardingPage({
     // and a club, and they do not draw the same tier.
     const offered = invites.map((invite) => ({
       ...invite,
-      ...quotaHours(invite.programOrgType),
+      ...quotaHours({
+        orgType: invite.programOrgType,
+        pilotEligible: invite.programPilotEligible,
+      }),
     }));
 
     return (
