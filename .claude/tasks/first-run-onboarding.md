@@ -229,7 +229,7 @@ ready).
 
 ## T17 · Getting-started line: tour steps first, n of 4
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/components/dashboard/home/setup-line.tsx, src/app/dashboard/(home)/page.tsx — guess

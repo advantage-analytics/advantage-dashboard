@@ -129,3 +129,13 @@ is the runner's. Newest entries at the bottom.
 1. T17 can reuse `countFinishedMatchesFor` (cached, so Home shares one query).
 2. `/pr-check` Stage 3b: the verifier account needs exactly one finished personal match and a null `first_report_tour_done_at` to see the tour.
 3. Consider moving the inline `users` read for `first_report_tour_done_at` into a data helper.
+
+## T17 · Getting-started line: tour steps first, n of 4 — blocked
+
+**gate:** completion — VERDICT: pass. mechanical — lint pass, typecheck pass, tests FAIL with one real regression beyond the environmental browser set: `tests/home-streaming.spec.ts:125` "Home returns its frame while independent analytics and serve reads remain pending" throws `TypeError: Cannot read properties of null (reading 'catch')` at `countFinishedMatchesFor(userId).catch(...)` in `startHomeResources` — the spec runs Home's page in a VM with stubbed data modules, and the new `finished-match-count-server` import has no stub, so it returns null. Passes with T17 stashed, fails with it applied (verified in isolation). Separately, `tests/upload-line-swap.spec.ts:402` failed once in the full run but passes in isolation both with and without T17 — flaky, unrelated.
+**stash:** cbc4e8c34412bdc245e8263887bf4e2f28b722f7 (`blocked: T17`) — `(home)/page.tsx` (users select adds the two tour columns; `countFinishedMatchesFor` in the setup `Promise.all`; `Footer` passes `SetupFacts`), `setup-line.tsx` (renders from `setupSteps(facts)`, "n of 4", next-step sentence + link), `tours.ts` (drops unused `SetupStep.phrase`).
+**follow-ups:**
+
+1. To resume: `git stash apply cbc4e8c3`, then either add a stub for `@/lib/data/finished-match-count-server` to `tests/home-streaming.spec.ts`'s module map (matching how its other data modules are stubbed) or make the call robust (`Promise.resolve().then(() => countFinishedMatchesFor(userId)).catch(() => null)`); re-run `npm run test -- home-streaming home-empty-loading onboarding-tours`; reset T17 to `todo`.
+2. Open author decision: the task note says veterans see "the same two-step line as today"; the shipped criterion gives them "2 of 4".
+3. The gate's summary prints only the last 40 failures, which hid this regression among the environmental ones; a per-file diff against a baseline failing set would catch it reliably.
