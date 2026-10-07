@@ -40,3 +40,12 @@ is the runner's. Newest entries at the bottom.
 3. T12: fixture `kpiHistory` is `[]` but consumers type it `MatchKpiHistory | null` — coerce to `null` in `sampleMatchData()`.
 4. `assertSampleClean` is substring-based, so "Quan" also flags words like "quantity" in insight text; the error names the JSON path, so a false positive will be obvious at H3.
 5. `loadMatchDetail` is exported from a `-server` module for the script; consider a guard against other `src/` callers.
+
+## T4 · TourPopover primitive with /design preview and keyboard/focus browser spec — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4354 passed / 380 skipped; failures are the environmental browser-spec set (missing Playwright Chromium headless shell 1200, per the author's ruling), now including the new `tour-popover.spec.ts`, which fails here with the same `Executable doesn't exist` error and passed 4/4 when the implementer temporarily shimmed headless shell 1194 into the 1200 path (shim removed; no repo config change). `check-design-drift` exit 0. completion — VERDICT: pass.
+**changed:** new `src/components/ui/tour.tsx` — presentational `TourPopover` ({ open, anchor: HTMLElement | null, index, total, title, body, onNext, onSkip, side? }) on Radix Popover + `PopoverAnchor` virtualRef; 230px white box, 12px radius, hairline, `--shadow-dropdown`, no scrim/caret/animation; Escape → onSkip; focus to Next on open, back to the prior element on close; reduced-motion-aware scrollIntoView. `/design` gains `TourPreview` (`src/app/design/tour-preview.tsx`). New harness + browser spec `tests/tour-popover.spec.ts`.
+**follow-ups:**
+
+1. T9: close via `open={false}` or unmount (both return focus); never null `anchor` while open. Outside clicks are ignored by design — add an opt-in prop if T9 wants them to end the tour.
+2. The popover's look and the `/design` preview have not been checked by eye (the spec bundles no Tailwind) — `/pr-check` Stage 3b should open `/design`.

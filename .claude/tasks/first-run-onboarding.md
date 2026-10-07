@@ -57,7 +57,7 @@ ready).
 
 ## T4 · TourPopover primitive with /design preview and keyboard/focus browser spec
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/ui/tour.tsx (new), src/app/design/tour-preview.tsx (new), src/app/design/design-preview.tsx, tests/tour-popover.spec.ts (new), tests/fixtures/tour-popover-harness.tsx (new) — guess
 - **done when:**
