@@ -6,7 +6,8 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validatePassword } from "@/lib/auth/error-messages";
+import { validateEmail, validatePassword } from "@/lib/auth/error-messages";
+import { requestOrigin } from "@/lib/request-origin";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import {
   expiredInviteNudgeEmail,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
+  acceptJoinLinkWithSession,
   acceptPendingWithSession,
   acceptWithSession,
   accountExists,
@@ -86,6 +88,11 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       return "Somebody has already taken over that roster profile. Ask your coach to check the roster.";
     case "player_gone":
       return "That roster profile is no longer on the program. Ask your coach for a new invitation.";
+    case "requested":
+      // Not a refusal: the join-link actions intercept it and send the person
+      // back to the link, which now renders `link_requested`. Here only so the
+      // switch stays exhaustive.
+      return "Your request to join has been sent to the program's coaches.";
     case "error":
       return outcome.message;
     default:
@@ -493,6 +500,166 @@ export async function createAccountAndAccept(
     await adoptMembershipAndNotify(admin, created.user.id, outcome.programId);
   }
   return finishJoin(outcome.programId);
+}
+
+// ---------------------------------------------------------------------------
+// Join links — the reusable, un-addressed door (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a join-link accept goes once the database has answered.
+ *
+ * `ok` is the same ending as every invitation: settle the profile, tell the
+ * owner, land inside the program. `requested` is approve mode — the function
+ * filed the `program_requests` row itself — and the person is sent back to
+ * the link, which `resolveJoinState` now answers with `link_requested`. That
+ * round trip is deliberate: the page is the one place that renders join
+ * states, so the action does not grow a second copy of the "request sent"
+ * screen. Everything else is a refusal in the screen's words.
+ */
+async function finishJoinLink(
+  token: string,
+  outcome: AcceptOutcome,
+  userId: string | undefined,
+): Promise<JoinActionResult> {
+  if (!outcome.ok) {
+    if (outcome.status === "requested") redirect(joinHref(token));
+    return { ok: false, error: describe(outcome) };
+  }
+
+  if (userId) {
+    const admin = createAdminClient();
+    // Before `finishJoin`, which redirects by throwing.
+    await adoptMembershipAndNotify(admin, userId, outcome.programId);
+  }
+  return finishJoin(outcome.programId);
+}
+
+/**
+ * Signed in, holding a join link. One click.
+ *
+ * Nothing but the token crosses from the browser. The program, the role
+ * (always `player`) and the mode all come off the `program_join_links` row
+ * inside `accept_program_join_link`, which also re-checks seats and the
+ * session's confirmed address at the moment of the write. The page's GET only
+ * previews; this POST is the only thing that joins.
+ */
+export async function acceptJoinLink(token: string): Promise<JoinActionResult> {
+  const supabase = await createClient();
+  const [
+    outcome,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    acceptJoinLinkWithSession(token, supabase),
+    supabase.auth.getUser(),
+  ]);
+  return finishJoinLink(token, outcome, user?.id);
+}
+
+export type JoinLinkSignUpResult =
+  | JoinActionResult
+  /**
+   * The account exists but its address is not confirmed yet, so the join is
+   * waiting on the mail. `email` is the address the mail went to, lowercased,
+   * for the screen to print back.
+   */
+  | { ok: true; status: "confirm_email"; email: string };
+
+/**
+ * No session, holding a join link. Create the account, then join.
+ *
+ * Mirrors `createAccountAndAccept` with one difference that changes
+ * everything after it: the address comes from the FORM. An invitation token
+ * was mailed to one address, so holding it proves control of that address
+ * and the invite path confirms the account on the spot. A join link was
+ * mailed to nobody — it was pasted into a group chat — so a typed address
+ * proves nothing, and this path must NOT `email_confirm: true`. It would
+ * otherwise let anyone type a teammate's address, and
+ * `_ensure_program_player_row` would hand them that teammate's roster row —
+ * and with it, through `matches.player1_id`, every match on it.
+ *
+ * So the account is created with Supabase's own `signUp`, which mails a
+ * confirmation link back to `/confirm?next=/join/<token>`; `/confirm`
+ * establishes the session and the link then renders `link_ready` for one
+ * click. `accept_program_join_link` enforces the same rule from the other side
+ * (`unconfirmed`), so even a caller that skipped this file could not join on
+ * an unproven address. If the project ever runs with confirmations off,
+ * `signUp` returns a session and the join finishes here the way the
+ * invitation path does.
+ *
+ * An existing account is never offered a password box, same as the header's
+ * rule: it is sent to sign in.
+ */
+export async function createAccountAndJoinByLink(
+  token: string,
+  input: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+  },
+): Promise<JoinLinkSignUpResult> {
+  const state = await resolveJoinState(token);
+  if (state.kind !== "link_sign_up") {
+    return { ok: false, error: "That link can't be used that way." };
+  }
+
+  const email = input.email.trim().toLowerCase();
+  const emailProblem = validateEmail(email);
+  if (emailProblem) return { ok: false, error: emailProblem };
+
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  if (!firstName) return { ok: false, error: "Add your first name." };
+
+  const passwordProblem = validatePassword(input.password);
+  if (passwordProblem) return { ok: false, error: passwordProblem };
+
+  // Same outcome as the invite path, for the same reason: an account that
+  // exists signs in, it never sets a password from a link. (`signUp` on a
+  // confirmed address would also come back looking like success without
+  // creating anything — this check is what turns that into a sentence.)
+  if (await accountExists(email)) {
+    return {
+      ok: false,
+      error: "There's already an account for that address. Sign in instead.",
+    };
+  }
+
+  const supabase = await createClient();
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+
+  const { data, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password: input.password,
+    options: {
+      // `handle_new_user` reads `full_name` only — see `createAccountAndAccept`
+      // for why nothing trust-bearing may ride in metadata.
+      data: { full_name: fullName },
+      // The request's own origin, like every other `redirectTo` in the app
+      // (`sendClaimOtp`): Supabase honours allow-listed URLs only, so a dev
+      // worktree's port comes back to that worktree and nothing else does.
+      emailRedirectTo: `${await requestOrigin()}/confirm?next=${encodeURIComponent(joinHref(token))}`,
+    },
+  });
+
+  if (signUpError) {
+    console.error("[join] could not create the account", {
+      message: signUpError.message,
+    });
+    return { ok: false, error: "We couldn't create that account. Try again." };
+  }
+
+  // Confirmations on (the deployed configuration): no session yet, and the
+  // join waits on the mail.
+  if (!data.session) {
+    return { ok: true, status: "confirm_email", email };
+  }
+
+  const outcome = await acceptJoinLinkWithSession(token, supabase);
+  return finishJoinLink(token, outcome, data.user?.id);
 }
 
 // ---------------------------------------------------------------------------

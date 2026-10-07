@@ -19,7 +19,8 @@ import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
-import type { MemberRole } from "@/lib/data/team-settings-server";
+import { joinLinkUrl, type MemberRole } from "@/lib/data/team-settings-server";
+import type { JoinLinkMode } from "@/lib/services/programs/join-links";
 import type {
   EventsPolicy,
   UploadPolicy,
@@ -730,5 +731,151 @@ export async function setPlayersCanUpload(
   // that flips it lives on that page — without this the sentence under the
   // table contradicts the switch the coach just moved.
   revalidatePath(ROSTER_PATH);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Join links — one reusable link per program (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unlike an invitation, the raw token IS returned to the caller — as the URL.
+ * The person asking for it is the one who hands it out, so there is no second
+ * recipient to protect; and the column is plaintext precisely so the same URL
+ * can be shown again after a reload (the migration header says why). The
+ * token is still minted here with `generateToken()`, never by the browser.
+ *
+ * Authority lives in SQL, like everything else in this file: any staff member
+ * may mint or reset; owner and coaches change the mode or turn it off. The
+ * RPCs say each refusal in words the popover shows.
+ */
+export type JoinLinkResult =
+  { ok: true; url: string } | { ok: false; error: string };
+
+/** The settings page for this program, the teams layout above it, and the Roster. */
+function revalidateJoinLink(programId: string): void {
+  revalidatePath(`${SETTINGS_PATH}/${programId}`);
+  revalidateTeams();
+  revalidatePath(ROSTER_PATH);
+}
+
+function isJoinLinkMode(value: string): value is JoinLinkMode {
+  return value === "open" || value === "approve";
+}
+
+/**
+ * Mint the link — or replace the live one, which is the same RPC:
+ * `set_program_join_link` revokes whatever is live and inserts the new row in
+ * one transaction, so "Reset link" below is this call with the current mode.
+ */
+async function mintJoinLink(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<JoinLinkResult> {
+  const supabase = await createClient();
+  const token = generateToken();
+
+  const { error } = await supabase.rpc("set_program_join_link", {
+    p_program_id: programId,
+    p_token: token,
+    p_mode: mode,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't create the join link."),
+    };
+  }
+
+  revalidateJoinLink(programId);
+  return { ok: true, url: joinLinkUrl(token) };
+}
+
+/** Turn the link on, with who it admits. Replaces a live link if one exists. */
+export async function createJoinLink(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<JoinLinkResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (!isJoinLinkMode(mode)) {
+    return { ok: false, error: "Choose who the link should admit." };
+  }
+  return mintJoinLink(programId, mode);
+}
+
+/**
+ * A new URL, same mode. The old one stops working the moment this returns.
+ *
+ * The mode is read off the live row (staff can select it under RLS) so a
+ * reset never silently flips an approve-mode link open. No live row — the
+ * link was turned off between the page render and the click — is a plain
+ * mint in open mode, which is what the popover's first rung means.
+ */
+export async function resetJoinLink(
+  programId: string,
+): Promise<JoinLinkResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("program_join_links")
+    .select("mode")
+    .eq("program_id", programId)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  const mode = (current?.mode as string | null | undefined) ?? "open";
+  return mintJoinLink(programId, isJoinLinkMode(mode) ? mode : "open");
+}
+
+/** Open ↔ approve, on the live link. Owner and coaches; the RPC says so otherwise. */
+export async function setJoinLinkMode(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (!isJoinLinkMode(mode)) {
+    return { ok: false, error: "Choose who the link should admit." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_join_link_mode", {
+    p_program_id: programId,
+    p_mode: mode,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change who the link admits."),
+    };
+  }
+
+  revalidateJoinLink(programId);
+  return { ok: true };
+}
+
+/** Turn the link off. Everyone holding the URL loses it; silent when already off. */
+export async function revokeJoinLink(programId: string): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("revoke_program_join_link", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't turn the link off."),
+    };
+  }
+
+  revalidateJoinLink(programId);
   return { ok: true };
 }

@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Service layer: link states, join actions, team actions, settings loader
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** src/lib/services/programs/invite-acceptance.ts, src/lib/services/programs/join-actions.ts, src/lib/services/programs/join-links.ts, src/components/dashboard/settings/team-actions.ts, src/lib/data/team-settings-server.ts, src/lib/services/programs/tokens.ts (read — token minting helper)
