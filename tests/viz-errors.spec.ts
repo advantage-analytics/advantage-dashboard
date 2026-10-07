@@ -17,6 +17,7 @@ import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/s
 import {
   activeFilterEntries,
   carryFilters,
+  courtFor,
   parseVizState,
   sameView,
   VIZ_MATCH_FILTERS_PARAM,
@@ -541,4 +542,46 @@ test("switching to Errors drops advanced filters that ask for the court player's
     carryFilters({ ...EMPTY_VIZ_FILTERS, match: winning }, "rallyPlacement")
       .match,
   ).toEqual(winning);
+});
+
+test("Ball stays a pill on the return cuts, where Serve › Type means other points", () => {
+  const ball = { ...EMPTY_VIZ_FILTERS, ball: ["first" as const] };
+  expect(foldedMatchFilters(ball, "returnContact").folded).toEqual([]);
+  expect(foldedMatchFilters(ball, "returnPlacement").match.serveType).toEqual(
+    [],
+  );
+  expect(foldedMatchFilters(ball, "serve").folded).toEqual(["ball"]);
+  // And the return nouns never read Serve › Type as "first-serve returns".
+  const stats = computeVizStats(
+    [],
+    "returnContact",
+    {
+      ...EMPTY_VIZ_FILTERS,
+      match: { ...EMPTY_MATCH_FILTERS, serveType: ["first"] },
+    },
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  expect(stats.subtitle).not.toContain("first-serve");
+});
+
+test("switching player on Errors drops an Outcome that would empty it", () => {
+  const state = {
+    cut: "errors" as const,
+    chart: "scatter" as const,
+    viewId: null,
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      match: { ...EMPTY_MATCH_FILTERS, resultOutcome: ["lost" as const] },
+    },
+  };
+  const theirs = courtFor(state, "opponent");
+  expect(theirs.player).toBe("opponent");
+  expect(theirs.match.resultOutcome).toEqual([]);
+  // Off Errors the outcome is left alone.
+  expect(
+    courtFor({ ...state, cut: "serve" }, "opponent").match.resultOutcome,
+  ).toEqual(["lost"]);
 });

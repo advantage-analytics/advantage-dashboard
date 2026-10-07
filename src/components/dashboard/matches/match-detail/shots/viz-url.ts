@@ -9,7 +9,13 @@
  */
 
 import type { Cut, Chart, VizFilters } from "./viz-model";
-import { EMPTY_VIZ_FILTERS, chartAllowedOn, filterKeysFor } from "./viz-model";
+import {
+  EMPTY_VIZ_FILTERS,
+  chartAllowedOn,
+  filterKeysFor,
+  withPlayer,
+  type PlayerFilter,
+} from "./viz-model";
 import {
   appliedValues,
   capitalizeFirst,
@@ -561,11 +567,17 @@ export function clearedFilters(state: VizState): VizState {
 }
 
 /**
- * Reset serve-only filter values when switching off serve: `zone` clears
- * entirely (it has no meaning off serve), and `"ace"` alone is dropped out
- * of `result` — any OTHER selected result value (`won`/`lost`) is kept,
- * since those still mean something off serve.
+ * `state`'s filters with the court's player set to `player` (`withPlayer`).
+ * On the errors cut the advanced Result › Outcome is yours and does not
+ * follow the court, so a "Lost" set on your court would ask the
+ * opponent's court for points you lost — their wins, never their errors —
+ * and draw nothing; the same carry rule a cut switch applies drops it.
  */
+export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
+  const next = withPlayer(state.filters, player);
+  return state.cut === "errors" ? carryFilters(next, "errors") : next;
+}
+
 /** `filters` without what can only match a point the court player won (see
  * `carryFilters`). Result › Outcome is yours, so the court player's win is
  * "won" on your court and "lost" on the opponent's. */
@@ -587,6 +599,12 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
   };
 }
 
+/**
+ * Reset serve-only filter values when switching off serve: `zone` clears
+ * entirely (it has no meaning off serve), and `"ace"` alone is dropped out
+ * of `result` — any OTHER selected result value (`won`/`lost`) is kept,
+ * since those still mean something off serve.
+ */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error.length) {

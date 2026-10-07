@@ -849,6 +849,7 @@ export type FoldedKey =
  *   ace; with Won or Lost picked too the whole group stays a pill group.
  * - Game or Result with every value picked is no constraint: it folds to
  *   nothing.
+ * - Ball never folds on a return cut (see the comment at its fold).
  * - Zone and Court never fold. On the serve cut the pills read the serve's
  *   measured landing (its zone, the box it landed in); the advanced Zone
  *   reads the tracker's zone label and Court the score's service court —
@@ -860,7 +861,11 @@ export type FoldedKey =
  * the opponent's flips them. `withPlayer` keeps them following the court
  * when its player changes later.
  */
-export function foldedMatchFilters(filters: VizFilters): {
+export function foldedMatchFilters(
+  filters: VizFilters,
+  /** The cut on screen: Ball folds on every cut but the two return cuts. */
+  cut: Cut | null = null,
+): {
   match: MatchFilters;
   folded: FoldedKey[];
 } {
@@ -884,7 +889,12 @@ export function foldedMatchFilters(filters: VizFilters): {
   }
 
   list("set", base.sets, filters.set, (v) => (match.sets = v));
-  list("ball", base.serveType, filters.ball, (v) => (match.serveType = v));
+  // On a return cut "1st" is the return of a first serve that went IN
+  // (`isReturnOnFirstServe`); Serve › Type also admits a second-serve return
+  // after a first-serve fault. Different points, so Ball stays a pill there.
+  if (cut !== "returnPlacement" && cut !== "returnContact") {
+    list("ball", base.serveType, filters.ball, (v) => (match.serveType = v));
+  }
   list(
     "pressure",
     base.scoreType,
@@ -1541,17 +1551,19 @@ function buildSentence(groups: StatGroup[], noun: string): string | null {
   return `${headline} — level with ${tiedOther.row.label}.`;
 }
 
+/** The serve the serve cut is narrowed to — the Ball pills, or Serve › Type
+ * in the advanced filters where the ball now lives. Serve cut only: on a
+ * return cut Serve › Type is not "first-serve returns" (see
+ * `foldedMatchFilters`), so the return nouns read the Ball pills alone. */
+function ballOf(filters: VizFilters): BallFilter {
+  return filters.ball.length ? filters.ball : (filters.match?.serveType ?? []);
+}
+
 /** Singular when `count === 1` ("1 serve", "1 first serve", "1 second
  * serve"), plural otherwise — including `count === 0` ("0 serves"). The
  * "first"/"second" wording only applies when the ball filter narrows to
  * EXACTLY one value; two selected (or none) reads as the plain noun, since
  * "first and second serves" is just "serves". */
-/** The serve the cut is narrowed to — the Ball pills, or Serve › Type in
- * the advanced filters where the ball now lives. */
-function ballOf(filters: VizFilters): BallFilter {
-  return filters.ball.length ? filters.ball : (filters.match?.serveType ?? []);
-}
-
 function serveNoun(ball: BallFilter, count: number): string {
   const serve = count === 1 ? "serve" : "serves";
   if (ball.length === 1 && ball[0] === "first") return `first ${serve}`;
@@ -1828,7 +1840,7 @@ export function computeVizStats(
       bands,
       unit,
     );
-    const noun = returnNoun(ballOf(filters), subtitleCount);
+    const noun = returnNoun(filters.ball, subtitleCount);
     // The rows' denominator (subtitleCount) can be smaller than the total
     // drawable pool (total) when some returns landed out/net — say so
     // instead of printing a bare count that looks orphaned next to a court
@@ -1837,7 +1849,7 @@ export function computeVizStats(
     const subtitle =
       subtitleCount === total
         ? `Points won by placement · ${subtitleCount} ${noun}`
-        : `Points won by placement · ${subtitleCount} of ${total} ${returnNoun(ballOf(filters), total)} landed in`;
+        : `Points won by placement · ${subtitleCount} of ${total} ${returnNoun(filters.ball, total)} landed in`;
     return {
       title: "Where the return went",
       subtitle,
@@ -1914,7 +1926,7 @@ export function computeVizStats(
 
   // The contact-cut subtitle noun follows the ball filter exactly as
   // returnPlacement's does, instead of hardcoding "returns".
-  const noun = returnNoun(ballOf(filters), total);
+  const noun = returnNoun(filters.ball, total);
   const groups = returnContactStats(result, bands, unit);
   return {
     title: "Where the return was struck",

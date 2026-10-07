@@ -136,16 +136,12 @@ function fillFor(dot: VizDot): string {
  */
 function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
   const keys = new Set<ZoneKey>();
-  // The Zone pill, else Serve › Zone in the advanced filters ("Wide" →
-  // "wide"); the Court pill, else the advanced service court.
-  const zones: readonly string[] = filters.zone.length
-    ? filters.zone
-    : (filters.match?.serveZone ?? []).map((z) => z.toLowerCase());
-  const courts: readonly string[] = filters.court.length
-    ? filters.court
-    : filters.match?.court
-      ? [filters.match.court]
-      : [];
+  // The Zone and Court pills only: they filter by the MEASURED landing these
+  // cells stand for. The advanced Serve › Zone and Court read the tracker's
+  // label and the score's court, so a cell they named could hold none of
+  // the dots they let through.
+  const zones: readonly string[] = filters.zone;
+  const courts: readonly string[] = filters.court;
   if (zones.length === 0) return keys;
   for (const zone of ZONES) {
     const family = zone.label.toLowerCase(); // "wide" | "body" | "t"

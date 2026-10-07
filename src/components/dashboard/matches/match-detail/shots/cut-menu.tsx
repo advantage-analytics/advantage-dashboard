@@ -84,8 +84,8 @@ export function CutMenu({
     setState((prev) => ({
       ...prev,
       cut,
-      // Every current chart type is allowed on every cut.
-      // `chartAllowedOn` is the one pure rule behind
+      // A chart the new cut cannot draw (Zones on Errors) falls back to
+      // Scatter. `chartAllowedOn` is the one pure rule behind
       // this, also used by `parseVizState` and `validateVizInput`.
       chart: chartAllowedOn(cut, prev.chart) ? prev.chart : "scatter",
       filters: carryFilters(prev.filters, cut),

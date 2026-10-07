@@ -27,7 +27,6 @@ import {
   foldedMatchFilters,
   subjectFor,
   withFoldedFilters,
-  withPlayer,
   type Chart,
   type Cut,
   type PlayerFilter,
@@ -38,6 +37,7 @@ import {
   activeFilterEntries,
   canonicalOptionValues,
   clearedFilters,
+  courtFor,
   OPTIONS,
 } from "./viz-url";
 import { useVizPoints } from "./use-viz-points";
@@ -163,7 +163,7 @@ export function FiltersPopover({
   }
 
   const applied = activeFilterEntries(state).length;
-  const fold = foldedMatchFilters(filters);
+  const fold = foldedMatchFilters(filters, cut);
   const advancedCount = activeFilterCount(fold.match);
 
   // Player stays single-select: choosing one always replaces the other,
@@ -172,7 +172,7 @@ export function FiltersPopover({
   function selectPlayer(value: PlayerFilter) {
     setState((prev) => ({
       ...prev,
-      filters: withPlayer(prev.filters, value),
+      filters: courtFor(prev, value),
       viewId: null,
     }));
   }
@@ -209,7 +209,7 @@ export function FiltersPopover({
       filters: withFoldedFilters(
         prev.filters,
         next,
-        foldedMatchFilters(prev.filters).folded,
+        foldedMatchFilters(prev.filters, prev.cut).folded,
       ),
       viewId: null,
     }));

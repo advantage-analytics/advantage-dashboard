@@ -91,9 +91,12 @@ export function ChartMenu({
         />
       )}
 
-      <FloatMenuNote>
-        Zones follows the service boxes or the current depth and contact bands.
-      </FloatMenuNote>
+      {(state.cut === null || chartAllowedOn(state.cut, "zones")) && (
+        <FloatMenuNote>
+          Zones follows the service boxes or the current depth and contact
+          bands.
+        </FloatMenuNote>
+      )}
     </FloatMenu>
   );
 }

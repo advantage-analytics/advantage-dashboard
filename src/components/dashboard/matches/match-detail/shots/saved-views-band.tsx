@@ -60,7 +60,7 @@ import { buildDefaultTiles, type DefaultTile } from "./default-tiles";
 
 // M3: `variant="wall"` never renders a default tile (`viz-wall.tsx` builds
 // its own) — a shared, frozen empty array lets the `defaultTiles` memo below
-// skip `buildDefaultTiles`'s six `computeViz` scans entirely on that variant
+// skip `buildDefaultTiles`'s ten `computeViz` scans entirely on that variant
 // instead of running them for output nothing reads.
 const EMPTY_DEFAULT_TILES: readonly DefaultTile[] = Object.freeze([]);
 
