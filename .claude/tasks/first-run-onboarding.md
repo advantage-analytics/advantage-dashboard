@@ -31,7 +31,7 @@ ready).
 
 ## T2 · Pure onboarding tour logic: definitions, resolveSteps, soloDestination, eligibility, setupSteps
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/onboarding/tours.ts (new), tests/onboarding-tours.spec.ts (new) — guess
 - **done when:**

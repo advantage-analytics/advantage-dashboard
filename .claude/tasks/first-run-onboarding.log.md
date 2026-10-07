@@ -20,3 +20,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Every new `public.users` column needs an explicit `grant update (...)` — second time this has bitten (after `20260926201548`). Worth a line in AGENTS.md's Conventions next to the function-grant rule.
+
+## T2 · Pure onboarding tour logic: definitions, resolveSteps, soloDestination, eligibility, setupSteps — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4343 passed (+24 new) / 379 skipped; failures are the same environmental browser-spec set as T1 (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — VERDICT: pass.
+**changed:** new `src/lib/onboarding/tours.ts` (no React/Next imports): `TOUR_TARGETS`, `TourTarget`/`TourId`/`TourTab`/`TourStep` types, `TOURS` ("sample", "first-report"), `resolveSteps`, `soloDestination`, `firstReportTourEligible`, `setupSteps` (`SetupFacts` is a superset of `SetupProgress`). New offline spec `tests/onboarding-tours.spec.ts` (24 cases).
+**follow-ups:**
+
+1. T17: the tour steps' `phrase`/`link` copy ("Open sample", "Open matches") was invented here — review when wiring `SetupLine`; its hand-written all-outstanding sentence needs rewording for four steps.
