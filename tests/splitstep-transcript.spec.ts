@@ -10,6 +10,7 @@ import {
   classifyPoint,
   flagPoint,
   lastServeIndex,
+  parseStrokes,
   playedRally,
   pointsPlayed,
   reconcile,
@@ -634,6 +635,61 @@ test.describe("transcript", () => {
     );
     const games = new Set(t.points.map((p) => p.game_number));
     expect(games.size).toBe(Math.max(...games));
+  });
+
+  test("every shot carries its vendor event_id and every point its rally_id", () => {
+    const { strokes } = parseStrokes(clean);
+    const a = analyzeResults(clean);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    const key = keysFor(a.rallies);
+    const probe = reconcile({
+      winners,
+      labels: a.players,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
+    });
+    const [p1, p2] = a.players;
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score: {
+        player1: probe.foldedSets.map((s) => s[p1] ?? 0),
+        player2: probe.foldedSets.map((s) => s[p2] ?? 0),
+      },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+
+    // The join key back to the vendor stroke: present on every shot and
+    // unique across the match. The transcript no longer carries every parsed
+    // stroke — phantom swings between serves are removed (played.ts) — so the
+    // strokes it lacks must be exactly those: non-serves before a rally's last
+    // serve. The label seed adds them back (label-seed.spec.ts).
+    const eventIds = t.points.flatMap((p) => p.shots.map((s) => s.event_id));
+    for (const id of eventIds) {
+      expect(id).not.toBeNull();
+      expect(typeof id).toBe("number");
+    }
+    expect(new Set(eventIds).size).toBe(eventIds.length);
+    const kept = new Set(eventIds);
+    const phantoms = a.rallies.flatMap((rally) => {
+      const serveIndex = lastServeIndex(rally);
+      return rally.strokes
+        .filter((s, i) => i < serveIndex && s.strokeType !== "serve")
+        .map((s) => s.eventId);
+    });
+    expect(phantoms.length).toBeGreaterThan(0);
+    expect(
+      strokes
+        .map((s) => s.eventId)
+        .filter((id) => !kept.has(id))
+        .sort(),
+    ).toEqual([...phantoms].sort());
+
+    expect(t.points.map((p) => p.rally_id)).toEqual(
+      a.rallies.map((r) => r.rallyId),
+    );
   });
 
   test("flags record the contradictions rather than hiding them", () => {

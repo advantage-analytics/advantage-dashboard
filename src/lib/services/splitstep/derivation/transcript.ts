@@ -49,6 +49,12 @@ import { bounceVideoTimes } from "./frame-clock";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
 export interface DerivedShot {
+  /**
+   * The vendor stroke's `eventId`, carried so a derived row can be joined back
+   * to the stroke it came from. Not a `shots` column — persist-transcript.ts
+   * lists its insert columns explicitly and leaves this out.
+   */
+  event_id: number;
   shot_number: number;
   is_player1: boolean;
   shot_type: string | null;
@@ -72,6 +78,11 @@ export interface DerivedShot {
 }
 
 export interface DerivedPoint {
+  /**
+   * The vendor rally's `rallyId`, the point-level join key back to the
+   * payload. Not a `points` column — see `DerivedShot.event_id`.
+   */
+  rally_id: number;
   point_number: number;
   set_number: number;
   game_number: number;
@@ -513,6 +524,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       const isFirstServe = isServe && index < serveIndex;
 
       shots.push({
+        event_id: stroke.eventId,
         shot_number: number,
         is_player1: stroke.playerLabel === player1,
         shot_type: isServe
@@ -548,6 +560,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
     const frozen = frozenRallies.has(rally.rallyId);
     points.push({
+      rally_id: rally.rallyId,
       point_number: points.length + 1,
       set_number: numbering.set,
       game_number: numbering.game,
