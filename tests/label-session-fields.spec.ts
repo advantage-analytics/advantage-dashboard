@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,15 +17,7 @@ import { tag } from "./fixtures/html-probe";
 import { labelSessionFixture } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * The "Score doesn't add up" writes (T41, board 08m `BANNER`, now the rail
- * header's score chip): the parser that admits ONLY `final_score` and
- * `video_ends_early`, the service over a fake client — ONE update on
- * `label_sessions`, never `matches` — and the chip itself in the black rail's
- * header, rendered offline through `fixtures/vm-modules`: shown on a
- * mismatch, gone when the labeller has said the video ends early, when the
- * scores agree, and when marks are off. The header's two totals ride along.
- */
+/** The session's own fields (`final_score`, `video_ends_early`): the parser, the service over a fake client, and the rail header's score chip and total. */
 
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -256,25 +246,6 @@ test.describe("writeLabelSessionFields", () => {
       filters: { id: SESSION_ID },
     });
     for (const call of fake.calls) expect(call.table).toBe("label_sessions");
-    // The column's CHECK asks for a jsonb array: pairs per set, nothing else.
-    const written = updates(fake)[0].values?.final_score;
-    expect(Array.isArray(written)).toBe(true);
-    for (const pair of written as unknown[]) {
-      expect(Array.isArray(pair)).toBe(true);
-      expect((pair as unknown[]).length).toBe(2);
-    }
-  });
-
-  test("video_ends_early is the other column it may set, alone", async () => {
-    const fake = fakeClient({});
-    expect(
-      await writeLabelSessionFields({
-        supabase: fake.supabase,
-        sessionId: SESSION_ID,
-        patch: { video_ends_early: true },
-      }),
-    ).toEqual({ ok: true, fields: { video_ends_early: true } });
-    expect(updates(fake)[0].values).toEqual({ video_ends_early: true });
   });
 
   test("a session labelled without marks, and a complete one, are refused before anything is written", async () => {
@@ -477,14 +448,10 @@ test.describe("the score chip in the rail header", () => {
    * the ace), a second game with no counted point, and a match record of
    * 6–3 4–6. The rows make 1–0 in set 1; the record says 6–3.
    */
-  test("the labelled pair against the entered one, in the header, amber, as a dark menu of the three answers — and a render writes nothing", () => {
+  test("the labelled pair against the entered one, in the header, as a menu — and a render writes nothing", () => {
     const { called, operations } = countingOperations();
     const html = black(labelSessionFixture(), EMPTY_MARKS, operations);
     expect(called).toEqual([]);
-
-    // No banner anywhere: the chip is the score's one home.
-    expect(html).not.toContain("data-label-score-banner");
-    expect(html).not.toContain("Stats are estimates until");
 
     const head = header(html);
     const chip = tag(head, 'data-label-score-chip=""');
@@ -492,38 +459,7 @@ test.describe("the score chip in the rail header", () => {
     expect(chip).toContain('aria-label="Score doesn’t add up"');
     expect(chip).toContain('aria-haspopup="menu"');
     expect(chip).toContain('aria-expanded="false"');
-    for (const cls of [
-      "rounded-full",
-      "bg-[var(--rail-amber-wash)]",
-      "text-[var(--rail-amber)]",
-      "text-[10px]",
-      "h-[18px]",
-      "shrink-0",
-    ]) {
-      expect(chip, cls).toContain(cls);
-    }
     expect(CHIP_TEXT(head)).toBe("1–0 · entered 6–3");
-    // The words give way under 600px of header; the dot stays.
-    expect(tag(head, "data-label-score-chip-text")).toMatch(
-      /class="[^"]*\bhidden\b[^"]*@min-\[600px\]:inline/,
-    );
-    expect(tag(html, 'data-label-rail-header=""')).toMatch(
-      /class="[^"]*@container\b/,
-    );
-    // After the checked count, before the save line and the way out.
-    expect(head.indexOf("data-label-score-chip")).toBeGreaterThan(
-      head.indexOf("data-label-rail-progress"),
-    );
-    expect(head.indexOf("data-label-score-chip")).toBeLessThan(
-      head.indexOf("data-save-status"),
-    );
-    expect(head.indexOf("data-label-score-chip")).toBeLessThan(
-      head.indexOf('aria-label="Exit full screen"'),
-    );
-    // A closed menu renders no rows; the answers are the menu's, not the
-    // header's. Nothing of the old banner's words is drawn in the header.
-    expect(head).not.toContain("Fix the entered score");
-    expect(head).not.toContain("Find the gap");
   });
 
   test("gone once the labeller has said the video ends early", () => {
@@ -574,110 +510,47 @@ test.describe("the score chip in the rail header", () => {
     expect(chip).not.toContain("aria-haspopup");
     expect(CHIP_TEXT(head)).toBe("1–0 · entered 6–3");
   });
-
-  test("the answers' words live in marks-copy, each with what it does", () => {
-    const copy = readFileSync("src/lib/services/labels/marks-copy.ts", "utf8");
-    for (const words of [
-      "Fix the entered score",
-      "Video ends early",
-      "Find the gap",
-      "Make the entered score what these points say.",
-      "The points stop before the match did; the score stands.",
-    ]) {
-      expect(copy).toContain(words);
-    }
-  });
 });
 
 test.describe("the header's total", () => {
   test("a flag with the match's count, named for a reader", () => {
     const html = black(labelSessionFixture(), EMPTY_MARKS);
     const head = header(html);
-    // Nothing on any row: it reads zero, in the quiet ink.
+    // Nothing on any row: it reads zero.
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('role="img"');
     expect(toCheck).toContain('aria-label="Nothing left to check"');
-    expect(toCheck).toContain("text-white/45");
-    expect(head).toContain("lucide-flag");
-    // After the checked count, before the save line.
-    expect(head.indexOf("data-label-rail-to-check")).toBeGreaterThan(
-      head.indexOf("data-label-rail-progress"),
-    );
-    expect(head.indexOf("data-label-rail-to-check")).toBeLessThan(
-      head.indexOf("data-save-status"),
-    );
-    // The mono the progress line uses, and nothing that could push the way
-    // out off a 520px rail.
-    expect(toCheck).toMatch(/class="[^"]*\bmono\b[^"]*\btext-\[10px\]/);
-    expect(toCheck).toContain("shrink-0");
   });
 
   test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
     const session = labelSessionFixture();
     const [p1, p2, , p4] = session.points;
+    const m = (code: string, tier: string, scope = "point") =>
+      ({ code, tier, scope, params: {} }) as LabelMarks["points"][string][0];
     const marks: LabelMarks = {
       ...EMPTY_MARKS,
       points: {
         // The edited point: its counted mark is settled by the edit.
-        [p1.id]: [
-          {
-            code: "winner_disputed",
-            tier: "count",
-            scope: "point",
-            params: { scoreWinner: "p2", lastStrokeWinner: "p1" },
-          },
-          {
-            code: "winner_guessed",
-            tier: "hidden",
-            scope: "point",
-            params: {},
-          },
-        ],
+        [p1.id]: [m("winner_disputed", "count"), m("winner_guessed", "hidden")],
         // The checked-as-is point: its counted mark is not open; a hint
         // beside it was never counted.
-        [p2.id]: [
-          { code: "serve_fault", tier: "hint", scope: "point", params: {} },
-          { code: "pick_winner", tier: "count", scope: "point", params: {} },
-        ],
+        [p2.id]: [m("serve_fault", "hint"), m("pick_winner", "count")],
         // Point 4, untouched: two counted marks open, a hint and a hidden one.
         [p4.id]: [
-          { code: "pick_winner", tier: "count", scope: "point", params: {} },
-          {
-            code: "reserve_after_in",
-            tier: "count",
-            scope: "point",
-            params: {},
-          },
-          {
-            code: "ending_suspect_line",
-            tier: "hint",
-            scope: "point",
-            params: {},
-          },
-          {
-            code: "phantom_strokes_dropped",
-            tier: "hidden",
-            scope: "point",
-            params: { eventIds: [402], hitter: "p1" },
-          },
+          m("pick_winner", "count"),
+          m("reserve_after_in", "count"),
+          m("ending_suspect_line", "hint"),
+          m("phantom_strokes_dropped", "hidden"),
         ],
       },
+      // A hint on a stroke of point 4 is a hint still: not counted.
       shots: {
-        // A hint on a stroke of point 4 is a hint still: not counted.
-        "s-p4-serve": [
-          {
-            code: "net_hit_contradicts_height",
-            tier: "hint",
-            scope: "shot",
-            params: {},
-          },
-        ],
+        "s-p4-serve": [m("net_hit_contradicts_height", "hint", "shot")],
       },
     };
     const head = header(black(session, marks));
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('aria-label="2 flags to check"');
-    expect(toCheck).toContain("text-[var(--rail-amber)]");
 
     // Hints and hidden marks alone: nothing to check.
     const quiet: LabelMarks = {

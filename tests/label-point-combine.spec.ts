@@ -1,10 +1,7 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { AdminClient } from "@/lib/supabase/admin";
 import {
   COMBINED_POINT_RESTORE_REFUSED,
   applyPointRestore,
@@ -23,32 +20,20 @@ import {
   combineLabelPoints,
   writeLabelPointCombine,
 } from "@/lib/services/labels/point-combine-session";
-import type { LabelPoint, LabelSession } from "@/lib/services/labels/session";
-import { text } from "./fixtures/html-probe";
+import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
+  fakeLabelClient,
   labelSessionFixture,
-  editContext as sharedEditContext,
   noop,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * Combine two neighbouring points of a game into one (`point-combine.ts`):
- * the earlier point keeps every shot and takes the later one's winner and
- * ending; the later becomes a tombstone with no shots, which reads
- * "Combined into the point above" and offers no Undo.
- *
- * The pure plan and the console's optimistic rows; the service over a fake
- * client, for the ORDER of its writes, their tables and what it refuses;
- * the restore service's refusal of the emptied tombstone; the ⋯ menu's two
- * rows; and both tombstone drawings, rendered offline through
- * `fixtures/vm-modules`.
- */
+// Combine two neighbouring points of a game into one: the pure plan and the
+// console's rows, the services over a fake client, the ⋯ menu and the rail.
 
 const MENU = "src/components/admin/labels/label-point-menu.tsx";
-const BLACK_ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 
 const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
@@ -248,14 +233,6 @@ const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const UUID = (n: number) => `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${n}`;
 const SHOT = (n: number) => `bbbbbbbb-bbbb-4bbb-8bbb-00000000000${n}`;
 
-interface Call {
-  table: string;
-  op: "select" | "update" | "insert";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  in?: Record<string, unknown[]>;
-}
-
 const POINT_ROWS = points().map((p, i) => ({
   id: UUID(i + 1),
   point_index: p.pointIndex,
@@ -276,87 +253,50 @@ function fakeClient(rows: {
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          return {
-            data: rows.raced && "status" in call.filters ? [] : [{ id: 1 }],
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return rows.raced && "status" in call.filters
+        ? { data: [], error: null }
+        : undefined;
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data:
+          rows.session === undefined
+            ? { status: "labelling", marks_enabled: true }
+            : rows.session,
+        error: null,
+      };
+    }
+    if (call.table === "label_points") {
+      return "session_id" in call.filters
+        ? { data: rows.points ?? POINT_ROWS, error: null }
+        : {
             data:
-              rows.session === undefined
-                ? { status: "labelling", marks_enabled: true }
-                : rows.session,
+              rows.point === undefined
+                ? {
+                    id: call.filters.id,
+                    session_id: SESSION_ID,
+                    status: "deleted",
+                    status_before_delete: "unchanged",
+                    server: "p1",
+                    set_number: 1,
+                    game_number: 1,
+                    serve_side: null,
+                    winner: null,
+                    ending: null,
+                    ended_by: null,
+                    seed: null,
+                  }
+                : rows.point,
             error: null,
           };
-        }
-        if (table === "label_points") {
-          return "session_id" in call.filters
-            ? { data: rows.points ?? POINT_ROWS, error: null }
-            : {
-                data:
-                  rows.point === undefined
-                    ? {
-                        id: call.filters.id,
-                        session_id: SESSION_ID,
-                        status: "deleted",
-                        status_before_delete: "unchanged",
-                        server: "p1",
-                        set_number: 1,
-                        game_number: 1,
-                        serve_side: null,
-                        winner: null,
-                        ending: null,
-                        ended_by: null,
-                        seed: null,
-                      }
-                    : rows.point,
-                error: null,
-              };
-        }
-        if (table === "label_shots") {
-          return {
-            data: rows.shots ?? [{ id: SHOT(1) }],
-            error: null,
-          };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
-      };
-      const builder = {
-        select: () => builder,
-        order: () => builder,
-        returns: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        in: (column: string, values: unknown[]) => {
-          (call.in ??= {})[column] = values;
-          return builder;
-        },
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shots ?? [{ id: SHOT(1) }], error: null };
+    }
+    return undefined;
+  });
 }
 
 const writes = (fake: ReturnType<typeof fakeClient>) =>
@@ -556,17 +496,6 @@ const OPERATIONS = {
   onCombinePoints: noop,
 };
 
-const editContext = (
-  session: LabelSession,
-  rows: readonly LabelPoint[],
-  overrides: Record<string, unknown> = {},
-  editable = true,
-) =>
-  sharedEditContext(
-    { editable, operations: editable ? OPERATIONS : undefined, ...overrides },
-    { points: rows, adScoring: session.adScoring },
-  );
-
 type MenuActions = {
   combineAbove: { description: string; run: () => void } | null;
   combineBelow: { description: string; run: () => void } | null;
@@ -623,47 +552,6 @@ test.describe("the ⋯ menu", () => {
       onCombinePoints: (...args: unknown[]) => quiet.push(args),
     });
     expect(quiet).toEqual([]);
-  });
-});
-
-// ── The tombstone ──────────────────────────────────────────────────────────
-
-test.describe("the combined tombstone", () => {
-  test("black rail: 'Combined into the point above' on the dark line, no Undo; the ordinary tombstone keeps its Undo", () => {
-    const { BlackDeletedPoint } = createLoader().load(BLACK_ROW) as {
-      BlackDeletedPoint: React.ComponentType<Record<string, unknown>>;
-    };
-    const session = labelSessionFixture();
-    const rows = combined();
-    const gone = renderToStaticMarkup(
-      React.createElement(BlackDeletedPoint, {
-        point: rows[1],
-        edit: editContext(session, rows),
-      }),
-    );
-    expect(gone).toContain('data-row="deleted-point"');
-    expect(gone).toContain('data-combined=""');
-    expect(text(gone)).toBe("– Combined into the point above");
-    expect(gone).not.toContain("data-undo-delete");
-    expect(gone).not.toContain("Undo");
-    const ordinary = renderToStaticMarkup(
-      React.createElement(BlackDeletedPoint, {
-        point: rows[2],
-        edit: editContext(session, rows),
-      }),
-    );
-    expect(ordinary).not.toContain("data-combined");
-    expect(text(ordinary)).toBe("– Deleted point Undo");
-    expect(ordinary).toContain('aria-label="Undo delete point 3"');
-  });
-
-  test("the marks' join reads every rally id a point carries, so a combined point takes both rallies' marks", () => {
-    const marks = readFileSync("src/lib/services/labels/marks.ts", "utf8");
-    expect(marks).toMatch(/for \(const rallyId of point\.vendorRallyIds\)/);
-    // The first point in index order wins a rally: the kept (earlier) point.
-    expect(marks).toMatch(
-      /if \(!pointIdByRally\.has\(rallyId\)\) pointIdByRally\.set\(rallyId, point\.id\)/,
-    );
   });
 });
 

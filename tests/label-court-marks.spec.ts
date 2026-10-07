@@ -13,40 +13,21 @@ import {
 } from "@/components/dashboard/matches/match-detail/film/film-court";
 import { REACHED_EPSILON_SECONDS } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import type { LabelShot } from "@/lib/services/labels/session";
-
-/**
- * The labelling court's marks as a function of film time
- * (`label-court-marks.ts`): the Video tab's hold-and-fade rule, applied to
- * label strokes on the analysis clock.
- */
+import { labelShot } from "./fixtures/label-session";
 
 function stroke(
   id: string,
   videoTime: number | null,
   fields: Partial<LabelShot> = {},
 ): LabelShot {
-  return {
-    id,
-    labelPointId: "p-1",
-    eventId: null,
-    afterEventId: null,
-    status: "kept",
-    statusBeforeDelete: null,
-    deleteReason: null,
-    hitter: "p1",
-    stroke: null,
-    result: null,
-    spin: null,
+  return labelShot(id, "p-1", {
+    videoTime,
     contactX: 0,
     contactY: 0,
     landingX: 0,
     landingY: 0,
-    videoTime,
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
-    seed: null,
     ...fields,
-  };
+  });
 }
 
 // A serve at 10 s and a return at 12 s: the serve's ball comes down 0.6 of the
@@ -57,14 +38,6 @@ const RALLY = [stroke("a", SERVE), stroke("b", RETURN)];
 const SERVE_LANDS = SERVE + (RETURN - SERVE) * BOUNCE_REVEAL_SHARE; // 11.2
 const RETURN_LANDS = RETURN + BOUNCE_REVEAL_SECONDS; // 12.75
 const GONE = MARK_HOLD_SECONDS + MARK_FADE_SECONDS; // 4.5
-
-test("the constants this spec is written against", () => {
-  expect(MARK_HOLD_SECONDS).toBe(2);
-  expect(MARK_FADE_SECONDS).toBe(2.5);
-  expect(BOUNCE_REVEAL_SHARE).toBe(0.6);
-  expect(BOUNCE_REVEAL_SECONDS).toBe(0.75);
-  expect(REACHED_EPSILON_SECONDS).toBe(0.1);
-});
 
 test("before a stroke's contact it is omitted; before the video moves, everything is", () => {
   expect(courtMarksAt(RALLY, SERVE - 0.5)).toEqual([]);

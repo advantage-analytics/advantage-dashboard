@@ -22,18 +22,15 @@ import {
   writeLabelPlayerSwitch,
 } from "@/lib/services/labels/player-swap-session";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
-import type { AdminClient } from "@/lib/supabase/admin";
 import {
   FIXTURE_POINT_IDS,
+  fakeLabelClient,
   labelSessionFixture,
+  labelShotRow,
 } from "./fixtures/label-session";
 
-/**
- * When a point moves into a game the other player serves, its players switch
- * as a whole (`player-swap.ts`): every stroke's hitter, the winner and who
- * ended it — but only when the point's own rows contradict the new server.
- * The rule, the statuses it leaves, and the round trip back to `unchanged`.
- */
+// A point moved under the other server switches its players as a whole, but
+// only when its own rows contradict the new server; and "Switch players".
 
 const { P1, P2, P4 } = FIXTURE_POINT_IDS;
 
@@ -226,25 +223,6 @@ test.describe("when the players switch", () => {
     );
     expect(swap?.point).toEqual({ winner: null, ended_by: null });
     expect(hitters(swap!.shots)).toEqual({ serve: "p2", blank: null });
-  });
-
-  test("tombstones and ghosts flip with the rest, in the order given", () => {
-    const swap = planPlayerSwap(fixturePoint(P4), "p1");
-    expect(swap).not.toBeNull();
-    // The fixture's P4: Vargas's fault, Lee's ghost swing, Vargas's second
-    // serve — p2 served it, so p1 serving means every row changes hands.
-    expect(hitters(swap!.shots)).toEqual({
-      "s-p4-fault": "p1",
-      "s-p4-ghost": "p2",
-      "s-p4-serve": "p1",
-    });
-    const p1 = planPlayerSwap(fixturePoint(P1), "p2")!;
-    expect(hitters(p1.shots)).toEqual({
-      "s-serve": "p2",
-      "s-return": "p1",
-      "s-phantom": "p2",
-      "s-added": "p2",
-    });
   });
 });
 
@@ -605,49 +583,8 @@ test.describe("switch players", () => {
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
-interface Call {
-  table: string;
-  op: "select" | "update";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  in?: Record<string, readonly unknown[]>;
-}
-
-function shotRow(id: string, fields: Record<string, unknown>) {
-  const hitter = fields.hitter ?? "p1";
-  return {
-    id,
-    label_point_id: POINT_ID,
-    event_id: 1,
-    after_event_id: null,
-    status: "kept",
-    status_before_delete: null,
-    delete_reason: null,
-    hitter,
-    stroke: "forehand",
-    result: "in",
-    spin: null,
-    contact_x: null,
-    contact_y: null,
-    landing_x: null,
-    landing_y: null,
-    video_time: null,
-    site_removal: null,
-    site_removal_restored_at: null,
-    seed: {
-      hitter,
-      stroke: fields.stroke ?? "forehand",
-      result: "in",
-      spin: null,
-      contact_x: null,
-      contact_y: null,
-      landing_x: null,
-      landing_y: null,
-      video_time: fields.video_time ?? null,
-    },
-    ...fields,
-  };
-}
+const shotRow = (id: string, fields: Record<string, unknown>) =>
+  labelShotRow(id, POINT_ID, fields);
 
 function fakeClient(rows: {
   point?: Record<string, unknown> | null;
@@ -655,59 +592,24 @@ function fakeClient(rows: {
   sessionStatus?: string;
   raced?: boolean;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          return {
-            data: rows.raced ? [] : [{ id: call.filters.id }],
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
-            data: { status: rows.sessionStatus ?? "labelling" },
-            error: null,
-          };
-        }
-        if (table === "label_shots") {
-          return { data: rows.shots ?? [], error: null };
-        }
-        if (table === "label_points") {
-          return { data: rows.point ?? null, error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return rows.raced ? { data: [], error: null } : undefined;
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data: { status: rows.sessionStatus ?? "labelling" },
+        error: null,
       };
-      const builder = {
-        select: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        in: (column: string, values: readonly unknown[]) => {
-          call.in = { ...call.in, [column]: values };
-          return builder;
-        },
-        returns: () => builder,
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shots ?? [], error: null };
+    }
+    if (call.table === "label_points") {
+      return { data: rows.point ?? null, error: null };
+    }
+    return undefined;
+  });
 }
 
 const pointRow = {

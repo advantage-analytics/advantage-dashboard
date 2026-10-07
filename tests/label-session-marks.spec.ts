@@ -24,14 +24,6 @@ import {
 } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 
-/**
- * The session loader's marks (T36): built only when the session has
- * `marks_enabled` and a job, from the job's raw results file with the current
- * derivation code, and never at the cost of the console — a failure is logged
- * and the session still opens with `marks: null`. Plus the three fields the
- * "Score doesn't add up" banner reads off the session.
- */
-
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const JOB_ID = "22222222-2222-4222-8222-222222222222";
 const MATCH_ID = "33333333-3333-4333-8333-333333333333";
@@ -60,45 +52,28 @@ const MATCH_ROW = {
 
 // Two points stored out of index order, so the loader's sort is what the
 // marks builder sees.
+const POINT_ROW = {
+  id: "p-0002",
+  point_index: 1,
+  vendor_rally_ids: [1002],
+  set_number: 1,
+  game_number: 1,
+  server: "p1",
+  serve_side: "ad",
+  winner: "p1",
+  ending: "ace",
+  ended_by: "p1",
+  game_type: "game",
+  status: "unchanged",
+  status_before_delete: null,
+  checked_at: null,
+  note: null,
+  dismissed: [],
+  seed: null,
+};
 const POINT_ROWS = [
-  {
-    id: "p-0002",
-    point_index: 1,
-    vendor_rally_ids: [1002],
-    set_number: 1,
-    game_number: 1,
-    server: "p1",
-    serve_side: "ad",
-    winner: "p1",
-    ending: "ace",
-    ended_by: "p1",
-    game_type: "game",
-    status: "unchanged",
-    status_before_delete: null,
-    checked_at: null,
-    note: null,
-    dismissed: [],
-    seed: null,
-  },
-  {
-    id: "p-0001",
-    point_index: 0,
-    vendor_rally_ids: [1001],
-    set_number: 1,
-    game_number: 1,
-    server: "p1",
-    serve_side: "deuce",
-    winner: "p2",
-    ending: "error",
-    ended_by: "p1",
-    game_type: "game",
-    status: "unchanged",
-    status_before_delete: null,
-    checked_at: null,
-    note: null,
-    dismissed: [],
-    seed: null,
-  },
+  POINT_ROW,
+  { ...POINT_ROW, id: "p-0001", point_index: 0, vendor_rally_ids: [1001] },
 ];
 
 const SHOT_ROWS = [

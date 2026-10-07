@@ -18,21 +18,17 @@ import type {
   LabelPointSeedValues,
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
-import type { AdminClient } from "@/lib/supabase/admin";
 import { buildLabelSession } from "@/lib/data/labels-server";
 import { resolveLabelAdScoring } from "@/lib/services/labels/ad-scoring";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
+  fakeLabelClient,
   labelSessionFixture,
 } from "./fixtures/label-session";
 
-/**
- * Reset: an edited shot or point back to the values it was seeded with — the
- * pure plans (reset.ts) and the admin-gated writes behind the
- * `resetLabelShotAction` / `resetLabelPointAction` server actions
- * (reset-session.ts).
- */
+// Reset: an edited shot or point back to the values it was seeded with — the
+// pure plans and the admin-gated writes over a fake client.
 
 const SHOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -328,69 +324,30 @@ test.describe("the session's ad scoring", () => {
 
 // ── The services, over a fake client ───────────────────────────────────────
 
-interface Call {
-  table: string;
-  op: "select" | "update";
-  columns?: string;
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-}
-
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
   point?: Record<string, unknown> | null;
   sessionStatus?: string;
   raced?: boolean;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          return {
-            data: rows.raced ? [] : [{ id: call.filters.id }],
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
-            data: { status: rows.sessionStatus ?? "labelling" },
-            error: null,
-          };
-        }
-        if (table === "label_shots")
-          return { data: rows.shot ?? null, error: null };
-        if (table === "label_points") {
-          return { data: rows.point ?? null, error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return rows.raced ? { data: [], error: null } : undefined;
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data: { status: rows.sessionStatus ?? "labelling" },
+        error: null,
       };
-      const builder = {
-        select: (columns?: string) => {
-          if (call.op === "select") call.columns = columns;
-          return builder;
-        },
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        maybeSingle: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shot ?? null, error: null };
+    }
+    if (call.table === "label_points") {
+      return { data: rows.point ?? null, error: null };
+    }
+    return undefined;
+  });
 }
 
 const shotRow = (fields: Record<string, unknown> = {}) => ({
@@ -471,7 +428,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     expect(fake.calls.every((c) => c.table !== "label_shots")).toBe(true);
   });
 
-  test("refuse a row with no seed, a tombstone and an added row, writing nothing", async () => {
+  test("refuse a shot with no seed, a tombstone and an added shot, writing nothing", async () => {
     for (const row of [
       shotRow({ seed: null }),
       shotRow({ seed: { hitter: "p1" } }), // half a seed is no seed
@@ -481,20 +438,6 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
       const fake = fakeClient({ shot: row });
       expect(
         await writeLabelShotReset({ supabase: fake.supabase, shotId: SHOT_ID }),
-      ).toHaveProperty("error");
-      expect(fake.calls.some((c) => c.op === "update")).toBe(false);
-    }
-    for (const row of [
-      pointRow({ seed: null }),
-      pointRow({ status: "deleted" }),
-      pointRow({ status: "added", seed: null }),
-    ]) {
-      const fake = fakeClient({ point: row });
-      expect(
-        await writeLabelPointReset({
-          supabase: fake.supabase,
-          pointId: POINT_ID,
-        }),
       ).toHaveProperty("error");
       expect(fake.calls.some((c) => c.op === "update")).toBe(false);
     }

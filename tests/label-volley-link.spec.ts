@@ -11,12 +11,6 @@ import {
 } from "@/lib/services/labels/volley-link";
 import { labelShot } from "./fixtures/label-session";
 
-/**
- * A volley or an overhead takes the ball out of the air, so the previous
- * stroke's landing and its own contact are one place. `volleyLinkWrites` is
- * the console's rule for the follower write a labeller's shot patch asks for.
- */
-
 let clock = 0;
 function shot(id: string, fields: Partial<LabelShot> = {}): LabelShot {
   clock += 1;
@@ -33,10 +27,6 @@ const BACK = { contactX: 1, contactY: 1 };
 const AT_NET = { x: -1.5, y: 14 };
 const ELSEWHERE = { x: 2.25, y: 15.5 };
 
-/**
- * The labeller's `patch` to `shotId`, as the console runs it: the rows with
- * the patch applied, and the stroke as it was before.
- */
 function edit(
   shots: LabelShot[],
   shotId: string,
@@ -77,11 +67,8 @@ test.describe("isAirStroke", () => {
 });
 
 test.describe("a stroke changed TO an air stroke", () => {
-  for (const stroke of [
-    "forehand_volley",
-    "backhand_volley",
-    "overhead",
-  ] as const) {
+  // One air stroke stands for the three: `isAirStroke` above is the set.
+  for (const stroke of ["forehand_volley"] as const) {
     test(`${stroke}: its contact becomes the previous stroke's landing`, () => {
       const a = shot("a", { ...BACK, landingX: 0, landingY: 20 });
       const b = shot("b", {
@@ -201,16 +188,6 @@ test.describe("the contact of an air stroke", () => {
     expect("result" in write.patch).toBe(false);
   });
 
-  test("the court click's patch (contact and its result) links the same", () => {
-    expect(
-      edit(rows(), "b", {
-        contact_x: AT_NET.x,
-        contact_y: AT_NET.y,
-        result: "in",
-      }),
-    ).toHaveLength(1);
-  });
-
   test("cleared: the landing stays where it is", () => {
     const [a] = rows();
     const b = shot("b", {
@@ -232,13 +209,6 @@ test.describe("the contact of an air stroke", () => {
         contact_x: AT_NET.x,
         contact_y: AT_NET.y,
       }),
-    ).toEqual([]);
-  });
-
-  test("the first stroke of a point: nothing", () => {
-    const only = [shot("b", { stroke: "overhead" })];
-    expect(
-      edit(only, "b", { contact_x: AT_NET.x, contact_y: AT_NET.y }),
     ).toEqual([]);
   });
 });

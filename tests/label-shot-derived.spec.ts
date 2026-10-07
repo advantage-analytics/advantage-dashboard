@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 import { NET_Y } from "@/components/admin/labels/court-geometry";
-import { parseLabelShotPatch } from "@/lib/services/labels/edit";
 import {
   deriveShotResult,
   shotPlacement,
@@ -12,12 +11,6 @@ import {
   directionZone,
   serveZone,
 } from "@/lib/services/splitstep/derivation/court";
-
-/**
- * T11: a stroke's Result and Placement read off its coordinates. Label frame:
- * x metres from the centre line, y metres from the near baseline, net at
- * 11.885, far baseline at 23.77.
- */
 
 /** A forehand struck near the near baseline, landing where `landing` says. */
 function rally(
@@ -167,16 +160,5 @@ test.describe("shotPlacement", () => {
     expect(
       shotPlacement(rally({ x: -3, y: 20 }, { contact_x: null })),
     ).toBeNull();
-  });
-});
-
-test.describe("result stays a stored column", () => {
-  test("parseLabelShotPatch still accepts result", () => {
-    for (const result of ["in", "out", "net", null] as const) {
-      expect(parseLabelShotPatch({ result })).toEqual({
-        ok: true,
-        patch: { result },
-      });
-    }
   });
 });

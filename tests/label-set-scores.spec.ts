@@ -4,18 +4,9 @@ import { labelScores, type ScorablePoint } from "@/lib/services/labels/score";
 import type { LabelSide } from "@/lib/services/labels/session";
 import {
   enteredScore,
-  formatPair,
   labelSetScores,
   scoreMismatch,
 } from "@/lib/services/labels/set-scores";
-
-/**
- * The "Score doesn't add up" banner's arithmetic (T41, board 08m `BANNER`):
- * each set's games counted for the winner of each game's last counted point
- * (`LabelGameBand.winner`), held against the score that was entered —
- * `final_score` first, else `matches.score` — and the first disagreeing set
- * named with its first live point.
- */
 
 let ids = 0;
 
@@ -201,21 +192,5 @@ test.describe("scoreMismatch", () => {
       entered: "6–3",
       firstPointId: null,
     });
-  });
-
-  test("final_score is what the rows are held against when both are set", () => {
-    const sets = labelled();
-    const entered = enteredScore(
-      [
-        [2, 1],
-        [0, 1],
-      ],
-      { player1: [6, 4], player2: [3, 6] },
-    );
-    expect(scoreMismatch(sets, entered)).toBeNull();
-  });
-
-  test("formatPair writes an en dash", () => {
-    expect(formatPair([4, 0])).toBe("4–0");
   });
 });

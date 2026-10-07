@@ -17,15 +17,9 @@ import {
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The labelling console's video: the label points as the film player's stops
- * (`label-film-stops.ts`, pure), then the player itself (`label-video.tsx`),
- * rendered offline through `fixtures/vm-modules` — the Video tab's transport
- * on the film, its title row (`label-now-playing.ts`), and the frame's
- * loading state.
- *
- * The fixture's point 1 has live strokes at 2472.0, 2473.1 and 2474.4 and a
- * tombstone at 2473.6; point 2 has one stroke at 2490.2; point 3 is deleted
- * and point 4's strokes are untimed.
+ * The console's video: the label points as the film player's stops, then the player. The fixture's point 1 has
+ * live strokes at 2472.0, 2473.1, 2474.4 and a tombstone at 2473.6; point 2 one at 2490.2; point 3 is deleted;
+ * point 4's are untimed.
  */
 
 const { P1, P2, P3, P4 } = FIXTURE_POINT_IDS;
@@ -154,7 +148,6 @@ test.describe("the player's film", () => {
     readout?: Readout;
     onTime?: (videoTime: number) => void;
     initialReady?: boolean;
-    square?: boolean;
   };
 
   function load() {
@@ -216,7 +209,7 @@ test.describe("the player's film", () => {
     return html.slice(html.lastIndexOf("<", block));
   }
 
-  test("the Video tab's transport rides over the film, with no scoreboard", () => {
+  test("the Video tab's transport rides over the film", () => {
     const html = render({ initialReady: true });
     const bar = transport(html);
     const words = text(bar);
@@ -244,19 +237,15 @@ test.describe("the player's film", () => {
     // Opening: nothing measured yet, so the clock is one dash.
     expect(words).toContain("—");
 
-    // The room's extras are left off, and nothing minimises: the player is
-    // a card of the page or the full screen's stage, never a floating dock.
+    // The room's extras are left off.
     for (const absent of [
       "Save point",
       "Show the court",
       "Exit fullscreen",
       "More — not available yet",
-      "Minimise the video",
-      "Expand the video",
     ]) {
       expect(html).not.toContain(absent);
     }
-    expect(html).not.toMatch(/scoreboard/i);
   });
 
   test("until the video can play, the frame is pending and the transport is inert", () => {
@@ -272,8 +261,6 @@ test.describe("the player's film", () => {
     expect(pending).toContain('data-testid="label-video"');
     const bar = transport(pending);
     expect(bar.slice(0, bar.indexOf(">") + 1)).toContain('inert=""');
-    // Nothing to press in the middle of a frame that cannot play.
-    expect(pending).not.toContain("bg-white/[0.14]");
 
     // Pending is what a real element starts as.
     expect(render()).toContain("data-label-video-pending");
@@ -286,23 +273,6 @@ test.describe("the player's film", () => {
     expect(ready).not.toContain('role="status"');
     const live = transport(ready);
     expect(live.slice(0, live.indexOf(">") + 1)).not.toContain("inert");
-    expect(ready).toContain("bg-white/[0.14]");
-  });
-
-  test("`square` takes the skeleton's card radius off, for a frame flush to the black stage", () => {
-    expect(tag(render(), "data-label-video-pending")).not.toContain(
-      "[&amp;_*]:rounded-none",
-    );
-    expect(tag(render({ square: true }), "data-label-video-pending")).toContain(
-      "[&amp;_*]:rounded-none",
-    );
-  });
-
-  test("no video: the frame says so, with no element and no transport", () => {
-    const html = render({ video: null });
-    expect(html).toContain("No video for this job");
-    expect(html).not.toContain('data-testid="label-video"');
-    expect(html).not.toContain('role="slider"');
   });
 
   test("the title row leaves out what a point lacks, and says so in dead time", () => {

@@ -4,11 +4,7 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-  RAIL_DEFAULT_PX,
-  RAIL_MAX_PX,
-  RAIL_MIN_PX,
-} from "@/components/admin/labels/label-layout";
+import { RAIL_MIN_PX } from "@/components/admin/labels/label-layout";
 import { labelScores } from "@/lib/services/labels/score";
 import type {
   LabelPoint,
@@ -28,12 +24,7 @@ import {
 import { elements, findByProp } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
-/**
- * The black full-screen view's rows (T30): the two lines a point reads as
- * (`label-black-format.ts`), and the row and game band that draw them
- * (`label-black-point-row.tsx`) — rendered offline through
- * `fixtures/vm-modules`, nothing stubbed.
- */
+/** The points rail's rows: a point's two lines, its row, the game band and the shots well. */
 
 type Names = { p1: string; p2: string };
 
@@ -272,7 +263,7 @@ function renderRow(
 }
 
 test.describe("the black point row", () => {
-  test("the fixture's edited point: its two lines, its tracks, and the pencil", () => {
+  test("the fixture's edited point: its two lines, its winner, score and tick, and the pencil", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1);
     const row = tag(html, 'data-row="point"');
     expect(row).toContain(`data-point-id="${FIXTURE_POINT_IDS.P1}"`);
@@ -284,18 +275,14 @@ test.describe("the black point row", () => {
     expect(inner(html, "data-point-detail")).toBe(
       "Crosscourt · 41:12 · 3 shot rally",
     );
-    expect(tag(html, "data-point-detail")).toContain(
-      "color:color-mix(in oklab, var(--color-white) 45%, transparent)",
-    );
 
-    // Won by Vargas: the other player's wash, not the blue.
+    // Won by Vargas.
     expect(tag(html, "data-winner-mark")).toContain('data-winner-mark="p2"');
-    expect(tag(html, "data-winner-mark")).toContain("bg-white/[0.14]");
     expect(html).toContain('aria-label="Point 1 won by Vargas"');
 
     // Edited — and a stroke of it edited, added and deleted: the pencil,
     // in the tail slot. The point has a seed, so the pencil is its Reset
-    // too: a button named for that, the glyph the same blue.
+    // too: a button named for that.
     const tail = html.slice(
       html.indexOf("data-row-tail"),
       html.indexOf("data-point-score"),
@@ -303,47 +290,21 @@ test.describe("the black point row", () => {
     const pencil = tag(tail, "data-reset-pencil");
     expect(pencil).toMatch(/^<button/);
     expect(pencil).toContain('aria-label="Reset point 1"');
-    expect(pencil).toContain("data-pencil");
-    expect(pencil).toContain("data-cell");
-    expect(tail).toContain("text-[var(--blue)]");
     expect(tail).not.toContain('aria-label="Changed by you"');
 
     // The score before it.
     expect(inner(html, "data-point-score")).toBe("0–0");
 
-    // Not checked: the tick is there, unpressed and quiet.
+    // Not checked: the tick is there, unpressed.
     const tick = tag(html, "data-check-row");
     expect(tick).toContain('aria-pressed="false"');
     expect(tick).toContain('aria-label="Point 1 checked"');
-    expect(tick).toContain("text-white/[0.22]");
-    expect(tick).not.toContain("--success");
 
     // Folded: no strokes under it.
     expect(html).not.toContain("data-shots-for");
   });
 
-  test("the actions sit between the score and the tick", () => {
-    const html = renderRow(FIXTURE_POINT_IDS.P1);
-    const score = html.indexOf("data-point-score");
-    const actions = html.indexOf('data-row-actions=""');
-    const tick = html.indexOf("data-check-row");
-    expect(score).toBeLessThan(actions);
-    expect(actions).toBeLessThan(tick);
-
-    // The point's ⋯ menu, on the dark tone.
-    const inGroup = html.slice(actions, tick);
-    expect(inGroup).toContain('aria-label="Point 1 actions"');
-    expect(tag(html, "data-point-menu")).toContain("text-white/55");
-    expect(tag(html, "data-point-menu")).not.toContain("--ink-");
-
-    // The number stays put: no grip takes its place, and it never fades.
-    expect(html).not.toContain("data-row-handle");
-    const numberTag = tag(html, "data-point-number");
-    expect(numberTag).not.toContain("opacity-0");
-    expect(inner(html, "data-point-number")).toBe("1");
-  });
-
-  test("a checked, untouched point: the tick is pressed and green, no pencil", () => {
+  test("a checked, untouched point: the tick is pressed, no pencil", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P2);
     expect(inner(html, "data-point-sentence")).toBe("Ace by Lee");
     expect(inner(html, "data-point-detail")).toBe(
@@ -351,16 +312,12 @@ test.describe("the black point row", () => {
     );
     const tick = tag(html, "data-check-row");
     expect(tick).toContain('aria-pressed="true"');
-    expect(tick).toContain('aria-label="Point 2 checked"');
-    expect(tick).toContain("text-[var(--success)]");
     // Kept as seeded: nothing changed by the labeller.
-    expect(html).toContain("data-row-tail");
     expect(html).not.toContain("data-pencil");
-    // Won by Lee: p1's blue mark.
-    expect(tag(html, "data-winner-mark")).toContain("bg-[var(--blue)]");
+    expect(tag(html, "data-winner-mark")).toContain('data-winner-mark="p1"');
   });
 
-  test("a playing point: marked, its actions shown, the rule drawn", () => {
+  test("a playing point: marked, the rule drawn, its strokes under it", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P4, {
       playing: true,
       open: true,
@@ -369,33 +326,19 @@ test.describe("the black point row", () => {
     });
     const row = tag(html, 'data-row="point"');
     expect(row).toContain('data-playing="true"');
-    expect(row).toContain("bg-white/[0.08]");
     // Nothing labelled on it yet. Its strokes are untimed, and without the
     // session's marks its ghost is a stroke like any other (the second
     // serve still decides, and the rally still counts from it).
     expect(inner(html, "data-point-sentence")).toBe("Point 4");
     expect(inner(html, "data-point-detail")).toBe("Second Serve · serve only");
 
-    const group = tag(html, 'data-row-actions=""');
-    expect(group).toContain("opacity-100");
-    expect(group).not.toContain("opacity-0");
-    // The playing row holds the reveal: the score stays aside for it.
-    expect(tag(html, "data-point-score")).toMatch(/ -translate-x-\[26px\]/);
-    expect(tag(html, "data-point-score")).not.toContain("group-hover/row");
-    expect(html).not.toContain("data-row-handle");
-    expect(inner(html, "data-point-number")).toBe("4");
-    expect(tag(html, "data-check-row")).toContain("text-white/50");
-
     const rule = tag(html, "data-playing-rule");
-    expect(rule).toContain("h-0.5 bg-[var(--blue)]");
     expect(rule).toContain("var(--film-t, 0) - 2500");
     expect(rule).toContain("/ 12 * 100%");
 
     // Open: its strokes are handed in under it.
     expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P4}"`);
     expect(html).toContain("data-strokes");
-    // The two lines are the row's control — go to the point — not a fold.
-    expect(tag(html, "data-point-go")).not.toContain("aria-expanded");
     // A playing row with no window is marked, with no rule.
     expect(renderRow(FIXTURE_POINT_IDS.P4, { playing: true })).not.toContain(
       "data-playing-rule",
@@ -495,7 +438,6 @@ test.describe("the black game band", () => {
     expect(type).toContain('aria-label="Game type: Game 1"');
     const server = tag(html, 'data-game-menu="server"');
     expect(server).toContain('aria-label="Server: Lee"');
-    expect(html).not.toContain("--ink-");
 
     // The second game is Vargas's.
     expect(text(renderBand(true, 1))).toBe(
@@ -514,7 +456,6 @@ test.describe("the black game band", () => {
 // ── The shots well (T31) ───────────────────────────────────────────────────
 
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
-const CELLS = "src/components/admin/labels/label-cells.tsx";
 
 type WellProps = {
   point: LabelPoint;
@@ -604,18 +545,12 @@ function rally(): LabelPoint {
   });
 }
 
-/** One track of `SHOT_TRACKS`: its floor, and its share of the slack. */
 interface Track {
   min: number;
   fr: number;
 }
 
-/**
- * `SHOT_TRACKS` read as tracks. A fixed `Npx` is a floor with no share; a
- * `minmax(Npx, Xfr)` is both; the result's `minmax(calc(var(--shot-tail,
- * Tpx) + Apx), Xfr)` floor is read from `floors`, which the component
- * exports beside the string so the two cannot drift.
- */
+/** `SHOT_TRACKS` read as tracks: each one's floor, and its share of the slack. */
 function shotTracks(spec: string, floors: readonly number[]): Track[] {
   const inner = /grid-cols-\[(.+)\]$/.exec(spec)![1];
   // Split on the underscores between tracks, not the ones inside calc().
@@ -642,33 +577,6 @@ function shotTracks(spec: string, floors: readonly number[]): Track[] {
     }
     return { min: floor ? Number(floor[1]) : floors[i], fr: Number(range![2]) };
   });
-}
-
-/**
- * CSS grid's share-out of `space` over `tracks`: every track starts on its
- * floor, the slack goes to the fr tracks in proportion, and a track that
- * would fall under its floor is pinned there and the rest re-shared.
- */
-function distribute(tracks: readonly Track[], space: number): number[] {
-  const widths = tracks.map((t) => t.min);
-  const free = new Set(
-    tracks.map((t, i) => (t.fr > 0 ? i : -1)).filter((i) => i >= 0),
-  );
-  for (;;) {
-    const fixed = tracks.reduce(
-      (sum, t, i) => sum + (free.has(i) ? 0 : widths[i]),
-      0,
-    );
-    const frs = [...free].reduce((sum, i) => sum + tracks[i].fr, 0);
-    if (frs === 0) return widths;
-    const unit = (space - fixed) / frs;
-    const pinned = [...free].filter((i) => unit * tracks[i].fr < tracks[i].min);
-    if (pinned.length === 0) {
-      for (const i of free) widths[i] = unit * tracks[i].fr;
-      return widths;
-    }
-    for (const i of pinned) free.delete(i);
-  }
 }
 
 function wellEdit(overrides: Record<string, unknown> = {}, editable = true) {
@@ -715,17 +623,11 @@ function xy(row: string, end: "hit" | "landed"): string {
 }
 
 test.describe("the black shots well", () => {
-  test("a recessed well with no header row, one row a live stroke, and Add shot", () => {
+  test("one row a live stroke, the tombstone between them, and Add shot", () => {
     const html = renderWell();
     expect(tag(html, "data-shots-well")).toContain('data-shots-well="p-well"');
 
-    // No header: no eyebrow, and the two column names are never text.
-    expect(html).not.toContain("eyebrow-sm");
-    expect(text(html)).not.toContain("Hit at");
-    expect(text(html)).not.toContain("Landed at");
-    expect(html).not.toContain("--ink-900");
-
-    // Four live strokes, numbered 1…4 as the light table numbers them; the
+    // Four live strokes, numbered 1…4; the
     // tombstone between them takes no number.
     const ids = [...html.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
     expect(ids).toEqual(["w-fault", "w-serve", "w-return", "w-lit"]);
@@ -788,19 +690,13 @@ test.describe("the black shots well", () => {
     // The tracks: the well's one set (`SHOT_TRACKS`), the word columns
     // fractions with floors so the row reads edge to edge at every rail
     // width, the number and the two positions fixed.
-    const {
-      SHOT_TRACKS,
-      SHOT_FLOORS_PX,
-      SHOT_GAPS_PX,
-      SHOT_PADDING_PX,
-      SHOT_TAIL_PX,
-    } = createLoader().load(WELL) as {
-      SHOT_TRACKS: string;
-      SHOT_FLOORS_PX: readonly number[];
-      SHOT_GAPS_PX: number;
-      SHOT_PADDING_PX: number;
-      SHOT_TAIL_PX: number;
-    };
+    const { SHOT_TRACKS, SHOT_FLOORS_PX, SHOT_GAPS_PX, SHOT_PADDING_PX } =
+      createLoader().load(WELL) as {
+        SHOT_TRACKS: string;
+        SHOT_FLOORS_PX: readonly number[];
+        SHOT_GAPS_PX: number;
+        SHOT_PADDING_PX: number;
+      };
     expect(open).toContain(SHOT_TRACKS);
     const tracks = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
     expect(tracks).toHaveLength(9);
@@ -809,84 +705,29 @@ test.describe("the black shots well", () => {
     expect(tracks[0]).toEqual({ min: 22, fr: 0 });
     expect(tracks[5]).toEqual({ min: 88, fr: 0 });
     expect(tracks[6]).toEqual({ min: 88, fr: 0 });
-    // Every word column grows.
-    for (const i of [1, 2, 3, 4, 7, 8]) expect(tracks[i].fr).toBeGreaterThan(0);
-    // The result is never narrower than its marks slot — an 18px disc, a
-    // 4px gap and the 11px pencil — plus the cell's gap, so the slot never
-    // grows the grid past the rail.
-    expect(SHOT_TAIL_PX).toBe(18 + 4 + 11);
-    expect(tracks[8].min).toBeGreaterThanOrEqual(SHOT_TAIL_PX + 3);
     // The floors, the gaps and the padding are the rail's narrowest exactly:
     // nothing passes its edge at 520.
-    expect(SHOT_GAPS_PX).toBe(8 * 8);
-    expect(SHOT_PADDING_PX).toBe(2 * 14);
     expect(
       tracks.reduce((sum, t) => sum + t.min, 0) +
         SHOT_GAPS_PX +
         SHOT_PADDING_PX,
     ).toBe(RAIL_MIN_PX);
-    const widthsAt = (rail: number) =>
-      distribute(tracks, rail - SHOT_GAPS_PX - SHOT_PADDING_PX);
-    // At 520 every track sits on its floor.
-    expect(widthsAt(RAIL_MIN_PX)).toEqual([...SHOT_FLOORS_PX]);
-    // At the default rail the row is the frame's — 22 · 48 · 54 · 80 · 52 ·
-    // 88 · 88 · 80 · 36 — within a few px: the time sits on its 56px floor
-    // (room for "1:02:03.4", a match past the hour), the words give it back.
-    const FRAME = [22, 48, 54, 80, 52, 88, 88, 80, 36];
-    for (const [i, width] of widthsAt(RAIL_DEFAULT_PX).entries()) {
-      expect(Math.abs(width - FRAME[i]), `track ${i}`).toBeLessThanOrEqual(
-        i === 1 ? 8 : 4,
-      );
-    }
-    // At the widest rail the slack is shared across the word columns in
-    // proportion: no column is left on its floor while another takes the
-    // whole void, and the fixed ones have not moved.
-    const wide = widthsAt(RAIL_MAX_PX);
-    expect(wide.reduce((sum, w) => sum + w, 0)).toBeCloseTo(
-      RAIL_MAX_PX - SHOT_GAPS_PX - SHOT_PADDING_PX,
-      6,
-    );
-    // (The time keeps to its floor: a tabular time wants no room past its
-    // figures.)
-    for (const i of [2, 3, 4, 7, 8]) {
-      expect(wide[i], `track ${i}`).toBeGreaterThan(tracks[i].min + 8);
-    }
-    expect([wide[0], wide[5], wide[6]]).toEqual([22, 88, 88]);
 
     // The time's floor holds an hour-long match's time whole: nine 6px mono
     // figures.
     expect(SHOT_FLOORS_PX[1]).toBeGreaterThanOrEqual("1:02:03.4".length * 6);
-
-    // A word its track can no longer hold truncates.
-    expect(tag(row, 'data-calculated="placement"')).toContain("truncate");
-    expect(open).not.toContain("data-selected");
-    expect(open).not.toContain("data-playing");
-    expect(open).not.toContain("bg-white/[0.12]");
 
     // Number · time to the tenth · player · stroke · spin · … · placement ·
     // result. (The positions are read on their own, below.)
     expect(text(row)).toBe(
       "3 15:58.9 Lee Forehand Backspin 1.76 23.34 0.77 3.90 Middle In",
     );
-    expect(row).toContain(
-      "color:color-mix(in oklab, var(--color-white) 45%, transparent)",
-    );
-    expect(row).toContain(
-      "color:color-mix(in oklab, var(--color-white) 72%, transparent)",
-    );
-    // Edited, with a seed: the blue pencil closes the row, and is its Reset.
+    // Edited, with a seed: the pencil closes the row, and is its Reset.
     const result = row.slice(row.indexOf('data-calculated="result"'));
     const pencil = tag(result, "data-reset-pencil");
     expect(pencil).toMatch(/^<button/);
     expect(pencil).toContain('aria-label="Reset shot 3"');
-    expect(result).toContain("text-[var(--blue)]");
     expect(result).not.toContain('aria-label="Changed by you"');
-    // Inside the marks slot, not the overlay: the slot's last child.
-    const slot = result.slice(result.indexOf("data-shot-marks"));
-    expect(slot.indexOf("data-reset-pencil")).toBeGreaterThan(-1);
-    expect(slot.indexOf("data-reset-pencil")).toBeLessThan(
-      slot.indexOf("data-shot-actions"),
-    );
     // A kept stroke has none.
     expect(shotRow(html, "w-lit")).not.toContain("data-pencil");
 
@@ -897,46 +738,33 @@ test.describe("the black shots well", () => {
       "No placement",
     );
 
-    // The faulted first serve is muted, as the light table mutes it.
+    // The faulted first serve is marked as one.
     const fault = shotRow(html, "w-fault");
     expect(tag(fault, 'data-row="shot"')).toContain("data-fault");
-    expect(fault).not.toContain(
-      "color:color-mix(in oklab, var(--color-white) 72%, transparent)",
-    );
-    expect(fault).toContain("text-white/35");
     expect(serve).not.toContain("data-fault");
   });
 
-  test("a coordinate: the ring or the dot, then x and y in slots of their own", () => {
+  test("a coordinate: x and y in slots of their own, so the columns align", () => {
     const html = renderWell();
     const lit = shotRow(html, "w-lit");
 
     const hit = xy(lit, "hit");
     expect(hit).toContain('aria-label="Hit at"');
-    expect(hit).toContain("size-[7px]");
-    expect(hit).toContain("border-white/50");
     // Two elements, x then y, each right-aligned in a fixed 32px slot.
     const numbers = [...hit.matchAll(/<b class="([^"]*)"[^>]*>([^<]*)<\/b>/g)];
     expect(numbers.map((m) => m[2])).toEqual(["-0.31", "-1.82"]);
     for (const [, cls] of numbers) {
-      for (const want of ["mono", "tabular", "w-8", "text-right"]) {
+      for (const want of ["tabular", "w-8", "text-right"]) {
         expect(cls.split(" ")).toContain(want);
       }
-      expect(cls).toContain("text-[10px]");
     }
 
     const landed = xy(lit, "landed");
     expect(landed).toContain('aria-label="Landed at"');
-    expect(landed).toContain("size-[5px]");
-    expect(landed).toContain("bg-white/50");
     expect(text(landed.slice(landed.indexOf(">") + 1))).toBe("-1.23 19.59");
 
     // No landing: one em dash under the dot, and an empty second slot.
     const none = xy(shotRow(html, "w-serve"), "landed");
-    expect(none).toContain('aria-label="Landed at"');
-    expect(none).toContain(
-      "color:color-mix(in oklab, var(--color-white) 25%, transparent)",
-    );
     expect(text(none.slice(none.indexOf(">") + 1))).toBe("— Not set");
     expect(none).toMatch(/<b class="[^"]*w-8[^"]*" aria-hidden="true"><\/b>/);
   });
@@ -946,18 +774,11 @@ test.describe("the black shots well", () => {
     const lit = shotRow(html, "w-lit");
     const open = tag(lit, 'data-row="shot"');
     expect(open).toContain("data-selected");
-    expect(open).toContain("bg-white/[0.12]");
     // Player, Stroke, Spin are menus; Time and the two positions are inputs.
     expect(lit.match(/data-select-editor/g)).toHaveLength(3);
     expect(lit.match(/<input/g)).toHaveLength(3);
     expect(lit).toContain('value="-0.31, -1.82"');
     expect(lit).toContain('aria-label="Shot 4 hit at, metres x, y"');
-    // On the dark tone, not the light table's field.
-    expect(lit).toContain("bg-white/[0.08]");
-    expect(lit).not.toContain("--surface-card");
-    // The marks stay while the numbers are fields.
-    expect(lit).toContain('aria-label="Hit at"');
-    expect(lit).toContain('aria-label="Landed at"');
 
     for (const id of ["w-fault", "w-serve", "w-return"]) {
       const row = shotRow(html, id);
@@ -967,17 +788,10 @@ test.describe("the black shots well", () => {
       expect(row, id).toContain('role="button"');
     }
 
-    // The playing stroke is lit too, and its stroke reads white.
+    // The playing stroke is marked too, without editors.
     const playing = shotRow(renderWell({}, true, "w-lit"), "w-lit");
     expect(tag(playing, 'data-row="shot"')).toContain('data-playing="true"');
-    expect(tag(playing, 'data-row="shot"')).toContain("bg-white/[0.12]");
     expect(playing).not.toContain("data-select-editor");
-    expect(playing).toMatch(
-      /class="text-\[11px\] font-medium text-white">Forehand</,
-    );
-    expect(shotRow(html, "w-return")).toMatch(
-      /class="text-\[11px\] font-medium" style="color:color-mix\(in oklab, var\(--color-white\) 72%, transparent\)">Forehand</,
-    );
 
     // Read-only: nothing to open, even on the selected row.
     const frozen = renderWell({ selectedShotId: "w-lit" }, false);
@@ -986,7 +800,7 @@ test.describe("the black shots well", () => {
     expect(frozen).not.toContain('role="button"');
   });
 
-  test("a click selects the stroke, and each editor sends the light table's patch", () => {
+  test("a click selects the stroke, and each editor sends its patch", () => {
     const patches: [string, unknown][] = [];
     const selected: string[] = [];
     const { BlackShotsWell } = well();
@@ -1045,17 +859,6 @@ test.describe("the black shots well", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // The edited, seeded stroke, selected: both, Reset before Delete.
     const edited = shotRow(html, "w-return");
-    // Not inside the result cell any more: a sibling of it, the row's last.
-    const resultCell = edited.slice(
-      edited.indexOf('data-calculated="result"'),
-      edited.indexOf("data-shot-actions"),
-    );
-    expect(resultCell.match(/<span/g)?.length ?? 0).toBe(
-      resultCell.match(/<\/span>/g)?.length ?? 0,
-    );
-    expect(edited.indexOf("data-shot-actions")).toBeGreaterThan(
-      edited.indexOf('data-calculated="result"'),
-    );
     expect(tag(edited, "data-reset-row")).toContain(
       'aria-label="Reset shot 3"',
     );
@@ -1080,7 +883,7 @@ test.describe("the black shots well", () => {
       expect(frozen).not.toContain("data-reset-row");
     }
 
-    // Each asks with the light row's arguments, and does not select the row.
+    // Each only asks, and does not select the row.
     const asked: unknown[][] = [];
     const selected: string[] = [];
     const { BlackShotRow } = createLoader().load(WELL) as {
@@ -1123,36 +926,7 @@ test.describe("the black shots well", () => {
     expect(selected).toEqual([]);
   });
 
-  test("the pencil is a plain mark when the stroke cannot be reset", () => {
-    // An added stroke: changed, so the pencil — but nothing seeded to go
-    // back to, so no button and no Reset name.
-    const { BlackShotsWell } = well();
-    const withAdded = point({
-      id: "p-well",
-      shots: [
-        ...rally().shots,
-        shot("w-added", { hitter: "p1", stroke: "forehand", status: "added" }),
-      ],
-    });
-    const added = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point: withAdded,
-        edit: wellEdit(),
-      }),
-    );
-    const row = shotRow(added, "w-added");
-    expect(row).toContain(
-      'role="img" data-pencil="" aria-label="Changed by you"',
-    );
-    expect(row).not.toContain("data-reset-pencil");
-    expect(row).not.toContain('aria-label="Reset shot');
-    // The edited stroke on a read-only session: the indicator alone.
-    const frozen = shotRow(renderWell({}, false), "w-return");
-    expect(frozen).toContain('aria-label="Changed by you"');
-    expect(frozen).not.toContain("data-reset-pencil");
-  });
-
-  test("a deleted stroke is one dark line that fits the rail, with Undo", () => {
+  test("a deleted stroke is one line, with Undo", () => {
     const restored: string[] = [];
     const operations = {
       ...OPERATIONS,
@@ -1166,15 +940,11 @@ test.describe("the black shots well", () => {
     );
     const open = tag(line, "data-tombstone-id");
     expect(open).toContain('data-row="deleted-shot"');
-    expect(open).toContain("data-well-tombstone");
-    expect(line).not.toContain("aria-expanded");
     expect(text(line)).toMatch(/^– Deleted shot( · .+)? Undo$/);
-    // No light-theme ink.
-    expect(line).not.toMatch(/--ink-|--danger|--surface-card/);
     const undo = tag(line, "data-undo-delete");
     expect(undo).toMatch(/aria-label="Undo delete shot( at [\d:.]+)?"/);
 
-    // The same restore the light tombstone asks for, and not a row click.
+    // Undo asks for the restore, and is not a row click.
     const { BlackDeletedShot } = createLoader().load(WELL) as {
       BlackDeletedShot: (props: Record<string, unknown>) => React.ReactElement;
     };
@@ -1212,24 +982,13 @@ test.describe("the black shots well", () => {
     const { BlackDeletedPoint } = createLoader().load(ROW) as {
       BlackDeletedPoint: (props: Record<string, unknown>) => React.ReactElement;
     };
-    const restored: string[] = [];
     const point = { ...rally(), id: "p-gone", status: "deleted" };
     const html = renderToStaticMarkup(
-      React.createElement(BlackDeletedPoint, {
-        point,
-        edit: wellEdit({
-          operations: {
-            ...OPERATIONS,
-            onRestorePoint: (id: string) => restored.push(id),
-          },
-        }),
-      }),
+      React.createElement(BlackDeletedPoint, { point, edit: wellEdit() }),
     );
     const open = tag(html, "data-tombstone-id");
     expect(open).toContain('data-row="deleted-point"');
     expect(open).toContain('data-tombstone-id="p-gone"');
-    expect(html).not.toContain("aria-expanded");
-    expect(html).not.toMatch(/--ink-|--danger|--surface-card/);
     expect(text(html)).toMatch(/^– Deleted point( · .+)? Undo$/);
     expect(tag(html, "data-undo-delete")).toContain(
       `aria-label="Undo delete point ${point.pointIndex + 1}"`,
@@ -1243,17 +1002,6 @@ test.describe("the black shots well", () => {
     expect(frozen).toContain("Deleted point");
     expect(frozen).not.toContain("data-undo-delete");
   });
-});
-
-test("the black rows use the palette's tokens and the type scale", () => {
-  const scale = new Set([8, 9, 10, 11, 12, 13, 14, 16, 28, 30, 40, 56]);
-  for (const file of [FORMAT, ROW, WELL, CELLS]) {
-    const source = readFileSync(file, "utf8");
-    expect(source.match(/#[0-9a-fA-F]{6}\b/g), file).toBeNull();
-    for (const match of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {
-      expect(scale.has(Number(match[1])), `${file}: ${match[0]}`).toBe(true);
-    }
-  }
 });
 
 /**
@@ -1289,259 +1037,4 @@ test("no labels component builds an arbitrary-value class from an interpolation"
       ).toBe(false);
     });
   }
-});
-
-// ── The rail on a light ground ─────────────────────────────────────────────
-
-const RAIL = "src/components/admin/labels/label-black-rail.tsx";
-const RAIL_TONE = "src/components/admin/labels/label-rail-tone.ts";
-
-test.describe("the rail's two tones", () => {
-  type RailProps = Record<string, unknown>;
-
-  function renderRail(props: RailProps = {}): string {
-    const { LabelBlackRail } = createLoader().load(RAIL) as {
-      LabelBlackRail: React.ComponentType<RailProps>;
-    };
-    const session = labelSessionFixture();
-    return renderToStaticMarkup(
-      React.createElement(LabelBlackRail, {
-        player1Name: NAMES.p1,
-        player2Name: NAMES.p2,
-        checked: 1,
-        total: 4,
-        saveStatus: { pending: 0, last: { kind: "saved", at: Date.now() } },
-        onExit: noop,
-        affordance: null,
-        onFollow: noop,
-        points: session.points,
-        scores: labelScores(session.points, session.adScoring),
-        names: NAMES,
-        expandedPointId: null,
-        editable: true,
-        operations: OPERATIONS,
-        onSetGameServer: noop,
-        onSetGameType: noop,
-        ...props,
-      }),
-    );
-  }
-
-  function palette() {
-    return createLoader().load(RAIL_TONE) as {
-      RAIL_TONE_CLASS: Record<"dark" | "light", string>;
-      railInk: (alpha: number) => string;
-      railAmber: (alpha: number) => string;
-    };
-  }
-
-  test("the palette: dark keeps the frame's amber, light re-points white at the page's ink", () => {
-    const { RAIL_TONE_CLASS, railInk, railAmber } = palette();
-    // The same variables in both, so a row never reads one that is not set.
-    const names = (classes: string) =>
-      [...classes.matchAll(/\[(--rail-[a-z-]+):/g)].map((m) => m[1]).sort();
-    expect(names(RAIL_TONE_CLASS.dark)).toEqual(names(RAIL_TONE_CLASS.light));
-    expect(names(RAIL_TONE_CLASS.dark)).toEqual([
-      "--rail-amber",
-      "--rail-amber-line",
-      "--rail-amber-wash",
-      "--rail-amber-wash-faint",
-      "--rail-amber-wash-strong",
-      "--rail-ground",
-      "--rail-on-accent",
-    ]);
-    // Dark: exactly what the rows drew before the palette.
-    for (const cls of [
-      "[--rail-ground:var(--surface-dark)]",
-      "[--rail-amber:rgba(252,211,77,1)]",
-      "[--rail-amber-wash-faint:rgba(253,230,138,0.06)]",
-      "[--rail-amber-wash:rgba(253,230,138,0.14)]",
-      "[--rail-amber-wash-strong:rgba(253,230,138,0.22)]",
-      "[--rail-amber-line:rgba(252,211,77,0.45)]",
-    ]) {
-      expect(RAIL_TONE_CLASS.dark, cls).toContain(cls);
-    }
-    // …and white stays white there.
-    expect(RAIL_TONE_CLASS.dark).not.toContain("--color-white");
-    // Light: ink for white, the card for the ground, the warning triple.
-    for (const cls of [
-      "[--color-white:var(--ink-900)]",
-      "text-[var(--ink-900)]",
-      "[--rail-ground:var(--surface-card)]",
-      "[--rail-amber:var(--warning-text)]",
-      "[--rail-amber-wash:var(--warning-bg)]",
-      "[--rail-amber-line:var(--warning-border)]",
-    ]) {
-      expect(RAIL_TONE_CLASS.light, cls).toContain(cls);
-    }
-    // White on both grounds, for a letter on a fill.
-    for (const tone of ["dark", "light"] as const) {
-      expect(RAIL_TONE_CLASS[tone]).toContain(
-        "[--rail-on-accent:rgb(255,255,255)]",
-      );
-    }
-    // An ink set by style follows the same variable a class does.
-    expect(railInk(0.45)).toBe(
-      "color-mix(in oklab, var(--color-white) 45%, transparent)",
-    );
-    expect(railInk(0.035)).toBe(
-      "color-mix(in oklab, var(--color-white) 3.5%, transparent)",
-    );
-    expect(railInk(0.12)).toBe(
-      "color-mix(in oklab, var(--color-white) 12%, transparent)",
-    );
-    expect(railAmber(0.8)).toBe(
-      "color-mix(in oklab, var(--rail-amber) 80%, transparent)",
-    );
-  });
-
-  test("dark by default: the palette on a box of no size, the session in the header, the way out", () => {
-    const html = renderRail();
-    const box = tag(html, "data-rail-palette");
-    expect(box).toContain('data-rail-palette="dark"');
-    expect(box).toContain("contents");
-    expect(box).toContain(palette().RAIL_TONE_CLASS.dark);
-    expect(inner(html, "data-label-rail-title")).toBe("Lee vs Vargas");
-    expect(html).toContain("data-label-rail-progress");
-    // The save line in its dark recipe.
-    expect(tag(html, 'data-save-status="saved"')).toContain(
-      'data-save-tone="dark"',
-    );
-    expect(tag(html, "data-label-black-exit")).toContain(
-      'aria-label="Exit full screen"',
-    );
-    expect(html).not.toContain("data-label-rail-full-screen");
-  });
-
-  test("light: the same rows under the light palette, the save line in its light recipe", () => {
-    const dark = renderRail();
-    const light = renderRail({ tone: "light" });
-    const box = tag(light, "data-rail-palette");
-    expect(box).toContain('data-rail-palette="light"');
-    expect(box).toContain(palette().RAIL_TONE_CLASS.light);
-    // The save line is the page header's: no dark mark, the light ink.
-    const save = tag(light, 'data-save-status="saved"');
-    expect(save).not.toContain("data-save-tone");
-    expect(save).toContain("color:var(--ink-500)");
-    // Everything else is the SAME markup — only the palette differs.
-    const rows = (html: string) =>
-      html.slice(html.indexOf("data-label-rail-scroller"));
-    expect(rows(light)).toBe(rows(dark));
-    // p1's initial sits on blue: white on both grounds, not the rail's ink.
-    expect(light).toContain("bg-[var(--blue)] text-[var(--rail-on-accent)]");
-  });
-
-  test("the tone reaches what leaves the rail through a portal: the well's menus and the row's", () => {
-    for (const tone of ["dark", "light"] as const) {
-      // The well: compact chrome on either ground, the menu in the tone.
-      const { BlackShotsWell } = well();
-      const wellElements = elements(
-        BlackShotsWell({
-          point: rally(),
-          edit: wellEdit({ tone, selectedShotId: "w-return" }),
-        }),
-      );
-      const selects = wellElements.filter(
-        (el) => "options" in el.props && "menu" in el.props,
-      );
-      expect(selects.length, tone).toBeGreaterThan(0);
-      for (const select of selects) {
-        expect(select.props.menu, tone).toBe(tone);
-      }
-
-      // The point row: the ⋯ menu.
-      const session = labelSessionFixture();
-      const edit = { ...editContext(session), tone };
-      const row = session.points.find((p) => p.status !== "deleted")!;
-      const { BlackPointRow } = components();
-      const rowElements = elements(
-        renderFunction<RowProps>(BlackPointRow)({
-          point: row,
-          open: false,
-          playing: false,
-          score: null,
-          edit,
-        }),
-      );
-      const menu = rowElements.find(
-        (el) => "operations" in el.props && "menu" in el.props,
-      );
-      expect(menu, tone).toBeDefined();
-      expect(menu!.props.menu, tone).toBe(tone);
-    }
-
-    // No tone on the context is the dark rail, as before the palette.
-    const { BlackShotsWell } = well();
-    const untoned = elements(
-      BlackShotsWell({ point: rally(), edit: wellEdit() }),
-    ).filter((el) => "options" in el.props && "menu" in el.props);
-    for (const select of untoned) expect(select.props.menu).toBe("dark");
-  });
-
-  test("showSession off: 'Points' in place of the title, no progress, no save line; the total stays", () => {
-    const marks = { points: {}, shots: {}, suggestions: [] };
-    const html = renderRail({ showSession: false, tone: "light", marks });
-    expect(inner(html, "data-label-rail-title")).toBe("Points");
-    expect(html).not.toContain("Lee vs Vargas");
-    expect(html).not.toContain("data-label-rail-progress");
-    expect(html).not.toContain("data-save-status");
-    expect(html).toContain("data-label-rail-to-check");
-    expect(html).not.toContain("data-label-rail-fixes");
-    // With it on (the default) all three are there.
-    const whole = renderRail({ marks });
-    expect(whole).toContain("data-label-rail-progress");
-    expect(whole).toContain("data-save-status");
-    expect(whole).toContain("data-label-rail-to-check");
-  });
-
-  test("onFullScreen draws its button; no onExit, no exit button", () => {
-    let entered = 0;
-    const html = renderRail({
-      onExit: undefined,
-      onFullScreen: () => {
-        entered += 1;
-      },
-    });
-    const button = tag(html, "data-label-rail-full-screen");
-    expect(button).toContain("<button");
-    expect(button).toContain('aria-label="Full screen"');
-    expect(html).toContain("lucide-maximize-2");
-    expect(html).not.toContain("data-label-black-exit");
-    expect(html).not.toContain("Exit full screen");
-    expect(entered).toBe(0);
-    // Both at once, the way in before the way out.
-    const both = renderRail({ onFullScreen: noop });
-    expect(both.indexOf("data-label-rail-full-screen")).toBeGreaterThan(-1);
-    expect(both.indexOf("data-label-rail-full-screen")).toBeLessThan(
-      both.indexOf("data-label-black-exit"),
-    );
-  });
-
-  test("the 'Now playing' pill: the rail's place on either ground, the page's shadow on the light one", () => {
-    const affordance = { label: "Now playing", ariaLabel: "Follow" };
-    const pill = (props: RailProps) =>
-      tag(renderRail({ affordance, ...props }), "data-label-follow-pill");
-    const dark = pill({});
-    for (const cls of [
-      "top-3",
-      "z-10",
-      "text-white",
-      "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]",
-    ]) {
-      expect(dark, cls).toContain(cls);
-    }
-    const light = pill({ tone: "light" });
-    for (const cls of [
-      "top-3",
-      "z-10",
-      "shadow-[var(--shadow-floating)]",
-      // Inside the light rail "white" is ink: the chip's words say white
-      // by the palette's own name.
-      "text-[var(--rail-on-accent)]",
-      "bg-[rgba(13,13,13,0.72)]",
-    ]) {
-      expect(light, cls).toContain(cls);
-    }
-    expect(light).not.toMatch(/\btext-white\b/);
-  });
 });

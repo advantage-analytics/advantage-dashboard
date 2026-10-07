@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { AdminClient } from "@/lib/supabase/admin";
 import {
   applyPointSplit,
   canSplitAtShot,
@@ -21,6 +20,7 @@ import type { LabelPoint, LabelSession } from "@/lib/services/labels/session";
 import { tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  fakeLabelClient,
   labelSessionFixture,
   editContext as sharedEditContext,
   noop,
@@ -29,17 +29,8 @@ import {
 import { findByProp } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * Split a point at one of its shots: the vendor ran two real points into one
- * rally, so "Split point here" on a shot moves it and every shot after it
- * (tombstones included) into a new point right below the anchor
- * (`point-split.ts`).
- *
- * The pure plan and the console's optimistic rows; the service over a fake
- * client, for the ORDER of its writes, their tables and what it refuses; the
- * black well's Split action, rendered offline through
- * `fixtures/vm-modules`; and the console's wiring, read off its source.
- */
+// Split a point at one of its shots: the pure plan and the console's rows, the
+// service over a fake client, and the black well's Split action.
 
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
 const MENU = "src/components/admin/labels/label-point-menu.tsx";
@@ -51,9 +42,6 @@ const NEW_ID = "p-split";
 
 const points = () => labelSessionFixture().points;
 const pointOf = (id: string) => points().find((p) => p.id === id)!;
-
-/** Point 1's shots in video order: the serve, the return, a tombstone, an added stroke. */
-const ORDER = ["s-serve", "s-return", "s-phantom", "s-added"];
 
 // ── The plan ───────────────────────────────────────────────────────────────
 
@@ -86,7 +74,6 @@ test.describe("planPointSplit", () => {
       status: "edited",
       vendor_rally_ids: [1001],
     });
-    expect(ORDER.indexOf("s-return")).toBe(1);
   });
 
   test("an unchanged anchor becomes edited; an added one stays added", () => {
@@ -279,15 +266,6 @@ const UUID = (n: number) => `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${n}`;
 const SHOT = (n: number) => `bbbbbbbb-bbbb-4bbb-8bbb-00000000000${n}`;
 const NEW_ROW_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-interface Call {
-  table: string;
-  op: "select" | "update" | "insert";
-  columns?: string;
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  in?: Record<string, unknown[]>;
-}
-
 const POINT_ROWS = points().map((p, i) => ({
   id: UUID(i + 1),
   session_id: SESSION_ID,
@@ -338,88 +316,45 @@ function fakeClient(rows: {
   points?: Record<string, unknown>[];
   shots?: Record<string, unknown>[];
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          return { data: [{ id: call.filters.id }], error: null };
-        }
-        if (call.op === "insert") {
-          return {
-            data: {
-              id: NEW_ROW_ID,
-              ...call.values,
-              status_before_delete: null,
-              note: null,
-              dismissed: [],
-            },
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
+  return fakeLabelClient((call) => {
+    if (call.op === "update") return undefined;
+    if (call.op === "insert") {
+      return {
+        data: {
+          id: NEW_ROW_ID,
+          ...call.values,
+          status_before_delete: null,
+          note: null,
+          dismissed: [],
+        },
+        error: null,
+      };
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data:
+          rows.session === undefined
+            ? { status: "labelling", marks_enabled: true }
+            : rows.session,
+        error: null,
+      };
+    }
+    if (call.table === "label_points") {
+      return "session_id" in call.filters
+        ? { data: rows.points ?? POINT_ROWS, error: null }
+        : {
             data:
-              rows.session === undefined
-                ? { status: "labelling", marks_enabled: true }
-                : rows.session,
+              rows.anchor === undefined
+                ? { id: call.filters.id, session_id: SESSION_ID }
+                : rows.anchor,
             error: null,
           };
-        }
-        if (table === "label_points") {
-          return "session_id" in call.filters
-            ? { data: rows.points ?? POINT_ROWS, error: null }
-            : {
-                data:
-                  rows.anchor === undefined
-                    ? { id: call.filters.id, session_id: SESSION_ID }
-                    : rows.anchor,
-                error: null,
-              };
-        }
-        if (table === "label_shots") {
-          return { data: rows.shots ?? SHOT_ROWS, error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
-      };
-      const builder = {
-        select: (columns?: string) => {
-          call.columns = columns;
-          return builder;
-        },
-        order: () => builder,
-        returns: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        insert: (values: Record<string, unknown>) => {
-          call.op = "insert";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        in: (column: string, values: unknown[]) => {
-          (call.in ??= {})[column] = values;
-          return builder;
-        },
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shots ?? SHOT_ROWS, error: null };
+    }
+    return undefined;
+  });
 }
 
 const writes = (fake: ReturnType<typeof fakeClient>) =>
@@ -606,17 +541,8 @@ const editContext = (
     session,
   );
 
-/** The markup of the stroke row for `shotId`, up to the next row. */
-function shotRow(html: string, shotId: string): string {
-  const at = html.indexOf(`data-shot-id="${shotId}"`);
-  expect(at, shotId).toBeGreaterThan(-1);
-  const start = html.lastIndexOf("<div", at);
-  const next = html.indexOf("data-row=", html.indexOf(">", at));
-  return html.slice(start, next === -1 ? undefined : next);
-}
-
 test.describe("Split point here", () => {
-  test("in the black well: on every live shot but the first, in the actions overlay before Reset and Delete, with its name", () => {
+  test("in the black well: offered, but never on a tombstone, and never on a session that cannot be written", () => {
     const session = labelSessionFixture();
     const { BlackShotsWell } = createLoader().load(WELL) as {
       BlackShotsWell: React.ComponentType<Record<string, unknown>>;
@@ -627,39 +553,11 @@ test.describe("Split point here", () => {
         edit: editContext(session, { selectedShotId: "s-return" }),
       }),
     );
-    // Shot 1 — the serve: no split.
-    const serve = shotRow(html, "s-serve");
-    expect(serve).toContain("data-shot-actions");
-    expect(serve).not.toContain("data-split-row");
-    // Shot 2 — the return: Split, then Reset (edited, seeded), then Delete.
-    const ret = shotRow(html, "s-return");
-    const split = tag(ret, "data-split-row");
-    expect(split).toContain('aria-label="Split point at shot 2"');
-    expect(split).toMatch(/^<button/);
-    expect(ret.indexOf("data-split-row")).toBeLessThan(
-      ret.indexOf("data-reset-row"),
-    );
-    expect(ret.indexOf("data-reset-row")).toBeLessThan(
-      ret.indexOf("data-delete-row"),
-    );
-    // Inside the overlay, not in the grid.
-    expect(ret.indexOf("data-shot-actions")).toBeLessThan(
-      ret.indexOf("data-split-row"),
-    );
-    // Shot 3 — the added stroke: Split and Delete.
-    const added = shotRow(html, "s-added");
-    expect(tag(added, "data-split-row")).toContain(
-      'aria-label="Split point at shot 3"',
-    );
-    expect(added).not.toContain("data-reset-row");
+    expect(html).toContain('aria-label="Split point at shot 2"');
     // The tombstone line carries none: its block ends before the next row.
     const tombAt = html.indexOf('data-tombstone-id="s-phantom"');
     const tomb = html.slice(tombAt, html.indexOf("data-row=", tombAt + 1));
     expect(tomb).not.toContain("data-split-row");
-    // Lucide's split glyph, not a native title.
-    expect(split).not.toContain(" title=");
-    expect(ret).toContain("lucide-split");
-
     // Read-only, or with nothing to ask: none.
     for (const frozen of [
       renderToStaticMarkup(

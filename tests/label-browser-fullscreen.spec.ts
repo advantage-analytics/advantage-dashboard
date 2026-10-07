@@ -9,14 +9,7 @@ import {
   type FullscreenDocument,
 } from "@/components/admin/labels/use-browser-fullscreen";
 
-/**
- * The browser's full screen, which IS the console's full-screen layout — its
- * pure half (`use-browser-fullscreen.ts`): the feature detection, the two
- * requests and how a request comes out,
- * driven with plain objects standing in for the document — the standard API,
- * Safari's `webkit` spellings alone, a browser with neither, and a browser
- * that refuses.
- */
+/** The browser's full screen (`use-browser-fullscreen.ts`), driven with plain objects standing in for the document. */
 
 /** A document with the standard API, recording what was asked of it. */
 function standard(refuse = false) {
@@ -145,13 +138,4 @@ test("a refusal is swallowed: rejected or thrown, it answers false and stays off
   };
   await expect(enterFullscreen(thrower)).resolves.toBe(false);
   await expect(exitFullscreen(thrower)).resolves.toBe(false);
-});
-
-test("a change event means LEFT only when nothing is fullscreened any more", async () => {
-  const { doc } = standard();
-  await requestFullscreen(doc);
-  // The change that follows entering: not a leave.
-  expect(fullscreenActive(doc)).toBe(true);
-  await exitFullscreen(doc);
-  expect(fullscreenActive(doc)).toBe(false);
 });

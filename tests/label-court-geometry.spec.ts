@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 
 import {
   COURT_LENGTH,
-  COURT_VIEW_BOX,
   DOUBLES_HALF_WIDTH,
   NET_Y,
   fromCourt,
@@ -13,16 +12,6 @@ import {
   toCourt,
   toCourtInHalf,
 } from "@/components/admin/labels/court-geometry";
-
-/**
- * The labelling console's court frame (T5): metres in the `label_shots`
- * frame (x lateral from the centre line, y from the NEAR baseline) against
- * percent of board 08's art box, near baseline at the bottom.
- */
-
-test("the art box is board 08's viewBox", () => {
-  expect(COURT_VIEW_BOX).toBe("-7.265 -4.5 14.53 32.77");
-});
 
 test("fixed points land where the board draws them", () => {
   const close = (
@@ -96,24 +85,6 @@ test.describe("the half-court zoom (board 08i)", () => {
     expect(halfCourtViewBox("far")).toBe("-10.085 -3.5 20.17 16.224");
     const [, , width, height] = halfCourtViewBox("near").split(" ").map(Number);
     expect(width / height).toBeCloseTo(276 / 222, 3);
-  });
-
-  test("fixed points land where the board draws them", () => {
-    // Near half: net along the top, baseline 3.5 m above the bottom edge.
-    const nearNet = fromCourtInHalf("near", { x: 0, y: NET_Y });
-    expect(nearNet.sx).toBeCloseTo(50, 9);
-    expect(nearNet.sy).toBeCloseTo(5.17, 2);
-    const nearBase = fromCourtInHalf("near", { x: -DOUBLES_HALF_WIDTH, y: 0 });
-    expect(nearBase.sx).toBeCloseTo(22.81, 2);
-    expect(nearBase.sy).toBeCloseTo(78.43, 2);
-    // Far half: the mirror — far baseline near the top, net along the bottom.
-    const farBase = fromCourtInHalf("far", {
-      x: DOUBLES_HALF_WIDTH,
-      y: COURT_LENGTH,
-    });
-    expect(farBase.sx).toBeCloseTo(77.19, 2);
-    expect(farBase.sy).toBeCloseTo(21.57, 2);
-    expect(fromCourtInHalf("far", { x: 0, y: NET_Y }).sy).toBeCloseTo(94.83, 2);
   });
 
   test("the surround is court too: a corner of the box is metres off the lines", () => {

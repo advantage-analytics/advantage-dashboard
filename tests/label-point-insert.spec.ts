@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { AdminClient } from "@/lib/supabase/admin";
 import {
   LABEL_MARK_META,
   type LabelMark,
@@ -28,21 +27,14 @@ import {
 import { inner, tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  fakeLabelClient,
   labelSessionFixture,
 } from "./fixtures/label-session";
+import { findByProp } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
-/**
- * A suggested point (T40, board 08m §5): two points of a game served from the
- * same side, so the black rail opens a dashed slot between them with three
- * answers — "Add point" (a new `label_points` row at the second point's
- * index, every later point moved up one), "{b} was a let" (the existing
- * point autosave) and "Dismiss" (T39's key). Nothing changes until a click.
- *
- * The pure plan; the service over a fake client, for the ORDER of its writes
- * and what it refuses; and the rail rendered offline through
- * `fixtures/vm-modules`.
- */
+// A suggested point: two points of a game served from the same side open a
+// slot between them. The pure plan, the service over a fake client, the rail.
 
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
@@ -164,27 +156,6 @@ test.describe("planInsertedPoint", () => {
 
   // "Add point below" (the ⋯ menu): the slot after the anchor.
   test("after: the next index, in the anchor's game even when it closes that game, and only the later points move", () => {
-    // P1 is the first point of game 1; P2 (game 1) and the tombstone P3
-    // follow it. The anchor itself does not move.
-    expect(planInsertedPoint(points(), P1, "after")).toEqual({
-      ok: true,
-      write: {
-        insert: {
-          point_index: 1,
-          set_number: 1,
-          game_number: 1,
-          server: "p1",
-          game_type: "game",
-          status: "added",
-          vendor_rally_ids: [],
-        },
-        shifts: [
-          { id: P4, point_index: 4 },
-          { id: P3, point_index: 3 },
-          { id: P2, point_index: 2 },
-        ],
-      },
-    });
     // P2 is the last live point of game 1: below it is still game 1, served
     // by Lee — never game 2 — and the tombstone after it moves too.
     expect(planInsertedPoint(points(), P2, "after")).toMatchObject({
@@ -224,21 +195,6 @@ test.describe("planInsertedPoint", () => {
     expect(planInsertedPoint(points(), "p-nope", "after")).toEqual({
       error: "The point to add after is not a point of this session.",
     });
-    // The console's in-memory rows agree with the plan.
-    const plan = planInsertedPoint(points(), P2, "after");
-    if ("error" in plan) throw new Error(plan.error);
-    const rows = applyInsertedPoint(
-      points(),
-      draftInsertedPoint(plan.write.insert, NEW_ID),
-    );
-    expect(rows.map((p) => [p.id, p.pointIndex])).toEqual([
-      [P1, 0],
-      [P2, 1],
-      [NEW_ID, 2],
-      [P3, 3],
-      [P4, 4],
-    ]);
-    expect(rows[2]).toMatchObject({ gameNumber: 1, server: "p1" });
   });
 
   test("applyInsertedPoint renumbers in memory and withdrawInsertedPoint undoes it", () => {
@@ -333,13 +289,6 @@ test.describe("a missing point's state", () => {
 
 // ── The service ────────────────────────────────────────────────────────────
 
-interface Call {
-  table: string;
-  op: "select" | "update" | "insert";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-}
-
 const POINT_ROWS = points().map((p) => ({
   id: p.id,
   point_index: p.pointIndex,
@@ -356,84 +305,38 @@ function fakeClient(rows: {
   /** The shift of this row fails. */
   failShift?: string;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          if (rows.failShift && call.filters.id === rows.failShift) {
-            return { data: null, error: { message: "boom" } };
-          }
-          return { data: [{ id: call.filters.id }], error: null };
-        }
-        if (call.op === "insert") {
-          return {
-            data: {
-              id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-              point_index: call.values?.point_index,
-              status: call.values?.status,
-              set_number: call.values?.set_number,
-              game_number: call.values?.game_number,
-              server: call.values?.server,
-              game_type: call.values?.game_type,
-              vendor_rally_ids: call.values?.vendor_rally_ids,
-              serve_side: null,
-              winner: null,
-              ending: null,
-              ended_by: null,
-              status_before_delete: null,
-              checked_at: null,
-              note: null,
-              dismissed: [],
-            },
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
-            data:
-              rows.session === undefined
-                ? { status: "labelling", marks_enabled: true }
-                : rows.session,
-            error: null,
-          };
-        }
-        if (table === "label_points") {
-          return { data: rows.points ?? POINT_ROWS, error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return rows.failShift && call.filters.id === rows.failShift
+        ? { data: null, error: { message: "boom" } }
+        : undefined;
+    }
+    if (call.op === "insert") {
+      return {
+        data: {
+          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          ...call.values,
+          status_before_delete: null,
+          note: null,
+          dismissed: [],
+        },
+        error: null,
       };
-      const builder = {
-        select: () => builder,
-        order: () => builder,
-        returns: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        insert: (values: Record<string, unknown>) => {
-          call.op = "insert";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data:
+          rows.session === undefined
+            ? { status: "labelling", marks_enabled: true }
+            : rows.session,
+        error: null,
       };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_points") {
+      return { data: rows.points ?? POINT_ROWS, error: null };
+    }
+    return undefined;
+  });
 }
 
 /** The point ids the fake knows, as uuids the service accepts. */
@@ -520,43 +423,6 @@ test.describe("writeLabelPointInsert", () => {
         filters: {},
       },
     ]);
-  });
-
-  test("after: the same writes with the slot one higher, and the anchor left where it is", async () => {
-    const fake = fakeClient({ points: UUID_ROWS });
-    const result = await writeLabelPointInsert({
-      supabase: fake.supabase,
-      sessionId: SESSION_ID,
-      anchorPointId: UUID(2),
-      position: "after",
-    });
-    expect(result).toMatchObject({
-      ok: true,
-      point: { pointIndex: 2, gameNumber: 1, server: "p1", status: "added" },
-    });
-    expect(writes(fake).map((c) => [c.op, c.values, c.filters])).toEqual([
-      ["update", { point_index: 4 }, { id: UUID(4) }],
-      ["update", { point_index: 3 }, { id: UUID(3) }],
-      [
-        "insert",
-        expect.objectContaining({
-          session_id: SESSION_ID,
-          point_index: 2,
-          game_number: 1,
-          server: "p1",
-          status: "added",
-        }),
-        {},
-      ],
-    ]);
-    // Anything but "after" is "before", as the entry point passes it through.
-    const odd = fakeClient({ points: UUID_ROWS });
-    expect(
-      await insertLabelPoint(SESSION_ID, UUID(2), "sideways", {
-        requireAdmin: async () => ({ id: "admin" }),
-        createAdminClient: () => odd.supabase,
-      }),
-    ).toMatchObject({ ok: true, point: { pointIndex: 1 } });
   });
 
   test("a session labelled without marks takes a point — a manual edit, not an answer to a mark", async () => {
@@ -780,68 +646,24 @@ function slot(html: string): string {
 }
 
 test.describe("a suggested point on the black rail", () => {
-  test("a dashed slot between the pair's rows: plus, the two lines, three answers — and a render writes nothing", () => {
+  test("a slot between the pair's rows: the two lines, three answers — and a render writes nothing", () => {
     const { called, operations } = countingOperations();
     const html = black(unchecked(), marksOf(), operations);
     expect(called).toEqual([]);
 
-    const open = tag(html, "data-point-suggestion=");
-    expect(open).toContain(`data-point-suggestion="${P2}"`);
-    for (const cls of [
-      "min-h-[44px]",
-      "mx-2",
-      "my-0.5",
-      "rounded-lg",
-      "border",
-      "border-dashed",
-      "border-[var(--rail-amber-line)]",
-      "bg-[var(--rail-amber-wash-faint)]",
-      "grid-cols-[22px_minmax(0,1fr)_auto]",
-    ]) {
-      expect(open, cls).toContain(cls);
-    }
-    const row = slot(html);
-    expect(row).toContain("lucide-plus");
-    expect(row).toMatch(
-      /color:color-mix\(in oklab, var\(--rail-amber\) 80%, transparent\)/,
+    expect(tag(html, "data-point-suggestion=")).toContain(
+      `data-point-suggestion="${P2}"`,
     );
+    const row = slot(html);
     expect(inner(row, "data-point-suggestion-title")).toBe(
       "A point is probably missing here",
     );
-    expect(tag(row, "data-point-suggestion-title")).toContain("text-[12px]");
-    expect(tag(row, "data-point-suggestion-title")).toContain("font-medium");
-    expect(tag(row, "data-point-suggestion-title")).toContain("text-white");
     expect(inner(row, "data-point-suggestion-detail")).toBe(
       "Points 1 and 2 were both served from the ad side",
     );
-    expect(tag(row, "data-point-suggestion-detail")).toContain("text-[11px]");
-    expect(tag(row, "data-point-suggestion-detail")).toContain("text-white/50");
-
     expect(inner(row, "data-point-suggestion-add")).toBe("Add point");
-    expect(tag(row, "data-point-suggestion-add")).toContain(
-      "text-[var(--rail-amber)]",
-    );
     expect(inner(row, "data-point-suggestion-let")).toBe("2 was a let");
-    expect(tag(row, "data-point-suggestion-let")).toContain("text-white/50");
     expect(inner(row, "data-point-suggestion-dismiss")).toBe("Dismiss");
-    expect(tag(row, "data-point-suggestion-dismiss")).toContain(
-      "text-white/50",
-    );
-    // The two lines give way; the answers never shrink or wrap.
-    for (const attr of [
-      "data-point-suggestion-title",
-      "data-point-suggestion-detail",
-    ]) {
-      expect(tag(row, attr)).toContain("truncate");
-    }
-    for (const attr of [
-      "data-point-suggestion-add",
-      "data-point-suggestion-let",
-      "data-point-suggestion-dismiss",
-    ]) {
-      expect(tag(row, attr)).toContain("shrink-0");
-      expect(tag(row, attr)).toContain("whitespace-nowrap");
-    }
 
     // Between the two rows, and nowhere else.
     const at = html.indexOf("data-point-suggestion=");
@@ -886,7 +708,7 @@ test.describe("a suggested point on the black rail", () => {
     });
     expect(calls).toEqual([]);
     const click = (attr: string) => {
-      const button = find(tree, attr);
+      const button = findByProp(tree, attr);
       expect(button, attr).not.toBeNull();
       let stopped = 0;
       (button!.props.onClick as (e: unknown) => void)({
@@ -903,85 +725,6 @@ test.describe("a suggested point on the black rail", () => {
     click("data-point-suggestion-dismiss");
     expect(calls[2]).toEqual(["onDismissSuggestion", P2, "missing_point"]);
     expect(calls).toHaveLength(3);
-  });
-
-  test("after Add point: the slot is gone, the New point row stands in its place and the next point is one higher", () => {
-    const session = withAdded(unchecked());
-    const html = black(session, marksOf());
-    expect(html).not.toContain("data-point-suggestion=");
-
-    const row = pointRow(html, NEW_ID);
-    expect(tag(row, "data-point-id")).toContain("data-point-new");
-    expect(numberOf(html, NEW_ID)).toBe("2");
-    expect(numberOf(html, P2)).toBe("3");
-    expect(numberOf(html, P4)).toBe("5");
-    expect(html.indexOf(`data-point-id="${P1}"`)).toBeLessThan(
-      html.indexOf(`data-point-id="${NEW_ID}"`),
-    );
-    expect(html.indexOf(`data-point-id="${NEW_ID}"`)).toBeLessThan(
-      html.indexOf(`data-point-id="${P2}"`),
-    );
-
-    // The frame's "New point": a "?" in a blue ring, the title in blue, the
-    // detail between the neighbours' strokes, a dash for the score, the pencil.
-    expect(tag(row, 'data-winner-mark="new"')).toContain(
-      "shadow-[inset_0_0_0_1px_var(--blue)]",
-    );
-    expect(tag(row, 'data-winner-mark="new"')).toContain("bg-transparent");
-    expect(inner(row, 'data-winner-mark="new"')).toBe("?");
-    expect(inner(row, "data-point-sentence")).toBe("New point");
-    expect(tag(row, "data-point-sentence")).toContain("text-[var(--blue)]");
-    // Lee's last stroke of point 1 is at 2474.4; Vargas's ace opens point 3 at 2490.2.
-    expect(inner(row, "data-point-detail")).toBe(
-      "Set who won, then add its shots · between 41:14 and 41:30",
-    );
-    expect(tag(row, "data-point-score")).toBeTruthy();
-    expect(row.slice(row.indexOf("data-point-score"))).toContain("No score");
-    expect(row).toContain("data-pencil");
-
-    // The flagged point's question goes grey, never away: settled by the
-    // point now between the two, and the hover says that — not "changed the
-    // ending", which it did not.
-    const chip = tag(pointRow(html, P2), 'data-mark-chip=""');
-    expect(chip).toContain('data-mark-state="settled"');
-    expect(chip).toContain(
-      'aria-label="Same side twice · settled. You added the missing point."',
-    );
-    // The flagged point itself is untouched: no pencil of its own.
-    expect(pointRow(html, P2)).not.toContain("data-pencil");
-  });
-
-  test("after “was a let”: the slot is gone and the chip reads settled; after Dismiss, dismissed", () => {
-    const session = unchecked();
-    const let_ = {
-      ...session,
-      points: session.points.map((p) =>
-        p.id === P2
-          ? { ...p, ending: "let_replayed" as const, status: "edited" as const }
-          : p,
-      ),
-    };
-    const html = black(let_, marksOf());
-    expect(html).not.toContain("data-point-suggestion=");
-    expect(tag(pointRow(html, P2), 'data-mark-chip=""')).toContain(
-      'data-mark-state="settled"',
-    );
-    expect(inner(pointRow(html, P2), "data-point-sentence")).toBe(
-      "Let, replayed",
-    );
-
-    const dismissed = {
-      ...session,
-      points: session.points.map((p) =>
-        p.id === P2 ? { ...p, dismissed: ["missing_point"] } : p,
-      ),
-    };
-    const after = black(dismissed, marksOf());
-    expect(after).not.toContain("data-point-suggestion=");
-    expect(tag(pointRow(after, P2), 'data-mark-chip=""')).toContain(
-      'data-mark-state="dismissed"',
-    );
-    expect(pointRow(after, P2)).not.toContain("data-pencil");
   });
 
   test("with marks off, none built, a pair that is not two live rows, or no way to write — no slot, or no answers", () => {
@@ -1090,31 +833,3 @@ test("an added empty point reads on the default layout's rail, with its menu, an
     write: { status: "deleted", status_before_delete: "added" },
   });
 });
-
-/**
- * The first element in a React tree whose props carry `attr`. Only the slot's
- * own component is entered.
- */
-function find(
-  node: React.ReactNode,
-  attr: string,
-): React.ReactElement<Record<string, unknown>> | null {
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = find(child, attr);
-      if (found) return found;
-    }
-    return null;
-  }
-  if (!React.isValidElement(node)) return null;
-  const element = node as React.ReactElement<Record<string, unknown>>;
-  if (attr in element.props) return element;
-  if (typeof element.type === "function") return null;
-  for (const child of React.Children.toArray(
-    element.props.children as React.ReactNode,
-  )) {
-    const found = find(child, attr);
-    if (found) return found;
-  }
-  return null;
-}

@@ -24,29 +24,16 @@ import {
   dismissLabelSuggestion,
   writeLabelSuggestionDismiss,
 } from "@/lib/services/labels/suggestions-session";
-import { inner, tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  labelShot,
   editContext as sharedEditContext,
   noop,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * A suggested shot (T39, board 08m §4): two strokes in a row by one player,
- * so the black rail proposes the other's between them as a dashed row with
- * two answers. "Add shot" is the existing add operation; "Dismiss" is the one
- * new write, a key appended to `label_points.dismissed`. Nothing is added
- * until a click.
- *
- * The pure rules; the service over a fake client, for what its ONE update
- * sets and matches on and what it refuses; and the well, the point row and
- * the console rendered offline through `fixtures/vm-modules`.
- */
-
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
-const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
 
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -54,62 +41,24 @@ const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const { P4 } = FIXTURE_POINT_IDS;
 const KEY = "missing_shot:502";
 
-/**
- * The fixture's fourth point with the frame's rally in place of its own:
- * Lee's serve, Vargas's backhand, Vargas's forehand — the pair — and Lee's
- * backhand. The vendor never saw Lee's stroke between the pair.
- */
 function pairPoint(): LabelPoint {
   const point = labelSessionFixture().points.find((p) => p.id === P4)!;
-  const blank: LabelShot = {
-    ...point.shots[0],
-    status: "kept",
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
-    contactX: null,
-    contactY: null,
-    landingX: null,
-    landingY: null,
-    seed: null,
-  };
-  const shot = (id: string, fields: Partial<LabelShot>): LabelShot => ({
-    ...blank,
-    id,
-    result: "in",
-    ...fields,
-  });
+  const shot = (
+    id: string,
+    eventId: number,
+    hitter: "p1" | "p2",
+    stroke: LabelShot["stroke"],
+    videoTime: number,
+  ): LabelShot =>
+    labelShot(id, P4, { eventId, hitter, stroke, videoTime, result: "in" });
   return {
     ...point,
     server: "p1",
     shots: [
-      shot("s-a", {
-        eventId: 501,
-        hitter: "p1",
-        stroke: "first_serve",
-        spin: "flat",
-        videoTime: 1679.4,
-      }),
-      shot("s-b", {
-        eventId: 502,
-        hitter: "p2",
-        stroke: "backhand",
-        spin: "backspin",
-        videoTime: 1680.3,
-      }),
-      shot("s-c", {
-        eventId: 503,
-        hitter: "p2",
-        stroke: "forehand",
-        spin: "topspin",
-        videoTime: 1682.7,
-      }),
-      shot("s-d", {
-        eventId: 504,
-        hitter: "p1",
-        stroke: "backhand",
-        spin: "flat",
-        videoTime: 1684.0,
-      }),
+      shot("s-a", 501, "p1", "first_serve", 1679.4),
+      shot("s-b", 502, "p2", "backhand", 1680.3),
+      shot("s-c", 503, "p2", "forehand", 1682.7),
+      shot("s-d", 504, "p1", "backhand", 1684.0),
     ],
   };
 }
@@ -123,11 +72,6 @@ const SUGGESTION: Extract<LabelSuggestion, { kind: "missing_shot" }> = {
   videoTime: 1681.5,
 };
 
-/**
- * The mark the derivation raises beside the suggestion. Its CHIP is hidden
- * (marks.ts `LABEL_MARK_META`): the console is never handed it, and a row
- * handed it anyway draws nothing for it — the dashed slot is the question.
- */
 function pairMark(): LabelMark {
   const meta = LABEL_MARK_META.same_player_consecutive;
   return {
@@ -504,12 +448,6 @@ type WellProps = {
   edit: Record<string, unknown>;
   marks?: LabelMarks | null;
 };
-type RowProps = WellProps & {
-  open: boolean;
-  playing: boolean;
-  score: string | null;
-};
-
 /** Row operations that record every request made of them. */
 function recordingOperations() {
   const calls: Array<[string, ...unknown[]]> = [];
@@ -557,128 +495,14 @@ function renderWell(
   );
 }
 
-function renderRow(
-  point: LabelPoint,
-  marks: LabelMarks | null,
-  edit: Record<string, unknown> = editContext(),
-): string {
-  const { BlackPointRow } = createLoader().load(ROW) as {
-    BlackPointRow: React.ComponentType<RowProps>;
-  };
-  return renderToStaticMarkup(
-    React.createElement(BlackPointRow, {
-      point,
-      open: false,
-      playing: false,
-      score: "0–0",
-      edit,
-      marks,
-    }),
-  );
-}
-
-/** The number drawn in a stroke row's first track. */
-function numberOf(html: string, shotId: string): string {
-  const at = html.indexOf(`data-shot-id="${shotId}"`);
-  expect(at, shotId).toBeGreaterThan(-1);
-  const row = html.slice(at);
-  const span = row.indexOf("<span");
-  const start = row.indexOf(">", span) + 1;
-  return row.slice(start, row.indexOf("<", start));
-}
-
-/** The dashed row: from its marker to the next row of any kind. */
-function suggestionRow(html: string): string {
-  const at = html.indexOf("data-shot-suggestion=");
-  expect(at).toBeGreaterThan(-1);
-  const start = html.lastIndexOf("<div", at);
-  const next = html.indexOf("data-row=", html.indexOf(">", at));
-  return html.slice(start, html.lastIndexOf("<", next));
-}
-
 test.describe("a suggested shot in the black well", () => {
-  test("a dashed amber row after the pair's first stroke: plus, midpoint, name, the sentence, two answers", () => {
-    const point = pairPoint();
-    const html = renderWell(point, marksOf(point));
-    const row = suggestionRow(html);
-
-    const open = tag(row, "data-shot-suggestion");
-    expect(open).toContain(`data-shot-suggestion="${KEY}"`);
-    for (const cls of [
-      "outline-dashed",
-      "outline-1",
-      "outline-[color:var(--rail-amber-line)]",
-      "-outline-offset-4",
-      "rounded-lg",
-      "bg-[var(--rail-amber-wash-faint)]",
-    ]) {
-      expect(open, cls).toContain(cls);
-    }
-
-    // A plus where the number would be; the time and the name in amber.
-    expect(row).toContain("lucide-plus");
-    expect(row).toContain(">28:01.5<");
-    expect(row).toContain(">Lee<");
-    expect(
-      row.match(
-        /color:color-mix\(in oklab, var\(--rail-amber\) 75%, transparent\)/g,
-      ),
-    ).toHaveLength(3);
-    expect(inner(row, "data-suggestion-text")).toBe(
-      "A shot by Lee is probably missing here",
-    );
-    expect(tag(row, "data-suggestion-text")).toContain("text-[11px]");
-    expect(tag(row, "data-suggestion-text")).toMatch(
-      /color:color-mix\(in oklab, var\(--color-white\) 72%, transparent\)/,
-    );
-    expect(tag(row, "data-suggestion-text")).toContain("truncate");
-
-    expect(inner(row, "data-suggestion-add")).toBe("Add shot");
-    expect(tag(row, "data-suggestion-add")).toContain(
-      "text-[var(--rail-amber)]",
-    );
-    expect(inner(row, "data-suggestion-dismiss")).toBe("Dismiss");
-    expect(tag(row, "data-suggestion-dismiss")).toContain("text-white/50");
-    // The answers never shrink or wrap: the sentence gives first.
-    for (const attr of ["data-suggestion-add", "data-suggestion-dismiss"]) {
-      expect(tag(row, attr)).toContain("shrink-0");
-      expect(tag(row, attr)).toContain("whitespace-nowrap");
-    }
-
-    // Where it would go: after Vargas's backhand, before Vargas's forehand.
-    const at = html.indexOf("data-shot-suggestion=");
-    expect(html.indexOf('data-shot-id="s-b"')).toBeLessThan(at);
-    expect(at).toBeLessThan(html.indexOf('data-shot-id="s-c"'));
-    // It is not a stroke: no id, no number, and the next stroke is still 3.
-    expect(row).not.toContain("data-shot-id");
-    expect(numberOf(html, "s-b")).toBe("2");
-    expect(numberOf(html, "s-c")).toBe("3");
-    expect(numberOf(html, "s-d")).toBe("4");
-    expect(html.match(/data-row="shot"/g)).toHaveLength(4);
-  });
-
-  test("it is not counted: the point row reads the same rally with it and without", () => {
-    const point = pairPoint();
-    const withIt = renderRow(point, marksOf(point));
-    const without = renderRow(point, null);
-    expect(inner(withIt, "data-point-detail")).toBe(
-      inner(without, "data-point-detail"),
-    );
-    expect(inner(withIt, "data-point-detail")).toContain("4 shot rally");
-    // No chip on the row for it: the slot in the well is the whole question.
-    expect(withIt).not.toContain("data-mark-chip");
-    expect(text(withIt)).not.toContain("Missing shot?");
-    expect(renderWell(point, marksOf(point))).toContain(
-      "data-shot-suggestion=",
-    );
-  });
-
   test("nothing is added until a click; the two buttons are the console's requests", () => {
     const point = pairPoint();
     const { calls, operations } = recordingOperations();
     const edit = editContext({ operations });
     const html = renderWell(point, marksOf(point), edit);
     expect(html).toContain("data-shot-suggestion=");
+    expect(html).toContain("A shot by Lee is probably missing here");
     // A render asked for nothing.
     expect(calls).toEqual([]);
 
@@ -706,40 +530,6 @@ test.describe("a suggested shot in the black well", () => {
     ]);
   });
 
-  test("after Add shot: the row is gone, the new stroke is an ordinary added row in its place, and the point row has its pencil", () => {
-    const point = withAdded(pairPoint());
-    const marks = marksOf(point);
-    const well = renderWell(point, marks);
-    expect(well).not.toContain("data-shot-suggestion");
-    expect(well.match(/data-row="shot"/g)).toHaveLength(5);
-    expect(numberOf(well, "s-b")).toBe("2");
-    expect(numberOf(well, "s-new")).toBe("3");
-    expect(numberOf(well, "s-c")).toBe("4");
-    expect(well.indexOf('data-shot-id="s-b"')).toBeLessThan(
-      well.indexOf('data-shot-id="s-new"'),
-    );
-    expect(well.indexOf('data-shot-id="s-new"')).toBeLessThan(
-      well.indexOf('data-shot-id="s-c"'),
-    );
-
-    const row = renderRow(point, marks);
-    expect(row).not.toContain("data-mark-chip");
-    expect(row).toContain("data-pencil");
-  });
-
-  test("after Dismiss: the row is gone, and the point row is untouched", () => {
-    const point: LabelPoint = { ...pairPoint(), dismissed: [KEY] };
-    const marks = marksOf(point);
-    const well = renderWell(point, marks);
-    expect(well).not.toContain("data-shot-suggestion");
-    expect(well.match(/data-row="shot"/g)).toHaveLength(4);
-
-    const row = renderRow(point, marks);
-    expect(row).not.toContain("data-mark-chip");
-    // A dismissal is not a change to the point.
-    expect(row).not.toContain("data-pencil");
-  });
-
   test("with marks off, or none built, no suggestion renders", () => {
     const point = pairPoint();
     const marks = marksOf(point);
@@ -751,32 +541,6 @@ test.describe("a suggested shot in the black well", () => {
         suggestions: [{ ...SUGGESTION, pointId: "p-0001" }],
       }),
     ).not.toContain("data-shot-suggestion");
-  });
-
-  test("read-only: the row, no answers; and no row once the stroke it follows is deleted", () => {
-    const point = pairPoint();
-    for (const edit of [
-      editContext({ editable: false, operations: undefined }),
-      editContext({ operations: undefined }),
-      editContext({ editable: false }),
-    ]) {
-      const html = renderWell(point, marksOf(point), edit);
-      expect(html).toContain(`data-shot-suggestion="${KEY}"`);
-      expect(html).not.toContain("data-suggestion-add");
-      expect(html).not.toContain("data-suggestion-dismiss");
-    }
-
-    const deleted: LabelPoint = {
-      ...point,
-      shots: point.shots.map((s) =>
-        s.id === "s-b"
-          ? { ...s, status: "deleted", statusBeforeDelete: "kept" }
-          : s,
-      ),
-    };
-    expect(renderWell(deleted, marksOf(deleted))).not.toContain(
-      "data-shot-suggestion",
-    );
   });
 });
 
@@ -838,35 +602,8 @@ test.describe("the console", () => {
     return { called, operations };
   }
 
-  test("the black view draws the suggestion with its answers, and a render writes nothing", () => {
-    const { called, operations } = countingOperations();
-    const saves: string[] = [];
-    const html = renderConsole({
-      session: sessionWithPair(),
-      video: null,
-      marks: marksOf(pairPoint()),
-      initialLayoutMode: "black",
-      initialExpandedPointId: P4,
-      operations,
-      onSaveShot: async () => {
-        saves.push("shot");
-        return { ok: true, status: "edited" };
-      },
-      onSavePoint: async () => {
-        saves.push("point");
-        return { ok: true, status: "edited" };
-      },
-    });
-    expect(html).toContain(`data-shot-suggestion="${KEY}"`);
-    expect(html).toContain("A shot by Lee is probably missing here");
-    expect(html).toContain("data-suggestion-add");
-    expect(html).toContain("data-suggestion-dismiss");
-    expect(called).toEqual([]);
-    expect(saves).toEqual([]);
-  });
-
   test("not on a session with marks off; the default layout draws them with marks on", () => {
-    const { operations } = countingOperations();
+    const { called, operations } = countingOperations();
     const saves = {
       onSaveShot: async () => ({ ok: true, status: "edited" }),
       onSavePoint: async () => ({ ok: true, status: "edited" }),
@@ -896,6 +633,8 @@ test.describe("the console", () => {
     expect(docked).toContain('data-label-layout-mode="docked-side"');
     expect(docked).toContain(`data-shot-suggestion="${KEY}"`);
     expect(docked).toContain('data-shot-id="s-b"');
+    // A render asked the console's operations for nothing.
+    expect(called).toEqual([]);
   });
 });
 

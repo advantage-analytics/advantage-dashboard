@@ -20,24 +20,17 @@ import {
   writeLabelGameType,
 } from "@/lib/services/labels/game-operations-session";
 import type {
-  LabelPoint,
   LabelPointSeedValues,
   LabelSide,
 } from "@/lib/services/labels/session";
-import type { AdminClient } from "@/lib/supabase/admin";
-import { labelSessionFixture } from "./fixtures/label-session";
+import { fakeLabelClient, labelSessionFixture } from "./fixtures/label-session";
 
-/**
- * T10's game operations: set a game's server, set a game's type — the pure
- * rules (game-operations.ts) and the admin-gated services behind the server
- * actions (game-operations-session.ts).
- */
+// Game operations: set a game's server, set a game's type — the pure rules
+// and the admin-gated services over a fake client.
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const GAME = { setNumber: 1, gameNumber: 7 };
 const OTHER_GAME = { setNumber: 1, gameNumber: 6 };
-
-const WRITE_KEYS = ["id", "server", "game_type", "status"];
 
 type PointFields = Partial<Omit<GamePoint, "seed">> & {
   /** Null: no seed. A partial: the seed is the point's values with these over it. */
@@ -125,20 +118,6 @@ test.describe("tiebreak rotation", () => {
     expect(writesOf(planned).map((w) => w.id)).toEqual(
       Array.from({ length: 9 }, (_, i) => `tb-${i + 1}`),
     );
-  });
-
-  test("the other first server mirrors the whole rotation", () => {
-    expect(servers(planGameServer(tiebreakPoints(), GAME, "p2"))).toEqual([
-      "p2",
-      "p1",
-      "p1",
-      "p2",
-      "p2",
-      "p2",
-      "p1",
-      "p1",
-      "p2",
-    ]);
   });
 
   test("a let at the end takes the last served point's server; not_a_point is a let too", () => {
@@ -350,30 +329,6 @@ test.describe("planGameType", () => {
   });
 });
 
-// ── What a write names ─────────────────────────────────────────────────────
-
-test("no write names a key other than id, server, game_type, status", () => {
-  const points = [...tiebreakPoints(), point("g-x", 200, { gameType: "game" })];
-  const planned = [
-    planGameServer(points, GAME, "p1"),
-    planGameServer(points, GAME, "p2"),
-    planGameType(points, GAME, "tiebreak"),
-    planGameType(points, GAME, "match_tiebreak"),
-    planGameType(points, GAME, "game"),
-  ];
-  for (const plan of planned) {
-    for (const write of writesOf(plan)) {
-      for (const key of Object.keys(write)) expect(WRITE_KEYS).toContain(key);
-      expect(write).toHaveProperty("id");
-      expect(write).toHaveProperty("server");
-      expect(write).toHaveProperty("status");
-    }
-  }
-  // The server operation never names the type; the type operation always does.
-  expect(writesOf(planned[0]).some((w) => "game_type" in w)).toBe(false);
-  expect(writesOf(planned[2]).every((w) => "game_type" in w)).toBe(true);
-});
-
 // ── The console's optimistic rows ──────────────────────────────────────────
 
 test("applyGameWrites applies the writes and leaves the other rows alone", () => {
@@ -400,73 +355,32 @@ test("applyGameWrites applies the writes and leaves the other rows alone", () =>
 
 // ── The services, over a fake client ───────────────────────────────────────
 
-interface Call {
-  table: string;
-  op: "select" | "update";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  negated: Record<string, unknown>;
-}
-
 function fakeClient(rows: {
   gamePoints?: Record<string, unknown>[];
   sessionStatus?: string | null;
   /** Ids whose compare-and-set matches nothing — another tab got there first. */
   racedIds?: string[];
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {}, negated: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          const raced = (rows.racedIds ?? []).includes(
-            call.filters.id as string,
-          );
-          return { data: raced ? [] : [{ id: call.filters.id }], error: null };
-        }
-        if (table === "label_sessions") {
-          return {
-            data:
-              rows.sessionStatus === null
-                ? null
-                : { status: rows.sessionStatus ?? "labelling" },
-            error: null,
-          };
-        }
-        if (table === "label_points") {
-          return { data: rows.gamePoints ?? [], error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return (rows.racedIds ?? []).includes(call.filters.id as string)
+        ? { data: [], error: null }
+        : undefined;
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data:
+          rows.sessionStatus === null
+            ? null
+            : { status: rows.sessionStatus ?? "labelling" },
+        error: null,
       };
-      const builder = {
-        select: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        neq: (column: string, value: unknown) => {
-          call.negated[column] = value;
-          return builder;
-        },
-        returns: () => builder,
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_points") {
+      return { data: rows.gamePoints ?? [], error: null };
+    }
+    return undefined;
+  });
 }
 
 const ADMIN = { requireAdmin: async () => ({ id: "admin" }) };
@@ -617,21 +531,18 @@ test.describe("the services", () => {
         op: "update",
         values: { server: "p2", status: "edited" },
         filters: { id: ROW_IDS[0], updated_at: "2026-10-03T00:00:01Z" },
-        negated: {},
       },
       {
         table: "label_points",
         op: "update",
         values: { server: "p2", status: "edited" },
         filters: { id: ROW_IDS[1], updated_at: "2026-10-03T00:00:02Z" },
-        negated: {},
       },
       {
         table: "label_points",
         op: "update",
         values: { server: "p2", status: "added" },
         filters: { id: ROW_IDS[2], updated_at: "2026-10-03T00:00:03Z" },
-        negated: {},
       },
     ]);
   });

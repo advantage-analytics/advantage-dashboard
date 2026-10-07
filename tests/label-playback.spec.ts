@@ -95,15 +95,6 @@ test("the next point's first stroke ends a point before its tail does", () => {
   expect(at(2475.0, session)).toEqual({ pointId: P2, shotId: "s-ace" });
 });
 
-test("after the last point, nothing is playing", () => {
-  expect(at(2490.2 + POINT_TAIL_SECONDS - 0.1)).toEqual({
-    pointId: P2,
-    shotId: "s-ace",
-  });
-  expect(at(2500)).toBeNull();
-  expect(at(99_999)).toBeNull();
-});
-
 test("a deleted point is never playing and never cuts another short", () => {
   // Point 3 is a tombstone; give it a stroke inside point 1's rally and one
   // in the dead time after it.

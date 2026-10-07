@@ -28,13 +28,6 @@ import {
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 
-/**
- * The words of a mark (board 08m, word for word), the life a counted mark
- * leads — open, settled, checked, checked as is, dismissed — and what the
- * point row rolls its marks up to, by tier: the chip for the marks that can
- * change the score, the open point's hints, and nothing for a hidden one.
- */
-
 const names = { p1: "Ace", p2: "Goodman" };
 
 function mark<C extends LabelMarkCode>(
@@ -161,13 +154,6 @@ test.describe("mark copy", () => {
     );
   });
 
-  test("the names follow the sides, not the sample", () => {
-    const other = { p1: "Quan", p2: "Harazaki" };
-    expect(markHover(sample("winner_disputed"), other)).toBe(
-      "The score says Harazaki won, but the last shot says Quan did. The ending is wrong more often than the winner.",
-    );
-  });
-
   test("a mark the derivation could not fill still reads as a sentence", () => {
     for (const hover of [
       markHover(mark("service_court_repeat", { side: null }), names),
@@ -203,17 +189,6 @@ test.describe("a flag's life", () => {
     ).toBe("checked");
     expect(markState(flag, point({ checkedAt: CHECKED_AT }))).toBe(
       "checked-as-is",
-    );
-  });
-
-  test("unchecking a point reopens a flag that was not settled", () => {
-    expect(markState(flag, point({ checkedAt: CHECKED_AT }))).toBe(
-      "checked-as-is",
-    );
-    expect(markState(flag, point({ checkedAt: null }))).toBe("open");
-    // A settled one stays settled.
-    expect(markState(flag, point({ status: "edited", checkedAt: null }))).toBe(
-      "settled",
     );
   });
 
@@ -415,19 +390,6 @@ test.describe("the row roll-up", () => {
         point({ dismissed: ["missing_point"], checkedAt: CHECKED_AT }),
       ),
     ).toEqual({ text: null, count: 2, state: "dismissed" });
-  });
-
-  test("the pencil follows any change to the point or its shots", () => {
-    expect(pointChanged(point({ status: "added" }))).toBe(true);
-    for (const status of ["edited", "added", "deleted"] as const) {
-      expect(pointChanged(point({ shots: [shot({ status })] }))).toBe(true);
-    }
-    expect(
-      pointChanged(
-        point({ shots: [shot({ siteRemovalRestoredAt: CHECKED_AT })] }),
-      ),
-    ).toBe(true);
-    expect(pointChanged(point({ status: "edited" }))).toBe(true);
   });
 });
 

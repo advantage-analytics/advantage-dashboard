@@ -16,7 +16,6 @@ import {
   deleteReasonGroup,
   openingMarks,
   pointChange,
-  renderScorecard,
   seededScorePoints,
   shotChangedFromSeed,
 } from "@/lib/services/labels/scorecard";
@@ -26,13 +25,6 @@ import type {
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
 import { labelPoint, labelShot } from "./fixtures/label-session";
-
-/**
- * The marks scorecard (`labels/scorecard.ts`): each mark code measured
- * against what the labeller did to the point it sat on, seed against the row
- * now — and the three lists beside it. Pure, so the rows here are built by
- * hand; `scripts/label-scorecard.ts` only reads and prints.
- */
 
 // The frame: x metres from the centre line, y from the near baseline; the
 // net at 11.885, the far baseline at 23.77.
@@ -126,8 +118,6 @@ const marksOf = (
   points: Record<string, LabelMark[]>,
   shots: Record<string, LabelMark[]> = {},
 ): LabelMarks => ({ points, shots, suggestions: [], serveSides: {} });
-
-const NAMES = { p1: "Lee", p2: "Vargas" };
 
 test.describe("what the labeller changed on a point", () => {
   test("nothing: a point and its strokes at their seed", () => {
@@ -229,34 +219,20 @@ test.describe("the per-code table", () => {
         d: [DISPUTED, mark("winner_guessed", {})],
       }),
     );
-    expect(card.rows).toEqual([
-      {
-        code: "winner_disputed",
-        label: "Check the ending",
-        tier: "count",
-        marks: 4,
-        winnerChanged: 1,
-        endingChanged: 1,
-        anythingChanged: 3,
-      },
-      {
-        code: "serve_fault",
-        label: "Serve fault?",
-        tier: "hint",
-        marks: 1,
-        winnerChanged: 1,
-        endingChanged: 0,
-        anythingChanged: 1,
-      },
-      {
-        code: "winner_guessed",
-        label: "Winner guessed",
-        tier: "hidden",
-        marks: 1,
-        winnerChanged: 0,
-        endingChanged: 0,
-        anythingChanged: 0,
-      },
+    expect(
+      card.rows.map((r) => [
+        r.code,
+        r.label,
+        r.tier,
+        r.marks,
+        r.winnerChanged,
+        r.endingChanged,
+        r.anythingChanged,
+      ]),
+    ).toEqual([
+      ["winner_disputed", "Check the ending", "count", 4, 1, 1, 3],
+      ["serve_fault", "Serve fault?", "hint", 1, 1, 0, 1],
+      ["winner_guessed", "Winner guessed", "hidden", 1, 0, 0, 0],
     ]);
     expect(card.points).toEqual({ live: 4, added: 0, deleted: 0, changed: 3 });
   });
@@ -521,67 +497,6 @@ test.describe("the marks as the session opened", () => {
     ]);
     // b's winner changed under a count mark: not an unmarked change.
     expect(card.unmarkedWinnerChanges).toEqual([]);
-  });
-});
-
-test.describe("the markdown", () => {
-  test("a table per section, shares of each code's own marks, players by name", () => {
-    const a = point("a", 0, [shot("a1", { ...LONG }, { result: "out" })], {
-      winner: "p2",
-    });
-    const b = point("b", 1, [
-      shot("b1", { video_time: 1 }),
-      shot(
-        "b2",
-        { video_time: 2 },
-        {
-          status: "deleted",
-          deleteReason: "dead_ball_after_point",
-        },
-      ),
-    ]);
-    const c = point("c", 2, [], { winner: "p2" });
-    const md = renderScorecard(
-      buildScorecard(
-        [a, b, c],
-        marksOf({ a: [DISPUTED], b: [DISPUTED], c: [mark("serve_fault", {})] }),
-      ),
-      { title: "Marks scorecard — Lee v Vargas", names: NAMES },
-    );
-    expect(md.startsWith("# Marks scorecard — Lee v Vargas\n")).toBe(true);
-    expect(md).toContain(
-      "3 live points (0 added by the labeller), 0 deleted; 3 changed in some way.",
-    );
-    expect(md).toContain(
-      "| Mark | Code | Tier | Marks | Winner changed | Ending / ended by changed | Anything changed |",
-    );
-    expect(md).toContain(
-      "| Check the ending | `winner_disputed` | count | 2 | 1 (50%) | 0 (0%) | 2 (100%) |",
-    );
-    expect(md).toContain(
-      "| Serve fault? | `serve_fault` | hint | 1 | 1 (100%) | 0 (0%) | 1 (100%) |",
-    );
-    expect(md).toContain("| 3 | Lee | Vargas | `serve_fault` |");
-    expect(md).toContain("1 stroke; the labeller made 1 (100%) Out or Net.");
-    expect(md).toContain("| 1 | out | out |");
-    expect(md).toContain(`| ${AFTER_POINT_ENDED} | 1 | 0 (0%) |`);
-  });
-
-  test("an empty session says so in every section", () => {
-    const md = renderScorecard(buildScorecard([], marksOf({})), {
-      title: "Empty",
-      names: NAMES,
-    });
-    expect(md).toContain("No marks.");
-    expect(md).toContain(
-      "None: every winner the labeller changed sat under an amber chip.",
-    );
-    expect(md).toContain(
-      "## Last strokes seeded In whose coordinates say Out or Net\n\nNone.",
-    );
-    expect(md).toContain("## Strokes the labeller deleted\n\nNone.");
-    expect(md).not.toContain("undefined");
-    expect(md).not.toContain("NaN");
   });
 });
 

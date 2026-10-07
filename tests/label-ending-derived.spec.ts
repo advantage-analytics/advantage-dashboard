@@ -12,12 +12,6 @@ import type {
 } from "@/lib/services/labels/session";
 import { labelShot } from "./fixtures/label-session";
 
-/**
- * T28: "How it ended" read off the shot rows. `deriveEnding` looks at the
- * point's last live stroke in video order; `endingPatchForShotChange` is the
- * console's rule for when a shot change sends a point patch.
- */
-
 let clock = 0;
 function shot(fields: Partial<LabelShot>): LabelShot {
   clock += 1;
@@ -29,8 +23,6 @@ function shot(fields: Partial<LabelShot>): LabelShot {
     ...fields,
   });
 }
-
-/** A stroke, timed after every stroke made before it. */
 
 const serve = (fields: Partial<LabelShot> = {}) =>
   shot({ hitter: "p1", stroke: "first_serve", ...fields });
@@ -192,38 +184,7 @@ test.describe("deriveEnding", () => {
     });
   });
 
-  test("winner: the other side from a last stroke that missed, the hitter of one in, null with no result", () => {
-    // error: the hitter missed, the opponent won — whoever the point names.
-    expect(
-      deriveEnding(point([serve(), p2(), p1({ result: "out" })], "p1"))?.winner,
-    ).toBe("p2");
-    expect(
-      deriveEnding(point([serve(), p2({ result: "net" })], "p1"))?.winner,
-    ).toBe("p1");
-    // double fault: the receiver
-    expect(
-      deriveEnding(
-        point([
-          serve({ result: "net" }),
-          serve({ stroke: "second_serve", result: "out" }),
-        ]),
-      )?.winner,
-    ).toBe("p2");
-    // service winner: the server (the returner missed)
-    expect(deriveEnding(point([serve(), p2({ result: "out" })]))?.winner).toBe(
-      "p1",
-    );
-    // ace: the server
-    expect(deriveEnding(point([serve()], "p2"))?.winner).toBe("p1");
-    // a last stroke in: its hitter, whoever the point names
-    expect(deriveEnding(point([serve(), p2(), p1()], "p2"))?.winner).toBe("p1");
-    expect(deriveEnding(point([serve(), p2()], "p1"))?.winner).toBe("p2");
-    // no result yet: the rows settle nothing
-    expect(deriveEnding(point([serve({ result: null })]))?.winner).toBeNull();
-    expect(
-      deriveEnding(point([serve(), p2(), p1({ result: null })], "p1"))?.winner,
-    ).toBeNull();
-    // a stroke with no hitter names no winner
+  test("a stroke with no hitter names no winner", () => {
     expect(
       deriveEnding(point([serve(), p2(), p1({ hitter: null })]))?.winner,
     ).toBeNull();

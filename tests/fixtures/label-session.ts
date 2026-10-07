@@ -1,3 +1,4 @@
+import type { AdminClient } from "@/lib/supabase/admin";
 import { labelScores } from "@/lib/services/labels/score";
 import {
   orderLabelShots,
@@ -340,4 +341,126 @@ export function editContext(
     scores: labelScores(session.points, session.adScoring).points,
     ...overrides,
   };
+}
+
+/**
+ * A `label_shots` row as the services read it: a kept forehand by player 1,
+ * seeded with exactly what it holds unless `fields` names a seed.
+ */
+export function labelShotRow(
+  id: string,
+  labelPointId: string,
+  fields: Record<string, unknown> = {},
+) {
+  const row = {
+    id,
+    label_point_id: labelPointId,
+    event_id: 1,
+    after_event_id: null,
+    status: "kept",
+    status_before_delete: null,
+    delete_reason: null,
+    hitter: "p1",
+    stroke: "forehand",
+    result: "in",
+    spin: null,
+    contact_x: null,
+    contact_y: null,
+    landing_x: null,
+    landing_y: null,
+    video_time: null,
+    site_removal: null,
+    site_removal_restored_at: null,
+    ...fields,
+  };
+  const seed = {
+    hitter: row.hitter,
+    stroke: row.stroke,
+    result: row.result,
+    spin: row.spin,
+    contact_x: row.contact_x,
+    contact_y: row.contact_y,
+    landing_x: row.landing_x,
+    landing_y: row.landing_y,
+    video_time: row.video_time,
+  };
+  return { ...row, seed: "seed" in fields ? fields.seed : seed };
+}
+
+/** One `from(table)` chain of the fake client, as the service built it. */
+export interface FakeLabelCall {
+  table: string;
+  op: "select" | "update" | "insert";
+  /** The column list of a read. */
+  columns?: string;
+  values?: Record<string, unknown>;
+  filters: Record<string, unknown>;
+  /** `.neq(column, value)`; absent until one is asked. */
+  negated?: Record<string, unknown>;
+  /** `.in(column, values)`; absent until one is asked. */
+  in?: Record<string, readonly unknown[]>;
+}
+
+type FakeLabelAnswer = { data: unknown; error: { message: string } | null };
+
+/**
+ * A Supabase client for the labels services' specs: it records every chain
+ * and answers each from `answer`. A chain `answer` leaves unanswered succeeds
+ * when it is an update (one row, the id it filtered on) and fails otherwise.
+ */
+export function fakeLabelClient(
+  answer: (call: FakeLabelCall) => FakeLabelAnswer | undefined,
+) {
+  const calls: FakeLabelCall[] = [];
+  const supabase = {
+    from(table: string) {
+      const call: FakeLabelCall = { table, op: "select", filters: {} };
+      calls.push(call);
+      const settle = async (): Promise<FakeLabelAnswer> =>
+        answer(call) ??
+        (call.op === "update"
+          ? { data: [{ id: call.filters.id }], error: null }
+          : { data: null, error: { message: `unexpected ${table}` } });
+      const builder = {
+        select: (columns?: string) => {
+          if (call.op === "select") call.columns = columns;
+          return builder;
+        },
+        order: () => builder,
+        returns: () => builder,
+        update: (values: Record<string, unknown>) => {
+          call.op = "update";
+          call.values = values;
+          return builder;
+        },
+        insert: (values: Record<string, unknown>) => {
+          call.op = "insert";
+          call.values = values;
+          return builder;
+        },
+        eq: (column: string, value: unknown) => {
+          call.filters[column] = value;
+          return builder;
+        },
+        neq: (column: string, value: unknown) => {
+          call.negated = { ...call.negated, [column]: value };
+          return builder;
+        },
+        in: (column: string, values: readonly unknown[]) => {
+          call.in = { ...call.in, [column]: values };
+          return builder;
+        },
+        /** One page of a `readAllPages` read: the fake holds under a page. */
+        range: settle,
+        maybeSingle: settle,
+        single: settle,
+        then: (
+          resolve: (v: unknown) => unknown,
+          reject?: (e: unknown) => unknown,
+        ) => settle().then(resolve, reject),
+      };
+      return builder;
+    },
+  };
+  return { calls, supabase: supabase as unknown as AdminClient };
 }

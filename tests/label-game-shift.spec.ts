@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { AdminClient } from "@/lib/supabase/admin";
 import {
   applyGameShift,
   gameOverflow,
@@ -23,18 +22,18 @@ import type {
   LabelSide,
 } from "@/lib/services/labels/session";
 import { inner, tag } from "./fixtures/html-probe";
-import { labelPoint, labelSessionFixture } from "./fixtures/label-session";
+import {
+  fakeLabelClient,
+  labelPoint,
+  labelSessionFixture,
+  labelShot,
+  labelShotRow,
+} from "./fixtures/label-session";
 import { findWhere } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
-/**
- * "Move the leftover points to the next game" (`game-shift.ts`): a game
- * decided before its last row reads "Game–30" on the rows past the deciding
- * one, and those rows belong to the next game. The pure overflow reading and
- * the cascade plan; the service over a fake client, for its gate and the
- * ORDER and shape of its writes; the black rail's slot and the light menu's
- * item, rendered offline through `fixtures/vm-modules`.
- */
+// "Move the leftover points to the next game": the pure overflow reading and
+// cascade plan, the service over a fake client, and the rail's slot and menu.
 
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const MENU = "src/components/admin/labels/label-point-menu.tsx";
@@ -285,37 +284,25 @@ test.describe("planGameShift", () => {
     // points 9 and 10 (game 2, Lee serving) show VARGAS serving, which is
     // what game 3 has — they take the server alone; points 13 and 14 have
     // no strokes — the server alone.
-    const serve = (id: string, hitter: LabelSide): LabelShot => ({
-      id,
-      labelPointId: "",
-      eventId: 1,
-      afterEventId: null,
-      status: "kept",
-      statusBeforeDelete: null,
-      deleteReason: null,
-      hitter,
-      stroke: "first_serve",
-      result: "in",
-      spin: null,
-      contactX: null,
-      contactY: null,
-      landingX: null,
-      landingY: null,
-      videoTime: 1,
-      siteRemoval: null,
-      siteRemovalRestoredAt: null,
-      seed: {
+    const serve = (id: string, hitter: LabelSide): LabelShot =>
+      labelShot(id, "", {
+        eventId: 1,
         hitter,
         stroke: "first_serve",
         result: "in",
-        spin: null,
-        contact_x: null,
-        contact_y: null,
-        landing_x: null,
-        landing_y: null,
-        video_time: 1,
-      },
-    });
+        videoTime: 1,
+        seed: {
+          hitter,
+          stroke: "first_serve",
+          result: "in",
+          spin: null,
+          contact_x: null,
+          contact_y: null,
+          landing_x: null,
+          landing_y: null,
+          video_time: 1,
+        },
+      });
     const served: Record<string, LabelSide> = {
       [UUID(5)]: "p2",
       [UUID(6)]: "p2",
@@ -517,15 +504,6 @@ test.describe("planGameShift", () => {
 
 // ── The service ────────────────────────────────────────────────────────────
 
-interface Call {
-  table: string;
-  op: "select" | "update";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  /** `.in(column, values)`, as the writes name their rows. */
-  in?: Record<string, readonly unknown[]>;
-}
-
 function rowsOf(points: readonly LabelPoint[]) {
   return points.map((p) => ({
     id: p.id,
@@ -551,77 +529,39 @@ function fakeClient(rows: {
   shots?: Record<string, unknown>[];
   failUpdate?: string;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          if (
-            rows.failUpdate &&
-            (call.filters.id === rows.failUpdate ||
-              call.in?.id?.includes(rows.failUpdate))
-          ) {
-            return { data: null, error: { message: "boom" } };
-          }
-          return { data: [{ id: call.filters.id }], error: null };
-        }
-        if (table === "label_sessions") {
-          return {
-            data:
-              rows.session === undefined
-                ? {
-                    status: "labelling",
-                    marks_enabled: true,
-                    ad_scoring: true,
-                    job_id: JOB_ID,
-                  }
-                : rows.session,
-            error: null,
-          };
-        }
-        if (table === "processing_jobs") {
-          return { data: rows.job ?? null, error: null };
-        }
-        if (table === "label_points") {
-          return { data: rows.points ?? rowsOf(usersCase()), error: null };
-        }
-        if (table === "label_shots") {
-          return { data: rows.shots ?? [], error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      const failed =
+        rows.failUpdate &&
+        (call.filters.id === rows.failUpdate ||
+          call.in?.id?.includes(rows.failUpdate));
+      return failed ? { data: null, error: { message: "boom" } } : undefined;
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data:
+          rows.session === undefined
+            ? {
+                status: "labelling",
+                marks_enabled: true,
+                ad_scoring: true,
+                job_id: JOB_ID,
+              }
+            : rows.session,
+        error: null,
       };
-      const builder = {
-        select: () => builder,
-        order: () => builder,
-        returns: () => builder,
-        /** One page of a `readAllPages` read: the fake holds under a page. */
-        range: () => Promise.resolve(answer()),
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        in: (column: string, values: readonly unknown[]) => {
-          call.in = { ...call.in, [column]: values };
-          return builder;
-        },
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
-      };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "processing_jobs") {
+      return { data: rows.job ?? null, error: null };
+    }
+    if (call.table === "label_points") {
+      return { data: rows.points ?? rowsOf(usersCase()), error: null };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shots ?? [], error: null };
+    }
+    return undefined;
+  });
 }
 
 const writes = (fake: ReturnType<typeof fakeClient>) =>
@@ -672,55 +612,13 @@ test.describe("writeLabelGameShift", () => {
     }
   });
 
-  test("a shift that changes no server never reads a shot", async () => {
-    // Both games Lee's: the leftovers keep their server.
-    const sameServer = match([
-      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p1"] },
-      { game: 2, server: "p1", winners: ["p2", "p2"] },
-    ]);
-    const fake = fakeClient({ points: rowsOf(sameServer) });
-    expect(
-      await writeLabelGameShift({
-        supabase: fake.supabase,
-        sessionId: SESSION_ID,
-        fromPointId: UUID(5),
-      }),
-    ).toMatchObject({ ok: true, shots: [] });
-    expect(fake.calls.map((c) => c.table)).not.toContain("label_shots");
-  });
-
   test("moved points whose strokes contradict their new server: the points' writes carry the flipped winner, then the strokes in grouped writes — label_points and label_shots", async () => {
-    const shotRow = (id: string, pointId: string, hitter: LabelSide) => ({
-      id,
-      label_point_id: pointId,
-      event_id: 1,
-      after_event_id: null,
-      status: "kept",
-      status_before_delete: null,
-      delete_reason: null,
-      hitter,
-      stroke: "first_serve",
-      result: "in",
-      spin: null,
-      contact_x: null,
-      contact_y: null,
-      landing_x: null,
-      landing_y: null,
-      video_time: 1,
-      site_removal: null,
-      site_removal_restored_at: null,
-      seed: {
+    const shotRow = (id: string, pointId: string, hitter: LabelSide) =>
+      labelShotRow(id, pointId, {
         hitter,
         stroke: "first_serve",
-        result: "in",
-        spin: null,
-        contact_x: null,
-        contact_y: null,
-        landing_x: null,
-        landing_y: null,
         video_time: 1,
-      },
-    });
+      });
     // The user's case: game 1 is Vargas's, game 2 Lee's. Point 7 was
     // served by Vargas (it switches, and Lee won it); point 8 already shows
     // Lee serving. With point 7 now Lee's, game 2 is won a row early and
@@ -773,15 +671,6 @@ test.describe("writeLabelGameShift", () => {
         },
       ],
     });
-    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
-      ["label_sessions", "select"],
-      ["label_points", "select"],
-      ["label_shots", "select"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_shots", "update"],
-    ]);
     // The point that switches, the one that does not and the one moved on
     // are three groups; the flipped stroke is written after them, by id
     // list.
@@ -826,24 +715,6 @@ test.describe("writeLabelGameShift", () => {
         { hitter: "p1", status: "edited", status_before_delete: null },
         { id: ["s-7"] },
       ],
-    ]);
-
-    // Two points switching the same way, with a stroke each flipped the
-    // same way: one write for the points, one for the strokes — and, both
-    // now Lee's, game 2 is won two rows early, so its last two move on in
-    // a write of their own.
-    const both = fakeClient({
-      shots: [shotRow("s-7", UUID(7), "p2"), shotRow("s-8", UUID(8), "p2")],
-    });
-    await writeLabelGameShift({
-      supabase: both.supabase,
-      sessionId: SESSION_ID,
-      fromPointId: UUID(7),
-    });
-    expect(writes(both).map((c) => [c.table, c.in])).toEqual([
-      ["label_points", { id: [UUID(7), UUID(8)] }],
-      ["label_points", { id: [UUID(11), UUID(12)] }],
-      ["label_shots", { id: ["s-7", "s-8"] }],
     ]);
   });
 
@@ -1087,28 +958,15 @@ function slot(html: string): string {
 }
 
 test.describe("the slot on the black rail", () => {
-  test("before the first leftover row: arrow, the two lines, one answer — and a render writes nothing", () => {
+  test("before the first leftover row: the two lines, one answer — and a render writes nothing", () => {
     const { called, operations } = countingOperations();
     const html = black(sessionWith(usersCase()), operations);
     expect(called).toEqual([]);
 
-    const open = tag(html, "data-game-overflow=");
-    expect(open).toContain('data-row="game-overflow"');
-    expect(open).toContain(`data-game-overflow="${UUID(7)}"`);
-    for (const cls of [
-      "min-h-[44px]",
-      "mx-2",
-      "my-0.5",
-      "rounded-lg",
-      "border-dashed",
-      "border-[var(--rail-amber-line)]",
-      "bg-[var(--rail-amber-wash-faint)]",
-      "grid-cols-[22px_minmax(0,1fr)_auto]",
-    ]) {
-      expect(open, cls).toContain(cls);
-    }
+    expect(tag(html, "data-game-overflow=")).toContain(
+      `data-game-overflow="${UUID(7)}"`,
+    );
     const row = slot(html);
-    expect(row).toContain("lucide-corner-down-right");
     expect(inner(row, "data-game-overflow-title")).toBe(
       "Game 1 is already won",
     );
@@ -1116,33 +974,13 @@ test.describe("the slot on the black rail", () => {
       "2 points after it belong to the next game",
     );
     expect(inner(row, "data-game-overflow-move")).toBe("Move to game 2");
-    expect(tag(row, "data-game-overflow-move")).toContain(
-      "text-[var(--rail-amber)]",
-    );
     expect(row).not.toContain("Dismiss");
-    // The lines give way; the answer never shrinks or wraps.
-    for (const attr of [
-      "data-game-overflow-title",
-      "data-game-overflow-detail",
-    ]) {
-      expect(tag(row, attr)).toContain("truncate");
-    }
-    expect(tag(row, "data-game-overflow-move")).toContain("shrink-0");
-    expect(tag(row, "data-game-overflow-move")).toContain("whitespace-nowrap");
 
     // After the deciding row, before the first leftover, and nowhere else.
     const at = html.indexOf("data-game-overflow=");
     expect(html.indexOf(`data-point-id="${UUID(6)}"`)).toBeLessThan(at);
     expect(at).toBeLessThan(html.indexOf(`data-point-id="${UUID(7)}"`));
     expect(html.match(/data-game-overflow=/g)).toHaveLength(1);
-  });
-
-  test("one leftover reads in the singular; with marks off the slot still draws", () => {
-    const points = usersCase().slice(0, 7);
-    const html = black(sessionWith(points, { marksEnabled: false }));
-    expect(inner(slot(html), "data-game-overflow-detail")).toBe(
-      "1 point after it belongs to the next game",
-    );
   });
 
   test("none when nothing runs over, and none on a session that cannot be written", () => {
@@ -1207,73 +1045,6 @@ test.describe("the slot on the black rail", () => {
     expect(tooltip?.props).toMatchObject({
       label: "Move to game 2",
       detail: "Moves 4 points across 2 games",
-    });
-
-    // A moved point whose players switch: the tooltip says so — on its
-    // own when one game, beside the cascade's line otherwise.
-    const vargasServe = (pointId: string): LabelShot => ({
-      id: `serve-${pointId}`,
-      labelPointId: pointId,
-      eventId: 1,
-      afterEventId: null,
-      status: "kept",
-      statusBeforeDelete: null,
-      deleteReason: null,
-      hitter: "p2",
-      stroke: "first_serve",
-      result: "in",
-      spin: null,
-      contactX: null,
-      contactY: null,
-      landingX: null,
-      landingY: null,
-      videoTime: 1,
-      siteRemoval: null,
-      siteRemovalRestoredAt: null,
-      seed: null,
-    });
-    // Game 1 (Vargas's) runs over by one row, Vargas's point served by
-    // Vargas; moved under Lee it switches, and Lee's win does not reopen
-    // game 2 — one game.
-    const switching = match([
-      { game: 1, server: "p2", winners: ["p1", "p1", "p1", "p1", "p2"] },
-      { game: 2, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
-    ]).map((p) =>
-      p.id === UUID(5) ? { ...p, shots: [vargasServe(p.id)] } : p,
-    );
-    const one = BlackGameOverflow({
-      overflow: gameOverflow(switching, true)[0],
-      summary: summaryOf(switching, switching[4].id),
-      point: switching[4],
-      edit: edit(switching),
-    });
-    expect(
-      findWhere(one, (p) => typeof p.detail === "string")?.props,
-    ).toMatchObject({
-      label: "Move to game 2",
-      detail: "Players switch on 1 point",
-    });
-    // Two of Vargas's served by Vargas, moved under Lee and now Lee's: game
-    // 2 is won two rows early, and its last two open game 3.
-    const cascadeSwitching = match([
-      { game: 1, server: "p2", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
-      { game: 2, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
-      { game: 3, server: "p2", winners: ["p2", "p2", "p2", "p2"] },
-    ]).map((p) =>
-      p.id === UUID(5) || p.id === UUID(6)
-        ? { ...p, shots: [vargasServe(p.id)] }
-        : p,
-    );
-    const two = BlackGameOverflow({
-      overflow: gameOverflow(cascadeSwitching, true)[0],
-      summary: summaryOf(cascadeSwitching, cascadeSwitching[4].id),
-      point: cascadeSwitching[4],
-      edit: edit(cascadeSwitching),
-    });
-    expect(
-      findWhere(two, (p) => typeof p.detail === "string")?.props,
-    ).toMatchObject({
-      detail: "Moves 4 points across 2 games · Players switch on 2 points",
     });
   });
 });

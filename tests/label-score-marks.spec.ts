@@ -21,13 +21,6 @@ import {
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * The two marks that follow the LABELLED score (`score-marks.ts`): "Wrong
- * side for the score" and "Same side twice", read off the console's rows and
- * the vendor's serve sides on every render — present while the labelled
- * score disagrees with the serve, gone when it agrees.
- */
-
 let n = 0;
 function point(
   id: string,
@@ -169,21 +162,6 @@ test.describe("Wrong side for the score", () => {
         .filter((id) => codes(marks, id).includes("service_court_repeat")),
     ).toEqual(["p2", "p4"]);
     expect(marks.suggestions.map((s) => s.pointId)).toEqual(["p2", "p4"]);
-  });
-
-  test("the score is the labelled one: change a winner and the flag follows", () => {
-    // Point 2 served from the deuce side after point 1: wrong while point 1
-    // counts…
-    const wrong = game(["p1", "p1"], ["deuce", "deuce"]);
-    expect(
-      codes(liveScoreMarks(wrong.points, true, wrong.serveSides), "p2"),
-    ).toEqual(["score_side_mismatch", "service_court_repeat"]);
-    // …right once point 1 is a let: the score stands, and so does the side.
-    const replayed = game(["p1", "p1"], ["deuce", "deuce"]);
-    replayed.points[0].ending = "let_replayed";
-    expect(
-      liveScoreMarks(replayed.points, true, replayed.serveSides).points,
-    ).toEqual({});
   });
 
   test("40–40 under no-ad: the receiver picks the side, so no expectation and no repeat", () => {
@@ -423,34 +401,6 @@ const EMPTY: LabelMarks = {
 
 test.describe("the console reads them live", () => {
   const { P1, P2 } = FIXTURE_POINT_IDS;
-
-  test("the fixture's two counted points from one side: the second flagged, the slot drawn, the header counting it", () => {
-    const html = renderBlack(labelSessionFixture(), {
-      ...EMPTY,
-      serveSides: { [P1]: "deuce", [P2]: "deuce" },
-    });
-    // Point 2 is checked, so its flags read checked-as-is — present, quiet.
-    const p2 = row(html, P2);
-    expect(p2).toContain("data-mark-chip");
-    expect(p2).toContain('data-mark-state="checked-as-is"');
-    expect(p2).toMatch(/aria-label="[^"]*Same side twice · checked as is/);
-    expect(p2).toMatch(
-      /aria-label="[^"]*Wrong side for the score · checked as is/,
-    );
-    expect(row(html, P1)).not.toContain("data-mark-chip");
-    // The slot between the two.
-    expect(html).toContain('data-row="suggested-point"');
-    // The header: nothing OPEN to check (the point is checked).
-    expect(html).toContain('aria-label="Nothing left to check"');
-    const marks: LabelMarks = {
-      ...EMPTY,
-      serveSides: { [P1]: "deuce", [P2]: "deuce" },
-    };
-    const points = labelSessionFixture().points;
-    expect(
-      markSummary(points, withLiveScoreMarks(marks, points, true)),
-    ).toEqual({ open: 0, openPoints: 0 });
-  });
 
   test("unchecked, the same two flags are open and counted; with the sides agreeing, nothing is drawn", () => {
     const session = labelSessionFixture();

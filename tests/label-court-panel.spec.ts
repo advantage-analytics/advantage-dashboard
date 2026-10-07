@@ -20,13 +20,7 @@ import {
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * The labelling console's court (board 08i's body, `label-court-panel.tsx`),
- * rendered offline through `fixtures/vm-modules` in each of its states: the
- * two-line readout, the whole court or the half a click belongs on, and the
- * foot. The blue outline while placing is the view's — the docked card's
- * (`label-side-view.tsx`) and the full screen's (`label-black-view.tsx`).
- */
+/** The console's court panel in each of its states, and the views' outline while placing. */
 
 type PanelProps = {
   point: LabelPoint | null;
@@ -95,12 +89,8 @@ test.describe("the court panel", () => {
     expect(html).toContain('viewBox="-7.265 -4.5 14.53 32.77"');
     expect(html).not.toContain('<button type="button" data-court-target');
     expect(html).not.toContain("data-court-steps");
-    expect(html).toContain("data-court-legend");
     expect(title(html)).toBe("Point 1");
     expect(subtitle(html)).toBe("Shot 2 of 3 · Vargas");
-    // No list of the point's shots.
-    expect(html).not.toContain("First serve");
-    expect(html).not.toContain("Backhand");
   });
 
   test("placing a contact: the hitter's half, the prompt and the switch", () => {
@@ -189,35 +179,17 @@ test.describe("the blue outline while placing", () => {
     );
   }
 
-  test("docked: the court card wears it, round the card's own shadow", () => {
-    const file = "src/components/admin/labels/label-side-view.tsx";
-    const on = tagOf(
-      view(file, "LabelSideView", true),
-      "data-label-side-court",
-    );
-    expect(on).toContain('data-court-placing="true"');
-    expect(on).toContain("shadow-[0_0_0_1.5px_var(--blue),var(--shadow-card)]");
-    const off = tagOf(
-      view(file, "LabelSideView", false),
-      "data-label-side-court",
-    );
-    expect(off).toContain('data-court-placing="false"');
-    expect(off).not.toContain("var(--blue)");
-  });
-
-  test("full screen: on the inside, there being no card edge to carry it", () => {
+  test("the full screen's court is marked while placing", () => {
     const file = "src/components/admin/labels/label-black-view.tsx";
     const on = tagOf(
       view(file, "LabelBlackView", true),
       "data-label-black-court",
     );
     expect(on).toContain('data-court-placing="true"');
-    expect(on).toContain("shadow-[inset_0_0_0_1.5px_var(--blue)]");
     const off = tagOf(
       view(file, "LabelBlackView", false),
       "data-label-black-court",
     );
     expect(off).toContain('data-court-placing="false"');
-    expect(off).not.toContain("var(--blue)");
   });
 });

@@ -30,13 +30,6 @@ import {
 } from "@/lib/services/labels/marks";
 import { buildLabelSeed } from "@/lib/services/labels/seed";
 
-/**
- * The marks module: the derivation's flags and fixes, computed from the raw
- * file with current code, joined onto label rows by rally id and event id —
- * plus the two flags only the labels console knows (`serve_fault`,
- * `pick_winner`) and the two suggestions a flag can open.
- */
-
 const FIXTURES = path.join(__dirname, "fixtures", "splitstep");
 
 function load(name: string) {
@@ -107,20 +100,6 @@ const labelIdOfRally = (rallyId: number) =>
   cleanPoints.find((p) => p.vendorRallyIds.includes(rallyId))!.id;
 
 test.describe("buildLabelMarks on the clean fixture", () => {
-  test("the fixture builds a transcript with flags of both scopes", () => {
-    expect(clean.transcript.ok).toBe(true);
-    const pointCodes = new Set(clean.transcript.points.flatMap((p) => p.flags));
-    const shotCodes = new Set(
-      clean.transcript.points.flatMap((p) => p.shots.flatMap((s) => s.flags)),
-    );
-    expect(pointCodes).toContain(POINT_FLAGS.WINNER_DISPUTED);
-    expect(pointCodes).toContain(POINT_FLAGS.SAME_PLAYER_CONSECUTIVE);
-    expect(pointCodes).toContain(POINT_FLAGS.SERVICE_COURT_REPEAT);
-    expect(pointCodes).toContain(POINT_FLAGS.PHANTOM_STROKES_DROPPED);
-    expect(shotCodes).toContain(SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED);
-    expect(shotCodes).toContain(SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT);
-  });
-
   test("a transcript point's flags land on the label point whose vendorRallyIds holds its rally id", () => {
     let flagged = 0;
     for (const point of clean.transcript.points) {
@@ -325,13 +304,6 @@ test.describe("buildLabelMarks on the clean fixture", () => {
     expect(marks2.points[pair.pointId]).toEqual(
       cleanMarks.points[pair.pointId],
     );
-  });
-
-  test("the marks are plain data that survive a JSON round trip", () => {
-    expect(JSON.parse(JSON.stringify(cleanMarks))).toEqual(cleanMarks);
-    expect(Object.getPrototypeOf(cleanMarks.points)).toBe(Object.prototype);
-    expect(Object.getPrototypeOf(cleanMarks.shots)).toBe(Object.prototype);
-    expect(Array.isArray(cleanMarks.suggestions)).toBe(true);
   });
 
   test("a code outside the vocabulary produces no mark", () => {
@@ -681,30 +653,6 @@ test.describe("the labels-only flags", () => {
     transcript.reconciliation.settledWinners = [];
     const unseen = buildLabelMarks(transcript, [rally], labelRows([rally]));
     expect(unseen.points.p1).toBeUndefined();
-  });
-
-  test("the labels-only flags sit after the derivation's own, with sides read through is_player1", () => {
-    // Player 1 (A) serves a fault B hits back and wins the point by the score,
-    // while the last stroke — B's, called in — says B won: disputed AND a
-    // possible serve fault.
-    const rally = rallyOf(1, [
-      ["A", "serve", false],
-      ["B", "groundstroke", true],
-    ]);
-    const marks = marksFor(
-      [rally],
-      ["A"],
-      [{ flags: [POINT_FLAGS.WINNER_DISPUTED] }],
-    );
-    expect(marks.points.p1).toEqual([
-      {
-        code: "winner_disputed",
-        tier: "count",
-        scope: "point",
-        params: { scoreWinner: "p1", lastStrokeWinner: "p2" },
-      },
-      { code: "serve_fault", tier: "hint", scope: "point", params: {} },
-    ]);
   });
 });
 

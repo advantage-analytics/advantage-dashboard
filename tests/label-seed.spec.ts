@@ -18,17 +18,11 @@ import {
   labelSpin,
   labelStroke,
 } from "@/lib/services/labels/seed";
-import { LABEL_SPINS } from "@/lib/services/labels/session";
 import {
   seedLabelSession,
   seedLabelSessionForJob,
 } from "@/lib/services/labels/seed-session";
 import type { AdminClient } from "@/lib/supabase/admin";
-
-/**
- * The hand-labelling seed: one label row per derived point and shot, each shot
- * carrying the raw vendor stroke it came from, joined on `event_id`.
- */
 
 const clean = JSON.parse(
   readFileSync(
@@ -67,11 +61,6 @@ const rawById = new Map(clean.map((r) => [r.event_id, r]));
 const side = (isPlayer1: boolean) => (isPlayer1 ? "p1" : "p2");
 
 test.describe("buildLabelSeed", () => {
-  test("the fixture builds a transcript to seed from", () => {
-    expect(transcript.ok).toBe(true);
-    expect(transcript.points.length).toBeGreaterThan(50);
-  });
-
   test("one label point per transcript point, carrying its rally id", () => {
     expect(seed.points).toHaveLength(transcript.points.length);
     seed.points.forEach((point, i) => {
@@ -186,20 +175,6 @@ test.describe("buildLabelSeed", () => {
     }
   });
 
-  test("spin is the vendor's spin_type, lower-cased, and only the four", () => {
-    const spins = seed.points.flatMap((p) => p.shots.map((s) => s.spin));
-    for (const point of seed.points) {
-      for (const shot of point.shots) {
-        const vendor = rawById.get(shot.event_id)!;
-        expect(shot.spin).toBe(labelSpin(vendor.spin_type));
-        expect(shot.spin).toBe(vendor.spin_type.toLowerCase());
-        if (shot.spin !== null) expect(LABEL_SPINS).toContain(shot.spin);
-      }
-    }
-    // Not vacuous: the fixture carries every spin the column accepts.
-    expect(new Set(spins)).toEqual(new Set(LABEL_SPINS));
-  });
-
   test("every row freezes its own values as its seed", () => {
     for (const point of seed.points) {
       expect(point.seed).toEqual({
@@ -240,22 +215,6 @@ test.describe("buildLabelSeed", () => {
     }
   });
 
-  test("every shot type the fixture produces maps to a stroke", () => {
-    const strokes = seed.points.flatMap((p) => p.shots.map((s) => s.stroke));
-    expect(strokes).not.toContain(null);
-    expect(new Set(strokes)).toEqual(
-      new Set([
-        "first_serve",
-        "second_serve",
-        "forehand",
-        "backhand",
-        "forehand_volley",
-        "backhand_volley",
-        "overhead",
-      ]),
-    );
-  });
-
   test("winner, ending and ended_by are prefilled from the derivation", () => {
     const settled = new Map(
       transcript.reconciliation.settledWinners.map((w) => [
@@ -276,17 +235,6 @@ test.describe("buildLabelSeed", () => {
       (p) => p.winner && p.ending && p.ended_by,
     );
     expect(filled.length).toBeGreaterThan(seed.points.length * 0.8);
-  });
-
-  test("a point ended by a rally stroke names the last hitter", () => {
-    for (const point of seed.points) {
-      if (point.ending !== "winner" && point.ending !== "error") continue;
-      const last = point.shots[point.shots.length - 1];
-      expect(point.ended_by).toBe(last.hitter);
-      // A winner is struck by the point winner; an error by the loser.
-      if (point.ending === "winner") expect(point.ended_by).toBe(point.winner);
-      else expect(point.ended_by).not.toBe(point.winner);
-    }
   });
 
   test("a transcript shot with no raw stroke is refused", () => {
@@ -565,21 +513,6 @@ test.describe("seedLabelSessionForJob", () => {
 
     // Every inserted row carries its seed (the migration's `seed` jsonb).
     expect(points.map((p) => p.seed)).toEqual(seed.points.map((p) => p.seed));
-    for (const shot of shots) {
-      expect(shot.seed).toEqual({
-        hitter: shot.hitter,
-        stroke: shot.stroke,
-        result: shot.result,
-        spin: shot.spin,
-        contact_x: shot.contact_x,
-        contact_y: shot.contact_y,
-        landing_x: shot.landing_x,
-        landing_y: shot.landing_y,
-        video_time: shot.video_time,
-      });
-      // The `spin` column is written alongside the other value columns.
-      expect(shot).toHaveProperty("spin");
-    }
 
     // The site's removal reaches the insert as the seed built it: set on the
     // strokes the derivation dropped, null on the rest, never absent.

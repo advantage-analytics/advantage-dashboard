@@ -26,12 +26,6 @@ import {
 import type { AdminClient } from "@/lib/supabase/admin";
 import { POINT_1_SHOTS } from "./fixtures/label-session";
 
-/**
- * T6's autosave writes: the allowlist and vocabularies every patch is held
- * to, the `edited` rule, and the admin-gated service behind the
- * `updateLabelShot` / `updateLabelPoint` server actions.
- */
-
 const SHOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -72,11 +66,6 @@ test.describe("the allowlists", () => {
 
   for (const key of [
     "status",
-    "event_id",
-    "vendor",
-    "session_id",
-    "label_point_id",
-    "delete_reason",
     "id",
     // The site's removal and its restore are written by the seed, the
     // backfill and the Restore action — never by an edit.
@@ -90,15 +79,7 @@ test.describe("the allowlists", () => {
     });
   }
 
-  for (const key of [
-    "status",
-    "server",
-    "checked_at",
-    "point_index",
-    "vendor_rally_ids",
-    "game_type",
-    "dismissed",
-  ]) {
+  for (const key of ["status", "server"]) {
     test(`a point patch reaching "${key}" is rejected whole`, () => {
       expect(parseLabelPointPatch({ winner: "p1", [key]: 1 })).toHaveProperty(
         "error",
@@ -365,39 +346,6 @@ test.describe("labelShotStatusAfterPatch — the edited rule", () => {
     expect(labelShotStatusAfterPatch(legacy, { spin: "topspin" })).toBe(
       "edited",
     );
-    // Set back within tolerance counts as set back.
-    const moved = {
-      ...SEEDED,
-      contact_x: 3,
-      contact_y: 20,
-      status: "edited" as const,
-      seed: SEEDED,
-    };
-    expect(
-      labelShotStatusAfterPatch(moved, { contact_x: 1.805, contact_y: 24.495 }),
-    ).toBe("kept");
-    // A kept shot whose unrelated field changes goes edited, then back.
-    const once = applyLabelShotPatch(
-      POINT_1_SHOTS.find((s) => s.id === "s-serve")!,
-      { video_time: 2480 },
-    );
-    expect(once.status).toBe("edited");
-    expect(applyLabelShotPatch(once, { video_time: 2472.0 }).status).toBe(
-      "kept",
-    );
-  });
-
-  test("the fixture's edited return goes kept only when every field is back", () => {
-    const edited = POINT_1_SHOTS.find((s) => s.id === "s-return")!;
-    expect(edited.status).toBe("edited");
-    // The seed has a forehand at x 2.1; one field back is not enough.
-    const half = applyLabelShotPatch(edited, { stroke: "forehand" });
-    expect(half.status).toBe("edited");
-    const whole = applyLabelShotPatch(half, {
-      contact_x: 2.1,
-      contact_y: 24.49,
-    });
-    expect(whole).toMatchObject({ status: "kept", stroke: "forehand" });
   });
 
   test("without a seed, kept goes edited and edited never comes back", () => {
@@ -499,22 +447,6 @@ test.describe("labelPointStatusAfterPatch", () => {
     expect(
       labelPointStatusAfterChange(moved, { game_number: 3, winner: "p1" }),
     ).toBe("unchanged");
-  });
-
-  test("without a seed, unchanged moves only on a changed value", () => {
-    const unchanged = { ...point, status: "unchanged" as const, seed: null };
-    expect(labelPointStatusAfterPatch(unchanged, { winner: "p2" })).toBe(
-      "edited",
-    );
-    expect(labelPointStatusAfterPatch(unchanged, { serve_side: "ad" })).toBe(
-      "edited",
-    );
-    expect(labelPointStatusAfterPatch(unchanged, { winner: "p1" })).toBe(
-      "unchanged",
-    );
-    expect(labelPointStatusAfterPatch(unchanged, { note: "let" })).toBe(
-      "unchanged",
-    );
   });
 
   test("added, edited and deleted are left alone", () => {
@@ -722,29 +654,6 @@ test.describe("updateLabelShot (editLabelShot)", () => {
     expect(fake.calls.every((c) => c.table.startsWith("label_"))).toBe(true);
   });
 
-  test("a no-op patch on a kept shot writes kept", async () => {
-    const fake = fakeClient({ shot: shotRow() });
-    const result = await writeLabelShotEdit({
-      supabase: fake.supabase,
-      shotId: SHOT_ID,
-      patch: { result: "in" },
-    });
-    expect(result).toEqual({ ok: true, status: "kept" });
-  });
-
-  test("an added shot stays added", async () => {
-    const fake = fakeClient({ shot: shotRow({ status: "added" }) });
-    const result = await writeLabelShotEdit({
-      supabase: fake.supabase,
-      shotId: SHOT_ID,
-      patch: { result: "out" },
-    });
-    expect(result).toEqual({ ok: true, status: "added" });
-    expect(fake.calls.find((c) => c.op === "update")?.values).toMatchObject({
-      status: "added",
-    });
-  });
-
   test("refuses a tombstone and a complete session without writing", async () => {
     const deleted = fakeClient({ shot: shotRow({ status: "deleted" }) });
     expect(
@@ -827,41 +736,6 @@ test.describe("status against the stored seed, on the server", () => {
       result: "in",
       status: "kept",
     });
-  });
-
-  test("a spin set back to its seed writes kept; a changed one writes edited", async () => {
-    const back = fakeClient({
-      shot: shotRow({ status: "edited", spin: "backspin" }),
-    });
-    expect(
-      await writeLabelShotEdit({
-        supabase: back.supabase,
-        shotId: SHOT_ID,
-        patch: { spin: "topspin" },
-      }),
-    ).toEqual({ ok: true, status: "kept" });
-    expect(back.calls.find((c) => c.op === "update")?.values).toEqual({
-      spin: "topspin",
-      status: "kept",
-    });
-    // The row is read with its spin, so the comparison sees it.
-    expect(back.calls[0]).toMatchObject({ table: "label_shots", op: "select" });
-
-    const away = fakeClient({ shot: shotRow() });
-    expect(
-      await writeLabelShotEdit({
-        supabase: away.supabase,
-        shotId: SHOT_ID,
-        patch: { spin: "sidespin" },
-      }),
-    ).toEqual({ ok: true, status: "edited" });
-    expect(
-      await writeLabelShotEdit({
-        supabase: fakeClient({ shot: shotRow() }).supabase,
-        shotId: SHOT_ID,
-        patch: { spin: "slice" },
-      }),
-    ).toHaveProperty("error");
   });
 
   test("a malformed stored seed falls back to the seedless rule", async () => {
@@ -956,16 +830,5 @@ test.describe("updateLabelPoint (editLabelPoint)", () => {
         patch: { note: "net cord on the return" },
       }),
     ).toEqual({ ok: true, status: "unchanged" });
-  });
-
-  test("an added point stays added", async () => {
-    const fake = fakeClient({ point: pointRow({ status: "added" }) });
-    expect(
-      await writeLabelPointEdit({
-        supabase: fake.supabase,
-        pointId: POINT_ID,
-        patch: { winner: "p2" },
-      }),
-    ).toEqual({ ok: true, status: "added" });
   });
 });

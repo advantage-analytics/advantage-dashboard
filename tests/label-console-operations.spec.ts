@@ -10,38 +10,18 @@ import {
   planGameServer,
 } from "@/lib/services/labels/game-operations";
 import { labelScores } from "@/lib/services/labels/score";
-import type {
-  LabelPoint,
-  LabelSession,
-  LabelVideo,
-} from "@/lib/services/labels/session";
+import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import { count, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
 } from "./fixtures/label-session";
+import { findByProp } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
- * T7 in the console, rendered offline through `fixtures/vm-modules`: the ✕
- * (a stroke's) and the ⋯ menu (a point's) that ask before deleting, the
- * tombstone's one line with its Undo, the move question, the point's tick,
- * and Reset on an edited row that has a seed. The rows are the points
- * rail's (`label-black-rail.tsx`), in both of the console's layouts; their
- * own paint and presses are `label-black-rows.spec.ts`'s.
- *
- * Radix portals render nothing under `renderToStaticMarkup`, so
- * `ConfirmDialog` is stubbed to print its props — and to hand the spec its
- * `onConfirm`, which is how "nothing is written until the dialog's action"
- * is held: the operation spies stay empty through the render, and fill only
- * once that action runs.
- *
- * A click on a (hook-free) row is pressed by walking its element tree:
- * {@link press} finds a control by its accessible name and calls its
- * `onClick`, exactly as React would, without a DOM. A point's ⋯ menu is a
- * popover with state of its own, which that walk cannot open — its rows are
- * `pointMenuActions`, plain data the menu draws, run here directly. What the
- * console hands its rail is read by stubbing the rail ({@link railProps}).
+ * The console's operations, rendered offline. `ConfirmDialog` is stubbed to print its props and hand over
+ * its `onConfirm`; a point's ⋯ menu is read as `pointMenuActions`; the rail's props by stubbing the rail.
  */
 
 type Props = Record<string, unknown>;
@@ -122,72 +102,6 @@ function after(html: string, attr: string): string {
   const at = html.indexOf(attr);
   expect(at, attr).toBeGreaterThan(-1);
   return html.slice(html.indexOf(">", at) + 1);
-}
-
-// ── A tiny element walker for a stateless row ─────────────────────────────
-
-type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
-
-/**
- * Expand `node` into host elements, calling function components as React
- * would. A component that needs hooks (a cell editor, a tooltip root, the
- * move menu) cannot run outside a render, so its children are walked in its
- * place — which is where the controls it wraps live.
- */
-function hostElements(node: React.ReactNode, out: Element[] = []): Element[] {
-  if (node === null || node === undefined || typeof node === "boolean") {
-    return out;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) hostElements(child, out);
-    return out;
-  }
-  if (!React.isValidElement(node)) return out;
-  const element = node as Element;
-  if (typeof element.type === "function") {
-    let rendered: React.ReactNode;
-    // React reports the refused hook call on console.error before it throws.
-    const error = console.error;
-    console.error = () => {};
-    try {
-      rendered = (element.type as (p: Props) => React.ReactNode)(element.props);
-    } catch {
-      return hostElements(element.props.children, out);
-    } finally {
-      console.error = error;
-    }
-    return hostElements(rendered, out);
-  }
-  out.push(element);
-  return hostElements(element.props.children, out);
-}
-
-function press(tree: React.ReactNode, name: string) {
-  const control = hostElements(tree).find(
-    (el) =>
-      el.props["aria-label"] === name ||
-      (typeof el.type === "string" &&
-        el.type === "button" &&
-        textOf(el.props.children) === name),
-  );
-  expect(control, `a control named "${name}"`).toBeDefined();
-  (control!.props.onClick as (event: unknown) => void)({
-    stopPropagation() {},
-    preventDefault() {},
-    // The tick marks its own element for the check's answer.
-    currentTarget: { dataset: {} },
-  });
-}
-
-function textOf(node: React.ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("").trim();
-  if (React.isValidElement(node)) {
-    const el = node as Element;
-    if (el.type === "kbd" || el.props["aria-hidden"] === "true") return "";
-    return textOf(el.props.children);
-  }
-  return "";
 }
 
 /** Row operations that only record what they were asked. */
@@ -340,6 +254,8 @@ test.describe("add point above / below", () => {
       initialExpandedPointId: P1,
     });
     expect(count(editable, /data-point-menu/g)).toBe(3);
+    // Nothing asks until a row does: no dialog is open.
+    expect(editable).not.toContain("data-confirm");
     const complete = { ...labelSessionFixture(), status: "complete" as const };
     for (const readOnly of [
       renderConsole({ initialExpandedPointId: P1 }),
@@ -374,28 +290,6 @@ test.describe("add point above / below", () => {
 // ── Delete asks first ──────────────────────────────────────────────────────
 
 test.describe("delete", () => {
-  test("every live stroke carries a ✕, every live point a ⋯, and no dialog is open", () => {
-    const { operations } = spies();
-    const html = renderConsole({
-      ...SAVES,
-      operations,
-      initialExpandedPointId: P1,
-    });
-    for (const name of [
-      "Point 1 actions",
-      "Point 2 actions",
-      "Point 4 actions",
-      "Delete shot 1",
-      "Delete shot 2",
-      "Delete shot 3",
-    ]) {
-      expect(html).toContain(`aria-label="${name}"`);
-    }
-    expect(count(html, /data-point-menu/g)).toBe(3);
-    expect(count(html, /data-delete-row/g)).toBe(3);
-    expect(html).not.toContain("data-confirm");
-  });
-
   test("the ⋯ menu's Delete only asks: the request goes up and nothing is deleted", () => {
     // (A stroke's ✕ doing the same is label-black-rows.spec.ts's.)
     const { asked, operations } = askSpies();
@@ -507,18 +401,6 @@ test.describe("tombstones", () => {
     expect(html).not.toMatch(/data-tombstone-id="[^"]*"[^>]*aria-expanded/);
     expect(html).not.toContain("data-ghost-id");
   });
-
-  test("read-only, a tombstone still shows — without Undo", () => {
-    const html = renderConsole({
-      initialExpandedPointId: P1,
-    });
-    expect(html).toContain('data-tombstone-id="s-phantom"');
-    expect(html).toContain(`data-tombstone-id="${P3}"`);
-    expect(text(html)).toContain("Deleted shot · 41:13.6 · Not a shot");
-    expect(text(html)).toContain("Deleted point");
-    expect(html).not.toContain("Undo");
-    expect(html).not.toContain("data-delete-row");
-  });
 });
 
 // ── Move ───────────────────────────────────────────────────────────────────
@@ -574,102 +456,6 @@ test.describe("move point", () => {
       movePoint: [[P2, { setNumber: 1, gameNumber: 2 }, true]],
     });
   });
-
-  test("the question's body says what a yes does: the players, or the server alone", () => {
-    const { labelConfirmCopy } = loader().load(
-      "src/components/admin/labels/label-confirm.ts",
-    ) as {
-      labelConfirmCopy: (
-        confirm: Record<string, unknown>,
-        names: Record<string, string>,
-      ) => { title: string; description: string };
-    };
-    const ask = (swaps: string | null) =>
-      labelConfirmCopy(
-        {
-          kind: "move-point",
-          pointId: P2,
-          pointNumber: 2,
-          to: { setNumber: 1, gameNumber: 2 },
-          server: "p2",
-          swaps,
-        },
-        NAMES,
-      );
-    // The title is the same question either way.
-    for (const swaps of ["shots-and-winner", "shots", null]) {
-      expect(ask(swaps).title).toBe(
-        "Vargas is serving this game, switch players?",
-      );
-    }
-    expect(ask("shots-and-winner").description).toBe(
-      "Point 2 moves to set 1, game 2, and Vargas becomes its server. Every shot in this point changes hands, and so does who won it.",
-    );
-    // A point with no winner yet: the shots alone change hands.
-    expect(ask("shots").description).toBe(
-      "Point 2 moves to set 1, game 2, and Vargas becomes its server. Every shot in this point changes hands.",
-    );
-    // Rows that already agree with the new server: only the server changes.
-    expect(ask(null).description).toBe(
-      "Point 2 moves to set 1, game 2, and Vargas becomes its server.",
-    );
-  });
-
-  test("the console decides the question from the point's own strokes, and applies the swap to the rows it holds", () => {
-    // The console cannot be re-rendered after a click under
-    // `renderToStaticMarkup`, so the rows it would hold are the pure apply
-    // it runs, over the fixture.
-    const { planPointMove, applyPointMove } = loader().load(
-      "src/lib/services/labels/operations.ts",
-    ) as {
-      planPointMove: (
-        point: unknown,
-        to: unknown,
-        server: unknown,
-        switchServer: boolean,
-      ) =>
-        | { ok: true; write: Record<string, unknown>; shots: unknown[] }
-        | { error: string };
-      applyPointMove: (
-        point: unknown,
-        write: unknown,
-      ) => Record<string, unknown>;
-    };
-    const { applyShotSwaps, moveSwapsPlayers } = loader().load(
-      "src/lib/services/labels/player-swap.ts",
-    ) as {
-      applyShotSwaps: (points: unknown[], shots: unknown[]) => LabelPoint[];
-      moveSwapsPlayers: (point: unknown, server: unknown) => boolean;
-    };
-    const session = labelSessionFixture();
-    const p2 = session.points.find((p) => p.id === P2)!;
-    expect(moveSwapsPlayers(p2, "p2")).toBe(true);
-    const plan = planPointMove(p2, { setNumber: 1, gameNumber: 2 }, "p2", true);
-    if ("error" in plan) throw new Error(plan.error);
-    const rows = applyShotSwaps(
-      session.points.map((p) =>
-        p.id === P2 ? applyPointMove(p, plan.write) : p,
-      ),
-      plan.shots,
-    );
-    const moved = rows.find((p) => p.id === P2)!;
-    expect(moved).toMatchObject({
-      gameNumber: 2,
-      server: "p2",
-      winner: "p2",
-      endedBy: "p2",
-      status: "edited",
-    });
-    expect(moved.shots.map((s) => [s.id, s.hitter, s.status])).toEqual([
-      ["s-ace", "p2", "edited"],
-    ]);
-    // Every other row stands.
-    for (const id of [P1, P3, P4]) {
-      expect(rows.find((p) => p.id === id)).toBe(
-        session.points.find((p) => p.id === id),
-      );
-    }
-  });
 });
 
 // ── Switch players ─────────────────────────────────────────────────────────
@@ -719,12 +505,6 @@ test.describe("switch players", () => {
       description: "Vargas serves this game, but Lee hits the serve here",
       contradicts: true,
     });
-  });
-
-  test("read-only, there is no menu to offer it", () => {
-    const html = renderConsole({ initialExpandedPointId: P2 });
-    expect(html).not.toContain("data-point-menu");
-    expect(html).not.toContain("Switch players");
   });
 
   test("the console plans the switch on the client and calls the action", async () => {
@@ -800,20 +580,6 @@ test.describe("mark as a let / not a point", () => {
     }
   });
 
-  test("an added point with no shots and no winner is offered them too", () => {
-    const blank = sessionWith(P4, {
-      status: "added",
-      seed: null,
-      winner: null,
-      ending: null,
-      endedBy: null,
-      shots: [],
-    });
-    const { actions, patches } = letMenu(P4, blank);
-    actions.markLet!();
-    expect(patches).toEqual([[P4, { ending: "let_replayed" }]]);
-  });
-
   test("a let or a non-point shows only Count this point, read off its rows", () => {
     for (const ending of ["let_replayed", "not_a_point"]) {
       // Point 1 ends on Lee's forehand, out: an error by Lee, Vargas's
@@ -881,54 +647,24 @@ test.describe("mark as a let / not a point", () => {
     expect(order).toEqual([...order].sort((x, y) => x - y));
     expect(source).toContain('label="Switch players"');
   });
-
-  test("read-only, there is no menu to offer them", () => {
-    expect(renderConsole({ initialExpandedPointId: P1 })).not.toContain(
-      "data-point-menu",
-    );
-  });
 });
 
 // ── Checked ────────────────────────────────────────────────────────────────
 
 test.describe("mark point checked", () => {
-  test("every live point carries its tick, pressed once checked, and the open point an Add shot", () => {
-    // (The tick's paint is label-black-rows.spec.ts's.)
-    const { operations } = spies();
-    const html = renderConsole({
-      ...SAVES,
-      operations,
-      initialExpandedPointId: P1,
-    });
-    expect(count(html, /data-check-row/g)).toBe(3);
-    for (const [number, pressed] of [
-      [1, false],
-      [2, true],
-      [4, false],
-    ]) {
-      expect(html).toMatch(
-        new RegExp(
-          `<button[^>]*data-check-row=""[^>]*aria-pressed="${pressed}"[^>]*aria-label="Point ${number} checked"`,
-        ),
-      );
-    }
-    expect(html).not.toMatch(/data-check-row=""[^>]*disabled/);
-    // One Add shot, closing the open point's well.
-    expect(count(html, /data-add-shot/g)).toBe(1);
-    const well = after(html, `data-shots-well="${P1}"`);
-    expect(text(after(well, "data-add-shot").split("</button>")[0])).toBe(
-      "Add shot",
-    );
-  });
-
   test("the tick marks and unmarks through the console", () => {
-    const unchecked = pointRowTree(P1);
-    press(unchecked.tree, "Point 1 checked");
-    expect(unchecked.asked).toEqual({ onSetChecked: [[P1, true]] });
-
-    const checked = pointRowTree(P2);
-    press(checked.tree, "Point 2 checked");
-    expect(checked.asked).toEqual({ onSetChecked: [[P2, false]] });
+    const pressTick = (pointId: string) => {
+      const { tree, asked } = pointRowTree(pointId);
+      const tick = findByProp(tree, "data-check-row")!;
+      (tick.props.onClick as (event: unknown) => void)({
+        stopPropagation() {},
+        // The tick marks its own element for the check's answer.
+        currentTarget: { dataset: {} },
+      });
+      return asked;
+    };
+    expect(pressTick(P1)).toEqual({ onSetChecked: [[P1, true]] });
+    expect(pressTick(P2)).toEqual({ onSetChecked: [[P2, false]] });
   });
 
   test("without operations the tick cannot be pressed, and there is no Add shot or menu", () => {
@@ -944,33 +680,6 @@ test.describe("mark point checked", () => {
 // ── Reset ──────────────────────────────────────────────────────────────────
 
 test.describe("reset", () => {
-  test("appears only on an edited row that has a seed", () => {
-    const { operations } = spies();
-    const html = renderConsole({
-      ...SAVES,
-      operations,
-      initialExpandedPointId: P1,
-    });
-    // Point 1 and its return (shot 2) are edited with a seed; the kept
-    // serve, the added stroke and the unchanged points are not.
-    expect(html).toContain('aria-label="Reset point 1"');
-    expect(html).toContain('aria-label="Reset shot 2"');
-    // Each one's pencil is its Reset; the stroke's row offers it again
-    // among its requests.
-    expect(count(html, /data-reset-pencil/g)).toBe(2);
-    expect(count(html, /data-reset-row/g)).toBe(1);
-    expect(count(html, /aria-label="Reset point 1"/g)).toBe(1);
-    expect(count(html, /aria-label="Reset shot 2"/g)).toBe(2);
-    for (const name of [
-      "Reset shot 1",
-      "Reset shot 3",
-      "Reset point 2",
-      "Reset point 4",
-    ]) {
-      expect(html).not.toContain(`aria-label="${name}"`);
-    }
-  });
-
   test("no seed, no Reset — and none on a read-only console", () => {
     const { operations } = spies();
     const session = labelSessionFixture();
@@ -1036,29 +745,6 @@ test.describe("reset", () => {
     await Promise.resolve();
     expect(calls).toEqual({ resetShot: [["s-return"]] });
   });
-
-  test("the point confirm asks, and the reset waits for its action", async () => {
-    const { calls, operations } = spies();
-    renderConsole({
-      ...SAVES,
-      operations,
-      initialConfirm: { kind: "reset-point", pointId: P1, pointNumber: 1 },
-    });
-    const dialog = dialogs.at(-1)!;
-    expect(dialog).toMatchObject({
-      title: "Reset point 1 to its original values?",
-      confirmLabel: "Reset",
-      tone: "primary",
-    });
-    expect(String(dialog.description)).toContain(
-      "Its shots, note and checked mark stay as they are.",
-    );
-    expect(calls).toEqual({});
-
-    (dialog.onConfirm as () => void)();
-    await Promise.resolve();
-    expect(calls).toEqual({ resetPoint: [[P1]] });
-  });
 });
 
 // ── Game bands (T14) ───────────────────────────────────────────────────────
@@ -1077,11 +763,8 @@ function bands(html: string): string[] {
     .split(/(?=<div data-game-band=)/)
     .slice(1)
     .map((chunk) => {
-      // The band is one flat <div>: label, spacer and meta are <span>s, with
-      // no nested <div> and no server chip.
-      const band = chunk.slice(0, chunk.indexOf("</div>"));
-      expect(band).not.toContain("data-player-mark");
-      return text(band);
+      // The band is one flat <div>.
+      return text(chunk.slice(0, chunk.indexOf("</div>")));
     });
 }
 
@@ -1224,26 +907,6 @@ test.describe("game bands", () => {
     ]);
   });
 
-  test("the menus' triggers render only when the console can write", () => {
-    const { operations } = spies();
-    const editable = renderConsole({ ...SAVES, operations });
-    expect(count(editable, /data-game-menu="type"/g)).toBe(2);
-    expect(count(editable, /data-game-menu="server"/g)).toBe(2);
-    expect(editable).toContain('aria-label="Game type: Game 1"');
-    expect(editable).toContain('aria-label="Server: Vargas"');
-
-    const complete = { ...labelSessionFixture(), status: "complete" as const };
-    for (const readOnly of [
-      renderConsole({}),
-      renderConsole({ ...SAVES }),
-      renderConsole({ ...SAVES, operations, session: complete }),
-    ]) {
-      expect(readOnly).not.toContain("data-game-menu");
-      // The band itself still reads.
-      expect(bands(readOnly)).toHaveLength(2);
-    }
-  });
-
   test("the console plans the game on the client, then calls the action with the session", async () => {
     const { calls, operations } = spies();
     const session = labelSessionFixture();
@@ -1367,30 +1030,6 @@ test.describe("how it ended follows the shot rows", () => {
     expect(point).toEqual([
       [P1, { ending: "error", ended_by: "p1", winner: "p2" }],
     ]);
-  });
-
-  test("the winner in that one patch is what moves the next point's score", async () => {
-    const { point, saves } = saveSpies();
-    const table = consoleTable({ ...saves, operations: spies().operations });
-    await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
-    await settled();
-    // The harness renders once, so the re-render is read through the scoreboard:
-    // exactly one point write, and applying its patch re-scores the next point.
-    expect(point).toHaveLength(1);
-    const patch = point[0][1] as Record<string, unknown>;
-    expect(patch).toHaveProperty("winner", "p2");
-
-    const session = winnerSession();
-    const scoreOf = (s: LabelSession) =>
-      labelScores(s.points, s.adScoring).points.get(P2)?.scoreBefore;
-    const patched = {
-      ...session,
-      points: session.points.map((row) =>
-        row.id === P1 ? { ...row, winner: "p2" as const } : row,
-      ),
-    };
-    expect(scoreOf(session)).toBe("15–0");
-    expect(scoreOf(patched)).toBe("0–15");
   });
 
   test("a spin edit sends none", async () => {

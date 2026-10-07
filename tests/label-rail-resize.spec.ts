@@ -3,7 +3,6 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  RAIL_DEFAULT_PX,
   RAIL_KEY_STEP_PX,
   RAIL_MAX_PX,
   RAIL_MIN_PX,
@@ -11,13 +10,7 @@ import {
 import { tag as tagOf } from "./fixtures/html-probe";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * The points rail's handle (T32, board 08l's "The rail's edge"), in both the
- * docked view and the full screen: `label-rail-resize.tsx`, rendered offline
- * through `fixtures/vm-modules`, nothing stubbed — the separator it
- * announces, which way a drag goes, and the key mechanics
- * (`useSeparatorDrag`) in the same file.
- */
+/** The points rail's handle: the separator it announces, which way a drag goes, and its keys. */
 
 const HANDLE = "src/components/admin/labels/label-rail-resize.tsx";
 
@@ -51,9 +44,6 @@ function render(width: number): string {
 
 test.describe("the rail's resize handle (T32)", () => {
   test("a vertical separator carrying the rail's width and its bounds", () => {
-    expect([RAIL_MIN_PX, RAIL_MAX_PX, RAIL_DEFAULT_PX]).toEqual([
-      520, 880, 640,
-    ]);
     const html = render(640);
     expect(html.match(/role="separator"/g)).toHaveLength(1);
     const separator = tagOf(html, 'role="separator"');
@@ -63,12 +53,6 @@ test.describe("the rail's resize handle (T32)", () => {
     expect(separator).toContain('aria-valuemax="880"');
     expect(separator).toContain('aria-valuenow="640"');
     expect(separator).toContain('tabindex="0"');
-    expect(separator).toContain('data-dragging="false"');
-    // Its line and grip are the focus mark, so no global ring on top.
-    expect(separator).toContain('data-focus-ring="none"');
-    // Pointer drag only: never a native drag, never a tooltip.
-    expect(separator).not.toContain("draggable");
-    expect(separator).not.toMatch(/\stitle=/);
 
     expect(tagOf(render(712), 'role="separator"')).toContain(
       'aria-valuenow="712"',

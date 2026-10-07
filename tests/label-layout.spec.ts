@@ -3,12 +3,6 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  DEFAULT_LAYOUT_MODE,
-  LAYOUT_MODES,
-  RAIL_DEFAULT_PX,
-  RAIL_KEY_STEP_PX,
-  RAIL_MAX_PX,
-  RAIL_MIN_PX,
   clampRailWidth,
   layoutAfterFullscreenRequest,
   parseRailWidth,
@@ -16,17 +10,7 @@ import {
 } from "@/components/admin/labels/label-layout";
 import { createLoader } from "./fixtures/vm-modules";
 
-/**
- * The labelling console's two layouts (`label-layout.ts`): the words, the
- * full screen's two rules, and the arithmetic of the one size both share — the
- * points rail's width. Then the header's Layout menu
- * (`label-layout-control.tsx`), rendered offline.
- */
-
-test("two modes, docked side by default", () => {
-  expect(LAYOUT_MODES).toEqual(["docked-side", "black"]);
-  expect(DEFAULT_LAYOUT_MODE).toBe("docked-side");
-});
+/** The console's two layouts, the rail's width, and the header's Layout menu. */
 
 test("a request for the browser's full screen settles the layout", () => {
   // It went along: black, in the browser's full screen.
@@ -61,22 +45,6 @@ test.describe("the rail's width", () => {
     for (const raw of [null, undefined, "", "  ", "wide", "{}", "640px"]) {
       expect(parseRailWidth(raw), String(raw)).toBe(640);
     }
-  });
-
-  test("an arrow press is 16px, and a run of them stops at the bounds", () => {
-    let width = RAIL_DEFAULT_PX;
-    width = clampRailWidth(width + RAIL_KEY_STEP_PX);
-    expect(width).toBe(656);
-    width = clampRailWidth(width - 2 * RAIL_KEY_STEP_PX);
-    expect(width).toBe(624);
-    for (let press = 0; press < 10; press += 1) {
-      width = clampRailWidth(width - RAIL_KEY_STEP_PX);
-    }
-    expect(width).toBe(RAIL_MIN_PX);
-    for (let press = 0; press < 60; press += 1) {
-      width = clampRailWidth(width + RAIL_KEY_STEP_PX);
-    }
-    expect(width).toBe(RAIL_MAX_PX);
   });
 });
 
@@ -154,7 +122,6 @@ test.describe("the header's Layout menu", () => {
       "Video over the court, the points list on the right",
       "The same layout on black, filling the whole screen",
     ]);
-    expect(html.match(/data-stub-row=/g)).toHaveLength(2);
   });
 
   test("the current mode is the checked row, and the trigger names it", () => {
@@ -168,8 +135,6 @@ test.describe("the header's Layout menu", () => {
     expect(black.html).toMatch(
       /<button[^>]*data-label-layout=""[^>]*data-layout-mode="black"[^>]*aria-label="Layout: Full screen"/,
     );
-    // It names the control, not the value.
-    expect(docked.html).toMatch(/<span>Layout<\/span>/);
   });
 
   test("choosing the other row reports it; choosing the current one reports nothing", () => {

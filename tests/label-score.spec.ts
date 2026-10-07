@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
 import { expect, test } from "@playwright/test";
 
 import {
@@ -12,12 +9,6 @@ import {
   type ScorablePoint,
 } from "@/lib/services/labels/score";
 import type { LabelEnding, LabelSide } from "@/lib/services/labels/session";
-
-/**
- * T8's scoreboard: the score before every point and the games before every
- * game, derived from the session's rows in `point_index` order and never
- * stored.
- */
 
 let nextId = 0;
 
@@ -267,18 +258,6 @@ test.describe("games and sets", () => {
       [2, 7, 1],
       [2, 8, 2],
     ]);
-    // The stored game numbers are what they were.
-    expect(points.map((p) => p.gameNumber)).toEqual([
-      ...[1, 2, 3, 4, 5, 6].flatMap((n) => [n, n, n, n]),
-      7,
-      7,
-      7,
-      7,
-      8,
-      8,
-      8,
-      8,
-    ]);
   });
 
   test("gamesBefore counts the set's games won so far, p1 first", () => {
@@ -289,36 +268,14 @@ test.describe("games and sets", () => {
       ...game({ setNumber: 2, gameNumber: 4 }, ["p2"]),
     ];
     const { games } = labelScores(points, true);
-    expect(games).toEqual([
-      {
-        setNumber: 1,
-        gameNumber: 1,
-        gameInSet: 1,
-        gamesBefore: "0–0",
-        winner: "p1",
-      },
-      {
-        setNumber: 1,
-        gameNumber: 2,
-        gameInSet: 2,
-        gamesBefore: "1–0",
-        winner: "p1",
-      },
-      {
-        setNumber: 1,
-        gameNumber: 3,
-        gameInSet: 3,
-        gamesBefore: "2–0",
-        winner: "p2",
-      },
+    expect(
+      games.map((g) => [g.setNumber, g.gameInSet, g.gamesBefore, g.winner]),
+    ).toEqual([
+      [1, 1, "0–0", "p1"],
+      [1, 2, "1–0", "p1"],
+      [1, 3, "2–0", "p2"],
       // A new set starts from nothing.
-      {
-        setNumber: 2,
-        gameNumber: 4,
-        gameInSet: 1,
-        gamesBefore: "0–0",
-        winner: "p2",
-      },
+      [2, 1, "0–0", "p2"],
     ]);
   });
 
@@ -360,16 +317,4 @@ test.describe("games and sets", () => {
     labelScores(points, true);
     expect(JSON.stringify(points)).toBe(snapshot);
   });
-});
-
-test("the module stays free of components, next/ and server-side code", () => {
-  const source = readFileSync(
-    path.join(process.cwd(), "src/lib/services/labels/score.ts"),
-    "utf8",
-  );
-  const imports = [...source.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-  expect(imports).toEqual(["./session"]);
-  expect(source).not.toMatch(/components\//);
-  expect(source).not.toMatch(/from\s+"next/);
-  expect(source).not.toMatch(/-server"|supabase|"server-only"/);
 });

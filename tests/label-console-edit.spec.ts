@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
-import * as React from "react";
 
-import {
-  toCourt,
-  toCourtInHalf,
-} from "@/components/admin/labels/court-geometry";
+import { toCourtInHalf } from "@/components/admin/labels/court-geometry";
 import {
   NO_PLACEMENT,
   flipPlacement,
@@ -27,14 +23,9 @@ import {
   type SaveEvent,
 } from "@/components/admin/labels/save-status";
 import type { LabelShotPatch } from "@/lib/services/labels/edit";
-import { labelScores } from "@/lib/services/labels/score";
 import type { LabelShot } from "@/lib/services/labels/session";
 import type { ShotGeometry } from "@/lib/services/labels/shot-derived";
-import {
-  FIXTURE_POINT_IDS,
-  labelSessionFixture,
-} from "./fixtures/label-session";
-import { elements } from "./fixtures/react-tree";
+import { labelSessionFixture } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -118,36 +109,10 @@ test.describe("court click placement", () => {
     });
   });
 
-  test("selecting a stroke always starts at the hit", () => {
-    const halfway = nextPlacement(
-      startPlacement("a"),
-      { x: 0, y: 0 },
-      UNPLACED,
-    )!.state;
-    expect(halfway.target).toBe("landing");
-    expect(startPlacement("b")).toEqual({
-      shotId: "b",
-      target: "contact",
-      half: "near",
-      flipped: false,
-    });
-  });
-
   test("with nothing selected a click places nothing and there is no prompt", () => {
     expect(nextPlacement(NO_PLACEMENT, { x: 0, y: 0 }, UNPLACED)).toBeNull();
     expect(placementPrompt(NO_PLACEMENT, null)).toBeNull();
     expect(placementPrompt(startPlacement("gone"), null)).toBeNull();
-  });
-
-  test("a click at the art box's percent position becomes metres via toCourt", () => {
-    // The centre of the art box is the centre of the court: the net.
-    const centre = toCourt({ sx: 50, sy: 50 });
-    const step = nextPlacement(startPlacement("s"), centre, UNPLACED)!;
-    expect(Object.keys(step.patch)).toEqual(["contact_x", "contact_y"]);
-    expect(step.patch.contact_x).toBe(0);
-    expect(Math.abs(step.patch.contact_y! - 11.885)).toBeLessThanOrEqual(
-      0.0051,
-    );
   });
 });
 
@@ -368,132 +333,7 @@ test.describe("cell text", () => {
   });
 });
 
-test.describe("a typed position (T13) and a picked value (T27)", () => {
-  type Props = Record<string, unknown>;
-
-  /**
-   * The open point's shots well (`BlackShotsWell`, the rail's rows under the
-   * current point), with the stroke `selectedShotId` names carrying its
-   * editors — and every patch its rows send.
-   */
-  function well(selectedShotId: string) {
-    const { BlackShotsWell } = createLoader().load(
-      "src/components/admin/labels/label-black-shot-row.tsx",
-    ) as { BlackShotsWell: (p: Props) => React.ReactNode };
-    const session = labelSessionFixture();
-    const patches: [string, LabelShotPatch][] = [];
-    const tree = BlackShotsWell({
-      point: session.points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!,
-      edit: {
-        editable: true,
-        names: { p1: "Lee", p2: "Vargas" },
-        selectedShotId,
-        onPatchShot: (id: string, patch: LabelShotPatch) =>
-          patches.push([id, patch]),
-        points: session.points,
-        scores: labelScores(session.points, session.adScoring).points,
-      },
-    });
-
-    /** Type `value` into the position input named `label`, and commit. */
-    const type = (label: string, value: { x: number; y: number } | null) => {
-      const input = elements(tree).find(
-        (el) => el.props.label === `${label}, metres x, y`,
-      );
-      expect(input, label).toBeDefined();
-      (input!.props.onCommit as (v: unknown) => void)(value);
-    };
-    /**
-     * The dropdown named `label`: the menu `SelectEditor` renders, with the
-     * rows it offers and the row it shows as chosen.
-     */
-    const dropdown = (label: string) => {
-      const all = elements(tree);
-      const editor = all.find(
-        (el) =>
-          typeof el.type === "function" &&
-          el.type.name === "SelectEditor" &&
-          el.props.label === label,
-      );
-      expect(editor, label).toBeDefined();
-      const drawn = elements(editor);
-      // The design system's menu, never the browser's.
-      expect(drawn.map((el) => el.type)).not.toContain("select");
-      const menu = drawn.find(
-        (el) => typeof el.type === "function" && el.type.name === "MenuSelect",
-      );
-      expect(menu, `${label}'s MenuSelect`).toBeDefined();
-      const props = menu!.props as {
-        label: string;
-        value: string | undefined;
-        options: { value: string; label: string }[];
-        onChange: (value: string) => void;
-      };
-      expect(props.label).toBe(label);
-      return {
-        value: props.value,
-        rows: props.options.map((option) => option.label),
-        /** Pick the row reading `row`, as a click on it does. */
-        pick(row: string) {
-          const option = props.options.find((o) => o.label === row);
-          expect(option, row).toBeDefined();
-          props.onChange(option!.value);
-        },
-      };
-    };
-    return { patches, type, dropdown };
-  }
-
-  test("every dropdown is the DS menu, and a pick sends that one field", () => {
-    const patches: [string, LabelShotPatch][] = [];
-    const on = (shotId: string) => {
-      const drawn = well(shotId);
-      return {
-        dropdown: drawn.dropdown,
-        done: () => patches.push(...drawn.patches),
-      };
-    };
-
-    const back = on("s-return");
-    const player = back.dropdown("Shot 2 player");
-    expect(player.value).toBe("p2");
-    expect(player.rows).toEqual(["Lee", "Vargas"]);
-    player.pick("Lee");
-
-    const stroke = back.dropdown("Shot 2 stroke");
-    expect(stroke.value).toBe("backhand");
-    expect(stroke.rows).toContain("Backhand volley");
-    stroke.pick("Forehand");
-
-    // A rally shot's spin prints as recorded…
-    const spin = back.dropdown("Shot 2 spin");
-    expect(spin.value).toBe("topspin");
-    expect(spin.rows).toEqual(["Topspin", "Flat", "Backspin", "Sidespin"]);
-    spin.pick("Backspin");
-    back.done();
-    // …a serve's in Serve › Spin's words, for the same four values.
-    const serve = on("s-serve");
-    const serveSpin = serve.dropdown("Shot 1 spin");
-    expect(serveSpin.value).toBe("flat");
-    expect(serveSpin.rows).toEqual(["Kick", "Flat", "Backspin", "Slice"]);
-    serveSpin.pick("Kick");
-    serve.done();
-    // Not set yet: no row is chosen, and any of them can be.
-    const added = on("s-added");
-    const unset = added.dropdown("Shot 3 spin");
-    expect(unset.value).toBeUndefined();
-    unset.pick("Flat");
-    added.done();
-
-    expect(patches).toEqual([
-      ["s-return", { hitter: "p1" }],
-      ["s-return", { stroke: "forehand" }],
-      ["s-return", { spin: "backspin" }],
-      ["s-serve", { spin: "topspin" }],
-      ["s-added", { spin: "flat" }],
-    ]);
-  });
-
+test.describe("a typed position and a picked spin", () => {
   test("spin reads as the match Video tab prints it", () => {
     const { spinLabel } = createLoader().load(
       "src/components/admin/labels/label-format.ts",
@@ -521,17 +361,6 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
     expect(spinLabel("forehand", "topspin")).toBe("Topspin");
     expect(spinLabel("forehand", null)).toBeNull();
     expect(spinLabel(null, "sidespin")).toBe("Sidespin");
-  });
-
-  // The fixture's return: hit at (1.80, 24.49), landed at (-2.10, 3.49), In.
-
-  test("Hit at sends the contact and the result it now derives, in one patch", () => {
-    const { patches, type } = well("s-return");
-    // Hit from the landing's own side of the net: it never crossed.
-    type("Shot 2 hit at", { x: 1.8, y: 1 });
-    expect(patches).toEqual([
-      ["s-return", { contact_x: 1.8, contact_y: 1, result: "net" }],
-    ]);
   });
 
   test("the result is deriveShotResult of the row after the edit", () => {

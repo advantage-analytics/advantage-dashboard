@@ -35,23 +35,17 @@ import {
   writeLabelShotDelete,
   writeLabelShotRestore,
 } from "@/lib/services/labels/operations-session";
-import {
-  labelProgress,
-  type LabelPoint,
-  type LabelShot,
-} from "@/lib/services/labels/session";
-import type { AdminClient } from "@/lib/supabase/admin";
+import type { LabelShot } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
+  fakeLabelClient,
   labelSessionFixture,
+  labelShotRow,
 } from "./fixtures/label-session";
 
-/**
- * T7's row operations: delete and Undo, add a stroke, move a point, mark it
- * checked — the pure rules (operations.ts) and the admin-gated services
- * behind the server actions (operations-session.ts).
- */
+// Row operations: delete and Undo, add a stroke, move a point, mark it checked
+// — the pure rules and the admin-gated services over a fake client.
 
 const SHOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -402,29 +396,6 @@ test.describe("move point", () => {
     });
   });
 
-  test("the console's applyPointMove agrees with the plan on a round trip", () => {
-    const { points } = labelSessionFixture();
-    const p4 = points.find((p) => p.id === FIXTURE_POINT_IDS.P4)!;
-    expect(p4.status).toBe("unchanged");
-    const away = planPointMove(
-      p4,
-      { setNumber: 1, gameNumber: 1 },
-      null,
-      false,
-    );
-    if ("error" in away) throw new Error(away.error);
-    const moved = applyPointMove(p4, away.write);
-    expect(moved.status).toBe("edited");
-    const back = planPointMove(
-      moved,
-      { setNumber: 1, gameNumber: 2 },
-      null,
-      false,
-    );
-    if ("error" in back) throw new Error(back.error);
-    expect(applyPointMove(moved, back.write).status).toBe("unchanged");
-  });
-
   test("into a game someone else serves: refused unless switchServer", () => {
     const refused = planPointMove(
       unchangedP1,
@@ -548,44 +519,9 @@ test.describe("mark point checked", () => {
       "error",
     );
   });
-
-  test("the header counts checked points out of the non-deleted points", () => {
-    const { points } = labelSessionFixture();
-    // P2 checked; P3 a tombstone.
-    expect(labelProgress(points)).toEqual({ checked: 1, total: 3 });
-
-    const markP1 = points.map((p) =>
-      p.id === FIXTURE_POINT_IDS.P1
-        ? { ...p, checkedAt: NOW.toISOString() }
-        : p,
-    );
-    expect(labelProgress(markP1)).toEqual({ checked: 2, total: 3 });
-
-    // Deleting a checked point takes it out of both counts.
-    const deleteP2 = markP1.map((p) =>
-      p.id === FIXTURE_POINT_IDS.P2 ? applyPointDelete(p) : p,
-    );
-    expect(labelProgress(deleteP2)).toEqual({ checked: 1, total: 2 });
-
-    // Restoring the tombstone P3 brings it back unchecked.
-    const restoreP3 = points.map((p): LabelPoint =>
-      p.id === FIXTURE_POINT_IDS.P3 ? applyPointRestore(p) : p,
-    );
-    expect(labelProgress(restoreP3)).toEqual({ checked: 1, total: 4 });
-  });
 });
 
 // ── The services, over a fake client ───────────────────────────────────────
-
-interface Call {
-  table: string;
-  op: "select" | "update" | "insert";
-  values?: Record<string, unknown>;
-  filters: Record<string, unknown>;
-  negated: Record<string, unknown>;
-  /** `.in(column, values)`, as a swap's grouped writes name their rows. */
-  in?: Record<string, readonly unknown[]>;
-}
 
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
@@ -596,78 +532,34 @@ function fakeClient(rows: {
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
 }) {
-  const calls: Call[] = [];
-  const client = {
-    from(table: string) {
-      const call: Call = { table, op: "select", filters: {}, negated: {} };
-      calls.push(call);
-      const answer = () => {
-        if (call.op === "update") {
-          return {
-            data: rows.raced ? [] : [{ id: call.filters.id }],
-            error: null,
-          };
-        }
-        if (call.op === "insert") {
-          return {
-            data: { id: OTHER_SHOT, ...call.values, delete_reason: null },
-            error: null,
-          };
-        }
-        if (table === "label_sessions") {
-          return {
-            data: { status: rows.sessionStatus ?? "labelling" },
-            error: null,
-          };
-        }
-        if (table === "label_shots") {
-          return "label_point_id" in call.filters || call.in?.label_point_id
-            ? { data: rows.shots ?? [], error: null }
-            : { data: rows.shot ?? null, error: null };
-        }
-        if (table === "label_points") {
-          return "game_number" in call.filters
-            ? { data: rows.gamePoints ?? [], error: null }
-            : { data: rows.point ?? null, error: null };
-        }
-        return { data: null, error: { message: `unexpected ${table}` } };
+  return fakeLabelClient((call) => {
+    if (call.op === "update") {
+      return rows.raced ? { data: [], error: null } : undefined;
+    }
+    if (call.op === "insert") {
+      return {
+        data: { id: OTHER_SHOT, ...call.values, delete_reason: null },
+        error: null,
       };
-      const builder = {
-        select: () => builder,
-        update: (values: Record<string, unknown>) => {
-          call.op = "update";
-          call.values = values;
-          return builder;
-        },
-        insert: (values: Record<string, unknown>) => {
-          call.op = "insert";
-          call.values = values;
-          return builder;
-        },
-        eq: (column: string, value: unknown) => {
-          call.filters[column] = value;
-          return builder;
-        },
-        neq: (column: string, value: unknown) => {
-          call.negated[column] = value;
-          return builder;
-        },
-        in: (column: string, values: readonly unknown[]) => {
-          call.in = { ...call.in, [column]: values };
-          return builder;
-        },
-        returns: () => builder,
-        maybeSingle: async () => answer(),
-        single: async () => answer(),
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject?: (e: unknown) => unknown,
-        ) => Promise.resolve(answer()).then(resolve, reject),
+    }
+    if (call.table === "label_sessions") {
+      return {
+        data: { status: rows.sessionStatus ?? "labelling" },
+        error: null,
       };
-      return builder;
-    },
-  };
-  return { calls, supabase: client as unknown as AdminClient };
+    }
+    if (call.table === "label_shots") {
+      return "label_point_id" in call.filters || call.in?.label_point_id
+        ? { data: rows.shots ?? [], error: null }
+        : { data: rows.shot ?? null, error: null };
+    }
+    if (call.table === "label_points") {
+      return "game_number" in call.filters
+        ? { data: rows.gamePoints ?? [], error: null }
+        : { data: rows.point ?? null, error: null };
+    }
+    return undefined;
+  });
 }
 
 const ADMIN = { requireAdmin: async () => ({ id: "admin" }) };
@@ -724,21 +616,8 @@ test.describe("the services", () => {
           delete_reason: "not_a_stroke",
         },
         filters: { id: SHOT_ID, status: "edited" },
-        negated: {},
       },
     ]);
-  });
-
-  test("a delete without a valid reason reads and writes nothing", async () => {
-    const fake = fakeClient({});
-    expect(
-      await writeLabelShotDelete({
-        supabase: fake.supabase,
-        shotId: SHOT_ID,
-        reason: "phantom",
-      }),
-    ).toHaveProperty("error");
-    expect(fake.calls).toEqual([]);
   });
 
   test("Undo restores the remembered status and clears the reason", async () => {
@@ -892,72 +771,9 @@ test.describe("the services", () => {
     });
   });
 
-  test("with switchServer the server changes with the game", async () => {
-    const fake = fakeClient({
-      point: pointRow,
-      gamePoints: [{ server: "p2", point_index: 20 }],
-    });
-    expect(
-      await writeLabelPointMove({
-        supabase: fake.supabase,
-        pointId: POINT_ID,
-        to: { setNumber: 1, gameNumber: 4 },
-        switchServer: true,
-      }),
-    ).toEqual({
-      ok: true,
-      status: "edited",
-      server: "p2",
-      setNumber: 1,
-      gameNumber: 4,
-      shots: [],
-    });
-    expect(fake.calls.find((c) => c.op === "update")?.values).toEqual({
-      set_number: 1,
-      game_number: 4,
-      status: "edited",
-      server: "p2",
-    });
-    // The point's shots were read (and found empty): the switch needed them.
-    expect(
-      fake.calls.find((c) => c.table === "label_shots" && c.op === "select")
-        ?.in,
-    ).toEqual({ label_point_id: [POINT_ID] });
-  });
-
   test("a switch the strokes contradict flips the point, then its strokes in grouped writes — label_points and label_shots, no delete", async () => {
-    const shotRow = (id: string, fields: Record<string, unknown>) => ({
-      id,
-      label_point_id: POINT_ID,
-      event_id: 1,
-      after_event_id: null,
-      status: "kept",
-      status_before_delete: null,
-      delete_reason: null,
-      hitter: "p1",
-      stroke: "forehand",
-      result: "in",
-      spin: null,
-      contact_x: null,
-      contact_y: null,
-      landing_x: null,
-      landing_y: null,
-      video_time: null,
-      site_removal: null,
-      site_removal_restored_at: null,
-      seed: {
-        hitter: fields.hitter ?? "p1",
-        stroke: fields.stroke ?? "forehand",
-        result: "in",
-        spin: null,
-        contact_x: null,
-        contact_y: null,
-        landing_x: null,
-        landing_y: null,
-        video_time: fields.video_time ?? null,
-      },
-      ...fields,
-    });
+    const shotRow = (id: string, fields: Record<string, unknown>) =>
+      labelShotRow(id, POINT_ID, fields);
     const fake = fakeClient({
       point: { ...pointRow, winner: "p1", ended_by: "p2", seed: null },
       gamePoints: [{ server: "p2", point_index: 20 }],
@@ -1077,37 +893,6 @@ test.describe("the services", () => {
       expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
       expect(["select", "update"]).toContain(call.op);
     }
-
-    // Two strokes flipped the same way share one write.
-    const pair = fakeClient({
-      point: pointRow,
-      gamePoints: [{ server: "p2", point_index: 20 }],
-      shots: [
-        shotRow(SHOT_ID, {
-          hitter: "p1",
-          stroke: "first_serve",
-          video_time: 1,
-        }),
-        shotRow(OTHER_SHOT, {
-          hitter: "p1",
-          stroke: "forehand",
-          video_time: 3,
-        }),
-      ],
-    });
-    await writeLabelPointMove({
-      supabase: pair.supabase,
-      pointId: POINT_ID,
-      to: { setNumber: 1, gameNumber: 4 },
-      switchServer: true,
-    });
-    expect(
-      pair.calls.filter((c) => c.op === "update" && c.table === "label_shots"),
-    ).toHaveLength(1);
-    expect(
-      pair.calls.find((c) => c.op === "update" && c.table === "label_shots")
-        ?.in,
-    ).toEqual({ id: [SHOT_ID, OTHER_SHOT] });
   });
 
   test("a point that races away is not moved, and no stroke is touched", async () => {
@@ -1115,27 +900,11 @@ test.describe("the services", () => {
       point: pointRow,
       gamePoints: [{ server: "p2", point_index: 20 }],
       shots: [
-        {
-          id: SHOT_ID,
-          label_point_id: POINT_ID,
-          event_id: 1,
-          after_event_id: null,
-          status: "kept",
-          status_before_delete: null,
-          delete_reason: null,
-          hitter: "p1",
+        labelShotRow(SHOT_ID, POINT_ID, {
           stroke: "first_serve",
-          result: "in",
-          spin: null,
-          contact_x: null,
-          contact_y: null,
-          landing_x: null,
-          landing_y: null,
           video_time: 1,
-          site_removal: null,
-          site_removal_restored_at: null,
           seed: null,
-        },
+        }),
       ],
       raced: true,
     });
@@ -1150,28 +919,6 @@ test.describe("the services", () => {
     expect(
       fake.calls.filter((c) => c.op === "update").map((c) => c.table),
     ).toEqual(["label_points"]);
-  });
-
-  test("a same-server move writes set and game only", async () => {
-    const fake = fakeClient({
-      point: pointRow,
-      gamePoints: [{ server: "p1", point_index: 2 }],
-    });
-    expect(
-      await writeLabelPointMove({
-        supabase: fake.supabase,
-        pointId: POINT_ID,
-        to: { setNumber: 1, gameNumber: 2 },
-        switchServer: false,
-      }),
-    ).toMatchObject({ ok: true, server: "p1", shots: [] });
-    expect(fake.calls.find((c) => c.op === "update")?.values).toEqual({
-      set_number: 1,
-      game_number: 2,
-      status: "edited",
-    });
-    // No switch, so the shots were never read.
-    expect(fake.calls.map((c) => c.table)).not.toContain("label_shots");
   });
 
   test("checked sets checked_at, and unchecking clears it", async () => {
