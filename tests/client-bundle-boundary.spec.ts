@@ -84,6 +84,12 @@ const SERVER_ONLY = [
   // the loader, one keyword away from dragging the signer into the bundle.
   "lib/data/match-film-entry-server.ts",
   "lib/data/match-video-server.ts",
+  // First-run onboarding T10: the sample clip's credential. The handler
+  // itself only reaches `http.ts`, but its route passes it `mintPlaybackSas`
+  // from `azure-sas.ts` — the account-key signer — and the Film view renews
+  // the sample's URL over HTTP exactly as it does a match's.
+  "lib/services/sample-match/video.ts",
+  "lib/services/splitstep/video-url/azure-sas.ts",
   // codex/admin-uploads: the schedule writer and the admin console's result
   // submissions build service-role clients and re-authorize the admin server-side.
   "lib/schedule/writes-server.ts",

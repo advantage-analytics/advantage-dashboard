@@ -358,6 +358,52 @@ paths:
         "503":
           $ref: "#/components/responses/VideoStorageUnavailable"
 
+  /api/sample-match/video:
+    get:
+      tags: [Match video]
+      operationId: getSampleMatchVideo
+      summary: Read a fresh read-only URL for the sample match's clip
+      description: >-
+        For anyone signed in. `/dashboard/matches/sample` renders a bundled,
+        anonymised report whose placeholder ids name no row, so its Film view
+        renews its credential here instead of at
+        `/api/matches/{matchId}/video` and gets back the same envelope. The
+        blob name is a server-side constant (`sample/match-v1.mp4`) and the
+        handler reads nothing from the request — not the query, not a
+        header, not a body — so a caller can vary only whether they are
+        signed in. `id` and `version` are fixed, so a refresh always reads as
+        "same video, new URL". No match is read and no same-origin check
+        runs, for the reasons the match route gives.
+      responses:
+        "200":
+          description: The sample clip's playback metadata and a 30-minute read-only URL.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackMetadataResult"
+              examples:
+                sample:
+                  summary: The sample clip
+                  value:
+                    attachment:
+                      id: 00000000-0000-4000-8000-5a4d504c4531
+                      version: 1
+                      offsetSeconds: 0
+                      confirmedVideoTimeSeconds: 0
+                      durationSeconds: 0
+                      contentType: video/mp4
+                      filename: sample-match.mp4
+                      playbackUrl: https://example.blob.core.windows.net/match-videos/sample/match-v1.mp4?sv=2025-01-05&sp=r&sig=REDACTED
+                      playbackExpiresAt: "2026-10-07T15:30:00.000Z"
+        "401":
+          $ref: "#/components/responses/VideoUnauthenticated"
+        "500":
+          $ref: "#/components/responses/VideoInternalError"
+        "503":
+          $ref: "#/components/responses/VideoStorageUnavailable"
   /api/matches/{matchId}/video:
     parameters:
       - $ref: "#/components/parameters/MatchId"

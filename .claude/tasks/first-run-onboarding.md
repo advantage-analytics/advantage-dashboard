@@ -136,7 +136,7 @@ ready).
 
 ## T10 · GET /api/sample-match/video: session-gated SAS for the sample clip
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/app/api/sample-match/video/route.ts (new), src/lib/services/sample-match/video.ts (new, handler + deps), openapi/advantage-api.yaml, MAP.md (hand-written API row), tests/sample-match-video-route.spec.ts (new) — guess
 - **done when:**

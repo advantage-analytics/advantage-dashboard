@@ -92,3 +92,13 @@ is the runner's. Newest entries at the bottom.
 
 1. `markTourDone` doesn't `revalidatePath("/dashboard")`; add it if a client-cached Home shows the sample step undone right after the tour (T17).
 2. Nothing mounts `TourRunner` yet — T12 (sample page) and T16 (first-report) do.
+
+## T10 · GET /api/sample-match/video: session-gated SAS for the sample clip — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4370 passed (+11) / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. completion — first review VERDICT: needs-work solely because `npm run api:lint` could not run (the `postman` CLI is not installed in this container); installed `postman-cli@1.70.0` into the session scratchpad (outside the repo), `npm run api:lint` → "No issues found", exit 0; re-review VERDICT: pass (reviewer re-ran typecheck, lint, format:check and the specs). RLS checklist (by hand): clean.
+**changed:** new `src/lib/services/sample-match/video.ts` (`SAMPLE_VIDEO_BLOB`, `SAMPLE_VIDEO_TTL_SECONDS`, `SAMPLE_VIDEO_ATTACHMENT`, `handleGetSampleVideo(deps)` — takes no request; 401 unauthenticated, 200 `{ attachment: {…, playbackUrl, playbackExpiresAt} }` matching the match video route, 503 storage_unavailable / 500 internal_error) and `src/app/api/sample-match/video/route.ts` (nodejs, force-dynamic, cookie client + `mintPlaybackSas`). New offline spec `tests/sample-match-video-route.spec.ts` (12). `openapi/advantage-api.yaml` gains the path; MAP.md API row updated; `tests/client-bundle-boundary.spec.ts` pins the new module and `azure-sas.ts` server-only. `src/proxy.ts` unchanged.
+**follow-ups:**
+
+1. Fixture/T12: carry `id = 00000000-0000-4000-8000-5a4d504c4531`, `version = 1` (`SAMPLE_VIDEO_ATTACHMENT`) in the sample's `MatchVideo`, or the first renewal reads as a replaced video and reloads the player once.
+2. After H1, set `SAMPLE_VIDEO_ATTACHMENT.durationSeconds` (and the OpenAPI example) to the measured clip length if the Film timeline needs a fixed clock.
+3. `npm run api:lint` needs the global Postman CLI; this container lacks it — worth adding to the environment setup.
