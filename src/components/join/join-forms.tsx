@@ -498,7 +498,6 @@ export function JoinLinkSignUp({
             lastName,
             password,
           });
-          if (!result) return;
           if (!result.ok) setError(result.error);
           else setSentTo(result.email);
         });

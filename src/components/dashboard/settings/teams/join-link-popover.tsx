@@ -150,7 +150,7 @@ export function JoinLinkPopover({
  * `aria-disabled` (never `disabled`, so it stays in the tab order and
  * announces why), Copy and Email live, no Reset, and a note naming who can.
  */
-export function JoinLinkPanel({
+function JoinLinkPanel({
   programId,
   programName,
   joinLink,
@@ -369,7 +369,7 @@ export function JoinLinkPanel({
             className="size-[18px] bg-[var(--ink-200)] text-[9px]"
           />
         )}
-        {`Made ${formatMadeDate(meta.createdAt)}${byName ? ` by ${byName}` : ""} · ${meta.uses} joined · Players only`}
+        {`Made ${formatInviteDate(meta.createdAt)}${byName ? ` by ${byName}` : ""} · ${meta.uses} joined · Players only`}
       </>
     );
   }
@@ -434,8 +434,8 @@ export function JoinLinkPanel({
   );
 }
 
-/** `2026-10-07T…` → `Oct 7`, as the Members card dates an invitation. */
-function formatMadeDate(iso: string): string {
+/** `2026-08-04T…` → `Aug 4`; dates an invitation or a join link. */
+export function formatInviteDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

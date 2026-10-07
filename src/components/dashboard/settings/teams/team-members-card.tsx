@@ -26,6 +26,7 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { StaffInviteDialog } from "@/components/dashboard/settings/teams/staff-invite-dialog";
 import {
+  formatInviteDate,
   JoinLinkPopover,
   type JoinLinkTriggerProps,
 } from "@/components/dashboard/settings/teams/join-link-popover";
@@ -354,12 +355,4 @@ function PersonRow({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-/** `2026-08-04T…` → `Aug 4`. */
-function formatInviteDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
