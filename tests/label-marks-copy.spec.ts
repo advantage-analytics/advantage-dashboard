@@ -52,6 +52,8 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   result_type_unknown: {},
   serve_fault: {},
   shot_after_point_end: { landed: 3, extra: 4, result: "out" },
+  ending_stale: { ending: "error", endedBy: "p2", winner: "p1" },
+  second_serve_as_first: { shotId: "s-2" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -109,6 +111,8 @@ test.describe("mark copy", () => {
       net_hit_contradicts_height: "Net or out?",
       serve_fault: "Serve fault?",
       shot_after_point_end: "Shot after the point ended?",
+      ending_stale: "Ending looks stale",
+      second_serve_as_first: "Second serve?",
       pick_winner: "Pick the winner",
       phantom_strokes_dropped: "1 shot removed",
       out_ball_rally_continued: "Out call ignored",
@@ -151,6 +155,18 @@ test.describe("mark copy", () => {
     );
     expect(markHover(sample("score_side_mismatch"), names)).toBe(
       "At 0–15 the serve should come from the ad side. This one came from the deuce side.",
+    );
+    expect(markHover(sample("ending_stale"), names)).toBe(
+      "The strokes say an error by Goodman.",
+    );
+    expect(
+      markHover(
+        mark("ending_stale", { ending: "ace", endedBy: null, winner: null }),
+        names,
+      ),
+    ).toBe("The strokes say an ace.");
+    expect(markHover(sample("second_serve_as_first"), names)).toBe(
+      "Follows a faulted serve, so it is the second serve.",
     );
   });
 

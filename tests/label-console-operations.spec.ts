@@ -9,6 +9,7 @@ import {
   applyGameWrites,
   planGameServer,
 } from "@/lib/services/labels/game-operations";
+import { applyShotSwaps } from "@/lib/services/labels/player-swap";
 import { labelScores } from "@/lib/services/labels/score";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
 import { count, text } from "./fixtures/html-probe";
@@ -805,9 +806,11 @@ function bandModule() {
 test.describe("game bands", () => {
   test("one band above the first live point of each game: set, game in set, games before, server", () => {
     const html = renderConsole({ ...SAVES, operations: spies().operations });
+    // Game 1 stops at 15–15, so it is nobody's and its band says so; the
+    // last game of the session is still being played, so its band does not.
     expect(bands(html)).toEqual([
-      "Set 1 · Game 1 0–0 · Lee serves",
-      "Set 1 · Game 2 1–0 · Vargas serves",
+      "Set 1 · Game 1 0–0 · Lee serves · Unfinished · 15–15",
+      "Set 1 · Game 2 0–0 · Vargas serves",
     ]);
     // Above its game's first live point: band 1, points 1–2, band 2, point 4.
     const at = (attr: string) => html.indexOf(attr);
@@ -936,7 +939,7 @@ test.describe("game bands", () => {
     expect(frozen.operations).toBeUndefined();
   });
 
-  test("swapping a game's server re-derives the rows' scores and the band", () => {
+  test("swapping a game's server switches the players of a point its serve contradicts, and the rows' scores follow", () => {
     const session = labelSessionFixture();
     const plan = planGameServer(
       session.points,
@@ -946,29 +949,42 @@ test.describe("game bands", () => {
     if (!("ok" in plan)) throw new Error(plan.error);
     const swapped = {
       ...session,
-      points: applyGameWrites(session.points, plan.writes),
+      points: applyShotSwaps(
+        applyGameWrites(session.points, plan.writes),
+        plan.shots,
+      ),
     };
 
-    // Point 2 follows a point Vargas won: server-first, 0–15 with Lee
-    // serving and 15–0 once Vargas is.
+    // Point 1's serve was Lee's, so serving the game by Vargas means the
+    // vendor had the players the wrong way round: its hitters, winner and
+    // ended by flip with the server (Vargas won it; now Lee did).
+    const p1Before = session.points.find((p) => p.id === P1)!;
+    const p1After = swapped.points.find((p) => p.id === P1)!;
+    expect(p1Before.winner).toBe("p2");
+    expect(p1After.winner).toBe("p1");
+    expect(p1After.endedBy).toBe("p2");
+    expect(p1After.server).toBe("p2");
+    for (const shot of p1After.shots) {
+      const was = p1Before.shots.find((s) => s.id === shot.id)!;
+      expect(shot.hitter).toBe(was.hitter === "p1" ? "p2" : "p1");
+    }
+
+    // Point 2 follows a point the receiver won either way: 0–15 server-first,
+    // with Lee serving before and Vargas after.
     const scoreOf = (s: LabelSession) =>
       labelScores(s.points, s.adScoring).points.get(P2)?.scoreBefore;
     expect(scoreOf(session)).toBe("0–15");
-    expect(scoreOf(swapped)).toBe("15–0");
+    expect(scoreOf(swapped)).toBe("0–15");
 
     const row = (html: string) =>
       text(after(html, `data-point-id="${P2}"`).split("data-point-id=")[0]);
-    const before = renderRail(session);
     const afterSwap = renderRail(swapped);
-    expect(row(before)).toContain("0–15");
-    expect(row(before)).not.toContain("15–0");
-    expect(row(afterSwap)).toContain("15–0");
-    expect(row(afterSwap)).not.toContain("0–15");
-    expect(bands(afterSwap)[0]).toBe("Set 1 · Game 1 0–0 · Vargas serves");
+    expect(row(afterSwap)).toContain("0–15");
+    expect(bands(afterSwap)[0]).toContain("Set 1 · Game 1 0–0 · Vargas serves");
   });
 });
 
-// ── How it ended follows the shot rows (T28) ───────────────────────────────
+// ── How it ended follows the shot rows, on the server ──────────────────────
 
 test.describe("how it ended follows the shot rows", () => {
   /** Every write the console hands each autosave, in order. */
@@ -1016,41 +1032,43 @@ test.describe("how it ended follows the shot rows", () => {
 
   type PatchShot = (shotId: string, patch: Props) => Promise<void>;
 
-  /** Let the point patch, sent once the shot write has settled, go out. */
+  /** Let anything queued behind the shot write go out. */
   const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-  test("flipping the last stroke to out sends exactly one point patch", async () => {
-    const { shot, point, saves } = saveSpies();
+  test("flipping the last stroke to out is the shot write alone: the ending is settled in that call, never as a second request", async () => {
+    const { shot, point, saves } = saveSpies({
+      ok: true,
+      status: "edited",
+      // What the server answers once the point followed the rows.
+      point: { ending: "error", endedBy: "p1", winner: "p2", status: "edited" },
+    });
     const table = consoleTable({ ...saves, operations: spies().operations });
     await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
     await settled();
     expect(shot).toEqual([["s-added", { result: "out" }]]);
-    // Lee (p1) hit the last ball and was labelled the winner of the point; the
-    // ball missed, so Vargas won, and the same patch says so.
-    expect(point).toEqual([
-      [P1, { ending: "error", ended_by: "p1", winner: "p2" }],
-    ]);
+    expect(point).toEqual([]);
   });
 
-  test("a spin edit sends none", async () => {
+  test("a spin edit, and a shot write that fails, send nothing either", async () => {
     const { shot, point, saves } = saveSpies();
     const table = consoleTable({ ...saves, operations: spies().operations });
     await (table.onPatchShot as PatchShot)("s-added", { spin: "flat" });
     await settled();
     expect(shot).toEqual([["s-added", { spin: "flat" }]]);
     expect(point).toEqual([]);
-  });
 
-  test("a shot write that fails leaves the ending alone", async () => {
-    const { shot, point, saves } = saveSpies({ error: "refused" });
-    const table = consoleTable({ ...saves, operations: spies().operations });
-    await (table.onPatchShot as PatchShot)("s-added", { result: "out" });
+    const refused = saveSpies({ error: "refused" });
+    const again = consoleTable({
+      ...refused.saves,
+      operations: spies().operations,
+    });
+    await (again.onPatchShot as PatchShot)("s-added", { result: "out" });
     await settled();
-    expect(shot).toHaveLength(1);
-    expect(point).toEqual([]);
+    expect(refused.shot).toHaveLength(1);
+    expect(refused.point).toEqual([]);
   });
 
-  test("Undo on the last stroke moves the ending back onto it, once", async () => {
+  test("Undo on the last stroke is the restore alone: its answer carries the point", async () => {
     // Lee's last forehand is a tombstone: the point ends on Vargas's return,
     // which stayed in, so Vargas won it.
     const session = winnerSession();
@@ -1073,11 +1091,7 @@ test.describe("how it ended follows the shot rows", () => {
     rows.onRestoreShot("s-added");
     await settled();
     expect(calls.restoreShot).toEqual([["s-added"]]);
-    // In, so Lee wins it with his forehand: the ending and the winner both move
-    // back onto the restored stroke.
-    expect(point).toEqual([
-      [P1, { ending: "winner", ended_by: "p1", winner: "p1" }],
-    ]);
+    expect(point).toEqual([]);
   });
 
   test("a point reset is not a shot change: no ending patch follows it", async () => {

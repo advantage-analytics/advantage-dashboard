@@ -16,8 +16,11 @@ import {
   deleteReasonGroup,
   openingMarks,
   pointChange,
+  renderScorecard,
   seededScorePoints,
   shotChangedFromSeed,
+  vendorStrokeFacts,
+  type VendorStrokeFacts,
 } from "@/lib/services/labels/scorecard";
 import type {
   LabelPoint,
@@ -290,8 +293,8 @@ test.describe("the per-code table", () => {
   });
 });
 
-test.describe("a winner changed with no count mark", () => {
-  test("lists the point, the two winners and the quieter marks it did carry", () => {
+test.describe("a change with no count mark", () => {
+  test("lists the point, each field that changed, the stroke counts and the quieter marks it did carry", () => {
     const marked = point("a", 0, [], { winner: "p2" });
     const hinted = point("b", 1, [shot("b1")], { winner: "p2" });
     const bare = point("c", 2, [], { winner: null });
@@ -307,18 +310,88 @@ test.describe("a winner changed with no count mark", () => {
         { b1: [mark("out_ball_rally_continued", { nextHitter: null })] },
       ),
     );
-    expect(card.unmarkedWinnerChanges).toEqual([
+    const none = {
+      ending: null,
+      endedBy: null,
+      server: null,
+      game: null,
+      shots: { edited: 0, deleted: 0, added: 0 },
+    };
+    expect(card.unmarkedChanges).toEqual([
       {
         number: 2,
-        from: "p1",
-        to: "p2",
-        otherCodes: [
-          "ending_suspect_line",
-          "winner_guessed",
-          "out_ball_rally_continued",
-        ],
+        winner: { from: "p1", to: "p2" },
+        ...none,
+        hints: ["ending_suspect_line"],
+        hidden: ["winner_guessed", "out_ball_rally_continued"],
       },
-      { number: 3, from: "p1", to: null, otherCodes: [] },
+      {
+        number: 3,
+        winner: { from: "p1", to: null },
+        ...none,
+        hints: [],
+        hidden: [],
+      },
+    ]);
+  });
+
+  test("every field counts: ending, ended by, server, the game, and a stroke edited, deleted or added", () => {
+    const ending = point("a", 0, [], { ending: "error", endedBy: "p2" });
+    const server = point("b", 1, [], { server: "p2" });
+    const game = point("c", 2, [], { gameNumber: 2 });
+    const strokes = point("d", 3, [
+      shot("d1", {}, { result: "out" }),
+      shot("d2", {}, { status: "deleted" }),
+      shot("d3", {}, { status: "added", seed: null, eventId: null }),
+      shot("d4"),
+    ]);
+    // Not listed: a change under a count mark; a point the labeller added
+    // (no seed); a deleted point; a serve side, which is no field of the
+    // list; and an untouched point.
+    const chipped = point("e", 4, [], { winner: "p2" });
+    const added = point("f", 5, [], { status: "added", seed: null });
+    const gone = point("g", 6, [], { status: "deleted", winner: "p2" });
+    const side = point("h", 7, [], { serveSide: "ad" });
+    const same = point("i", 8);
+    const card = buildScorecard(
+      [ending, server, game, strokes, chipped, added, gone, side, same],
+      marksOf({ e: [DISPUTED], g: [mark("serve_fault", {})] }),
+    );
+    expect(
+      card.unmarkedChanges.map((row) => [
+        row.number,
+        row.ending,
+        row.endedBy,
+        row.server,
+        row.game,
+        row.shots,
+      ]),
+    ).toEqual([
+      [
+        1,
+        { from: "winner", to: "error" },
+        { from: "p1", to: "p2" },
+        null,
+        null,
+        { edited: 0, deleted: 0, added: 0 },
+      ],
+      [
+        2,
+        null,
+        null,
+        { from: "p1", to: "p2" },
+        null,
+        { edited: 0, deleted: 0, added: 0 },
+      ],
+      [
+        3,
+        null,
+        null,
+        null,
+        { from: "1·1", to: "1·2" },
+        { edited: 0, deleted: 0, added: 0 },
+      ],
+      [4, null, null, null, null, { edited: 1, deleted: 1, added: 1 }],
     ]);
   });
 });
@@ -495,8 +568,420 @@ test.describe("the marks as the session opened", () => {
       ["score_side_mismatch", 1, 1, 1],
       ["service_court_repeat", 1, 1, 1],
     ]);
-    // b's winner changed under a count mark: not an unmarked change.
-    expect(card.unmarkedWinnerChanges).toEqual([]);
+    // b's winner changed under a count mark, and a's let is a count mark's
+    // point too: neither is an unmarked change.
+    expect(card.unmarkedChanges).toEqual([]);
+  });
+});
+
+/** A vendor stroke's facts: an ordinary in ball unless `over` says otherwise. */
+function facts(over: Partial<VendorStrokeFacts> = {}): VendorStrokeFacts {
+  return {
+    in: true,
+    netHit: false,
+    bounce: { x: 1, y: 8 },
+    bouncePlaceholder: false,
+    isServe: false,
+    ...over,
+  };
+}
+const vendorOf = (entries: Record<string, VendorStrokeFacts>) =>
+  new Map(Object.entries(entries));
+
+test.describe("the vendor's stroke, read", () => {
+  test("booleans, the placeholder, the enclosure and the stroke type", () => {
+    expect(
+      vendorStrokeFacts({
+        in: false,
+        net_hit: true,
+        bounce_x_m: 1.5,
+        bounce_y_m: -3,
+        stroke_type: "Serve",
+      }),
+    ).toEqual({
+      in: false,
+      netHit: true,
+      bounce: { x: 1.5, y: -3 },
+      bouncePlaceholder: false,
+      isServe: true,
+    });
+    // The -9999 placeholder (as the float too) is no bounce; a bounce outside
+    // the enclosure is none either, but is no placeholder.
+    expect(
+      vendorStrokeFacts({ bounce_x_m: -9999, bounce_y_m: -9999.0 }),
+    ).toMatchObject({ bounce: null, bouncePlaceholder: true });
+    expect(
+      vendorStrokeFacts({ bounce_x_m: 2, bounce_y_m: 371.7 }),
+    ).toMatchObject({ bounce: null, bouncePlaceholder: false });
+    expect(vendorStrokeFacts({ stroke_type: "groundstroke" })).toMatchObject({
+      in: null,
+      netHit: null,
+      isServe: false,
+    });
+    expect(vendorStrokeFacts(null)).toBeNull();
+    expect(vendorStrokeFacts("stroke")).toBeNull();
+  });
+});
+
+test.describe("games", () => {
+  const won = (
+    id: string,
+    index: number,
+    winner: "p1" | "p2",
+    game: number,
+    now: Partial<LabelPoint> = {},
+  ) => point(id, index, [], { winner, gameNumber: game, ...now });
+
+  test("a game that ends undecided and a game with points past its deciding one, by the session's scoring", () => {
+    // Game 1: p1 wins four straight, then one more point sits in it.
+    // Game 2: 30–40 to the receiver, and the rows stop.
+    const rows = [
+      won("a", 0, "p1", 1),
+      won("b", 1, "p1", 1),
+      won("c", 2, "p1", 1),
+      won("d", 3, "p1", 1),
+      won("e", 4, "p2", 1),
+      won("f", 5, "p1", 2, { server: "p2" }),
+      won("g", 6, "p1", 2, { server: "p2" }),
+      won("h", 7, "p2", 2, { server: "p2" }),
+      won("i", 8, "p1", 2, { server: "p2" }),
+      won("j", 9, "p2", 2, { server: "p2" }),
+    ];
+    const card = buildScorecard(rows, marksOf({}), { adScoring: false });
+    expect(card.games).toEqual({
+      undecided: [
+        {
+          set: 1,
+          gameInSet: 2,
+          gameNumber: 2,
+          from: 6,
+          to: 10,
+          score: "30–40",
+          server: "p2",
+        },
+      ],
+      overflow: [
+        {
+          set: 1,
+          gameInSet: 1,
+          gameNumber: 1,
+          from: 5,
+          to: 5,
+          score: "Game–15",
+          server: "p1",
+        },
+      ],
+    });
+  });
+
+  test("with ad scoring, 40–40 and Ad are undecided; without it, the point at 40–40 decides", () => {
+    const deuce = ["p1", "p1", "p2", "p2", "p1", "p2", "p1", "p2"] as const;
+    const rows = deuce.map((winner, i) => won(`p${i}`, i, winner, 1));
+    const ad = buildScorecard(rows, marksOf({}), { adScoring: true });
+    expect(ad.games.undecided.map((g) => g.score)).toEqual(["40–40"]);
+    expect(ad.games.overflow).toEqual([]);
+    const noAd = buildScorecard(rows, marksOf({}), { adScoring: false });
+    expect(noAd.games.undecided).toEqual([]);
+    // Decided on the seventh point (p1 at 40–40); the eighth is past it, and
+    // still counted, as on the scoreboard.
+    expect(noAd.games.overflow).toEqual([
+      expect.objectContaining({ from: 8, to: 8, score: "Game–40" }),
+    ]);
+  });
+
+  test("a tiebreak, a deleted point, a let and a point with no game are not read", () => {
+    const rows = [
+      won("a", 0, "p1", 1, { gameType: "tiebreak" }),
+      won("b", 1, "p1", 2, { status: "deleted" }),
+      won("c", 2, "p1", 2, { ending: "let_replayed" }),
+      won("d", 3, "p1", 2),
+      point("e", 4, [], { gameNumber: null, winner: "p1" }),
+    ];
+    const card = buildScorecard(rows, marksOf({}), { adScoring: false });
+    expect(card.games.undecided).toEqual([
+      expect.objectContaining({ gameInSet: 2, from: 3, to: 4, score: "15–0" }),
+    ]);
+    expect(card.games.overflow).toEqual([]);
+  });
+});
+
+test.describe("winner flips by direction", () => {
+  test("each direction once, most points first; a point with no seed or deleted is not a flip", () => {
+    const rows = [
+      point("a", 0, [], { winner: "p2" }),
+      point("b", 1, [], { winner: "p2" }),
+      point("c", 2, [], { winner: "p1", seed: null, status: "added" }),
+      point("d", 3, [], { winner: null }),
+      point("e", 4, [], { winner: "p2", status: "deleted" }),
+      point("f", 5),
+    ];
+    expect(buildScorecard(rows, marksOf({})).winnerFlips).toEqual([
+      { from: "p1", to: "p2", points: 2 },
+      { from: "p1", to: null, points: 1 },
+    ]);
+  });
+});
+
+test.describe("last-stroke result changes", () => {
+  test("the last live stroke's result against its seed, grouped, with the vendor's own out call", () => {
+    const rows = [
+      // The last live stroke: a deleted stroke and a ghost after it do not count.
+      point("a", 0, [
+        shot("a1", { video_time: 1 }, { result: "out" }),
+        shot("a2", { video_time: 2 }, { status: "deleted" }),
+        shot("a3", { video_time: 3 }, { siteRemoval: "hit_after_fault" }),
+      ]),
+      point("b", 1, [shot("b1", {}, { result: "out" })]),
+      point("c", 2, [shot("c1", {}, { result: "net" })]),
+      point("d", 3, [shot("d1", { result: "out" }, { result: "in" })]),
+      // Unchanged, no seed (added), deleted point: none is a change.
+      point("e", 4, [shot("e1")]),
+      point("f", 5, [
+        shot("f1", {}, { status: "added", seed: null, result: "out" }),
+      ]),
+      point("g", 6, [shot("g1", {}, { result: "out" })], {
+        status: "deleted",
+      }),
+    ];
+    const card = buildScorecard(rows, marksOf({}), {
+      vendor: vendorOf({
+        a1: facts({ in: false }),
+        b1: facts({ in: true }),
+        c1: facts({ in: false }),
+        d1: facts({ in: false }),
+      }),
+    });
+    expect(card.lastResultChanges).toEqual([
+      { from: "in", to: "out", points: 2, vendorOut: 1 },
+      { from: "in", to: "net", points: 1, vendorOut: 1 },
+      { from: "out", to: "in", points: 1, vendorOut: 1 },
+    ]);
+  });
+
+  test("with the marks off a ghost is a row, and the last one", () => {
+    const rows = [
+      point("a", 0, [
+        shot("a1", { video_time: 1 }, { result: "out" }),
+        shot(
+          "a2",
+          { video_time: 2, result: null },
+          { siteRemoval: "hit_after_fault", result: "net" },
+        ),
+      ]),
+    ];
+    expect(
+      buildScorecard(rows, marksOf({}), { ghosts: false }).lastResultChanges,
+    ).toEqual([{ from: null, to: "net", points: 1, vendorOut: 0 }]);
+  });
+});
+
+test.describe("last landings", () => {
+  test("where the seed's landing went and what the labeller did with it", () => {
+    const noLanding = { landing_x: null, landing_y: null };
+    const rows = [
+      // Vendor bounce, placed by the labeller.
+      point("a", 0, [shot("a1", noLanding, { landingX: 1, landingY: 20 })]),
+      // Placeholder and net hit at once, left empty on a net.
+      point("b", 1, [
+        shot("b1", noLanding, {
+          result: "net",
+          landingX: null,
+          landingY: null,
+        }),
+      ]),
+      // Added by the labeller, left empty and in.
+      point("c", 2, [
+        shot("c1", noLanding, {
+          status: "added",
+          seed: null,
+          landingX: null,
+          landingY: null,
+        }),
+      ]),
+      // No result at all.
+      point("d", 3, [
+        shot("d1", noLanding, { result: null, landingX: null, landingY: null }),
+      ]),
+      // Seeded with a landing: not counted, whatever happened since.
+      point("e", 4, [shot("e1", {}, { landingX: null, landingY: null })]),
+    ];
+    const card = buildScorecard(rows, marksOf({}), {
+      vendor: vendorOf({
+        a1: facts(),
+        b1: facts({ bounce: null, bouncePlaceholder: true, netHit: true }),
+        d1: facts({ bounce: null }),
+      }),
+    });
+    expect(card.lastLandings).toEqual({
+      points: 4,
+      vendorBounce: 1,
+      vendorPlaceholder: 1,
+      netHits: 1,
+      added: 1,
+      placed: 1,
+      remaining: { in: 1, outOrNet: 1, noResult: 1 },
+    });
+  });
+});
+
+test.describe("out-call tails", () => {
+  const out = facts({ in: false });
+  test("one or two vendor strokes after the vendor's last non-serve out call, on checked points; whether the labeller removed them", () => {
+    const checked = { checkedAt: "2026-10-07T10:00:00Z" };
+    const rows = [
+      // Out call, then one stroke the labeller deleted: removed.
+      point(
+        "a",
+        0,
+        [
+          shot("a1", { video_time: 1 }),
+          shot("a2", { video_time: 2 }),
+          shot("a3", { video_time: 3 }, { status: "deleted" }),
+        ],
+        checked,
+      ),
+      // Out call, then a ghost and a kept stroke: partly.
+      point(
+        "b",
+        1,
+        [
+          shot("b1", { video_time: 1 }),
+          shot("b2", { video_time: 2 }, { siteRemoval: "hit_after_fault" }),
+          shot("b3", { video_time: 3 }),
+        ],
+        checked,
+      ),
+      // Out call, then one kept stroke: kept. The order is the SEEDED one.
+      point(
+        "c",
+        2,
+        [
+          shot("c2", { video_time: 2 }, { videoTime: 0.5 }),
+          shot("c1", { video_time: 1 }),
+        ],
+        checked,
+      ),
+      // A serve's out call is not an out call; three strokes after is no
+      // tail; an out call on the last stroke has no tail; unchecked points
+      // are not read.
+      point(
+        "d",
+        3,
+        [shot("d1", { video_time: 1 }), shot("d2", { video_time: 2 })],
+        checked,
+      ),
+      point(
+        "e",
+        4,
+        [1, 2, 3, 4].map((t) => shot(`e${t}`, { video_time: t })),
+        checked,
+      ),
+      point(
+        "f",
+        5,
+        [shot("f1", { video_time: 1 }), shot("f2", { video_time: 2 })],
+        checked,
+      ),
+      point("g", 6, [
+        shot("g1", { video_time: 1 }),
+        shot("g2", { video_time: 2 }),
+      ]),
+    ];
+    const card = buildScorecard(rows, marksOf({}), {
+      vendor: vendorOf({
+        a2: out,
+        b1: out,
+        c1: out,
+        d1: facts({ in: false, isServe: true }),
+        e1: out,
+        f2: out,
+        g1: out,
+      }),
+    });
+    expect(card.outCallTails).toEqual([
+      { number: 1, tail: 1, outcome: "removed" },
+      { number: 2, tail: 2, outcome: "partly" },
+      { number: 3, tail: 1, outcome: "kept" },
+    ]);
+  });
+});
+
+test.describe("serves", () => {
+  test("three or more serves in the live rows or the vendor's, and a serve after a serve called in", () => {
+    const serve = (id: string, t: number, now: Partial<LabelShot> = {}) =>
+      shot(id, { stroke: "first_serve", video_time: t }, now);
+    const rows = [
+      // Three live serves, each a fault but the last.
+      point("a", 0, [
+        serve("a1", 1, { result: "out" }),
+        serve("a2", 2, { result: "net" }),
+        serve("a3", 3),
+      ]),
+      // Three by the vendor's word, one of them deleted since and one the
+      // labeller made a forehand.
+      point("b", 1, [
+        serve("b1", 1, { result: "out" }),
+        serve("b2", 2, { status: "deleted" }),
+        shot(
+          "b3",
+          { stroke: "first_serve", video_time: 3 },
+          { stroke: "forehand" },
+        ),
+      ]),
+      // A serve after a serve the labeller called in.
+      point("c", 2, [
+        serve("c1", 1, { result: "in" }),
+        serve("c2", 2, { result: "in" }),
+      ]),
+      // A fault then a second serve: the usual pair, nothing to say. A
+      // deleted stroke between them is not in the live rows.
+      point("d", 3, [
+        serve("d1", 1, { result: "out" }),
+        shot("d2", { video_time: 2 }, { status: "deleted" }),
+        serve("d3", 3),
+      ]),
+    ];
+    const card = buildScorecard(rows, marksOf({}), {
+      vendor: vendorOf({
+        b1: facts({ isServe: true }),
+        b2: facts({ isServe: true }),
+        b3: facts({ isServe: true }),
+      }),
+    });
+    expect(card.serves).toEqual({ threeOrMore: [1, 2], serveAfterIn: [3] });
+  });
+});
+
+test.describe("the markdown", () => {
+  test("names the players and heads every section", () => {
+    const rows = [
+      point("a", 0, [shot("a1", {}, { result: "out" })], { winner: "p2" }),
+      point("b", 1, [shot("b1")]),
+    ];
+    const text = renderScorecard(
+      buildScorecard(rows, marksOf({}), { adScoring: false }),
+      { title: "Scorecard", names: { p1: "Lee", p2: "Vargas" } },
+    );
+    for (const heading of [
+      "## Marks, against what the labeller changed",
+      "## Changed with no `count` mark on the point",
+      "## Last strokes seeded In whose coordinates say Out or Net",
+      "## Strokes the labeller deleted",
+      "## Games",
+      "## Winner flips by direction",
+      "## Last-stroke result changes",
+      "## Last landings",
+      "## Out-call tails",
+      "## Serves",
+    ]) {
+      expect(text).toContain(heading);
+    }
+    expect(text).toContain(
+      "| 1 | winner Lee→Vargas; shot: 1 edited | none | none |",
+    );
+    expect(text).toContain("| Lee | Vargas | 1 |");
+    expect(text).toContain("| in | out | 1 | 0 (0%) |");
+    expect(text).toContain("| 1 | 1 | 1 | 1–2 | 15–15 | Lee |");
   });
 });
 

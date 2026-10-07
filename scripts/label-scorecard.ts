@@ -5,14 +5,17 @@
  *
  * Prints markdown: per mark code, how many marks there were and on how many the
  * labeller changed the point's winner, its ending or anything in the point;
- * then the unmarked winner changes, the last strokes seeded In whose
- * coordinates say Out or Net, and the deleted strokes by reason. The arithmetic
- * is `src/lib/services/labels/scorecard.ts`.
+ * then the changes no chip pointed at, the last strokes seeded In whose
+ * coordinates say Out or Net, the deleted strokes by reason, the games that
+ * do not add up, the winner flips, what happened to the last stroke's result
+ * and landing, the vendor's out-call tails, and the serves that cannot be
+ * right. The arithmetic is `src/lib/services/labels/scorecard.ts`.
  *
  * Reads only: every query is a SELECT, plus one storage download of the job's
  * results file. The marks are rebuilt from that file with the derivation code
  * in this checkout, hidden codes included, so the card measures today's rules,
- * even for a session labelled with marks off.
+ * even for a session labelled with marks off. The vendor's own calls come
+ * from `label_shots.vendor`, the stroke frozen on each row at seed time.
  *
  * LABELS ARE A REAL ATHLETE'S DATA: the output names the players. Keep it
  * outside the repo.
@@ -22,11 +25,14 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import { buildJobMarks, readLabelSessionRows } from "@/lib/data/labels-server";
 import {
   buildScorecard,
   openingMarks,
   renderScorecard,
+  vendorStrokeFacts,
+  type VendorStrokeFacts,
 } from "@/lib/services/labels/scorecard";
 import { DERIVATION_VERSION } from "@/lib/services/splitstep/derivation";
 import { loadEnvLocal } from "./lib/env";
@@ -55,7 +61,28 @@ async function main() {
   });
   const marks = openingMarks(fileMarks, built.points, built.adScoring);
 
-  const card = buildScorecard(built.points, marks);
+  // The vendor's stroke, frozen on each row: the loader's column list leaves
+  // it out, since the console never reads it.
+  const vendor = new Map<string, VendorStrokeFacts>();
+  const vendorRows = await readAllPages<{ id: string; vendor: unknown }>(
+    db
+      .from("label_shots")
+      .select("id, vendor")
+      .eq("session_id", built.id)
+      .order("id"),
+    "Could not read the vendor strokes",
+  );
+  for (const row of vendorRows) {
+    const facts = vendorStrokeFacts(row.vendor);
+    if (facts) vendor.set(row.id, facts);
+  }
+
+  const card = buildScorecard(built.points, marks, {
+    adScoring: built.adScoring,
+    // A site-removed stroke is a ghost only while the marks are on.
+    ghosts: built.marksEnabled,
+    vendor,
+  });
   const notes = [
     `session \`${built.id}\` (${built.status})`,
     `seeded on derivation ${built.derivationVersion}, marks rebuilt on ${DERIVATION_VERSION}`,

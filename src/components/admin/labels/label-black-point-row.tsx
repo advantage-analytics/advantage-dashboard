@@ -287,6 +287,7 @@ export const BlackPointRow = memo(function BlackPointRow({
               edit={edit}
               operations={operations}
               menu={tone}
+              ghosts={drawsGhosts(marks)}
             />
           ) : null}
         </span>

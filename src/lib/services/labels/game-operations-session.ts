@@ -4,7 +4,12 @@
  * game-operations.ts.
  *
  * Every write is an UPDATE on `label_points`, one per live point of the game,
- * naming only `server`, `game_type` and `status`.
+ * naming only `server`, `game_type` and `status` — and, on a point whose
+ * players switch with its server, `winner` and `ended_by`, with its flipped
+ * strokes then written on `label_shots` (`writeShotSwaps`, grouped by value
+ * tuple as a move's are). The shots are read only once a dry plan moves some
+ * point's server, the same way the move reads them only when the server
+ * switches.
  *
  * A game is several rows with no transaction across them. Each row is written
  * compare-and-set on the `updated_at` it was read with; a row that changed
@@ -25,10 +30,18 @@ import {
   planGameType,
   type GamePoint,
   type GamePointWrite,
+  type GameServerPoint,
   type PlannedGameWrites,
 } from "./game-operations";
 import { isLabelGame, type LabelGame } from "./operations";
-import { gated, normaliseId, type LabelOpResult } from "./operations-session";
+import {
+  gated,
+  normaliseId,
+  readShotsOfPoints,
+  writeShotSwaps,
+  type LabelOpResult,
+} from "./operations-session";
+import type { ShotSwapWrite } from "./player-swap";
 import {
   isLabelGameType,
   type LabelEnding,
@@ -38,14 +51,19 @@ import {
   type LabelSide,
 } from "./session";
 
+/** One point as it now stands: the winner and ended by are the row's own unless they flipped. */
 export interface LabelGamePointResult {
   id: string;
   server: LabelSide;
   gameType: LabelGameType;
   status: LabelPointStatus;
+  winner: LabelSide | null;
+  endedBy: LabelSide | null;
 }
 export type LabelGameWriteResult = LabelOpResult<{
   points: LabelGamePointResult[];
+  /** The strokes flipped with their points' players (player-swap.ts); empty when none. */
+  shots: ShotSwapWrite[];
 }>;
 
 const BUSY = "This game changed while it was saving. Try again.";
@@ -109,16 +127,58 @@ async function readGame(
 }
 
 /**
+ * Plan the game as read, with its strokes only when they can matter: a dry
+ * plan over strokeless points says whether any server moves, and only then
+ * are the game's shots read and the plan run again over them.
+ */
+async function planGame(
+  supabase: AdminClient,
+  rows: readonly GameRow[],
+  plan: (points: readonly GameServerPoint[]) => PlannedGameWrites,
+  readsShots: boolean,
+): Promise<PlannedGameWrites> {
+  const points: GameServerPoint[] = rows.map((row) => ({
+    ...toGamePoint(row),
+    shots: [],
+  }));
+  const dry = plan(points);
+  if ("error" in dry || !readsShots) return dry;
+  const serverOf = new Map(rows.map((row) => [row.id, row.server]));
+  const moves = dry.writes.some(
+    (write) => write.server !== serverOf.get(write.id),
+  );
+  if (!moves) return dry;
+
+  const owned = await readShotsOfPoints(
+    supabase,
+    rows.map((row) => row.id),
+  );
+  if ("error" in owned) return owned;
+  const shotsOf = new Map<string, GameServerPoint["shots"][number][]>();
+  for (const shot of owned.shots) {
+    const list = shotsOf.get(shot.labelPointId) ?? [];
+    list.push(shot);
+    shotsOf.set(shot.labelPointId, list);
+  }
+  return plan(
+    points.map((point) => ({ ...point, shots: shotsOf.get(point.id) ?? [] })),
+  );
+}
+
+/**
  * Read the game, plan with `plan`, and write every row compare-and-set on
- * its `updated_at`; start over when one changed under the plan. The session
- * is checked once, before the first read.
+ * its `updated_at`; start over when one changed under the plan. The flipped
+ * strokes, if any, are written once every point row is. The session is
+ * checked once, before the first read.
  */
 async function writeGame(
   supabase: AdminClient,
   sessionId: string,
   game: LabelGame,
-  plan: (points: readonly GamePoint[]) => PlannedGameWrites,
+  plan: (points: readonly GameServerPoint[]) => PlannedGameWrites,
   what: string,
+  /** Whether `plan` swaps players, and so needs the game's strokes. */
+  readsShots: boolean,
 ): Promise<LabelGameWriteResult> {
   const closed = await checkSessionOpen(supabase, sessionId);
   if (closed) return { error: closed };
@@ -126,7 +186,7 @@ async function writeGame(
   for (let attempt = 0; attempt < MAX_GAME_ATTEMPTS; attempt += 1) {
     const read = await readGame(supabase, sessionId, game);
     if ("error" in read) return read;
-    const planned = plan(read.rows.map(toGamePoint));
+    const planned = await planGame(supabase, read.rows, plan, readsShots);
     if ("error" in planned) return planned;
 
     const byId = new Map(read.rows.map((row) => [row.id, row]));
@@ -151,9 +211,16 @@ async function writeGame(
       }
     }
     if (!raced) {
+      const swapFailed = await writeShotSwaps(
+        supabase,
+        planned.shots,
+        "switch the points' players",
+      );
+      if (swapFailed) return { error: swapFailed };
       return {
         ok: true,
         points: planned.writes.map((write) => toResult(write, byId)),
+        shots: planned.shots,
       };
     }
   }
@@ -164,11 +231,15 @@ function toResult(
   write: GamePointWrite,
   rows: ReadonlyMap<string, GameRow>,
 ): LabelGamePointResult {
+  const row = rows.get(write.id);
   return {
     id: write.id,
     server: write.server,
-    gameType: write.game_type ?? rows.get(write.id)?.game_type ?? "game",
+    gameType: write.game_type ?? row?.game_type ?? "game",
     status: write.status,
+    winner: "winner" in write ? (write.winner ?? null) : (row?.winner ?? null),
+    endedBy:
+      "ended_by" in write ? (write.ended_by ?? null) : (row?.ended_by ?? null),
   };
 }
 
@@ -179,7 +250,10 @@ function isLabelSide(value: unknown): value is LabelSide {
   );
 }
 
-/** Give a game its server: every live point, the rotation in a tiebreak. */
+/**
+ * Give a game its server: every live point, the rotation in a tiebreak, and
+ * the players' swap on each point whose strokes contradict its new server.
+ */
 export async function writeLabelGameServer(params: {
   supabase: AdminClient;
   sessionId: unknown;
@@ -201,6 +275,7 @@ export async function writeLabelGameServer(params: {
     game,
     (points) => planGameServer(points, game, server),
     "set the game's server",
+    true,
   );
 }
 
@@ -228,6 +303,7 @@ export async function writeLabelGameType(params: {
     game,
     (points) => planGameType(points, game, type),
     "set the game's type",
+    false,
   );
 }
 

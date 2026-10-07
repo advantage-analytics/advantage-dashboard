@@ -260,24 +260,47 @@ type SeedableShot = Pick<
   | "video_time"
 >;
 
+/** The parsed vendor strokes by `event_id`; one the parse layer dropped is absent. */
+function parsedById(
+  rawStrokes: readonly RawSplitStepStroke[],
+): Map<number, SplitStepStroke> {
+  const parsed = new Map<number, SplitStepStroke>();
+  for (const stroke of parseStrokes([...rawStrokes]).strokes) {
+    parsed.set(stroke.eventId, stroke);
+  }
+  return parsed;
+}
+
+/**
+ * The vendor's bounce in the court frame, when the parse layer kept it. The
+ * transcript nulls a landing it would not count for stats (a rally ball more
+ * than 6 m wide or 14 m long, transcript.ts `rallyLandingUsable`); the labeller
+ * judges those balls, so the seed keeps the bounce and only the parse layer's
+ * enclosure guard leaves a landing empty.
+ */
+function parsedLanding(
+  stroke: SplitStepStroke | undefined,
+): { x: number; y: number } | null {
+  if (!stroke || stroke.bounceX === null || stroke.bounceY === null) {
+    return null;
+  }
+  return metersToCourtFrame(stroke.bounceX, stroke.bounceY);
+}
+
 /**
  * The strokes the derivation removed before building the transcript (phantom
  * swings between serves, played.ts), per rally, shaped like the shots it kept:
  * the labeller judges that removal, so the seed is one row per vendor stroke.
- * They carry no result and no landing.
+ * They carry no result; their landing is the vendor's bounce, for the day one
+ * is restored.
  *
  * The transcript's own shots supply which vendor label is player 1 and the trim
  * offset on `video_time`.
  */
 function droppedShotsByRally(
   transcript: Transcript,
-  rawStrokes: readonly RawSplitStepStroke[],
+  parsed: ReadonlyMap<number, SplitStepStroke>,
 ): Map<number, SeedableShot[]> {
-  const parsed = new Map<number, SplitStepStroke>();
-  for (const stroke of parseStrokes([...rawStrokes]).strokes) {
-    parsed.set(stroke.eventId, stroke);
-  }
-
   const kept = new Set<number>();
   const isPlayer1 = new Map<string, boolean>();
   let offset: number | null = null;
@@ -303,6 +326,7 @@ function droppedShotsByRally(
       stroke.playerX !== null && stroke.playerY !== null
         ? metersToCourtFrame(stroke.playerX, stroke.playerY)
         : null;
+    const landing = parsedLanding(stroke);
     const list = dropped.get(stroke.rallyId) ?? [];
     list.push({
       event_id: stroke.eventId,
@@ -311,8 +335,8 @@ function droppedShotsByRally(
       result: null,
       contact_x: contact?.x ?? null,
       contact_y: contact?.y ?? null,
-      landing_x: null,
-      landing_y: null,
+      landing_x: landing?.x ?? null,
+      landing_y: landing?.y ?? null,
       video_time: stroke.videoTime + (offset ?? 0),
     });
     dropped.set(stroke.rallyId, list);
@@ -356,7 +380,8 @@ export function buildLabelSeed(
     resolved.set(settled.rallyId, settled.winner !== null);
   }
 
-  const dropped = droppedShotsByRally(transcript, rawStrokes);
+  const parsed = parsedById(rawStrokes);
+  const dropped = droppedShotsByRally(transcript, parsed);
 
   const points = transcript.points.map((point, index): LabelPointSeed => {
     // Written unconditionally: a new session defaults to `marks_enabled`, and
@@ -376,6 +401,11 @@ export function buildLabelSeed(
           `results file has no stroke with event_id ${shot.event_id}`,
         );
       }
+      // The transcript's landing when it kept one, else the vendor's bounce.
+      const landing =
+        shot.landing_x !== null && shot.landing_y !== null
+          ? { x: shot.landing_x, y: shot.landing_y }
+          : parsedLanding(parsed.get(shot.event_id));
       const values = {
         hitter: labelSideOf(shot.is_player1),
         stroke: labelStroke(shot.shot_type, vendor.stroke_side),
@@ -385,8 +415,8 @@ export function buildLabelSeed(
         spin: labelSpin(vendor.spin_type),
         contact_x: shot.contact_x,
         contact_y: shot.contact_y,
-        landing_x: shot.landing_x,
-        landing_y: shot.landing_y,
+        landing_x: landing?.x ?? null,
+        landing_y: landing?.y ?? null,
         video_time: shot.video_time,
       };
       return {

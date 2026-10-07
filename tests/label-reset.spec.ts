@@ -25,6 +25,7 @@ import {
   POINT_1_SHOTS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShotRow,
 } from "./fixtures/label-session";
 
 // Reset: an edited shot or point back to the values it was seeded with — the
@@ -93,13 +94,18 @@ test.describe("planShotReset", () => {
 
 test.describe("planPointReset", () => {
   test("writes the point's own seeded fields, and unchanged", () => {
-    const plan = planPointReset({ status: "edited", seed: POINT_SEED });
+    const plan = planPointReset({
+      status: "edited",
+      seed: POINT_SEED,
+      shots: [],
+    });
     expect(plan).toEqual({
       ok: true,
       write: { ...POINT_SEED, status: "unchanged" },
+      shots: [],
     });
-    // Never the note, the checked mark, the game type or anything on the
-    // strokes.
+    // Never the note, the checked mark, the game type or a stroke's other
+    // values.
     if ("error" in plan) throw new Error(plan.error);
     expect(plan.write).not.toHaveProperty("game_type");
     expect(Object.keys(plan.write).sort()).toEqual(
@@ -116,16 +122,69 @@ test.describe("planPointReset", () => {
     );
   });
 
+  test("puts each stroke's hitter back to its seed: a swapped stroke returns to kept, a matching or unseeded one gets no write, a tombstone keeps deleted", () => {
+    const byId = new Map(POINT_1_SHOTS.map((s) => [s.id, s]));
+    const swapped = (id: string, hitter: "p1" | "p2") => ({
+      ...byId.get(id)!,
+      hitter,
+      status: "edited" as const,
+    });
+    const plan = planPointReset({
+      status: "edited",
+      seed: POINT_SEED,
+      shots: [
+        swapped("s-serve", "p2"), // seeded p1
+        byId.get("s-return")!, // seeded p2, held p2: nothing to put back
+        {
+          ...byId.get("s-phantom")!, // a tombstone, flipped to p2 by a swap
+          hitter: "p2",
+          statusBeforeDelete: "edited",
+        },
+        { ...byId.get("s-added")!, hitter: "p2" }, // no seed: keeps its hitter
+      ],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.shots).toEqual([
+      {
+        id: "s-serve",
+        hitter: "p1",
+        status: "kept",
+        status_before_delete: null,
+      },
+      {
+        id: "s-phantom",
+        hitter: "p1",
+        status: "deleted",
+        status_before_delete: "kept",
+      },
+    ]);
+    // A stroke edited elsewhere stays edited once its hitter is back.
+    const widened = planPointReset({
+      status: "edited",
+      seed: POINT_SEED,
+      shots: [{ ...swapped("s-serve", "p2"), contactX: 1.4 }],
+    });
+    if ("error" in widened) throw new Error(widened.error);
+    expect(widened.shots).toEqual([
+      {
+        id: "s-serve",
+        hitter: "p1",
+        status: "edited",
+        status_before_delete: null,
+      },
+    ]);
+  });
+
   test("refuses without a seed, on a tombstone and on an added point", () => {
-    expect(planPointReset({ status: "edited", seed: null })).toHaveProperty(
-      "error",
-    );
     expect(
-      planPointReset({ status: "deleted", seed: POINT_SEED }),
+      planPointReset({ status: "edited", seed: null, shots: [] }),
     ).toHaveProperty("error");
-    expect(planPointReset({ status: "added", seed: null })).toHaveProperty(
-      "error",
-    );
+    expect(
+      planPointReset({ status: "deleted", seed: POINT_SEED, shots: [] }),
+    ).toHaveProperty("error");
+    expect(
+      planPointReset({ status: "added", seed: null, shots: [] }),
+    ).toHaveProperty("error");
   });
 });
 
@@ -166,7 +225,7 @@ test.describe("the console's rows", () => {
     expect(applyShotReset(added)).toBe(added);
   });
 
-  test("applyPointReset restores the point's fields, not its shots, check, note or game type", () => {
+  test("applyPointReset restores the point's fields and its strokes' hitters, not its check, note or game type", () => {
     const p1 = labelSessionFixture().points.find(
       (p) => p.id === FIXTURE_POINT_IDS.P1,
     )!;
@@ -186,7 +245,39 @@ test.describe("the console's rows", () => {
       note: "long rally",
       gameType: "tiebreak",
     });
+    // Every hitter is its seed's already: the strokes are the same array.
     expect(reset.shots).toBe(checked.shots);
+
+    // After "Switch players": every hitter flipped, and the seeded ones go
+    // back; the added stroke keeps the hitter it was given.
+    const flipped = {
+      ...checked,
+      shots: checked.shots.map((s) => ({
+        ...s,
+        hitter: s.hitter === "p1" ? ("p2" as const) : ("p1" as const),
+        status:
+          s.status === "kept" || s.status === "edited"
+            ? ("edited" as const)
+            : s.status,
+      })),
+    };
+    const back = applyPointReset(flipped);
+    expect(Object.fromEntries(back.shots.map((s) => [s.id, s.hitter]))).toEqual(
+      {
+        "s-serve": "p1",
+        "s-return": "p2",
+        "s-phantom": "p1",
+        "s-added": "p2",
+      },
+    );
+    expect(Object.fromEntries(back.shots.map((s) => [s.id, s.status]))).toEqual(
+      {
+        "s-serve": "kept",
+        "s-return": "edited", // still 30 cm off its seed
+        "s-phantom": "deleted",
+        "s-added": "added",
+      },
+    );
   });
 });
 
@@ -324,15 +415,28 @@ test.describe("the session's ad scoring", () => {
 
 // ── The services, over a fake client ───────────────────────────────────────
 
+/**
+ * A shot's row, a point's row and the point's shot rows (`shots`), read by
+ * `label_point_id` whether by a point reset or by the ending a shot reset
+ * settles. With no point given, a shot's point is a blank one; the point row
+ * takes each successful `label_points` update.
+ */
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
   point?: Record<string, unknown> | null;
+  /** The point's shot rows, as a point reset reads them by `label_point_id`. */
+  shots?: Record<string, unknown>[];
   sessionStatus?: string;
   raced?: boolean;
 }) {
+  let point = rows.point === undefined ? BLANK_POINT : rows.point;
   return fakeLabelClient((call) => {
     if (call.op === "update") {
-      return rows.raced ? { data: [], error: null } : undefined;
+      if (rows.raced) return { data: [], error: null };
+      if (call.table === "label_points" && point) {
+        point = { ...point, ...call.values };
+      }
+      return undefined;
     }
     if (call.table === "label_sessions") {
       return {
@@ -341,10 +445,12 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_shots") {
-      return { data: rows.shot ?? null, error: null };
+      return call.in || "label_point_id" in call.filters
+        ? { data: rows.shots ?? [], error: null }
+        : { data: rows.shot ?? null, error: null };
     }
     if (call.table === "label_points") {
-      return { data: rows.point ?? null, error: null };
+      return { data: point, error: null };
     }
     return undefined;
   });
@@ -353,10 +459,26 @@ function fakeClient(rows: {
 const shotRow = (fields: Record<string, unknown> = {}) => ({
   id: SHOT_ID,
   session_id: SESSION_ID,
+  label_point_id: POINT_ID,
   status: "edited",
   seed: SHOT_SEED,
   ...fields,
 });
+/** A shot's point when the test says nothing of it: no ending, no seed. */
+const BLANK_POINT = {
+  id: POINT_ID,
+  session_id: SESSION_ID,
+  updated_at: "2026-10-01T10:00:00+00:00",
+  status: "unchanged",
+  seed: null,
+  set_number: 1,
+  game_number: 1,
+  server: "p1",
+  serve_side: null,
+  winner: null,
+  ending: null,
+  ended_by: null,
+};
 const pointRow = (fields: Record<string, unknown> = {}) => ({
   id: POINT_ID,
   session_id: SESSION_ID,
@@ -393,7 +515,7 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     expect(result).toEqual({ ok: true, status: "kept" });
     expect(fake.calls[0]).toMatchObject({
       table: "label_shots",
-      columns: "id, session_id, status, seed",
+      columns: "id, session_id, label_point_id, status, seed",
     });
     const writes = fake.calls.filter((c) => c.op === "update");
     expect(writes).toEqual([
@@ -408,14 +530,64 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
     expect(writes[0].values).not.toHaveProperty("unclear");
   });
 
-  test("a point reset writes its own fields and unchanged only", async () => {
-    const fake = fakeClient({ point: pointRow() });
+  test("a shot reset settles the point's ending off the seeded values, in the same call", async () => {
+    // Vargas's backhand, seeded in, was marked out by hand: the point read
+    // as Lee's on her error. Reset puts the ball in — her winner.
+    const fake = fakeClient({
+      shot: shotRow({ result: "out" }),
+      shots: [
+        labelShotRow(SHOT_ID, POINT_ID, {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "out",
+          status: "edited",
+          seed: SHOT_SEED,
+        }),
+      ],
+      point: { ...BLANK_POINT, winner: "p1", ending: "error", ended_by: "p2" },
+    });
+    expect(
+      await writeLabelShotReset({ supabase: fake.supabase, shotId: SHOT_ID }),
+    ).toEqual({
+      ok: true,
+      status: "kept",
+      point: {
+        ending: "winner",
+        endedBy: "p2",
+        winner: "p2",
+        status: "edited",
+      },
+    });
+    expect(
+      fake.calls
+        .filter((c) => c.op === "update")
+        .map((c) => [c.table, c.values]),
+    ).toEqual([
+      ["label_shots", { ...SHOT_SEED, status: "kept" }],
+      [
+        "label_points",
+        { ending: "winner", ended_by: "p2", winner: "p2", status: "edited" },
+      ],
+    ]);
+  });
+
+  test("a point reset writes its own fields and unchanged; its strokes are read, and written only where a hitter differs from its seed", async () => {
+    const fake = fakeClient({
+      point: pointRow(),
+      shots: [
+        labelShotRow("s-1", POINT_ID, { hitter: "p1", stroke: "first_serve" }),
+        labelShotRow("s-2", POINT_ID, { hitter: "p2", seed: null }),
+      ],
+    });
     expect(
       await writeLabelPointReset({
         supabase: fake.supabase,
         pointId: POINT_ID,
       }),
-    ).toEqual({ ok: true, status: "unchanged" });
+    ).toEqual({ ok: true, status: "unchanged", shots: [] });
+    expect(
+      fake.calls.find((c) => c.table === "label_shots" && c.op === "select"),
+    ).toMatchObject({ in: { label_point_id: [POINT_ID] } });
     const writes = fake.calls.filter((c) => c.op === "update");
     expect(writes).toEqual([
       {
@@ -425,7 +597,84 @@ test.describe("resetLabelShot / resetLabelPoint", () => {
         filters: { id: POINT_ID, status: "edited" },
       },
     ]);
-    expect(fake.calls.every((c) => c.table !== "label_shots")).toBe(true);
+  });
+
+  test("a point reset after Switch players: the point first, compare-and-set, then each seeded stroke's hitter back in grouped writes — label_points and label_shots only", async () => {
+    // A kept forehand's seed (`labelShotRow`), under the other hitter.
+    const seededAs = (hitter: "p1" | "p2") =>
+      labelShotRow("x", POINT_ID, { hitter }).seed;
+    const fake = fakeClient({
+      point: pointRow(),
+      shots: [
+        // Flipped to p2; the hitter is all that differs from its seed.
+        labelShotRow("s-1", POINT_ID, {
+          hitter: "p2",
+          status: "edited",
+          seed: seededAs("p1"),
+        }),
+        // Flipped to p1, and 30 cm off its seed besides: stays edited.
+        labelShotRow("s-2", POINT_ID, {
+          hitter: "p1",
+          status: "edited",
+          seed: { ...SHOT_SEED, hitter: "p2" },
+        }),
+        labelShotRow("s-3", POINT_ID, {
+          hitter: "p2",
+          status: "edited",
+          seed: seededAs("p1"),
+        }),
+        // The labeller's own stroke, flipped with the rest: it has no seed.
+        labelShotRow("s-4", POINT_ID, {
+          hitter: "p2",
+          status: "added",
+          seed: null,
+        }),
+      ],
+    });
+    const result = await writeLabelPointReset({
+      supabase: fake.supabase,
+      pointId: POINT_ID,
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "unchanged",
+      shots: [
+        { id: "s-1", hitter: "p1", status: "kept", status_before_delete: null },
+        {
+          id: "s-2",
+          hitter: "p2",
+          status: "edited",
+          status_before_delete: null,
+        },
+        { id: "s-3", hitter: "p1", status: "kept", status_before_delete: null },
+      ],
+    });
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_points", "select"],
+      ["label_sessions", "select"],
+      ["label_shots", "select"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "update"],
+    ]);
+    const updates = fake.calls.filter((c) => c.op === "update");
+    expect(updates[0]).toMatchObject({
+      filters: { id: POINT_ID, status: "edited" },
+      values: { ...POINT_SEED, status: "unchanged" },
+    });
+    expect(updates.slice(1).map((c) => [c.values, c.in])).toEqual([
+      [
+        { hitter: "p1", status: "kept", status_before_delete: null },
+        { id: ["s-1", "s-3"] },
+      ],
+      [
+        { hitter: "p2", status: "edited", status_before_delete: null },
+        { id: ["s-2"] },
+      ],
+    ]);
+    for (const call of fake.calls) {
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
+    }
   });
 
   test("refuse a shot with no seed, a tombstone and an added shot, writing nothing", async () => {

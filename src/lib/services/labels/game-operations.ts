@@ -7,7 +7,11 @@
  * A game is the stored `(set_number, game_number)` within a session. Both
  * operations touch every live point of the game and nothing else, naming only
  * `server`, `game_type` (the type operation) and the `status` the server change
- * implies.
+ * implies — plus, for the server operation, the players' swap: a point whose
+ * strokes contradict its new server switches players as a whole, the rule a
+ * move runs (player-swap.ts `planPlayerSwap`), so its `winner`, `ended_by` and
+ * every stroke's `hitter` flip with it. A point already served by the new
+ * server, or with no stroke naming a hitter, is only re-served.
  *
  * In a tiebreak the serve rotates 1-2-2. Only a point that was actually served
  * takes a turn: a replayed let or a `not_a_point` row takes the server of the
@@ -26,6 +30,11 @@ import {
 } from "./session";
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
 import type { LabelGame } from "./operations";
+import {
+  planPlayerSwap,
+  type ShotSwapWrite,
+  type SwapShot,
+} from "./player-swap";
 
 type LivePointStatus = Exclude<LabelPointStatus, "deleted">;
 
@@ -46,6 +55,9 @@ export type GamePoint = Pick<
   | "seed"
 >;
 
+/** What the server operation reads: a game point and its strokes, for the swap. */
+export type GameServerPoint = GamePoint & { shots: readonly SwapShot[] };
+
 /** The columns one point of the game is written with. Nothing else. */
 export interface GamePointWrite {
   id: string;
@@ -53,10 +65,19 @@ export interface GamePointWrite {
   /** Present only when the game's type is being set. */
   game_type?: LabelGameType;
   status: LivePointStatus;
+  /** Present only when the point's players switch with its server. */
+  winner?: LabelSide | null;
+  ended_by?: LabelSide | null;
 }
 
 export type PlannedGameWrites =
-  { ok: true; writes: GamePointWrite[] } | { error: string };
+  | {
+      ok: true;
+      writes: GamePointWrite[];
+      /** The strokes flipped with their points' players; empty when none. */
+      shots: ShotSwapWrite[];
+    }
+  | { error: string };
 
 /** The endings that are not served points: the rotation does not move. */
 const UNSERVED_ENDINGS: ReadonlySet<NonNullable<LabelPoint["ending"]>> =
@@ -148,40 +169,67 @@ export function rotateServers(
   return servers as LabelSide[];
 }
 
-function statusAfterServer(
+function statusAfterChange(
   point: GamePoint,
-  server: LabelSide,
+  change: {
+    server: LabelSide;
+    winner?: LabelSide | null;
+    ended_by?: LabelSide | null;
+  },
 ): LivePointStatus {
   const status = labelPointStatusAfterChange(
     { ...labelPointFields(point), status: point.status, seed: point.seed },
-    { server },
+    change,
   );
   // Only live points reach here, so the rule never hands back `deleted`.
   return status as LivePointStatus;
 }
 
+function statusAfterServer(
+  point: GamePoint,
+  server: LabelSide,
+): LivePointStatus {
+  return statusAfterChange(point, { server });
+}
+
 /**
  * Give game `game` the server `server`: one write per live point. In an
  * ordinary game every point gets `server`; in a tiebreak `server` is who serves
- * point 1 and the rest follow the rotation. Each status comes from
- * `labelPointStatusAfterChange` against the point's seed.
+ * point 1 and the rest follow the rotation. A point whose strokes contradict
+ * its new server (`planPlayerSwap`) carries its flipped winner and ended by,
+ * and its strokes come back flipped in `shots`. Each status comes from
+ * `labelPointStatusAfterChange` against the point's seed, over the whole
+ * change.
  */
 export function planGameServer(
-  points: readonly GamePoint[],
+  points: readonly GameServerPoint[],
   game: LabelGame,
   server: LabelSide,
 ): PlannedGameWrites {
   const live = livePointsOfGame(points, game);
   if (live.length === 0) return { error: "That game has no live points." };
   const servers = rotateServers(live, gameTypeOf(live), server);
-  return {
-    ok: true,
-    writes: live.map((point, i) => ({
+  const shots: ShotSwapWrite[] = [];
+  const writes = live.map((point, i) => {
+    const swap = planPlayerSwap(point, servers[i]);
+    if (!swap) {
+      return {
+        id: point.id,
+        server: servers[i],
+        status: statusAfterServer(point, servers[i]),
+      };
+    }
+    shots.push(...swap.shots);
+    const change = { server: servers[i], ...swap.point };
+    return {
       id: point.id,
       server: servers[i],
-      status: statusAfterServer(point, servers[i]),
-    })),
-  };
+      status: statusAfterChange(point, change),
+      winner: swap.point.winner,
+      ended_by: swap.point.ended_by,
+    };
+  });
+  return { ok: true, writes, shots };
 }
 
 /**
@@ -211,10 +259,15 @@ export function planGameType(
       game_type: type,
       status: statusAfterServer(point, servers[i]),
     })),
+    shots: [],
   };
 }
 
-/** The console's rows with `writes` applied; order is kept. */
+/**
+ * The console's rows with `writes` applied; order is kept. A write that
+ * carries the swap's winner and ended by applies those too; the flipped
+ * strokes are the plan's `shots`, applied by player-swap.ts `applyShotSwaps`.
+ */
 export function applyGameWrites<T extends LabelPoint>(
   points: readonly T[],
   writes: readonly GamePointWrite[],
@@ -228,6 +281,8 @@ export function applyGameWrites<T extends LabelPoint>(
       server: write.server,
       status: write.status,
       gameType: write.game_type ?? point.gameType,
+      winner: "winner" in write ? (write.winner ?? null) : point.winner,
+      endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
     };
   });
 }

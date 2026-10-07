@@ -17,6 +17,15 @@
  *   its server changes and its own strokes say the old server served it, its
  *   players switch as a whole (player-swap.ts), read once against where it ends
  *   up.
+ *
+ * The other way round is a game that ends short — 30–40 and then the next
+ * game's rows (`gameUnderflow`). `planGamePull` takes the next game's leading
+ * rows into it one at a time until it is settled, each taking the short
+ * game's server, and carries on into the donor when that is left short in
+ * turn. It stops with `add_point` instead of a plan when the cascade would
+ * read from more than two games or a donor runs out before the game is
+ * settled: then the game is more likely missing a point the vendor never
+ * saw than holding the next game's.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
@@ -27,7 +36,13 @@ import {
   type ShotSwapWrite,
   type SwapShot,
 } from "./player-swap";
-import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
+import {
+  gameDecided,
+  gameKey,
+  isCountedPoint,
+  labelScores,
+  type LabelGameBand,
+} from "./score";
 import {
   opponent,
   type LabelGameType,
@@ -90,6 +105,45 @@ export type PlannedGameShift =
       shots: ShotSwapWrite[];
       summary: GameShiftSummary;
     }
+  | { error: string };
+
+/**
+ * One ordinary game whose rows stop short of settling it. Read off the
+ * scoreboard's bands, so its score is the call as the band reads it.
+ */
+export interface GameUnderflow {
+  setNumber: number;
+  gameNumber: number;
+  /** Its rank in its set — the number the band names it by. */
+  gameInSet: number;
+  /** The call as it stands, the game's server first: "30–40". */
+  score: string;
+  /** The game's live rows, in `point_index` order; never empty. */
+  rows: GamePoint[];
+  /** The last live row: the slot sits after it and "Add point" inserts there. */
+  lastPointId: string;
+}
+
+export interface GamePullSummary {
+  /** Rows pulled in. */
+  points: number;
+  /** Games the rows were pulled FROM — the cascade's length, 1 or 2. */
+  games: number;
+  /** The first game pulled from — the slot's words. */
+  fromGame: GameShiftGameRef;
+  /** Pulled rows whose players switch — the tooltip's warning. */
+  swapped: number;
+}
+
+export type PlannedGamePull =
+  | {
+      ok: true;
+      writes: GameShiftWrite[];
+      shots: ShotSwapWrite[];
+      summary: GamePullSummary;
+    }
+  /** No plan: the game is more likely missing a point than holding the next game's. */
+  | { kind: "add_point" }
   | { error: string };
 
 interface Accumulator {
@@ -407,4 +461,189 @@ export function applyGameShift<
       endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
     };
   });
+}
+
+// ── A game that ends short ─────────────────────────────────────────────────
+
+/** The live rows with a set and a game, in `point_index` order. */
+function liveRows<T extends GamePoint>(points: readonly T[]): T[] {
+  return points
+    .filter(
+      (p) =>
+        p.status !== "deleted" && p.setNumber !== null && p.gameNumber !== null,
+    )
+    .sort((a, b) => a.pointIndex - b.pointIndex);
+}
+
+/** Whether a band's game is an ordinary one left short with a point in it. */
+function bandIsShort(band: LabelGameBand): boolean {
+  return (
+    band.gameType === "game" &&
+    band.outcome.kind === "unfinished" &&
+    band.points.p1 + band.points.p2 > 0
+  );
+}
+
+/**
+ * Every ordinary game with a counted point whose rows stop short of settling
+ * it, in the order the games appear — except the last game of each set,
+ * which has no game of its own set after it to read from. The last game of
+ * the session is the last of its set too, so it is listed only when the
+ * labeller has not said the video ends early: then the rows end on an
+ * unfinished game the vendor cut, not the film.
+ */
+export function gameUnderflow(
+  points: readonly GamePoint[],
+  adScoring: boolean,
+  opts: { videoEndsEarly: boolean | null },
+): GameUnderflow[] {
+  const live = liveRows(points);
+  const bands = labelScores(live, adScoring).games;
+  if (bands.length === 0) return [];
+  const lastOfSet = new Map<number, string>();
+  for (const band of bands) lastOfSet.set(band.setNumber, gameKey(band));
+  const lastOfSession = gameKey(bands[bands.length - 1]);
+  const out: GameUnderflow[] = [];
+  for (const band of bands) {
+    if (!bandIsShort(band)) continue;
+    const key = gameKey(band);
+    if (lastOfSet.get(band.setNumber) === key) {
+      if (key !== lastOfSession || opts.videoEndsEarly === true) continue;
+    }
+    const rows = live.filter((p) => gameKey(p) === key);
+    out.push({
+      setNumber: band.setNumber,
+      gameNumber: band.gameNumber,
+      gameInSet: band.gameInSet,
+      score: band.outcome.kind === "unfinished" ? band.outcome.score : "",
+      rows,
+      lastPointId: rows[rows.length - 1].id,
+    });
+  }
+  return out;
+}
+
+/**
+ * Plan the pull into the short game `key` (`"{set}·{game}"`): one write per
+ * pulled row with where it ends up, the strokes flipped with any row whose
+ * players switch, and a summary for the slot. `add_point` when no plan is
+ * sound (see the file comment); an error when the game is not short.
+ */
+export function planGamePull(
+  points: readonly ShiftPoint[],
+  key: string,
+  adScoring: boolean,
+): PlannedGamePull {
+  // The session's last game is listed here too: with nothing after it the
+  // plan is `add_point`, which is what the slot on it offers.
+  const short = gameUnderflow(points, adScoring, { videoEndsEarly: false });
+  const from = short.find((game) => gameKey(game) === key);
+  if (!from) {
+    return { error: "That game is not short — there is nothing to pull in." };
+  }
+
+  // The game ranks the console names games by, on the rows as they stand.
+  const rank = new Map<string, number>();
+  for (const band of labelScores(points, adScoring).games) {
+    rank.set(gameKey(band), band.gameInSet);
+  }
+  const ref = (game: {
+    setNumber: number;
+    gameNumber: number;
+  }): GameShiftGameRef => ({
+    set: game.setNumber,
+    gameInSet: rank.get(gameKey(game)) ?? 0,
+  });
+
+  // As in `planGameShift`: the cascade reads from the originals with the
+  // writes so far applied, and each row's status is measured from its
+  // ORIGINAL state.
+  const original = new Map(points.map((point) => [point.id, point]));
+  let working: ShiftPoint[] = [...points];
+  const writes = new Map<string, GameShiftWrite>();
+  const swaps = new Map<string, PlayerSwap | null>();
+  let current: { setNumber: number; gameNumber: number } = from;
+  /** The games pulled from, in order; a game is listed once. */
+  const donors: string[] = [];
+
+  // Bounded for safety: every step either pulls a row or ends the loop.
+  const bound = working.filter((p) => p.status !== "deleted").length + 2;
+  for (let step = 0; step < bound; step += 1) {
+    const live = liveRows(working);
+    const bands = labelScores(live, adScoring).games;
+    const band = bands.find((b) => gameKey(b) === gameKey(current));
+    if (!band) return { kind: "add_point" };
+    if (band.outcome.kind !== "unfinished") {
+      // Settled. The donor it was read from may be short now in turn: carry
+      // on into it, unless it is the last game of its set.
+      const last = donors[donors.length - 1];
+      const donor = last ? bands.find((b) => gameKey(b) === last) : undefined;
+      if (!donor || !bandIsShort(donor)) break;
+      const lastOfSet = [...bands]
+        .reverse()
+        .find((b) => b.setNumber === donor.setNumber);
+      if (lastOfSet === donor) break;
+      current = donor;
+      continue;
+    }
+
+    const rows = live.filter((p) => gameKey(p) === gameKey(current));
+    const to = gameAfter(live, current, rows);
+    // No game after, one in another set, or a tiebreak — never split.
+    if (!to || to.setNumber !== current.setNumber || to.gameType !== "game") {
+      return { kind: "add_point" };
+    }
+    const donorKey = gameKey(to);
+    if (donors[donors.length - 1] !== donorKey) {
+      if (donors.length >= 2) return { kind: "add_point" };
+      donors.push(donorKey);
+    }
+    const donorRows = live.filter((p) => gameKey(p) === donorKey);
+    const first = original.get(donorRows[0].id);
+    if (!first) return { kind: "add_point" };
+    const { write, swap } = shiftWrite(first, {
+      setNumber: current.setNumber,
+      gameNumber: current.gameNumber,
+      gameType: "game",
+      server: gameFirstServer(rows),
+      opened: false,
+    });
+    writes.set(first.id, write);
+    swaps.set(first.id, swap);
+    working = applyGameShift(working, [...writes.values()]);
+
+    // The donor given whole without settling the game: a point is missing,
+    // not misplaced.
+    if (donorRows.length === 1) {
+      const after = labelScores(liveRows(working), adScoring).games.find(
+        (b) => gameKey(b) === gameKey(current),
+      );
+      if (!after || after.outcome.kind === "unfinished") {
+        return { kind: "add_point" };
+      }
+    }
+  }
+  if (writes.size === 0) return { kind: "add_point" };
+
+  const shots: ShotSwapWrite[] = [];
+  let swapped = 0;
+  for (const id of writes.keys()) {
+    const swap = swaps.get(id);
+    if (!swap) continue;
+    swapped += 1;
+    shots.push(...swap.shots);
+  }
+  const [firstDonor] = donors;
+  const [set, game] = firstDonor.split("·").map(Number);
+  return {
+    ok: true,
+    writes: [...writes.values()],
+    shots,
+    summary: {
+      points: writes.size,
+      games: donors.length,
+      fromGame: ref({ setNumber: set, gameNumber: game }),
+      swapped,
+    },
+  };
 }

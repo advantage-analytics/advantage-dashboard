@@ -6,15 +6,18 @@
  * moving the later point's shots (`label_point_id`, by id list), their statuses
  * untouched; one UPDATE of the kept point's winner, ending, ended by, rally ids
  * and status; one compare-and-set UPDATE tombstoning the later point
- * (`updateIfUnchanged`). No row is ever removed.
+ * (`updateIfUnchanged`); then the kept point's ending as its joined rows
+ * derive it (`reconcileEnding`, ending-session.ts), where the later point's
+ * stored ending did not already say so. No row is ever removed.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
-  checkSessionOpen,
   defaultLabelWriteDependencies,
+  readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { reconcileEnding } from "./ending-session";
 import {
   gated,
   normaliseId,
@@ -69,8 +72,8 @@ export async function writeLabelPointCombine(params: {
     return { error: `Could not read the point: ${pointError.message}` };
   }
   if (!point) return { error: "Point not found." };
-  const closed = await checkSessionOpen(supabase, point.session_id);
-  if (closed) return { error: closed };
+  const gate = await readSessionGate(supabase, point.session_id);
+  if ("error" in gate) return gate;
 
   const { data: rows, error: rowsError } = await supabase
     .from("label_points")
@@ -150,9 +153,29 @@ export async function writeLabelPointCombine(params: {
   );
   if (failed) return { error: failed };
 
+  // The kept point's ending off the joined rows; its status stays `edited`
+  // (or `added`) as the plan wrote it.
+  const synced = await reconcileEnding({
+    supabase,
+    pointId: write.keptId,
+    ghosts: gate.ghosts,
+    keepStatus: true,
+  });
+  if ("error" in synced) return synced;
+
   return {
     ok: true,
-    kept: { id: write.keptId, ...write.kept },
+    kept: {
+      id: write.keptId,
+      ...write.kept,
+      ...(synced.point
+        ? {
+            winner: synced.point.winner,
+            ending: synced.point.ending,
+            ended_by: synced.point.endedBy,
+          }
+        : {}),
+    },
     removed: { id: write.removedId, ...write.removed },
   };
 }

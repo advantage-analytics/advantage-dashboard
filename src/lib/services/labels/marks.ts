@@ -12,7 +12,9 @@
  * `serve_fault` and `pick_winner` exist only here. "Wrong side for the score"
  * and "Same side twice" describe the vendor's score, which the labeller is
  * correcting, so they are raised live from `serveSides` against the labelled
- * score (score-marks.ts).
+ * score (score-marks.ts); "Shot after the point ended?", "Ending looks stale"
+ * and "Second serve?" are read off the labelled rows themselves
+ * (marks-state.ts).
  *
  * Every code has a tier, decided once in `LABEL_MARK_META`: `count` (amber
  * chip, counted in the header), `hint` (one quiet line in the open point),
@@ -36,6 +38,7 @@ import {
 import {
   labelSideOf,
   opponent,
+  type LabelEnding,
   type LabelPoint,
   type LabelServeSide,
   type LabelShot,
@@ -54,6 +57,10 @@ export const LABEL_ONLY_FLAGS = {
   PICK_WINNER: "pick_winner",
   /** A stroke lands out or in the net and exactly one more follows it. */
   SHOT_AFTER_POINT_END: "shot_after_point_end",
+  /** The stored ending is not what the point's strokes now derive. */
+  ENDING_STALE: "ending_stale",
+  /** A first serve that follows a faulted serve of the same point. */
+  SECOND_SERVE_AS_FIRST: "second_serve_as_first",
 } as const;
 
 /**
@@ -77,6 +84,8 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
+  [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
@@ -125,6 +134,15 @@ export interface LabelMarkParams {
     result: "out" | "net";
   };
   pick_winner: NoParams;
+  /** What the strokes derive (ending-derived.ts) — the "Use it" patch. */
+  ending_stale: {
+    ending: LabelEnding;
+    endedBy: LabelSide | null;
+    /** Who the rows say won; null when they do not settle it. */
+    winner: LabelSide | null;
+  };
+  /** The serve typed as a first serve that follows a faulted one. */
+  second_serve_as_first: { shotId: string };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */

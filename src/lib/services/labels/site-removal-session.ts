@@ -3,31 +3,41 @@
  * into the rally (`site-removal.ts`). Admin-gated like edit-session.ts, with
  * the marks gate (`checkSessionOpen` with `blind`).
  *
- * Its one write is an UPDATE of `label_shots` setting
+ * Its write on the stroke is an UPDATE of `label_shots` setting
  * `site_removal_restored_at`, matched on the id and on the two columns the plan
  * read (`site_removal is not null`, `site_removal_restored_at is null`), so two
  * tabs restoring the same ghost cannot both report success and nothing but a
- * ghost is ever touched.
+ * ghost is ever touched. A ghost put back is a stroke of the rally again, so
+ * the point's ending then follows (ending-session.ts).
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
-  checkSessionOpen,
   defaultLabelWriteDependencies,
+  readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
+import {
+  endingSyncFailed,
+  readPointShots,
+  syncEndingAfterShotChange,
+} from "./ending-session";
 import {
   gated,
   normaliseId,
   racedMessage,
   type LabelOpResult,
+  type WithSyncedPoint,
 } from "./operations-session";
 import type { LabelShotStatus, LabelSiteRemoval } from "./session";
-import { planSiteRemovalRestore } from "./site-removal";
+import {
+  applySiteRemovalRestore,
+  planSiteRemovalRestore,
+} from "./site-removal";
 
-export type LabelSiteRemovalRestoreResult = LabelOpResult<{
-  siteRemovalRestoredAt: string;
-}>;
+export type LabelSiteRemovalRestoreResult = LabelOpResult<
+  { siteRemovalRestoredAt: string } & WithSyncedPoint
+>;
 
 const RACED = racedMessage("row");
 const BLIND =
@@ -36,12 +46,16 @@ const BLIND =
 interface GhostRow {
   id: string;
   session_id: string;
+  label_point_id: string;
   status: LabelShotStatus;
   site_removal: LabelSiteRemoval | null;
   site_removal_restored_at: string | null;
 }
 
-/** Read the ghost, check its session, write the one column. Never throws. */
+/**
+ * Read the ghost, check its session, write the one column, then the point's
+ * ending. Never throws.
+ */
 export async function writeLabelSiteRemovalRestore(params: {
   supabase: AdminClient;
   shotId: unknown;
@@ -54,16 +68,20 @@ export async function writeLabelSiteRemovalRestore(params: {
 
   const { data: row, error } = await supabase
     .from("label_shots")
-    .select("id, session_id, status, site_removal, site_removal_restored_at")
+    .select(
+      "id, session_id, label_point_id, status, site_removal, site_removal_restored_at",
+    )
     .eq("id", shotId)
     .maybeSingle<GhostRow>();
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!row) return { error: "Shot not found." };
 
-  const refused = await checkSessionOpen(supabase, row.session_id, {
+  const gate = await readSessionGate(supabase, row.session_id, {
     blind: BLIND,
   });
-  if (refused) return { error: refused };
+  if ("error" in gate) return gate;
+  const owned = await readPointShots(supabase, row.label_point_id);
+  if ("error" in owned) return owned;
 
   const at = params.at ?? new Date().toISOString();
   const plan = planSiteRemovalRestore(
@@ -87,9 +105,20 @@ export async function writeLabelSiteRemovalRestore(params: {
     return { error: `Could not restore the shot: ${writeError.message}` };
   }
   if (!written || written.length === 0) return { error: RACED };
+  const synced = await syncEndingAfterShotChange({
+    supabase,
+    pointId: row.label_point_id,
+    ghosts: gate.ghosts,
+    before: owned.shots,
+    after: owned.shots.map((shot) =>
+      shot.id === shotId ? applySiteRemovalRestore(shot, at) : shot,
+    ),
+  });
+  if ("error" in synced) return { error: endingSyncFailed(synced.error) };
   return {
     ok: true,
     siteRemovalRestoredAt: plan.write.site_removal_restored_at,
+    ...(synced.point ? { point: synced.point } : {}),
   };
 }
 

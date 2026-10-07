@@ -523,18 +523,46 @@ test.describe("mark point checked", () => {
 
 // ── The services, over a fake client ───────────────────────────────────────
 
+/** The point a shot belongs to when a test says nothing of it: blank. */
+const OWNING_POINT = {
+  id: POINT_ID,
+  session_id: SESSION_ID,
+  updated_at: "2026-10-01T10:00:00+00:00",
+  status: "unchanged",
+  status_before_delete: null,
+  server: "p1",
+  set_number: 1,
+  game_number: 1,
+  serve_side: null,
+  winner: null,
+  ending: null,
+  ended_by: null,
+  seed: null,
+};
+
+/**
+ * A shot's row, the point's shot rows (`shots`) and the point's own row —
+ * `OWNING_POINT` unless given, `null` for none. The point row takes each
+ * successful `label_points` update, so the ending sync's re-read sees it.
+ */
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
   point?: Record<string, unknown> | null;
   shots?: Record<string, unknown>[];
   gamePoints?: Record<string, unknown>[];
   sessionStatus?: string;
+  marksEnabled?: boolean;
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
 }) {
+  let point = rows.point === undefined ? OWNING_POINT : rows.point;
   return fakeLabelClient((call) => {
     if (call.op === "update") {
-      return rows.raced ? { data: [], error: null } : undefined;
+      if (rows.raced) return { data: [], error: null };
+      if (call.table === "label_points" && point) {
+        point = { ...point, ...call.values };
+      }
+      return undefined;
     }
     if (call.op === "insert") {
       return {
@@ -544,7 +572,10 @@ function fakeClient(rows: {
     }
     if (call.table === "label_sessions") {
       return {
-        data: { status: rows.sessionStatus ?? "labelling" },
+        data: {
+          status: rows.sessionStatus ?? "labelling",
+          marks_enabled: rows.marksEnabled ?? false,
+        },
         error: null,
       };
     }
@@ -556,7 +587,7 @@ function fakeClient(rows: {
     if (call.table === "label_points") {
       return "game_number" in call.filters
         ? { data: rows.gamePoints ?? [], error: null }
-        : { data: rows.point ?? null, error: null };
+        : { data: point, error: null };
     }
     return undefined;
   });
@@ -638,6 +669,140 @@ test.describe("the services", () => {
       status_before_delete: null,
       delete_reason: null,
     });
+  });
+
+  test("a delete, an Undo and an add each settle the point's ending in the same call, after the stroke's own write", async () => {
+    // Lee's serve, Vargas's return in, Lee's forehand out: Vargas's point on
+    // Lee's error. Delete the forehand and the point ends on the return.
+    const serve = labelShotRow(OTHER_SHOT, POINT_ID, {
+      stroke: "first_serve",
+      video_time: 1,
+    });
+    const back = labelShotRow(
+      "cccccccc-cccc-4ccc-8ccc-000000000002",
+      POINT_ID,
+      {
+        hitter: "p2",
+        stroke: "backhand",
+        video_time: 2,
+      },
+    );
+    const last = labelShotRow(SHOT_ID, POINT_ID, {
+      result: "out",
+      video_time: 3,
+    });
+    const point = {
+      ...OWNING_POINT,
+      winner: "p2",
+      ending: "error",
+      ended_by: "p1",
+    };
+
+    const deleted = fakeClient({
+      shot: { ...last, session_id: SESSION_ID },
+      shots: [serve, back, last],
+      point,
+    });
+    expect(
+      await writeLabelShotDelete({
+        supabase: deleted.supabase,
+        shotId: SHOT_ID,
+        reason: "not_a_stroke",
+      }),
+    ).toEqual({
+      ok: true,
+      status: "deleted",
+      point: {
+        ending: "winner",
+        endedBy: "p2",
+        winner: "p2",
+        status: "edited",
+      },
+    });
+    expect(
+      deleted.calls
+        .filter((c) => c.op === "update")
+        .map((c) => [c.table, c.values]),
+    ).toEqual([
+      [
+        "label_shots",
+        {
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "not_a_stroke",
+        },
+      ],
+      ["label_points", { ending: "winner", ended_by: "p2", status: "edited" }],
+    ]);
+    // Compare-and-set on the `updated_at` the point was read with.
+    expect(deleted.calls.at(-1)?.filters).toEqual({
+      id: POINT_ID,
+      updated_at: OWNING_POINT.updated_at,
+    });
+
+    // Undo it: the forehand is the last stroke again, out, so Lee's error.
+    const restored = fakeClient({
+      shot: {
+        ...last,
+        session_id: SESSION_ID,
+        status: "deleted",
+        status_before_delete: "kept",
+      },
+      shots: [serve, back, { ...last, status: "deleted" }],
+      point: { ...point, ending: "winner", ended_by: "p2" },
+    });
+    expect(
+      await writeLabelShotRestore({
+        supabase: restored.supabase,
+        shotId: SHOT_ID,
+      }),
+    ).toEqual({
+      ok: true,
+      status: "kept",
+      point: { ending: "error", endedBy: "p1", winner: "p2", status: "edited" },
+    });
+
+    // Add a stroke after the forehand: Vargas's, with no result yet, so the
+    // rows read her as the winner of the point she holds.
+    const added = fakeClient({
+      point: { ...point, server: "p1" },
+      shots: [serve, back, last],
+    });
+    const result = await writeLabelShotAdd({
+      supabase: added.supabase,
+      pointId: POINT_ID,
+      afterShotId: null,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      shot: { hitter: "p2", status: "added" },
+      point: { ending: "winner", endedBy: "p2", winner: "p2" },
+    });
+    expect(added.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_points", "select"],
+      ["label_sessions", "select"],
+      ["label_shots", "select"],
+      ["label_shots", "insert"],
+      ["label_points", "select"],
+      ["label_points", "update"],
+    ]);
+
+    // A stroke change that leaves the rows saying the same thing — the serve
+    // deleted, the forehand still Lee's error: the shot's write alone, and no
+    // point in the answer.
+    const same = fakeClient({
+      shot: { ...serve, session_id: SESSION_ID },
+      shots: [serve, back, last],
+      point,
+    });
+    expect(
+      await writeLabelShotDelete({
+        supabase: same.supabase,
+        shotId: serve.id,
+        reason: "not_a_stroke",
+      }),
+    ).toEqual({ ok: true, status: "deleted" });
+    expect(same.calls.filter((c) => c.op === "update")).toHaveLength(1);
   });
 
   test("a race, a complete session and a missing row are refused", async () => {

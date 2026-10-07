@@ -2,13 +2,23 @@
 
 import { Flag, Pencil } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import type { LabelMarkCode, LabelMarks } from "@/lib/services/labels/marks";
-import { MARK_LABEL, markHover } from "@/lib/services/labels/marks-copy";
+import type {
+  LabelMark,
+  LabelMarkCode,
+  LabelMarks,
+} from "@/lib/services/labels/marks";
 import {
+  HINT_ACTION_LABEL,
+  MARK_LABEL,
+  markHover,
+} from "@/lib/services/labels/marks-copy";
+import {
+  endingStale,
   hoverLine,
   markStates,
   missingPointAdded,
   pointRowMarkList,
+  secondServeAsFirst,
   shotAfterPointEnd,
   rollupMarks,
   stateHoverParts,
@@ -17,14 +27,17 @@ import {
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
+import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
 import { railInk } from "./label-rail-tone";
+import type { EditContext } from "./label-row-parts";
 
 /**
  * The rail's marks, drawn by tier (`LabelMarkTier`, marks.ts): a mark that can
  * change the score is the amber chip on the point's row (`MarkChip`), the only
  * thing the header counts; a mark about how the point ended is a word on one
- * quiet line in the open point (`PointHintLine`). These components only draw:
+ * quiet line in the open point (`PointHintLine`), two of them with the one
+ * answer they offer beside the word. These components only draw:
  * `pointRowMarks` and `pointHints` decide what, with words and states from
  * marks-copy.ts and marks-state.ts.
  */
@@ -97,6 +110,8 @@ export interface PointHint {
   label: string;
   /** Its hover sentence — `markHover`, with the players' names. */
   detail: string;
+  /** The one answer the hint offers, when the console can write it. */
+  action?: { label: string; run: () => void };
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -106,8 +121,10 @@ const HINT_DOT_INK = railInk(0.25);
 
 /**
  * The open point's quiet line: its hints by their labels, each with its
- * sentence on hover. Not a control and counted nowhere. Drawn as the first row
- * of the shots well, it takes the well's own arrival (`className` / `style`).
+ * sentence on hover, and a hint's one answer as a text action after its word
+ * (`RAIL_PRESS`, through `BlackTextAction`). Counted nowhere. Drawn as the
+ * first row of the shots well, it takes the well's own arrival (`className` /
+ * `style`).
  */
 export function PointHintLine({
   hints,
@@ -150,6 +167,19 @@ export function PointHintLine({
               {hint.label}
             </span>
           </ChromeTooltip>
+          {hint.action ? (
+            <BlackTextAction
+              ink="quiet"
+              data-point-hint-action={hint.code}
+              aria-label={`${hint.action.label}: ${hint.detail}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                hint.action?.run();
+              }}
+            >
+              {hint.action.label}
+            </BlackTextAction>
+          ) : null}
         </span>
       ))}
     </div>
@@ -278,18 +308,69 @@ export function pointRowMarks(
   };
 }
 
-/** The open point's hints, the one read off the rows last. */
+/**
+ * The open point's hints: the marks' own, then the three read off the rows —
+ * "Shot after the point ended?", "Ending looks stale" and "Second serve?".
+ * The last two carry their one answer when `edit` can write it: the derived
+ * ending as a point patch (the winner only when the rows settle one), and
+ * `{ stroke: "second_serve" }` on the serve. Nothing without marks: a session
+ * labelled blind reads none of these, and its ghosts are strokes, which is
+ * why `ghosts` is true here.
+ */
 export function pointHints(
   point: LabelPoint,
   marks: LabelMarks | null | undefined,
   names: SideNames,
+  edit?: Pick<EditContext, "onPatchPoint" | "onPatchShot">,
 ): PointHint[] {
   if (!marks) return [];
-  const after = shotAfterPointEnd(point);
-  const hints = pointRowMarkList(point, marks).hints;
-  return (after ? [...hints, after] : hints).map((mark) => ({
+  const live: (LabelMark | null)[] = [
+    shotAfterPointEnd(point),
+    endingStale(point, true),
+    secondServeAsFirst(point, true),
+  ];
+  const hints = [
+    ...pointRowMarkList(point, marks).hints,
+    ...live.filter((mark): mark is LabelMark => mark !== null),
+  ];
+  return hints.map((mark) => ({
     code: mark.code,
     label: MARK_LABEL[mark.code],
     detail: markHover(mark, names),
+    ...hintAction(mark, point, edit),
   }));
+}
+
+/** A hint's answer as `PointHint.action`, or nothing. */
+function hintAction(
+  mark: LabelMark,
+  point: LabelPoint,
+  edit: Pick<EditContext, "onPatchPoint" | "onPatchShot"> | undefined,
+): Pick<PointHint, "action"> {
+  if (mark.code === "ending_stale" && edit?.onPatchPoint) {
+    const { onPatchPoint } = edit;
+    const { ending, endedBy, winner } = mark.params;
+    return {
+      action: {
+        label: HINT_ACTION_LABEL.ending_stale,
+        run: () =>
+          onPatchPoint(point.id, {
+            ending,
+            ended_by: endedBy,
+            ...(winner !== null ? { winner } : {}),
+          }),
+      },
+    };
+  }
+  if (mark.code === "second_serve_as_first" && edit?.onPatchShot) {
+    const { onPatchShot } = edit;
+    const { shotId } = mark.params;
+    return {
+      action: {
+        label: HINT_ACTION_LABEL.second_serve_as_first,
+        run: () => onPatchShot(shotId, { stroke: "second_serve" }),
+      },
+    };
+  }
+  return {};
 }

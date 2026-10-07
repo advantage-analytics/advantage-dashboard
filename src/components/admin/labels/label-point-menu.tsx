@@ -46,12 +46,14 @@ import type { EditContext, LabelRowOperations } from "./label-row-parts";
  * The patch that makes a let or a non-point a played point again: the ending
  * its rows describe (`deriveEnding` — with the winner when they settle one
  * the point does not hold, as `endingPatchForShotChange` writes it), else
- * the ending it was seeded with, else none.
+ * the ending it was seeded with, else none. `ghosts` is whether the session
+ * draws the site's removed strokes as ghosts (`drawsGhosts`).
  */
 export function countPointPatch(
   point: Pick<LabelPoint, "winner" | "shots" | "seed">,
+  ghosts: boolean,
 ): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> {
-  const derived = deriveEnding(point);
+  const derived = deriveEnding(point, ghosts);
   if (derived) {
     return {
       ending: derived.ending,
@@ -94,7 +96,13 @@ export function countPointPatch(
  */
 export function pointMenuActions(
   point: LabelPoint,
-  context: Pick<EditContext, "points" | "names" | "adScoring" | "onPatchPoint">,
+  context: Pick<
+    EditContext,
+    "points" | "names" | "adScoring" | "onPatchPoint"
+  > & {
+    /** Whether a site-removed stroke is a ghost here; a stroke by default. */
+    ghosts?: boolean;
+  },
   operations: LabelRowOperations,
 ): {
   addAbove: () => void;
@@ -153,7 +161,9 @@ export function pointMenuActions(
       : null,
     markLet: uncounted ? null : patch({ ending: "let_replayed" }),
     markNotAPoint: uncounted ? null : patch({ ending: "not_a_point" }),
-    countPoint: uncounted ? patch(countPointPatch(point)) : null,
+    countPoint: uncounted
+      ? patch(countPointPatch(point, context.ghosts ?? false))
+      : null,
     shiftOverflow: leftoverIds(context.points, context.adScoring ?? true).has(
       point.id,
     )
@@ -186,6 +196,7 @@ export function PointMenu({
   edit,
   operations,
   menu = "dark",
+  ghosts = false,
 }: {
   point: LabelPoint;
   number: number;
@@ -193,12 +204,16 @@ export function PointMenu({
   operations: LabelRowOperations;
   /** The menu's tone: portalled, so the rail's palette does not reach it. */
   menu?: FloatMenuTone;
+  /** Whether the well draws site-removed strokes as ghosts (`drawsGhosts`). */
+  ghosts?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"actions" | "move">("actions");
   // The requests are planned only while the menu is open: planning rescans
   // the session's rows, and a closed menu on every row would do it per render.
-  const actions = open ? pointMenuActions(point, edit, operations) : null;
+  const actions = open
+    ? pointMenuActions(point, { ...edit, ghosts }, operations)
+    : null;
   const close = () => {
     setOpen(false);
     setPanel("actions");

@@ -279,17 +279,85 @@ test.describe("games and sets", () => {
     ]);
   });
 
-  test("a game's winner is the winner of its last counted point", () => {
-    // Mislabelled: p1 has the points but the labeller's last call is p2.
+  test("a game's winner is its last counted point's; an unsettled game wins nobody a game", () => {
+    // Mislabelled: p1 has the points but the labeller's last call is p2. At
+    // 3–1 under ad scoring the game is not settled, so the next band's
+    // running count credits it to nobody.
     const odd = game({ gameNumber: 1 }, ["p1", "p1", "p1", "p2"]);
     const next = game({ gameNumber: 2 }, ["p1"]);
     const { games } = labelScores([...odd, ...next], true);
-    expect(games[1].gamesBefore).toBe("0–1");
+    expect(games[0].winner).toBe("p2");
+    expect(games[1].gamesBefore).toBe("0–0");
     // A game with no counted point wins nobody a game.
     const empty = [pt(null, { gameNumber: 1 })];
     expect(labelScores([...empty, ...next], true).games[1].gamesBefore).toBe(
       "0–0",
     );
+  });
+
+  test("a game's outcome: settled with the winner's points first, unfinished with the call, or settled with rows past its end", () => {
+    const outcomes = (points: ScorablePoint[], adScoring = true) =>
+      labelScores(points, adScoring).games.map((g) => g.outcome);
+    // Settled 4–2 for p2, the winner's points first whoever serves.
+    expect(
+      outcomes(game({ server: "p1" }, ["p1", "p2", "p2", "p1", "p2", "p2"])),
+    ).toEqual([{ kind: "decided", winner: "p2", score: "4–2" }]);
+    // Left at 30–40 (no-ad), the server's points first; p2's game next.
+    expect(
+      outcomes(
+        [
+          ...game({ server: "p1" }, ["p1", "p1", "p2", "p2", "p2"]),
+          ...game({ gameNumber: 2, server: "p2" }, ["p2", "p2", "p2", "p2"]),
+        ],
+        false,
+      ),
+    ).toEqual([
+      { kind: "unfinished", score: "30–40" },
+      { kind: "decided", winner: "p2", score: "4–0" },
+    ]);
+    // Under ad scoring 40–40 then Ad–40 is still unfinished.
+    expect(
+      outcomes(game({}, ["p1", "p1", "p1", "p2", "p2", "p2", "p1"])),
+    ).toEqual([{ kind: "unfinished", score: "Ad–40" }]);
+    // Settled on the fourth row; a let and a point after it are two extras,
+    // and the score is the tally when it was settled.
+    expect(
+      outcomes([
+        ...game({}, ["p1", "p1", "p1", "p1"]),
+        pt("p2", { ending: "let_replayed" }),
+        pt("p2"),
+      ]),
+    ).toEqual([{ kind: "overflow", winner: "p1", score: "4–0", extra: 2 }]);
+    // No counted point: unfinished at 0–0.
+    expect(outcomes([pt(null)])).toEqual([
+      { kind: "unfinished", score: "0–0" },
+    ]);
+    // A tiebreak settles at 7 and two clear; 7–6 is not settled.
+    const tb = (winners: LabelSide[]) =>
+      game({ gameType: "tiebreak" }, winners);
+    expect(outcomes(tb(["p1", "p1", "p1", "p1", "p1", "p1", "p1"]))).toEqual([
+      { kind: "decided", winner: "p1", score: "7–0" },
+    ]);
+    expect(
+      outcomes(
+        tb([
+          ...Array<LabelSide>(6).fill("p1"),
+          ...Array<LabelSide>(6).fill("p2"),
+          "p1",
+        ]),
+      ),
+    ).toEqual([{ kind: "unfinished", score: "7–6" }]);
+    // The band also carries the tally and who settled it.
+    const [band] = labelScores(
+      game({}, ["p1", "p1", "p2", "p1", "p1"]),
+      true,
+    ).games;
+    expect(band).toMatchObject({
+      gameType: "game",
+      points: { p1: 4, p2: 1 },
+      decidedBy: "p1",
+      winner: "p1",
+    });
   });
 
   test("a point without a set or game has no place on the scoreboard", () => {

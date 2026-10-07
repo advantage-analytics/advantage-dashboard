@@ -9,16 +9,20 @@
  * not settle. A `hint` has no state; a `hidden` mark is dropped.
  *
  * The two score marks (score-marks.ts) are read off the labelled score on every
- * render, so one that no longer disagrees is simply not there.
+ * render, so one that no longer disagrees is simply not there — as are the
+ * three hints read off the labelled rows (`shotAfterPointEnd`, `endingStale`,
+ * `secondServeAsFirst`).
  */
 
 import { labelShotValues } from "./edit";
+import { deriveEnding } from "./ending-derived";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   isLiveShot,
   isMissedResult,
   isServeStroke,
+  orderLabelShots,
   type LabelPoint,
   type LabelShot,
 } from "./session";
@@ -228,6 +232,72 @@ export function shotAfterPointEnd(
     scope: "point",
     params: { landed: live.length - 1, extra: live.length, result },
   };
+}
+
+/**
+ * "Ending looks stale": the point's stored ending is not what its strokes
+ * derive (`deriveEnding`) — the ending or the ended-by differ, or none is
+ * stored at all. How a point whose ending was left behind (a stroke edited
+ * before the server kept the two in step, a point added by hand) gets fixed:
+ * on a click of "Use it", never on load. Nothing for a let or a non-point,
+ * whose ending says the rows do not decide it, and nothing while the rows
+ * say nothing. `ghosts` is whether a site-removed stroke is still a ghost.
+ */
+export function endingStale(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "ending_stale" }> | null {
+  if (point.ending === "let_replayed" || point.ending === "not_a_point") {
+    return null;
+  }
+  const derived = deriveEnding(point, ghosts);
+  if (!derived) return null;
+  if (
+    point.ending !== null &&
+    point.ending === derived.ending &&
+    point.endedBy === derived.endedBy
+  ) {
+    return null;
+  }
+  return {
+    code: "ending_stale",
+    tier: "hint",
+    scope: "point",
+    params: {
+      ending: derived.ending,
+      endedBy: derived.endedBy,
+      winner: derived.winner,
+    },
+  };
+}
+
+/**
+ * "Second serve?": a live serve typed `first_serve` that follows an earlier
+ * live serve of the point whose ball missed — by structure the second serve,
+ * however the vendor typed it. The first such serve in video order; the
+ * action retypes it (`{ stroke: "second_serve" }`).
+ */
+export function secondServeAsFirst(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "second_serve_as_first" }> | null {
+  const live = orderLabelShots(
+    point.shots.filter((shot) => isLiveShot(shot, ghosts)),
+  );
+  let faulted = false;
+  for (const shot of live) {
+    if (!isServeStroke(shot.stroke)) continue;
+    if (faulted && shot.stroke === "first_serve") {
+      return {
+        code: "second_serve_as_first",
+        tier: "hint",
+        scope: "shot",
+        params: { shotId: shot.id },
+      };
+    }
+    faulted = isMissedResult(shot.result);
+  }
+  return null;
 }
 
 /** What the rail header counts across the match. */

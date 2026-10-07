@@ -104,13 +104,37 @@ interface Call {
   isNull: string[];
 }
 
+/** The ghost's point when a test says nothing of it: no ending yet. */
+const POINT_ROW = {
+  id: FIXTURE_POINT_IDS.P4,
+  session_id: SESSION_ID,
+  updated_at: "2026-10-01T10:00:00+00:00",
+  status: "unchanged",
+  seed: null,
+  set_number: 1,
+  game_number: 2,
+  server: "p2",
+  serve_side: null,
+  winner: null,
+  ending: null,
+  ended_by: null,
+};
+
+/**
+ * The ghost's row, its point's row and the point's shot rows (`shots`, read
+ * by `label_point_id` for the ending the restore settles). The point row
+ * takes each successful `label_points` update.
+ */
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
+  point?: Record<string, unknown> | null;
+  shots?: Record<string, unknown>[];
   session?: Record<string, unknown> | null;
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
 }) {
   const calls: Call[] = [];
+  let point = rows.point === undefined ? POINT_ROW : rows.point;
   const client = {
     from(table: string) {
       const call: Call = {
@@ -123,10 +147,11 @@ function fakeClient(rows: {
       calls.push(call);
       const answer = () => {
         if (call.op === "update") {
-          return {
-            data: rows.raced ? [] : [{ id: call.filters.id }],
-            error: null,
-          };
+          if (rows.raced) return { data: [], error: null };
+          if (table === "label_points" && point) {
+            point = { ...point, ...call.values };
+          }
+          return { data: [{ id: call.filters.id }], error: null };
         }
         if (table === "label_sessions") {
           return {
@@ -138,12 +163,16 @@ function fakeClient(rows: {
           };
         }
         if (table === "label_shots") {
-          return { data: rows.shot ?? null, error: null };
+          return "label_point_id" in call.filters
+            ? { data: rows.shots ?? [], error: null }
+            : { data: rows.shot ?? null, error: null };
         }
+        if (table === "label_points") return { data: point, error: null };
         return { data: null, error: { message: `unexpected ${table}` } };
       };
       const builder = {
         select: () => builder,
+        returns: () => builder,
         update: (values: Record<string, unknown>) => {
           call.op = "update";
           call.values = values;
@@ -179,6 +208,7 @@ function fakeClient(rows: {
 const GHOST_ROW = {
   id: SHOT_ID,
   session_id: SESSION_ID,
+  label_point_id: FIXTURE_POINT_IDS.P4,
   status: "kept",
   site_removal: "hit_after_fault",
   site_removal_restored_at: null,
@@ -213,8 +243,83 @@ test.describe("writeLabelSiteRemovalRestore", () => {
       filters: { id: SESSION_ID },
     });
     for (const call of fake.calls) {
-      expect(call.table).toMatch(/^label_(shots|sessions)$/);
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
     }
+  });
+
+  test("a ghost put back is a stroke of the rally: the point's ending follows in the same call", async () => {
+    // The fixture's fourth point: Vargas's faulted first serve, Lee's swing
+    // at it (the ghost) and her second serve in — an ace, as stored. Put the
+    // swing back and the point is a stroke longer; its last stroke is still
+    // the serve, so nothing moves. Restore a ghost AFTER the second serve
+    // instead and the rows end on it.
+    const rows = point4().shots.map((shot) => ({
+      id: shot.id,
+      label_point_id: FIXTURE_POINT_IDS.P4,
+      event_id: shot.eventId,
+      after_event_id: null,
+      status: shot.status,
+      status_before_delete: null,
+      delete_reason: null,
+      hitter: shot.hitter,
+      stroke: shot.stroke,
+      result: shot.result,
+      spin: shot.spin,
+      contact_x: shot.contactX,
+      contact_y: shot.contactY,
+      landing_x: shot.landingX,
+      landing_y: shot.landingY,
+      video_time: shot.videoTime,
+      site_removal: shot.siteRemoval,
+      site_removal_restored_at: shot.siteRemovalRestoredAt,
+      seed: shot.seed,
+    }));
+    const point = { ...POINT_ROW, winner: "p2", ending: "ace", ended_by: "p2" };
+    const between = fakeClient({
+      shot: { ...GHOST_ROW, id: GHOST },
+      shots: rows,
+      point,
+    });
+    expect(
+      await writeLabelSiteRemovalRestore({
+        supabase: between.supabase,
+        shotId: SHOT_ID,
+        at: AT,
+      }),
+    ).toEqual({ ok: true, siteRemovalRestoredAt: AT });
+    expect(updates(between).map((w) => w.table)).toEqual(["label_shots"]);
+
+    // Lee's swing after the second serve, removed by the site: back, it is a
+    // return with no result yet, read as Lee's winner by the labelled loser
+    // — an error, by him.
+    const late = fakeClient({
+      shot: GHOST_ROW,
+      shots: [
+        ...rows,
+        {
+          ...rows[1],
+          id: SHOT_ID,
+          event_id: 404,
+          video_time: null,
+        },
+      ],
+      point,
+    });
+    expect(
+      await writeLabelSiteRemovalRestore({
+        supabase: late.supabase,
+        shotId: SHOT_ID,
+        at: AT,
+      }),
+    ).toEqual({
+      ok: true,
+      siteRemovalRestoredAt: AT,
+      point: { ending: "error", endedBy: "p1", winner: "p2", status: "edited" },
+    });
+    expect(updates(late).map((w) => [w.table, w.values])).toEqual([
+      ["label_shots", { site_removal_restored_at: AT }],
+      ["label_points", { ending: "error", ended_by: "p1", status: "edited" }],
+    ]);
   });
 
   test("a session labelled without marks is refused before anything is written", async () => {

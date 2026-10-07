@@ -399,6 +399,10 @@ export interface FakeLabelCall {
   negated?: Record<string, unknown>;
   /** `.in(column, values)`; absent until one is asked. */
   in?: Record<string, readonly unknown[]>;
+  /** `.not(column, "is", null)` — the column must be set; absent until asked. */
+  notNull?: string[];
+  /** `.is(column, null)` — the column must be unset; absent until asked. */
+  isNull?: string[];
 }
 
 type FakeLabelAnswer = { data: unknown; error: { message: string } | null };
@@ -448,6 +452,18 @@ export function fakeLabelClient(
         },
         in: (column: string, values: readonly unknown[]) => {
           call.in = { ...call.in, [column]: values };
+          return builder;
+        },
+        not: (column: string, operator: string, value: unknown) => {
+          if (operator !== "is" || value !== null) {
+            throw new Error(`unexpected .not(${column}, ${operator})`);
+          }
+          call.notNull = [...(call.notNull ?? []), column];
+          return builder;
+        },
+        is: (column: string, value: unknown) => {
+          if (value !== null) throw new Error(`unexpected .is(${column})`);
+          call.isNull = [...(call.isNull ?? []), column];
           return builder;
         },
         /** One page of a `readAllPages` read: the fake holds under a page. */

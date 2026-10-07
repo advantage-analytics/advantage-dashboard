@@ -1,7 +1,8 @@
 /**
- * The console's "move the leftover points to the next game" (`game-shift.ts`
- * has the rule). Admin-gated like edit-session.ts; not the marks gate, since
- * the leftovers are read off the labeller's own rows.
+ * The console's "move the leftover points to the next game" and "pull the
+ * next game's points into this one" (`game-shift.ts` has both rules).
+ * Admin-gated like edit-session.ts; not the marks gate, since the leftovers
+ * and the short games are read off the labeller's own rows.
  *
  * The plan is run twice: once over the points alone to learn whether any moves
  * under a new server, then, only when one does, again with the session's shot
@@ -26,6 +27,7 @@ import {
   type GameRow,
 } from "./game-operations-session";
 import {
+  planGamePull,
   planGameShift,
   type GameShiftWrite,
   type ShiftPoint,
@@ -113,19 +115,22 @@ function groupWrites(
   return [...groups.values()];
 }
 
-/** Plan the cascade from `fromPointId` and write it. Never throws. */
-export async function writeLabelGameShift(params: {
-  supabase: AdminClient;
-  sessionId: unknown;
-  /** A leftover point of the overflowing game. */
-  fromPointId: unknown;
-}): Promise<LabelGameShiftResult> {
-  const { supabase } = params;
-  const sessionId = normaliseId(params.sessionId);
-  if (!sessionId) return { error: "Invalid session id." };
-  const fromPointId = normaliseId(params.fromPointId);
-  if (!fromPointId) return { error: "Invalid point id." };
+/** What either plan hands the writer: the moved points and flipped strokes. */
+type GamePlan =
+  | { ok: true; writes: GameShiftWrite[]; shots: ShotSwapWrite[] }
+  | { error: string };
 
+/**
+ * The run both writes share: the session's gate and scoring in one read, the
+ * points, the plan — twice when a point changes server — then the grouped
+ * writes and the flipped strokes. `plan` is the pure rule over the rows.
+ */
+async function runGamePlan(
+  supabase: AdminClient,
+  sessionId: string,
+  plan: (points: readonly ShiftPoint[], adScoring: boolean) => GamePlan,
+  failed: string,
+): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
@@ -169,13 +174,13 @@ export async function writeLabelGameShift(params: {
     ...toGamePoint(row),
     shots: [],
   }));
-  const dry = planGameShift(shiftPoints, adScoring, fromPointId);
+  const dry = plan(shiftPoints, adScoring);
   if ("error" in dry) return dry;
   const byId = new Map(shiftPoints.map((point) => [point.id, point]));
   const switching = dry.writes.some(
     (write) => write.server !== byId.get(write.id)?.server,
   );
-  let plan = dry;
+  let planned = dry;
   if (switching) {
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
@@ -189,27 +194,80 @@ export async function writeLabelGameShift(params: {
       ...point,
       shots: shotsOf.get(point.id) ?? [],
     }));
-    const full = planGameShift(shiftPoints, adScoring, fromPointId);
+    const full = plan(shiftPoints, adScoring);
     if ("error" in full) return full;
-    plan = full;
+    planned = full;
   }
 
-  for (const group of groupWrites(plan.writes)) {
+  for (const group of groupWrites(planned.writes)) {
     const { error: writeError } = await supabase
       .from("label_points")
       .update(group.values)
       .in("id", group.ids);
     if (writeError) {
-      return { error: `Could not move the points: ${writeError.message}` };
+      return { error: `${failed}: ${writeError.message}` };
     }
   }
   const swapFailed = await writeShotSwaps(
     supabase,
-    plan.shots,
+    planned.shots,
     "switch the moved points' players",
   );
   if (swapFailed) return { error: swapFailed };
-  return { ok: true, writes: plan.writes, shots: plan.shots };
+  return { ok: true, writes: planned.writes, shots: planned.shots };
+}
+
+/** Plan the cascade from `fromPointId` and write it. Never throws. */
+export async function writeLabelGameShift(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  /** A leftover point of the overflowing game. */
+  fromPointId: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const fromPointId = normaliseId(params.fromPointId);
+  if (!fromPointId) return { error: "Invalid point id." };
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points, adScoring) => planGameShift(points, adScoring, fromPointId),
+    "Could not move the points",
+  );
+}
+
+/** `"{set}·{game}"` with two whole numbers, as `gameKey` spells it. */
+const GAME_KEY = /^\d+·\d+$/;
+
+const NO_PULL =
+  "That game is more likely missing a point than holding the next game's — add the point instead.";
+
+/**
+ * Plan the pull into the short game `gameKey` and write it. Never throws.
+ * A plan the rule declines (`add_point`) is refused with `NO_PULL`: the
+ * console offers "Add point" there and never asks for this.
+ */
+export async function writeLabelGamePull(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  /** The short game, as `gameKey` spells it. */
+  gameKey: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const key = params.gameKey;
+  if (typeof key !== "string" || !GAME_KEY.test(key)) {
+    return { error: "Invalid game." };
+  }
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points, adScoring) => {
+      const plan = planGamePull(points, key, adScoring);
+      return "kind" in plan ? { error: NO_PULL } : plan;
+    },
+    "Could not pull the points in",
+  );
 }
 
 export function shiftLabelGameOverflow(
@@ -221,5 +279,17 @@ export function shiftLabelGameOverflow(
     deps,
     (supabase) => writeLabelGameShift({ supabase, sessionId, fromPointId }),
     "move the points to the next game",
+  );
+}
+
+export function pullLabelGamePoints(
+  sessionId: unknown,
+  gameKey: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelGamePull({ supabase, sessionId, gameKey }),
+    "pull the points into the game",
   );
 }

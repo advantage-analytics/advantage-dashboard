@@ -8,11 +8,20 @@
  * own (`status = 'deleted'`) by the column each uses.
  *
  * Pure: the console runs `applySiteRemovalRestore` and
- * `site-removal-session.ts` runs `planSiteRemovalRestore`.
+ * `site-removal-session.ts` runs `planSiteRemovalRestore`. The one restore
+ * with no click of its own is `ghostFreedByServeIn`, which edit-session.ts
+ * runs when a serve is relabelled in.
  */
 
+import type { LabelShotPatch } from "./edit";
 import type { Planned } from "./operations";
-import { isGhostShot, type LabelShot } from "./session";
+import {
+  isGhostShot,
+  isMissedResult,
+  isServeStroke,
+  orderLabelShots,
+  type LabelShot,
+} from "./session";
 
 /** What the plan reads off a shot — the console's row or the service's read. */
 export type SiteRemovalShot = Pick<
@@ -53,4 +62,33 @@ export function applySiteRemovalRestore(
 ): LabelShot {
   if (!isGhostShot(shot)) return shot;
   return { ...shot, siteRemovalRestoredAt: at };
+}
+
+/**
+ * The ghost a serve relabelled in frees: the site removed a swing at a serve
+ * it took for a fault (`hit_after_fault`), so a labeller who marks that serve
+ * in has said the swing was a return after all. The stroke right after the
+ * serve in video order (tombstones are not strokes) — when it is such a ghost
+ * — is the one to put back; null otherwise. `shots` are the point's rows as
+ * read, `before` the serve's stroke and result before the patch.
+ */
+export function ghostFreedByServeIn(
+  shots: readonly LabelShot[],
+  shotId: string,
+  before: Pick<LabelShot, "stroke" | "result">,
+  patch: LabelShotPatch,
+): string | null {
+  if (patch.result !== "in" || !isMissedResult(before.result)) return null;
+  if (!isServeStroke("stroke" in patch ? patch.stroke : before.stroke)) {
+    return null;
+  }
+  const strokes = orderLabelShots(shots).filter(
+    (shot) => shot.status !== "deleted",
+  );
+  const at = strokes.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return null;
+  const next = strokes[at + 1];
+  return next && isGhostShot(next) && next.siteRemoval === "hit_after_fault"
+    ? next.id
+    : null;
 }

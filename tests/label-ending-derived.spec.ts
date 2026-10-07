@@ -40,22 +40,89 @@ function point(
   return { winner, shots, ending, endedBy };
 }
 
+/** A session with marks on: a site-removed stroke is a ghost, not a stroke. */
+const GHOSTS = true;
+
+/** A swing the site removed after a faulted serve, never put back. */
+const ghost = (fields: Partial<LabelShot> = {}) =>
+  shot({
+    hitter: "p2",
+    stroke: "backhand",
+    result: null,
+    siteRemoval: "hit_after_fault",
+    ...fields,
+  });
+
 test.describe("deriveEnding", () => {
+  test("a ghost is no stroke: two faulted serves around ghosts are a double fault", () => {
+    // Rudy v Aidan 83: first serve out, a swing the site removed, the second
+    // serve typed as a first and out, another removed swing. The rows end on
+    // the server's second fault — not on the ghost's hitter.
+    const rows = [
+      serve({ result: "out" }),
+      ghost(),
+      serve({ result: "out" }),
+      ghost(),
+    ];
+    expect(deriveEnding(point(rows), GHOSTS)).toEqual({
+      ending: "double_fault",
+      endedBy: "p1",
+      winner: "p2",
+    });
+    // Labelled without marks, the removed swings are strokes of the rally:
+    // the last one, with no result, is read as its hitter's winner.
+    expect(deriveEnding(point(rows), false)).toEqual({
+      ending: "winner",
+      endedBy: "p2",
+      winner: null,
+    });
+    // A ghost put back is a stroke in either session.
+    const restored = { ...rows[3], siteRemovalRestoredAt: "2026-10-07" };
+    expect(
+      deriveEnding(point([...rows.slice(0, 3), restored]), GHOSTS)?.endedBy,
+    ).toBe("p2");
+  });
+
+  test("the patch reads ghosts the same way", () => {
+    const before = [serve({ result: "out" }), ghost(), serve({ result: null })];
+    const after = before.map((s, i) =>
+      i === 2 ? { ...s, result: "out" as const } : s,
+    );
+    expect(
+      endingPatchForShotChange(point(before), point(after), GHOSTS),
+    ).toEqual({ ending: "double_fault", ended_by: "p1", winner: "p2" });
+    // With the ghost a live stroke, the last stroke is still the serve.
+    expect(
+      endingPatchForShotChange(point(before), point(after), false),
+    ).toEqual({ ending: "double_fault", ended_by: "p1", winner: "p2" });
+    const trailing = [...after, ghost()];
+    expect(
+      endingPatchForShotChange(point(after), point(trailing), false)?.ending,
+    ).toBe("winner");
+    expect(
+      endingPatchForShotChange(point(after), point(trailing), GHOSTS),
+    ).toBeNull();
+  });
+
   test("no live stroke says nothing", () => {
-    expect(deriveEnding(point([]))).toBeNull();
-    expect(deriveEnding(point([serve({ status: "deleted" })]))).toBeNull();
+    expect(deriveEnding(point([]), GHOSTS)).toBeNull();
+    expect(
+      deriveEnding(point([serve({ status: "deleted" })]), GHOSTS),
+    ).toBeNull();
   });
 
   test("an unreturned serve is an ace, won by the server", () => {
-    expect(deriveEnding(point([serve()], "p1"))).toEqual({
+    expect(deriveEnding(point([serve()], "p1"), GHOSTS)).toEqual({
       ending: "ace",
       endedBy: "p1",
       winner: "p1",
     });
     // The rows settle it whoever the point names.
-    expect(deriveEnding(point([serve()], "p2"))?.winner).toBe("p1");
+    expect(deriveEnding(point([serve()], "p2"), GHOSTS)?.winner).toBe("p1");
     // A serve with no result yet reads the same ending, but settles no winner.
-    expect(deriveEnding(point([serve({ result: null })], "p2"))).toEqual({
+    expect(
+      deriveEnding(point([serve({ result: null })], "p2"), GHOSTS),
+    ).toEqual({
       ending: "ace",
       endedBy: "p1",
       winner: null,
@@ -64,18 +131,19 @@ test.describe("deriveEnding", () => {
     expect(
       deriveEnding(
         point([serve({ result: "net" }), serve({ stroke: "second_serve" })]),
+        GHOSTS,
       )?.ending,
     ).toBe("ace");
   });
 
   test("a return into the net is a service winner", () => {
     // The return missed, so the server won.
-    expect(deriveEnding(point([serve(), p2({ result: "net" })], "p1"))).toEqual(
-      { ending: "service_winner", endedBy: "p2", winner: "p1" },
-    );
-    expect(deriveEnding(point([serve(), p2({ result: "out" })]))?.ending).toBe(
-      "service_winner",
-    );
+    expect(
+      deriveEnding(point([serve(), p2({ result: "net" })], "p1"), GHOSTS),
+    ).toEqual({ ending: "service_winner", endedBy: "p2", winner: "p1" });
+    expect(
+      deriveEnding(point([serve(), p2({ result: "out" })]), GHOSTS)?.ending,
+    ).toBe("service_winner");
   });
 
   test("a second serve out is a double fault", () => {
@@ -88,50 +156,57 @@ test.describe("deriveEnding", () => {
           ],
           "p2",
         ),
+        GHOSTS,
       ),
     ).toEqual({ ending: "double_fault", endedBy: "p1", winner: "p2" });
     // A lone missed second serve, the first never recorded.
     expect(
-      deriveEnding(point([serve({ stroke: "second_serve", result: "net" })]))
-        ?.ending,
+      deriveEnding(
+        point([serve({ stroke: "second_serve", result: "net" })]),
+        GHOSTS,
+      )?.ending,
     ).toBe("double_fault");
     // Two faults both typed as first serves: the earlier serve decides.
     expect(
-      deriveEnding(point([serve({ result: "out" }), serve({ result: "out" })]))
-        ?.ending,
+      deriveEnding(
+        point([serve({ result: "out" }), serve({ result: "out" })]),
+        GHOSTS,
+      )?.ending,
     ).toBe("double_fault");
   });
 
   test("a lone faulted first serve says nothing", () => {
-    expect(deriveEnding(point([serve({ result: "out" })]))).toBeNull();
-    expect(deriveEnding(point([serve({ result: "net" })]))).toBeNull();
+    expect(deriveEnding(point([serve({ result: "out" })]), GHOSTS)).toBeNull();
+    expect(deriveEnding(point([serve({ result: "net" })]), GHOSTS)).toBeNull();
     // A deleted earlier serve is not an earlier serve.
     expect(
       deriveEnding(
         point([serve({ status: "deleted" }), serve({ result: "out" })]),
+        GHOSTS,
       ),
     ).toBeNull();
   });
 
   test("the last rally ball out is an error", () => {
     expect(
-      deriveEnding(point([serve(), p2(), p1({ result: "out" })], "p2")),
+      deriveEnding(point([serve(), p2(), p1({ result: "out" })], "p2"), GHOSTS),
     ).toEqual({ ending: "error", endedBy: "p1", winner: "p2" });
     const netted = deriveEnding(
       point([serve(), p2(), p1(), p2({ result: "net" })]),
+      GHOSTS,
     );
     expect(netted?.ending).toBe("error");
     expect(netted?.winner).toBe("p1");
   });
 
   test("the last ball in is a winner, won by its hitter", () => {
-    expect(deriveEnding(point([serve(), p2(), p1()], "p1"))).toEqual({
+    expect(deriveEnding(point([serve(), p2(), p1()], "p1"), GHOSTS)).toEqual({
       ending: "winner",
       endedBy: "p1",
       winner: "p1",
     });
     // No winner labelled: the same.
-    expect(deriveEnding(point([serve(), p2()]))).toEqual({
+    expect(deriveEnding(point([serve(), p2()]), GHOSTS)).toEqual({
       ending: "winner",
       endedBy: "p2",
       winner: "p2",
@@ -139,7 +214,7 @@ test.describe("deriveEnding", () => {
   });
 
   test("the last ball in, by the point's labelled loser, is still its hitter's winner", () => {
-    expect(deriveEnding(point([serve(), p2(), p1()], "p2"))).toEqual({
+    expect(deriveEnding(point([serve(), p2(), p1()], "p2"), GHOSTS)).toEqual({
       ending: "winner",
       endedBy: "p1",
       winner: "p1",
@@ -148,17 +223,19 @@ test.describe("deriveEnding", () => {
 
   test("a last ball with no result yet reads the labelled winner and settles none", () => {
     // By the labelled winner (or with none labelled): a winner.
-    expect(deriveEnding(point([serve(), p2({ result: null })], "p2"))).toEqual({
+    expect(
+      deriveEnding(point([serve(), p2({ result: null })], "p2"), GHOSTS),
+    ).toEqual({
       ending: "winner",
       endedBy: "p2",
       winner: null,
     });
-    expect(deriveEnding(point([serve(), p2({ result: null })]))?.ending).toBe(
-      "winner",
-    );
+    expect(
+      deriveEnding(point([serve(), p2({ result: null })]), GHOSTS)?.ending,
+    ).toBe("winner");
     // By the labelled loser: an error.
     expect(
-      deriveEnding(point([serve(), p2(), p1({ result: null })], "p2")),
+      deriveEnding(point([serve(), p2(), p1({ result: null })], "p2"), GHOSTS),
     ).toEqual({ ending: "error", endedBy: "p1", winner: null });
   });
 
@@ -169,6 +246,7 @@ test.describe("deriveEnding", () => {
           [serve(), p2({ result: "net" }), p1({ status: "deleted" })],
           "p1",
         ),
+        GHOSTS,
       ),
     ).toEqual({ ending: "service_winner", endedBy: "p2", winner: "p1" });
   });
@@ -177,7 +255,7 @@ test.describe("deriveEnding", () => {
     const first = serve();
     const second = p2();
     const third = p1({ result: "out" });
-    expect(deriveEnding(point([third, first, second]))).toEqual({
+    expect(deriveEnding(point([third, first, second]), GHOSTS)).toEqual({
       ending: "error",
       endedBy: "p1",
       winner: "p2",
@@ -186,11 +264,14 @@ test.describe("deriveEnding", () => {
 
   test("a stroke with no hitter names no winner", () => {
     expect(
-      deriveEnding(point([serve(), p2(), p1({ hitter: null })]))?.winner,
+      deriveEnding(point([serve(), p2(), p1({ hitter: null })]), GHOSTS)
+        ?.winner,
     ).toBeNull();
     expect(
-      deriveEnding(point([serve(), p2(), p1({ hitter: null, result: "out" })]))
-        ?.winner,
+      deriveEnding(
+        point([serve(), p2(), p1({ hitter: null, result: "out" })]),
+        GHOSTS,
+      )?.winner,
     ).toBeNull();
   });
 });
@@ -205,6 +286,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p1", "winner", "p1"),
         point(flip("out"), "p1", "winner", "p1"),
+        GHOSTS,
       ),
     ).toEqual({ ending: "error", ended_by: "p1", winner: "p2" });
   });
@@ -214,6 +296,7 @@ test.describe("endingPatchForShotChange", () => {
     const patch = endingPatchForShotChange(
       point(flip("out"), "p2", "error", "p1"),
       point(rally, "p2", "error", "p1"),
+      GHOSTS,
     );
     expect(patch).toEqual({ ending: "winner", ended_by: "p1", winner: "p1" });
   });
@@ -228,6 +311,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p1", "winner", "p1"),
         point(deleted, "p1", "winner", "p1"),
+        GHOSTS,
       ),
     ).toEqual({ ending: "winner", ended_by: "p2", winner: "p2" });
   });
@@ -237,11 +321,13 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p2", "error", "p1"),
         point(flip("out"), "p2", "error", "p1"),
+        GHOSTS,
       ),
     ).toBeNull();
     const patch = endingPatchForShotChange(
       point(rally, "p2", "winner", "p1"),
       point(flip("out"), "p2", "winner", "p1"),
+      GHOSTS,
     );
     expect(patch).toEqual({ ending: "error", ended_by: "p1" });
     expect(patch).not.toHaveProperty("winner");
@@ -258,6 +344,7 @@ test.describe("endingPatchForShotChange", () => {
     const step1 = endingPatchForShotChange(
       point(live, "p2", "error", "p1"),
       point(deleted, "p2", "error", "p1"),
+      GHOSTS,
     );
     expect(step1).toEqual({ ending: "winner", ended_by: "p2" });
     expect(step1).not.toHaveProperty("winner");
@@ -271,6 +358,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(deleted, "p2", "winner", "p2"),
         point(marked, "p2", "winner", "p2"),
+        GHOSTS,
       ),
     ).toEqual({ ending: "service_winner", ended_by: "p2", winner: "p1" });
   });
@@ -281,6 +369,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p1", "error", "p2"),
         point(spun, "p1", "error", "p2"),
+        GHOSTS,
       ),
     ).toBeNull();
   });
@@ -290,6 +379,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p2", "error", "p1"),
         point(flip("out"), "p2", "error", "p1"),
+        GHOSTS,
       ),
     ).toBeNull();
     const lone = serve();
@@ -297,6 +387,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point([lone], "p1", "ace", "p1"),
         point([{ ...lone, result: "out" }], "p1", "ace", "p1"),
+        GHOSTS,
       ),
     ).toBeNull();
   });
@@ -306,6 +397,7 @@ test.describe("endingPatchForShotChange", () => {
       endingPatchForShotChange(
         point(rally, "p1", "error", "p1"),
         point(flip("out"), "p1", "error", "p1"),
+        GHOSTS,
       ),
     ).toEqual({ winner: "p2" });
   });
@@ -316,6 +408,7 @@ test.describe("endingPatchForShotChange", () => {
         endingPatchForShotChange(
           point(rally, "p1", held),
           point(flip("out"), "p1", held),
+          GHOSTS,
         ),
       ).toBeNull();
     }

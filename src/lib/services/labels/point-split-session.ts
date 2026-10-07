@@ -6,15 +6,19 @@
  * `point_index` per later point, HIGHEST first (the rail numbers rows by it);
  * one INSERT of the new row; one UPDATE moving the shots (`label_point_id`, by
  * id list), their statuses untouched; one UPDATE of the anchor's status and
- * rally ids. No row is ever removed.
+ * rally ids; then each half's ending as its rows now derive it
+ * (`reconcileEnding`, ending-session.ts) — the new point's, which starts
+ * blank, and the anchor's, where its last stroke changed. No row is ever
+ * removed.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
-  checkSessionOpen,
   defaultLabelWriteDependencies,
+  readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { reconcileEnding } from "./ending-session";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   planPointSplit,
@@ -125,8 +129,8 @@ export async function writeLabelPointSplit(params: {
     return { error: `Could not read the point: ${anchorError.message}` };
   }
   if (!anchor) return { error: "Point not found." };
-  const closed = await checkSessionOpen(supabase, anchor.session_id);
-  if (closed) return { error: closed };
+  const gate = await readSessionGate(supabase, anchor.session_id);
+  if ("error" in gate) return gate;
 
   const { data: rows, error: rowsError } = await supabase
     .from("label_points")
@@ -207,11 +211,47 @@ export async function writeLabelPointSplit(params: {
     };
   }
 
+  // Both halves' endings, off the rows each now holds. The statuses stay as
+  // just written: a split's anchor is `edited` whatever its fields say.
+  const split = await reconcileEnding({
+    supabase,
+    pointId: inserted.id,
+    ghosts: gate.ghosts,
+    keepStatus: true,
+  });
+  if ("error" in split) return split;
+  const kept = await reconcileEnding({
+    supabase,
+    pointId,
+    ghosts: gate.ghosts,
+    keepStatus: true,
+  });
+  if ("error" in kept) return kept;
+
+  const point = toLabelPoint(inserted);
   return {
     ok: true,
-    // The row read back whole: an added point with no seed and no shots.
-    point: toLabelPoint(inserted),
-    anchor: { id: pointId, ...write.anchor },
+    // The row read back whole: an added point with no seed and no shots, and
+    // the ending its moved strokes derive.
+    point: split.point
+      ? {
+          ...point,
+          ending: split.point.ending,
+          endedBy: split.point.endedBy,
+          winner: split.point.winner,
+        }
+      : point,
+    anchor: {
+      id: pointId,
+      ...write.anchor,
+      ...(kept.point
+        ? {
+            ending: kept.point.ending,
+            ended_by: kept.point.endedBy,
+            winner: kept.point.winner,
+          }
+        : {}),
+    },
   };
 }
 

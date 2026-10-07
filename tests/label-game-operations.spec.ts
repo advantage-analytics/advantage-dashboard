@@ -10,8 +10,8 @@ import {
   planGameType,
   rotateServers,
   takesServeTurn,
-  type GamePoint,
   type GamePointWrite,
+  type GameServerPoint,
 } from "@/lib/services/labels/game-operations";
 import {
   setLabelGameServer,
@@ -19,11 +19,16 @@ import {
   writeLabelGameServer,
   writeLabelGameType,
 } from "@/lib/services/labels/game-operations-session";
+import type { SwapShot } from "@/lib/services/labels/player-swap";
 import type {
   LabelPointSeedValues,
   LabelSide,
 } from "@/lib/services/labels/session";
-import { fakeLabelClient, labelSessionFixture } from "./fixtures/label-session";
+import {
+  fakeLabelClient,
+  labelSessionFixture,
+  labelShotRow,
+} from "./fixtures/label-session";
 
 // Game operations: set a game's server, set a game's type — the pure rules
 // and the admin-gated services over a fake client.
@@ -32,19 +37,19 @@ const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const GAME = { setNumber: 1, gameNumber: 7 };
 const OTHER_GAME = { setNumber: 1, gameNumber: 6 };
 
-type PointFields = Partial<Omit<GamePoint, "seed">> & {
+type PointFields = Partial<Omit<GameServerPoint, "seed">> & {
   /** Null: no seed. A partial: the seed is the point's values with these over it. */
   seed?: Partial<LabelPointSeedValues> | null;
 };
 
-/** A point of GAME, `unchanged`, served by `server`, seeded as it stands. */
+/** A point of GAME, `unchanged`, served by `server`, seeded as it stands, with no strokes. */
 function point(
   id: string,
   pointIndex: number,
   fields: PointFields = {},
-): GamePoint {
+): GameServerPoint {
   const { seed: seedFields, ...rest } = fields;
-  const base: GamePoint = {
+  const base: GameServerPoint = {
     id,
     pointIndex,
     status: "unchanged",
@@ -57,6 +62,7 @@ function point(
     endedBy: "p1",
     gameType: "game",
     seed: null,
+    shots: [],
     ...rest,
   };
   if (seedFields === null) return base;
@@ -74,7 +80,7 @@ function point(
 }
 
 /** Nine points of a tiebreak, the fourth a replayed let. */
-function tiebreakPoints(first: LabelSide = "p1"): GamePoint[] {
+function tiebreakPoints(first: LabelSide = "p1"): GameServerPoint[] {
   return Array.from({ length: 9 }, (_, i) =>
     point(`tb-${i + 1}`, 100 + i, {
       server: first,
@@ -82,6 +88,58 @@ function tiebreakPoints(first: LabelSide = "p1"): GamePoint[] {
       ...(i === 3 ? { ending: "let_replayed", winner: null } : {}),
     }),
   );
+}
+
+/** A vendor stroke seeded with exactly what it holds. */
+function seededShot(id: string, fields: Partial<SwapShot> = {}): SwapShot {
+  const row: SwapShot = {
+    id,
+    eventId: 1,
+    status: "kept",
+    statusBeforeDelete: null,
+    seed: null,
+    hitter: "p1",
+    stroke: null,
+    result: null,
+    spin: null,
+    contactX: null,
+    contactY: null,
+    landingX: null,
+    landingY: null,
+    videoTime: null,
+    ...fields,
+  };
+  return {
+    ...row,
+    seed: {
+      hitter: row.hitter,
+      stroke: row.stroke,
+      result: row.result,
+      spin: row.spin,
+      contact_x: row.contactX,
+      contact_y: row.contactY,
+      landing_x: row.landingX,
+      landing_y: row.landingY,
+      video_time: row.videoTime,
+    },
+  };
+}
+
+/** A serve by `server` and the return, in video order, prefixed by `id`. */
+function rally(id: string, server: LabelSide): SwapShot[] {
+  const returner = server === "p1" ? "p2" : "p1";
+  return [
+    seededShot(`${id}-serve`, {
+      hitter: server,
+      stroke: "first_serve",
+      videoTime: 1,
+    }),
+    seededShot(`${id}-return`, {
+      hitter: returner,
+      stroke: "backhand",
+      videoTime: 2,
+    }),
+  ];
 }
 
 function servers(planned: ReturnType<typeof planGameServer>): LabelSide[] {
@@ -94,6 +152,11 @@ function writesOf(
 ): GamePointWrite[] {
   if (!("ok" in planned)) throw new Error(planned.error);
   return planned.writes;
+}
+
+function planOf(planned: ReturnType<typeof planGameServer>) {
+  if (!("ok" in planned)) throw new Error(planned.error);
+  return planned;
 }
 
 // ── The tiebreak rotation ──────────────────────────────────────────────────
@@ -210,6 +273,195 @@ test.describe("an ordinary game", () => {
     ).toHaveProperty("error");
     expect(planGameServer([], GAME, "p1")).toHaveProperty("error");
     expect(planGameType([], GAME, "tiebreak")).toHaveProperty("error");
+  });
+});
+
+// ── The players' swap ──────────────────────────────────────────────────────
+
+test.describe("the players' swap", () => {
+  test("a point whose serve the old server hit switches players; one already served by the new server, or with no hitter, is only re-served", () => {
+    const points = [
+      // Lee's serve, Lee's winner: the strokes contradict p2.
+      point("g-1", 1, { shots: rally("g-1", "p1") }),
+      // Vargas already serving, under a wrong `server`: only re-served.
+      point("g-2", 2, {
+        winner: "p2",
+        endedBy: "p2",
+        shots: rally("g-2", "p2"),
+      }),
+      // Lee's serve again, this time an error by Vargas, won by Lee.
+      point("g-3", 3, {
+        ending: "error",
+        endedBy: "p2",
+        shots: rally("g-3", "p1"),
+      }),
+      // No stroke names a hitter: nothing to contradict, only re-served.
+      point("g-4", 4, {
+        shots: [
+          seededShot("g-4-serve", { hitter: null, stroke: "first_serve" }),
+        ],
+      }),
+    ];
+    const plan = planOf(planGameServer(points, GAME, "p2"));
+    expect(plan.writes).toEqual([
+      {
+        id: "g-1",
+        server: "p2",
+        status: "edited",
+        winner: "p2",
+        ended_by: "p2",
+      },
+      { id: "g-2", server: "p2", status: "edited" },
+      {
+        id: "g-3",
+        server: "p2",
+        status: "edited",
+        winner: "p2",
+        ended_by: "p1",
+      },
+      { id: "g-4", server: "p2", status: "edited" },
+    ]);
+    // Every stroke of the two swapped points, flipped; none of the others'.
+    expect(plan.shots).toEqual([
+      {
+        id: "g-1-serve",
+        hitter: "p2",
+        status: "edited",
+        status_before_delete: null,
+      },
+      {
+        id: "g-1-return",
+        hitter: "p1",
+        status: "edited",
+        status_before_delete: null,
+      },
+      {
+        id: "g-3-serve",
+        hitter: "p2",
+        status: "edited",
+        status_before_delete: null,
+      },
+      {
+        id: "g-3-return",
+        hitter: "p1",
+        status: "edited",
+        status_before_delete: null,
+      },
+    ]);
+  });
+
+  test("a null winner stays null; ending is never named; a tombstone's hitter flips with status_before_delete recomputed", () => {
+    const points = [
+      point("g-1", 1, {
+        winner: null,
+        ending: null,
+        endedBy: null,
+        shots: [
+          ...rally("g-1", "p1"),
+          seededShot("g-1-phantom", {
+            hitter: "p1",
+            videoTime: 3,
+            status: "deleted",
+            statusBeforeDelete: "kept",
+          }),
+        ],
+      }),
+    ];
+    const plan = planOf(planGameServer(points, GAME, "p2"));
+    expect(plan.writes).toEqual([
+      {
+        id: "g-1",
+        server: "p2",
+        status: "edited",
+        winner: null,
+        ended_by: null,
+      },
+    ]);
+    expect(plan.writes[0]).not.toHaveProperty("ending");
+    expect(plan.shots.find((s) => s.id === "g-1-phantom")).toEqual({
+      id: "g-1-phantom",
+      hitter: "p2",
+      status: "deleted",
+      status_before_delete: "edited",
+    });
+  });
+
+  test("the status is measured over the whole change: a swap that lands the point back on its seed makes it unchanged", () => {
+    // Seeded server p2, winner p2; a move set server p1 and swapped the
+    // players (winner p1, Lee's serve). Serving p2 again swaps them back.
+    const points = [
+      point("g-1", 1, {
+        status: "edited",
+        server: "p1",
+        winner: "p1",
+        endedBy: "p1",
+        seed: { server: "p2", winner: "p2", ended_by: "p2" },
+        shots: [
+          {
+            ...seededShot("g-1-serve", {
+              hitter: "p2",
+              stroke: "first_serve",
+              videoTime: 1,
+            }),
+            hitter: "p1",
+            status: "edited",
+          },
+        ],
+      }),
+    ];
+    const plan = planOf(planGameServer(points, GAME, "p2"));
+    expect(plan.writes).toEqual([
+      {
+        id: "g-1",
+        server: "p2",
+        status: "unchanged",
+        winner: "p2",
+        ended_by: "p2",
+      },
+    ]);
+    // The stroke lands on its seeded hitter too: back to kept.
+    expect(plan.shots).toEqual([
+      {
+        id: "g-1-serve",
+        hitter: "p2",
+        status: "kept",
+        status_before_delete: null,
+      },
+    ]);
+  });
+
+  test("in a tiebreak each point is measured against its own rotated server", () => {
+    // Nine points all served by Lee as the rows have it; serving p1 first
+    // rotates points 2–3, 6–7 to Vargas, and those four switch players.
+    const points = tiebreakPoints().map((p, i) => ({
+      ...p,
+      shots: i === 3 ? [] : rally(p.id, "p1"),
+    }));
+    const plan = planOf(planGameServer(points, GAME, "p1"));
+    expect(plan.writes.map((w) => "winner" in w)).toEqual([
+      false,
+      true,
+      true,
+      false, // the let: no strokes
+      false,
+      false,
+      true,
+      true,
+      false,
+    ]);
+    expect(plan.shots.map((s) => s.id)).toEqual(
+      ["tb-2", "tb-3", "tb-7", "tb-8"].flatMap((id) => [
+        `${id}-serve`,
+        `${id}-return`,
+      ]),
+    );
+  });
+
+  test("the type operation never swaps", () => {
+    const points = [point("g-1", 1, { shots: rally("g-1", "p2") })];
+    const plan = planOf(planGameType(points, GAME, "tiebreak"));
+    expect(plan.shots).toEqual([]);
+    expect(plan.writes[0]).not.toHaveProperty("winner");
   });
 });
 
@@ -351,12 +603,28 @@ test("applyGameWrites applies the writes and leaves the other rows alone", () =>
   expect(next[3]).toBe(p4);
   // The input is not mutated.
   expect(session.points[0].server).toBe("p1");
+
+  // A swapped point's write carries its winner and ended by, null included;
+  // its strokes are the plan's `shots`, applied separately.
+  const swapped = applyGameWrites(session.points, [
+    { id: p2.id, server: "p2", status: "edited", winner: "p2", ended_by: null },
+  ]);
+  expect(swapped[1]).toEqual({
+    ...p2,
+    server: "p2",
+    status: "edited",
+    winner: "p2",
+    endedBy: null,
+  });
+  expect(swapped[1].shots).toBe(p2.shots);
 });
 
 // ── The services, over a fake client ───────────────────────────────────────
 
 function fakeClient(rows: {
   gamePoints?: Record<string, unknown>[];
+  /** The game's shot rows, as `readShotsOfPoints` reads them. */
+  shots?: Record<string, unknown>[];
   sessionStatus?: string | null;
   /** Ids whose compare-and-set matches nothing — another tab got there first. */
   racedIds?: string[];
@@ -378,6 +646,9 @@ function fakeClient(rows: {
     }
     if (call.table === "label_points") {
       return { data: rows.gamePoints ?? [], error: null };
+    }
+    if (call.table === "label_shots") {
+      return { data: rows.shots ?? [], error: null };
     }
     return undefined;
   });
@@ -503,13 +774,17 @@ test.describe("the services", () => {
     });
     const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
     const result = await setLabelGameServer(SESSION_ID, GAME, "p2", deps);
+    // Each point as it now stands: the winner and ended by are the rows' own
+    // when nothing contradicted the new server — here, no strokes at all.
+    const own = { gameType: "game", winner: "p1", endedBy: "p1" };
     expect(result).toEqual({
       ok: true,
       points: [
-        { id: ROW_IDS[0], server: "p2", gameType: "game", status: "edited" },
-        { id: ROW_IDS[1], server: "p2", gameType: "game", status: "edited" },
-        { id: ROW_IDS[2], server: "p2", gameType: "game", status: "added" },
+        { id: ROW_IDS[0], server: "p2", status: "edited", ...own },
+        { id: ROW_IDS[1], server: "p2", status: "edited", ...own },
+        { id: ROW_IDS[2], server: "p2", status: "added", ...own },
       ],
+      shots: [],
     });
 
     const read = fake.calls.find(
@@ -523,6 +798,10 @@ test.describe("the services", () => {
       },
       negated: { status: "deleted" },
     });
+    // A server moved, so the game's strokes were read — by the live rows' ids.
+    expect(
+      fake.calls.find((c) => c.table === "label_shots" && c.op === "select"),
+    ).toMatchObject({ in: { label_point_id: ROW_IDS } });
 
     const updates = fake.calls.filter((c) => c.op === "update");
     expect(updates).toEqual([
@@ -556,28 +835,15 @@ test.describe("the services", () => {
       ],
     });
     const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
+    const own = { gameType: "tiebreak", winner: "p1", endedBy: "p1" };
     expect(await setLabelGameType(SESSION_ID, GAME, "tiebreak", deps)).toEqual({
       ok: true,
       points: [
-        {
-          id: ROW_IDS[0],
-          server: "p1",
-          gameType: "tiebreak",
-          status: "unchanged",
-        },
-        {
-          id: ROW_IDS[1],
-          server: "p2",
-          gameType: "tiebreak",
-          status: "edited",
-        },
-        {
-          id: ROW_IDS[2],
-          server: "p2",
-          gameType: "tiebreak",
-          status: "edited",
-        },
+        { id: ROW_IDS[0], server: "p1", status: "unchanged", ...own },
+        { id: ROW_IDS[1], server: "p2", status: "edited", ...own },
+        { id: ROW_IDS[2], server: "p2", status: "edited", ...own },
       ],
+      shots: [],
     });
     expect(
       fake.calls.filter((c) => c.op === "update").map((c) => c.values),
@@ -586,6 +852,189 @@ test.describe("the services", () => {
       { server: "p2", game_type: "tiebreak", status: "edited" },
       { server: "p2", game_type: "tiebreak", status: "edited" },
     ]);
+    // The type operation never swaps, so it never reads the strokes.
+    expect(fake.calls.some((c) => c.table === "label_shots")).toBe(false);
+  });
+
+  test("the server operation swaps the players of each point whose strokes contradict the new server: winner and ended by on the point row, then the strokes grouped by value tuple", async () => {
+    const shotRow = (
+      id: string,
+      pointId: string,
+      fields: Record<string, unknown>,
+    ) => labelShotRow(id, pointId, fields);
+    const fake = fakeClient({
+      gamePoints: [
+        gameRow(ROW_IDS[0], 1),
+        gameRow(ROW_IDS[1], 2, { winner: "p2", ended_by: "p2" }),
+        gameRow(ROW_IDS[2], 3, { winner: null, ending: null, ended_by: null }),
+      ],
+      shots: [
+        // Point 1: Lee's serve — contradicts p2.
+        shotRow("s-1a", ROW_IDS[0], {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        shotRow("s-1b", ROW_IDS[0], {
+          hitter: "p2",
+          stroke: "backhand",
+          video_time: 2,
+        }),
+        // Point 2: Vargas already serving — only re-served.
+        shotRow("s-2a", ROW_IDS[1], {
+          hitter: "p2",
+          stroke: "first_serve",
+          video_time: 3,
+        }),
+        // Point 3: Lee's serve, a tombstone in the rally, no winner yet.
+        shotRow("s-3a", ROW_IDS[2], {
+          hitter: "p1",
+          stroke: "first_serve",
+          video_time: 4,
+        }),
+        shotRow("s-3b", ROW_IDS[2], {
+          hitter: "p1",
+          video_time: 5,
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "other",
+        }),
+      ],
+    });
+    const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
+    const result = await setLabelGameServer(SESSION_ID, GAME, "p2", deps);
+    expect(result).toEqual({
+      ok: true,
+      points: [
+        {
+          id: ROW_IDS[0],
+          server: "p2",
+          gameType: "game",
+          status: "edited",
+          winner: "p2",
+          endedBy: "p2",
+        },
+        {
+          id: ROW_IDS[1],
+          server: "p2",
+          gameType: "game",
+          status: "edited",
+          winner: "p2",
+          endedBy: "p2",
+        },
+        {
+          id: ROW_IDS[2],
+          server: "p2",
+          gameType: "game",
+          status: "edited",
+          winner: null,
+          endedBy: null,
+        },
+      ],
+      shots: [
+        {
+          id: "s-1a",
+          hitter: "p2",
+          status: "edited",
+          status_before_delete: null,
+        },
+        {
+          id: "s-1b",
+          hitter: "p1",
+          status: "edited",
+          status_before_delete: null,
+        },
+        {
+          id: "s-3a",
+          hitter: "p2",
+          status: "edited",
+          status_before_delete: null,
+        },
+        {
+          id: "s-3b",
+          hitter: "p2",
+          status: "deleted",
+          status_before_delete: "edited",
+        },
+      ],
+    });
+    // Points (compare-and-set on updated_at) first, every one, then the strokes.
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "update"],
+    ]);
+    const updates = fake.calls.filter((c) => c.op === "update");
+    expect(updates.slice(0, 3).map((c) => [c.values, c.filters])).toEqual([
+      [
+        { server: "p2", status: "edited", winner: "p2", ended_by: "p2" },
+        { id: ROW_IDS[0], updated_at: "2026-10-03T00:00:01Z" },
+      ],
+      [
+        { server: "p2", status: "edited" },
+        { id: ROW_IDS[1], updated_at: "2026-10-03T00:00:02Z" },
+      ],
+      [
+        { server: "p2", status: "edited", winner: null, ended_by: null },
+        { id: ROW_IDS[2], updated_at: "2026-10-03T00:00:03Z" },
+      ],
+    ]);
+    expect(updates.slice(3).map((c) => [c.values, c.in])).toEqual([
+      [
+        { hitter: "p2", status: "edited", status_before_delete: null },
+        { id: ["s-1a", "s-3a"] },
+      ],
+      [
+        { hitter: "p1", status: "edited", status_before_delete: null },
+        { id: ["s-1b"] },
+      ],
+      [
+        { hitter: "p2", status: "deleted", status_before_delete: "edited" },
+        { id: ["s-3b"] },
+      ],
+    ]);
+  });
+
+  test("the strokes are read only once a dry plan moves a server; re-serving the same player reads none", async () => {
+    const fake = fakeClient({
+      gamePoints: [gameRow(ROW_IDS[0], 1), gameRow(ROW_IDS[1], 2)],
+      shots: [
+        labelShotRow("s-1", ROW_IDS[0], {
+          hitter: "p2",
+          stroke: "first_serve",
+        }),
+      ],
+    });
+    const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
+    expect(await setLabelGameServer(SESSION_ID, GAME, "p1", deps)).toEqual({
+      ok: true,
+      points: [
+        {
+          id: ROW_IDS[0],
+          server: "p1",
+          gameType: "game",
+          status: "unchanged",
+          winner: "p1",
+          endedBy: "p1",
+        },
+        {
+          id: ROW_IDS[1],
+          server: "p1",
+          gameType: "game",
+          status: "unchanged",
+          winner: "p1",
+          endedBy: "p1",
+        },
+      ],
+      shots: [],
+    });
+    expect(fake.calls.some((c) => c.table === "label_shots")).toBe(false);
   });
 
   test("a row that changed under the plan makes the game re-read; a persistent race is refused", async () => {
@@ -631,24 +1080,43 @@ test.describe("the services", () => {
     ).toEqual({ error: "Session not found." });
   });
 
-  test("every service call stays on label_points / label_sessions, and is a select or an update", async () => {
+  test("every service call stays on label_points / label_shots / label_sessions, and is a select or an update", async () => {
     const fake = fakeClient({
       gamePoints: [gameRow(ROW_IDS[0], 1), gameRow(ROW_IDS[1], 2)],
+      shots: [
+        labelShotRow("s-1", ROW_IDS[0], {
+          hitter: "p1",
+          stroke: "first_serve",
+        }),
+      ],
     });
     const deps = { ...ADMIN, createAdminClient: () => fake.supabase };
     await setLabelGameServer(SESSION_ID, GAME, "p2", deps);
     await setLabelGameType(SESSION_ID, GAME, "match_tiebreak", deps);
     expect(fake.calls.length).toBeGreaterThan(0);
+    const POINT_KEYS = ["server", "game_type", "status", "winner", "ended_by"];
+    const SHOT_KEYS = ["hitter", "status", "status_before_delete"];
     for (const call of fake.calls) {
-      expect(call.table).toMatch(/^label_(points|sessions)$/);
+      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
       expect(["select", "update"]).toContain(call.op);
       if (call.op === "update") {
-        expect(call.table).toBe("label_points");
+        expect(["label_points", "label_shots"]).toContain(call.table);
+        const allowed = call.table === "label_points" ? POINT_KEYS : SHOT_KEYS;
         for (const key of Object.keys(call.values ?? {})) {
-          expect(["server", "game_type", "status"]).toContain(key);
+          expect(allowed).toContain(key);
         }
       }
     }
+    // Both tables were written: the point and its flipped serve.
+    expect(
+      fake.calls.filter((c) => c.op === "update").map((c) => c.table),
+    ).toEqual([
+      "label_points",
+      "label_points",
+      "label_shots",
+      "label_points",
+      "label_points",
+    ]);
   });
 });
 

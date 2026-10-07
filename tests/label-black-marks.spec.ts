@@ -415,3 +415,125 @@ test.describe("a session with no marks", () => {
     expect(pencils(tail(renderRow(first, marksOf(first, [DISPUTED]))))).toBe(1);
   });
 });
+
+test.describe("the two hints read off the rows, with their one answer", () => {
+  const MARK = "src/components/admin/labels/label-black-mark.tsx";
+  type Hint = {
+    code: string;
+    label: string;
+    detail: string;
+    action?: { label: string; run: () => void };
+  };
+  type Hints = (
+    point: LabelPoint,
+    marks: LabelMarks | null,
+    names: typeof NAMES,
+    edit?: Record<string, unknown>,
+  ) => Hint[];
+
+  /** The ace, stored as Vargas's winner: the rows say otherwise. */
+  const stale = () => fixturePoint({ ending: "winner", endedBy: "p2" });
+
+  /** Lee's faulted serve, then a serve typed as a first that went in. */
+  const retyped = () => {
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    return {
+      ...point,
+      shots: [
+        { ...ace, id: "s-fault", eventId: 200, result: "net" as const },
+        { ...ace, id: "s-second", eventId: 201 },
+      ],
+    };
+  };
+
+  test("drawn on the line with the words and the sentence, and a button after each", () => {
+    const html = renderWell(stale(), marksOf(stale(), []));
+    expect(hintLine(html)).toEqual([
+      {
+        code: "ending_stale",
+        text: "Ending looks stale",
+        label: "Ending looks stale. The strokes say an ace by Lee.",
+      },
+    ]);
+    const button =
+      /<button[^>]*data-point-hint-action="ending_stale"[^>]*>([^<]*)</.exec(
+        html,
+      );
+    expect(button?.[1]).toBe("Use it");
+    // The rail's pressed state, as every text action in it.
+    expect(button?.[0]).toContain("active:scale-[0.96]");
+    expect(chips(html)).toHaveLength(0);
+
+    const serves = renderWell(retyped(), marksOf(retyped(), []));
+    expect(hintLine(serves).map((h) => [h.code, h.text, h.label])).toEqual([
+      [
+        "second_serve_as_first",
+        "Second serve?",
+        "Second serve? Follows a faulted serve, so it is the second serve.",
+      ],
+    ]);
+    expect(serves).toMatch(
+      /<button[^>]*data-point-hint-action="second_serve_as_first"[^>]*>Make it a second serve</,
+    );
+  });
+
+  test("the answers are the point patch and the shot patch, through the console's two writes", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const patched: unknown[][] = [];
+    const edit = {
+      onPatchPoint: (...args: unknown[]) => patched.push(["point", ...args]),
+      onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
+    };
+    const point = stale();
+    const [ending] = pointHints(point, marksOf(point, []), NAMES, edit);
+    expect(ending.action?.label).toBe("Use it");
+    ending.action?.run();
+    // The rows settle the winner too — Lee's ace — so the patch carries it.
+    expect(patched).toEqual([
+      ["point", point.id, { ending: "ace", ended_by: "p1", winner: "p1" }],
+    ]);
+
+    patched.length = 0;
+    const [second] = pointHints(retyped(), marksOf(retyped(), []), NAMES, edit);
+    second.action?.run();
+    expect(patched).toEqual([["shot", "s-second", { stroke: "second_serve" }]]);
+
+    // A last stroke with no result settles no winner: none in the patch.
+    patched.length = 0;
+    const open = {
+      ...point,
+      shots: [
+        ...point.shots,
+        {
+          ...point.shots[0],
+          id: "s-open",
+          eventId: 202,
+          hitter: "p2" as const,
+          stroke: "backhand" as const,
+          result: null,
+        },
+      ],
+      winner: "p1" as const,
+    };
+    const [hint] = pointHints(open, marksOf(open, []), NAMES, edit);
+    hint.action?.run();
+    expect(patched).toEqual([
+      ["point", point.id, { ending: "error", ended_by: "p2" }],
+    ]);
+  });
+
+  test("nothing without marks, and no button where the console cannot write", () => {
+    expect(renderWell(stale(), null)).not.toContain("data-point-hint");
+    expect(renderWell(retyped(), null)).not.toContain("data-point-hint");
+    const readOnly = renderWell(stale(), marksOf(stale(), []), {
+      editable: false,
+    });
+    expect(hintLine(readOnly).map((h) => h.code)).toEqual(["ending_stale"]);
+    expect(readOnly).not.toContain("data-point-hint-action");
+    // The rows in step with the ending: no hint at all.
+    expect(
+      renderWell(fixturePoint(), marksOf(fixturePoint(), [])),
+    ).not.toContain("data-point-hint");
+  });
+});

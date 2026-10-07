@@ -10,16 +10,22 @@
  * Here the patch is validated whole against edit.ts's allowlist before anything
  * is read, a tombstone is refused, and the patch is written together with the
  * status it implies, measured against the row's frozen `seed`.
+ *
+ * A shot write then settles its point's ending in the same call
+ * (ending-session.ts), and answers with the point when that moved it. A serve
+ * relabelled in frees the ghost the site removed after it
+ * (`ghostFreedByServeIn`) in the same call too.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { UUID_RE } from "@/lib/admin/validation";
-import type { LabelPointStatus, LabelShotStatus } from "./session";
+import type { LabelPointStatus, LabelShot, LabelShotStatus } from "./session";
 import {
   LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_VALUE_FIELDS,
+  applyLabelShotPatch,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
@@ -29,13 +35,35 @@ import {
   type LabelPointFields,
   type LabelShotValues,
 } from "./edit";
+import {
+  endingSyncFailed,
+  readPointShots,
+  reconcileEnding,
+  syncEndingAfterShotChange,
+  type LabelPointEndingSynced,
+} from "./ending-session";
+import { applySiteRemovalRestore, ghostFreedByServeIn } from "./site-removal";
 
 const LOG = "[labels:edit]";
 
 export type LabelShotEditResult =
-  { ok: true; status: LabelShotStatus } | { error: string };
+  | {
+      ok: true;
+      status: LabelShotStatus;
+      /** The shot's point, when the write moved its ending. */
+      point?: LabelPointEndingSynced;
+      /** The ghost a serve relabelled in put back, when one was. */
+      restoredGhostId?: string;
+    }
+  | { error: string };
 export type LabelPointEditResult =
-  { ok: true; status: LabelPointStatus } | { error: string };
+  | {
+      ok: true;
+      status: LabelPointStatus;
+      /** The point once a winner pick made its ending follow the rows. */
+      point?: LabelPointEndingSynced;
+    }
+  | { error: string };
 
 /** What every admin-gated label write needs; specs pass fakes. */
 export interface LabelWriteDependencies {
@@ -64,39 +92,57 @@ const BUSY = "This row changed while it was saving. Try again.";
 const MAX_EDIT_ATTEMPTS = 3;
 
 /**
- * Refuses anything but a `labelling` session: an error sentence, or null to
- * proceed. With `blind`, also refuses a session whose `marks_enabled` is false,
- * the gate the marks' own writes share (Restore a ghost, Dismiss a suggestion):
- * that session was labelled blind to the derivation and carries no mark to act
- * on. `blind` is the sentence that says so.
+ * The session's gate, in one read: refuses anything but a `labelling` session
+ * with an error sentence, else answers `ghosts` — whether the session draws
+ * the site's removed strokes as ghosts (`marks_enabled`), the flag every
+ * reading of a point's rows takes (ending-derived.ts). With `blind`, also
+ * refuses a session whose `marks_enabled` is false, the gate the marks' own
+ * writes share (Restore a ghost, Dismiss a suggestion): that session was
+ * labelled blind to the derivation and carries no mark to act on. `blind` is
+ * the sentence that says so.
  */
-export async function checkSessionOpen(
+export async function readSessionGate(
   supabase: AdminClient,
   sessionId: string,
   { blind }: { blind?: string } = {},
-): Promise<string | null> {
+): Promise<{ ghosts: boolean } | { error: string }> {
   const { data, error } = await supabase
     .from("label_sessions")
-    .select(blind === undefined ? "status" : "status, marks_enabled")
+    .select("status, marks_enabled")
     .eq("id", sessionId)
     .maybeSingle<{ status: string; marks_enabled?: boolean | null }>();
-  if (error) return `Could not read the session: ${error.message}`;
-  if (!data) return "Session not found.";
-  if (data.status !== "labelling") return FROZEN;
-  if (blind !== undefined && data.marks_enabled !== true) return blind;
-  return null;
+  if (error) return { error: `Could not read the session: ${error.message}` };
+  if (!data) return { error: "Session not found." };
+  if (data.status !== "labelling") return { error: FROZEN };
+  const ghosts = data.marks_enabled === true;
+  if (blind !== undefined && !ghosts) return { error: blind };
+  return { ghosts };
+}
+
+/** `readSessionGate` as a refusal alone: an error sentence, or null to proceed. */
+export async function checkSessionOpen(
+  supabase: AdminClient,
+  sessionId: string,
+  options: { blind?: string } = {},
+): Promise<string | null> {
+  const gate = await readSessionGate(supabase, sessionId, options);
+  return "error" in gate ? gate.error : null;
 }
 
 type ShotRow = LabelShotValues & {
   id: string;
   session_id: string;
+  label_point_id: string;
   updated_at: string;
   status: LabelShotStatus;
   /** Raw jsonb — parsed before the status rule trusts it. */
   seed: unknown;
 };
 
-/** Validate, then write `patch` and its status to one shot. Never throws. */
+/**
+ * Validate, then write `patch` and its status to one shot; then the ghost a
+ * serve relabelled in frees, and the point's ending. Never throws.
+ */
 export async function writeLabelShotEdit(params: {
   supabase: AdminClient;
   shotId: unknown;
@@ -111,11 +157,15 @@ export async function writeLabelShotEdit(params: {
   const { patch } = parsed;
 
   try {
+    // The session's gate and the point's rows, read once with the first
+    // attempt: what the ending is derived from before and after the write.
+    let ghosts = false;
+    let before: LabelShot[] = [];
     for (let attempt = 0; attempt < MAX_EDIT_ATTEMPTS; attempt += 1) {
       const { data: row, error } = await supabase
         .from("label_shots")
         .select(
-          `id, session_id, updated_at, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
+          `id, session_id, label_point_id, updated_at, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}`,
         )
         .eq("id", shotId)
         .maybeSingle<ShotRow>();
@@ -127,8 +177,12 @@ export async function writeLabelShotEdit(params: {
         return { error: "Restore this shot before editing it." };
       }
       if (attempt === 0) {
-        const closed = await checkSessionOpen(supabase, row.session_id);
-        if (closed) return { error: closed };
+        const gate = await readSessionGate(supabase, row.session_id);
+        if ("error" in gate) return gate;
+        ghosts = gate.ghosts;
+        const owned = await readPointShots(supabase, row.label_point_id);
+        if ("error" in owned) return owned;
+        before = owned.shots;
       }
 
       const status = labelShotStatusAfterPatch(
@@ -144,7 +198,56 @@ export async function writeLabelShotEdit(params: {
       if (writeError) {
         return { error: `Could not save the shot: ${writeError.message}` };
       }
-      if (written && written.length > 0) return { ok: true, status };
+      if (!written || written.length === 0) continue;
+
+      let after = before.map((shot) =>
+        shot.id === shotId ? applyLabelShotPatch(shot, patch) : shot,
+      );
+      // A serve marked in says the swing the site removed after it was a
+      // return: put it back here, with no click of its own (see the console's
+      // file comment). Only while the session draws ghosts at all.
+      const freed = ghosts
+        ? ghostFreedByServeIn(before, shotId, row, patch)
+        : null;
+      let restoredGhostId: string | undefined;
+      if (freed) {
+        const at = new Date().toISOString();
+        const { data: unghosted, error: ghostError } = await supabase
+          .from("label_shots")
+          .update({ site_removal_restored_at: at })
+          .eq("id", freed)
+          .not("site_removal", "is", null)
+          .is("site_removal_restored_at", null)
+          .select("id");
+        if (ghostError) {
+          return {
+            error: endingSyncFailed(
+              `Could not restore the shot after the serve: ${ghostError.message}`,
+            ),
+          };
+        }
+        // Matched nothing: another tab put it back first. Either way it is a
+        // stroke of the rally now.
+        if (unghosted && unghosted.length > 0) restoredGhostId = freed;
+        after = after.map((shot) =>
+          shot.id === freed ? applySiteRemovalRestore(shot, at) : shot,
+        );
+      }
+
+      const synced = await syncEndingAfterShotChange({
+        supabase,
+        pointId: row.label_point_id,
+        ghosts,
+        before,
+        after,
+      });
+      if ("error" in synced) return { error: endingSyncFailed(synced.error) };
+      return {
+        ok: true,
+        status,
+        ...(synced.point ? { point: synced.point } : {}),
+        ...(restoredGhostId ? { restoredGhostId } : {}),
+      };
     }
     return { error: BUSY };
   } catch (err) {
@@ -163,7 +266,13 @@ type PointRow = LabelPointFields & {
   seed: unknown;
 };
 
-/** Validate, then write `patch` and its status to one point. Never throws. */
+/**
+ * Validate, then write `patch` and its status to one point. A patch that
+ * names the `winner` then lets the ending follow (`reconcileEnding`): a last
+ * stroke with no result reads the winner to say winner or error, so a pick
+ * must not leave the ending saying the other. The winner itself is never
+ * written back — the labeller just chose it. Never throws.
+ */
 export async function writeLabelPointEdit(params: {
   supabase: AdminClient;
   pointId: unknown;
@@ -178,6 +287,7 @@ export async function writeLabelPointEdit(params: {
   const { patch } = parsed;
 
   try {
+    let ghosts = false;
     for (let attempt = 0; attempt < MAX_EDIT_ATTEMPTS; attempt += 1) {
       const { data: row, error } = await supabase
         .from("label_points")
@@ -194,8 +304,9 @@ export async function writeLabelPointEdit(params: {
         return { error: "Restore this point before editing it." };
       }
       if (attempt === 0) {
-        const closed = await checkSessionOpen(supabase, row.session_id);
-        if (closed) return { error: closed };
+        const gate = await readSessionGate(supabase, row.session_id);
+        if ("error" in gate) return gate;
+        ghosts = gate.ghosts;
       }
 
       const status = labelPointStatusAfterPatch(
@@ -211,7 +322,23 @@ export async function writeLabelPointEdit(params: {
       if (writeError) {
         return { error: `Could not save the point: ${writeError.message}` };
       }
-      if (written && written.length > 0) return { ok: true, status };
+      if (!written || written.length === 0) continue;
+      if (!("winner" in patch)) return { ok: true, status };
+
+      const synced = await reconcileEnding({
+        supabase,
+        pointId,
+        ghosts,
+        settleWinner: false,
+      });
+      if ("error" in synced) {
+        return {
+          error: `${synced.error} The winner was saved; reload to see the point as it stands.`,
+        };
+      }
+      return synced.point
+        ? { ok: true, status: synced.point.status, point: synced.point }
+        : { ok: true, status };
     }
     return { error: BUSY };
   } catch (err) {

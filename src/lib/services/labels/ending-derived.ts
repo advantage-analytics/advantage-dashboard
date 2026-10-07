@@ -1,15 +1,21 @@
 /**
  * What a labelled point's strokes already say about how it ended. Pure; the
- * console calls it around every shot change (`syncEnding`).
+ * server runs it around every shot write (ending-session.ts) and the console
+ * reads it for the "Ending looks stale" hint (marks-state.ts).
  *
  * The last ball also settles who won: a ball that missed gives the point to the
  * other side, a ball marked in gives it to its hitter. A last ball with no
  * result yet settles nothing; there the labelled `winner` is read and never
  * written.
+ *
+ * `ghosts` says whether a stroke the site removed (`isGhostShot`) is still a
+ * ghost — no stroke at all — or, on a session labelled without marks, an
+ * ordinary stroke: the same flag `shotAfterPointEnd` and the volley link take.
  */
 
 import type { LabelPointPatch } from "./edit";
 import {
+  isLiveShot,
   isMissedResult,
   isServeStroke,
   opponent,
@@ -35,8 +41,9 @@ export interface DerivedEnding {
 type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
 
 /**
- * The ending the point's live (non-deleted) strokes describe, read in video
- * order off the LAST of them:
+ * The ending the point's live strokes (`isLiveShot`: no tombstone, and no
+ * ghost while `ghosts` is on) describe, read in video order off the LAST of
+ * them:
  *
  * - no live stroke → `null`
  * - a serve that missed → `double_fault` when it is a second serve or an
@@ -48,9 +55,12 @@ type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
  * - any other stroke with no result yet → `winner` when its hitter is the
  *   point's labelled `winner` or no winner is labelled, else `error`
  */
-export function deriveEnding(point: EndingPoint): DerivedEnding | null {
+export function deriveEnding(
+  point: EndingPoint,
+  ghosts: boolean,
+): DerivedEnding | null {
   const live = orderLabelShots(
-    point.shots.filter((shot) => shot.status !== "deleted"),
+    point.shots.filter((shot) => isLiveShot(shot, ghosts)),
   );
   const last = live.at(-1);
   if (!last) return null;
@@ -120,10 +130,11 @@ const HELD_ENDINGS: readonly (LabelEnding | null)[] = [
 export function endingPatchForShotChange(
   before: EndingPoint,
   after: EndingPoint & Pick<LabelPoint, "ending" | "endedBy">,
+  ghosts: boolean,
 ): Pick<LabelPointPatch, "ending" | "ended_by" | "winner"> | null {
   if (HELD_ENDINGS.includes(after.ending)) return null;
-  const was = deriveEnding(before);
-  const now = deriveEnding(after);
+  const was = deriveEnding(before, ghosts);
+  const now = deriveEnding(after, ghosts);
   if (!now) return null;
   if (
     was &&

@@ -439,9 +439,10 @@ test.describe("the black game band", () => {
     const server = tag(html, 'data-game-menu="server"');
     expect(server).toContain('aria-label="Server: Lee"');
 
-    // The second game is Vargas's.
+    // The second game is Vargas's; the first stopped at 15–15, so the
+    // running count credits it to nobody.
     expect(text(renderBand(true, 1))).toBe(
-      "Set 1 · Game 2 1–0 · Vargas serves",
+      "Set 1 · Game 2 0–0 · Vargas serves",
     );
   });
 

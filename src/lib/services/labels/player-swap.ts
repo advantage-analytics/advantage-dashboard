@@ -220,7 +220,19 @@ function flip(side: LabelSide | null): LabelSide | null {
 }
 
 function flipShot(shot: SwapShot): ShotSwapWrite {
-  const hitter = flip(shot.hitter);
+  return planShotHitter(shot, flip(shot.hitter));
+}
+
+/**
+ * One stroke given `hitter`, as a swap writes it: the status a hitter patch
+ * gives a live stroke, and on a tombstone `deleted` kept with its
+ * `status_before_delete` recomputed. The flip is one case of this; a point
+ * reset (reset.ts) is the other, handing back the seeded hitter.
+ */
+export function planShotHitter(
+  shot: SwapShot,
+  hitter: LabelSide | null,
+): ShotSwapWrite {
   const patch = { hitter };
   const values = valuesOf(shot);
   if (shot.status === "deleted") {

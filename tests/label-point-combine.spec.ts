@@ -25,6 +25,7 @@ import {
   FIXTURE_POINT_IDS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShotRow,
   noop,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
@@ -245,16 +246,40 @@ const POINT_ROWS = points().map((p, i) => ({
   vendor_rally_ids: p.vendorRallyIds,
 }));
 
+/**
+ * The combine's own reads, plus what the kept point's ending is then derived
+ * from: `endingShots` (the console's full shot rows; none unless given) and
+ * the kept row as the reconcile reads it back — the kept write's values over
+ * `endingPoint`, taking each later update too.
+ */
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   point?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
   shots?: Record<string, unknown>[];
+  endingShots?: Record<string, unknown>[];
+  endingPoint?: Record<string, unknown>;
   /** The compare-and-set matched nothing — another tab got there first. */
   raced?: boolean;
 }) {
+  let kept: Record<string, unknown> = {
+    updated_at: "2026-10-01T10:00:00+00:00",
+    status: "edited",
+    seed: null,
+    set_number: 1,
+    game_number: 1,
+    server: "p1",
+    serve_side: null,
+    winner: null,
+    ending: null,
+    ended_by: null,
+    ...rows.endingPoint,
+  };
   return fakeLabelClient((call) => {
     if (call.op === "update") {
+      if (call.table === "label_points" && !("status" in call.filters)) {
+        kept = { ...kept, ...call.values };
+      }
       return rows.raced && "status" in call.filters
         ? { data: [], error: null }
         : undefined;
@@ -269,31 +294,37 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_points") {
-      return "session_id" in call.filters
-        ? { data: rows.points ?? POINT_ROWS, error: null }
-        : {
-            data:
-              rows.point === undefined
-                ? {
-                    id: call.filters.id,
-                    session_id: SESSION_ID,
-                    status: "deleted",
-                    status_before_delete: "unchanged",
-                    server: "p1",
-                    set_number: 1,
-                    game_number: 1,
-                    serve_side: null,
-                    winner: null,
-                    ending: null,
-                    ended_by: null,
-                    seed: null,
-                  }
-                : rows.point,
-            error: null,
-          };
+      if ("session_id" in call.filters) {
+        return { data: rows.points ?? POINT_ROWS, error: null };
+      }
+      if (call.columns?.includes("updated_at")) {
+        return { data: { id: call.filters.id, ...kept }, error: null };
+      }
+      return {
+        data:
+          rows.point === undefined
+            ? {
+                id: call.filters.id,
+                session_id: SESSION_ID,
+                status: "deleted",
+                status_before_delete: "unchanged",
+                server: "p1",
+                set_number: 1,
+                game_number: 1,
+                serve_side: null,
+                winner: null,
+                ending: null,
+                ended_by: null,
+                seed: null,
+              }
+            : rows.point,
+        error: null,
+      };
     }
     if (call.table === "label_shots") {
-      return { data: rows.shots ?? [{ id: SHOT(1) }], error: null };
+      return call.columns === "id"
+        ? { data: rows.shots ?? [{ id: SHOT(1) }], error: null }
+        : { data: rows.endingShots ?? [], error: null };
     }
     return undefined;
   });
@@ -334,9 +365,14 @@ test.describe("writeLabelPointCombine", () => {
       ["label_shots", "update"],
       ["label_points", "update"],
       ["label_points", "update"],
+      // The kept point's joined rows and its row, read for the ending they
+      // derive: with no rows to read here, nothing is written.
+      ["label_shots", "select"],
+      ["label_points", "select"],
     ]);
-    // The later point's shots are the ones read.
+    // The later point's shots are the ones read; then the kept point's.
     expect(fake.calls[3].filters).toEqual({ label_point_id: UUID(2) });
+    expect(fake.calls[7].filters).toEqual({ label_point_id: UUID(1) });
     const [move, kept, removed] = writes(fake);
     expect(move).toEqual({
       table: "label_shots",
@@ -368,6 +404,47 @@ test.describe("writeLabelPointCombine", () => {
       expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
       expect(["select", "update"]).toContain(call.op);
     }
+  });
+
+  test("the kept point's ending follows its joined rows where the later point's did not say so; its status stays as combined", async () => {
+    // The later point handed over "ace by Lee", but the rows joined now end
+    // on Vargas's return out, right after the serve: Lee's service winner.
+    const fake = fakeClient({
+      endingShots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(2), UUID(1), {
+          hitter: "p2",
+          stroke: "backhand",
+          result: "out",
+          video_time: 2,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      kept: {
+        id: UUID(1),
+        winner: "p1",
+        ending: "service_winner",
+        ended_by: "p2",
+        status: "edited",
+      },
+    });
+    const ending = writes(fake).at(-1);
+    expect(ending).toEqual({
+      table: "label_points",
+      op: "update",
+      values: { ending: "service_winner", ended_by: "p2", status: "edited" },
+      filters: { id: UUID(1), updated_at: "2026-10-01T10:00:00+00:00" },
+    });
   });
 
   test("with no shot row on the later point there is no shots update; a race on the tombstone is reported", async () => {

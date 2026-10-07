@@ -15,7 +15,11 @@ import {
   livePointsOfGame,
 } from "@/lib/services/labels/game-operations";
 import type { LabelGame } from "@/lib/services/labels/operations";
-import type { LabelGameBand as LabelGameBandScore } from "@/lib/services/labels/score";
+import {
+  gameKey,
+  type LabelGameBand as LabelGameBandScore,
+  type LabelGameOutcome,
+} from "@/lib/services/labels/score";
 import type {
   LabelGameType,
   LabelPoint,
@@ -65,6 +69,31 @@ export function gameBandModel(
 export function gameBandServes(model: GameBandModel, names: SideNames): string {
   if (!model.server) return "No server";
   return `${names[model.server]} ${model.type === "game" ? "serves" : "serves first"}`;
+}
+
+/**
+ * How the game ended, at the band's end: "Vargas · 4–2" for a settled game,
+ * "Unfinished · 30–40" for one the points leave short (drawn in amber), and
+ * "Vargas · 4–2 · 2 extra" for one with rows past its end.
+ */
+export function gameBandOutcome(
+  outcome: LabelGameOutcome,
+  names: SideNames,
+): { text: string; amber: boolean } {
+  switch (outcome.kind) {
+    case "decided":
+      return {
+        text: `${names[outcome.winner]} · ${outcome.score}`,
+        amber: false,
+      };
+    case "unfinished":
+      return { text: `Unfinished · ${outcome.score}`, amber: true };
+    case "overflow":
+      return {
+        text: `${names[outcome.winner]} · ${outcome.score} · ${outcome.extra} extra`,
+        amber: false,
+      };
+  }
 }
 
 const GAME_TYPE: Record<LabelGameType, { label: string; description: string }> =
@@ -163,8 +192,9 @@ const PAINT = {
 /**
  * A game band: the points rail's game header, above the first live point of
  * each `(set_number, game_number)`. Left, "Set N · Game M", "Set N · Tiebreak"
- * or "Match tiebreak"; right, the set's games before it and who serves. With
- * both callbacks the game's name and its server are triggers, each opening a
+ * or "Match tiebreak"; right, the set's games before it, who serves and —
+ * given `outcome` — how the game ended (`gameBandOutcome`). With both
+ * callbacks the game's name and its server are triggers, each opening a
  * `FloatMenu`; without them the band is the same text.
  *
  * Changing a game here is a request to the console, which owns the write.
@@ -174,6 +204,7 @@ export const LabelGameBand = memo(function LabelGameBand({
   band,
   points,
   names,
+  outcome,
   onSetGameType,
   onSetGameServer,
   menu = "dark",
@@ -181,6 +212,8 @@ export const LabelGameBand = memo(function LabelGameBand({
   band: LabelGameBandScore;
   points: readonly LabelPoint[];
   names: SideNames;
+  /** The game's `outcome` (`band.outcome`); absent, the band ends at the server. */
+  outcome?: LabelGameOutcome;
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
@@ -195,9 +228,23 @@ export const LabelGameBand = memo(function LabelGameBand({
     onSetGameType && onSetGameServer
       ? gameBandMenus(model, names, { onSetGameType, onSetGameServer })
       : null;
+  const ended = outcome ? gameBandOutcome(outcome, names) : null;
+  const tail = ended ? (
+    <span
+      data-game-outcome={outcome?.kind}
+      className={cn(
+        BAND_META,
+        ended.amber ? "text-[var(--rail-amber)]" : PAINT.metaInk,
+      )}
+    >
+      {" "}
+      · {ended.text}
+    </span>
+  ) : null;
   return (
     <div
       data-game-band={`${band.setNumber}-${band.gameNumber}`}
+      data-game-key={gameKey(band)}
       data-game-type={model.type}
       className={PAINT.band}
     >
@@ -249,10 +296,12 @@ export const LabelGameBand = memo(function LabelGameBand({
           >
             {serves}
           </BandMenu>
+          {tail}
         </span>
       ) : (
         <span className={cn(BAND_META, PAINT.metaInk)}>
           {model.score} · {serves}
+          {tail}
         </span>
       )}
     </div>

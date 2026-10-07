@@ -8,16 +8,27 @@
  * compare-and-set: the UPDATE matches the status the row was read with, so two
  * tabs racing to delete (or Undo) the same row cannot leave a tombstone
  * remembering `deleted` as its previous status.
+ *
+ * A stroke deleted, restored or added changes what its point's rows say, so
+ * each of those settles the point's ending in the same call
+ * (`syncEndingAfterShotChange`, ending-session.ts) and answers with the point
+ * when that moved it.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
 import {
   ADMIN_REQUIRED,
-  checkSessionOpen,
   defaultLabelWriteDependencies,
+  readSessionGate,
   type LabelWriteDependencies,
 } from "./edit-session";
+import {
+  endingSyncFailed,
+  readPointShots,
+  syncEndingAfterShotChange,
+  type LabelPointEndingSynced,
+} from "./ending-session";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   gameServer,
@@ -48,11 +59,19 @@ const LOG = "[labels:operations]";
 export type LabelOpResult<T extends object = object> =
   ({ ok: true } & T) | { error: string };
 
-export type LabelShotStatusResult = LabelOpResult<{ status: LabelShotStatus }>;
+/** The shot's point, when a stroke write moved its ending. */
+export interface WithSyncedPoint {
+  point?: LabelPointEndingSynced;
+}
+export type LabelShotStatusResult = LabelOpResult<
+  { status: LabelShotStatus } & WithSyncedPoint
+>;
 export type LabelPointStatusResult = LabelOpResult<{
   status: LabelPointStatus;
 }>;
-export type LabelAddShotResult = LabelOpResult<{ shot: LabelShot }>;
+export type LabelAddShotResult = LabelOpResult<
+  { shot: LabelShot } & WithSyncedPoint
+>;
 export type LabelMovePointResult = LabelOpResult<{
   status: LabelPointStatus;
   server: LabelSide | null;
@@ -178,25 +197,70 @@ export async function readShotsOfPoints(
 interface ShotStateRow {
   id: string;
   session_id: string;
+  label_point_id: string;
   status: LabelShotStatus;
   status_before_delete: Exclude<LabelShotStatus, "deleted"> | null;
   event_id: number | null;
 }
 
+/** The shot, its session's gate (`ghosts`) and its point's rows as read. */
 async function readShotState(
   supabase: AdminClient,
   shotId: string,
-): Promise<{ row: ShotStateRow } | { error: string }> {
+): Promise<
+  { row: ShotStateRow; ghosts: boolean; shots: LabelShot[] } | { error: string }
+> {
   const { data, error } = await supabase
     .from("label_shots")
-    .select("id, session_id, status, status_before_delete, event_id")
+    .select(
+      "id, session_id, label_point_id, status, status_before_delete, event_id",
+    )
     .eq("id", shotId)
     .maybeSingle<ShotStateRow>();
   if (error) return { error: `Could not read the shot: ${error.message}` };
   if (!data) return { error: "Shot not found." };
-  const closed = await checkSessionOpen(supabase, data.session_id);
-  if (closed) return { error: closed };
-  return { row: data };
+  const gate = await readSessionGate(supabase, data.session_id);
+  if ("error" in gate) return gate;
+  const owned = await readPointShots(supabase, data.label_point_id);
+  if ("error" in owned) return owned;
+  return { row: data, ghosts: gate.ghosts, shots: owned.shots };
+}
+
+/**
+ * A status write on one stroke, then its point's ending: `before` is the
+ * point's rows as read, `after` the same with the stroke at `status`. The
+ * result the two status writes share.
+ */
+async function writeShotStatus(
+  supabase: AdminClient,
+  read: { row: ShotStateRow; ghosts: boolean; shots: LabelShot[] },
+  write: { status: LabelShotStatus },
+  what: string,
+): Promise<LabelShotStatusResult> {
+  const failed = await updateIfUnchanged(
+    supabase,
+    "label_shots",
+    read.row.id,
+    read.row.status,
+    { ...write },
+    what,
+  );
+  if (failed) return { error: failed };
+  const synced = await syncEndingAfterShotChange({
+    supabase,
+    pointId: read.row.label_point_id,
+    ghosts: read.ghosts,
+    before: read.shots,
+    after: read.shots.map((shot) =>
+      shot.id === read.row.id ? { ...shot, status: write.status } : shot,
+    ),
+  });
+  if ("error" in synced) return { error: endingSyncFailed(synced.error) };
+  return {
+    ok: true,
+    status: write.status,
+    ...(synced.point ? { point: synced.point } : {}),
+  };
 }
 
 /** Tombstone one stroke with a reason. Never throws. */
@@ -215,15 +279,7 @@ export async function writeLabelShotDelete(params: {
   if ("error" in read) return read;
   const plan = planShotDelete(read.row, params.reason);
   if ("error" in plan) return plan;
-  const failed = await updateIfUnchanged(
-    params.supabase,
-    "label_shots",
-    shotId,
-    read.row.status,
-    { ...plan.write },
-    "delete the shot",
-  );
-  return failed ? { error: failed } : { ok: true, status: plan.write.status };
+  return writeShotStatus(params.supabase, read, plan.write, "delete the shot");
 }
 
 /** Undo a stroke's delete. Never throws. */
@@ -237,15 +293,7 @@ export async function writeLabelShotRestore(params: {
   if ("error" in read) return read;
   const plan = planShotRestore(read.row);
   if ("error" in plan) return plan;
-  const failed = await updateIfUnchanged(
-    params.supabase,
-    "label_shots",
-    shotId,
-    read.row.status,
-    { ...plan.write },
-    "restore the shot",
-  );
-  return failed ? { error: failed } : { ok: true, status: plan.write.status };
+  return writeShotStatus(params.supabase, read, plan.write, "restore the shot");
 }
 
 /**
@@ -299,7 +347,16 @@ export async function writeLabelShotAdd(params: {
       error: `Could not add the shot: ${insertError?.message ?? "no row came back"}`,
     };
   }
-  return { ok: true, shot: toLabelShot(inserted) };
+  const shot = toLabelShot(inserted);
+  const synced = await syncEndingAfterShotChange({
+    supabase,
+    pointId,
+    ghosts: read.ghosts,
+    before: shots,
+    after: [...shots, shot],
+  });
+  if ("error" in synced) return { error: endingSyncFailed(synced.error) };
+  return { ok: true, shot, ...(synced.point ? { point: synced.point } : {}) };
 }
 
 // ── Points ──────────────────────────────────────────────────────────────────
@@ -319,10 +376,11 @@ export interface PointStateRow {
   seed: unknown;
 }
 
+/** The point and its session's gate (`ghosts`, edit-session.ts). */
 export async function readPointState(
   supabase: AdminClient,
   pointId: string,
-): Promise<{ row: PointStateRow } | { error: string }> {
+): Promise<{ row: PointStateRow; ghosts: boolean } | { error: string }> {
   const { data, error } = await supabase
     .from("label_points")
     .select(
@@ -332,9 +390,9 @@ export async function readPointState(
     .maybeSingle<PointStateRow>();
   if (error) return { error: `Could not read the point: ${error.message}` };
   if (!data) return { error: "Point not found." };
-  const closed = await checkSessionOpen(supabase, data.session_id);
-  if (closed) return { error: closed };
-  return { row: data };
+  const gate = await readSessionGate(supabase, data.session_id);
+  if ("error" in gate) return gate;
+  return { row: data, ghosts: gate.ghosts };
 }
 
 /** Tombstone one point. Its strokes are left exactly as they are. */

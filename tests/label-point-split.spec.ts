@@ -22,6 +22,7 @@ import {
   FIXTURE_POINT_IDS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShotRow,
   editContext as sharedEditContext,
   noop,
   ROW_OPERATIONS,
@@ -310,14 +311,28 @@ const SHOT_ROWS = [
   },
 ];
 
+/**
+ * The split's own reads, plus what the ending each half then derives is
+ * read from: `endingShots` by point id (the console's full shot rows; none
+ * unless given) and the point row the reconcile reads back, which takes each
+ * `label_points` update it is sent.
+ */
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   anchor?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
   shots?: Record<string, unknown>[];
+  endingShots?: Record<string, Record<string, unknown>[]>;
 }) {
+  const endingPoints: Record<string, Record<string, unknown>> = {};
   return fakeLabelClient((call) => {
-    if (call.op === "update") return undefined;
+    if (call.op === "update") {
+      if (call.table === "label_points" && "updated_at" in call.filters) {
+        const id = String(call.filters.id);
+        endingPoints[id] = { ...endingPoints[id], ...call.values };
+      }
+      return undefined;
+    }
     if (call.op === "insert") {
       return {
         data: {
@@ -340,18 +355,41 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_points") {
-      return "session_id" in call.filters
-        ? { data: rows.points ?? POINT_ROWS, error: null }
-        : {
-            data:
-              rows.anchor === undefined
-                ? { id: call.filters.id, session_id: SESSION_ID }
-                : rows.anchor,
-            error: null,
-          };
+      if ("session_id" in call.filters) {
+        return { data: rows.points ?? POINT_ROWS, error: null };
+      }
+      if (call.columns?.includes("updated_at")) {
+        const id = String(call.filters.id);
+        endingPoints[id] ??= {
+          id,
+          updated_at: "2026-10-01T10:00:00+00:00",
+          status: id === NEW_ROW_ID ? "added" : "edited",
+          seed: null,
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          serve_side: null,
+          winner: null,
+          ending: null,
+          ended_by: null,
+        };
+        return { data: endingPoints[id], error: null };
+      }
+      return {
+        data:
+          rows.anchor === undefined
+            ? { id: call.filters.id, session_id: SESSION_ID }
+            : rows.anchor,
+        error: null,
+      };
     }
     if (call.table === "label_shots") {
-      return { data: rows.shots ?? SHOT_ROWS, error: null };
+      return call.columns?.includes("rally:")
+        ? { data: rows.shots ?? SHOT_ROWS, error: null }
+        : {
+            data: rows.endingShots?.[String(call.filters.label_point_id)] ?? [],
+            error: null,
+          };
     }
     return undefined;
   });
@@ -400,9 +438,17 @@ test.describe("writeLabelPointSplit", () => {
       ["label_points", "insert"],
       ["label_shots", "update"],
       ["label_points", "update"],
+      // Each half's rows and row, read for the ending it now derives: with
+      // no rows to read here, nothing is written.
+      ["label_shots", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_points", "select"],
     ]);
     expect(fake.calls[3].columns).toContain("rally:vendor->>pred_rally_id");
     expect(fake.calls[3].filters).toEqual({ label_point_id: UUID(1) });
+    expect(fake.calls[10].filters).toEqual({ label_point_id: NEW_ROW_ID });
+    expect(fake.calls[12].filters).toEqual({ label_point_id: UUID(1) });
     const [s4, s3, s2, insert, move, anchor] = writes(fake);
     expect([s4, s3, s2].map((w) => [w.filters.id, w.values])).toEqual([
       [UUID(4), { point_index: 4 }],
@@ -443,6 +489,63 @@ test.describe("writeLabelPointSplit", () => {
       expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
       expect(["select", "update", "insert"]).toContain(call.op);
     }
+  });
+
+  test("both halves take the ending their rows now derive, statuses as the split wrote them", async () => {
+    // Split at the return: the anchor keeps Lee's serve alone — an ace,
+    // where it said Lee's error — and the new point gets the return and
+    // Lee's forehand out, Vargas's point on his error.
+    const serve = labelShotRow(SHOT(1), UUID(1), {
+      stroke: "first_serve",
+      video_time: 2472.0,
+    });
+    const back = labelShotRow(SHOT(2), NEW_ROW_ID, {
+      hitter: "p2",
+      stroke: "backhand",
+      video_time: 2473.1,
+    });
+    const out = labelShotRow(SHOT(4), NEW_ROW_ID, {
+      result: "out",
+      status: "added",
+      video_time: 2474.4,
+    });
+    const fake = fakeClient({
+      endingShots: { [UUID(1)]: [serve], [NEW_ROW_ID]: [back, out] },
+    });
+    const result = await writeLabelPointSplit({
+      supabase: fake.supabase,
+      pointId: UUID(1),
+      shotId: SHOT(2),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      point: {
+        id: NEW_ROW_ID,
+        status: "added",
+        ending: "error",
+        endedBy: "p1",
+        winner: "p2",
+      },
+      anchor: {
+        id: UUID(1),
+        status: "edited",
+        vendor_rally_ids: [1001],
+        ending: "ace",
+        ended_by: "p1",
+        winner: "p1",
+      },
+    });
+    const endings = writes(fake).filter((w) => "updated_at" in w.filters);
+    expect(endings.map((w) => [w.filters.id, w.values])).toEqual([
+      [
+        NEW_ROW_ID,
+        { ending: "error", ended_by: "p1", winner: "p2", status: "added" },
+      ],
+      [
+        UUID(1),
+        { ending: "ace", ended_by: "p1", winner: "p1", status: "edited" },
+      ],
+    ]);
   });
 
   test("a session labelled without marks takes a split — a manual edit", async () => {

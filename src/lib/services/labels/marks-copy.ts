@@ -7,7 +7,7 @@
  */
 
 import type { LabelMark, LabelMarkCode } from "./marks";
-import type { LabelSide } from "./session";
+import type { LabelEnding, LabelSide } from "./session";
 
 /**
  * The players' names by side. Structurally the console's `SideNames`
@@ -30,6 +30,8 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   net_hit_contradicts_height: "Net or out?",
   serve_fault: "Serve fault?",
   shot_after_point_end: "Shot after the point ended?",
+  ending_stale: "Ending looks stale",
+  second_serve_as_first: "Second serve?",
   pick_winner: "Pick the winner",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
@@ -40,6 +42,33 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
 
 /** A point score ("0-15") with an en dash ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
+
+/** An ending as a noun phrase mid-sentence: "an ace", "a double fault". */
+const ENDING_PHRASE: Record<LabelEnding, string> = {
+  ace: "an ace",
+  service_winner: "a service winner",
+  double_fault: "a double fault",
+  winner: "a winner",
+  error: "an error",
+  let_replayed: "a let, replayed",
+  not_a_point: "not a point",
+};
+
+/** "an error by Goodman", or the ending alone when nobody is named. */
+export function endingPhrase(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  names: MarkNames,
+): string {
+  const by = endedBy ? ` by ${names[endedBy]}` : "";
+  return `${ENDING_PHRASE[ending]}${by}`;
+}
+
+/** The one action a live hint offers, by code; the rest offer none. */
+export const HINT_ACTION_LABEL = {
+  ending_stale: "Use it",
+  second_serve_as_first: "Make it a second serve",
+} as const;
 
 // ── The rail header's total ─────────────────────────────────────────────────
 
@@ -142,6 +171,12 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     }
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
+    case "ending_stale": {
+      const { ending, endedBy } = mark.params;
+      return `The strokes say ${endingPhrase(ending, endedBy, names)}.`;
+    }
+    case "second_serve_as_first":
+      return "Follows a faulted serve, so it is the second serve.";
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {

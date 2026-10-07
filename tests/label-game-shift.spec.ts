@@ -2,18 +2,23 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { INITIAL_SAVE_STATUS } from "@/components/admin/labels/save-status";
 import {
   applyGameShift,
   gameOverflow,
+  gameUnderflow,
   leftoverIds,
+  planGamePull,
   planGameShift,
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import {
+  pullLabelGamePoints,
   shiftLabelGameOverflow,
+  writeLabelGamePull,
   writeLabelGameShift,
 } from "@/lib/services/labels/game-shift-session";
-import { labelScores } from "@/lib/services/labels/score";
+import { gameKey, labelScores } from "@/lib/services/labels/score";
 import type {
   LabelGameType,
   LabelPoint,
@@ -1087,5 +1092,500 @@ test.describe("the ⋯ menu", () => {
       pointMenuActions(points[6], { points, names: NAMES }, operations)
         .shiftOverflow,
     ).not.toBeNull();
+  });
+});
+
+// ── A game that ends short ─────────────────────────────────────────────────
+
+/**
+ * The real case, in miniature: no-ad scoring, game 1 (Lee serving) stops at
+ * 30–40 and its deciding point sits at the top of game 2 (Vargas's), which
+ * reads "Game–0" with one row to spare. Pulling that row in settles game 1
+ * for Vargas and leaves game 2 settled on its last row.
+ */
+function shortCase(): LabelPoint[] {
+  return match([
+    { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+    { game: 2, server: "p2", winners: ["p2", "p2", "p2", "p2", "p2"] },
+  ]);
+}
+
+const KEY = "1·1";
+
+test.describe("gameUnderflow", () => {
+  test("an ordinary game with a counted point left short, with its call and its last row — never the last game of a set", () => {
+    expect(gameUnderflow(shortCase(), false, { videoEndsEarly: null })).toEqual(
+      [
+        {
+          setNumber: 1,
+          gameNumber: 1,
+          gameInSet: 1,
+          score: "30–40",
+          rows: shortCase().slice(0, 5),
+          lastPointId: UUID(5),
+        },
+      ],
+    );
+    // Under ad scoring 30–40 is short just the same; a settled game is not.
+    expect(
+      gameUnderflow(shortCase(), true, { videoEndsEarly: null }).map((g) =>
+        gameKey(g),
+      ),
+    ).toEqual([KEY]);
+    expect(gameUnderflow(usersCase(), true, { videoEndsEarly: null })).toEqual(
+      [],
+    );
+    // The last game of set 1 is short, but set 2 follows: not listed. A
+    // tiebreak and a game of nothing but a blank winner are not either.
+    const sets = match([
+      { set: 1, game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { set: 1, game: 2, server: "p2", winners: ["p2", "p2"] },
+      {
+        set: 2,
+        game: 3,
+        server: "p1",
+        winners: ["p1", "p1"],
+        type: "tiebreak",
+      },
+      { set: 2, game: 4, server: "p2", winners: [null] },
+      { set: 2, game: 5, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    expect(gameUnderflow(sets, true, { videoEndsEarly: null })).toEqual([]);
+  });
+
+  test("the session's last game: listed while the video is not said to end early, and not once it is", () => {
+    const tail = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p1"] },
+    ]);
+    const listed = gameUnderflow(tail, true, { videoEndsEarly: null });
+    expect(listed.map((g) => [g.gameInSet, g.score])).toEqual([[2, "30–15"]]);
+    expect(gameUnderflow(tail, true, { videoEndsEarly: false })).toHaveLength(
+      1,
+    );
+    expect(gameUnderflow(tail, true, { videoEndsEarly: true })).toEqual([]);
+  });
+});
+
+test.describe("planGamePull", () => {
+  test("one row from the next game, under the short game's server, settles it; the donor stays settled — one write", () => {
+    const points = shortCase();
+    const plan = planGamePull(points, KEY, false);
+    expect(plan).toEqual({
+      ok: true,
+      writes: [
+        {
+          id: UUID(6),
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+      ],
+      shots: [],
+      summary: {
+        points: 1,
+        games: 1,
+        fromGame: { set: 1, gameInSet: 2 },
+        swapped: 0,
+      },
+    });
+    if (!("ok" in plan)) return;
+    const after = labelScores(applyGameShift(points, plan.writes), false).games;
+    expect(after.map((g) => g.outcome)).toEqual([
+      { kind: "decided", winner: "p2", score: "4–2" },
+      { kind: "decided", winner: "p2", score: "4–0" },
+    ]);
+    // The input is read, never written.
+    expect(points).toEqual(shortCase());
+  });
+
+  test("the donor left short pulls from its own next game in turn; a third game is too far — add a point instead", () => {
+    // Game 1 needs one row; game 2 then has one point and takes four from
+    // game 3, which keeps one and would need game 4: three games deep.
+    const deep = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p2", "p1"] },
+      { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2", "p2"] },
+      { game: 4, server: "p2", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    expect(planGamePull(deep, KEY, false)).toEqual({ kind: "add_point" });
+
+    // With game 3 given whole, the cascade ends at two games.
+    const two = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p2", "p1"] },
+      { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+      { game: 4, server: "p2", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    const plan = planGamePull(two, KEY, false);
+    expect(plan).toMatchObject({
+      ok: true,
+      summary: {
+        points: 5,
+        games: 2,
+        fromGame: { set: 1, gameInSet: 2 },
+        swapped: 0,
+      },
+    });
+    if (!("ok" in plan)) return;
+    expect(plan.writes.map((w) => [w.id, w.game_number, w.server])).toEqual([
+      [UUID(6), 1, "p1"],
+      [UUID(8), 2, "p2"],
+      [UUID(9), 2, "p2"],
+      [UUID(10), 2, "p2"],
+      [UUID(11), 2, "p2"],
+    ]);
+    const after = labelScores(applyGameShift(two, plan.writes), false).games;
+    expect(after.map((g) => [g.gameInSet, g.outcome.kind])).toEqual([
+      [1, "decided"],
+      [2, "decided"],
+      [3, "decided"],
+    ]);
+  });
+
+  test("a donor that runs out, a tiebreak after, or nothing after: add a point", () => {
+    // One row is not enough and there is none left.
+    const thin = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p1"] },
+      { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+    ]);
+    expect(planGamePull(thin, KEY, false)).toEqual({ kind: "add_point" });
+    const tiebreak = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+      {
+        game: 2,
+        server: "p2",
+        type: "tiebreak",
+        winners: ["p2", "p2", "p2", "p2", "p2", "p2", "p2"],
+      },
+    ]);
+    expect(planGamePull(tiebreak, KEY, false)).toEqual({ kind: "add_point" });
+    const last = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
+      { game: 2, server: "p2", winners: ["p2", "p2", "p1"] },
+    ]);
+    expect(planGamePull(last, "1·2", true)).toEqual({ kind: "add_point" });
+  });
+
+  test("a settled game, or a stranger, is refused", () => {
+    expect(planGamePull(shortCase(), "1·2", false)).toEqual({
+      error: "That game is not short — there is nothing to pull in.",
+    });
+    expect(planGamePull(shortCase(), "3·9", false)).toMatchObject({
+      error: expect.stringContaining("not short"),
+    });
+  });
+
+  test("a pulled row whose serve says the old server served it switches players, and the tally reads the switched winner", () => {
+    const serve = (id: string, pointId: string, hitter: LabelSide) =>
+      labelShot(id, pointId, {
+        hitter,
+        stroke: "first_serve",
+        videoTime: 1,
+      });
+    // Game 2's first row was served by Vargas: into Lee's game it flips, so
+    // Lee wins it (3–3, no-ad: not settled) and the next row is pulled too.
+    const points = shortCase().map((p) =>
+      p.id === UUID(6) ? { ...p, shots: [serve("s-6", UUID(6), "p2")] } : p,
+    );
+    const plan = planGamePull(points, KEY, false);
+    expect(plan).toEqual({
+      ok: true,
+      writes: [
+        {
+          id: UUID(6),
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+          winner: "p1",
+          ended_by: null,
+        },
+        {
+          id: UUID(7),
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+      ],
+      shots: [
+        {
+          id: "s-6",
+          hitter: "p1",
+          status: "edited",
+          status_before_delete: null,
+        },
+      ],
+      summary: {
+        points: 2,
+        games: 1,
+        fromGame: { set: 1, gameInSet: 2 },
+        swapped: 1,
+      },
+    });
+  });
+});
+
+test.describe("writeLabelGamePull", () => {
+  test("the same run as the shift: the gate and scoring, the points, the shots when a server changes, then one update by id list", async () => {
+    const fake = fakeClient({
+      session: { status: "labelling", ad_scoring: false, job_id: JOB_ID },
+      points: rowsOf(shortCase()),
+    });
+    const result = await writeLabelGamePull({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      gameKey: KEY,
+    });
+    expect(result).toEqual({
+      ok: true,
+      writes: [
+        {
+          id: UUID(6),
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+      ],
+      shots: [],
+    });
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_points", "update"],
+    ]);
+    expect(writes(fake).map((c) => [c.values, c.in])).toEqual([
+      [
+        {
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+        },
+        { id: [UUID(6)] },
+      ],
+    ]);
+  });
+
+  test("a bad key, a game the rule declines, a complete session and a failed write each stop the run", async () => {
+    const bad = fakeClient({});
+    expect(
+      await writeLabelGamePull({
+        supabase: bad.supabase,
+        sessionId: SESSION_ID,
+        gameKey: "1-1",
+      }),
+    ).toEqual({ error: "Invalid game." });
+    expect(bad.calls).toEqual([]);
+
+    const declined = fakeClient({
+      session: { status: "labelling", ad_scoring: false, job_id: JOB_ID },
+      points: rowsOf(
+        match([
+          { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+          { game: 2, server: "p2", winners: ["p1"] },
+          { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+        ]),
+      ),
+    });
+    expect(
+      await writeLabelGamePull({
+        supabase: declined.supabase,
+        sessionId: SESSION_ID,
+        gameKey: KEY,
+      }),
+    ).toEqual({
+      error:
+        "That game is more likely missing a point than holding the next game's — add the point instead.",
+    });
+    expect(writes(declined)).toEqual([]);
+
+    const complete = fakeClient({
+      session: { status: "complete", ad_scoring: false, job_id: JOB_ID },
+    });
+    expect(
+      await writeLabelGamePull({
+        supabase: complete.supabase,
+        sessionId: SESSION_ID,
+        gameKey: KEY,
+      }),
+    ).toMatchObject({ error: expect.stringContaining("") });
+    expect(complete.calls.map((c) => c.table)).toEqual(["label_sessions"]);
+
+    const failing = fakeClient({
+      session: { status: "labelling", ad_scoring: false, job_id: JOB_ID },
+      points: rowsOf(shortCase()),
+      failUpdate: UUID(6),
+    });
+    expect(
+      await writeLabelGamePull({
+        supabase: failing.supabase,
+        sessionId: SESSION_ID,
+        gameKey: KEY,
+      }),
+    ).toEqual({ error: "Could not pull the points in: boom" });
+  });
+
+  test("the entry point refuses without an admin, before a client is built", async () => {
+    let built = 0;
+    expect(
+      await pullLabelGamePoints(SESSION_ID, KEY, {
+        requireAdmin: async () => null,
+        createAdminClient: () => {
+          built += 1;
+          return fakeClient({}).supabase;
+        },
+      }),
+    ).toEqual({ error: "Administrator access is required." });
+    expect(built).toBe(0);
+  });
+});
+
+test.describe("the isn't-finished slot", () => {
+  const SLOT = "src/components/admin/labels/label-game-underflow.tsx";
+  const RAIL = "src/components/admin/labels/label-black-rail.tsx";
+
+  test("after the short game's last row, keyed by it, with the pull planned", () => {
+    const { underflowAfterPoints } = createLoader().load(SLOT) as {
+      underflowAfterPoints: (
+        points: LabelPoint[],
+        adScoring: boolean,
+        videoEndsEarly: boolean | null,
+      ) => Map<string, { underflow: { gameInSet: number }; plan: unknown }>;
+    };
+    const after = underflowAfterPoints(shortCase(), false, null);
+    expect([...after.keys()]).toEqual([UUID(5)]);
+    expect(after.get(UUID(5))).toMatchObject({
+      underflow: { gameInSet: 1, score: "30–40" },
+      plan: { ok: true, summary: { points: 1 } },
+    });
+    expect(underflowAfterPoints(usersCase(), true, null).size).toBe(0);
+  });
+
+  test("the two lines and the one answer — Move here from the plan, Add point without one — on a click alone; none read-only", () => {
+    const BlackGameUnderflow = renderFunction<Record<string, unknown>>(
+      createLoader().load(SLOT).BlackGameUnderflow,
+    );
+    const calls: unknown[][] = [];
+    const points = shortCase();
+    const [underflow] = gameUnderflow(points, false, { videoEndsEarly: null });
+    const pull = {
+      underflow,
+      plan: planGamePull(points, KEY, false),
+    };
+    const tree = BlackGameUnderflow({
+      slot: pull,
+      onPull: (...args: unknown[]) => calls.push(["pull", ...args]),
+      onAddPoint: (...args: unknown[]) => calls.push(["add", ...args]),
+    });
+    expect(calls).toEqual([]);
+    expect(
+      findWhere(tree, (p) => "data-game-underflow-title" in p)?.props.children,
+    ).toBe("Game 1 isn’t finished at 30–40");
+    expect(
+      findWhere(tree, (p) => "data-game-underflow-detail" in p)?.props.children,
+    ).toBe("Pull 1 point from game 2");
+    const button = findWhere(tree, (p) => "data-game-underflow-action" in p);
+    expect(button?.props["data-game-underflow-action"]).toBe("pull");
+    expect(button?.props.children).toBe("Move here");
+    let stopped = 0;
+    (button!.props.onClick as (e: unknown) => void)({
+      stopPropagation: () => (stopped += 1),
+    });
+    expect(stopped).toBe(1);
+    expect(calls).toEqual([["pull", KEY]]);
+    // One game, nobody switching: no tooltip on the button.
+    expect(findWhere(tree, (p) => typeof p.detail === "string")).toBeNull();
+
+    const add = BlackGameUnderflow({
+      slot: { underflow, plan: { kind: "add_point" } },
+      onPull: (...args: unknown[]) => calls.push(["pull", ...args]),
+      onAddPoint: (...args: unknown[]) => calls.push(["add", ...args]),
+    });
+    expect(
+      findWhere(add, (p) => "data-game-underflow-detail" in p)?.props.children,
+    ).toBe("A point may be missing");
+    const addButton = findWhere(add, (p) => "data-game-underflow-action" in p);
+    expect(addButton?.props.children).toBe("Add point");
+    (addButton!.props.onClick as (e: unknown) => void)({
+      stopPropagation: () => {},
+    });
+    expect(calls).toEqual([
+      ["pull", KEY],
+      ["add", UUID(5)],
+    ]);
+
+    const html = renderToStaticMarkup(
+      React.createElement(
+        createLoader().load(SLOT).BlackGameUnderflow as React.ComponentType<
+          Record<string, unknown>
+        >,
+        { slot: pull },
+      ),
+    );
+    expect(html).toContain('data-game-key="1·1"');
+    expect(html).not.toContain("<button");
+  });
+
+  test("on the rail, behind `underflow`: the slot sits after the short game's last row, and the band says Unfinished", () => {
+    const { LabelBlackRail } = createLoader().load(RAIL) as {
+      LabelBlackRail: React.ComponentType<Record<string, unknown>>;
+    };
+    const points = shortCase();
+    const render = (extra: Record<string, unknown>) =>
+      renderToStaticMarkup(
+        React.createElement(LabelBlackRail, {
+          player1Name: "Lee",
+          player2Name: "Vargas",
+          checked: 0,
+          total: 0,
+          saveStatus: INITIAL_SAVE_STATUS,
+          affordance: null,
+          onFollow: () => {},
+          points,
+          scores: labelScores(points, false),
+          adScoring: false,
+          names: NAMES,
+          expandedPointId: null,
+          editable: true,
+          operations: {},
+          ...extra,
+        }),
+      );
+    const html = render({ underflow: true });
+    const at = (attr: string) => html.indexOf(attr);
+    expect(at(`data-point-id="${UUID(5)}"`)).toBeLessThan(
+      at(`data-game-underflow="${UUID(5)}"`),
+    );
+    expect(at(`data-game-underflow="${UUID(5)}"`)).toBeLessThan(
+      at('data-game-band="1-2"'),
+    );
+    expect(html.match(/data-game-underflow=/g)).toHaveLength(1);
+    expect(inner(html, "data-game-underflow-title")).toBe(
+      "Game 1 isn’t finished at 30–40",
+    );
+    expect(tag(html, 'data-game-band="1-1"')).toContain('data-game-key="1·1"');
+    expect(html).toContain("Unfinished · 30–40");
+    expect(tag(html, 'data-game-outcome="unfinished"')).toContain(
+      "text-[var(--rail-amber)]",
+    );
+
+    // Not asked for: neither the slot nor the outcome. Read-only: neither.
+    const plain = render({});
+    expect(plain).not.toContain("data-game-underflow");
+    expect(plain).not.toContain("data-game-outcome");
+    expect(render({ underflow: true, editable: false })).not.toContain(
+      "data-game-underflow",
+    );
   });
 });

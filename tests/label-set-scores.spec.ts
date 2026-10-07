@@ -4,8 +4,13 @@ import { labelScores, type ScorablePoint } from "@/lib/services/labels/score";
 import type { LabelSide } from "@/lib/services/labels/session";
 import {
   enteredScore,
+  formatSets,
   labelSetScores,
+  mismatchGameKey,
   scoreMismatch,
+  scoreMismatchSentence,
+  scoreReasonText,
+  type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
 
 let ids = 0;
@@ -80,11 +85,73 @@ const setsOf = (points: readonly ScorablePoint[]) =>
   labelSetScores(points, labelScores(points, true).games);
 
 test.describe("labelSetScores", () => {
-  test("counts each game for its winner, per set, with the set's first live point", () => {
+  test("counts each settled game for its winner, per set, with the set's first live point and the games left unfinished", () => {
     const points = twoSets();
     expect(setsOf(points)).toEqual([
-      { setNumber: 1, games: [2, 1], firstPointId: "pt-1" },
-      { setNumber: 2, games: [0, 1], firstPointId: "pt-13" },
+      {
+        setNumber: 1,
+        games: [2, 1],
+        firstPointId: "pt-1",
+        unfinished: [],
+        overflow: [],
+      },
+      {
+        setNumber: 2,
+        games: [0, 1],
+        firstPointId: "pt-13",
+        unfinished: [
+          { setNumber: 2, gameNumber: 5, gameInSet: 2, score: "0–0" },
+        ],
+        overflow: [],
+      },
+    ]);
+  });
+
+  test("a game the points leave short counts for nobody — not its last point's winner — and is listed with its call", () => {
+    // 30–40 under no-ad scoring, then a full game: p1 has 1 game, not 2.
+    ids = 0;
+    const points = [
+      won(1, 1, "p1"),
+      won(1, 1, "p1"),
+      won(1, 1, "p2"),
+      won(1, 1, "p2"),
+      won(1, 1, "p2"),
+      ...game(1, 2, "p1"),
+    ];
+    const games = labelScores(points, false).games;
+    expect(games[0].winner).toBe("p2");
+    expect(labelSetScores(points, games)).toEqual([
+      {
+        setNumber: 1,
+        games: [1, 0],
+        firstPointId: "pt-1",
+        unfinished: [
+          { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "30–40" },
+        ],
+        overflow: [],
+      },
+    ]);
+  });
+
+  test("a game with rows past its end counts for who it was settled for, and is listed with the extra", () => {
+    // p1 settles game 1 on the fourth point; two more rows go p2's way.
+    ids = 0;
+    const points = [
+      ...game(1, 1, "p1"),
+      won(1, 1, "p2"),
+      won(1, 1, "p2"),
+      ...game(1, 2, "p2"),
+    ];
+    const games = labelScores(points, true).games;
+    expect(games[0].winner).toBe("p2");
+    expect(labelSetScores(points, games)).toEqual([
+      {
+        setNumber: 1,
+        games: [1, 1],
+        firstPointId: "pt-1",
+        unfinished: [],
+        overflow: [{ setNumber: 1, gameNumber: 1, gameInSet: 1, extra: 2 }],
+      },
     ]);
   });
 
@@ -93,15 +160,29 @@ test.describe("labelSetScores", () => {
     points[0] = { ...points[0], status: "deleted" };
     const sets = setsOf(points);
     expect(sets[0].firstPointId).toBe("pt-2");
-    // Set 2 deleted whole: the tally has one set.
+    // Set 2 deleted whole: the tally has one set — and game 1, three
+    // points now, is short of settled.
     const oneSet = points.map((p) =>
       p.setNumber === 2 ? { ...p, status: "deleted" as const } : p,
     );
     expect(setsOf(oneSet)).toEqual([
-      { setNumber: 1, games: [2, 1], firstPointId: "pt-2" },
+      {
+        setNumber: 1,
+        games: [1, 1],
+        firstPointId: "pt-2",
+        unfinished: [
+          { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "40–0" },
+        ],
+        overflow: [],
+      },
     ]);
     // Points with no set are not a set.
     expect(setsOf([{ ...won(1, 1, "p1"), setNumber: null }])).toEqual([]);
+  });
+
+  test("formatSets writes the sets as Fix the entered score will store them", () => {
+    expect(formatSets(setsOf(twoSets()))).toBe("2–1, 0–1");
+    expect(formatSets([])).toBe("");
   });
 
   test("sets come back in set order whatever the row order", () => {
@@ -131,7 +212,7 @@ test.describe("enteredScore", () => {
 test.describe("scoreMismatch", () => {
   const labelled = () => setsOf(twoSets());
 
-  test("names the first set whose pair differs, with the labelled and entered pairs and the set's first point", () => {
+  test("names the first set whose pair differs, with the labelled and entered pairs, the set's first point and its reasons", () => {
     expect(
       scoreMismatch(labelled(), [
         [2, 1],
@@ -142,6 +223,15 @@ test.describe("scoreMismatch", () => {
       labelled: "0–1",
       entered: "5–2",
       firstPointId: "pt-13",
+      reasons: [
+        {
+          kind: "unfinished",
+          setNumber: 2,
+          gameNumber: 5,
+          gameInSet: 2,
+          score: "0–0",
+        },
+      ],
     });
     // Set 1 differs: it is named, not set 2.
     expect(
@@ -177,9 +267,10 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–4",
       firstPointId: null,
+      reasons: [],
     });
     // The rows run into a set the entered score never had.
-    expect(scoreMismatch(labelled(), [[2, 1]])).toEqual({
+    expect(scoreMismatch(labelled(), [[2, 1]])).toMatchObject({
       setNumber: 2,
       labelled: "0–1",
       entered: "0–0",
@@ -191,6 +282,49 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–3",
       firstPointId: null,
+      reasons: [],
     });
+  });
+});
+
+test.describe("the chip's sentence", () => {
+  const mismatch = (reasons: LabelScoreMismatch["reasons"]) => ({
+    setNumber: 2,
+    labelled: "4–5",
+    entered: "4–6",
+    firstPointId: "pt-13",
+    reasons,
+  });
+
+  test("the set, the two pairs, then each reason after a middle dot", () => {
+    const short = {
+      kind: "unfinished" as const,
+      setNumber: 2,
+      gameNumber: 11,
+      gameInSet: 5,
+      score: "30–40",
+    };
+    const over = {
+      kind: "overflow" as const,
+      setNumber: 2,
+      gameNumber: 9,
+      gameInSet: 3,
+      extra: 2,
+    };
+    expect(scoreMismatchSentence(mismatch([short]))).toBe(
+      "Set 2: labelled 4–5, entered 4–6 · game 5 unfinished (30–40)",
+    );
+    expect(scoreMismatchSentence(mismatch([short, over]))).toBe(
+      "Set 2: labelled 4–5, entered 4–6 · game 5 unfinished (30–40) · game 3 has 2 extra points",
+    );
+    expect(scoreMismatchSentence(mismatch([]))).toBe(
+      "Set 2: labelled 4–5, entered 4–6",
+    );
+    expect(scoreReasonText({ ...over, extra: 1 })).toBe(
+      "game 3 has 1 extra point",
+    );
+    // The first reason's game is where the chip goes; none, nowhere.
+    expect(mismatchGameKey(mismatch([short, over]))).toBe("2·11");
+    expect(mismatchGameKey(mismatch([]))).toBeNull();
   });
 });

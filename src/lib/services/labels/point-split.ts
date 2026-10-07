@@ -15,6 +15,7 @@
  * `planPointSplit`.
  */
 
+import type { LabelPointFields } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyInsertedPoint,
@@ -267,16 +268,23 @@ export function withdrawPointSplit(
   );
 }
 
-/** What the session file answers with: the saved row and the anchor as written. */
+/**
+ * What the session file answers with: the saved row and the anchor as written
+ * — each with the ending its rows now derive, where the server settled one
+ * (`reconcileEnding`, ending-session.ts). The anchor's is absent when its
+ * stored ending already said what its remaining strokes do.
+ */
 export interface PointSplitSaved {
   point: LabelPoint;
-  anchor: { id: string } & SplitAnchorWrite;
+  anchor: { id: string } & SplitAnchorWrite &
+    Partial<Pick<LabelPointFields, "winner" | "ending" | "ended_by">>;
 }
 
 /**
  * The draft row replaced by the saved one — its id on the row and on every
- * moved shot, its rally ids — and the anchor confirmed as the server wrote
- * it. The draft's shots stay: the server moved exactly those rows.
+ * moved shot, its rally ids, its ending — and the anchor confirmed as the
+ * server wrote it, ending included when the split moved it. The draft's shots
+ * stay: the server moved exactly those rows.
  */
 export function settlePointSplit(
   points: readonly LabelPoint[],
@@ -295,10 +303,14 @@ export function settlePointSplit(
       };
     }
     if (point.id === saved.anchor.id) {
+      const { anchor } = saved;
       return {
         ...point,
-        status: saved.anchor.status,
-        vendorRallyIds: saved.anchor.vendor_rally_ids,
+        status: anchor.status,
+        vendorRallyIds: anchor.vendor_rally_ids,
+        ...("ending" in anchor ? { ending: anchor.ending ?? null } : {}),
+        ...("ended_by" in anchor ? { endedBy: anchor.ended_by ?? null } : {}),
+        ...("winner" in anchor ? { winner: anchor.winner ?? null } : {}),
       };
     }
     return point;

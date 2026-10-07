@@ -15,11 +15,13 @@ import {
 } from "@/lib/services/labels/session-fields-session";
 import { tag } from "./fixtures/html-probe";
 import { labelSessionFixture } from "./fixtures/label-session";
+import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /** The session's own fields (`final_score`, `video_ends_early`): the parser, the service over a fake client, and the rail header's score chip and total. */
 
 const CONSOLE = "src/components/admin/labels/label-console.tsx";
+const RAIL = "src/components/admin/labels/label-black-rail.tsx";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
 // ── The parser ─────────────────────────────────────────────────────────────
@@ -444,11 +446,15 @@ const CHIP_TEXT = (html: string) =>
 
 test.describe("the score chip in the rail header", () => {
   /**
-   * The fixture: one game of set 1 counted for Lee (its last counted point,
-   * the ace), a second game with no counted point, and a match record of
-   * 6–3 4–6. The rows make 1–0 in set 1; the record says 6–3.
+   * The fixture: game 1 of set 1 at 15–15 (two counted points, one each),
+   * a second game with no counted point, and a match record of 6–3 4–6.
+   * Neither game is settled, so the rows make 0–0 in set 1; the record says
+   * 6–3 — and the chip says which games fall short.
    */
-  test("the labelled pair against the entered one, in the header, as a menu — and a render writes nothing", () => {
+  const SENTENCE =
+    "Set 1: labelled 0–0, entered 6–3 · game 1 unfinished (15–15) · game 2 unfinished (0–0)";
+
+  test("the sentence — set, pairs, the unfinished games — in the header, as a menu — and a render writes nothing", () => {
     const { called, operations } = countingOperations();
     const html = black(labelSessionFixture(), EMPTY_MARKS, operations);
     expect(called).toEqual([]);
@@ -459,7 +465,7 @@ test.describe("the score chip in the rail header", () => {
     expect(chip).toContain('aria-label="Score doesn’t add up"');
     expect(chip).toContain('aria-haspopup="menu"');
     expect(chip).toContain('aria-expanded="false"');
-    expect(CHIP_TEXT(head)).toBe("1–0 · entered 6–3");
+    expect(CHIP_TEXT(head)).toBe(SENTENCE);
   });
 
   test("gone once the labeller has said the video ends early", () => {
@@ -469,12 +475,12 @@ test.describe("the score chip in the rail header", () => {
 
   test("gone when the labelled points agree with the score — final_score first", () => {
     // The labeller's reading matches the rows: no chip, whatever the record says.
-    const agreed = { ...labelSessionFixture(), finalScore: [[1, 0]] };
+    const agreed = { ...labelSessionFixture(), finalScore: [[0, 0]] };
     expect(black(agreed, EMPTY_MARKS)).not.toContain("data-label-score-chip");
     // The record agrees and nothing was entered on the session.
     const record = {
       ...labelSessionFixture(),
-      matchScore: { player1: [1], player2: [0] },
+      matchScore: { player1: [0], player2: [0] },
     };
     expect(black(record, EMPTY_MARKS)).not.toContain("data-label-score-chip");
     // Nothing entered anywhere: nothing to hold the rows against.
@@ -483,8 +489,90 @@ test.describe("the score chip in the rail header", () => {
     // A reading that differs from the rows shows, with the reading's numbers.
     const differs = { ...labelSessionFixture(), finalScore: [[4, 0]] };
     expect(CHIP_TEXT(header(black(differs, EMPTY_MARKS)))).toBe(
-      "1–0 · entered 4–0",
+      "Set 1: labelled 0–0, entered 4–0 · game 1 unfinished (15–15) · game 2 unfinished (0–0)",
     );
+  });
+
+  test("the menu: Go to game first, Fix says what it stores, Use the match score again only with a score stored", () => {
+    const { ScoreChipMenu } = createLoader().load(RAIL) as {
+      ScoreChipMenu: (props: Record<string, unknown>) => React.ReactNode;
+    };
+    const mismatch = {
+      setNumber: 1,
+      labelled: "0–0",
+      entered: "6–3",
+      firstPointId: "p-0001",
+      reasons: [
+        {
+          kind: "unfinished",
+          setNumber: 1,
+          gameNumber: 1,
+          gameInSet: 1,
+          score: "15–15",
+        },
+      ],
+    };
+    const calls: string[] = [];
+    const props = {
+      mismatch,
+      stored: "0–0",
+      reason: mismatch.reasons[0],
+      game: "1·1",
+      gameInSet: 1,
+      close: () => calls.push("close"),
+      onGoToGame: (key: string) => calls.push(`go ${key}`),
+      onFixEnteredScore: () => calls.push("fix"),
+      onVideoEndsEarly: () => calls.push("early"),
+      onFindGap: () => calls.push("gap"),
+    };
+    const rows = (tree: React.ReactNode) =>
+      elements(tree)
+        .filter((e) => typeof e.props.label === "string")
+        .map((e) => [e.props.label, e.props.description]);
+
+    const without = ScoreChipMenu(props);
+    expect(rows(without)).toEqual([
+      ["Go to game 1", "game 1 unfinished (15–15)"],
+      ["Fix the entered score", "Store 0–0 as the entered score."],
+      [
+        "Video ends early",
+        "The points stop before the match did; the score stands.",
+      ],
+      [
+        "Find the gap",
+        "Goes to the first point of set 1. The entered score is a set total, so the gap can’t be placed at a game.",
+      ],
+    ]);
+    // Each row closes the menu, then asks. Nothing is written by a render.
+    const go = elements(without).find((e) => e.props.label === "Go to game 1");
+    (go?.props.onSelect as () => void)();
+    expect(calls).toEqual(["close", "go 1·1"]);
+
+    const withStored = ScoreChipMenu({
+      ...props,
+      onClearEnteredScore: () => calls.push("clear"),
+    });
+    expect(rows(withStored).map(([label]) => label)).toEqual([
+      "Go to game 1",
+      "Fix the entered score",
+      "Video ends early",
+      "Find the gap",
+      "Use the match score again",
+    ]);
+    // No game named: no Go to row.
+    const noGame = ScoreChipMenu({
+      ...props,
+      reason: undefined,
+      game: null,
+      gameInSet: null,
+    });
+    expect(rows(noGame)[0][0]).toBe("Fix the entered score");
+  });
+
+  test("the band or slot carrying the game's key is where Go to game scrolls", () => {
+    // The rail's scroll reads `data-game-key`; the band carries it.
+    const html = black(labelSessionFixture(), EMPTY_MARKS);
+    expect(tag(html, 'data-game-band="1-1"')).toContain('data-game-key="1·1"');
   });
 
   test("never without marks: a session labelled blind shows no chip and no total", () => {
@@ -498,17 +586,32 @@ test.describe("the score chip in the rail header", () => {
     }
   });
 
-  test("words alone on a session that cannot be written: not a control", () => {
+  test("on a session that cannot be written: no menu, a button that goes to the named game — words alone with none named", () => {
     const html = black(labelSessionFixture(), EMPTY_MARKS, null);
     const head = header(html);
     const chip = tag(head, 'data-label-score-chip=""');
-    expect(chip).not.toContain("<button");
-    expect(chip).toContain('role="img"');
+    expect(chip).toContain("<button");
     expect(chip).toContain(
-      "These points make 1–0 in set 1. The score entered was 6–3.",
+      "These points make 0–0 in set 1. The score entered was 6–3.",
     );
+    expect(chip).toContain("Go to game 1.");
     expect(chip).not.toContain("aria-haspopup");
-    expect(CHIP_TEXT(head)).toBe("1–0 · entered 6–3");
+    expect(CHIP_TEXT(head)).toBe(SENTENCE);
+
+    // The entered score has a set the rows never reach: nothing to go to.
+    const beyond = {
+      ...labelSessionFixture(),
+      finalScore: [
+        [0, 0],
+        [6, 4],
+      ],
+    };
+    const far = tag(
+      header(black(beyond, EMPTY_MARKS, null)),
+      'data-label-score-chip=""',
+    );
+    expect(far).not.toContain("<button");
+    expect(far).toContain('role="img"');
   });
 });
 

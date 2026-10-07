@@ -28,6 +28,7 @@ import {
 import {
   resetLabelPoint,
   resetLabelShot,
+  type LabelPointResetResult,
 } from "@/lib/services/labels/reset-session";
 import {
   setLabelGameServer,
@@ -48,6 +49,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  pullLabelGamePoints,
   shiftLabelGameOverflow,
   type LabelGameShiftResult,
 } from "@/lib/services/labels/game-shift-session";
@@ -217,7 +219,7 @@ export async function resetLabelShotAction(
  */
 export async function resetLabelPointAction(
   pointId: string,
-): Promise<LabelPointStatusResult> {
+): Promise<LabelPointResetResult> {
   return resetLabelPoint(pointId);
 }
 
@@ -281,6 +283,18 @@ export async function shiftLabelGameOverflowAction(
   fromPointId: string,
 ): Promise<LabelGameShiftResult> {
   return shiftLabelGameOverflow(sessionId, fromPointId);
+}
+
+/**
+ * The mirror of the shift: pull the next game's first rows into the game
+ * `gameKey` (`"set·game"`) until it is decided, and on down the match. Same
+ * writes, same refusals; a game more likely missing a point is refused.
+ */
+export async function pullLabelGamePointsAction(
+  sessionId: string,
+  gameKey: string,
+): Promise<LabelGameShiftResult> {
+  return pullLabelGamePoints(sessionId, gameKey);
 }
 
 /**

@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   analyzeResults,
+  BASELINE_M,
   buildTranscript,
   DERIVATION_VERSION,
   type MatchScore,
@@ -113,8 +114,11 @@ test.describe("buildLabelSeed", () => {
       expect(stroke.strokeType).not.toBe("serve");
       expect(shot.status).toBe("kept");
       expect(shot.result).toBeNull();
-      expect(shot.landing_x).toBeNull();
-      expect(shot.landing_y).toBeNull();
+      // Its landing is the vendor's bounce, for the day it is restored.
+      expect(shot.landing_x).toBe(stroke.bounceX);
+      expect(shot.landing_y).toBe(
+        stroke.bounceY === null ? null : stroke.bounceY + BASELINE_M,
+      );
       expect(shot.video_time).toBe(stroke.videoTime);
       // A dropped stroke still has a vendor spin, and it is seeded.
       expect(shot.spin).toBe(labelSpin(stroke.spinType));
@@ -154,6 +158,10 @@ test.describe("buildLabelSeed", () => {
     const derivedById = new Map(
       transcript.points.flatMap((p) => p.shots.map((s) => [s.event_id, s])),
     );
+    const strokeById = new Map(
+      analysis.rallies.flatMap((r) => r.strokes.map((s) => [s.eventId, s])),
+    );
+    let keptBounces = 0;
     for (const point of seed.points) {
       for (const shot of point.shots) {
         const derived = derivedById.get(shot.event_id);
@@ -164,8 +172,18 @@ test.describe("buildLabelSeed", () => {
         expect(shot.hitter).toBe(side(derived.is_player1));
         expect(shot.contact_x).toBe(derived.contact_x);
         expect(shot.contact_y).toBe(derived.contact_y);
-        expect(shot.landing_x).toBe(derived.landing_x);
-        expect(shot.landing_y).toBe(derived.landing_y);
+        if (derived.landing_x !== null && derived.landing_y !== null) {
+          expect(shot.landing_x).toBe(derived.landing_x);
+          expect(shot.landing_y).toBe(derived.landing_y);
+        } else {
+          // The transcript's cut is for stats; the seed keeps the bounce.
+          const stroke = strokeById.get(shot.event_id)!;
+          expect(shot.landing_x).toBe(stroke.bounceX);
+          expect(shot.landing_y).toBe(
+            stroke.bounceY === null ? null : stroke.bounceY + BASELINE_M,
+          );
+          if (stroke.bounceX !== null) keptBounces += 1;
+        }
         expect(shot.video_time).toBe(derived.video_time);
         expect(shot.result).toBe(labelShotResult(derived.result));
         expect(shot.spin).toBe(labelSpin(derived.spin_type));
@@ -173,6 +191,8 @@ test.describe("buildLabelSeed", () => {
         expect(shot.unclear).toEqual([]);
       }
     }
+    // The fixture has balls the transcript's cut dropped; the seed kept them.
+    expect(keptBounces).toBeGreaterThan(0);
   });
 
   test("every row freezes its own values as its seed", () => {

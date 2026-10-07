@@ -527,32 +527,57 @@ interface Call {
   op: "select" | "update";
   values?: Record<string, unknown>;
   filters: Record<string, unknown>;
+  /** `.not(column, "is", null)` — the column must be set. */
+  notNull?: string[];
+  /** `.is(column, null)` — the column must be unset. */
+  isNull?: string[];
 }
 
+/**
+ * A shot's row, its point's row and the point's shot rows. The point row
+ * takes each successful `label_points` update, so a read after a write sees
+ * what was written — the winner pick's re-read depends on it.
+ */
 function fakeClient(rows: {
   shot?: Record<string, unknown> | null;
   point?: Record<string, unknown> | null;
+  /** Every shot row of the point; none unless given. */
+  shots?: Record<string, unknown>[];
   sessionStatus?: string;
+  marksEnabled?: boolean;
   failWrite?: boolean;
   /** Every write finds the row changed since it was read. */
   gone?: boolean;
 }) {
   const calls: Call[] = [];
+  let point = rows.point === undefined ? pointRow() : rows.point;
   const client = {
     from(table: string) {
       const call: Call = { table, op: "select", filters: {} };
       calls.push(call);
       const answer = () => {
         if (call.op === "update") {
-          return rows.failWrite
-            ? { data: null, error: { message: "write refused" } }
-            : { data: rows.gone ? [] : [{ id: "written" }], error: null };
+          if (rows.failWrite) {
+            return { data: null, error: { message: "write refused" } };
+          }
+          if (rows.gone) return { data: [], error: null };
+          if (table === "label_points" && point) {
+            point = { ...point, ...call.values };
+          }
+          return { data: [{ id: "written" }], error: null };
         }
-        if (table === "label_shots") return { data: rows.shot, error: null };
-        if (table === "label_points") return { data: rows.point, error: null };
+        if (table === "label_shots") {
+          return "label_point_id" in call.filters
+            ? { data: rows.shots ?? [], error: null }
+            : { data: rows.shot, error: null };
+        }
+        if (table === "label_points") return { data: point, error: null };
         if (table === "label_sessions") {
           return {
-            data: { status: rows.sessionStatus ?? "labelling" },
+            data: {
+              status: rows.sessionStatus ?? "labelling",
+              marks_enabled: rows.marksEnabled ?? false,
+            },
             error: null,
           };
         }
@@ -560,6 +585,7 @@ function fakeClient(rows: {
       };
       const builder = {
         select: () => builder,
+        returns: () => builder,
         update: (values: Record<string, unknown>) => {
           call.op = "update";
           call.values = values;
@@ -567,6 +593,14 @@ function fakeClient(rows: {
         },
         eq: (column: string, value: unknown) => {
           call.filters[column] = value;
+          return builder;
+        },
+        not: (column: string) => {
+          call.notNull = [...(call.notNull ?? []), column];
+          return builder;
+        },
+        is: (column: string) => {
+          call.isNull = [...(call.isNull ?? []), column];
           return builder;
         },
         maybeSingle: async () => answer(),
@@ -585,6 +619,7 @@ const UPDATED_AT = "2026-10-01T10:00:00.123456+00:00";
 const shotRow = (fields: Record<string, unknown> = {}) => ({
   id: SHOT_ID,
   session_id: SESSION_ID,
+  label_point_id: POINT_ID,
   updated_at: UPDATED_AT,
   ...kept,
   ...fields,
@@ -600,6 +635,10 @@ const pointRow = (fields: Record<string, unknown> = {}) => ({
   status: "unchanged",
   ...fields,
 });
+
+/** The updates a fake saw, in order: table, values and the row they hit. */
+const updates = (fake: ReturnType<typeof fakeClient>) =>
+  fake.calls.filter((c) => c.op === "update");
 
 test.describe("updateLabelShot (editLabelShot)", () => {
   test("returns an error and touches nothing when requireAdmin() is null", async () => {
@@ -685,10 +724,15 @@ test.describe("updateLabelShot (editLabelShot)", () => {
         patch: { result: "out" },
       }),
     ).toEqual({ error: "This row changed while it was saving. Try again." });
-    // Three attempts, each a fresh read and a guarded write; the session is
-    // checked once.
+    // Three attempts, each a fresh read and a guarded write; the session and
+    // the point's rows are read once.
     const shots = busy.calls.filter((c) => c.table === "label_shots");
-    expect(shots.filter((c) => c.op === "select")).toHaveLength(3);
+    expect(
+      shots.filter((c) => c.op === "select" && "id" in c.filters),
+    ).toHaveLength(3);
+    expect(
+      shots.filter((c) => c.op === "select" && "label_point_id" in c.filters),
+    ).toHaveLength(1);
     expect(shots.filter((c) => c.op === "update")).toHaveLength(3);
     expect(busy.calls.filter((c) => c.table === "label_sessions")).toHaveLength(
       1,
@@ -830,5 +874,288 @@ test.describe("updateLabelPoint (editLabelPoint)", () => {
         patch: { note: "net cord on the return" },
       }),
     ).toEqual({ ok: true, status: "unchanged" });
+  });
+});
+
+// ── The ending follows the shot rows, on the server ────────────────────────
+
+const GHOST_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+/** A shot row of the point, as `readPointShots` reads it. */
+const pointShot = (id: string, fields: Record<string, unknown> = {}) => ({
+  id,
+  label_point_id: POINT_ID,
+  event_id: null,
+  after_event_id: null,
+  status: "kept",
+  status_before_delete: null,
+  delete_reason: null,
+  hitter: "p1",
+  stroke: "forehand",
+  result: "in",
+  spin: null,
+  contact_x: null,
+  contact_y: null,
+  landing_x: null,
+  landing_y: null,
+  video_time: null,
+  site_removal: null,
+  site_removal_restored_at: null,
+  seed: null,
+  ...fields,
+});
+
+test.describe("a shot write settles its point's ending in the same call", () => {
+  test("the last ball marked out: the point's ending and ended-by follow, compare-and-set, and come back", async () => {
+    // Vargas's (p2) backhand, the point's one stroke, labelled in; the point
+    // was seeded as Lee's (p1) winner. Marking the ball out makes it an error
+    // by Vargas; the rows now say Lee won, which the point already holds.
+    const fake = fakeClient({
+      shot: shotRow(),
+      shots: [pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand" })],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: { result: "out" },
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "edited",
+      point: { ending: "error", endedBy: "p2", winner: "p1", status: "edited" },
+    });
+    expect(updates(fake)).toEqual([
+      {
+        table: "label_shots",
+        op: "update",
+        values: { result: "out", status: "edited" },
+        filters: { id: SHOT_ID, updated_at: UPDATED_AT },
+      },
+      {
+        table: "label_points",
+        op: "update",
+        values: { ending: "error", ended_by: "p2", status: "edited" },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+    // The point's rows were read before the shot was written.
+    const order = fake.calls.map((c) => [
+      c.table,
+      c.op,
+      "label_point_id" in c.filters,
+    ]);
+    expect(
+      order.findIndex(
+        ([t, op, byPoint]) => t === "label_shots" && op === "select" && byPoint,
+      ),
+    ).toBeLessThan(
+      order.findIndex(([t, op]) => t === "label_shots" && op === "update"),
+    );
+  });
+
+  test("a change that leaves the rows saying the same thing writes the shot alone", async () => {
+    const fake = fakeClient({
+      shot: shotRow(),
+      shots: [pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand" })],
+    });
+    expect(
+      await writeLabelShotEdit({
+        supabase: fake.supabase,
+        shotId: SHOT_ID,
+        patch: { spin: "flat" },
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+    expect(updates(fake).map((w) => w.table)).toEqual(["label_shots"]);
+  });
+
+  test("the point's write is retried on a changed row, then the shot reports it saved but its point not", async () => {
+    // The shot's write lands; every point write finds the row moved on.
+    let pointWrites = 0;
+    const fake = fakeClient({
+      shot: shotRow(),
+      shots: [pointShot(SHOT_ID, { hitter: "p2", stroke: "backhand" })],
+    });
+    const raced = {
+      from(table: string) {
+        const builder = fake.supabase.from(table as never) as unknown as {
+          update: (values: Record<string, unknown>) => unknown;
+        };
+        if (table !== "label_points") return builder;
+        const update = builder.update.bind(builder);
+        builder.update = (values) => {
+          pointWrites += 1;
+          const chain = update(values) as Record<string, unknown>;
+          chain.then = (resolve: (v: unknown) => unknown) =>
+            Promise.resolve({ data: [], error: null }).then(resolve);
+          return chain;
+        };
+        return builder;
+      },
+    } as unknown as AdminClient;
+    const result = await writeLabelShotEdit({
+      supabase: raced,
+      shotId: SHOT_ID,
+      patch: { result: "out" },
+    });
+    expect(pointWrites).toBe(3);
+    expect(result).toEqual({
+      error:
+        "The point changed while its ending was saving. Try again. The shot was saved; reload to see the point as it stands.",
+    });
+  });
+
+  test("a serve relabelled in puts back the swing the site removed after it, and the ending reads it", async () => {
+    // Lee's first serve was called out and Vargas's swing at it removed as
+    // a hit after the fault. The serve placed in: the swing was a return.
+    const serve = shotRow({
+      hitter: "p1",
+      stroke: "first_serve",
+      result: "out",
+    });
+    const rows = [
+      pointShot(SHOT_ID, {
+        hitter: "p1",
+        stroke: "first_serve",
+        result: "out",
+        video_time: 10,
+      }),
+      pointShot(GHOST_ID, {
+        hitter: "p2",
+        stroke: "backhand",
+        result: null,
+        video_time: 11,
+        site_removal: "hit_after_fault",
+      }),
+    ];
+    const fake = fakeClient({ shot: serve, shots: rows, marksEnabled: true });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.5, landing_y: 17, result: "in" },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      status: "edited",
+      restoredGhostId: GHOST_ID,
+      // The return, with no result yet, is the last stroke: by the labelled
+      // loser, so an error by Vargas.
+      point: { ending: "error", endedBy: "p2", winner: "p1" },
+    });
+    const [shot, ghost, point] = updates(fake);
+    expect(shot.table).toBe("label_shots");
+    expect(ghost).toMatchObject({
+      table: "label_shots",
+      filters: { id: GHOST_ID },
+      notNull: ["site_removal"],
+      isNull: ["site_removal_restored_at"],
+    });
+    expect(typeof ghost.values?.site_removal_restored_at).toBe("string");
+    expect(point).toMatchObject({
+      table: "label_points",
+      values: { ending: "error", ended_by: "p2" },
+    });
+
+    // Not on a session labelled without marks: there the swing is a stroke
+    // already, and the point's rows said so before the edit.
+    const blind = fakeClient({ shot: serve, shots: rows });
+    const plain = await writeLabelShotEdit({
+      supabase: blind.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.5, landing_y: 17, result: "in" },
+    });
+    expect(plain).not.toHaveProperty("restoredGhostId");
+    expect(updates(blind).map((w) => w.table)).toEqual(["label_shots"]);
+
+    // Nor when the serve was already in, or the next stroke is no ghost.
+    const wasIn = fakeClient({
+      shot: shotRow({ hitter: "p1", stroke: "first_serve", result: "in" }),
+      shots: rows,
+      marksEnabled: true,
+    });
+    await writeLabelShotEdit({
+      supabase: wasIn.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.5, landing_y: 17, result: "in" },
+    });
+    expect(updates(wasIn).some((w) => w.filters.id === GHOST_ID)).toBe(false);
+  });
+});
+
+test.describe("a winner pick lets the ending follow the rows", () => {
+  // Lee's serve, then Vargas's backhand with no result yet: the last stroke
+  // settles nothing, so the ending reads the winner.
+  const rows = [
+    pointShot(SHOT_ID, { stroke: "first_serve", video_time: 1 }),
+    pointShot(GHOST_ID, {
+      hitter: "p2",
+      stroke: "backhand",
+      result: null,
+      video_time: 2,
+    }),
+  ];
+
+  test("picked = the hitter: a winner by them; the other side: an error by the hitter", async () => {
+    const vargas = fakeClient({
+      point: pointRow({ winner: "p1", ending: "error", ended_by: "p2" }),
+      shots: rows,
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: vargas.supabase,
+        pointId: POINT_ID,
+        patch: { winner: "p2" },
+      }),
+    ).toEqual({
+      ok: true,
+      status: "edited",
+      point: {
+        ending: "winner",
+        endedBy: "p2",
+        winner: "p2",
+        status: "edited",
+      },
+    });
+    expect(updates(vargas).map((w) => w.values)).toEqual([
+      { winner: "p2", status: "edited" },
+      { ending: "winner", ended_by: "p2", status: "edited" },
+    ]);
+
+    const lee = fakeClient({
+      point: pointRow({ winner: "p2", ending: "winner", ended_by: "p2" }),
+      shots: rows,
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: lee.supabase,
+        pointId: POINT_ID,
+        patch: { winner: "p1" },
+      }),
+    ).toMatchObject({
+      ok: true,
+      point: { ending: "error", endedBy: "p2", winner: "p1" },
+    });
+  });
+
+  test("a pick the stored ending already agrees with writes the winner alone; any other field never re-reads the rows", async () => {
+    const agreed = fakeClient({
+      point: pointRow({ winner: "p1", ending: "winner", ended_by: "p2" }),
+      shots: rows,
+    });
+    expect(
+      await writeLabelPointEdit({
+        supabase: agreed.supabase,
+        pointId: POINT_ID,
+        patch: { winner: "p2" },
+      }),
+    ).toEqual({ ok: true, status: "edited" });
+    expect(updates(agreed)).toHaveLength(1);
+
+    const ending = fakeClient({ point: pointRow(), shots: rows });
+    await writeLabelPointEdit({
+      supabase: ending.supabase,
+      pointId: POINT_ID,
+      patch: { ending: "error" },
+    });
+    expect(ending.calls.some((c) => c.table === "label_shots")).toBe(false);
   });
 });

@@ -222,7 +222,13 @@ export function BlackShotsWell({
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
   // The point's hints, as the well's first row: it arrives with the rally.
-  const hints = pointHints(point, marks, edit.names);
+  // Their answers write through the console only where it can write at all.
+  const hints = pointHints(
+    point,
+    marks,
+    edit.names,
+    edit.editable ? edit : undefined,
+  );
   if (hints.length > 0) {
     const arrival = rowArrival(arrive());
     rows.push(
