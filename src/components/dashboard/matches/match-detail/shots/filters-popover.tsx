@@ -83,7 +83,7 @@ const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
  * cannot say exactly stays a pill group, applied and removable in the
  * strip, rather than being changed by a Show nobody meant to change it.
  * Picking the other Player leaves the advanced filters as picked: they name
- * players outright, as on the Video tab (`withPlayer`).
+ * players outright, as on the Video tab (`courtFor`).
  *
  * Built on the same Radix `Popover` primitive `ui/float-menu.tsx` wraps
  * (click-outside, Esc, focus-return all come from Radix). `count`/`total`/

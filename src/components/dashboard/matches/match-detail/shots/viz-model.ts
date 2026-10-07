@@ -38,13 +38,13 @@ import {
   EMPTY_MATCH_FILTERS,
   errorMadeBy,
   hasActiveMatchFilters,
+  finalShotOf,
   lastShotOf,
-  strokeOf,
   type MatchFilterContext,
   type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
-import { isPlacementCut } from "./cut-kinds";
+import { bandKindFor } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -156,6 +156,12 @@ export interface VizDotMeta {
    */
   isAce: boolean;
   speedMph: number | null;
+  /**
+   * Errors cut only: the stroke the point ended on, by Result › Shot's own
+   * rule (`finalShotOf`) — so the stats card's Stroke rows and that filter
+   * always agree on a point. Absent everywhere else.
+   */
+  stroke?: string;
 }
 
 /**
@@ -1105,7 +1111,11 @@ function computeErrorsViz(
   const dots: VizDot[] = [];
 
   for (const p of points) {
+    // Their error AND their lost point: a last row credited to the point's
+    // winner (a missing final row, an untyped Out the winner hit) is not an
+    // error that cost them anything, and would draw as one.
     if (errorMadeBy(p) !== subjectIsPlayer1) continue;
+    if (p.wonByPlayer1 === subjectIsPlayer1) continue;
     const shot = lastShotOf(p);
     if (!shot || shot.isPlayer1 !== subjectIsPlayer1) continue;
     const landing = rallyLandingMetrics(shot);
@@ -1117,13 +1127,12 @@ function computeErrorsViz(
     }
     if (matchPass !== null && !matchPass(p)) continue;
     if (filters.error.length) {
-      // An error the source left unclassified (no result type — found from
-      // an Out/Net last shot) is unforced: the bucket the derivation and
-      // `calculate_match_stats` fold every non-forced error into. Without
-      // this the default "Unforced errors" tile read 0 on such a match while
-      // the unfiltered cut drew every one of them.
-      const kind = errorKindOf(p) ?? "unforced";
-      if (!filters.error.includes(kind)) continue;
+      // Strictly by the recorded result type, as the Point endings card's
+      // unforced-error count reads it — so "Unforced errors" means the same
+      // number on both. An error the source left unclassified is drawn on
+      // the unfiltered cut, under no kind.
+      const kind = errorKindOf(p);
+      if (kind === null || !filters.error.includes(kind)) continue;
     }
     count++;
 
@@ -1134,7 +1143,10 @@ function computeErrorsViz(
       outcome: "lost",
       shape: shapeFromShotType(shot.shotType),
       atNet: landing.atNet,
-      meta: pointDotMeta(p, subjectIsPlayer1, shot),
+      meta: {
+        ...pointDotMeta(p, subjectIsPlayer1, shot),
+        stroke: finalShotOf(p)?.kind ?? "Other",
+      },
     });
   }
 
@@ -1964,7 +1976,7 @@ function errorStats(result: VizResult): StatGroup[] {
       if (toBaseline <= toSideline) long++;
       else wide++;
     } else inCourt++;
-    const stroke = errorStrokeLabel(dot.meta?.shotType);
+    const stroke = dot.meta?.stroke ?? "Other";
     strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
   }
 
@@ -1990,13 +2002,6 @@ function errorStats(result: VizResult): StatGroup[] {
   ];
 }
 
-/** Result › Shot's own stroke rule (`strokeOf`), so a row here and the
- * advanced filter always agree on a shot; serves first, as `finalShotOf`. */
-function errorStrokeLabel(shotType: string | null | undefined): string {
-  if (isServeShotType(shotType ?? null)) return "Serve";
-  return strokeOf(shotType) ?? "Other";
-}
-
 /** Geometry and values share the SAME settings and computed statistics. */
 export interface VizBandZones {
   kind: "depth" | "contact";
@@ -2012,8 +2017,8 @@ export function bandZonesFor(
   stats: VizStats | null,
   contactHidden = false,
 ): VizBandZones | null {
-  if (cut === "serve" || cut === "errors") return null;
-  const kind = isPlacementCut(cut) ? "depth" : "contact";
+  const kind = bandKindFor(cut);
+  if (kind === null) return null;
   if (kind === "contact" && contactHidden) return null;
   const rows =
     kind === "depth"

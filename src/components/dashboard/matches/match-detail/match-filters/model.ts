@@ -655,9 +655,7 @@ export function rallyLengthBandOf(rallyLength: number): RallyLengthBand | null {
   return "short";
 }
 
-export function strokeOf(
-  shotType: string | null | undefined,
-): ResultShot | null {
+function strokeOf(shotType: string | null | undefined): ResultShot | null {
   const t = lower(shotType);
   if (t.includes("overhead") || t.includes("smash")) return "Overhead";
   if (t.includes("volley")) return "Volley";

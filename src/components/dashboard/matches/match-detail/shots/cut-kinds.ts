@@ -20,3 +20,10 @@ export function isPlacementCut(cut: Cut): boolean {
 export function isLandingCut(cut: Cut): boolean {
   return cut === "serve" || isPlacementCut(cut);
 }
+
+/** Which half a cut's bands describe — `null` for Serve (service boxes, no
+ * bands) and Errors (shares of the errors, not points won per band). */
+export function bandKindFor(cut: Cut): "depth" | "contact" | null {
+  if (cut === "serve" || cut === "errors") return null;
+  return isPlacementCut(cut) ? "depth" : "contact";
+}

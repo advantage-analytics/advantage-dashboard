@@ -209,7 +209,7 @@ export function appliedPhrases(
   const out: string[] = [];
   for (const key of SENTENCE_KEYS) {
     for (const value of appliedValues(filters, key)) {
-      out.push(PHRASE[key](optionLabel(key, value), value, names));
+      out.push(phraseFor(key, optionLabel(key, value), value, names));
     }
   }
   return out;

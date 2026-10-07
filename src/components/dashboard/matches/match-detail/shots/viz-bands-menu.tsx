@@ -21,6 +21,7 @@ import type { DistanceUnit } from "@/lib/format/distance";
 import { useVizBands } from "./viz-bands-context";
 import { VizMenuTrigger } from "./viz-labels";
 import type { Cut } from "./viz-model";
+import { bandKindFor } from "./cut-kinds";
 
 /**
  * The bands control in the fullscreen viewer's bottom slab (Phase 2B, Task
@@ -84,12 +85,7 @@ function contactDividersLabel(
   return `${side(c0)} · ${side(c1)}`.toUpperCase();
 }
 
-/** Which half a cut's bands describe — `null` for Serve, which has none. */
-export function bandKindFor(cut: Cut): "depth" | "contact" | null {
-  if (cut === "returnPlacement" || cut === "rallyPlacement") return "depth";
-  if (cut === "returnContact" || cut === "rallyPosition") return "contact";
-  return null;
-}
+export { bandKindFor };
 
 export function VizBandsMenu({
   cut,

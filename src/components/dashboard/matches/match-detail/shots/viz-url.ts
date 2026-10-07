@@ -736,7 +736,11 @@ export function activeFilterEntries(
 
     if (key === "player") {
       if (state.filters.player !== "you") {
-        result.push({ key: "player", value: "opponent", label: "Opponent" });
+        result.push({
+          key: "player",
+          value: "opponent",
+          label: names.opponent,
+        });
       }
       continue;
     }

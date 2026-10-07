@@ -640,27 +640,65 @@ test("Show on Errors writes what a reload reads back", () => {
   expect(shown.match.resultOutcome).toEqual([]);
 });
 
-test("an error with no recorded type counts as unforced", () => {
+test("an error with no recorded type is drawn, but under no error kind", () => {
   const untyped: MatchPoint = {
     ...UNFORCED_NET,
     id: "untyped",
     resultType: "",
   };
-  const result = computeViz(
-    [untyped],
-    "errors",
-    { ...EMPTY_VIZ_FILTERS, error: ["unforced"] },
-    true,
-  );
-  expect(result.dots.map((d) => d.id)).toEqual(["untyped"]);
+  // On the unfiltered cut it is there…
+  expect(
+    computeViz([untyped], "errors", EMPTY_VIZ_FILTERS, true).dots.map(
+      (d) => d.id,
+    ),
+  ).toEqual(["untyped"]);
+  // …but "Unforced" is strict, as the Point endings card counts it.
   expect(
     computeViz(
       [untyped],
       "errors",
-      { ...EMPTY_VIZ_FILTERS, error: ["forced"] },
+      { ...EMPTY_VIZ_FILTERS, error: ["unforced"] },
       true,
     ).count,
   ).toBe(0);
+});
+
+test("an error dot is always a point its player lost", () => {
+  // The last row credited to the point's winner: not an error that cost
+  // them anything.
+  const wonAnyway: MatchPoint = {
+    ...UNFORCED_NET,
+    id: "won",
+    wonByPlayer1: true,
+  };
+  expect(computeViz([wonAnyway], "errors", EMPTY_VIZ_FILTERS, true).total).toBe(
+    0,
+  );
+});
+
+test("stroke rows read Result › Shot's rule, so a missed return is a Return", () => {
+  const missedReturn: MatchPoint = {
+    ...servePoint({ id: "ret", player1: false }),
+    resultType: "Forehand Unforced Error",
+    wonByPlayer1: false,
+  };
+  missedReturn.shots = [
+    ...missedReturn.shots!,
+    rallyShot("ret-miss", true, false, 1, 13, {
+      result: "Out",
+      shotType: "Forehand",
+    }),
+  ];
+  const stats = computeVizStats(
+    [missedReturn],
+    "errors",
+    EMPTY_VIZ_FILTERS,
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  expect(stats.groups[1].rows.map((r) => r.label)).toEqual(["Return"]);
 });
 
 test("the advanced panel offers only what the cut keeps", () => {
