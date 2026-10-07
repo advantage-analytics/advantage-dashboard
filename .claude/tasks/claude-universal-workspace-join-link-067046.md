@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Migration: `program_join_links` table, RLS and five RPCs
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_program_join_links.sql (new; name it to the version `list_migrations` reports after the live apply), supabase/migrations/20260921050000_seats_count_roster_players.sql (read only — source of the player-branch body to factor out)
 - **done when:**
