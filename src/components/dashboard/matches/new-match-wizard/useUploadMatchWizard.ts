@@ -73,6 +73,8 @@ import {
   ParsingState,
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
+  videoCheckOf,
+  withoutVideoCheck,
   STEP_ORDER_BY_KIND,
   NO_FORMAT_DEFAULTS,
   presetLineKey,
@@ -954,8 +956,7 @@ export function useUploadMatchWizard({
    * The window start as it stood when `initialTopPlayerIsPlayer1` was last
    * answered — the distance every later trim is measured against, so ten 10 s
    * jumps add up the way one 100 s drag does. Null when no answer has been
-   * given in this session (including a resumed draft, which restores the
-   * answer but not the moment it was given).
+   * given in this session.
    */
   const topPlayerAnswerStartRef = useRef<number | null>(null);
   /**
@@ -970,12 +971,12 @@ export function useUploadMatchWizard({
   /**
    * The recording the camera answers describe, as {@link videoSignature}.
    *
-   * Null means "no answer belongs to a file in this session" — which includes
-   * a RESUMED DRAFT, whose answers come back without the video they were given
-   * for. Re-picking then re-asks both questions rather than assuming the file
+   * Null means "no answer belongs to a file in this session". A pick against
+   * a null signature re-asks both questions rather than assuming the file
    * chosen is the one they were answered for; two recordings can share a name,
    * and the guardrail's own rule is that a false clear costs one click while a
-   * false keep costs the match.
+   * false keep costs the match. A resumed draft brings no answers back at all
+   * (`VIDEO_CHECK_FIELDS`).
    */
   const cameraAnswerFileRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1352,6 +1353,17 @@ export function useUploadMatchWizard({
    * from it (to tell a carried score from a typed one) and its source kind.
    */
   const seededPresetRef = useRef<EventPreset | null>(null);
+  /**
+   * The id of the draft whose saved answers have been seeded into the form.
+   *
+   * `draft` comes straight from the Server Component, so any server re-render
+   * of the page hands over a new object describing the SAME draft and re-runs
+   * the seed effect below. A draft is seeded once per id: a second pass would
+   * put its saved answers back over the live ones — the top-player answer and
+   * the trim window among them (`docs/ui-revamp-guardrails.md` §4) — and send
+   * the step back to the file.
+   */
+  const seededDraftIdRef = useRef<string | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1378,7 +1390,8 @@ export function useUploadMatchWizard({
         stepIndex: Math.max(0, order.indexOf(step)),
         stepCount: order.length,
         provider: selectedProvider,
-        formData,
+        // The video check never reaches the row — see `VIDEO_CHECK_FIELDS`.
+        formData: withoutVideoCheck(formData) as MatchFormData,
         fileName: uploadedFile?.name ?? null,
         preset: preset ?? null,
         attachedLine,
@@ -1457,6 +1470,10 @@ export function useUploadMatchWizard({
       // Captured here, not read in the updater below: `seededRef` flips to
       // true further down this effect, before React runs the updater.
       const firstSeed = !seededRef.current;
+      // Captured for the updater too. See `seededDraftIdRef`.
+      const seedDraft =
+        draft && seededDraftIdRef.current !== draft.id ? draft : null;
+      if (seedDraft) seededDraftIdRef.current = seedDraft.id;
       // The Lets default applies when a line is (re)opened — its first seed
       // or a swap — never on a re-run for the SAME line (a format re-sync),
       // which would silently undo a coach's "Lets played" choice. A resumed
@@ -1490,7 +1507,10 @@ export function useUploadMatchWizard({
         }
       }
       setFormData((prev) => {
-        const base = { ...prev, ...(draft?.formData ?? {}) };
+        const base = {
+          ...prev,
+          ...(seedDraft ? withoutVideoCheck(seedDraft.formData) : {}),
+        };
         const scoreCleared: Partial<MatchFormData> =
           // A score equal to line A's recorded one came from line A's record
           // (or cannot be told apart from it) and is wrong for line B; a
@@ -1507,8 +1527,8 @@ export function useUploadMatchWizard({
             : {};
         return {
           ...base,
-          // After the draft: a swap in a resumed flow re-spreads the draft,
-          // whose answers were given for its line's players too.
+          // After the draft, whose answers were given for its line's players
+          // too.
           ...swapCleared,
           ...scoreCleared,
           eventName: preset.eventName ?? "",
@@ -1546,8 +1566,7 @@ export function useUploadMatchWizard({
               preset.eventKind === "tournament")
               ? true
               : // A resumed draft's saved answer on its first seed; after that
-                // the live value — `base` re-spreads the draft, which would
-                // put the draft's answer back over a newer toggle.
+                // the live value.
                 firstSeed
                 ? base.playOnLets
                 : prev.playOnLets,
@@ -1587,12 +1606,21 @@ export function useUploadMatchWizard({
     // A draft being resumed outranks whatever localStorage has: it is the
     // explicit thing the person clicked Resume on.
     if (draft) {
+      // Already seeded: the live answers and the step stand. See
+      // `seededDraftIdRef`.
+      if (seededDraftIdRef.current === draft.id) return;
+      seededDraftIdRef.current = draft.id;
       const draftProvider =
         draft.provider && isProviderSupported(draft.provider)
           ? (draft.provider as ProviderId)
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
-      setFormData({ ...getDefaultFormData(formatDefaults), ...draft.formData });
+      setFormData({
+        ...getDefaultFormData(formatDefaults),
+        // A row saved before the video check stopped being stored still
+        // carries it — see `VIDEO_CHECK_FIELDS`.
+        ...withoutVideoCheck(draft.formData),
+      });
       if (draft.attachedLine) {
         attachedLineRef.current = draft.attachedLine;
         setAttachedLine(draft.attachedLine);
@@ -1655,11 +1683,17 @@ export function useUploadMatchWizard({
       // hold whoever the previous visit was for, and a name left disagreeing
       // with the id chosen in the For field is the mismatch the details step
       // exists to make impossible.
-      setFormData({
+      //
+      // The video check is never stored (`VIDEO_CHECK_FIELDS`), so the live
+      // one is kept: an in-place workspace switch re-runs this with a video
+      // still loaded, and blanking its window would leave nothing to submit.
+      // On a fresh mount the live one is the unanswered default.
+      setFormData((prev) => ({
         ...getDefaultFormData(formatDefaults),
         ...storedFormData,
+        ...videoCheckOf(prev),
         ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
-      });
+      }));
     } else {
       // Nothing stored to reseed from — a switch in place before the first
       // autosave, or storage that cannot be written. The live form may still
@@ -2355,7 +2389,7 @@ export function useUploadMatchWizard({
         // A DIFFERENT recording invalidates both camera answers — see
         // CLEARED_CAMERA_ANSWERS. Re-picking the identical file (Remove, then
         // add the same one back) is not a swap and keeps them; an unknown
-        // signature, which is what a resumed draft has, counts as different.
+        // signature counts as different.
         const signature = videoSignature(file);
         const sameRecording = cameraAnswerFileRef.current === signature;
         if (!sameRecording) forgetCameraAnswers();
@@ -2405,10 +2439,9 @@ export function useUploadMatchWizard({
       // the ONE place that clears it: the handle drag's release, the arrow
       // nudge, `I` and the start CutField's Set button all arrive here.
       const { start: previousStart, answered } = topPlayerAnswerRef.current;
-      // A resumed draft restores the answer but not the moment it was given.
-      // Adopt the committed start as the baseline rather than reading "no
-      // baseline" as "clear": creep is then measured from where the player
-      // came back to the step.
+      // Should an answer ever stand with no recorded baseline, adopt the
+      // committed start as the baseline rather than reading "no baseline" as
+      // "clear".
       const baseline = topPlayerAnswerStartRef.current ?? previousStart ?? 0;
       const startMoved =
         previousStart !== undefined && startSeconds !== previousStart;
