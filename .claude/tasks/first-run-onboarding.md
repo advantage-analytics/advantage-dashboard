@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Read-only Shots tab: no saved-view or band writers
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/dashboard/matches/match-detail/shots/shots-tab.tsx, shots/saved-views-band.tsx, shots/viz-bands-context.tsx, shots/viz-toolbar.tsx, tests/viz-bands-can-edit.spec.ts or a new tests/shots-read-only.spec.ts — guess

@@ -67,3 +67,14 @@ is the runner's. Newest entries at the bottom.
 
 1. To resume: `git stash apply 225c9d84`, guard the `FilmEntryActions` render in `film-unavailable-state.tsx` (or pass `readOnly` from the no-video branch), widen `/__api-hits` to every `/api/matches/` path, reset T6 to `todo`.
 2. The harness pins every browser case to H.264; an opt-in VP9 fixture (`tests/fixtures/match-video/vp9.webm`) would make them runnable in containers without proprietary codecs.
+
+## T7 · Read-only Shots tab: no saved-view or band writers — done
+
+**gate:** mechanical — lint pass, typecheck pass, tests 4359 passed (+5) / 380 skipped; failures are the same environmental browser-spec set (missing Playwright Chromium headless shell 1200), per the author's ruling. `shots-read-only viz-bands saved-views-logic band-editor-state` 225 passed / 13 live-DB skips. completion — VERDICT: pass. widget-states: no loader/Suspense change; read-only wall with no saved views stays on Default (honest empty).
+**changed:** new pure `shots/shots-write-access.ts` (`shotsWriteAccess(meta)` → both false when readOnly). `VizBandsProvider`/`useVizBands` fallback take `canEdit` from it; `SavedViewsBand`, `VizFocused`, `VizFullscreen` take `canSaveViews`. Gated: Create-view tiles (wall + focused), manage mode (rename/duplicate/share/delete/reorder), "Save this view…" in both cut menus + SaveViewDialog mounts, "Edit bands…" row (read-only note instead), band editor entry; `viz-wall` drops the Default/Saved switch when read-only with nothing saved. New spec `tests/shots-read-only.spec.ts`; harness passes the new required prop.
+**follow-ups:**
+
+1. A pasted `?draft=1` on a read-only report still opens the blank draft court headed "Create view" (no save action) — consider ignoring `draft` when `readOnly`.
+2. `VizEmpty` still shows "Open the Video tab" on read-only reports (navigation, not a writer).
+3. Only the predicate is spec-covered; once `/dashboard/matches/sample` exists, a browser spec should assert no "Create view" / "Save this view…" / "Edit bands…".
+4. The non-readOnly "canManageSavedView per view" test is close to a tautology — strengthen it.

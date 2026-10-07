@@ -54,12 +54,15 @@ import type { Cut } from "./viz-model";
  *
  * "Edit bands…" opens the drag editor (`viz-bands-editor.tsx`) through
  * `onEdit`. The row is disabled whenever the viewer cannot edit this
- * workspace's bands at all, or when no `onEdit` is passed.
+ * workspace's bands at all, or when no `onEdit` is passed — and is not
+ * drawn at all on a read-only report (`useVizBands().readOnly`).
  */
 
 const OWN_BANDS_NOTE =
   "Bands are yours — they change every return chart in this workspace, not this match.";
 const READ_ONLY_NOTE = "Only coaches and staff can change this team's bands.";
+const REPORT_READ_ONLY_NOTE =
+  "These bands come with this report — they can't be changed here.";
 
 /**
  * The contact trigger's mono slot — contact has no schemes, so it prints the
@@ -102,6 +105,7 @@ export function VizBandsMenu({
   const {
     bands,
     canEdit,
+    readOnly,
     unit,
     contactHidden,
     toggleContactHidden,
@@ -204,21 +208,34 @@ export function VizBandsMenu({
         />
       )}
 
-      <FloatMenuDivider />
-      <FloatMenuItem
-        label="Edit bands…"
-        disabled={editDisabled}
-        icon={
-          <MoveVertical
-            className="size-[13px] shrink-0"
-            strokeWidth={1.5}
-            aria-hidden="true"
+      {/* A read-only report (share page, sample match) draws no editor entry
+          at all: a disabled row would promise an editor that exists for
+          somebody else, and its note would name the wrong reason. */}
+      {!readOnly && (
+        <>
+          <FloatMenuDivider />
+          <FloatMenuItem
+            label="Edit bands…"
+            disabled={editDisabled}
+            icon={
+              <MoveVertical
+                className="size-[13px] shrink-0"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            }
+            onSelect={edit}
           />
-        }
-        onSelect={edit}
-      />
+        </>
+      )}
 
-      <FloatMenuNote>{canEdit ? OWN_BANDS_NOTE : READ_ONLY_NOTE}</FloatMenuNote>
+      <FloatMenuNote>
+        {readOnly
+          ? REPORT_READ_ONLY_NOTE
+          : canEdit
+            ? OWN_BANDS_NOTE
+            : READ_ONLY_NOTE}
+      </FloatMenuNote>
     </FloatMenu>
   );
 }

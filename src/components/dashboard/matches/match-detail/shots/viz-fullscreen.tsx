@@ -48,6 +48,7 @@ import { CutMenu } from "./cut-menu";
 import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
 import { SaveViewDialog } from "./save-view-dialog";
+import { shotsWriteAccess } from "./shots-write-access";
 import { usePanZoom } from "./use-pan-zoom";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import { useVizState } from "./use-viz-state";
@@ -121,6 +122,9 @@ export function VizFullscreen() {
     unit,
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
+  // A read-only report (share page, sample match) offers no "Save this
+  // view…" row and mounts no Save dialog — see `shotsWriteAccess`.
+  const { canSaveViews } = shotsWriteAccess(meta);
   // `availableSets` is an O(points) scan; this viewer re-renders on every
   // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
   // so it's memoized on `points` alone rather than re-scanning on every one
@@ -755,7 +759,9 @@ export function VizFullscreen() {
             >
               <CutMenu
                 savedViews={meta.savedViews}
-                onSaveRequest={() => setSaveDialogOpen(true)}
+                onSaveRequest={
+                  canSaveViews ? () => setSaveDialogOpen(true) : undefined
+                }
                 triggerRef={cutMenuTriggerRef}
                 width={312}
                 tone="dark"
@@ -851,20 +857,24 @@ export function VizFullscreen() {
           </div>
         </div>
 
-        <SaveViewDialog
-          open={saveDialogOpen}
-          onOpenChange={setSaveDialogOpen}
-          anchorRef={cutMenuTriggerRef}
-          cut={cut}
-          chart={state.chart}
-          filters={state.filters}
-          savedViews={meta.savedViews}
-          workspaceKind={meta.workspaceKind}
-          workspaceName={meta.workspaceName}
-          tone="dark"
-          side="top"
-          onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
-        />
+        {canSaveViews && (
+          <SaveViewDialog
+            open={saveDialogOpen}
+            onOpenChange={setSaveDialogOpen}
+            anchorRef={cutMenuTriggerRef}
+            cut={cut}
+            chart={state.chart}
+            filters={state.filters}
+            savedViews={meta.savedViews}
+            workspaceKind={meta.workspaceKind}
+            workspaceName={meta.workspaceName}
+            tone="dark"
+            side="top"
+            onSaved={(view) =>
+              setState((prev) => ({ ...prev, viewId: view.id }))
+            }
+          />
+        )}
       </div>
     </TooltipProvider>,
     document.body,

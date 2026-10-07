@@ -89,6 +89,7 @@ type MarkAnchor = {
 export function VizFocused({
   savedViews,
   savedViewsBand,
+  canSaveViews = true,
   workspaceKind,
   workspaceName,
   hasPlayableVideo = false,
@@ -96,6 +97,9 @@ export function VizFocused({
 }: {
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
+  /** `shotsWriteAccess(meta).canSaveViews` — `false` on a read-only report
+   * (share page, sample match): no "Save this view…" row, no Save dialog. */
+  canSaveViews?: boolean;
   /** Save-dialog needs (Task 9): "Share with team" only exists in a team
    * workspace, and its micro copy names the workspace it shares into. */
   workspaceKind: WorkspaceKind;
@@ -126,9 +130,9 @@ export function VizFocused({
   // memoized on `points` alone rather than re-scanning on every one of those.
   const sets = useMemo(() => availableSets(points), [points]);
 
-  // Everyone — including players — may save a view, so this is always on;
-  // the ref is what lets the dialog anchor under the SAME button that opens
-  // the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
+  // Everyone — including players — may save a view, so this is on except on
+  // a read-only report (`canSaveViews`); the ref is what lets the dialog
+  // anchor under the SAME button that opens the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const courtArtRef = useRef<HTMLDivElement>(null);
@@ -406,7 +410,7 @@ export function VizFocused({
       <VizToolbar
         className="viz-vt-toolbar"
         savedViews={savedViews}
-        onSaveRequest={() => setSaveDialogOpen(true)}
+        onSaveRequest={canSaveViews ? () => setSaveDialogOpen(true) : undefined}
         cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
@@ -680,18 +684,20 @@ export function VizFocused({
 
       {savedViewsBand}
 
-      <SaveViewDialog
-        open={saveDialogOpen}
-        onOpenChange={setSaveDialogOpen}
-        anchorRef={cutMenuTriggerRef}
-        cut={cut}
-        chart={state.chart}
-        filters={state.filters}
-        savedViews={savedViews}
-        workspaceKind={workspaceKind}
-        workspaceName={workspaceName}
-        onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
-      />
+      {canSaveViews && (
+        <SaveViewDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          anchorRef={cutMenuTriggerRef}
+          cut={cut}
+          chart={state.chart}
+          filters={state.filters}
+          savedViews={savedViews}
+          workspaceKind={workspaceKind}
+          workspaceName={workspaceName}
+          onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
+        />
+      )}
     </div>
   );
 }

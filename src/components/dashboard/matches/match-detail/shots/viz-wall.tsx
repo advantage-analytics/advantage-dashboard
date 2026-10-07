@@ -29,9 +29,14 @@ export type WallCollection = "default" | "saved";
 
 export function VizWall({
   savedViewsBand,
-  collection,
+  collection: requestedCollection,
   onCollectionChange,
 }: {
+  /**
+   * The Saved collection's content. Absent (a read-only report with no saved
+   * views, where there is nothing to list and no "Create view" tile to offer)
+   * drops the Default/Saved switch and keeps the wall on Default.
+   */
   savedViewsBand?: ReactNode;
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
@@ -43,6 +48,9 @@ export function VizWall({
   // F5: mirrors `viz-focused.tsx`'s identical fallback — see
   // `useExternalSwapFadeIn`'s doc comment.
   const fallbackFadeIn = useExternalSwapFadeIn();
+
+  const hasSaved = savedViewsBand != null;
+  const collection: WallCollection = hasSaved ? requestedCollection : "default";
 
   // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
   // is always `you.isPlayer1`'s inverse, so it carries no information the
@@ -71,34 +79,36 @@ export function VizWall({
           : "@container flex flex-col gap-6"
       }
     >
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="View"
-      >
-        {(["default", "saved"] as const).map((value) => {
-          const isActive = collection === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onCollectionChange(value)}
-              className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
-                isActive ? "" : "hover:bg-[var(--surface-subtle)]"
-              }`}
-              style={{
-                border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
-                background: isActive ? "var(--surface-subtle)" : undefined,
-                color: isActive ? "var(--ink-900)" : "var(--ink-600)",
-                fontWeight: isActive ? 500 : 400,
-              }}
-            >
-              {value === "default" ? "Default" : "Saved"}
-            </button>
-          );
-        })}
-      </div>
+      {hasSaved && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="View"
+        >
+          {(["default", "saved"] as const).map((value) => {
+            const isActive = collection === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onCollectionChange(value)}
+                className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
+                  isActive ? "" : "hover:bg-[var(--surface-subtle)]"
+                }`}
+                style={{
+                  border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
+                  background: isActive ? "var(--surface-subtle)" : undefined,
+                  color: isActive ? "var(--ink-900)" : "var(--ink-600)",
+                  fontWeight: isActive ? 500 : 400,
+                }}
+              >
+                {value === "default" ? "Default" : "Saved"}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {collection === "default" ? (
         visibleTiles.length > 0 ? (
           <div
@@ -132,7 +142,7 @@ export function VizWall({
           <EmptyWall />
         )
       ) : null}
-      <div hidden={collection !== "saved"}>{savedViewsBand}</div>
+      {hasSaved && <div hidden={collection !== "saved"}>{savedViewsBand}</div>}
     </div>
   );
 }

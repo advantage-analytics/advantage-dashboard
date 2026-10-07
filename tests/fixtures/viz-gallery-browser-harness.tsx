@@ -51,6 +51,7 @@ function Harness() {
       views={views}
       workspaceRole="player"
       workspaceKind="personal"
+      canSaveViews
       variant={state.cut === null ? "wall" : "focused"}
     />
   );
