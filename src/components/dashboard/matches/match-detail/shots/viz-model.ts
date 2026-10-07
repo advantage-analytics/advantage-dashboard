@@ -973,6 +973,7 @@ export function withPlayer(
     },
   };
 }
+
 /**
  * The kind of error a point ended on, off its free-text result type — the
  * same substrings `calculate_match_stats` buckets (`LIKE '%Unforced

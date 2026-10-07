@@ -587,12 +587,6 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
 }
 
 /**
- * Active filter entries for the UI, ordered per ORDER then set, one entry
- * per SELECTED VALUE (not per key) — a group with two values selected draws
- * two removable tokens. Skips empty groups and keys not in the cut. Returns
- * label strings from OPTIONS.
- */
-/**
  * One applied-strip token. `match` tokens carry `matchKey` — the
  * `MatchFilters` group the value belongs to — and the raw `matchValue`, so a
  * token's X can toggle exactly that option back off.
@@ -607,6 +601,12 @@ export interface ActiveFilterEntry {
 
 const DEFAULT_PHRASE_NAMES: PhraseNames = { you: "You", opponent: "Opponent" };
 
+/**
+ * Active filter entries for the UI, ordered per ORDER then set, one entry
+ * per SELECTED VALUE (not per key) — a group with two values selected draws
+ * two removable tokens. Skips empty groups and keys not in the cut. Returns
+ * label strings from OPTIONS.
+ */
 export function activeFilterEntries(
   state: VizState,
   /** Player names for the advanced filters' phrases ("Rudy serving"). */
