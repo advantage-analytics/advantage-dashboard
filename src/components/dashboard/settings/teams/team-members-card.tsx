@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Lock, Plus } from "lucide-react";
+import { ArrowUpRight, Link as LinkIcon, Lock, Plus } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { StatePill } from "@/components/ui/state-pill";
@@ -15,6 +15,7 @@ import {
 import type {
   MemberRole,
   TeamInvite,
+  TeamJoinLink,
   TeamMember,
 } from "@/lib/data/team-settings-server";
 import type { SeatUsage } from "@/lib/data/teams-server";
@@ -24,6 +25,10 @@ import { capitalize } from "@/lib/utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { StaffInviteDialog } from "@/components/dashboard/settings/teams/staff-invite-dialog";
+import {
+  JoinLinkPopover,
+  type JoinLinkTriggerProps,
+} from "@/components/dashboard/settings/teams/join-link-popover";
 
 const ROSTER_PATH = "/dashboard/team/roster";
 const ROSTER_LINK_CLASS =
@@ -32,8 +37,11 @@ const ROSTER_LINK_CLASS =
 /**
  * Who is on the program, and how many more there is room for.
  *
- * One list, one action (design B, 2026-09-24): the header's only button
- * invites staff, and the note under the list is the way to the Roster.
+ * One list, two ways in (design B, 2026-09-24; join link, 2026-10-07): the
+ * header's "Invite link" opens the program's join link — players only — and
+ * "Invite staff" invites staff by email; the note under the list is the way
+ * to the Roster. A live join link is the list's first row, drawn as a row of
+ * the same list (it admits people), and opens the same popover.
  *
  * Staff and coaches are invited from here; players are not. The roster's
  * dialog can bind a player's invitation to a row already listed so their
@@ -58,6 +66,8 @@ export function TeamMembersCard({
   isActiveWorkspace,
   members,
   invites,
+  joinLink,
+  playersCanUpload,
   seats,
   viewerId,
   viewerRole,
@@ -69,6 +79,10 @@ export function TeamMembersCard({
   isActiveWorkspace: boolean;
   members: readonly TeamMember[];
   invites: readonly TeamInvite[];
+  /** The live join link — null when off, and always null for a player (RLS). */
+  joinLink: TeamJoinLink | null;
+  /** `programs.players_can_upload`, for the popover's note. */
+  playersCanUpload: boolean;
   seats: SeatUsage;
   viewerId: string;
   viewerRole: MemberRole;
@@ -80,6 +94,9 @@ export function TeamMembersCard({
   const isStaff = viewerRole !== "player";
   const goToRoster = setActiveWorkspaceThen.bind(null, programId, ROSTER_PATH);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Controlled so the link row can open the popover too; it stays anchored
+  // to the header button either way.
+  const [linkOpen, setLinkOpen] = useState(false);
   // Players are invited and removed on the Roster; the note says so and is
   // the way there. Outside the active workspace the link has to switch
   // workspaces first, which only a server action can do.
@@ -104,6 +121,20 @@ export function TeamMembersCard({
           Members
         </span>
         {isStaff && (
+          <JoinLinkPopover
+            trigger={InviteLinkTrigger}
+            open={linkOpen}
+            onOpenChange={setLinkOpen}
+            programId={programId}
+            programName={programName}
+            joinLink={joinLink}
+            role={viewerRole}
+            playersCanUpload={playersCanUpload}
+            seats={seats}
+            rosterLink={rosterLink}
+          />
+        )}
+        {isStaff && (
           <SettingsButton
             variant="outline"
             size="sm"
@@ -118,6 +149,36 @@ export function TeamMembersCard({
       <SeatPips seats={seats} />
 
       <div className="pt-2">
+        {isStaff && joinLink && (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setLinkOpen(true)}
+            className="flex w-full cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] py-[9px] text-left transition-colors duration-200 hover:bg-[var(--surface-subtle)]"
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--blue-tint-08)] text-[var(--blue)]"
+            >
+              <LinkIcon className="size-[11px]" strokeWidth={1.75} />
+            </span>
+            <span className="shrink-0 text-[12px] font-medium text-[var(--ink-900)]">
+              Join link
+            </span>
+            <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
+              {joinLink.mode === "approve"
+                ? "Anyone, with approval"
+                : "Anyone with the link joins as a player"}
+            </span>
+            <span className="flex-1" />
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">
+              {joinLink.uses} joined · Made{" "}
+              {formatInviteDate(joinLink.createdAt)}
+            </span>
+            <StatePill outline>On</StatePill>
+          </button>
+        )}
+
         {members.map((member) => {
           const canReceive =
             isOwner &&
@@ -216,9 +277,10 @@ export function TeamMembersCard({
       <div className="mt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
         {isOwner ? (
           <>
-            A role change takes effect at once. Players are invited and removed
-            on the {rosterLink}. Ownership moves by transfer from a
-            member&rsquo;s row.
+            A role change takes effect at once. The join link admits players
+            only &mdash; staff and coaches are invited by email. Players are
+            also invited and removed on the {rosterLink}. Ownership moves by
+            transfer from a member&rsquo;s row.
           </>
         ) : viewerRole === "coach" ? (
           <>
@@ -246,6 +308,20 @@ export function TeamMembersCard({
         />
       )}
     </SettingsCard>
+  );
+}
+
+/**
+ * The header's "Invite link" button, as `JoinLinkPopover`'s trigger: Radix
+ * hands it `onClick`, the popover ARIA and a `ref` (a plain prop in React 19),
+ * and all of them land on the `<button>` `SettingsButton` draws.
+ */
+function InviteLinkTrigger(props: JoinLinkTriggerProps) {
+  return (
+    <SettingsButton variant="outline" size="sm" {...props}>
+      <LinkIcon className="size-3" strokeWidth={1.75} aria-hidden="true" />
+      Invite link
+    </SettingsButton>
   );
 }
 

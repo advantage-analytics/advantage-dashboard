@@ -150,6 +150,8 @@ export function TeamDetail({
         isActiveWorkspace={isActiveWorkspace}
         members={data.members}
         invites={data.invites}
+        joinLink={data.joinLink}
+        playersCanUpload={data.program.playersCanUpload}
         seats={seats}
         viewerId={viewerId}
         viewerRole={viewerRole}

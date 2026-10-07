@@ -45,7 +45,7 @@ ready).
 
 ## T3 · Join-link popover + Members card (extract share-panel primitives)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/ui/share-panel.tsx (new), src/components/dashboard/matches/match-detail/share-match-button.tsx, src/components/dashboard/settings/teams/join-link-popover.tsx (new), src/components/dashboard/settings/teams/team-members-card.tsx, src/components/dashboard/settings/teams/team-detail.tsx, src/components/dashboard/settings/teams/types.ts (guess — if member-card props are typed there)
