@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import FormHeader from "@/components/auth/form-header";
-import AuthButton from "@/components/auth/auth-button";
 import AuthFooter from "@/components/auth/auth-footer";
 import {
   MISSING_TOKEN_ERROR,
@@ -8,6 +7,7 @@ import {
   parseConfirmLink,
 } from "@/lib/auth/confirm-link";
 import { confirmLinkForm } from "./actions";
+import { ContinueButton } from "./continue-button";
 
 export const metadata = { title: "Finish signing in" };
 
@@ -41,12 +41,8 @@ export default async function ConfirmPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const link = parseConfirmLink({
-    get: (name) => {
-      const value = params[name];
-      return typeof value === "string" ? value : null;
-    },
-  });
+  // `parseConfirmLink` reads only strings, so a repeated (array) param is absent.
+  const link = parseConfirmLink({ get: (name) => params[name] });
 
   if (link.kind === "missing") redirect(errorHref(MISSING_TOKEN_ERROR));
 
@@ -72,7 +68,7 @@ export default async function ConfirmPage({
         )}
         <input type="hidden" name="next" value={link.next} />
 
-        <AuthButton type="submit">Continue</AuthButton>
+        <ContinueButton />
 
         <AuthFooter>
           <span className="text-micro">
