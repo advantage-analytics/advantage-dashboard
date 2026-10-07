@@ -27,6 +27,9 @@ import {
   foldedMatchFilters,
   subjectFor,
   withFoldedFilters,
+  withPlayer,
+  type Chart,
+  type Cut,
   type PlayerFilter,
   type VizFilters,
   type VizResult,
@@ -66,8 +69,11 @@ const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
  * Pressure, Rally, Set, Game) are all advanced options now. A default tile
  * or an older saved view can still carry them: the panel opens on them
  * folded in (`foldedMatchFilters`), and its Show writes them back as
- * advanced filters only (`withFoldedFilters`), so nothing is ever applied
- * twice or left where no control can clear it.
+ * advanced filters (`withFoldedFilters`). A group the advanced filters
+ * cannot say exactly stays a pill group, applied and removable in the
+ * strip, rather than being changed by a Show nobody meant to change it.
+ * Picking the other Player mirrors the advanced filters (`withPlayer`), so
+ * they keep following the court the way the pill groups do.
  *
  * Built on the same Radix `Popover` primitive `ui/float-menu.tsx` wraps
  * (click-outside, Esc, focus-return all come from Radix). `count`/`total`/
@@ -129,29 +135,8 @@ export function FiltersPopover({
   const bodyRef = useRef<HTMLDivElement>(null);
   const advancedRowRef = useRef<HTMLButtonElement>(null);
 
-  const points = useVizPoints(useMatchData());
-  const { you } = useMatchSides();
-  const { context } = useMatchFilters();
-  const { availability } = useFiltersPanelData();
-
   const cut = state.cut;
   const filters = state.filters;
-  const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
-  const chart = state.chart;
-  const countFor = useCallback(
-    (draft: MatchFilters) =>
-      cut === null
-        ? 0
-        : computeViz(
-            points,
-            cut,
-            withFoldedFilters(filters, draft),
-            subjectIsPlayer1,
-            chart,
-            context,
-          ).count,
-    [points, cut, filters, subjectIsPlayer1, chart, context],
-  );
 
   // Swapping the body unmounts the control that had focus: move it into
   // the panel on the way in, and back to the Advanced row on the way out.
@@ -178,8 +163,8 @@ export function FiltersPopover({
   }
 
   const applied = activeFilterEntries(state).length;
-  const folded = foldedMatchFilters(filters);
-  const advancedCount = activeFilterCount(folded);
+  const fold = foldedMatchFilters(filters);
+  const advancedCount = activeFilterCount(fold.match);
 
   // Player stays single-select: choosing one always replaces the other,
   // it never toggles off to "neither subject" — a court always has to
@@ -187,7 +172,7 @@ export function FiltersPopover({
   function selectPlayer(value: PlayerFilter) {
     setState((prev) => ({
       ...prev,
-      filters: { ...prev.filters, player: value },
+      filters: withPlayer(prev.filters, value),
       viewId: null,
     }));
   }
@@ -221,7 +206,11 @@ export function FiltersPopover({
   function applyAdvanced(next: MatchFilters) {
     setState((prev) => ({
       ...prev,
-      filters: withFoldedFilters(prev.filters, next),
+      filters: withFoldedFilters(
+        prev.filters,
+        next,
+        foldedMatchFilters(prev.filters).folded,
+      ),
       viewId: null,
     }));
     backToQuick();
@@ -261,17 +250,17 @@ export function FiltersPopover({
               <span id={headingId} className="sr-only">
                 Advanced filters
               </span>
-              <FiltersPanel
-                key={serializeMatchFilters(folded)}
-                className="min-h-0 flex-1"
-                tone={dark ? "dark" : "light"}
-                filters={folded}
-                availability={availability}
+              <AdvancedPanel
+                key={serializeMatchFilters(fold.match)}
+                filters={filters}
+                fold={fold}
+                cut={cut}
+                chart={state.chart}
+                dark={dark}
                 youName={youName}
                 oppName={opponentName}
-                countFor={countFor}
                 total={total}
-                noun={COUNT_NOUN[noun]}
+                noun={noun}
                 onApply={applyAdvanced}
                 onClose={backToQuick}
               />
@@ -411,6 +400,72 @@ export function FiltersPopover({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * The Video tab's `FiltersPanel`, counting this court. Its own component so
+ * the whole-match work it needs — option availability over every point and
+ * shot, and a `computeViz` per draft — runs only while the panel is open,
+ * never for a closed popover sitting in the toolbar.
+ */
+function AdvancedPanel({
+  filters,
+  fold,
+  cut,
+  chart,
+  dark,
+  youName,
+  oppName,
+  total,
+  noun,
+  onApply,
+  onClose,
+}: {
+  filters: VizFilters;
+  fold: ReturnType<typeof foldedMatchFilters>;
+  cut: Cut;
+  chart: Chart;
+  dark: boolean;
+  youName: string;
+  oppName: string;
+  total: number;
+  noun: VizResult["noun"];
+  onApply: (next: MatchFilters) => void;
+  onClose: () => void;
+}) {
+  const points = useVizPoints(useMatchData());
+  const { you } = useMatchSides();
+  const { context } = useMatchFilters();
+  const { availability } = useFiltersPanelData();
+  const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
+  const { folded } = fold;
+  const countFor = useCallback(
+    (draft: MatchFilters) =>
+      computeViz(
+        points,
+        cut,
+        withFoldedFilters(filters, draft, folded),
+        subjectIsPlayer1,
+        chart,
+        context,
+      ).count,
+    [points, cut, filters, folded, subjectIsPlayer1, chart, context],
+  );
+  return (
+    <FiltersPanel
+      className="min-h-0 flex-1"
+      tone={dark ? "dark" : "light"}
+      filters={fold.match}
+      availability={availability}
+      youName={youName}
+      oppName={oppName}
+      countFor={countFor}
+      total={total}
+      noun={COUNT_NOUN[noun]}
+      onApply={onApply}
+      onClose={onClose}
+    />
   );
 }
 

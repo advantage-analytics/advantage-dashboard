@@ -826,92 +826,153 @@ function matchFilterPass(
 }
 
 /** The pill groups the advanced filters replaced in the Filters popover. */
-const FOLDED_KEYS = [
-  "set",
-  "game",
-  "ball",
-  "court",
-  "zone",
-  "pressure",
-  "result",
-  "rally",
-] as const;
+export type FoldedKey =
+  "set" | "game" | "ball" | "court" | "zone" | "pressure" | "result" | "rally";
 
 /**
  * `filters`' pill groups (Ball, Court, Zone, …) restated as the advanced
- * filters they now live in, merged into `filters.match` — what the Filters
- * popover's `FiltersPanel` opens on, so a default tile's "1st" or an older
- * saved view's pills read as pressed options there. `withFoldedFilters`
- * writes the panel's answer back with those groups emptied.
+ * filters they now live in — what the Filters popover's `FiltersPanel`
+ * opens on, so a default tile's "1st" or an older saved view's pills read as
+ * pressed options there — and the groups that were restated (`folded`), so
+ * `withFoldedFilters` empties exactly those when the panel's Show writes the
+ * answer back.
+ *
+ * A group folds only when the advanced filters can say EXACTLY what it
+ * said; otherwise it stays a pill group, still applied (and still a
+ * removable token in the strip):
+ * - its advanced group must be empty. Within a group values OR, while the
+ *   pill group was AND'd against it, so merging the two could widen the cut.
+ * - Result's Aces OR'd with Won/Lost; advanced groups AND. "Won + Aces" is
+ *   just Won (an ace is a won point), Aces alone is Serve › Result's ace,
+ *   but "Lost + Aces" has no advanced equivalent and stays.
+ * - Game, Court or Result with every value picked is no constraint: it
+ *   folds to nothing.
  *
  * The pill groups are SUBJECT-relative (Game "Serving", Result "Won" are
  * the court's player); the advanced filters are YOU-relative, so a court of
- * the opponent's flips them. Game with both values picked is no constraint
- * and folds to nothing; Result's "Ace" is Serve › Result's ace.
+ * the opponent's flips them. `withPlayer` keeps them following the court
+ * when its player changes later.
  */
-export function foldedMatchFilters(filters: VizFilters): MatchFilters {
+export function foldedMatchFilters(filters: VizFilters): {
+  match: MatchFilters;
+  folded: FoldedKey[];
+} {
   const base = filters.match ?? EMPTY_MATCH_FILTERS;
+  const match: { -readonly [K in keyof MatchFilters]: MatchFilters[K] } = {
+    ...base,
+  };
+  const folded: FoldedKey[] = [];
   const subject = filters.player;
   const other: PlayerFilter = subject === "you" ? "opponent" : "you";
-  const add = <T>(held: readonly T[], more: readonly T[]): T[] => [
-    ...held,
-    ...more.filter((v) => !held.includes(v)),
-  ];
-  const outcomes = filters.result
-    .filter((v): v is "won" | "lost" => v !== "ace")
-    .map((v) =>
-      subject === "you"
-        ? v
-        : v === "won"
-          ? ("lost" as const)
-          : ("won" as const),
-    );
+
+  function list<T>(
+    key: FoldedKey,
+    held: readonly T[],
+    values: readonly T[],
+    write: (values: T[]) => void,
+  ) {
+    if (values.length === 0 || held.length > 0) return;
+    write([...new Set(values)]);
+    folded.push(key);
+  }
+
+  list("set", base.sets, filters.set, (v) => (match.sets = v));
+  list("ball", base.serveType, filters.ball, (v) => (match.serveType = v));
   const zoneOf = { t: "T", body: "Body", wide: "Wide" } as const;
-  return {
-    ...base,
-    sets: add(base.sets, filters.set),
-    server:
-      filters.game.length === 1
-        ? filters.game[0] === "serving"
-          ? subject
-          : other
-        : base.server,
-    serveType: add(base.serveType, filters.ball),
-    court: filters.court.length === 1 ? filters.court[0] : base.court,
-    serveZone: add(
-      base.serveZone,
-      filters.zone.map((z) => zoneOf[z]),
+  list(
+    "zone",
+    base.serveZone,
+    filters.zone.map((z) => zoneOf[z]),
+    (v) => (match.serveZone = v),
+  );
+  list(
+    "pressure",
+    base.scoreType,
+    filters.pressure.flatMap((v) =>
+      v === "break"
+        ? (["breakpoint"] as const)
+        : (["setPoint", "matchPoint"] as const),
     ),
-    scoreType: add(
-      base.scoreType,
-      filters.pressure.flatMap((v) =>
-        v === "break"
-          ? (["breakpoint"] as const)
-          : (["setPoint", "matchPoint"] as const),
-      ),
-    ),
-    // The pill group OR'd Ace with Won/Lost; advanced groups AND. An ace is
-    // a won point, so "Won + Ace" is just Won — Ace folds only on its own.
-    serveResult:
-      filters.result.includes("ace") && outcomes.length === 0
-        ? add(base.serveResult, ["ace"] as const)
-        : base.serveResult,
-    resultOutcome: add(base.resultOutcome, outcomes),
-    resultRallyLength: add(base.resultRallyLength, filters.rally),
-  };
+    (v) => (match.scoreType = v),
+  );
+  list(
+    "rally",
+    base.resultRallyLength,
+    filters.rally,
+    (v) => (match.resultRallyLength = v),
+  );
+
+  if (filters.game.length === 2) folded.push("game");
+  else if (filters.game.length === 1 && base.server === null) {
+    match.server = filters.game[0] === "serving" ? subject : other;
+    folded.push("game");
+  }
+
+  if (filters.court.length === 2) folded.push("court");
+  else if (filters.court.length === 1 && base.court === null) {
+    match.court = filters.court[0];
+    folded.push("court");
+  }
+
+  const won = filters.result.includes("won");
+  const lost = filters.result.includes("lost");
+  const ace = filters.result.includes("ace");
+  if (won && lost) folded.push("result");
+  else if (won || lost) {
+    if (!(lost && ace) && base.resultOutcome.length === 0) {
+      // Won/Lost are the court player's; the outcome is yours.
+      match.resultOutcome = [won === (subject === "you") ? "won" : "lost"];
+      folded.push("result");
+    }
+  } else if (ace && base.serveResult.length === 0) {
+    match.serveResult = ["ace"];
+    folded.push("result");
+  }
+
+  return { match, folded };
 }
 
-/** `filters` with the advanced filters set to `match` and every pill group
- * `foldedMatchFilters` folds into them emptied — the panel's Apply. */
+/** `filters` with the advanced filters set to `match` and the `folded` pill
+ * groups emptied — the panel's Show. */
 export function withFoldedFilters(
   filters: VizFilters,
   match: MatchFilters,
+  folded: readonly FoldedKey[],
 ): VizFilters {
   const next: VizFilters = { ...filters, match };
-  for (const key of FOLDED_KEYS) next[key] = [];
+  for (const key of folded) next[key] = [];
   return next;
 }
 
+/**
+ * `filters` with the court's player set to `player`. The advanced filters
+ * are you-relative, so when the player changes every you/opponent value in
+ * them swaps, and Result › Outcome's won/lost with it — they keep meaning
+ * the same thing relative to the court ("serving" stays the court player's
+ * serve), exactly as the subject-relative pill groups always have.
+ */
+export function withPlayer(
+  filters: VizFilters,
+  player: PlayerFilter,
+): VizFilters {
+  if (filters.player === player) return filters;
+  const match = filters.match ?? EMPTY_MATCH_FILTERS;
+  const swap = (side: PlayerFilter | null): PlayerFilter | null =>
+    side === null ? null : side === "you" ? "opponent" : "you";
+  return {
+    ...filters,
+    player,
+    match: {
+      ...match,
+      server: swap(match.server),
+      resultPlayer: swap(match.resultPlayer),
+      customPlayer: swap(match.customPlayer),
+      resultOutcome: match.resultOutcome.map((v) =>
+        v === "won" ? "lost" : "won",
+      ),
+    },
+  };
+}
 /**
  * The kind of error a point ended on, off its free-text result type — the
  * same substrings `calculate_match_stats` buckets (`LIKE '%Unforced
@@ -1881,7 +1942,8 @@ export function computeVizStats(
  * The errors cut's two groups, each row a SHARE of the errors drawn
  * (`StatRow.share`): how the ball missed — into the net, long (past the
  * baseline), wide (past a sideline) — and the stroke that missed it. A ball
- * both long and wide reads Long. Rows are in count order, biggest first.
+ * both long and wide reads Long. A double fault's serve is measured against
+ * the service box instead. Rows are in count order, biggest first.
  */
 function errorStats(result: VizResult): StatGroup[] {
   const total = result.dots.length;
@@ -1903,7 +1965,14 @@ function errorStats(result: VizResult): StatGroup[] {
   const strokes = new Map<string, number>();
   for (const dot of result.dots) {
     if (dot.atNet) net++;
-    else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
+    else if (isServeShotType(dot.meta?.shotType ?? null)) {
+      // A double fault's serve missed the SERVICE BOX, not the court: past
+      // the service line is long, anything else out (a sideline, the wrong
+      // box) is wide. Never "landed in" — a fault is out by definition, and
+      // SwingVision imputes many fault landings onto the line itself.
+      if (dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS) long++;
+      else wide++;
+    } else if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) long++;
     else if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
       wide++;
     else inCourt++;

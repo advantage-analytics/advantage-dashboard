@@ -9,6 +9,7 @@ import {
   foldedMatchFilters,
   statRowAnnouncement,
   withFoldedFilters,
+  withPlayer,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
@@ -296,8 +297,8 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     result: ["won", "ace"],
     rally: ["long"],
   };
-  const folded = foldedMatchFilters(filters);
-  expect(folded).toMatchObject({
+  const { match, folded } = foldedMatchFilters(filters);
+  expect(match).toMatchObject({
     sets: [1],
     server: "opponent",
     serveType: ["first"],
@@ -308,7 +309,7 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     resultOutcome: ["lost"],
     resultRallyLength: ["long"],
   });
-  const applied = withFoldedFilters(filters, folded);
+  const applied = withFoldedFilters(filters, match, folded);
   expect(applied.player).toBe("opponent");
   for (const key of [
     "set",
@@ -321,16 +322,141 @@ test("the pill groups fold into advanced filters, you-relative", () => {
     "rally",
   ] as const)
     expect(applied[key]).toEqual([]);
-  expect(applied.match).toBe(folded);
-  // Ace alone folds to Serve › Result; beside an outcome it is subsumed.
+  expect(applied.match).toBe(match);
+  // Ace alone folds to Serve › Result; beside Won it is subsumed.
   expect(
-    foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, result: ["ace"] }).serveResult,
+    foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, result: ["ace"] }).match
+      .serveResult,
   ).toEqual(["ace"]);
-  // Both Game values are no constraint.
+  // Both Game values are no constraint: folded away, nothing set.
+  const both = foldedMatchFilters({
+    ...EMPTY_VIZ_FILTERS,
+    game: ["serving", "returning"],
+  });
+  expect(both.match.server).toBeNull();
+  expect(both.folded).toEqual(["game"]);
+});
+
+test("a pill group the advanced filters cannot say exactly stays a pill group", () => {
+  // "Lost OR ace" has no advanced equivalent.
+  const lostOrAce: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    result: ["lost", "ace"],
+  };
+  const fold = foldedMatchFilters(lostOrAce);
+  expect(fold.folded).toEqual([]);
+  expect(fold.match).toEqual(EMPTY_MATCH_FILTERS);
+  const shown = withFoldedFilters(lostOrAce, fold.match, fold.folded);
+  expect(shown.result).toEqual(["lost", "ace"]);
+
+  // An advanced group already holding values is never merged into (OR
+  // within a group would widen what the pill group AND'd).
+  const both: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    pressure: ["break"],
+    game: ["returning"],
+    match: { ...EMPTY_MATCH_FILTERS, scoreType: ["pressure"], server: "you" },
+  };
+  const kept = foldedMatchFilters(both);
+  expect(kept.folded).toEqual([]);
+  expect(kept.match).toEqual(both.match);
+  expect(withFoldedFilters(both, kept.match, kept.folded)).toEqual(both);
+});
+
+test("switching the court's player mirrors the advanced filters", () => {
+  const mine: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    match: {
+      ...EMPTY_MATCH_FILTERS,
+      server: "you",
+      resultPlayer: "opponent",
+      customPlayer: "you",
+      resultOutcome: ["won"],
+      serveType: ["second"],
+    },
+  };
+  const theirs = withPlayer(mine, "opponent");
+  expect(theirs.player).toBe("opponent");
+  expect(theirs.match).toMatchObject({
+    server: "opponent",
+    resultPlayer: "you",
+    customPlayer: "opponent",
+    resultOutcome: ["lost"],
+    serveType: ["second"],
+  });
+  expect(withPlayer(theirs, "you")).toEqual(mine);
+  expect(withPlayer(mine, "you")).toBe(mine);
+
+  // "Serving" on your serve court keeps drawing the court player's serves.
+  const serves = [
+    servePoint({ id: "p1-serve", player1: true }),
+    servePoint({ id: "p2-serve", player1: false }),
+  ];
+  const ctx = { youIsPlayer1: true, hands: { player1: null, player2: null } };
+  const folded = foldedMatchFilters({
+    ...EMPTY_VIZ_FILTERS,
+    game: ["serving"],
+  });
+  const yours = withFoldedFilters(
+    { ...EMPTY_VIZ_FILTERS, game: ["serving"] },
+    folded.match,
+    folded.folded,
+  );
   expect(
-    foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, game: ["serving", "returning"] })
-      .server,
-  ).toBeNull();
+    computeViz(serves, "serve", yours, true, "scatter", ctx).dots.map(
+      (d) => d.id,
+    ),
+  ).toEqual(["p1-serve"]);
+  expect(
+    computeViz(
+      serves,
+      "serve",
+      withPlayer(yours, "opponent"),
+      false,
+      "scatter",
+      ctx,
+    ).dots.map((d) => d.id),
+  ).toEqual(["p2-serve"]);
+});
+
+test("a double fault misses the service box, never the court", () => {
+  const longFault: MatchPoint = {
+    ...servePoint({
+      id: "df-long",
+      second: true,
+      result: "Out",
+      lateral: -2,
+      depth: 8,
+      won: false,
+    }),
+    resultType: "Double Fault",
+  };
+  const lineFault: MatchPoint = {
+    ...servePoint({
+      id: "df-line",
+      second: true,
+      result: "Out",
+      lateral: -2,
+      depth: 6.44,
+      won: false,
+    }),
+    resultType: "Double Fault",
+  };
+  const stats = computeVizStats(
+    [longFault, lineFault, DOUBLE_FAULT_WIDE],
+    "errors",
+    EMPTY_VIZ_FILTERS,
+    true,
+    undefined,
+    DEFAULT_BANDS,
+    "ft",
+  );
+  const miss = Object.fromEntries(
+    stats.groups[0].rows.map((r) => [r.key, r.count]),
+  );
+  // 8 m and the imputed just-past-the-line landing are long; the 5 m-wide
+  // one is wide. None reads "landed in".
+  expect(miss).toEqual({ long: 2, wide: 1, net: 0 });
 });
 
 test("saved views keep the errors cut and advanced filters, and drop garbage", () => {

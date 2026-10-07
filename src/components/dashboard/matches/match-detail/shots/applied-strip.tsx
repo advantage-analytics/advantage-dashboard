@@ -15,7 +15,7 @@ import {
   type ActiveFilterEntry,
 } from "./viz-url";
 import { VIZ_PILL_RADIUS } from "./viz-labels";
-import { EMPTY_VIZ_FILTERS, type VizFilters } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, withPlayer } from "./viz-model";
 
 /**
  * The applied-filters strip (P1f): one removable token per active filter
@@ -84,7 +84,7 @@ export function AppliedStrip({
       if (key === "player") {
         return {
           ...prev,
-          filters: { ...prev.filters, player: EMPTY_VIZ_FILTERS.player },
+          filters: withPlayer(prev.filters, EMPTY_VIZ_FILTERS.player),
           viewId: null,
         };
       }
