@@ -2,11 +2,11 @@
  * One sentence per `program_audit_log.action` value, for the Activity log
  * card (T19).
  *
- * The 28 values are `program_audit_log_action_check`'s own constraint list,
- * read live from the database via `pg_get_constraintdef` rather than
- * `supabase/migrations/`, which runs roughly 100 migrations behind. No label
- * map for this table existed anywhere else in `src` — this is the first one,
- * not a rewording of an existing one.
+ * The 32 values (as of 2026-10-07) are `program_audit_log_action_check`'s own
+ * constraint list, read live from the database via `pg_get_constraintdef`
+ * rather than `supabase/migrations/`, which runs roughly 100 migrations
+ * behind. No label map for this table existed anywhere else in `src` — this
+ * is the first one, not a rewording of an existing one.
  *
  * Every label is a past-tense sentence fragment naming what happened, never
  * "splitstep": the video pipeline is "Advantage Intelligence" in every
@@ -16,6 +16,13 @@
  * `5a8d47d6`) inserts them from the admin console's own upload flow
  * (`details.origin: 'admin_console'`), for an admin entering a match result
  * or attaching an analysis file by hand from that console.
+ * `console.submission_reconciled` is the same console: an admin abandoning or
+ * completing a stuck item of a dual/tournament submission
+ * (`admin_reconcile_submission_item`, `admin_abandon_result_items`).
+ * `match.detached` and `match.round_changed` come from
+ * `detach_match_from_event_line` and `set_match_round_on_line` (2026-09-29).
+ * `pilot.eligibility_changed` has no migration in the repo; its live writer is
+ * `admin_set_pilot_eligible` (`details.from/to` booleans, `by_admin`).
  *
  * `activityLabel()` never throws and never hides a row: an action this map
  * has not learned about yet falls back to printing the raw string, because an
@@ -42,15 +49,20 @@ export const ADMIN_ACTIVITY_LABELS: Record<string, string> = {
   "ownership.transferred": "Ownership transferred",
   "event.deleted": "Event deleted",
   "match.attached": "Match attached",
+  "match.detached": "Match detached from its event",
+  "match.round_changed": "Match round changed",
   "program.conference_changed": "Conference changed",
   "program.details_changed": "Program details changed",
   "program.crest_changed": "Crest changed",
   "console.result_added": "Result entered from the admin console",
   "console.analysis_attached": "Analysis attached from the admin console",
+  "console.submission_reconciled":
+    "Submission reconciled from the admin console",
   "join_request.approved": "Join request approved",
   "join_request.declined": "Join request declined",
   "pilot.end_changed": "Pilot end date changed",
   "pilot.ended": "Pilot ended",
+  "pilot.eligibility_changed": "Pilot eligibility changed",
 };
 
 /** The label for `action`, or the raw value when nothing maps it yet. */
