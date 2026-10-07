@@ -3,18 +3,12 @@ import type { LabelPoint } from "@/lib/services/labels/session";
 import { ENDING_LABEL, STROKE_LABEL, type SideNames } from "./label-format";
 import type { LabelVideoReadout } from "./label-video";
 
-/**
- * What is playing, in the list's own numbers, and the words the player's
- * transport shows for it. Pure.
- */
+/** What is playing, in the list's numbers, and the transport's words. */
 
 export interface NowPlaying {
-  /** The playing point's id. */
   id: string;
   /** The list's point number, 1-based. */
   point: number;
-  /** The stroke's number among the point's live strokes, 1-based. */
-  shot: number | null;
 }
 
 /**
@@ -59,7 +53,7 @@ export function nowPlayingReadout(
   };
 }
 
-/** The playing row as the list numbers it: point N, and its stroke M. */
+/** The playing row as the list numbers it: point N. */
 export function nowPlayingOf(
   points: readonly LabelPoint[],
   playing: { pointId: string; shotId: string } | null,
@@ -67,11 +61,5 @@ export function nowPlayingOf(
   if (!playing) return null;
   const point = points.find((p) => p.id === playing.pointId);
   if (!point) return null;
-  const live = point.shots.filter((shot) => shot.status !== "deleted");
-  const index = live.findIndex((shot) => shot.id === playing.shotId);
-  return {
-    id: point.id,
-    point: point.pointIndex + 1,
-    shot: index === -1 ? null : index + 1,
-  };
+  return { id: point.id, point: point.pointIndex + 1 };
 }

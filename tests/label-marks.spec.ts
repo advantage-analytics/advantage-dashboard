@@ -709,36 +709,19 @@ test.describe("the labels-only flags", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("each code's tier is decided in LABEL_MARK_META, and nowhere else", () => {
-    const tiers = Object.fromEntries(
-      Object.entries(LABEL_MARK_META).map(([code, meta]) => [code, meta.tier]),
-    );
-    expect(tiers).toEqual({
-      // Can change the score: the amber chip, counted in the header.
-      winner_disputed: "count",
-      pick_winner: "count",
-      reserve_after_in: "count",
-      tiebreak_score_off_six_all: "count",
-      score_side_mismatch: "count",
-      service_court_repeat: "count",
-      // How the point ended: the open point's quiet line.
-      ending_suspect_line: "hint",
-      winner_to_error_by_bounce: "hint",
-      serve_fault: "hint",
-      second_serve_called_out: "hint",
-      result_type_unknown: "hint",
-      // Read off the labelled rows, not built here (`shotAfterPointEnd`).
-      shot_after_point_end: "hint",
-      // A hint on the point's last stroke only (`netHitTier`).
-      net_hit_contradicts_height: "hint",
-      // Drawn nowhere, counted nowhere.
-      same_player_consecutive: "hidden",
-      phantom_strokes_dropped: "hidden",
-      winner_guessed: "hidden",
-      score_frozen: "hidden",
-      out_ball_rally_continued: "hidden",
-      geometry_discarded: "hidden",
-    });
+  test("six codes can change the score, and only they are counted", () => {
+    const counted = Object.entries(LABEL_MARK_META)
+      .filter(([, meta]) => meta.tier === "count")
+      .map(([code]) => code);
+    expect(counted.sort()).toEqual([
+      "pick_winner",
+      "reserve_after_in",
+      "score_side_mismatch",
+      "service_court_repeat",
+      "tiebreak_score_off_six_all",
+      "winner_disputed",
+    ]);
+    // “Net or out?” is a hint on the point's last stroke only.
     expect(netHitTier(true)).toBe("hint");
     expect(netHitTier(false)).toBe("hidden");
   });

@@ -1,34 +1,15 @@
 /**
- * The labelling console's "move the leftover points to the next game",
- * admin-gated (`game-shift.ts` has the rule).
+ * The console's "move the leftover points to the next game" (`game-shift.ts`
+ * has the rule). Admin-gated like edit-session.ts; not the marks gate, since
+ * the leftovers are read off the labeller's own rows.
  *
- * Same shape as point-insert-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a session that is
- * not `labelling` (the same gate every row operation shares, read here with
- * the session's scoring in one go — NOT the marks gate: the leftovers are
- * read off the labeller's own rows, so a session labelled without marks
- * takes the shift too), and decides what to write with the pure plan the
- * console ran for its optimistic rows.
+ * The plan is run twice: once over the points alone to learn whether any moves
+ * under a new server, then, only when one does, again with the session's shot
+ * rows attached so the players' swap (player-swap.ts) can read them.
  *
- * The plan needs the session's scoring, which the console reads from
- * `LabelSession.adScoring`: `label_sessions.ad_scoring` as the labeller set
- * it, else the job's `processing_jobs.ad_scoring`, else true — the same
- * `resolveLabelAdScoring` the loader uses (ad-scoring.ts).
- *
- * The plan is run twice, as point-combine-session.ts does: once over the
- * points alone to learn whether any of them moves under a NEW server, then
- * — only when one does — again with the session's shot rows attached, so
- * the players' swap (player-swap.ts) can read them. A shift that changes no
- * server never reads a shot.
- *
- * Its writes are on `label_points` and `label_shots` and nothing else: one
- * UPDATE per destination the plan names, by id list (`groupWrites`), setting
- * `set_number`, `game_number`, `server`, `game_type` and `status` — plus
- * `winner` and `ended_by` on a point whose players switch — in the plan's
- * order; then the flipped strokes, grouped the same way
- * (`writeShotSwaps`). Nothing is inserted, nothing removed, no `point_index`
- * moves, and `points` / `shots` / `matches` are never touched.
- * `tests/label-operations.spec.ts` scans this file for a delete.
+ * Writes `label_points` and `label_shots` only: one UPDATE per destination by
+ * id list (`groupWrites`), then the flipped strokes (`writeShotSwaps`). Nothing
+ * is inserted or removed and no `point_index` moves.
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -95,7 +76,6 @@ export type LabelGameShiftResult = LabelOpResult<{
   shots: ShotSwapWrite[];
 }>;
 
-/** What the shift reads of the session row, in one read. */
 interface ShiftSessionRow {
   status: string;
   ad_scoring: boolean | null;
@@ -133,11 +113,7 @@ function groupWrites(
   return [...groups.values()];
 }
 
-/**
- * Check the session, read its points and its scoring together, plan the
- * cascade from `fromPointId`, and write each destination's points. Never
- * throws.
- */
+/** Plan the cascade from `fromPointId` and write it. Never throws. */
 export async function writeLabelGameShift(params: {
   supabase: AdminClient;
   sessionId: unknown;
@@ -236,7 +212,6 @@ export async function writeLabelGameShift(params: {
   return { ok: true, writes: plan.writes, shots: plan.shots };
 }
 
-/** The admin-gated entry point behind `shiftLabelGameOverflowAction`. */
 export function shiftLabelGameOverflow(
   sessionId: unknown,
   fromPointId: unknown,

@@ -15,12 +15,8 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
  * The console's one confirm, drawn by the product's `ConfirmDialog`: delete a
  * stroke (with the reason `label_shots` requires), delete a point, move a point
  * into a game someone else serves, or reset an edited stroke or point to its
- * seed.
- *
- * The action does not wait on the server: the console applies the change to
- * its rows at once and reports the write on the header's save line, putting
- * the row back if it fails — the same optimistic contract as every edit. So
- * the dialog closes on its action, and nothing is written on Cancel.
+ * seed. The dialog closes on its action without waiting on the server
+ * (`runOperation`'s contract); nothing is written on Cancel.
  */
 export function LabelConfirmDialog({
   confirm,
@@ -106,11 +102,7 @@ function LabelConfirmBody({
   );
 }
 
-/**
- * Why the stroke goes — the DS single-choice `Radio`: a check-dot beside each
- * reason, Signal Blue when chosen. Required: `label_shots` will not hold a
- * deleted stroke without one.
- */
+/** Why the stroke goes: required by `label_shots` for a deleted stroke. */
 export function DeleteReasonChoice({
   value,
   onChange,

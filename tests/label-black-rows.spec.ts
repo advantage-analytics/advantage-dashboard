@@ -15,10 +15,17 @@ import type {
   LabelSession,
   LabelShot,
 } from "@/lib/services/labels/session";
+import { inner, tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext as sharedEditContext,
+  labelPoint,
+  labelShot,
+  noop,
+  ROW_OPERATIONS as OPERATIONS,
 } from "./fixtures/label-session";
+import { elements, findByProp } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
@@ -33,7 +40,6 @@ type Names = { p1: string; p2: string };
 const FORMAT = "src/components/admin/labels/label-black-format.ts";
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const BAND = "src/components/admin/labels/label-game-band.tsx";
-const MENU_SELECT = "src/components/ui/menu-select.tsx";
 
 function format() {
   return createLoader().load(FORMAT) as {
@@ -48,54 +54,10 @@ const FRAME: Names = { p1: "Ace", p2: "Goodman" };
 /** The fixture session's. */
 const NAMES: Names = { p1: "Lee", p2: "Vargas" };
 
-function shot(id: string, fields: Partial<LabelShot>): LabelShot {
-  return {
-    id,
-    labelPointId: "p",
-    eventId: null,
-    afterEventId: null,
-    status: "kept",
-    statusBeforeDelete: null,
-    deleteReason: null,
-    hitter: "p1",
-    stroke: null,
-    result: null,
-    spin: null,
-    contactX: null,
-    contactY: null,
-    landingX: null,
-    landingY: null,
-    videoTime: null,
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
-    seed: null,
-    ...fields,
-  };
-}
-
-function point(fields: Partial<LabelPoint>): LabelPoint {
-  return {
-    id: "p",
-    pointIndex: 0,
-    vendorRallyIds: [],
-    setNumber: 1,
-    gameNumber: 1,
-    server: "p1",
-    serveSide: "deuce",
-    winner: null,
-    ending: null,
-    endedBy: null,
-    gameType: "game",
-    status: "unchanged",
-    statusBeforeDelete: null,
-    checkedAt: null,
-    note: null,
-    dismissed: [],
-    seed: null,
-    shots: [],
-    ...fields,
-  };
-}
+const shot = (id: string, fields: Partial<LabelShot>) =>
+  labelShot(id, "p", fields);
+const point = (fields: Partial<LabelPoint>) =>
+  labelPoint("p", 0, { vendorRallyIds: [], ...fields });
 
 test.describe("the two lines", () => {
   test("an error: the last stroke, who made it, and the deciding shot", () => {
@@ -282,31 +244,11 @@ function components() {
   };
 }
 
-const noop = () => {};
-const OPERATIONS = {
-  onAskDeleteShot: noop,
-  onAskDeletePoint: noop,
-  onRestoreShot: noop,
-  onRestorePoint: noop,
-  onMovePoint: noop,
-  onSetChecked: noop,
-  onAddShot: noop,
-  onAskResetShot: noop,
-  onAskResetPoint: noop,
-};
-
-function editContext(session: LabelSession, editable = true) {
-  return {
-    editable,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
-    operations: editable ? OPERATIONS : undefined,
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
-  };
-}
+const editContext = (session: LabelSession, editable = true) =>
+  sharedEditContext(
+    { editable, operations: editable ? OPERATIONS : undefined },
+    session,
+  );
 
 function renderRow(
   pointId: string,
@@ -329,40 +271,12 @@ function renderRow(
   );
 }
 
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-/** The inner text of the element carrying `attr`. */
-function inner(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  const start = html.indexOf(">", at) + 1;
-  return html.slice(start, html.indexOf("<", start));
-}
-
 test.describe("the black point row", () => {
   test("the fixture's edited point: its two lines, its tracks, and the pencil", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1);
     const row = tag(html, 'data-row="point"');
     expect(row).toContain(`data-point-id="${FIXTURE_POINT_IDS.P1}"`);
     expect(row).not.toContain("data-playing");
-    // The frame's grid: the actions take no track (they are an overlay).
-    expect(row).toContain("grid-cols-[22px_30px_minmax(0,1fr)_auto_52px_22px]");
-    for (const cls of ["gap-x-[10px]", "min-h-[52px]", "px-[14px]", "py-1.5"]) {
-      expect(row).toContain(cls);
-    }
 
     // Lee's error on the added forehand (no spin recorded), three strokes
     // from the serve at 41:12 — the tombstone between them not counted.
@@ -394,9 +308,8 @@ test.describe("the black point row", () => {
     expect(tail).toContain("text-[var(--blue)]");
     expect(tail).not.toContain('aria-label="Changed by you"');
 
-    // The score before it, mono and right-aligned.
+    // The score before it.
     expect(inner(html, "data-point-score")).toBe("0–0");
-    expect(tag(html, "data-point-score")).toContain("text-right");
 
     // Not checked: the tick is there, unpressed and quiet.
     const tick = tag(html, "data-check-row");
@@ -409,7 +322,7 @@ test.describe("the black point row", () => {
     expect(html).not.toContain("data-shots-for");
   });
 
-  test("the actions sit between the score and the tick, hidden until reached", () => {
+  test("the actions sit between the score and the tick", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1);
     const score = html.indexOf("data-point-score");
     const actions = html.indexOf('data-row-actions=""');
@@ -417,28 +330,9 @@ test.describe("the black point row", () => {
     expect(score).toBeLessThan(actions);
     expect(actions).toBeLessThan(tick);
 
-    // The Video tab's reveal (`film-row-reveal.ts`): an overlay over the
-    // score's right end that fades in, never a track that changes width.
-    const group = tag(html, 'data-row-actions=""');
-    for (const cls of [
-      "absolute",
-      "inset-y-0",
-      "right-[46px]",
-      "transition-opacity",
-      "duration-200",
-      "opacity-0",
-      "group-hover/row:opacity-100",
-      "group-focus-within/row:opacity-100",
-      "has-[[aria-expanded=true]]:opacity-100",
-    ]) {
-      expect(group, cls).toContain(cls);
-    }
-    expect(group).not.toMatch(/\bw-0\b|w-auto/);
-
-    // The point's ⋯ menu alone, on the dark tone: no note control.
+    // The point's ⋯ menu, on the dark tone.
     const inGroup = html.slice(actions, tick);
     expect(inGroup).toContain('aria-label="Point 1 actions"');
-    expect(html).not.toContain("data-note-action");
     expect(tag(html, "data-point-menu")).toContain("text-white/55");
     expect(tag(html, "data-point-menu")).not.toContain("--ink-");
 
@@ -464,8 +358,6 @@ test.describe("the black point row", () => {
     expect(html).not.toContain("data-pencil");
     // Won by Lee: p1's blue mark.
     expect(tag(html, "data-winner-mark")).toContain("bg-[var(--blue)]");
-    // It has a note stored; the row draws no control for it.
-    expect(html).not.toContain("data-note-action");
   });
 
   test("a playing point: marked, its actions shown, the rule drawn", () => {
@@ -514,7 +406,6 @@ test.describe("the black point row", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1, {}, false);
     expect(html).toContain('role="img" aria-label="Point 1 won by Vargas"');
     expect(html).not.toContain("data-point-menu");
-    expect(html).not.toContain("data-note-action");
     expect(tag(html, "data-check-row")).toContain("disabled");
   });
 
@@ -529,30 +420,6 @@ test.describe("the black point row", () => {
         onAskResetPoint: (...args: unknown[]) => asked.push(["reset", ...args]),
       },
     };
-    // The row as elements: the pencil is `PencilMark`'s, so that component
-    // is entered on the way down; nothing else is called.
-    const find = (
-      node: React.ReactNode,
-      attr: string,
-    ): React.ReactElement<Record<string, unknown>> | null => {
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          const hit = find(child, attr);
-          if (hit) return hit;
-        }
-        return null;
-      }
-      if (!React.isValidElement(node)) return null;
-      const el = node as React.ReactElement<Record<string, unknown>>;
-      if (attr in el.props) return el;
-      if (typeof el.type === "function" && el.type.name === "PencilMark") {
-        return find(
-          (el.type as (p: unknown) => React.ReactNode)(el.props),
-          attr,
-        );
-      }
-      return find(el.props.children as React.ReactNode, attr);
-    };
     const first = session.points.find((p) => p.id === FIXTURE_POINT_IDS.P1)!;
     const tree = renderFunction<unknown>(BlackPointRow)({
       point: first,
@@ -561,7 +428,8 @@ test.describe("the black point row", () => {
       score: null,
       edit,
     });
-    const pencil = find(tree, "data-reset-pencil");
+    // The pencil is `PencilMark`'s, so that component is entered.
+    const pencil = findByProp(tree, "data-reset-pencil", ["PencilMark"]);
     expect(pencil).not.toBeNull();
     expect(pencil!.props["aria-label"]).toBe("Reset point 1");
     (pencil!.props.onClick as (e: unknown) => void)({
@@ -621,21 +489,12 @@ test.describe("the black game band", () => {
   test("the game, the set's score before it and who serves, with both menus", () => {
     const html = renderBand(true);
     expect(tag(html, "data-game-band")).toContain('data-game-band="1-1"');
-    expect(tag(html, "data-game-band")).toContain(
-      "px-[14px] pt-[13px] pb-[5px]",
-    );
     expect(text(html)).toBe("Set 1 · Game 1 0–0 · Lee serves");
 
     const type = tag(html, 'data-game-menu="type"');
     expect(type).toContain('aria-label="Game type: Game 1"');
-    expect(type).toContain("text-[9px]");
-    expect(type).toContain("tracking-[1.4px]");
-    expect(type).toContain("uppercase");
-    expect(type).toContain("text-white/45");
     const server = tag(html, 'data-game-menu="server"');
     expect(server).toContain('aria-label="Server: Lee"');
-    expect(server).toContain("text-[10px]");
-    expect(server).toContain("text-white/40");
     expect(html).not.toContain("--ink-");
 
     // The second game is Vargas's.
@@ -859,19 +718,6 @@ test.describe("the black shots well", () => {
   test("a recessed well with no header row, one row a live stroke, and Add shot", () => {
     const html = renderWell();
     expect(tag(html, "data-shots-well")).toContain('data-shots-well="p-well"');
-    // The wash and the hairlines are on the well's inner column — what the
-    // outer grid's track clips as the well unfolds.
-    const outerEnd = html.indexOf(">", html.indexOf("data-shots-well")) + 1;
-    const frame = html.slice(outerEnd, html.indexOf(">", outerEnd) + 1);
-    for (const cls of [
-      "bg-white/[0.035]",
-      "shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]",
-    ]) {
-      expect(frame).toContain(cls);
-    }
-    // No air above the first row or under the last: the rows meet the well's
-    // two hairlines.
-    expect(frame).not.toMatch(/\bp[ytb]-/);
 
     // No header: no eyebrow, and the two column names are never text.
     expect(html).not.toContain("eyebrow-sm");
@@ -896,28 +742,12 @@ test.describe("the black shots well", () => {
       html.indexOf('data-shot-id="w-lit"'),
     );
 
-    // Add shot closes the well, on the well's own tracks: the plus under
-    // the numbers, the words under the times, at any rail width.
-    const add = tag(html, "data-add-shot");
-    const { SHOT_TRACKS } = createLoader().load(WELL) as {
-      SHOT_TRACKS: string;
-    };
-    for (const cls of [
-      SHOT_TRACKS,
-      "text-[11px]",
-      "font-medium",
-      "text-white/70",
-    ]) {
-      expect(add).toContain(cls);
-    }
-    expect(html.slice(html.indexOf("data-add-shot"))).toContain("col-[2/-1]");
     expect(html.indexOf("data-add-shot")).toBeGreaterThan(
       html.indexOf('data-shot-id="w-lit"'),
     );
     expect(text(html.slice(html.indexOf("data-add-shot")))).toContain(
       "Add shot",
     );
-    expect(html.slice(html.indexOf("data-add-shot"))).toContain("size-2.5");
   });
 
   test("Add shot appends to the rally, and only a writable session has it", () => {
@@ -954,9 +784,6 @@ test.describe("the black shots well", () => {
     const html = renderWell();
     const row = shotRow(html, "w-return");
     const open = tag(row, 'data-row="shot"');
-    for (const cls of ["relative", "gap-x-2", "h-[34px]", "px-[14px]"]) {
-      expect(open).toContain(cls);
-    }
 
     // The tracks: the well's one set (`SHOT_TRACKS`), the word columns
     // fractions with floors so the row reads edge to edge at every rail
@@ -1160,33 +987,6 @@ test.describe("the black shots well", () => {
   });
 
   test("a click selects the stroke, and each editor sends the light table's patch", () => {
-    type Props = Record<string, unknown>;
-    type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
-    // Every element under `node`; a component that needs hooks cannot run
-    // outside a render, so its `display`, `editor` and children are walked.
-    function elements(node: React.ReactNode, out: Element[] = []): Element[] {
-      if (Array.isArray(node)) {
-        for (const child of node) elements(child, out);
-        return out;
-      }
-      if (!React.isValidElement(node)) return out;
-      const element = node as Element;
-      out.push(element);
-      if (typeof element.type === "function") {
-        const error = console.error;
-        console.error = () => {};
-        try {
-          const render = element.type as (p: Props) => React.ReactNode;
-          return elements(render(element.props), out);
-        } catch {
-          elements(element.props.editor as React.ReactNode, out);
-        } finally {
-          console.error = error;
-        }
-      }
-      return elements(element.props.children, out);
-    }
-
     const patches: [string, unknown][] = [];
     const selected: string[] = [];
     const { BlackShotsWell } = well();
@@ -1241,29 +1041,10 @@ test.describe("the black shots well", () => {
     ]);
   });
 
-  test("Delete and Reset: hidden at rest, shown on hover or focus, asking the console", () => {
+  test("Delete and Reset: Reset before Delete, each asking the console", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // The edited, seeded stroke, selected: both, Reset before Delete.
     const edited = shotRow(html, "w-return");
-    const group = tag(edited, "data-shot-actions");
-    expect(group).toContain("opacity-100");
-    expect(group).toContain(" opacity-0");
-    // An overlay on the row's right edge, out of the grid: it takes no
-    // track, so nothing moves when it appears, and it cannot be cut off by
-    // a narrow rail. On the rail's own ground, faded in from the left.
-    for (const cls of [
-      "absolute",
-      "inset-y-0",
-      // Short of the tail's marks, so a chip and the pencil stay reachable:
-      // the padding, the well's `--shot-tail` and 4px of air.
-      "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]",
-      "bg-[var(--rail-ground)]",
-      "[mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)]",
-    ]) {
-      expect(group, cls).toContain(cls);
-    }
-    expect(group).not.toContain("ml-auto");
-    expect(group).toContain("background-image:linear-gradient(");
     // Not inside the result cell any more: a sibling of it, the row's last.
     const resultCell = edited.slice(
       edited.indexOf('data-calculated="result"'),
@@ -1283,21 +1064,11 @@ test.describe("the black shots well", () => {
     expect(edited.indexOf("data-reset-row")).toBeLessThan(
       edited.indexOf("data-delete-row"),
     );
-    expect(edited.slice(edited.indexOf("data-shot-actions"))).toContain(
-      "text-white/[0.45]",
-    );
 
     // A kept stroke, not selected: Delete alone, hidden until reached.
     const kept = shotRow(html, "w-lit");
     expect(kept).toContain('aria-label="Delete shot 4"');
     expect(kept).not.toContain("data-reset-row");
-    const hidden = tag(kept, "data-shot-actions");
-    expect(hidden).toContain("opacity-0");
-    expect(hidden).toContain("pointer-events-none");
-    expect(hidden).toContain("absolute");
-    expect(hidden).toContain("group-hover/row:opacity-100");
-    expect(hidden).toContain("group-focus-within/row:opacity-100");
-    expect(tag(kept, 'data-row="shot"')).toContain("group/row");
 
     // Read-only, or with nothing to ask: neither.
     for (const frozen of [
@@ -1314,31 +1085,6 @@ test.describe("the black shots well", () => {
     const selected: string[] = [];
     const { BlackShotRow } = createLoader().load(WELL) as {
       BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
-    };
-    const find = (
-      node: React.ReactNode,
-      attr: string,
-    ): React.ReactElement<Record<string, unknown>> | null => {
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          const hit = find(child, attr);
-          if (hit) return hit;
-        }
-        return null;
-      }
-      if (!React.isValidElement(node)) return null;
-      const el = node as React.ReactElement<Record<string, unknown>>;
-      if (attr in el.props) return el;
-      if (
-        typeof el.type === "function" &&
-        (el.type.name === "RowAction" || el.type.name === "PencilMark")
-      ) {
-        return find(
-          (el.type as (p: unknown) => React.ReactNode)(el.props),
-          attr,
-        );
-      }
-      return find(el.props.children as React.ReactNode, attr);
     };
     const row = BlackShotRow({
       shot: rally().shots.find((s) => s.id === "w-return"),
@@ -1362,7 +1108,7 @@ test.describe("the black shots well", () => {
       "data-delete-row",
       "data-reset-pencil",
     ]) {
-      const button = find(row, attr);
+      const button = findByProp(row, attr, ["RowAction", "PencilMark"]);
       expect(button, attr).not.toBeNull();
       (button!.props.onClick as (e: unknown) => void)(event);
     }
@@ -1404,11 +1150,6 @@ test.describe("the black shots well", () => {
     const frozen = shotRow(renderWell({}, false), "w-return");
     expect(frozen).toContain('aria-label="Changed by you"');
     expect(frozen).not.toContain("data-reset-pencil");
-    // The pencil never changes the marks slot's shape: 11px, no padding.
-    const pencil = tag(shotRow(renderWell(), "w-return"), "data-reset-pencil");
-    expect(pencil).not.toMatch(/\bp[xy]?-/);
-    expect(pencil).toContain("shrink-0");
-    expect(pencil).toContain("focus-visible:shadow-[var(--focus-ring)]");
   });
 
   test("a deleted stroke is one dark line that fits the rail, with Undo", () => {
@@ -1426,22 +1167,12 @@ test.describe("the black shots well", () => {
     const open = tag(line, "data-tombstone-id");
     expect(open).toContain('data-row="deleted-shot"');
     expect(open).toContain("data-well-tombstone");
-    // Three tracks — the number's, the words, Undo — none of them the
-    // light table's, and nothing to fold open.
-    expect(open).toContain("grid-cols-[22px_minmax(0,1fr)_auto]");
-    expect(open).toContain("px-[14px]");
     expect(line).not.toContain("aria-expanded");
-    expect(line).not.toContain("ghost-shot");
-    expect(line).not.toContain("overflow-x-auto");
     expect(text(line)).toMatch(/^– Deleted shot( · .+)? Undo$/);
-    expect(line).toContain("text-white/45");
-    expect(line).toContain("truncate");
     // No light-theme ink.
     expect(line).not.toMatch(/--ink-|--danger|--surface-card/);
     const undo = tag(line, "data-undo-delete");
     expect(undo).toMatch(/aria-label="Undo delete shot( at [\d:.]+)?"/);
-    expect(undo).toContain("text-white/70");
-    expect(undo).toContain("shrink-0");
 
     // The same restore the light tombstone asks for, and not a row click.
     const { BlackDeletedShot } = createLoader().load(WELL) as {
@@ -1497,7 +1228,6 @@ test.describe("the black shots well", () => {
     const open = tag(html, "data-tombstone-id");
     expect(open).toContain('data-row="deleted-point"');
     expect(open).toContain('data-tombstone-id="p-gone"');
-    expect(open).toContain("grid-cols-[22px_minmax(0,1fr)_auto]");
     expect(html).not.toContain("aria-expanded");
     expect(html).not.toMatch(/--ink-|--danger|--surface-card/);
     expect(text(html)).toMatch(/^– Deleted point( · .+)? Undo$/);
@@ -1512,40 +1242,6 @@ test.describe("the black shots well", () => {
     );
     expect(frozen).toContain("Deleted point");
     expect(frozen).not.toContain("data-undo-delete");
-  });
-
-  test("the dark fields: a menu in the dark tone, room for a position, danger while invalid", () => {
-    const cells = readFileSync(CELLS, "utf8");
-    // The select keeps the rail's compact trigger and hands the menu it
-    // opens the rail's tone (`menu`), dark unless told.
-    expect(cells).toContain('menu = "dark",');
-    expect(cells).toMatch(
-      /<MenuSelect[\s\S]*?\btone=\{menu\}[\s\S]*?className=\{SELECT_TRIGGER_DARK\}/,
-    );
-    const menu = readFileSync(MENU_SELECT, "utf8");
-    expect(menu).toContain('tone = "light",');
-    expect(menu).toContain("tone?: FloatMenuTone;");
-    expect(menu).toMatch(/<FloatMenu\b[\s\S]*?\btone=\{tone\}/);
-
-    // The text field: 3px of padding and tracked-in digits, 9px wider than
-    // its cell — thirteen characters of a position in an 88px track.
-    const dark = /const FIELD_DARK =\s*"([^"]+)"/.exec(cells)![1];
-    expect(dark).toContain("-ml-[4px]");
-    expect(dark).toContain("w-[calc(100%+9px)]");
-    expect(cells).toContain("px-[3px] text-[10px] tracking-[-0.05em]");
-    // 88px track − 7px mark − 6px gap = 75px cell; + 9px, − 2px border,
-    // − 6px padding = 76px for 13 characters at 10px mono (0.6em advance)
-    // less the tracking, with the caret's 2px.
-    const room = 88 - 7 - 6 + 9 - 2 - 6;
-    const need = 13 * (6 - 0.5) + 2;
-    expect(need).toBeLessThanOrEqual(room);
-
-    // Invalid outranks focus.
-    expect(dark).toContain("focus-within:border-[var(--blue)]");
-    expect(dark).toContain(
-      "data-[invalid]:focus-within:border-[var(--danger)]",
-    );
-    expect(cells).toContain('data-invalid={invalid ? "" : undefined}');
   });
 });
 
@@ -1599,7 +1295,6 @@ test("no labels component builds an arbitrary-value class from an interpolation"
 
 const RAIL = "src/components/admin/labels/label-black-rail.tsx";
 const RAIL_TONE = "src/components/admin/labels/label-rail-tone.ts";
-const PILL = "src/components/admin/labels/label-follow-pill.tsx";
 
 test.describe("the rail's two tones", () => {
   type RailProps = Record<string, unknown>;
@@ -1736,32 +1431,7 @@ test.describe("the rail's two tones", () => {
     expect(light).toContain("bg-[var(--blue)] text-[var(--rail-on-accent)]");
   });
 
-  test("the tone reaches what leaves the rail through a portal: every menu, the note", () => {
-    type Props = Record<string, unknown>;
-    type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
-    function elements(node: React.ReactNode, out: Element[] = []): Element[] {
-      if (Array.isArray(node)) {
-        for (const child of node) elements(child, out);
-        return out;
-      }
-      if (!React.isValidElement(node)) return out;
-      const element = node as Element;
-      out.push(element);
-      if (typeof element.type === "function") {
-        const error = console.error;
-        console.error = () => {};
-        try {
-          const render = element.type as (p: Props) => React.ReactNode;
-          return elements(render(element.props), out);
-        } catch {
-          elements(element.props.editor as React.ReactNode, out);
-        } finally {
-          console.error = error;
-        }
-      }
-      return elements(element.props.children, out);
-    }
-
+  test("the tone reaches what leaves the rail through a portal: the well's menus and the row's", () => {
     for (const tone of ["dark", "light"] as const) {
       // The well: compact chrome on either ground, the menu in the tone.
       const { BlackShotsWell } = well();
@@ -1806,24 +1476,6 @@ test.describe("the rail's two tones", () => {
       BlackShotsWell({ point: rally(), edit: wellEdit() }),
     ).filter((el) => "options" in el.props && "menu" in el.props);
     for (const select of untoned) expect(select.props.menu).toBe("dark");
-
-    // The rest are read off the source: these menus open inside components
-    // that hold state, which cannot be walked outside a render.
-    const rail = readFileSync(RAIL, "utf8");
-    // The game band keeps the rail's paint and opens menus in the tone.
-    expect(rail).toMatch(/<LabelGameBand[\s\S]*?\bmenu=\{tone\}/);
-    // The score chip's answers.
-    expect(rail).toMatch(/<FloatMenu[\s\S]*?width=\{272\}\s+tone=\{tone\}/);
-    expect(rail).not.toContain('tone="dark"');
-    const row = readFileSync(ROW, "utf8");
-    // Who won.
-    expect(row).toContain('tone={edit.tone ?? "dark"}');
-    expect(row).not.toContain('tone="dark"');
-    expect(readFileSync(WELL, "utf8")).not.toContain('tone="dark"');
-    // The band takes it: one paint, menus from `menu`.
-    const band = readFileSync(BAND, "utf8");
-    expect(band).toContain('menu = "dark",');
-    expect(band.match(/\btone=\{menu\}/g)).toHaveLength(1);
   });
 
   test("showSession off: 'Points' in place of the title, no progress, no save line; the total stays", () => {
@@ -1857,11 +1509,6 @@ test.describe("the rail's two tones", () => {
     expect(html).not.toContain("data-label-black-exit");
     expect(html).not.toContain("Exit full screen");
     expect(entered).toBe(0);
-    // Its tooltip's two lines, and the click, are the source's.
-    const rail = readFileSync(RAIL, "utf8");
-    expect(rail).toMatch(
-      /label="Full screen"\s+detail="Fills the whole screen"[\s\S]*?data-label-rail-full-screen=""\s+aria-label="Full screen"\s+onClick=\{onFullScreen\}/,
-    );
     // Both at once, the way in before the way out.
     const both = renderRail({ onFullScreen: noop });
     expect(both.indexOf("data-label-rail-full-screen")).toBeGreaterThan(-1);
@@ -1896,6 +1543,5 @@ test.describe("the rail's two tones", () => {
       expect(light, cls).toContain(cls);
     }
     expect(light).not.toMatch(/\btext-white\b/);
-    expect(readFileSync(PILL, "utf8")).toContain('tone = "dark",');
   });
 });

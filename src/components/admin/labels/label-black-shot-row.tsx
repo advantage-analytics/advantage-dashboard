@@ -56,61 +56,28 @@ import { railInk, type RailTone } from "./label-rail-tone";
 import { sideLabel, type EditContext } from "./label-row-parts";
 
 /**
- * The rail's strokes (board 08l's `.bk-well` and `.bk-sr`): the open point's
- * shots in a recessed well under its row, each edited in place with a
- * single-field write.
- *
- * The rail is narrow, so there is NO header row: a hollow ring says "hit
- * at", a filled dot "landed at", and every other column reads as what it is.
- *
- * Colours are the frame's: white at an alpha on black, and `--blue` for the
- * "changed" pencil. The same classes draw the well on the light ground,
- * where "white" is the page's ink (`label-rail-tone.ts`) — so an ink set by
- * style is `railInk(alpha)`, never a literal white.
+ * The rail's strokes: the open point's shots in a recessed well, each edited in
+ * place with a single-field write. No header row: a hollow ring is "hit at", a
+ * filled dot "landed at". An ink set by style is `railInk(alpha)`
+ * (label-rail-tone.ts), never a literal white.
  */
 
 /**
- * The well's one set of tracks: number · time · player · stroke · spin ·
- * hit at · landed at · placement · result. Every row kind in the well — a
- * stroke, a shown ghost, a suggested stroke, "Add shot" — is laid on
- * `SHOT_TRACKS`, so their columns line up by construction: a ghost's
- * reason and a suggestion's sentence span tracks (`col-[8/-1]`,
- * `col-[4/7]`) rather than carrying tracks of their own.
+ * The well's one set of tracks: number · time · player · stroke · spin · hit at
+ * · landed at · placement · result. Every row kind (stroke, ghost, suggestion,
+ * Add shot) is laid on `SHOT_TRACKS`, so columns line up by construction and
+ * ghost or suggestion text spans tracks.
  *
- * The frame draws the row for a 640px rail — 22 · 48 · 54 · 80 · 52 · 88 ·
- * 88 · 88 and what is left — but the rail resizes from 520 to 880
- * (`RAIL_MIN_PX` … `RAIL_MAX_PX`), and a row of `minmax(min, Npx)` tracks
- * hit every maximum at 640 and handed everything past that to the last
- * track: at 880 the words sat packed on the left and the result alone in a
- * void. So the WORD tracks are fractions with floors. The fractions are the
- * frame's widths in proportion (time's a little under, since a tabular
- * time is not a word and wants no room past its digits), so at 640 each
- * track is the frame's within a couple of px, and past 640 the slack is
- * shared out in those proportions — the row reads edge to edge at every
- * width, its gaps even rather than one big one. The two positions stay
- * fixed at 88: tabular numbers whose decimal points line up down the
- * column, however wide the rail. The number is 22.
+ * The word tracks are fractions with floors, not `minmax(min, Npx)`: the rail
+ * resizes 520–880 and fixed maxima left all the slack in the last track. Floors
+ * + gaps + padding come to exactly 520 (`SHOT_FLOORS_PX` + `SHOT_GAPS_PX` +
+ * `SHOT_PADDING_PX`), so nothing passes the edge at the narrowest; the two
+ * positions stay 88px so decimal points align.
  *
- * Each floor is what the track's shortest useful reading needs, and the
- * floors with the gaps and the padding come to exactly 520 (`SHOT_FLOORS_PX`
- * + `SHOT_GAPS_PX` + `SHOT_PADDING_PX`): at the rail's narrowest nothing
- * passes its edge, and a word that no longer fits truncates (a select's
- * whole word is in its menu, the placement's in a tooltip).
- *
- * The result's floor is its tail's room (`SHOT_TAIL_PX`, set once on the
- * well as `--shot-tail`) plus the cell's own 3px gap and 2px of air — so
- * the tail never grows the grid; the result word truncates first. The tail
- * holds the 11px pencil, right-aligned; its 33px are the frame's, from when
- * a stroke also carried an 18px mark disc, and are kept so that no track of
- * the row moved when the disc went. The same variable places the row's
- * actions overlay (`data-shot-actions`), which takes NO track and stops
- * short of the tail (padding + `--shot-tail` + 4px), so the pencil stays
- * under the pointer while the row is hovered. The ghost
- * row's tail — the placement and result tracks spanned, with the gap
- * between them — is at its narrowest `30 + 8 + 38 = 76`, which holds
- * Restore whole.
+ * The result's floor leaves room for the pencil tail (`SHOT_TAIL_PX`, set once
+ * on the well as `--shot-tail`); the actions overlay stops short of it.
  */
-/** The result cell's tail: the frame's 33px, of which the pencil takes 11. */
+/** The result cell's tail, of which the pencil takes 11px. */
 export const SHOT_TAIL_PX = 33;
 /** What the result track adds around the tail: the cell's 3px gap and 2px. */
 export const SHOT_TAIL_AIR_PX = 5;
@@ -134,17 +101,11 @@ export const SHOT_GAPS_PX = 8 * 8;
 /** `px-[14px]`, both sides. */
 export const SHOT_PADDING_PX = 2 * 14;
 
-/**
- * The tracks themselves. The result's floor reads `--shot-tail` so the two
- * numbers cannot drift apart; its fallback is `SHOT_TAIL_PX` for a row
- * drawn outside the well.
- */
 // A literal: Tailwind only emits a class it can read whole in the source, so
 // the two numbers (`SHOT_TAIL_PX`, `SHOT_TAIL_AIR_PX`) are written out here.
 export const SHOT_TRACKS =
   "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
-/** A stroke row: the tracks, the gap, the height and the padding. */
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its
 // text, so a value centres on the row instead of hanging from a 16px strut.
 const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
@@ -152,7 +113,6 @@ const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-
 /** The actions overlay's right edge: the padding, the tail and 4px of air. */
 const ACTIONS_RIGHT = "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]";
 
-/** The CSS variables the well sets once for every row in it. */
 const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
 } as React.CSSProperties;
@@ -160,22 +120,11 @@ const WELL_STYLE = {
 // ── The rally arriving ───────────────────────────────────────────────────
 
 /**
- * The Video tab's shots well, on the rail (`ShotWell` / `ShotWellRow` in
- * `film/point-list.tsx`, the keyframes in globals.css): the well unfolds on
- * `film-shot-well-open` — an outer grid whose one track grows 0fr → 1fr over
- * an inner `min-h-0 overflow-hidden` column — and each row in it arrives on
- * `film-shot-row-in`, 25ms after the one before, capped at eight steps
- * (`shotRowRevealDelay`, the Video tab's own function). Same classes, so the
- * same durations, curve and reduced-motion behaviour.
- *
- * `order` is the row's place in the well, 1-based, the point's hint line,
- * tombstones, ghosts and suggestions included — the stagger only. Undefined (a well that was
- * already open when the page loaded, or a row drawn outside a well) is no
- * arrival at all.
- *
- * Mount-driven: every row is keyed by its stroke's id, so an edit, a save or
- * a tick of the film's clock re-renders rows that are already there and
- * replays nothing.
+ * Same classes as the Video tab's `ShotWell` (film/point-list.tsx):
+ * `film-shot-well-open` unfolds the well, rows arrive on `film-shot-row-in` via
+ * `shotRowRevealDelay`. `order` is the row's 1-based place in the well (stagger
+ * only); undefined means no arrival. Rows are keyed by stroke id, so edits and
+ * clock ticks replay nothing.
  */
 function rowArrival(order: number | undefined): {
   className: string | undefined;
@@ -189,10 +138,9 @@ function rowArrival(order: number | undefined): {
 }
 
 /**
- * The rally has arrived: mark the well, on the element — no state, so the
- * well stays a plain function of its props. From here a row that mounts in
- * it is an edit, and globals.css (`[data-well-settled]`) takes the stagger
- * and the rise off it; only a tombstone still rises in.
+ * The rally has arrived: mark the well on the element (no state). From here a
+ * row that mounts in it is an edit, and globals.css (`[data-well-settled]`)
+ * takes the stagger and the rise off it; only a tombstone still rises in.
  */
 function settleWell(well: HTMLElement) {
   well.dataset.wellSettled = "";
@@ -217,12 +165,9 @@ function settleWellOnReach(event: React.SyntheticEvent<HTMLDivElement>) {
 }
 
 /**
- * The ground under the row's two requests: the rail's own (`--rail-ground`:
- * `--surface-dark` on black, the card's white on the light ground) with the
- * washes the row is wearing painted back over it — the well's, then
- * the lit row's or the hovered one's — so the patch is the row's colour and
- * the result text it covers does not show through the buttons. Its left 16px
- * fade in (a mask), so the words run under it rather than into an edge.
+ * The ground under the row's two requests: the rail's own (`--rail-ground`)
+ * with the washes the row is wearing painted back over it, so the result text
+ * it covers does not show through the buttons. Its left 16px fade in (a mask).
  */
 const WELL_WASH = railInk(0.035);
 function actionsGround(lit: boolean): string {
@@ -230,45 +175,26 @@ function actionsGround(lit: boolean): string {
   return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
 }
 
-/** The frame's `.bk-em`: a value that is not there. */
 const EMPTY_INK = railInk(0.25);
-/** `.bk-tm`'s ink, and a faulted serve's stroke and numbers. */
+/** Times, and a faulted serve's stroke and numbers. */
 const QUIET_INK = railInk(0.45);
-/** `.bk-sk` and `.bk-num`. */
+/** The stroke word and the numbers. */
 const VALUE_INK = railInk(0.72);
-/** A ghost's reason — the frame's `.fx-gt`. */
 const REASON_INK = railInk(0.5);
-/** A ghost's struck-through values — the frame's `.fx-gone`. */
 const GONE_INK = railInk(0.32);
 
-/**
- * Whether the rail draws a site-removed stroke as a ghost (board 08m §3):
- * only while the session has marks. The loader builds them only for a
- * session that computes marks, so `marks` being there says both; otherwise
- * — the ground-truth session, or a build that failed — a ghost is an
- * ordinary numbered row.
- */
+/** Whether a site-removed stroke is drawn as a ghost: only with marks. */
 export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
   return marks !== null && marks !== undefined;
 }
 
 /**
- * The open point's strokes — the frame's `.bk-well`, drawn inside the point
- * row's own `data-shots-for` wrapper (`label-black-point-row.tsx`).
- *
- * The strokes are numbered 1…n among the live ones: a tombstone takes no
- * number — and nor does a ghost while it
- * is drawn as one (`drawsGhosts`), which is also when the rally count, the
- * point's two lines and the marks' hover sentence skip it. Over them, as the
- * well's first row, is the point's quiet line of hints (`PointHintLine`) —
- * only when the point has any, and never on a session without marks. The trailing "Add
- * shot" appends to the rally; it is there only while the session can be
- * written.
- *
- * A stroke the marks think is missing (`openShotSuggestions`) is a dashed row
- * right after the stroke it would follow. It is a proposal, not a stroke: no
- * number, not in the rally count, and nothing is added until "Add shot" is
- * clicked.
+ * The open point's strokes, inside the point row's `data-shots-for` wrapper.
+ * Strokes are numbered 1…n among the live ones: a tombstone takes no number,
+ * nor does a ghost while it is drawn as one (`drawsGhosts`). The hint line
+ * (`PointHintLine`) is the first row; a suggested stroke
+ * (`openShotSuggestions`) is a dashed row after the stroke it would follow,
+ * with no number.
  */
 export function BlackShotsWell({
   point,
@@ -279,11 +205,7 @@ export function BlackShotsWell({
 }: {
   point: LabelPoint;
   edit: EditContext;
-  /**
-   * Unfold the well and let its rows arrive, as the Video tab's does. Off
-   * for the one well the rail must not animate: the point that was already
-   * open when the page loaded.
-   */
+  /** Animate the well's opening. Off for the point open on page load. */
   animate?: boolean;
   /** The session's marks; null draws no hint line, slot or ghost. */
   marks?: LabelMarks | null;
@@ -363,10 +285,6 @@ export function BlackShotsWell({
   }
   const addArrival = rowArrival(arrive());
   return (
-    // Two elements, as the Video tab's `ShotWell` is: the outer grid is what
-    // `film-shot-well-open` unfolds, the inner `min-h-0 overflow-hidden`
-    // column is what its track clips — the wash, the hairlines and the rows.
-    // The rows under the well slide down with the track instead of jumping.
     <div
       data-shots-well={point.id}
       data-well-animate={animate ? "" : undefined}
@@ -407,35 +325,17 @@ export function BlackShotsWell({
 }
 
 /**
- * One stroke — the frame's `.bk-sr`.
+ * One stroke: number · time · hitter · stroke · spin · hit at (ring) · landed
+ * at (dot) · derived placement and result · blue pencil when changed or added.
  *
- * Left to right: its number · its time on the film, to the tenth · who hit
- * it · the stroke · its spin · where it was hit (the ring) · where it landed
- * (the dot) · the placement and the result those two positions give, which
- * nobody types · the blue pencil on a stroke the labeller changed or added.
- * A stroke draws no mark of its own: what the derivation doubts about the
- * point's last stroke is a word on the point's hint line.
+ * Time, Player, Stroke, Spin and both positions are `EditableCell`s. A typed
+ * position sends its derived result in the same patch (`positionPatch`), as a
+ * court click does. Requests (Split point here, Reset, Delete) overlay the
+ * right edge on hover, focus and selection so no column moves. Reset and Delete
+ * only ask the console to confirm; Split runs at once.
  *
- * Time, Player, Stroke, Spin and the two positions are `EditableCell`s
- * (`label-cells.tsx`): text until the row is SELECTED
- * (then every one is a field) or the cell itself is clicked or reached from
- * the keyboard. A hovered cell shows only its cursor and its word a step
- * brighter — no box: a field under a crossing pointer read as a field
- * already chosen. A typed position sends the result it derives in the same
- * patch (`positionPatch`), exactly as a court click does.
- *
- * The row's requests — Split point here (any shot but the point's first
- * live one), Reset (an edited stroke with a seed) and Delete — are an
- * overlay on the row's right edge, out of the grid, there only on hover, on
- * focus and on the selected row, so the row at rest is the frame's and no
- * column moves when they appear. Reset and Delete only ASK: the console
- * opens the confirm. Split runs at once — it moves
- * rows and deletes nothing, and "Split point here" on the first moved shot
- * is the way back from a combine.
- *
- * LIT — selected, or the stroke the film is on — is the frame's `.bk-lit`
- * wash. A FAULT, a serve that did not go in, is a step quieter throughout:
- * part of the point, not of the rally.
+ * LIT (selected, or the stroke the film is on) washes the row; a FAULT is a
+ * step quieter.
  */
 export function BlackShotRow({
   shot,
@@ -448,17 +348,14 @@ export function BlackShotRow({
 }: {
   shot: LabelShot;
   number: number;
-  /** The row's place in the well, for its arrival (`rowArrival`). */
   arrive?: number;
   /**
-   * The point the stroke is in, for "Split point here" (`canSplitAtShot`
-   * reads its shots in video order). Absent, no split is offered.
+   * The stroke's point, for "Split point here". Absent, no split is offered.
    */
   point?: Pick<LabelPoint, "id" | "status" | "shots">;
   /** The point's number, for the confirm the console opens. */
   pointNumber: number;
   edit: EditContext;
-  /** The film is on this stroke. */
   playing?: boolean;
 }) {
   const { names, editable, onSelectShot, onPatchShot } = edit;
@@ -476,7 +373,7 @@ export function BlackShotRow({
   const selectCell = { ...cell, menu: tone };
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const placement = shotPlacement(labelShotValues(shot));
-  /** The words' ink — `.bk-pl`, `.bk-sp`, `.bk-cv` — a step down on a fault. */
+  /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
 
@@ -573,7 +470,9 @@ export function BlackShotRow({
         x={shot.contactX}
         y={shot.contactY}
         muted={fault}
-        onCommit={(p) => patch(positionPatch(shot, "contact", p))}
+        onCommit={(p) =>
+          patch(positionPatch(labelShotValues(shot), "contact", p))
+        }
       />
       <BlackPositionCell
         {...cell}
@@ -582,7 +481,9 @@ export function BlackShotRow({
         x={shot.landingX}
         y={shot.landingY}
         muted={fault}
-        onCommit={(p) => patch(positionPatch(shot, "landing", p))}
+        onCommit={(p) =>
+          patch(positionPatch(labelShotValues(shot), "landing", p))
+        }
       />
       {placement ? (
         // The one word here nobody can open an editor on, in a track that
@@ -603,12 +504,9 @@ export function BlackShotRow({
           <Dash label="No placement" />
         </span>
       )}
-      {/* The word, then a fixed right-aligned slot for the row's
-          pencil. The word's column can go to nothing and the cell clips, so
-          the slot never grows the grid and never passes the rail's edge: the
-          word truncates before the pencil is touched. The 3px between them is
-          what the cell's 36px minimum leaves beside the slot's 33
-          (`SHOT_TAIL_PX`) — at 4 the pencil's last pixel was clipped. */}
+      {/* The word, then a fixed right-aligned slot for the pencil: the word
+          truncates before the pencil is touched. The gap between them is
+          3px; at 4 the pencil's last pixel was clipped. */}
       <span
         data-calculated="result"
         className={cn(
@@ -698,14 +596,8 @@ export function BlackShotRow({
 }
 
 /**
- * A deleted stroke, in the well: ONE quiet line on the row's own first track
- * and padding — a dash where the number was, "Deleted shot", its time and
- * why it went — with Undo always at the right edge, on a track of its own so
- * the words truncate before it moves.
- *
- * Nothing folds open: the line is the whole tombstone. Undo is the console's
- * request (`onRestoreShot`), and is absent on a session that cannot be
- * written.
+ * A deleted stroke: one quiet line (a dash, "Deleted shot", its time and why it
+ * went) with Undo on a track of its own, so the words truncate first.
  */
 export function BlackDeletedShot({
   shot,
@@ -714,11 +606,7 @@ export function BlackDeletedShot({
 }: {
   shot: LabelShot;
   edit: EditContext;
-  /**
-   * The row's place in the well (`rowArrival`). It also carries
-   * `label-row-arrive`: a tombstone that mounts in a well already open — the
-   * stroke was just deleted — rises in where the stroke was (globals.css).
-   */
+  /** Its place in the well; a tombstone also rises (`label-row-arrive`). */
   arrive?: number;
 }) {
   const arrival = rowArrival(arrive);
@@ -762,15 +650,9 @@ export function BlackDeletedShot({
 }
 
 /**
- * A ghost row's reason and Restore sit where the stroke row's placement and
- * result would be, spanning both tracks (the frame's `.fx-gt`,
- * `grid-column: 8 / -1`): nobody derives a placement for a stroke that is
- * out of the rally. The span is at its narrowest the two floors and the gap
- * between them — `30 + 8 + 38 = 76` (`GHOST_TAIL_MIN_PX`), which holds
- * Restore whole (the icon, "Restore", its padding and the gap before it) —
- * so the reason's words are what give, truncating to nothing before
- * Restore moves or is cut. The ghost row is `ROW_GRID` itself, so its
- * columns are the stroke row's by construction.
+ * A ghost row's reason and Restore span the placement and result tracks. At its
+ * narrowest the span (`GHOST_TAIL_MIN_PX`) holds Restore whole, so the reason's
+ * words truncate first.
  */
 const GHOST_TAIL = "col-[8/-1]";
 
@@ -778,28 +660,19 @@ const GHOST_TAIL = "col-[8/-1]";
 export const GHOST_TAIL_MIN_PX = SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8];
 
 /**
- * The quiet affordance on an editable cell's text while it is text: the
- * cursor says what a click does, and class-coloured words step up to white.
- * No border and no ground — those are the field's, drawn once the cell is
- * opened or its row selected.
+ * The affordance on an editable cell's text while it is text: a cursor, and
+ * class-coloured words stepping up to white. No border and no ground: those are
+ * the field's.
  */
 const TEXT_AFFORDANCE =
   "cursor-pointer transition-colors duration-200 hover:text-white";
 
 /**
- * A ghost (board 08m §3, the frame's `.fx-gl` and `.fx-gone`): a stroke the
- * site removed before the transcript was built — someone hit a serve that
- * had already faulted — that the labeller has neither restored nor deleted.
- *
- * At rest it is ONE quiet line where the stroke was, on the line a tombstone
- * takes: a wand, "1 shot removed: {hitter} hit the fault back", and
- * Show. It takes no shot number and the rally count skips it. Shown
- * (`openGhostIds`, the console's state), the removed
- * stroke comes back under the line struck through — its values at a third of
- * white, the em dashes not struck — with its reason, "Hit after the fault",
- * and Restore, which is the one request here: the console writes
- * `site_removal_restored_at` and the stroke is an ordinary row again.
- * Restore is absent on a session that cannot be written.
+ * A ghost: a stroke the site removed before the transcript was built, neither
+ * restored nor deleted by the labeller. At rest it is one quiet line with Show;
+ * it takes no shot number and the rally count skips it. Shown (`openGhostIds`),
+ * the stroke comes back struck through with its reason and Restore, which
+ * writes `site_removal_restored_at`.
  */
 export function BlackGhostShot({
   shot,
@@ -924,12 +797,7 @@ export function BlackGhostShot({
 
 type ShotSuggestion = Extract<LabelSuggestion, { kind: "missing_shot" }>;
 
-/**
- * The point's stroke suggestions still waiting for an answer (board 08m §4):
- * the session computes marks and has them, the suggestion is this point's,
- * and it is neither dismissed nor already answered with an added stroke
- * (`suggestionState`). With marks off, or none built, there is none.
- */
+/** The point's stroke suggestions still open (`suggestionState`). */
 function openShotSuggestions(
   point: LabelPoint,
   marks: LabelMarks | null | undefined,
@@ -944,24 +812,11 @@ function openShotSuggestions(
 }
 
 /**
- * A suggested stroke (board 08m §4, the frame's `.fx-sug`): two strokes in a
- * row by one player, so the other's is probably missing between them. A
- * dashed amber row where it would go, on the stroke row's own first tracks —
- * a plus where the number would be, the time and the player it would be
- * added with — then the sentence and its two answers.
- *
- * The time and the player are what "Add shot" WILL write (`planAddedShot`,
- * the console's own rule: the midpoint of its two live neighbours, the
- * opponent of the stroke before it), falling back to the marks' reading; when
- * that rule refuses — the stroke it would follow is no longer live — there is
- * no row to draw. "Add shot" is the existing request (`onAddShot` after that
- * stroke); "Dismiss" stores the suggestion's key. Both are absent on a
- * session that cannot be written.
- *
- * It sits on the stroke row's tracks (`ROW_GRID`), so its first three
- * columns line up with the strokes around it: the sentence spans the
- * stroke, spin and hit-at tracks, the answers the last three — 172px at a
- * 520px rail, which holds both whole — and the sentence is what truncates.
+ * A suggested stroke: two strokes in a row by one player, so the other's is
+ * probably missing between them. A dashed amber row on the stroke row's tracks
+ * (`ROW_GRID`); the sentence is what truncates. Its time and player are what
+ * "Add shot" will write (`planAddedShot`); when that rule refuses there is no
+ * row.
  */
 function BlackSuggestedShot({
   suggestion,
@@ -972,7 +827,6 @@ function BlackSuggestedShot({
   suggestion: ShotSuggestion;
   point: LabelPoint;
   edit: EditContext;
-  /** The row's place in the well, for its arrival (`rowArrival`). */
   arrive?: number;
 }) {
   const arrival = rowArrival(arrive);
@@ -1061,11 +915,7 @@ function BlackSuggestedShot({
   );
 }
 
-/**
- * A ghost row's value: struck through at the frame's `.fx-gone` ink, or —
- * when there is none — the plain em dash, which the frame leaves unstruck
- * (`.fx-gone .bk-em`). One element either way, so it is one grid cell.
- */
+/** A ghost row's value: struck through, or an unstruck em dash for none. */
 function Struck({
   children,
   className,
@@ -1086,12 +936,7 @@ function Struck({
   );
 }
 
-/**
- * A ghost row's position: the stroke row's ring or dot, then x and y struck
- * through in their own slots (`BlackPositionCell` without the field — a
- * ghost is not edited, it is restored or left). A position not set is the
- * one unstruck dash in the first slot.
- */
+/** A ghost row's position: the ring or dot, then x and y struck through. */
 function GhostPosition({
   end,
   x,
@@ -1144,10 +989,7 @@ function GhostPosition({
   );
 }
 
-/**
- * One of the row's requests: a 22px glyph button, quiet until reached. It
- * never selects the row it sits in.
- */
+/** One of the row's requests. It never selects the row it sits in. */
 function RowAction({
   attr,
   label,
@@ -1182,7 +1024,7 @@ function RowAction({
   );
 }
 
-/** The frame's `.bk-em`: one em dash, and what is missing in words. */
+/** One em dash, and what is missing in words. */
 function Dash({ label }: { label: string }) {
   return (
     <>
@@ -1209,13 +1051,11 @@ function BlackSelectCell({
 }: {
   editable: boolean;
   rowSelected: boolean;
-  /** The tone of the menu the select opens — the rail's. */
   menu: RailTone;
   label: string;
   value: string | null;
   text: string | null;
   options: readonly SelectOption[];
-  /** The word's type and ink. */
   className: string;
   style?: React.CSSProperties;
   onChange: (value: string | null) => void;
@@ -1249,20 +1089,14 @@ function BlackSelectCell({
   );
 }
 
-/** The frame's `.bk-num`: one right-aligned number in a slot of its own. */
+/** One right-aligned number in a slot of its own. */
 const NUM = "mono tabular w-8 flex-none text-right text-[10px]";
 
 /**
- * A position — the frame's `.bk-xy`. The mark stands for the column's name:
- * a 7px ring is where the stroke was HIT, a 5px dot where it LANDED. After it
- * come x then y, each right-aligned in a 32px slot, so the decimal points of
- * every row line up whatever the sign or the digits. A position not set is
- * one em dash in the first slot, the second left empty.
- *
- * The mark stays put while the two numbers give way to the text field —
- * "x, y" in metres, typed; the court click is the other way in. The field
- * (`FIELD_DARK`, label-cells.tsx) is sized for the longest pair,
- * thirteen characters ("-10.10, 24.82"), in what this 88px track leaves.
+ * A position. The mark stands for the column's name: a ring is where the stroke
+ * was hit, a dot where it landed. Then x and y, each right-aligned in a 32px
+ * slot so the decimal points line up. The numbers give way to a text field ("x,
+ * y" in metres) sized for the longest pair in this 88px track.
  */
 function BlackPositionCell({
   editable,

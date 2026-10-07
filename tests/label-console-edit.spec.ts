@@ -34,6 +34,7 @@ import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
 } from "./fixtures/label-session";
+import { elements } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -369,36 +370,6 @@ test.describe("cell text", () => {
 
 test.describe("a typed position (T13) and a picked value (T27)", () => {
   type Props = Record<string, unknown>;
-  type Element = React.ReactElement<Props & { children?: React.ReactNode }>;
-
-  /**
-   * Every element under `node`, components included. A component that needs
-   * hooks (an `EditableCell`, a tooltip root) cannot run outside a render, so
-   * its children are walked in its place — and its `editor`, which is where
-   * a cell keeps the input it mounts.
-   */
-  function elements(node: React.ReactNode, out: Element[] = []): Element[] {
-    if (Array.isArray(node)) {
-      for (const child of node) elements(child, out);
-      return out;
-    }
-    if (!React.isValidElement(node)) return out;
-    const element = node as Element;
-    out.push(element);
-    if (typeof element.type === "function") {
-      const error = console.error;
-      console.error = () => {};
-      try {
-        const render = element.type as (p: Props) => React.ReactNode;
-        return elements(render(element.props), out);
-      } catch {
-        elements(element.props.editor as React.ReactNode, out);
-      } finally {
-        console.error = error;
-      }
-    }
-    return elements(element.props.children, out);
-  }
 
   /**
    * The open point's shots well (`BlackShotsWell`, the rail's rows under the
@@ -423,6 +394,7 @@ test.describe("a typed position (T13) and a picked value (T27)", () => {
         scores: labelScores(session.points, session.adScoring).points,
       },
     });
+
     /** Type `value` into the position input named `label`, and commit. */
     const type = (label: string, value: { x: number; y: number } | null) => {
       const input = elements(tree).find(

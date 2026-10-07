@@ -1,19 +1,12 @@
 /**
- * How a point row reveals its trailing action (handoff F3) — the Video tab's
- * recipe, lifted out of `point-list.tsx`'s `ROW_TONE` so the labelling
- * console's rail (`admin/labels/label-black-point-row.tsx`) reveals its ⋯
- * the same way rather than by a copy of these strings.
+ * How a point row reveals its trailing action: the Video tab's recipe, shared
+ * with the labelling console's rail (`admin/labels/label-black-point-row.tsx`).
  *
  * The row is `group/row`. The action sits over the row's right edge, out of
- * flow, and fades in (`opacity`, 200ms, the default curve); the score slides
- * 26px left out from under it (`transform`, 200ms, `--ease-primary`) — on
- * hover and on focus anywhere in the row. Nothing changes width, so no
- * column re-lays. A row whose action is lit at rest (a saved point's
- * bookmark; the rail's playing row) holds both: the score stays aside and
- * the action stays at full opacity.
- *
- * Reduced motion: the slide is `motion-safe:` only — the score stays put and
- * the action fades in over the row's edge. The fade itself stays.
+ * flow, and fades in; the score slides 26px left out from under it, on hover
+ * and on focus anywhere in the row. Nothing changes width, so no column
+ * re-lays. A row whose action is lit at rest holds both. Under reduced motion
+ * the slide is `motion-safe:` only; the fade stays.
  *
  * Whole string literals: Tailwind reads these classes off this file.
  */

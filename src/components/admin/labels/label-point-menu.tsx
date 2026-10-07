@@ -73,44 +73,24 @@ export function countPointPatch(
 }
 
 /**
- * What the ⋯ menu can ask for on `point`, as plain data — the menu draws
- * these, and a spec can run them without opening a popover.
- *   · `addAbove` / `addBelow` — an empty point beside this one, in its game
- *     (`onInsertPoint`, before or after); the labeller fills it in place, as
- *     the suggestion slot's "Add point" row is filled. A manual edit, so it
- *     is there on every session — marks on or off.
- *   · `combineAbove` / `combineBelow` — this point and its live neighbour
- *     that way become one (`onCombinePoints`, point-combine.ts), the earlier
- *     kept; only when that neighbour is in the SAME game. Each carries the
- *     two numbers, so the labeller reads which point's shots go where. Three
- *     or more are combined by repeating.
- *   · `switchPlayers` — every stroke's hitter, the winner and ended by
- *     flipped by hand (`onSwitchPlayers`, player-swap.ts), the server left
- *     alone; on every live point with a stroke that names a hitter. When
- *     the point's rows contradict its server — its serve is hit by the
- *     other side, as a point moved into another player's game before the
- *     swap rule existed is — it `contradicts`, says so, and the menu lists
- *     it FIRST so the stuck point advertises its fix.
- *   · `markLet` / `markNotAPoint` — the point stays, with its shots and its
- *     winner, and the score skips it: one point patch through the row's own
- *     autosave (`onPatchPoint`), `ending: let_replayed` — the suggestion
- *     slot's "was a let" — or `ending: not_a_point`. On every live point,
- *     an added one included. Null once the point is either.
- *   · `countPoint` — only on a let or a non-point: the ending goes back to
- *     what its rows say (`countPointPatch`), so the score counts it again.
- *   · `move` — the games either side of the point, each saying who serves it;
- *     picking one hands it to the console, which asks "switch players?" first
- *     when that is not this point's server. Empty when the point has no
- *     neighbouring game.
- *   · `shiftOverflow` — only on a leftover: a row sitting past the row that
- *     decided its game, whose score reads "Game–30" (`game-shift.ts`). Moves
- *     every leftover of that game into the next one, and on down the match.
- *   · `reset` — only on a point that has changed and has a stored seed, and
- *     not while another live point was built from one of its vendor rallies
- *     (`sharesVendorRally`): the two halves of a split. Reset would put the
- *     point's own fields back and call it `unchanged`, which a point whose
- *     rally was cut in two is not.
- *   · `remove` — always.
+ * What the ⋯ menu can ask for on `point`, as plain data.
+ *
+ * - `addAbove` / `addBelow`: an empty point beside this one, in its game.
+ * - `combineAbove` / `combineBelow`: only when that neighbour is in the same
+ *   game (point-combine.ts).
+ * - `switchPlayers`: on every live point with a stroke that names a hitter
+ *   (player-swap.ts). When the rows contradict the server it `contradicts`, and
+ *   the menu lists it first.
+ * - `markLet` / `markNotAPoint`: one point patch; null once the point is
+ *   either. `countPoint` puts the ending back (`countPointPatch`).
+ * - `move`: the games either side of the point; empty with no neighbouring
+ *   game.
+ * - `shiftOverflow`: only on a row sitting past the one that decided its game
+ *   (game-shift.ts).
+ * - `reset`: only on a changed point with a stored seed, and not while another
+ *   live point was built from one of its vendor rallies (`sharesVendorRally`):
+ *   half of a split is not `unchanged`.
+ * - `remove`: always.
  */
 export function pointMenuActions(
   point: LabelPoint,
@@ -197,10 +177,8 @@ export function pointMenuActions(
 }
 
 /**
- * The row's ⋯ — board 08l's `.bk-ib`, a 22px trigger in the rail's ink. The
- * row's actions group owns the reveal (hover, focus, the playing row); inside
- * it the ⋯ is just there. Two panels in one menu: the actions, and — behind
- * "Move to game…" — the games either side of the point.
+ * The row's ⋯: a 22px trigger in the rail's ink. Two panels in one menu: the
+ * actions and, behind "Move to game…", the games either side of the point.
  */
 export function PointMenu({
   point,
@@ -213,10 +191,7 @@ export function PointMenu({
   number: number;
   edit: EditContext;
   operations: LabelRowOperations;
-  /**
-   * The tone of the menu the ⋯ opens — the rail's. The menu is portalled, so
-   * the rail's palette does not reach it (`label-rail-tone.ts`).
-   */
+  /** The menu's tone: portalled, so the rail's palette does not reach it. */
   menu?: FloatMenuTone;
 }) {
   const [open, setOpen] = useState(false);
@@ -262,8 +237,7 @@ export function PointMenu({
       className="flex justify-end"
       onClick={(event) => event.stopPropagation()}
     >
-      {/* The dark tooltip around the menu, as every row's ⋯ wears it
-          (`match-actions-menu.tsx`): open, the menu already says its name. */}
+      {/* The tooltip hides while open: the menu already says its name. */}
       <ChromeTooltip label="Point actions" side="top" hidden={open}>
         <span className="inline-flex">
           <FloatMenu
@@ -381,8 +355,6 @@ export function PointMenu({
                 ) : null}
                 {switchFirst ? null : switchItem}
                 <FloatMenuDivider />
-                {/* Whether the point counts: a let or a non-point keeps its
-                    row and its shots, and the score skips it. */}
                 {actions.markLet ? (
                   <FloatMenuItem
                     label="Mark as a let"

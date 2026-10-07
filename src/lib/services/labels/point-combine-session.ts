@@ -1,22 +1,12 @@
 /**
- * The labelling console's "Combine with point above / below", admin-gated:
- * two neighbouring points of a game become one, the later point's shots
- * joining the earlier and the later row left as a tombstone
- * (`point-combine.ts`).
+ * The console's "Combine with point above / below" (`point-combine.ts`).
+ * Admin-gated like edit-session.ts; not the marks gate.
  *
- * Same shape as point-insert-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a session that is
- * not `labelling` (`checkSessionOpen`), and decides what to write with the
- * pure plan the console ran for its optimistic rows. A session labelled
- * without marks takes a combine too — a manual edit, not an answer to a mark.
- *
- * Its writes, in order, on `label_shots` and `label_points` and nothing
- * else: ONE UPDATE moving the later point's shots (`label_point_id`, by id
- * list) — their statuses untouched; ONE UPDATE of the kept point's winner,
- * ending, ended by, rally ids and status; ONE compare-and-set UPDATE
- * tombstoning the later point (`updateIfUnchanged`, as a plain delete is
- * written). No row is ever removed. `tests/label-operations.spec.ts` scans
- * this file for a delete.
+ * Its writes, in order, on `label_shots` and `label_points` only: one UPDATE
+ * moving the later point's shots (`label_point_id`, by id list), their statuses
+ * untouched; one UPDATE of the kept point's winner, ending, ended by, rally ids
+ * and status; one compare-and-set UPDATE tombstoning the later point
+ * (`updateIfUnchanged`). No row is ever removed.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -41,7 +31,6 @@ import type { LabelEnding, LabelPointStatus, LabelSide } from "./session";
 
 export type LabelCombinePointsResult = LabelOpResult<PointCombineSaved>;
 
-/** What the plan reads of each point of the session. */
 interface PointRow {
   id: string;
   point_index: number;
@@ -57,10 +46,7 @@ interface PointRow {
 const POINT_COLUMNS =
   "id, point_index, status, set_number, game_number, winner, ending, ended_by, vendor_rally_ids";
 
-/**
- * Check the session, read its points and the later point's shot ids, move
- * the shots, write the kept point, tombstone the later one. Never throws.
- */
+/** Move the shots, write the kept point, tombstone the later. Never throws. */
 export async function writeLabelPointCombine(params: {
   supabase: AdminClient;
   pointId: unknown;
@@ -171,7 +157,6 @@ export async function writeLabelPointCombine(params: {
   };
 }
 
-/** The admin-gated entry point behind `combineLabelPointsAction`. */
 export function combineLabelPoints(
   pointId: unknown,
   direction: unknown,

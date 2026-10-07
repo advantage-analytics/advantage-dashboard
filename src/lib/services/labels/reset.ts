@@ -1,20 +1,14 @@
 /**
  * Reset: put an edited shot or point back to the values it was seeded with.
+ * Pure: reset-session.ts writes what these plan and the console runs the same
+ * ones.
  *
- * Pure and import-free of anything server-side, like edit.ts and
- * operations.ts: the admin-gated writes (reset-session.ts) decide what to
- * write with these functions, and the `"use client"` console runs the same
- * ones for its optimistic update.
+ * The values come from the row's frozen `seed`. A row without one cannot be
+ * reset: an added row never had seeded values, and a vendor row seeded before
+ * the column existed waits for scripts/label-backfill-seed.ts.
  *
- * The values come from the row's frozen `seed`
- * (supabase/migrations/20260928190425_label_rows_seed.sql). A row without
- * one cannot be reset: an added row never had seeded values, and a vendor
- * row seeded before the column existed waits for
- * scripts/label-backfill-seed.ts.
- *
- * What a reset leaves alone: a shot's `unclear` list (not part of the seed),
- * and a point's strokes, note and checked mark — a point reset restores only
- * the point's own fields.
+ * A reset leaves alone a shot's `unclear` list and a point's strokes, note and
+ * checked mark.
  */
 
 import type { Planned } from "./operations";

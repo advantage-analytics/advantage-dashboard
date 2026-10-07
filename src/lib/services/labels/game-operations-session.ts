@@ -1,24 +1,16 @@
 /**
- * The labelling console's game operations, admin-gated: set who serves a game,
- * set what kind of game it is.
- *
- * Same shape as operations-session.ts: every entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session, and decides what to write with the pure rules in
- * game-operations.ts — the ones the console ran for its optimistic update.
+ * The labelling console's game operations: set who serves a game, set what kind
+ * of game it is. Admin-gated like edit-session.ts, planned by
+ * game-operations.ts.
  *
  * Every write is an UPDATE on `label_points`, one per live point of the game,
- * naming only `server`, `game_type` and `status`. Nothing is inserted, nothing
- * removed, and `points` / `shots` / `matches` are never touched
- * (`tests/label-game-operations.spec.ts` scans this file).
+ * naming only `server`, `game_type` and `status`.
  *
- * A game is several rows, and there is no transaction across them. Each row
- * is written compare-and-set on the `updated_at` it was read with (the touch
- * trigger moves it on every update), as a point edit is; a row that changed
- * under the plan makes the whole game re-read and re-planned from scratch, up
- * to {@link MAX_GAME_ATTEMPTS} times. Rows already written on the earlier
- * attempt are simply written again with the same values — the plan is a
- * function of the game as read, so a retry converges rather than piling up.
+ * A game is several rows with no transaction across them. Each row is written
+ * compare-and-set on the `updated_at` it was read with; a row that changed
+ * under the plan makes the whole game re-read and re-planned, up to {@link
+ * MAX_GAME_ATTEMPTS} times. The plan is a function of the game as read, so a
+ * retry converges.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -46,7 +38,6 @@ import {
   type LabelSide,
 } from "./session";
 
-/** One point of the game as it now stands. */
 export interface LabelGamePointResult {
   id: string;
   server: LabelSide;
@@ -100,7 +91,6 @@ export function toGamePoint(row: GameRow): GamePoint {
   };
 }
 
-/** The game's live rows, as stored. */
 async function readGame(
   supabase: AdminClient,
   sessionId: string,

@@ -1,56 +1,22 @@
 /**
- * Shift the points left over past a game's end into the next game — the
- * labelling console's answer to a "Game–30" score.
+ * Shift the points left over past a game's end into the next game: the
+ * console's answer to a "Game–30" score. A game boundary is stored per point
+ * and nothing re-derives it, so a point added at the top of a game leaves the
+ * game decided one row early. Pure: game-shift-session.ts writes what this
+ * plans and the console runs the same plan.
  *
- * A game boundary is stored per point (`set_number`, `game_number`, `server`
- * and `game_type` on each `label_points` row; see score.ts's header), and
- * nothing re-derives it. So when the labeller adds a point the vendor missed
- * at the top of a game, the game is decided one row early and its last rows
- * read "Game–30", "Game–40": the scoreboard's tell that they belong to the
- * NEXT game. This module plans that move as a pure rule over the console's
- * rows, like operations.ts: the admin-gated service
- * (game-shift-session.ts) writes what it plans, and the `"use client"`
- * console runs the same plan for its optimistic rows.
- *
- * ── The cascade ─────────────────────────────────────────────────────────────
- * The leftovers of a game are its live rows after the row that decided it
- * (`gameDecided`, score.ts's own rule — ad or no-ad) in `point_index` order.
- * A replayed let, a row marked `not_a_point` and a point with no winner yet
- * are leftovers too when they sit past that row: they are rows of a game
- * that is over. They move, all of them, into the NEXT game — the game of
- * the first live point after them that is not theirs — keeping their
- * `point_index`, so they open that game in point order. They take its
- * `set_number`, `game_number`, `game_type` and first server
- * (`gameFirstServer`). That game is then read again with the moved points
- * in front: if it now runs over, ITS leftovers move on to the game after
- * it, and so on, until a game does not. Each step's anchor — the point after
- * the moved rows — sits strictly later than the last, so the cascade cannot
- * revisit a game and is bounded by the number of live points besides.
- *
- * With no game after the leftovers they open a NEW one: the same set, the
- * session's highest `game_number` plus one, served by the other side from
- * the overflowing game's server, an ordinary `game`. A tiebreak (or match
- * tiebreak) takes the moved points but is never split — raw counts have no
- * "already won" row the way an ordinary game does — so the cascade stops at
- * it. Its serve rotation is NOT re-rotated: the moved points take the
- * tiebreak's first server, and the band's server menu is the labeller's way
- * to re-rotate if the tiebreak had already begun.
- *
- * A moved point's status is a move's: `labelPointStatusAfterChange` measured
- * against its seed, exactly as `planPointMove` does it, so a point shifted
- * back into the game it was seeded in reads `unchanged` again. Nothing here
- * touches `point_index` or a tombstone.
- *
- * ── Players switch with the server ──────────────────────────────────────────
- * A moved point whose server changes, and whose own strokes say the OLD
- * server served it, switches players as a whole (player-swap.ts
- * `planPlayerSwap`, the same rule as the point menu's move): its `winner`
- * and `ended_by` flip on the write, and every stroke's hitter comes out in
- * the plan's `shots`. A point whose rows already agree with its new server
- * takes the server alone. Each point is read ONCE for this, against where it
- * ends up — a point carried through two games along the cascade is compared
- * with the last — so a cascade over games with alternating servers swaps
- * exactly the points whose rows contradict their final game.
+ * - Leftovers are a game's live rows after the row that decided it
+ *   (`gameDecided`). They all move into the next game, keeping their
+ *   `point_index` and taking its set, game, type and first server
+ *   (`gameFirstServer`). That game is then read again, and so on until a game
+ *   does not run over.
+ * - With no game after, they open a new one: same set, the highest
+ *   `game_number` plus one, the other server. A tiebreak takes the moved points
+ *   but is never split or re-rotated.
+ * - A moved point's status is a move's (`labelPointStatusAfterChange`). When
+ *   its server changes and its own strokes say the old server served it, its
+ *   players switch as a whole (player-swap.ts), read once against where it ends
+ *   up.
  */
 
 import { labelPointFields, labelPointStatusAfterChange } from "./edit";
@@ -71,7 +37,6 @@ import {
 
 type LivePointStatus = Exclude<GamePoint["status"], "deleted">;
 
-/** A point as the shift reads it: a game point with its strokes. */
 export type ShiftPoint = GamePoint & { shots: readonly SwapShot[] };
 
 /**
@@ -108,7 +73,6 @@ export interface GameShiftGameRef {
 }
 
 export interface GameShiftSummary {
-  /** Distinct points moved. */
   points: number;
   /** Games the moved points went INTO — the cascade's length. */
   games: number;

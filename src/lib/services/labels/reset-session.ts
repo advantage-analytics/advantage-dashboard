@@ -1,17 +1,11 @@
 /**
- * The labelling console's Reset, admin-gated: write an edited shot's or
- * point's seed back over its values.
- *
- * Same shape as operations-session.ts: every entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session, and decides what to write with the pure rules in reset.ts — the
- * ones the console ran for its optimistic update.
+ * The console's Reset: write an edited shot's or point's seed back over its
+ * values. Admin-gated like edit-session.ts, planned by reset.ts.
  *
  * Every write is an UPDATE on `label_shots` / `label_points`, compare-and-set
  * on the status the row was read with, so a reset racing a delete in another
- * tab cannot bring a tombstone's values back. A point reset writes the
- * point's own columns only — never its strokes, note or `checked_at`.
- * `tests/label-operations.spec.ts` scans this file for a delete call.
+ * tab cannot bring a tombstone's values back. A point reset writes the point's
+ * own columns only, never its strokes, note or `checked_at`.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";

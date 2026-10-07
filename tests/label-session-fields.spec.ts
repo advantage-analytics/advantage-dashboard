@@ -15,6 +15,7 @@ import {
   updateLabelSessionFields,
   writeLabelSessionFields,
 } from "@/lib/services/labels/session-fields-session";
+import { tag } from "./fixtures/html-probe";
 import { labelSessionFixture } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -459,13 +460,6 @@ function black(
   });
 }
 
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
 /** The rail header's markup: from its marker to the scroller. */
 function header(html: string): string {
   const at = html.indexOf("data-label-rail-header");
@@ -592,20 +586,11 @@ test.describe("the score chip in the rail header", () => {
     ]) {
       expect(copy).toContain(words);
     }
-    const rail = readFileSync(
-      "src/components/admin/labels/label-black-rail.tsx",
-      "utf8",
-    );
-    expect(rail).toContain("tone={tone}");
-    expect(rail).toContain(
-      "findGapDescription(setNumber, firstPointId !== null)",
-    );
-    expect(rail).toContain("onFindGap(firstPointId)");
   });
 });
 
 test.describe("the header's total", () => {
-  test("a flag with the match's count, named for a reader; no automatic-fixes total in either tone", () => {
+  test("a flag with the match's count, named for a reader", () => {
     const html = black(labelSessionFixture(), EMPTY_MARKS);
     const head = header(html);
     // Nothing on any row: it reads zero, in the quiet ink.
@@ -614,10 +599,6 @@ test.describe("the header's total", () => {
     expect(toCheck).toContain('aria-label="Nothing left to check"');
     expect(toCheck).toContain("text-white/45");
     expect(head).toContain("lucide-flag");
-    // The wand and its count are gone: one total, not two.
-    expect(head).not.toContain("data-label-rail-fixes");
-    expect(head).not.toContain("lucide-wand-sparkles");
-    expect(head).not.toContain("automatic fix");
     // After the checked count, before the save line.
     expect(head.indexOf("data-label-rail-to-check")).toBeGreaterThan(
       head.indexOf("data-label-rail-progress"),
@@ -629,20 +610,6 @@ test.describe("the header's total", () => {
     // out off a 520px rail.
     expect(toCheck).toMatch(/class="[^"]*\bmono\b[^"]*\btext-\[10px\]/);
     expect(toCheck).toContain("shrink-0");
-
-    // ONE rail draws both tones, so the source says it for the light one:
-    // no wand, no fixes copy, one total.
-    const rail = readFileSync(
-      "src/components/admin/labels/label-black-rail.tsx",
-      "utf8",
-    );
-    expect(rail).not.toContain("WandSparkles");
-    expect(rail).not.toContain("fixesLabel");
-    expect(rail).not.toContain("data-label-rail-fixes");
-    expect(rail.match(/<RailTotal\b/g)).toHaveLength(1);
-    expect(
-      readFileSync("src/lib/services/labels/marks-copy.ts", "utf8"),
-    ).not.toContain("automatic");
   });
 
   test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {

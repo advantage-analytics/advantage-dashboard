@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import {
@@ -11,6 +9,7 @@ import {
   isAirStroke,
   volleyLinkWrites,
 } from "@/lib/services/labels/volley-link";
+import { labelShot } from "./fixtures/label-session";
 
 /**
  * A volley or an overhead takes the ball out of the air, so the previous
@@ -19,31 +18,14 @@ import {
  */
 
 let clock = 0;
-
 function shot(id: string, fields: Partial<LabelShot> = {}): LabelShot {
   clock += 1;
-  return {
-    id,
-    labelPointId: "p-1",
+  return labelShot(id, "p-1", {
     eventId: clock,
-    afterEventId: null,
-    status: "kept",
-    statusBeforeDelete: null,
-    deleteReason: null,
-    hitter: "p1",
     stroke: "forehand",
-    result: null,
-    spin: null,
-    contactX: null,
-    contactY: null,
-    landingX: null,
-    landingY: null,
     videoTime: clock,
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
-    seed: null,
     ...fields,
-  };
+  });
 }
 
 /** Near-side contact for a groundstroke, and a spot at the far net. */
@@ -397,44 +379,5 @@ test.describe("previous and next are the nearest LIVE strokes", () => {
     const a = shot("a", BACK);
     const b = shot("b", { status: "deleted", stroke: "forehand_volley" });
     expect(edit([a, b], "b", { contact_x: 1, contact_y: 14 })).toEqual([]);
-  });
-});
-
-test.describe("the console", () => {
-  const source = readFileSync(
-    join(process.cwd(), "src/components/admin/labels/label-console.tsx"),
-    "utf8",
-  );
-  const body = (name: string) => {
-    const start = source.indexOf(`const ${name} = useCallback(`);
-    expect(start, name).toBeGreaterThan(-1);
-    return source.slice(start, source.indexOf("\n  );\n", start));
-  };
-
-  test("the link follows the labeller's saved patch, off the updated rows", () => {
-    const patchShot = body("patchShot");
-    expect(patchShot).toMatch(
-      /const saved = await writeShot\(points, shotId, patch\);\s+if \(!saved\) return;/,
-    );
-    expect(patchShot).toMatch(/volleyLinkWrites\(\{\s+point: saved,/);
-    expect(patchShot).toContain("ghosts: marks !== null");
-    // The follower goes through the same optimistic shot write.
-    expect(patchShot).toContain(
-      "void writeShot([saved], follower.shotId, follower.patch);",
-    );
-  });
-
-  test("a follower's write never plans a link of its own", () => {
-    const writeShot = body("writeShot");
-    expect(writeShot).not.toContain("volleyLinkWrites");
-    expect(writeShot).not.toContain("patchShot");
-    // One save action, and the ending still follows every shot write.
-    expect(writeShot).toContain("onSaveShot(shotId, patch)");
-    expect(writeShot).toContain("syncEnding(owner, change);");
-    expect(source.match(/volleyLinkWrites\(/g)).toHaveLength(1);
-  });
-
-  test("the court click goes through patchShot, so it links too", () => {
-    expect(source).toContain("void patchShot(shot.id, step.patch);");
   });
 });

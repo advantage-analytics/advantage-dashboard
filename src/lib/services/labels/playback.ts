@@ -1,21 +1,14 @@
 /**
- * Which row of the labelling console the video is on — the pure lookup
- * behind the table's "playing" highlight.
+ * Which row of the labelling console the video is on: the pure lookup behind
+ * the "playing" highlight. `time` is on the analysis clock, as
+ * `LabelShot.videoTime` is.
  *
- * `time` is on the ANALYSIS clock, the same clock as `LabelShot.videoTime`
- * (the player adds the file's start offset back before asking — see
- * `label-video.tsx`).
- *
- * A point spans from its first live, timed stroke to whichever comes first:
- * the next point's first stroke, or {@link POINT_TAIL_SECONDS} after its own
- * last stroke. The tail covers the ball landing and the players pulling up;
- * past it the video is in dead time — a changeover, the walk back to the
- * line — and no row is playing, rather than the last point staying lit
- * through ninety seconds of towels.
- *
- * Inside a point, the playing stroke is the latest one struck at or before
- * `time`. Tombstones (`status: "deleted"`) and anything without a
- * `videoTime` are invisible here: they have no place on the video's clock.
+ * A point spans from its first live, timed stroke to whichever comes first: the
+ * next point's first stroke, or {@link POINT_TAIL_SECONDS} after its own last
+ * stroke. Past the tail the video is in dead time and no row is playing. Inside
+ * a point, the playing stroke is the latest one struck at or before `time`.
+ * Tombstones and anything without a `videoTime` have no place on the video's
+ * clock.
  */
 
 import type { LabelPoint } from "./session";
@@ -28,7 +21,6 @@ export interface PlayingRow {
   shotId: string;
 }
 
-/** One live point on the video's clock. */
 export interface PlaybackSpan {
   pointId: string;
   /** Live, timed strokes in time order. */

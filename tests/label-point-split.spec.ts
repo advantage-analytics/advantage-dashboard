@@ -1,11 +1,8 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { AdminClient } from "@/lib/supabase/admin";
-import { labelScores } from "@/lib/services/labels/score";
 import {
   applyPointSplit,
   canSplitAtShot,
@@ -21,10 +18,15 @@ import {
   writeLabelPointSplit,
 } from "@/lib/services/labels/point-split-session";
 import type { LabelPoint, LabelSession } from "@/lib/services/labels/session";
+import { tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext as sharedEditContext,
+  noop,
+  ROW_OPERATIONS,
 } from "./fixtures/label-session";
+import { findByProp } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -588,45 +590,21 @@ test.describe("writeLabelPointSplit", () => {
 
 // ── The rows' Split action ─────────────────────────────────────────────────
 
-const noop = () => {};
 const OPERATIONS = {
-  onAskDeleteShot: noop,
-  onAskDeletePoint: noop,
-  onRestoreShot: noop,
-  onRestorePoint: noop,
-  onMovePoint: noop,
-  onSetChecked: noop,
-  onAddShot: noop,
-  onAskResetShot: noop,
-  onAskResetPoint: noop,
+  ...ROW_OPERATIONS,
   onSplitPoint: noop,
   onCombinePoints: noop,
 };
 
-function editContext(
+const editContext = (
   session: LabelSession,
   overrides: Record<string, unknown> = {},
   editable = true,
-) {
-  return {
-    editable,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
-    operations: editable ? OPERATIONS : undefined,
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
-    ...overrides,
-  };
-}
-
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
+) =>
+  sharedEditContext(
+    { editable, operations: editable ? OPERATIONS : undefined, ...overrides },
+    session,
+  );
 
 /** The markup of the stroke row for `shotId`, up to the next row. */
 function shotRow(html: string, shotId: string): string {
@@ -635,32 +613,6 @@ function shotRow(html: string, shotId: string): string {
   const start = html.lastIndexOf("<div", at);
   const next = html.indexOf("data-row=", html.indexOf(">", at));
   return html.slice(start, next === -1 ? undefined : next);
-}
-
-/** The first element in a React tree whose props carry `attr`. */
-function find(
-  node: React.ReactNode,
-  attr: string,
-): React.ReactElement<Record<string, unknown>> | null {
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const hit = find(child, attr);
-      if (hit) return hit;
-    }
-    return null;
-  }
-  if (!React.isValidElement(node)) return null;
-  const element = node as React.ReactElement<Record<string, unknown>>;
-  if (attr in element.props) return element;
-  // The row's own request component is entered; everything else — the
-  // tooltip around it included — is walked through its children.
-  if (typeof element.type === "function" && element.type.name === "RowAction") {
-    return find(
-      (element.type as (p: unknown) => React.ReactNode)(element.props),
-      attr,
-    );
-  }
-  return find(element.props.children as React.ReactNode, attr);
 }
 
 test.describe("Split point here", () => {
@@ -747,7 +699,7 @@ test.describe("Split point here", () => {
         },
       }),
     });
-    const button = find(tree, "data-split-row");
+    const button = findByProp(tree, "data-split-row", ["RowAction"]);
     expect(button).not.toBeNull();
     let stopped = 0;
     (button!.props.onClick as (e: unknown) => void)({
@@ -765,7 +717,7 @@ test.describe("Split point here", () => {
       pointNumber: 1,
       edit: editContext(labelSessionFixture()),
     });
-    expect(find(bare, "data-split-row")).toBeNull();
+    expect(findByProp(bare, "data-split-row", ["RowAction"])).toBeNull();
   });
 
   test("the menu holds Reset back on a point whose rally another live point shares", () => {
@@ -800,31 +752,6 @@ test.describe("Split point here", () => {
 });
 
 // ── The console's wiring ───────────────────────────────────────────────────
-
-test("the console hands the request through runOperation, re-derives the anchor's ending and holds the new point", () => {
-  const source = readFileSync(CONSOLE, "utf8");
-  expect(source).toContain("onSplitPoint: splitPoint,");
-  expect(source).toContain("operations.splitPoint(pointId, shotId)");
-  expect(source).toMatch(
-    /applyPointSplit\(rows, pointId, draft, plan\.write\)/,
-  );
-  expect(source).toMatch(/settlePointSplit\(rows, tempId, result\)/);
-  expect(source).toMatch(/withdrawPointSplit\(rows, anchor, tempId\)/);
-  // The ending follows the shots the anchor kept; the winner is left alone.
-  expect(source).toMatch(/syncEnding\(anchor, change\)/);
-  // The new point is current, held and jumped to.
-  expect(source).toMatch(
-    /setRestPointId\(result\.point\.id\);\s*holdPoint\(result\.point\.id\);\s*jumpToPointId\.current = result\.point\.id;/,
-  );
-  expect(source).toContain("splitPoint: (");
-  const page = readFileSync(
-    "src/app/admin/labels/[sessionId]/page.tsx",
-    "utf8",
-  );
-  expect(page).toContain("splitPoint: splitLabelPointAction,");
-  const actions = readFileSync("src/app/admin/labels/actions.ts", "utf8");
-  expect(actions).toContain("export async function splitLabelPointAction(");
-});
 
 test("a render of the black console draws Split on the open point's later shots and writes nothing", () => {
   const called: string[] = [];

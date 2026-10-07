@@ -1,21 +1,13 @@
 /**
  * What a labelled stroke's coordinates already say: whether the ball went in,
- * out or into the net, and which placement bucket it landed in.
+ * out or into the net, and which placement bucket it landed in. Pure; the
+ * console calls it on every court click (court-placement.ts).
  *
- * Pure and import-free of anything server-side — the `"use client"` console
- * calls it on every court click (court-placement.ts), so a labeller who has
- * clicked where the ball was hit and where it landed never also has to pick
- * In / Out / Net by hand.
- *
- * ── Frame ──────────────────────────────────────────────────────────────────
  * `label_shots` shares the `shots` frame: `x` is metres from the centre line,
- * `y` metres from the NEAR baseline, so the net is `y = 11.885` and the far
- * baseline `y = 23.77`. It never flips with the hitter's end. The court
- * constants and both placement rules come from the derivation's court.ts —
- * its `BASELINE_M` is the baseline's distance from the net, which is the
- * net's `y` in this frame (court-geometry.ts's `NET_Y`). `serveZone` and
- * `directionZone` read x alone, in this same frame, so they take the label's
- * x untouched — exactly as transcript.ts feeds them for `shots.zone`.
+ * `y` metres from the NEAR baseline (net `y = 11.885`, far baseline `y =
+ * 23.77`). It never flips with the hitter's end. The court constants and both
+ * placement rules come from the derivation's court.ts; `serveZone` and
+ * `directionZone` read x alone, so they take the label's x untouched.
  */
 
 import {
@@ -25,9 +17,9 @@ import {
   directionZone,
   serveZone,
 } from "../splitstep/derivation/court";
-import { labelShotValues, type LabelShotPatch } from "./edit";
+import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
-import { isServeStroke, type LabelShot } from "./session";
+import { isServeStroke } from "./session";
 
 /** The net's `y`, metres from the near baseline. */
 const NET_Y = BASELINE_M;
@@ -106,16 +98,15 @@ export function shotPlacement(shot: ShotGeometry): ShotPlacement | null {
 }
 
 /**
- * The patch a typed position sends: the two coordinates of that end AND the
- * result the row's values derive once they are in — one write, so In / Out /
- * Net never lags the position it follows. Clearing an end (or typing one
- * while the other is still missing) leaves nothing to derive from:
- * `deriveShotResult` answers null, the patch carries no `result` key, and the
- * row keeps its stored value — `nextPlacement`'s rule for a court click. The volley link
- * (volley-link.ts) sends its follower's write through here too.
+ * The patch a position sends, typed or clicked on the court (`nextPlacement`):
+ * the two coordinates of that end and the result the row's values derive once
+ * they are in, in one write. With an end missing `deriveShotResult` answers
+ * null, the patch carries no `result` key and the row keeps its stored value.
+ * The volley link's follower writes (volley-link.ts) carry no result and do not
+ * come through here.
  */
 export function positionPatch(
-  shot: LabelShot,
+  shot: ShotGeometry,
   end: "contact" | "landing",
   point: { x: number; y: number } | null,
 ): LabelShotPatch {
@@ -125,6 +116,6 @@ export function positionPatch(
     end === "contact"
       ? { contact_x: x, contact_y: y }
       : { landing_x: x, landing_y: y };
-  const result = deriveShotResult({ ...labelShotValues(shot), ...placed });
+  const result = deriveShotResult({ ...shot, ...placed });
   return result === null ? placed : { ...placed, result };
 }

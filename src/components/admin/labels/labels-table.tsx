@@ -12,12 +12,9 @@ import {
 
 /**
  * A job's completion instant as date + time, e.g. "Oct 3, 2026, 2:14 PM UTC".
- *
- * UTC, with the zone named — the same fixed-zone rule as `formatWindowClose`
- * and `formatPilotEnd`. `toLocaleString` reads the runtime's own zone, so the
- * server render and the admin's browser would disagree and trip hydration. A
- * null or unparseable timestamp returns null so the caller draws `EmptyMark`
- * rather than "Invalid Date".
+ * UTC with the zone named: `toLocaleString` reads the runtime's own zone, so
+ * the server render and the browser would disagree and trip hydration. Null or
+ * unparseable returns null.
  */
 function formatCompletedAt(iso: string | null): string | null {
   if (!iso) return null;
@@ -34,17 +31,11 @@ function formatCompletedAt(iso: string | null): string | null {
 }
 
 /**
- * The Admin › Labels list — every completed Advantage Intelligence job an
- * admin could hand-label, T4.
- *
- * Follows the same Data Table shell as `requests-table.tsx`/`teams-table.tsx`
- * (hairlined card, 52px flex rows, no rule between rows), but this table's
- * rows are neither container rows nor record rows (Data Table law 3): a row
- * has nowhere to navigate to by itself — `/admin/labels/[sessionId]` only
- * exists once a session has been seeded, which is the click itself. So the
- * row carries no `onClick` and no chevron; the only control is
- * `StartLabellingButton`, and it is a Server Component throughout except for
- * that one button.
+ * The Admin › Labels list: every completed Advantage Intelligence job an admin
+ * could hand-label. The Data Table shell of `requests-table.tsx`, but a row has
+ * nowhere to navigate to: `/admin/labels/[sessionId]` only exists once a
+ * session has been seeded, which is the click itself. So no `onClick` and no
+ * chevron; the only control is `StartLabellingButton`.
  */
 export function LabelsTable({ rows }: { rows: readonly LabelJobRow[] }) {
   return (
@@ -107,15 +98,12 @@ function LabelJobRowView({ row }: { row: LabelJobRow }) {
         </span>
       </span>
 
-      {/* Points — the labelling unit, compared down its column. */}
       <span
         className={cn(COL.points, "tabular text-[13px] text-[var(--ink-900)]")}
       >
         {row.pointCount}
       </span>
 
-      {/* Progress — "N of M checked", or the not-yet mark when nobody has
-          started. */}
       <span className={cn(COL.progress, "text-[12px] text-[var(--ink-700)]")}>
         {row.session ? (
           <>

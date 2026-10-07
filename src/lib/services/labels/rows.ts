@@ -101,7 +101,6 @@ export interface LabelShotRow {
 export const LABEL_SHOT_COLUMNS =
   "id, label_point_id, event_id, after_event_id, status, status_before_delete, delete_reason, hitter, stroke, result, spin, contact_x, contact_y, landing_x, landing_y, video_time, site_removal, site_removal_restored_at, seed";
 
-/** A shot row as the console draws it. */
 export function toLabelShot(row: LabelShotRow): LabelShot {
   return {
     id: row.id,

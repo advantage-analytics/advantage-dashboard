@@ -5,17 +5,10 @@ import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { saveStatusView, type SaveStatus } from "./save-status";
 
 /**
- * The header's autosave line — board 08's green dot and "Saved · just now".
- * Words and transitions live in save-status.ts; this draws them, and ticks
- * every 30 s so "just now" ages into "2 min ago" instead of going stale. A
- * save newer than the last tick reads "just now" (the age floors at zero).
- *
- * A failure is `role="alert"`, so it is announced the moment it happens; the
- * routine saving/saved chatter is a polite status.
- *
- * `tone="dark"` is the same line on the black view's rail header (board 08l's
- * `.bk-sv`): 11px at white/55 with the dot as before — the words and the
- * roles do not change with the ground.
+ * The header's autosave line. Words and transitions live in save-status.ts;
+ * this draws them, and ticks every 30 s so "just now" ages into "2 min ago". A
+ * failure is `role="alert"`; the routine saving/saved chatter is a polite
+ * status. `tone` changes only the ink.
  */
 export function LabelSaveStatus({
   status,

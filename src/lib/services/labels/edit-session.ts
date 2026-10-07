@@ -1,17 +1,15 @@
 /**
- * The labelling console's autosave writes: one field (or one position pair)
- * of one `label_shots` or `label_points` row per call.
+ * The labelling console's autosave writes: one field (or one position pair) of
+ * one `label_shots` or `label_points` row per call.
  *
- * Writes go to those two tables and nowhere else. Each call re-checks the
- * admin session, validates the patch whole against edit.ts's allowlist and
- * vocabularies before anything is read, refuses a row in a `complete` session
- * (the run is frozen for scoring) or a tombstone (T7 restores those), and
- * writes the patch together with the status it implies — measured against the
- * row's frozen `seed` by the same pure rule the console used for its
- * optimistic update.
+ * The shape every `*-session.ts` write shares: re-check the admin session
+ * (`requireAdmin`), run on the service-role client, refuse a session that is
+ * not `labelling` (`checkSessionOpen`), and decide what to write with the same
+ * pure rule the console ran for its optimistic update.
  *
- * Runs on the service-role client, like seed-session.ts and the loader behind
- * the page (`getLabelSession`), with `requireAdmin` as the gate.
+ * Here the patch is validated whole against edit.ts's allowlist before anything
+ * is read, a tombstone is refused, and the patch is written together with the
+ * status it implies, measured against the row's frozen `seed`.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -58,23 +56,19 @@ const BUSY = "This row changed while it was saving. Try again.";
 
 /**
  * How many times an edit re-reads and retries when the row changed under it.
- *
- * The status an edit writes is worked out from the row as it was read, so a
- * second save landing in between would leave it stale — a changed shot marked
- * `kept`, with no Reset. Each write is therefore guarded on the `updated_at`
- * it read (the touch trigger moves it on every update): a write that matches
- * nothing means the row changed, and the edit starts again from a fresh read.
- * A delete is such a change too, and the fresh read then refuses the tombstone.
+ * The status an edit writes is worked out from the row as read, so each write
+ * is guarded on the `updated_at` it read (the touch trigger moves it on every
+ * update): a write that matches nothing means the row changed, and the edit
+ * starts again from a fresh read.
  */
 const MAX_EDIT_ATTEMPTS = 3;
 
 /**
- * Refuses anything but a `labelling` session — an error sentence, or null to
- * proceed. With `blind`, the gate the marks' own writes share (board 08m:
- * Restore a ghost, Dismiss a suggestion): a session whose `marks_enabled` is
- * false was labelled blind to the derivation and carries no mark to act on —
- * the ground-truth match is never written from there — and `blind` is the
- * sentence that says so for the write at hand.
+ * Refuses anything but a `labelling` session: an error sentence, or null to
+ * proceed. With `blind`, also refuses a session whose `marks_enabled` is false,
+ * the gate the marks' own writes share (Restore a ghost, Dismiss a suggestion):
+ * that session was labelled blind to the derivation and carries no mark to act
+ * on. `blind` is the sentence that says so.
  */
 export async function checkSessionOpen(
   supabase: AdminClient,
@@ -227,7 +221,6 @@ export async function writeLabelPointEdit(params: {
   }
 }
 
-/** The admin-gated entry point behind the `updateLabelShot` action. */
 export async function editLabelShot(
   shotId: unknown,
   patch: unknown,
@@ -242,7 +235,6 @@ export async function editLabelShot(
   });
 }
 
-/** The admin-gated entry point behind the `updateLabelPoint` action. */
 export async function editLabelPoint(
   pointId: unknown,
   patch: unknown,

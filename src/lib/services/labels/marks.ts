@@ -1,46 +1,22 @@
 /**
- * The marks the black rail draws on a label row: what the derivation
- * questioned on the point the row came from, joined back onto the label
- * tables through the vendor ids each row froze.
+ * The marks the black rail draws on a label row: what the derivation questioned
+ * on the point the row came from, joined to the label tables through the vendor
+ * ids each row froze.
  *
- * Pure. It reads a transcript built from the raw vendor file with the CURRENT
- * derivation code (`buildTranscriptForJob`) and the rallies it was built from,
- * never a stored `points.flags` / `shots.flags` column — a stored flag says
- * what the derivation thought when the rows were written, a mark says what it
- * thinks now, and the console compares the labeller against the latter. The
- * label tables carry no flags at all (session.ts).
+ * Pure. Built from a transcript made from the raw vendor file with the CURRENT
+ * derivation code (`buildTranscriptForJob`), never from a stored flags column:
+ * a mark says what the derivation thinks now, which is what the labeller is
+ * compared against. Plain data (no Map, Set or class) so it crosses the RSC
+ * boundary.
  *
- * Two flags exist only here, computed from the rally and from nothing stored:
- * `serve_fault` (one serve, called out, a short tail — a possible fault the
- * returner hit back) and `pick_winner` (the fold never settled the winner,
- * which is exactly when the seed left `winner` null).
+ * `serve_fault` and `pick_winner` exist only here. "Wrong side for the score"
+ * and "Same side twice" describe the vendor's score, which the labeller is
+ * correcting, so they are raised live from `serveSides` against the labelled
+ * score (score-marks.ts).
  *
- * Two of the derivation's flags are deliberately NOT marks here: "Wrong side
- * for the score" (`score_side_mismatch`) and "Same side twice"
- * (`service_court_repeat`) describe the VENDOR's score, which the labeller is
- * busy correcting. What this module hands over instead is the one fact only
- * the vendor file knows — `serveSides`, the side each point's opening serve
- * was actually hit from — and the console raises those two flags from it
- * against the LIVE labelled score (score-marks.ts), so a corrected winner or
- * an added point re-reads them at once.
- *
- * Every code has a TIER, decided in one place (`LABEL_MARK_META`): `count`
- * can change the score and is the amber chip the header counts; `hint` is
- * about how a point ended and is one quiet line in the open point; `hidden`
- * is not drawn or counted anywhere and, by default, is not in this module's
- * output at all — the labeller changed almost nothing on the points those
- * marked. The suggestions (`same_player_consecutive`'s missing stroke) and
- * `serveSides` are built beside the marks, not from them, so a hidden chip
- * takes neither away; the strokes the site removed are label rows of their
- * own (site-removal.ts) and never depended on a mark.
- *
- * The result is plain data — records and arrays, no Map, Set or class —
- * because it is built in a Server Component and handed to the `"use client"`
- * console across the RSC boundary.
- *
- * Imports only the pure derivation modules and `labels/session`: nothing from
- * `next/`, `components/` or a server file may reach a module the client
- * bundle can import.
+ * Every code has a tier, decided once in `LABEL_MARK_META`: `count` (amber
+ * chip, counted in the header), `hint` (one quiet line in the open point),
+ * `hidden` (omitted unless `hidden: true`, which only the scorecard asks for).
  */
 
 import {
@@ -65,16 +41,7 @@ import {
   type LabelSide,
 } from "./session";
 
-/**
- * How loudly a mark is drawn.
- *
- * - `count` — can change the score: an amber chip on the point's row, counted
- *   in the rail header's total.
- * - `hint` — about HOW the point ended, rarely who won: no chip and no count,
- *   one quiet line in the open point (marks-state.ts `pointRowMarkList`).
- * - `hidden` — drawn nowhere and counted nowhere; left out of
- *   `buildLabelMarks` unless asked for (`hidden`, the scorecard's reading).
- */
+/** How loudly a mark is drawn (see the file comment). */
 export type LabelMarkTier = "count" | "hint" | "hidden";
 export type LabelMarkScope = "point" | "shot";
 
@@ -84,27 +51,19 @@ export const LABEL_ONLY_FLAGS = {
   SERVE_FAULT: "serve_fault",
   /** The fold never settled who won; the seed left `winner` null. */
   PICK_WINNER: "pick_winner",
-  /**
-   * A stroke lands out or in the net and exactly one more follows it: a swing
-   * after the point was over? Read off the labelled rows as they stand
-   * (marks-state.ts `shotAfterPointEnd`), never built from the vendor file.
-   */
+  /** A stroke lands out or in the net and exactly one more follows it. */
   SHOT_AFTER_POINT_END: "shot_after_point_end",
 } as const;
 
 /**
- * Every code that becomes a mark, with how loudly it is drawn and where it
- * sits — the ONE place a code's tier is decided. A code in a transcript's
- * `flags[]` that is not a key here produces nothing — the withdrawn fixes,
- * and anything the derivation adds later, stay invisible until a row is
- * written for them deliberately.
+ * Every code that becomes a mark, with its tier and where it sits: the one
+ * place a tier is decided. A code in a transcript's `flags[]` that is not a key
+ * here produces nothing.
  *
- * One code has two tiers: `net_hit_contradicts_height` is a `hint` only on
- * the point's last stroke, where it bears on the ending, and `hidden` on any
- * stroke before it (`netHitTier`). `same_player_consecutive` and
- * `phantom_strokes_dropped` are hidden as CHIPS only: the dashed
- * missing-stroke slot and the struck-through removed stroke they describe
- * are drawn as before.
+ * `net_hit_contradicts_height` is a `hint` only on the point's last stroke and
+ * `hidden` before it (`netHitTier`). `same_player_consecutive` and
+ * `phantom_strokes_dropped` are hidden as chips only: the missing-stroke slot
+ * and the struck-through removed stroke are still drawn.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -139,10 +98,7 @@ export function isLabelMarkCode(value: string): value is LabelMarkCode {
 
 type NoParams = Record<string, never>;
 
-/**
- * What each mark carries for its hover line (`markHover`). Sides, never
- * names — the console substitutes the players' names at render time.
- */
+/** What each mark carries for its hover line. Sides, never names. */
 export interface LabelMarkParams {
   winner_disputed: { scoreWinner: LabelSide; lastStrokeWinner: LabelSide };
   winner_to_error_by_bounce: { loser: LabelSide };
@@ -152,10 +108,7 @@ export interface LabelMarkParams {
   reserve_after_in: NoParams;
   service_court_repeat: { side: LabelServeSide | null };
   score_side_mismatch: {
-    /**
-     * The point score before the point, server-first, as the labelled rows
-     * read it (score.ts's `scoreBefore`).
-     */
+    /** The score before the point, server-first (score.ts `scoreBefore`). */
     score: string | null;
     expected: LabelServeSide | null;
     actual: LabelServeSide | null;
@@ -183,11 +136,7 @@ export interface LabelMarkParams {
   geometry_discarded: NoParams;
 }
 
-/**
- * One mark on a point or a shot. `scope` follows from `code`; so does `tier`,
- * but for the one code that is quieter off the point's last stroke
- * (`netHitTier`).
- */
+/** One mark. `scope` and `tier` follow from `code` (see `netHitTier`). */
 export type LabelMark = {
   [C in LabelMarkCode]: {
     code: C;
@@ -230,13 +179,7 @@ export interface LabelMarks {
   /** Label shot id → its marks. */
   shots: Record<string, LabelMark[]>;
   suggestions: LabelSuggestion[];
-  /**
-   * Label point id → the side its opening serve was hit from, read off the
-   * server's stance in the vendor file (`serveCourtSide`). Only points with
-   * a vendor rally and a serve clear of the centre mark; a point the
-   * labeller added is never here. What score-marks.ts holds the labelled
-   * score against.
-   */
+  /** Label point id → the side its opening serve was hit from, when known. */
   serveSides: Record<string, LabelServeSide>;
 }
 
@@ -281,12 +224,12 @@ export function netHitTier(isLastStroke: boolean): LabelMarkTier {
 }
 
 /**
- * A rally's vendor labels as sides. Read through the transcript's own shots
+ * A rally's vendor labels as sides, read through the transcript's own shots
  * (`is_player1` by `event_id`), not by comparing labels to `player1Label`: a
- * frozen stretch relabels its strokes (frozen.ts `withServer`), so the raw
- * rally's label and the transcript's can disagree, while the event id never
- * does. A label no kept stroke carries — a phantom's, say — is the other side
- * of one that is; a rally with no kept stroke at all falls back to the label.
+ * frozen stretch relabels its strokes (frozen.ts `withServer`), so labels can
+ * disagree while the event id never does. A label no kept stroke carries is the
+ * other side of one that is; a rally with no kept stroke falls back to the
+ * label.
  */
 function labelSides(
   rally: SplitStepRally,
@@ -310,10 +253,7 @@ function labelSides(
   };
 }
 
-/**
- * The marks of one transcript point, in the order the derivation listed its
- * flags, plus the two labels-only flags last.
- */
+/** One transcript point's marks, in flag order; labels-only ones last. */
 function pointMarks(
   point: DerivedPoint,
   rally: SplitStepRally | undefined,
@@ -388,10 +328,7 @@ function pointMarks(
   return marks;
 }
 
-/**
- * The marks of one derived shot, from its own flags. `shots` are the point's
- * kept strokes, so the last of them is the point's last stroke.
- */
+/** One derived shot's marks. `shots` are the point's kept strokes. */
 function shotMarks(shots: DerivedShot[], index: number): LabelMark[] {
   const shot = shots[index];
   const marks: LabelMark[] = [];
@@ -418,11 +355,7 @@ function shotMarks(shots: DerivedShot[], index: number): LabelMark[] {
   return marks;
 }
 
-/**
- * Consecutive kept shots by one player, two serves excepted — the pairs
- * `same_player_consecutive` fires on (flags.ts), each one a stroke the vendor
- * probably never detected.
- */
+/** Consecutive kept shots by one player, two serves excepted. */
 function samePlayerPairs(
   shots: readonly DerivedShot[],
 ): Array<[DerivedShot, DerivedShot]> {
@@ -437,10 +370,7 @@ function samePlayerPairs(
   return pairs;
 }
 
-/**
- * The side the rally's opening serve was hit from, or null without a serve,
- * without a position, or with the server too near the centre mark to say.
- */
+/** The side the rally's opening serve was hit from, or null when unknown. */
 function openingServeSide(
   rally: SplitStepRally | undefined,
 ): LabelServeSide | null {
@@ -474,21 +404,14 @@ function midpoint(a: number | null, b: number | null): number | null {
 /**
  * Build the marks for one session.
  *
- * `points` is the session's rows in `point_index` order, as `getLabelSession`
- * returns them (tombstones included). A transcript point lands on the label
- * point whose `vendorRallyIds` holds its `rally_id`; a shot flag on the label
- * shot whose `eventId` is the derived shot's `event_id`. A flag whose rally
- * or event has no label row is dropped: a point the labeller deleted
- * outright, or a session seeded from a payload the derivation now reads
- * differently, draws nothing rather than something on the wrong row.
+ * `points` is the session's rows in `point_index` order, tombstones included. A
+ * transcript point lands on the label point whose `vendorRallyIds` holds its
+ * `rally_id`; a shot flag on the label shot whose `eventId` is the derived
+ * shot's `event_id`. A flag whose rally or event has no label row is dropped.
+ * `serveSides` is read off the first transcript point that lands on each label
+ * point.
  *
- * `serveSides` is read off the first transcript point that lands on each
- * label point — a point built from several rallies opened with the first.
- *
- * A `hidden` mark is left out: it never reaches a row. `hidden: true` keeps
- * them, for the one reader that measures every code against what the
- * labeller did (labels/scorecard.ts) — never for the console. The
- * suggestions and `serveSides` are the same either way.
+ * `hidden: true` keeps the hidden marks, for the scorecard only.
  */
 export function buildLabelMarks(
   transcript: Transcript,

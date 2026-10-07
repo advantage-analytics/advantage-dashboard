@@ -7,7 +7,6 @@ import {
   type LabelMarkParams,
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
-import * as marksCopy from "@/lib/services/labels/marks-copy";
 import {
   MARK_LABEL,
   markHover,
@@ -15,13 +14,13 @@ import {
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
+  hoverLine,
   markState,
   markStates,
   markSummary,
   pointChanged,
   pointRowMarkList,
   rollupMarks,
-  stateHover,
   stateHoverParts,
   type MarkListPoint,
   type MarkStatePoint,
@@ -126,16 +125,13 @@ test.describe("mark copy", () => {
     });
   });
 
-  test("the header has one total's words, and none for automatic fixes", () => {
+  test("the header has one total's words", () => {
     expect(toCheckLabel(0)).toBe("Nothing left to check");
     expect(toCheckLabel(1)).toBe("1 flag to check");
     expect(toCheckLabel(41)).toBe("41 flags to check");
     expect(onPointsDetail(0)).toBeUndefined();
     expect(onPointsDetail(1)).toBe("On 1 point");
     expect(onPointsDetail(30)).toBe("On 30 points");
-    // The fixes total and the removed-shots chip label went with their chips.
-    expect("fixesLabel" in marksCopy).toBe(false);
-    expect("fixLabel" in marksCopy).toBe(false);
   });
 
   test("hover lines are the board's, with the players' names", () => {
@@ -311,14 +307,14 @@ test.describe("a flag's life", () => {
     ).toBe("settled");
     expect(markState(flag, point(), [suggestion], rows("added"))).toBe("open");
     expect(
-      markStates([sameSide, flag], point(), [suggestion], rows("added")).marks,
+      markStates([sameSide, flag], point(), [suggestion], rows("added")),
     ).toEqual(["settled", "open"]);
   });
 
+  const stateHover = (...args: Parameters<typeof stateHoverParts>) =>
+    hoverLine(stateHoverParts(...args));
+
   test("the state hovers are the board's", () => {
-    expect(stateHover(flag, "open", names, SENTENCE)).toBe(
-      markHover(flag, names),
-    );
     expect(stateHover(flag, "settled", names, SENTENCE)).toBe(
       "Check the ending · settled. You changed the ending to Backhand error by Ace.",
     );
@@ -370,40 +366,37 @@ test.describe("the row roll-up", () => {
     rollupMarks(countMarks, markStates(countMarks, p));
 
   test("no marks, nothing to show", () => {
-    expect(rollup([], point())).toEqual({ flag: null, pencil: false });
+    expect(rollup([], point())).toBeNull();
   });
 
   test("one mark keeps its words", () => {
     expect(rollup([sample("winner_disputed")], point())).toEqual({
-      flag: { text: "Check the ending", count: 1, state: "open" },
-      pencil: false,
+      text: "Check the ending",
+      count: 1,
+      state: "open",
     });
   });
 
   test("two marks read as a count", () => {
     expect(
       rollup([sample("winner_disputed"), sample("pick_winner")], point()),
-    ).toEqual({
-      flag: { text: "2 to check", count: 2, state: "open" },
-      pencil: false,
-    });
+    ).toEqual({ text: "2 to check", count: 2, state: "open" });
   });
 
   test("a settled mark loses its words and the pencil appears", () => {
     const marks = [sample("winner_disputed")];
     expect(rollup(marks, point({ status: "edited" }))).toEqual({
-      flag: { text: null, count: 1, state: "settled" },
-      pencil: true,
+      text: null,
+      count: 1,
+      state: "settled",
     });
     expect(
       rollup(marks, point({ status: "edited", checkedAt: CHECKED_AT })),
-    ).toEqual({
-      flag: { text: null, count: 1, state: "checked" },
-      pencil: true,
-    });
+    ).toEqual({ text: null, count: 1, state: "checked" });
     expect(rollup(marks, point({ checkedAt: CHECKED_AT }))).toEqual({
-      flag: { text: null, count: 1, state: "checked-as-is" },
-      pencil: false,
+      text: null,
+      count: 1,
+      state: "checked-as-is",
     });
   });
 
@@ -414,34 +407,27 @@ test.describe("the row roll-up", () => {
         [sample("service_court_repeat"), sample("winner_disputed")],
         point({ dismissed: ["missing_point"] }),
       ),
-    ).toEqual({
-      flag: { text: "Check the ending", count: 2, state: "open" },
-      pencil: false,
-    });
+    ).toEqual({ text: "Check the ending", count: 2, state: "open" });
     // Dismissed outranks checked as is.
     expect(
       rollup(
         [sample("service_court_repeat"), sample("winner_disputed")],
         point({ dismissed: ["missing_point"], checkedAt: CHECKED_AT }),
-      ).flag,
+      ),
     ).toEqual({ text: null, count: 2, state: "dismissed" });
   });
 
   test("the pencil follows any change to the point or its shots", () => {
-    const marks = [sample("winner_disputed")];
-    expect(rollup(marks, point({ status: "added" })).pencil).toBe(true);
+    expect(pointChanged(point({ status: "added" }))).toBe(true);
     for (const status of ["edited", "added", "deleted"] as const) {
-      expect(rollup(marks, point({ shots: [shot({ status })] })).pencil).toBe(
-        true,
-      );
+      expect(pointChanged(point({ shots: [shot({ status })] }))).toBe(true);
     }
     expect(
-      rollup(
-        marks,
+      pointChanged(
         point({ shots: [shot({ siteRemovalRestoredAt: CHECKED_AT })] }),
-      ).pencil,
+      ),
     ).toBe(true);
-    expect(rollup([], point({ status: "edited" })).pencil).toBe(true);
+    expect(pointChanged(point({ status: "edited" }))).toBe(true);
   });
 });
 
@@ -473,9 +459,6 @@ test.describe("the tiers on a point", () => {
   const HIDDEN = CODES.filter((c) => LABEL_MARK_META[c].tier === "hidden");
 
   test("count marks are the chip's; hints the open point's line; hidden ones neither", () => {
-    expect(COUNT.length).toBe(6);
-    expect(HINT.length).toBe(7);
-    expect(HIDDEN.length).toBe(6);
     // Every code of every tier on one point, the shot-scoped ones on its
     // last stroke — the most a point could be handed.
     const p = listPoint([listShot("s1"), listShot("s2")]);

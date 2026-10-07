@@ -1,30 +1,19 @@
 /**
- * Combine two neighbouring points of a game into one: the vendor cut one
- * real point into two rallies (a let it took for a serve, a rally it lost
- * the ball in and picked up again), so two `label_points` rows hold the
- * strokes of one. The ⋯ menu's "Combine with point above" / "Combine with
- * point below" joins this point with its nearest live neighbour, when that
- * neighbour is in the SAME game. Three or more are combined by repeating.
+ * Combine two neighbouring points of a game into one: the vendor cut one real
+ * point into two rallies. Joins a point with its nearest live neighbour in the
+ * same game.
  *
- * The EARLIER point is kept. Every shot row of the later one — tombstones
- * included, so no row is left on a point that is gone — takes the earlier
- * point's id in ONE update; statuses are untouched (a moved vendor shot is
- * still `kept`, the comparison joins on `event_id`). The earlier point takes
- * the LATER point's `winner`, `ending` and `ended_by` — the rally really
- * ended where the later one did — and the union of both rows'
- * `vendor_rally_ids`, so the derivation's marks (`buildLabelMarks`, which
- * reads every id) land on the kept point; its status is `edited` (an `added`
- * point stays `added`). The later point becomes a tombstone through the
- * ordinary delete rule (`planPointDelete`), keeping its row.
+ * The earlier point is kept. Every shot row of the later one (tombstones
+ * included) takes its id in one update, statuses untouched. It takes the later
+ * point's `winner`, `ending` and `ended_by` and the union of both rows'
+ * `vendor_rally_ids`, so the derivation's marks land on it; its status is
+ * `edited` (`added` stays `added`). The later point becomes a tombstone
+ * (`planPointDelete`) with no shot rows: no Undo is offered
+ * (`isCombinedTombstone`), and the way back is "Split point here" on the first
+ * moved shot.
  *
- * That tombstone has no shot rows of its own, and restoring it would bring
- * back an EMPTY point: the console draws it as "Combined into the point
- * above" with no Undo (`isCombinedTombstone`), the restore service refuses
- * it, and the way back is "Split point here" on the first moved shot.
- *
- * Pure, and importable from the client bundle: the console runs
- * `applyPointCombine` for its optimistic rows and `point-combine-session.ts`
- * runs `planPointCombine` before its writes.
+ * Pure: the console runs `applyPointCombine`, `point-combine-session.ts` runs
+ * `planPointCombine`.
  */
 
 import {
@@ -59,7 +48,6 @@ export type CombinablePoint = Pick<
   | "vendorRallyIds"
 > & { shots: readonly Pick<LabelPoint["shots"][number], "id">[] };
 
-/** The kept point's columns after the combine. */
 export interface CombineKeptWrite {
   winner: LabelSide | null;
   ending: LabelEnding | null;
@@ -159,10 +147,7 @@ export function planPointCombine(
   };
 }
 
-/**
- * A tombstone with no shot rows of its own: what a combine leaves behind.
- * Undo is not offered on it — restoring would bring back an empty point.
- */
+/** A tombstone with no shot rows: what a combine leaves. No Undo. */
 export function isCombinedTombstone(
   point: Pick<LabelPoint, "status"> & { shots: readonly unknown[] },
 ): boolean {
@@ -209,10 +194,7 @@ export function applyPointCombine(
   });
 }
 
-/**
- * `applyPointCombine` undone: both rows exactly as they were before. What
- * the console does when the write fails.
- */
+/** `applyPointCombine` undone: both rows as they were. */
 export function withdrawPointCombine(
   points: readonly LabelPoint[],
   kept: LabelPoint,
@@ -229,7 +211,6 @@ export interface PointCombineSaved {
   removed: { id: string } & PointDeleteWrite;
 }
 
-/** The two rows confirmed as the server wrote them. */
 export function settlePointCombine(
   points: readonly LabelPoint[],
   saved: PointCombineSaved,

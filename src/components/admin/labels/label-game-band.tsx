@@ -24,13 +24,9 @@ import type {
 import type { SideNames } from "./label-format";
 
 /**
- * What one game band says, as plain data: the band draws it, and a spec can
- * read it without rendering.
- *
- * Everything is read off the game's LIVE points, the same way the scoreboard
- * and the game operations read them: the type is its first live point's, the
- * server its first live point's that names one (in a tiebreak, who serves
- * first).
+ * What one game band says, as plain data. Read off the game's live points: the
+ * type is its first live point's, the server its first live point's that names
+ * one.
  */
 export interface GameBandModel {
   game: LabelGame;
@@ -146,19 +142,14 @@ export function gameBandMenus(
 }
 
 /**
- * The points rail's game header type, as the match Video tab draws it
- * (`film/point-list.tsx`: `gameLabel` / `gameMeta`). Copied, not imported —
- * that rail keeps its tones private — so a change there is a change here too.
+ * The points rail's game header type (`film/point-list.tsx`). Copied, not
+ * imported: that rail keeps its tones private, so a change there is a change
+ * here too.
  */
 const BAND_LABEL = "mono text-[9px] tracking-[1.4px] uppercase";
 const BAND_META = "mono tabular text-[10px]";
 
-/**
- * The band's paint: `LIST_TONE.dark`'s game header on the row's own 14px
- * inset, the frame's `.bk-gl` / `.bk-gm` inks, and the trigger in the rail's
- * ink (board 08l's `.bk-gh`). Its whites follow the rail's palette
- * (`label-rail-tone.ts`), so the one paint draws both grounds.
- */
+/** The band's paint, in the rail's palette: one paint for both grounds. */
 const PAINT = {
   band: "flex items-center px-[14px] pt-[13px] pb-[5px]",
   labelInk: "text-white/45",
@@ -170,24 +161,14 @@ const PAINT = {
 } as const;
 
 /**
- * A game band — the points rail's game header, drawn above the first live
- * point of each `(set_number, game_number)`. No ground and no rule: the
- * rows' own spacing separates the games, as it does in the rail.
+ * A game band: the points rail's game header, above the first live point of
+ * each `(set_number, game_number)`. Left, "Set N · Game M", "Set N · Tiebreak"
+ * or "Match tiebreak"; right, the set's games before it and who serves. With
+ * both callbacks the game's name and its server are triggers, each opening a
+ * `FloatMenu`; without them the band is the same text.
  *
- * Left, "Set N · Game M" (M being the game's rank in the set), or
- * "Set N · Tiebreak" / "Match tiebreak"; right, the set's games before it
- * and who serves. With both callbacks, the game's name and its server are
- * text-button triggers in that same type, each opening a `FloatMenu`: the
- * game-type menu and the server menu. Without them — a read-only console —
- * the band is the same text with no buttons.
- *
- * Stateless: the two menus keep their own open state (`BandMenu`), so a spec
- * can read the band by walking the element tree. Changing a game here is a
- * REQUEST to the console, which owns the write; moving ONE point to another
- * game stays in that point's ⋯ menu.
- *
- * Memoised with the rail's rows: a band renders again only when its game,
- * the rows or the menus' tone change, never for the film moving on.
+ * Changing a game here is a request to the console, which owns the write.
+ * Memoised with the rail's rows: a band never renders for the film moving on.
  */
 export const LabelGameBand = memo(function LabelGameBand({
   band,
@@ -203,10 +184,7 @@ export const LabelGameBand = memo(function LabelGameBand({
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
-  /**
-   * The two menus' tone — the rail's. They are portalled, so the rail's
-   * palette does not reach them (`label-rail-tone.ts`).
-   */
+  /** The menus' tone: portalled, so the rail's palette does not reach them. */
   menu?: FloatMenuTone;
 }) {
   // The model reads every row of the game: once per band and rows, not on
@@ -250,7 +228,6 @@ export const LabelGameBand = memo(function LabelGameBand({
           {model.gameLabel}
         </span>
       )}
-      {/* The rail's spacer. A span, so the band stays one flat <div>. */}
       <span className="flex-1" />
       {menus ? (
         <span className="flex items-center">
@@ -283,11 +260,9 @@ export const LabelGameBand = memo(function LabelGameBand({
 });
 
 /**
- * One of the band's triggers and its menu — board 08g's `.btrig` + `.bmenu`.
- *
- * The trigger is 22px tall for the pointer and takes 14px of the band
- * (`-my-1`), so a band with menus is exactly as tall as one without — and as
- * the rail's header.
+ * One of the band's triggers and its menu. The trigger is 22px tall for the
+ * pointer and takes 14px of the band (`-my-1`), so a band with menus is exactly
+ * as tall as one without.
  */
 function BandMenu({
   kind,
@@ -308,7 +283,6 @@ function BandMenu({
   caption?: string;
   align: "start" | "end";
   rows: readonly GameBandMenuRow[];
-  /** The menu's tone (the band's `menu`). */
   menu: FloatMenuTone;
   /** The trigger's resting ink — the label's or the meta's. */
   ink: string;

@@ -1,3 +1,4 @@
+import { labelScores } from "@/lib/services/labels/score";
 import {
   orderLabelShots,
   type LabelPoint,
@@ -25,10 +26,11 @@ import {
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
-function shot(
+/** A kept, untimed stroke by player 1 with nothing labelled on it. */
+export function labelShot(
   id: string,
   labelPointId: string,
-  fields: Partial<LabelShot>,
+  fields: Partial<LabelShot> = {},
 ): LabelShot {
   return {
     id,
@@ -60,7 +62,7 @@ function seededShot(
   labelPointId: string,
   fields: Partial<LabelShot>,
 ): LabelShot {
-  const row = shot(id, labelPointId, fields);
+  const row = labelShot(id, labelPointId, fields);
   return {
     ...row,
     seed: row.seed ?? {
@@ -83,7 +85,7 @@ const P3 = "p-0003";
 const P4 = "p-0004";
 
 export const POINT_1_SHOTS: LabelShot[] = [
-  shot("s-return", P1, {
+  labelShot("s-return", P1, {
     eventId: 102,
     hitter: "p2",
     stroke: "backhand",
@@ -129,7 +131,7 @@ export const POINT_1_SHOTS: LabelShot[] = [
     statusBeforeDelete: "kept",
     deleteReason: "not_a_stroke",
   }),
-  shot("s-added", P1, {
+  labelShot("s-added", P1, {
     afterEventId: 102,
     hitter: "p1",
     stroke: "forehand",
@@ -143,10 +145,11 @@ export const POINT_1_SHOTS: LabelShot[] = [
   }),
 ];
 
-function point(
+/** An unchanged, unseeded point of game 1 with no strokes. */
+export function labelPoint(
   id: string,
   pointIndex: number,
-  fields: Partial<LabelPoint>,
+  fields: Partial<LabelPoint> = {},
 ): LabelPoint {
   return {
     id,
@@ -178,7 +181,7 @@ function seededPoint(
   pointIndex: number,
   fields: Partial<LabelPoint>,
 ): LabelPoint {
-  const row = point(id, pointIndex, fields);
+  const row = labelPoint(id, pointIndex, fields);
   return {
     ...row,
     seed: row.seed ?? {
@@ -208,7 +211,7 @@ export function labelSessionFixture(): LabelSession {
     videoEndsEarly: null,
     matchScore: { player1: [6, 4], player2: [3, 6] },
     points: [
-      point(P1, 0, {
+      labelPoint(P1, 0, {
         winner: "p2",
         ending: "error",
         endedBy: "p1",
@@ -250,7 +253,7 @@ export function labelSessionFixture(): LabelSession {
         // NO shot rows is what a combine leaves (`isCombinedTombstone`) and
         // offers no Undo, which this ordinary deleted point must.
         shots: [
-          shot("s-let", P3, {
+          labelShot("s-let", P3, {
             stroke: "first_serve",
             status: "deleted",
             statusBeforeDelete: "added",
@@ -299,3 +302,42 @@ export const POINT_4_SHOTS: LabelShot[] = [
 ];
 
 export const FIXTURE_POINT_IDS = { P1, P2, P3, P4 } as const;
+
+export const noop = () => {};
+
+/** The requests every rail row is handed; a spec adds its feature's own. */
+export const ROW_OPERATIONS = {
+  onAskDeleteShot: noop,
+  onAskDeletePoint: noop,
+  onRestoreShot: noop,
+  onRestorePoint: noop,
+  onMovePoint: noop,
+  onSetChecked: noop,
+  onAddShot: noop,
+  onAskResetShot: noop,
+  onAskResetPoint: noop,
+};
+
+/**
+ * The rail rows' `EditContext`: writable, nothing selected, every request a
+ * no-op, over the fixture session's points unless `session` says otherwise.
+ */
+export function editContext(
+  overrides: Record<string, unknown> = {},
+  session: {
+    points: readonly LabelPoint[];
+    adScoring: boolean;
+  } = labelSessionFixture(),
+) {
+  return {
+    editable: true,
+    names: { p1: "Lee", p2: "Vargas" },
+    selectedShotId: null,
+    onPatchPoint: noop,
+    onPatchShot: noop,
+    operations: ROW_OPERATIONS,
+    points: session.points,
+    scores: labelScores(session.points, session.adScoring).points,
+    ...overrides,
+  };
+}

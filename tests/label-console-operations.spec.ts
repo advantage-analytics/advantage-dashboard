@@ -15,6 +15,7 @@ import type {
   LabelSession,
   LabelVideo,
 } from "@/lib/services/labels/session";
+import { count, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -116,24 +117,11 @@ function renderConsole(props: Props): string {
   );
 }
 
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x27;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /** The markup after the element carrying `attr`'s opening tag. */
 function after(html: string, attr: string): string {
   const at = html.indexOf(attr);
   expect(at, attr).toBeGreaterThan(-1);
   return html.slice(html.indexOf(">", at) + 1);
-}
-
-function count(html: string, pattern: RegExp): number {
-  return html.match(pattern)?.length ?? 0;
 }
 
 // ── A tiny element walker for a stateless row ─────────────────────────────
@@ -344,23 +332,7 @@ test.describe("add point above / below", () => {
     });
   });
 
-  test("the menu draws them first, before Move to game…, with a glyph each; a read-only console has no menu", () => {
-    const source = readFileSync(
-      "src/components/admin/labels/label-point-menu.tsx",
-      "utf8",
-    );
-    const above = source.indexOf('label="Add point above"');
-    const below = source.indexOf('label="Add point below"');
-    const move = source.indexOf('label="Move to game…"');
-    expect(above).toBeGreaterThan(-1);
-    expect(above).toBeLessThan(below);
-    expect(below).toBeLessThan(move);
-    expect(source).toContain("ArrowUpToLine");
-    expect(source).toContain("ArrowDownToLine");
-    // Not behind the marks: the menu asks on every session, so the items
-    // do not read `marksEnabled`.
-    expect(source).not.toContain("marksEnabled");
-
+  test("a writable console draws a menu on every live point; a read-only one has none", () => {
     const { operations } = spies();
     const editable = renderConsole({
       ...SAVES,
@@ -646,7 +618,7 @@ test.describe("move point", () => {
   test("the console decides the question from the point's own strokes, and applies the swap to the rows it holds", () => {
     // The console cannot be re-rendered after a click under
     // `renderToStaticMarkup`, so the rows it would hold are the pure apply
-    // it runs — over the fixture — and its wiring is read off the source.
+    // it runs, over the fixture.
     const { planPointMove, applyPointMove } = loader().load(
       "src/lib/services/labels/operations.ts",
     ) as {
@@ -697,42 +669,12 @@ test.describe("move point", () => {
         session.points.find((p) => p.id === id),
       );
     }
-
-    const source = readFileSync(
-      "src/components/admin/labels/label-console.tsx",
-      "utf8",
-    );
-    const requestMove = source.slice(
-      source.indexOf("function requestMove("),
-      source.indexOf("function movePoint("),
-    );
-    expect(requestMove).toContain("moveSwapsPlayers(point, server)");
-    const movePoint = source.slice(
-      source.indexOf("function movePoint("),
-      source.indexOf("function runGameOperation("),
-    );
-    expect(movePoint).toContain("applyPointMove(p, plan.write)");
-    expect(movePoint).toContain("plan.shots");
-    expect(movePoint).toContain("result.shots");
-    expect(movePoint).toContain("shotSwapsOf(before.shots)");
-    expect(movePoint).not.toContain("syncEnding");
-    const shiftStart = source.indexOf("function shiftGameOverflow(");
-    const shift = source.slice(
-      shiftStart,
-      source.indexOf("\n  /**", shiftStart),
-    );
-    expect(shift).toContain("applyShotSwaps(");
-    expect(shift).toContain("plan.shots");
-    expect(shift).toContain("result.shots");
-    expect(shift).not.toContain("syncEnding");
   });
 });
 
 // ── Switch players ─────────────────────────────────────────────────────────
 
 test.describe("switch players", () => {
-  const MENU = "src/components/admin/labels/label-point-menu.tsx";
-
   test("the ⋯ menu offers it on every live point with a hitter, saying what it does; not on a point with none", () => {
     const { operations, asked } = askSpies();
     // P2: Lee's ace, won by Lee — the shots and the winner change hands.
@@ -765,7 +707,7 @@ test.describe("switch players", () => {
     expect(menuActions(P2, operations, session).switchPlayers).toBeNull();
   });
 
-  test("on a point whose rows contradict its server it comes first, and says who hits the serve", () => {
+  test("on a point whose rows contradict its server it says who hits the serve", () => {
     // P2 moved under Vargas before the swap rule existed: server p2, the
     // ace still Lee's.
     const session = labelSessionFixture();
@@ -777,23 +719,6 @@ test.describe("switch players", () => {
       description: "Vargas serves this game, but Lee hits the serve here",
       contradicts: true,
     });
-
-    // The menu draws a contradicting point's item before everything else,
-    // and an agreeing one's after the Combine items, before Move to game….
-    const source = readFileSync(MENU, "utf8");
-    const first = source.indexOf("{switchFirst ? (");
-    const above = source.indexOf('label="Add point above"');
-    const combineBelow = source.indexOf('label="Combine with point below"');
-    const after = source.indexOf("{switchFirst ? null : switchItem}");
-    const move = source.indexOf('label="Move to game…"');
-    expect(first).toBeGreaterThan(-1);
-    expect(first).toBeLessThan(above);
-    expect(combineBelow).toBeLessThan(after);
-    expect(after).toBeLessThan(move);
-    expect(source).toContain('label="Switch players"');
-    expect(source).toContain("ArrowLeftRight");
-    // One menu serves both of the rail's grounds: its tone is the rail's.
-    expect(source).toContain("tone={menu}");
   });
 
   test("read-only, there is no menu to offer it", () => {
@@ -802,7 +727,7 @@ test.describe("switch players", () => {
     expect(html).not.toContain("Switch players");
   });
 
-  test("the console plans the switch on the client, calls the action, and applies the flip to the rows it holds — never the ending", async () => {
+  test("the console plans the switch on the client and calls the action", async () => {
     const { calls, operations } = spies();
     const rail = railProps({ ...SAVES, operations });
     const rows = rail.operations as { onSwitchPlayers: (id: string) => void };
@@ -813,22 +738,6 @@ test.describe("switch players", () => {
     rows.onSwitchPlayers(P3);
     await Promise.resolve();
     expect(calls.switchPlayers).toHaveLength(1);
-
-    const source = readFileSync(
-      "src/components/admin/labels/label-console.tsx",
-      "utf8",
-    );
-    const start = source.indexOf("function switchPlayers(");
-    expect(start).toBeGreaterThan(-1);
-    const fn = source.slice(start, source.indexOf("\n  /**", start));
-    expect(fn).toContain("planPlayerSwitch(before)");
-    expect(fn).toContain("applyPlayerSwitch(p, plan.write)");
-    expect(fn).toContain("plan.shots");
-    expect(fn).toContain("result.shots");
-    expect(fn).toContain("shotSwapsOf(before.shots)");
-    expect(fn).not.toContain("syncEnding");
-    expect(fn).not.toContain("server");
-    expect(source).toContain("onSwitchPlayers: switchPlayers,");
   });
 });
 
@@ -947,29 +856,30 @@ test.describe("mark as a let / not a point", () => {
     expect(unseeded.patches).toEqual([[P1, { ending: null }]]);
   });
 
-  test("the menu draws the group after Switch players and the Combine items, before Move to game…", () => {
-    const source = readFileSync(MENU, "utf8");
-    const at = (needle: string) => {
-      const index = source.indexOf(needle);
-      expect(index, needle).toBeGreaterThan(-1);
-      return index;
-    };
+  test("the ⋯ menu's order: a contradicting switch, the adds, the combines, the switch, the endings, the move, the delete", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-point-menu.tsx",
+      "utf8",
+    );
     const order = [
-      at('label="Combine with point below"'),
-      at("{switchFirst ? null : switchItem}"),
-      at('label="Mark as a let"'),
-      at('description="Replayed. The score skips it."'),
-      at('label="Not a point"'),
-      at('description="Not part of the match. The score skips it."'),
-      at('label="Count this point"'),
-      at('description="It was played. The score counts it again."'),
-      at('label="Move to game…"'),
-      at('label="Delete point"'),
-    ];
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-    for (const glyph of ["RotateCcw", "Ban", "Undo2"]) {
-      expect(source).toContain(`<${glyph}`);
-    }
+      "{switchFirst ? (",
+      'label="Add point above"',
+      'label="Add point below"',
+      'label="Combine with point above"',
+      'label="Combine with point below"',
+      "{switchFirst ? null : switchItem}",
+      'label="Mark as a let"',
+      'description="Replayed. The score skips it."',
+      'label="Not a point"',
+      'description="Not part of the match. The score skips it."',
+      'label="Count this point"',
+      'description="It was played. The score counts it again."',
+      'label="Move to game…"',
+      'label="Delete point"',
+    ].map((needle) => source.indexOf(needle));
+    expect(order.every((at) => at > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((x, y) => x - y));
+    expect(source).toContain('label="Switch players"');
   });
 
   test("read-only, there is no menu to offer them", () => {

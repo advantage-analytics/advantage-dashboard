@@ -1,18 +1,12 @@
 /**
- * The labelling console's "Switch players" on one point, admin-gated
- * (`player-swap.ts` `planPlayerSwitch` has the rule).
+ * The console's "Switch players" on one point (`planPlayerSwitch`,
+ * player-swap.ts). Admin-gated like edit-session.ts.
  *
- * Same shape as operations-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session (`checkSessionOpen`, through `readPointState`), and decides what
- * to write with the pure plan the console ran for its optimistic rows.
- *
- * Its writes, in order, on `label_points` and `label_shots` and nothing
- * else: ONE compare-and-set UPDATE of the point's `winner`, `ended_by` and
- * `status` (`updateIfUnchanged`, as every point write is), then the flipped
- * strokes grouped by value tuple (`writeShotSwaps`). `server`, `set_number`
- * and `game_number` are never touched; no row is ever removed.
- * `tests/label-operations.spec.ts` scans this file for a delete.
+ * Its writes, in order, on `label_points` and `label_shots` only: one
+ * compare-and-set UPDATE of the point's `winner`, `ended_by` and `status`
+ * (`updateIfUnchanged`), then the flipped strokes grouped by value tuple
+ * (`writeShotSwaps`). `server`, `set_number` and `game_number` are never
+ * touched.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -93,7 +87,6 @@ export async function writeLabelPlayerSwitch(params: {
   };
 }
 
-/** The admin-gated entry point behind `switchLabelPointPlayersAction`. */
 export function switchLabelPointPlayers(
   pointId: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,

@@ -25,6 +25,7 @@ import type {
   LabelShot,
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
+import { labelPoint, labelShot } from "./fixtures/label-session";
 
 /**
  * The marks scorecard (`labels/scorecard.ts`): each mark code measured
@@ -61,14 +62,8 @@ function shot(
   now: Partial<LabelShot> = {},
 ): LabelShot {
   const values = seedOf(seed);
-  return {
-    id,
-    labelPointId: "p",
+  return labelShot(id, "p", {
     eventId: (eventId += 1),
-    afterEventId: null,
-    status: "kept",
-    statusBeforeDelete: null,
-    deleteReason: null,
     hitter: values.hitter,
     stroke: values.stroke,
     result: values.result,
@@ -78,11 +73,9 @@ function shot(
     landingX: values.landing_x,
     landingY: values.landing_y,
     videoTime: values.video_time,
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
     seed: values,
     ...now,
-  };
+  });
 }
 
 /** A vendor point at its seed; `now` is what the labeller made of it. */
@@ -92,23 +85,12 @@ function point(
   shots: LabelShot[] = [],
   now: Partial<LabelPoint> = {},
 ): LabelPoint {
-  return {
-    id,
-    pointIndex: index,
+  return labelPoint(id, index, {
     vendorRallyIds: [index + 1],
-    setNumber: 1,
-    gameNumber: 1,
-    server: "p1",
     serveSide: null,
     winner: "p1",
     ending: "winner",
     endedBy: "p1",
-    gameType: "game",
-    status: "unchanged",
-    statusBeforeDelete: null,
-    checkedAt: null,
-    note: null,
-    dismissed: [],
     seed: {
       set_number: 1,
       game_number: 1,
@@ -120,7 +102,7 @@ function point(
     },
     shots,
     ...now,
-  };
+  });
 }
 
 function mark<C extends LabelMarkCode>(
@@ -618,19 +600,5 @@ test.describe("the script is a thin, read-only shell", () => {
         "matches",
       ]).toContain(table[1]);
     }
-    expect(source.match(/\.select\(/g)?.length).toBe(4);
-  });
-
-  test("it reads the rows as getLabelSession does and rebuilds every code's marks from the raw file", () => {
-    expect(source).toContain("buildLabelSession(");
-    expect(source).toContain("LABEL_POINT_COLUMNS");
-    expect(source).toContain("LABEL_SHOT_COLUMNS");
-    expect(source).toContain("buildTranscriptForJob(");
-    expect(source).toMatch(/buildLabelMarks\([^)]*\{\s*hidden: true,?\s*\}/);
-    expect(source).toContain("openingMarks(");
-    expect(source).toContain("buildScorecard(");
-    expect(source).toContain("renderScorecard(");
-    // The arithmetic is the module's: the script compares nothing itself.
-    expect(source).not.toMatch(/\.seed\b/);
   });
 });

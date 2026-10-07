@@ -1,19 +1,9 @@
 /**
- * The words of a mark: its two-or-three-word label — a `count` mark's chip, a
- * `hint`'s word on the open point's quiet line — and the hover line.
- *
- * A `hidden` mark (marks.ts `LABEL_MARK_META`) is drawn nowhere; its words
- * are kept because the scorecard names every code by them
- * (labels/scorecard.ts), and so a code that is promoted again needs no copy.
- *
- * Board 08m is the source and the copy is its, word for word — the label
- * names the doubt, not the rule; the hover says what was seen, then what was
- * done or what to check, using the players' names. The board writes its
- * sample players ("Ace", "Goodman"); here the names come from `names`, keyed
- * by the side the mark's `params` carry.
- *
- * Pure, and importable from the client bundle: nothing from `next/`,
- * `components/` or a server file.
+ * The words of a mark: its short label (a `count` mark's chip, a `hint`'s word
+ * on the open point's quiet line) and the hover line. The label names the
+ * doubt, not the rule; the hover says what was seen, then what was done or what
+ * to check, with the players' names from `names`. A `hidden` mark's words are
+ * kept because the scorecard names every code by them.
  */
 
 import type { LabelMark, LabelMarkCode } from "./marks";
@@ -26,7 +16,6 @@ import type { LabelSide } from "./session";
  */
 export type MarkNames = Record<LabelSide, string>;
 
-/** A mark's words. */
 export const MARK_LABEL: Record<LabelMarkCode, string> = {
   winner_disputed: "Check the ending",
   winner_to_error_by_bounce: "Winner or error?",
@@ -49,7 +38,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   geometry_discarded: "No position",
 };
 
-/** A point score ("0-15") as the board writes one ("0–15"). */
+/** A point score ("0-15") with an en dash ("0–15"). */
 const scoreText = (score: string) => score.replace(/\s*-\s*/g, "–");
 
 // ── The rail header's total ─────────────────────────────────────────────────
@@ -68,7 +57,7 @@ export function onPointsDetail(count: number): string | undefined {
 
 // ── The score chip ──────────────────────────────────────────────────────────
 
-/** The chip's name: what is wrong, in the frame's own words. */
+/** The chip's name: what is wrong. */
 export const SCORE_MISMATCH_LABEL = "Score doesn’t add up";
 
 /** The chip's words: the labelled pair, then the entered one. */
@@ -76,7 +65,7 @@ export function scoreMismatchText(labelled: string, entered: string): string {
   return `${labelled} · entered ${entered}`;
 }
 
-/** The chip's hover sentence — the banner's, in one line. */
+/** The chip's hover sentence. */
 export function scoreMismatchDetail(
   setNumber: number,
   labelled: string,
@@ -111,12 +100,9 @@ export function findGapDescription(
 }
 
 /**
- * The hover line: the board's `tip` for the mark's code, with the players'
- * names where the board writes its sample ones.
- *
- * Four lines have a second form for what the board's single sample cannot
- * show — a mark whose side or score the derivation could not read, and a
- * removal of more than one shot.
+ * The hover line for the mark's code, with the players' names. Four lines have
+ * a second form: a mark whose side or score the derivation could not read, and
+ * a removal of more than one shot.
  */
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {

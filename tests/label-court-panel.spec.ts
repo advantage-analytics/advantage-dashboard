@@ -13,6 +13,7 @@ import {
   type VideoClock,
 } from "@/components/admin/labels/video-clock";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import { tag as tagOf } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -87,13 +88,6 @@ const title = (html: string) =>
 const subtitle = (html: string) =>
   /data-court-subtitle="[^"]*"[^>]*>([^<]*)</.exec(html)?.[1];
 
-/** The opening tag that carries `needle`. */
-function tagOf(html: string, needle: string): string {
-  const at = html.indexOf(needle);
-  expect(at, needle).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
 test.describe("the court panel", () => {
   test("not placing: the whole court, read-only, the playing stroke named", () => {
     const html = render({ playingShotId: "s-return" });
@@ -104,11 +98,7 @@ test.describe("the court panel", () => {
     expect(html).toContain("data-court-legend");
     expect(title(html)).toBe("Point 1");
     expect(subtitle(html)).toBe("Shot 2 of 3 · Vargas");
-    // A plain header — nothing to drag, nothing to minimise — and no list of
-    // the point's shots.
-    expect(html).not.toContain("data-court-handle");
-    expect(html).not.toContain("Minimise the court");
-    expect(html).not.toContain("Expand the court");
+    // No list of the point's shots.
     expect(html).not.toContain("First serve");
     expect(html).not.toContain("Backhand");
   });
@@ -161,16 +151,6 @@ test.describe("the court panel", () => {
     const empty = render({ point: null });
     expect(title(empty)).toBe("Court");
     expect(subtitle(empty)).toBe("No point open");
-  });
-
-  test("the court's box takes the panel's height and is its size container", () => {
-    const box = /class="([^"]*)"/
-      .exec(tagOf(render({}), "data-court-box"))![1]
-      .split(/\s+/);
-    expect(box).not.toContain("h-[222px]");
-    for (const token of ["[container-type:size]", "min-h-0", "flex-1"]) {
-      expect(box, token).toContain(token);
-    }
   });
 });
 

@@ -1,14 +1,12 @@
 /**
- * The two session fields the "Score doesn't add up" chip may write
- * (board 08m, `BANNER`): `label_sessions.final_score` — the match's score as
- * the labeller read it off the video, one `[p1, p2]` games pair per set — and
- * `label_sessions.video_ends_early`. Nothing else: the chip's third answer,
- * "Find the gap", is navigation and writes nothing, and `matches.score` is
- * read, never written, by any labels code.
+ * The two session fields the "Score doesn't add up" chip may write:
+ * `label_sessions.final_score` (the match's score as the labeller read it off
+ * the video, one `[p1, p2]` games pair per set) and
+ * `label_sessions.video_ends_early`. `matches.score` is read, never written, by
+ * any labels code.
  *
- * Pure, and importable from the client bundle: the console runs
- * `applyLabelSessionPatch` for its optimistic state and
- * `session-fields-session.ts` runs `parseLabelSessionPatch` before its write.
+ * Pure: the console runs `applyLabelSessionPatch` and
+ * `session-fields-session.ts` runs `parseLabelSessionPatch`.
  */
 
 import type { LabelSession } from "./session";

@@ -1,58 +1,40 @@
 /**
- * The points rail's two grounds (`label-black-rail.tsx`): `dark` is the
- * full-screen view's, `light` a white card inside the admin page. ONE rail — the same markup and the same class strings — in
- * both; only the palette under it changes, and this file is that palette.
+ * The points rail's two grounds: `dark` is the full-screen view's, `light` a
+ * white card inside the admin page. One rail, the same markup and class
+ * strings, in both; this file is the palette under it.
  *
- * ── How one set of classes paints two grounds ───────────────────────────────
- *
- * The rail's rows are written in white-at-an-alpha (`text-white/45`,
- * `bg-white/[0.06]`, `border-white/50`), which Tailwind v4 compiles to
- * `color-mix(in oklab, var(--color-white) 45%, transparent)` — and plain
- * `text-white` to `var(--color-white)`. So the light tone re-points that ONE
+ * The rows are written in white-at-an-alpha (`text-white/45`,
+ * `bg-white/[0.06]`), which Tailwind v4 compiles to `color-mix(in oklab,
+ * var(--color-white) 45%, transparent)`. The light tone re-points that one
  * variable at the page's ink:
  *
  *     [--color-white:var(--ink-900)]
  *
- * and every "white" inside the rail becomes ink at the same alpha, on white.
- * No class string changes, so nothing that pins the dark classes moves.
+ * So, for anyone writing a row:
  *
- * What follows from that, for anyone writing a row:
+ * - "White" in the rail means the rail's ink. A thing that must be white on
+ *   both grounds reads `--rail-on-accent`; the rail's ground is
+ *   `--rail-ground`.
+ * - A colour written outside a class (a `style`, a shadow, a gradient) says the
+ *   same thing by hand: `railInk(0.45)`.
+ * - The variables are inherited, so they stop at a portal. A menu takes the
+ *   rail's tone as its own prop (`FloatMenu`'s `tone`); anything else portalled
+ *   wears `RAIL_TONE_CLASS[tone]` on a wrapper.
  *
- *  · "white" in the rail means THE RAIL'S INK, not the colour white. A thing
- *    that must be white on both grounds — a letter on a `--blue` fill, the
- *    words on the dark "Now playing" pill — reads `--rail-on-accent`.
- *  · Never `bg-white` for a ground in here: in the light tone it is ink. The
- *    rail's ground is `--rail-ground`, or a DS surface token.
- *  · A colour written outside a class — a `style`, a shadow, a gradient —
- *    does not go through Tailwind, so it says the same thing by hand:
- *    `railInk(0.45)`, or the same `color-mix(…)` inside an arbitrary class.
- *  · The variables are INHERITED, so they stop at a portal. A menu opened
- *    from the rail takes the rail's tone as its own prop (`FloatMenu`'s
- *    `tone`); anything else portalled that uses these classes wears
- *    `RAIL_TONE_CLASS[tone]` on a wrapper of its own (the note popover).
- *  · A field or a trigger drawn INSIDE the rail has one compact recipe
- *    (`FIELD_DARK`, the 22px ⋯, the band's trigger), sized for the rail's
- *    rows. Its whites follow the palette, so on the light ground it is an
- *    ink wash in an ink hairline.
- *
- * The amber is the frame's in the dark tone (not a palette colour, so
- * written as rgba) and the design system's warning triple in the light one.
+ * The amber is an rgba in the dark tone and the design system's warning triple
+ * in the light one.
  */
 
 export type RailTone = "dark" | "light";
 
 /**
  * The palette, as whole-literal classes for the element the rail sits in.
- * `LabelBlackRail` wears it on its own wrapper, so a rail is painted right
- * wherever it is mounted; a view may wear it on its `<aside>` as well, for
- * chrome of its own drawn in the same inks.
  *
- *  · `--rail-ground` — what the rail sits on, for a patch that has to cover
- *    the row under it (the shot row's requests).
- *  · `--rail-on-accent` — white on both grounds.
- *  · `--rail-amber` — the open mark's text and glyph; `-wash-faint`, `-wash`
- *    and `-wash-strong` its three fills (a slot, a chip, a chip reached
- *    for); `-line` the slot's dashed edge.
+ * - `--rail-ground`: what the rail sits on, for a patch that has to cover the
+ *   row under it.
+ * - `--rail-on-accent`: white on both grounds.
+ * - `--rail-amber`: the open mark's text and glyph; `-wash-faint`, `-wash` and
+ *   `-wash-strong` its three fills; `-line` the slot's dashed edge.
  */
 export const RAIL_TONE_CLASS: Record<RailTone, string> = {
   dark: "[--rail-ground:var(--surface-dark)] [--rail-on-accent:rgb(255,255,255)] [--rail-amber:rgba(252,211,77,1)] [--rail-amber-wash-faint:rgba(253,230,138,0.06)] [--rail-amber-wash:rgba(253,230,138,0.14)] [--rail-amber-wash-strong:rgba(253,230,138,0.22)] [--rail-amber-line:rgba(252,211,77,0.45)]",

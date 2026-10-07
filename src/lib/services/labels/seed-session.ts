@@ -210,12 +210,9 @@ async function writeSeedRows(
 }
 
 /**
- * The admin-gated entry point behind the `/admin/labels` server action.
- *
- * The session is re-checked here rather than trusted from the page, and the
- * admin's id becomes the labeller. It runs on the service-role client, like
- * the rest of the admin console's writes, because `buildTranscriptForJob`
- * reads the job and its results file through that client.
+ * The admin-gated entry point behind the `/admin/labels` server action. The
+ * admin's id becomes the labeller. Runs on the service-role client because
+ * `buildTranscriptForJob` reads the job and its results file through it.
  */
 export async function seedLabelSession(
   jobId: unknown,

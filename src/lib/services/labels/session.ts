@@ -39,12 +39,10 @@ export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
 export type LabelShotStatus = "kept" | "edited" | "added" | "deleted";
 
 /**
- * `label_points.game_type`, the CHECK vocabulary
- * (supabase/migrations/..._label_points_game_type.sql). A game-level
- * annotation stored per point, like `server`: not seeded, not in the
- * `unchanged` comparison, and never touched by Reset. Declared here, not in
- * score.ts, because score.ts imports from this file and nothing may import
- * back.
+ * `label_points.game_type`, the CHECK vocabulary. A game-level annotation
+ * stored per point, like `server`: not seeded, not in the `unchanged`
+ * comparison, never touched by Reset. Declared here because score.ts imports
+ * from this file and nothing may import back.
  */
 export const LABEL_GAME_TYPES = ["game", "tiebreak", "match_tiebreak"] as const;
 export type LabelGameType = (typeof LABEL_GAME_TYPES)[number];
@@ -57,12 +55,10 @@ export function isLabelGameType(value: unknown): value is LabelGameType {
 }
 
 /**
- * `label_shots.spin`, the CHECK vocabulary
- * (supabase/migrations/..._label_shots_spin.sql): the vendor's `spin_type`,
- * lower-cased. A value field like `stroke` — seeded, in the `kept`
- * comparison, restored by Reset. Declared here, not in seed.ts, because
- * seed.ts imports from this file and the `"use client"` console must reach
- * the list without dragging the derivation in.
+ * `label_shots.spin`, the CHECK vocabulary: the vendor's `spin_type`,
+ * lower-cased. A value field like `stroke`. Declared here because seed.ts
+ * imports from this file and the console must reach the list without the
+ * derivation.
  */
 export const LABEL_SPINS = ["topspin", "flat", "backspin", "sidespin"] as const;
 export type LabelSpin = (typeof LABEL_SPINS)[number];
@@ -79,7 +75,11 @@ export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
   return stroke === "first_serve" || stroke === "second_serve";
 }
 
-/** The other player. */
+/** Whether a result is a missed ball: out, or in the net. */
+export function isMissedResult(result: unknown): result is "out" | "net" {
+  return result === "out" || result === "net";
+}
+
 export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";
 }
@@ -146,6 +146,14 @@ export function isGhostShot(
     shot.siteRemovalRestoredAt === null &&
     shot.status !== "deleted"
   );
+}
+
+/** Still in the rally: not deleted and — unless `ghosts` is off — not a ghost. */
+export function isLiveShot(
+  shot: Pick<LabelShot, "siteRemoval" | "siteRemovalRestoredAt" | "status">,
+  ghosts = true,
+): boolean {
+  return shot.status !== "deleted" && !(ghosts && isGhostShot(shot));
 }
 
 /** One `label_points` row with its strokes, already in video order. */

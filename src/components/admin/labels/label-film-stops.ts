@@ -3,27 +3,17 @@ import { POINT_TAIL_SECONDS } from "@/lib/services/labels/playback";
 import type { LabelPoint } from "@/lib/services/labels/session";
 
 /**
- * The labelling console's points as the film player's stops — what its
- * Previous/Next point glyphs, set-by-set track, Loop and Skip dead time walk.
+ * The labelling console's points as the film player's stops: what Previous/Next
+ * point, the set-by-set track, Loop and Skip dead time walk.
  *
- * The windows are the console's own playing rule (`playingRowAt` in
- * `lib/services/labels/playback.ts`), not the film tab's padded ones: a point
- * opens on its first live, timed stroke and closes at whichever comes first —
- * the next point's first stroke, or {@link POINT_TAIL_SECONDS} after its own
- * last stroke. So "Next point" lands on the serve the rail's row will light
- * up for, Loop repeats exactly the span the row stays lit, and Skip dead time
- * skips exactly the stretch where no row is lit. A 1.5s lead-in like the film
- * tab's would put the playhead on a point the rail says has not started.
+ * The windows are the console's own playing rule (`playingRowAt`, playback.ts),
+ * not the film tab's padded ones: a point opens on its first live, timed stroke
+ * and closes at the next point's first stroke or {@link POINT_TAIL_SECONDS}
+ * after its own last, whichever comes first. So the stops are exactly the spans
+ * the rail lights. A point with no timed stroke has no stop.
  *
- * Tombstones and strokes without a `videoTime` have no place on the video's
- * clock and are left out, as they are there; a point with no timed stroke
- * has no stop.
- *
- * ── Two clocks ──────────────────────────────────────────────────────────────
- * A label's `videoTime` is on the ANALYSIS clock; the player's stops are on
- * the FILE's (`<video>.currentTime`). `offset` is `LabelVideo.startTimeSeconds`
- * — seconds to subtract — applied once here and clamped at zero like
- * `toFilmTime`, the same arithmetic `label-video.tsx` does for a row click.
+ * Stops are on the file's clock: `offset` (`LabelVideo.startTimeSeconds`) is
+ * subtracted here and clamped at zero (see video-clock.ts).
  */
 
 /** What the player's track needs from a label point: its id and its set. */

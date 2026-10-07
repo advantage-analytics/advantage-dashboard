@@ -1,48 +1,23 @@
 /**
  * The two marks that follow the LABELLED score: "Wrong side for the score"
- * (`score_side_mismatch`) and "Same side twice" (`service_court_repeat`,
- * with its `missing_point` suggestion).
+ * (`score_side_mismatch`) and "Same side twice" (`service_court_repeat`, with
+ * its `missing_point` suggestion). The derivation raises both against the
+ * vendor's score; here they are read off the console's rows on every render,
+ * the side each serve was hit from (`LabelMarks.serveSides`) against the side
+ * the labelled score before the point expects (score.ts). Gone when the two
+ * agree.
  *
- * The derivation raises both against the vendor's score, which is the thing
- * the labeller is here to correct — so a flag read off the file keeps
- * describing a score that no longer stands once a winner is changed or a
- * missed point added. Here they are read off the console's own rows instead,
- * on every render: the side each serve was actually hit from comes from the
- * vendor file (`LabelMarks.serveSides`, marks.ts), the side it SHOULD have
- * come from is the labelled score before the point (score.ts's arithmetic),
- * and the two are compared. The result is a live fact: present while the
- * labelled score disagrees with the serve, gone the moment it agrees — the
- * one exception to "a flag goes grey, never away" (marks-state.ts), asked
- * for by the labeller: fix the score and the flag should go.
- *
- * The rules mirror the derivation's (flags.ts):
- *
- * - **Expected side.** Even number of points already played in the game →
- *   deuce; odd → ad. In a tiebreak the same parity, over the raw point
- *   count. Under no-ad at 40–40 the receiver chooses, so no expectation
- *   there. Once an ordinary game is already decided (score.ts `gameDecided`)
- *   the rows past its end read "Game–30" and the overflow slot owns them: no
- *   expectation either.
- * - **Once per game.** One wrong winner flips the parity of every point after
- *   it in the game, so each of them disagrees with its serve too. Only the
- *   FIRST point of a game that mismatches carries the mark: the later ones
- *   follow from it, and clear with it when it is fixed. A later mismatch of
- *   the same game is not drawn while the first stands; once the first agrees,
- *   the next point that still disagrees is the first, and carries it.
- *   "Same side twice" needs no such rule: it compares two SERVES, not a serve
- *   with the score, so a wrong score upstream does not repeat it.
- * - **Repeat.** Two consecutive live points of one game served from one
- *   known side. Not when the second sits at 40–40 under no-ad, not across a
- *   let (the point was replayed from the same side, as it should be), and
- *   never through a point with no known side — an added point has none, so
- *   it raises nothing and breaks a repeat, which is exactly how "Add point"
- *   answers the question. A `not_a_point` row is neither a point nor a break.
- *
- * Lets and `not_a_point` rows do not move the score (score.ts
- * `isCountedPoint`), so the point after one is expected from the same side.
- *
- * Pure, and importable from the client bundle: nothing from `next/`,
- * `components/` or a server file.
+ * - Expected side: an even number of counted points played in the game → deuce,
+ *   odd → ad; the same parity in a tiebreak. None at 40–40 under no-ad, or once
+ *   an ordinary game is already decided (`gameDecided`). Lets and `not_a_point`
+ *   rows do not move the score.
+ * - Once per game: one wrong winner flips the parity of every later point, so
+ *   only the first mismatching point carries the mark.
+ * - Repeat: two consecutive live points of one game served from one known side.
+ *   Not when the second sits at 40–40 under no-ad, not across a let, and never
+ *   through a point with no known side (an added point has none, which is how
+ *   "Add point" answers it). A `not_a_point` row is neither a point nor a
+ *   break.
  */
 
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
@@ -106,17 +81,14 @@ function decidingPoint(run: GameRun, adScoring: boolean): boolean {
   return !adScoring && run.type === "game" && p1 >= 3 && p2 >= 3 && p1 === p2;
 }
 
-/**
- * Read the two marks off the rows. `points` are the console's rows in rail
- * order, tombstones included; `serveSides` is `LabelMarks.serveSides`.
- */
+/** Read the two marks off the rows (rail order, tombstones included). */
 export function liveScoreMarks(
   points: readonly ScoreMarkPoint[],
   adScoring: boolean,
   serveSides: Readonly<Record<string, LabelServeSide>>,
+  scores = labelScores(points, adScoring),
 ): LiveScoreMarks {
   const out: LiveScoreMarks = { points: {}, suggestions: [] };
-  const scores = labelScores(points, adScoring).points;
   const runs = new Map<string, GameRun>();
 
   for (const point of points) {
@@ -150,7 +122,7 @@ export function liveScoreMarks(
           tier: "count",
           scope: "point",
           params: {
-            score: scores.get(point.id)?.scoreBefore ?? null,
+            score: scores.points.get(point.id)?.scoreBefore ?? null,
             expected,
             actual,
           },
@@ -210,18 +182,17 @@ export function liveScoreMarks(
 }
 
 /**
- * The session's marks with the two score flags read off the LIVE rows
- * appended after each point's other marks, and their `missing_point`
- * suggestions after the file's. The file emits neither (marks.ts), so this
- * is the one place they come from; everything else — the shot marks, the
- * other suggestions, `serveSides` — passes through untouched.
+ * The session's marks with the two score marks read off the live rows appended
+ * after each point's other marks, and their `missing_point` suggestions after
+ * the file's. Everything else passes through untouched.
  */
 export function withLiveScoreMarks(
   marks: LabelMarks,
   points: readonly ScoreMarkPoint[],
   adScoring: boolean,
+  scores?: ReturnType<typeof labelScores>,
 ): LabelMarks {
-  const live = liveScoreMarks(points, adScoring, marks.serveSides);
+  const live = liveScoreMarks(points, adScoring, marks.serveSides, scores);
   const merged: Record<string, LabelMark[]> = { ...marks.points };
   for (const [id, list] of Object.entries(live.points)) {
     merged[id] = [...(merged[id] ?? []), ...list];

@@ -1,27 +1,17 @@
 /**
- * Add a point the vendor never saw (board 08m §5): two points of a game were
- * served from the same side, so a point between them is probably missing. The
- * labeller's "Add point" makes room for it — a new `label_points` row at the
- * second point's index, every point from there on moved up one — and the
- * labeller then sets who won and adds its shots.
+ * Add a point the vendor never saw: a new `label_points` row beside an anchor
+ * point, every point from there on moved up one. "Above" (the suggestion's
+ * insert) takes the anchor's index; "below" the index after it. Either way the
+ * new point joins the anchor's set, game, server and game type, so a point
+ * added below the last point of a game stays in that game.
  *
- * The same insert is every point's "Add point above" / "Add point below"
- * (the ⋯ menu): a manual edit on an anchor point, with no mark behind it.
- * "Above" is the suggestion's insert — the new point takes the anchor's
- * index. "Below" takes the index after it. Either way the new point joins
- * the ANCHOR's set, game, server and game type, so a point added below the
- * last point of a game stays in that game rather than opening the next.
+ * `label_points.point_index` is what the rail numbers rows by and has no unique
+ * constraint, so the shift is plain updates on each later row, written highest
+ * first by `point-insert-session.ts` so no two rows share an index on the way.
+ * This is the one place that touches `point_index`.
  *
- * Nothing re-indexes on its own: `label_points.point_index` is what the rail
- * numbers rows by and has no unique constraint, so the shift is plain updates
- * on each later row, written highest first by `point-insert-session.ts` so no
- * two rows ever share an index on the way. The move operation
- * (`planPointMove`) never touches `point_index`; this is the one place that
- * does, and only to insert.
- *
- * Pure, and importable from the client bundle: the console runs
- * `applyInsertedPoint` for its optimistic rows and the session file runs
- * `planInsertedPoint` before its writes.
+ * Pure: the console runs `applyInsertedPoint` and the session file runs
+ * `planInsertedPoint`.
  */
 
 import type { Planned } from "./operations";
@@ -72,14 +62,10 @@ export type InsertablePoint = Pick<
 >;
 
 /**
- * Plan a new point beside `anchorPointId`. BEFORE (the default, and the
- * suggestion's "Add point" on the second of two points served from one
- * side): the new point takes the anchor's index, and the anchor and
- * everything after it move up one. AFTER: it takes the next index, and only
- * what came after the anchor moves. Either way it takes the anchor's set,
- * game, server and game type — a point beside one of a game is a point of
- * that game, served by the same player. Refused when the anchor is not among
- * `points` or is a tombstone: nothing goes beside a deleted row.
+ * Plan a new point beside `anchorPointId`. Before (the default): the new point
+ * takes the anchor's index, and the anchor and everything after it move up one.
+ * After: it takes the next index, and only what came after the anchor moves.
+ * Refused when the anchor is not among `points` or is a tombstone.
  */
 export function planInsertedPoint(
   points: readonly InsertablePoint[],

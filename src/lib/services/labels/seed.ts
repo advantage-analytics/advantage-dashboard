@@ -1,22 +1,16 @@
 /**
- * The seed for a hand-labelling session: a job's derived transcript turned
- * into `label_points` / `label_shots`-shaped rows, with every vendor stroke
- * frozen beside the label it seeds.
+ * The seed for a hand-labelling session: a job's derived transcript turned into
+ * `label_points` / `label_shots`-shaped rows, with every vendor stroke frozen
+ * beside the label it seeds.
  *
- * Pure. It reads a transcript and the raw results array and returns rows; the
- * writes live in seed-session.ts. Every value here is a PREFILL — the labeller
- * overwrites whatever the video contradicts, and the scoring script compares
- * the two joined on the vendor `event_id` (see
- * supabase/migrations/20260928190122_label_sessions.sql).
+ * Pure; the writes live in seed-session.ts. Every value is a prefill the
+ * labeller overwrites, and the scoring script compares the two joined on the
+ * vendor `event_id`. Every row also carries `seed`: its own value fields frozen
+ * as written, so the console can reset an edited row and see an edit set back.
+ * A row the labeller adds has none.
  *
- * Every row also carries `seed`: its own value fields, frozen as written, so
- * the console can reset an edited row and see an edit set back
- * (edit.ts `labelShotStatusAfterPatch`). A row the labeller adds has none.
- *
- * Sides are 'p1'/'p2', p1 = matches.player1_id, exactly as the transcript's
- * `is_player1` / `server_is_player1` / `won_by_player1` already mean.
- * Coordinates are copied from the transcript unchanged: they are already in
- * the `shots` frame (metres, near baseline at y = 0).
+ * Sides are 'p1'/'p2', p1 = matches.player1_id. Coordinates are copied from the
+ * transcript unchanged (metres, near baseline at y = 0).
  */
 
 import {
@@ -269,14 +263,12 @@ type SeedableShot = Pick<
 
 /**
  * The strokes the derivation removed before building the transcript (phantom
- * swings between serves — played.ts), per rally, shaped like the shots it kept.
+ * swings between serves, played.ts), per rally, shaped like the shots it kept:
+ * the labeller judges that removal, so the seed is one row per vendor stroke.
+ * They carry no result and no landing.
  *
- * The labeller judges that removal, so the console has to show what was
- * removed: the seed is one row per vendor stroke, not per cleaned shot. They
- * carry no result and no landing — the derivation never gave them either.
- *
- * The transcript's own shots supply the two things a raw stroke does not say:
- * which vendor label is player 1, and the trim offset on `video_time`.
+ * The transcript's own shots supply which vendor label is player 1 and the trim
+ * offset on `video_time`.
  */
 function droppedShotsByRally(
   transcript: Transcript,
@@ -340,15 +332,12 @@ function droppedShotType(stroke: SplitStepStroke): string | null {
 }
 
 /**
- * Build the seed rows for one transcript.
- *
- * One label point per transcript point and one label shot per vendor stroke
- * in that point's rally — the transcript's shots plus the strokes the
- * derivation removed (`droppedShotsByRally`), so no auto-fix is already
- * applied to what the labeller sees. A stroke the parse layer dropped as
- * unusable is in neither and has nothing to label against. Throws when a
- * shot has no raw stroke, because that means the transcript and the file
- * were not built from the same payload.
+ * Build the seed rows for one transcript: one label point per transcript point
+ * and one label shot per vendor stroke in that point's rally, the transcript's
+ * shots plus the strokes the derivation removed (`droppedShotsByRally`). A
+ * stroke the parse layer dropped as unusable is in neither. Throws when a shot
+ * has no raw stroke: the transcript and the file were not built from the same
+ * payload.
  */
 export function buildLabelSeed(
   transcript: Transcript,

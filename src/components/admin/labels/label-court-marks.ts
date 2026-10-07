@@ -6,23 +6,17 @@ import {
 import type { LabelShot } from "@/lib/services/labels/session";
 
 /**
- * Which of the open point's marks the labelling court draws right now, and
- * how strongly — the Video tab's rule (`film-court.ts`), applied to label
- * strokes. Pure, no React.
+ * Which of the open point's marks the labelling court draws right now, and how
+ * strongly: the Video tab's rule (`film-court.ts`), applied to label strokes.
+ * Pure.
  *
- * A mark's opacity is a function of FILM TIME alone: a contact reaches full
- * strength at its stroke's `videoTime`, the landing at the moment the ball is
- * estimated to come down (`bounceEventTime`: 0.6 of the way to the next
- * contact, 0.75 s after the last), each holds `MARK_HOLD_SECONDS`, fades over
- * `MARK_FADE_SECONDS` and is then omitted. So the court shows the rally one
- * stroke at a time as it happens, pausing freezes it, and seeking back
- * un-draws what has not happened yet.
- *
- * Both clocks are the ANALYSIS clock — `LabelShot.videoTime` and the
- * console's `VideoClock` (`video-clock.ts`) — so no offset is applied here.
- * Nothing about position: `LabelCourt` projects the coordinates itself with
- * its own metres → percent conversions (`court-geometry.ts`), never the Video
- * tab's `toCourtPercent`, whose frame and orientation are different.
+ * A mark's opacity is a function of film time alone: a contact reaches full
+ * strength at its stroke's `videoTime`, the landing when the ball is estimated
+ * to come down (`bounceEventTime`); each holds `MARK_HOLD_SECONDS`, fades over
+ * `MARK_FADE_SECONDS` and is then omitted. Both times are on the analysis clock
+ * (video-clock.ts), so no offset is applied. Position is `LabelCourt`'s own
+ * (court-geometry.ts), never the Video tab's `toCourtPercent`, whose frame
+ * differs.
  */
 
 interface CourtMarkOpacity {

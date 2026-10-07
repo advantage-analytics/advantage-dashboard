@@ -1,16 +1,11 @@
 /**
  * The match's set scores as the labelled points make them, held against the
- * score that was entered — the "Score doesn't add up" chip's arithmetic
- * (board 08m, `BANNER`).
+ * score that was entered: the "Score doesn't add up" chip's arithmetic. Pure,
+ * over `score.ts`: a set's games are its `LabelGameBand`s counted for their
+ * `winner`, so the rows that draw the scoreboard draw the tally.
  *
- * Pure, over `score.ts`: a set's games are its `LabelGameBand`s counted for
- * their `winner` — the caller hands in the bands it already scored, so the
- * same rows that draw the scoreboard draw the tally, and a corrected winner
- * moves both at once. Nothing here is stored.
- *
- * The entered score is a set total — `label_sessions.final_score` as the
- * labeller read it off the video, else `matches.score` as the match record
- * carries it — so a disagreement can be placed at a set, never at a game:
+ * The entered score is a set total (`label_sessions.final_score`, else
+ * `matches.score`), so a disagreement can be placed at a set, never at a game:
  * `scoreMismatch` names the first set whose pair differs and that set's first
  * live point, which is where "Find the gap" goes.
  */

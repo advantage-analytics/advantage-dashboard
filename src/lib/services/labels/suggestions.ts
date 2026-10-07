@@ -1,24 +1,15 @@
 /**
  * A suggestion's life, and the one thing about it that is stored.
  *
- * The marks module proposes (`marks.ts` `LabelSuggestion`): a stroke the
- * vendor probably never detected between two by one player, or a point
- * between two served from one side. Nothing is added for the labeller — the
- * black rail draws the proposal as a dashed row with two answers. "Add shot"
- * is the EXISTING add operation (`planAddedShot`, operations.ts), which
- * already times the new stroke at the pair's midpoint and credits the other
- * player; "Dismiss" appends the suggestion's key to `label_points.dismissed`,
- * the only column this module plans a write for.
+ * The marks module proposes (`marks.ts` `LabelSuggestion`): a stroke the vendor
+ * probably never detected between two by one player, or a point between two
+ * served from one side. "Add shot" is the existing add operation
+ * (`planAddedShot`); "Dismiss" appends the suggestion's key to
+ * `label_points.dismissed`, the only column this module plans a write for.
+ * Whether a suggestion is still open is derived (`suggestionState`).
  *
- * Whether a suggestion is still open is derived, never stored: it is `done`
- * once the point holds a live added stroke following the pair's first (a
- * missing shot), or once a live added point sits between the two served from
- * one side or the second was marked a replayed let (a missing point —
- * `point-insert.ts` is the add), and `dismissed` once its key is on the point.
- *
- * Pure, and importable from the client bundle: the console runs
- * `applyDismiss` for its optimistic row and `suggestions-session.ts` runs
- * `planDismiss` before its write.
+ * Pure: the console runs `applyDismiss` and `suggestions-session.ts` runs
+ * `planDismiss`.
  */
 
 import type { LabelSuggestion } from "./marks";

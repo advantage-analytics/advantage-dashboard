@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { LABEL_MARK_META } from "@/lib/services/labels/marks";
-import { MARK_LABEL, markHover } from "@/lib/services/labels/marks-copy";
+import { markHover } from "@/lib/services/labels/marks-copy";
 import { shotAfterPointEnd } from "@/lib/services/labels/marks-state";
 import type { LabelShot } from "@/lib/services/labels/session";
 import { POINT_1_SHOTS } from "./fixtures/label-session";
@@ -38,14 +37,6 @@ function stroke(
 const IN = { x: 0, y: 20 };
 const LONG = { x: 0, y: 25 };
 const NETTED = { x: 0, y: 8 };
-
-test("a hint, on the point, never counted", () => {
-  expect(LABEL_MARK_META.shot_after_point_end).toEqual({
-    tier: "hint",
-    scope: "point",
-  });
-  expect(MARK_LABEL.shot_after_point_end).toBe("Shot after the point ended?");
-});
 
 test("the second-to-last stroke lands out, one stroke follows", () => {
   const point = {

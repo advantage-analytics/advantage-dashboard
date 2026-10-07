@@ -1,22 +1,13 @@
 /**
- * The labelling console's row operations, admin-gated: delete and Undo for a
- * stroke or a point, add a stroke, move a point to another game, and mark a
- * point checked (or clear it).
- *
- * Same shape as edit-session.ts: every entry point re-checks `requireAdmin`,
- * runs on the service-role client, refuses a `complete` session, and decides
- * what to write with the pure rules in operations.ts — the ones the console
- * ran for its optimistic update.
+ * The labelling console's row operations: delete and Undo for a stroke or a
+ * point, add a stroke, move a point to another game, mark a point checked.
+ * Admin-gated like edit-session.ts, planned by operations.ts.
  *
  * Every write is an UPDATE or an INSERT on `label_points` / `label_shots`. No
- * row is ever removed: a delete is a tombstone (`status: 'deleted'` plus the
- * status it had, for Undo), which is what lets the offline scorer learn which
- * vendor strokes a labeller rejected. `tests/label-operations.spec.ts` scans
- * this file for a delete call.
- *
- * Status changes are compare-and-set: the UPDATE matches the status the row
- * was read with, so two tabs racing to delete (or Undo) the same row cannot
- * leave a tombstone remembering `deleted` as its previous status.
+ * row is ever removed: a delete is a tombstone. Status changes are
+ * compare-and-set: the UPDATE matches the status the row was read with, so two
+ * tabs racing to delete (or Undo) the same row cannot leave a tombstone
+ * remembering `deleted` as its previous status.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -407,14 +398,9 @@ export async function writeLabelPointRestore(params: {
 }
 
 /**
- * Move a point into game `to`. The destination's server is read from the
- * game's other live points; when it differs from the point's own the move is
- * refused unless `switchServer` — the console's "switch players?" yes — and
- * then `server` changes with it, and so do the point's players when its own
- * strokes contradict the new server (player-swap.ts): the point's row first
- * (compare-and-set, as every point write), then its flipped strokes in
- * grouped UPDATEs on `label_shots`. The shots are read only when the server
- * would switch; a same-server move never looks at them.
+ * Move a point into game `to` (`planPointMove`). The point's row is written
+ * first (compare-and-set), then its flipped strokes in grouped UPDATEs. The
+ * shots are read only when the server would switch.
  */
 export async function writeLabelPointMove(params: {
   supabase: AdminClient;

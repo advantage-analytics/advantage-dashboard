@@ -1,35 +1,25 @@
 /**
- * Placing the selected stroke on the court by clicking it — board 08i's
- * court panel. Pure, so the click sequence is a spec rather than a
- * hope.
+ * Placing the selected stroke on the court by clicking it. Pure.
  *
  * The sequence cycles: the first click on a newly selected stroke is where it
- * was HIT (`contact_x/y`), the second where it LANDED (`landing_x/y`), and a
- * third starts over at the hit, so a labeller who misplaced either end just
- * keeps clicking. The card's Contact / Landing switch sets the end directly
- * ({@link setPlacementTarget}). Selecting another stroke (or re-selecting
- * this one) starts again at the hit.
+ * was hit (`contact_x/y`), the second where it landed (`landing_x/y`), a third
+ * starts over. The Contact / Landing switch sets the end directly ({@link
+ * setPlacementTarget}).
  *
- * ── Which half the card zooms to ────────────────────────────────────────────
- * The card shows one half of the court while placing (court-geometry.ts), and
- * `half` is the one on screen:
+ * `half` is the half of the court on screen:
  *
- * - **Contact** shows the hitter's half — {@link hitterHalf}: the side the
- *   stroke's stored contact is on; else read off the nearest earlier live
- *   stroke with a contact (the other side when the other player hit it, the
- *   same side when this player did — a second serve after a fault); else
- *   near.
- * - **Landing** shows the other half: a ball that crossed the net.
- * - **Flip side** ({@link flipPlacement}) shows the opposite of either — a
- *   ball into the net came down on the hitter's own half, and a contact
- *   guessed onto the wrong side is one press from the right one. `flipped`
- *   is that button's pressed state; it never outlives the end it was pressed
- *   for.
+ * - Contact shows the hitter's half ({@link hitterHalf}): the side the stored
+ *   contact is on; else read off the nearest earlier live stroke with a
+ *   contact; else near.
+ * - Landing shows the other half.
+ * - Flip side ({@link flipPlacement}) shows the opposite of either, for a ball
+ *   into the net or a contact guessed onto the wrong side. `flipped` never
+ *   outlives the end it was pressed for.
  */
 
 import type { LabelShotPatch } from "@/lib/services/labels/edit";
 import {
-  deriveShotResult,
+  positionPatch,
   type ShotGeometry,
 } from "@/lib/services/labels/shot-derived";
 import {
@@ -58,7 +48,6 @@ export const NO_PLACEMENT: PlacementState = {
   flipped: false,
 };
 
-/** What {@link hitterHalf} reads of a stroke. */
 export interface HalfClue {
   hitter: "p1" | "p2" | null;
   contactY: number | null;
@@ -66,10 +55,7 @@ export interface HalfClue {
   status?: string;
 }
 
-/**
- * The half a stroke was hit from. `earlier` is the point's strokes before it,
- * in video order.
- */
+/** The half a stroke was hit from; `earlier` is the strokes before it. */
 export function hitterHalf(
   shot: HalfClue,
   earlier: readonly HalfClue[] = [],
@@ -87,10 +73,7 @@ export function hitterHalf(
   return sameHitter ? side : otherHalf(side);
 }
 
-/**
- * Selecting a stroke: its next click is where it was hit, on the hitter's
- * half (`half` — see {@link hitterHalf}).
- */
+/** Selecting a stroke: its next click is its contact, on the hitter's half. */
 export function startPlacement(
   shotId: string | null,
   half: CourtHalf = "near",
@@ -98,7 +81,6 @@ export function startPlacement(
   return { shotId, target: "contact", half, flipped: false };
 }
 
-/** The hitter's half as the state on screen implies it. */
 function hitterHalfIn(state: PlacementState): CourtHalf {
   // Wherever the labeller is about to place the contact IS the hitter's half,
   // flipped or not; a landing is across the net from it unless flipped.
@@ -127,7 +109,6 @@ export function setPlacementTarget(
   };
 }
 
-/** "Flip side": the other half, for the end being placed. */
 export function flipPlacement(state: PlacementState): PlacementState {
   if (state.shotId === null) return state;
   return { ...state, half: otherHalf(state.half), flipped: !state.flipped };
@@ -137,20 +118,14 @@ export function flipPlacement(state: PlacementState): PlacementState {
 const toCm = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * One court click: the patch it writes to the selected stroke and the state
- * the next click starts from. Null when no stroke is selected — the click
- * places nothing.
+ * One court click: the patch it writes to the selected stroke and the state the
+ * next click starts from. Null when no stroke is selected.
  *
- * `shot` is the stroke being placed, as it stands before the click. When the
- * click leaves it with both a contact and a landing — the landing click, or a
- * re-placed contact on a stroke that already has its landing — the patch also
- * carries the `result` those coordinates derive (shot-derived.ts), so In /
- * Out / Net is saved in the same write as the position. A stroke still
- * missing an end gets no `result` key and keeps its stored value.
- *
- * The next state's half follows the click: after a contact, the landing is
- * across the net from where the contact was just put; after a landing, the
- * contact is back on the hitter's half.
+ * When the click leaves `shot` with both a contact and a landing, the patch
+ * also carries the `result` those coordinates derive (shot-derived.ts); a
+ * stroke still missing an end keeps its stored value. The next state's half
+ * follows the click: after a contact the landing is across the net, after a
+ * landing the contact is back on the hitter's half.
  */
 export function nextPlacement(
   state: PlacementState,
@@ -160,11 +135,6 @@ export function nextPlacement(
   if (state.shotId === null) return null;
   const x = toCm(point.x);
   const y = toCm(point.y);
-  const placed: LabelShotPatch =
-    state.target === "contact"
-      ? { contact_x: x, contact_y: y }
-      : { landing_x: x, landing_y: y };
-  const result = deriveShotResult({ ...shot, ...placed });
   const next: PlacementState =
     state.target === "contact"
       ? {
@@ -182,10 +152,7 @@ export function nextPlacement(
               : hitterHalfIn(state),
           flipped: false,
         };
-  return {
-    state: next,
-    patch: result === null ? placed : { ...placed, result },
-  };
+  return { state: next, patch: positionPatch(shot, state.target, { x, y }) };
 }
 
 /**

@@ -9,18 +9,16 @@ import {
 } from "./label-layout";
 
 /**
- * The pointer and key mechanics of a window splitter (`role="separator"` with
- * a value, in px) on an edge that travels sideways — the rail's handle,
- * below.
+ * The pointer and key mechanics of a window splitter (`role="separator"` with a
+ * value, in px) on an edge that travels sideways.
  *
- * - **Pointer**: `pointerdown` captures the pointer, `pointermove` reports the
- *   size the drag has reached (`sizeFromDrag`), `pointerup` / `pointercancel`
- *   let go. Never HTML5 drag-and-drop (Reorder Mode's rule).
- * - **Keys**: `growKey` / `shrinkKey` move it `RAIL_KEY_STEP_PX`, Home and
- *   End go to the least and the most, Enter back to the default. Each is
- *   `preventDefault`ed, which is also what tells the console's own ← / → /
- *   Enter shortcuts to stand down.
- * - **Double-click**: back to the default.
+ * - Pointer: captured on `pointerdown`; `pointermove` reports the size the drag
+ *   has reached (`sizeFromDrag`). Never HTML5 drag-and-drop.
+ * - Keys: `growKey` / `shrinkKey` move it `RAIL_KEY_STEP_PX`, Home and End go
+ *   to the least and the most, Enter back to the default. Each is
+ *   `preventDefault`ed, which also tells the console's own ← / → / Enter
+ *   shortcuts to stand down.
+ * - Double-click: back to the default.
  *
  * Spread `separatorProps` on the element; `dragging` is for its styling.
  */
@@ -34,7 +32,6 @@ export function useSeparatorDrag({
   onResize,
   onReset,
 }: {
-  /** The size now, in px. */
   value: number;
   min: number;
   max: number;
@@ -43,9 +40,7 @@ export function useSeparatorDrag({
   shrinkKey: string;
   /** The size a drag has reached: where it began, and where the pointer is. */
   sizeFromDrag: (startSize: number, from: number, at: number) => number;
-  /** The size asked for, in px. */
   onResize: (px: number) => void;
-  /** Back to the default size. */
   onReset: () => void;
 }) {
   const drag = useRef<{ pointerId: number; from: number; size: number } | null>(
@@ -128,37 +123,23 @@ export function railWidthFromDrag(
 }
 
 /**
- * The handle on the left edge of the points rail (board 08l's
- * "The rail's edge"): drag it and the rail runs from `RAIL_MIN_PX` to
- * `RAIL_MAX_PX`, the film taking whatever is left.
+ * The handle on the left edge of the points rail. Stateless: the view owns the
+ * width and clamps it (label-layout.ts), and the mechanics are
+ * `useSeparatorDrag`'s (← widens).
  *
- * Stateless — the view owns the width and clamps it. This reports the width
- * asked for (`onResize`), and that the default is wanted back
- * (`onReset`: a double-click, or Enter). The pointer and key mechanics are
- * `useSeparatorDrag`'s: pointer capture, ← / → by
- * `RAIL_KEY_STEP_PX` (← widens, the edge going the way the arrow points),
- * Home and End to the least and the most. Never HTML5 drag-and-drop.
- *
- * **Nothing shows until you reach for it.** At rest the 8px strip is empty
- * and the rail's own hairline is all there is. On hover a 1px line and a slim
- * 4×32 grip fade in; while dragged or keyboard-focused the line is 2px
- * `--blue` and the grip 4×40 white with a halo. That change IS its focus
- * mark, so it opts out of the global ring (`data-focus-ring="none"`) the way
- * the underline fields do.
- *
- * The parent rail must be `relative`: this sits `absolute` across its left
- * edge, 4px either side.
+ * Nothing shows at rest; a line and a grip fade in on hover and turn `--blue`
+ * while dragged or keyboard-focused. That change is its focus mark, so it opts
+ * out of the global ring (`data-focus-ring="none"`). The parent rail must be
+ * `relative`.
  */
 export function LabelRailResize({
   width,
   onResize,
   onReset,
 }: {
-  /** The rail's width now, in px. */
   width: number;
   /** The width asked for, in px; the view clamps it. */
   onResize: (px: number) => void;
-  /** Back to `RAIL_DEFAULT_PX`. */
   onReset: () => void;
 }) {
   const { separatorProps } = useSeparatorDrag({

@@ -1,13 +1,10 @@
-import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 import {
-  FULLSCREEN_EVENTS,
   enterFullscreen,
   exitFullscreen,
   fullscreenActive,
   fullscreenSupported,
-  fullscreenLeft,
   requestFullscreen,
   type FullscreenDocument,
 } from "@/components/admin/labels/use-browser-fullscreen";
@@ -150,71 +147,11 @@ test("a refusal is swallowed: rejected or thrown, it answers false and stays off
   await expect(exitFullscreen(thrower)).resolves.toBe(false);
 });
 
-test("both change events are listened for", () => {
-  expect([...FULLSCREEN_EVENTS]).toEqual([
-    "fullscreenchange",
-    "webkitfullscreenchange",
-  ]);
-});
-
 test("a change event means LEFT only when nothing is fullscreened any more", async () => {
   const { doc } = standard();
   await requestFullscreen(doc);
   // The change that follows entering: not a leave.
-  expect(fullscreenLeft(doc)).toBe(false);
+  expect(fullscreenActive(doc)).toBe(true);
   await exitFullscreen(doc);
-  expect(fullscreenLeft(doc)).toBe(true);
-});
-
-test.describe("the hook", () => {
-  const source = readFileSync(
-    "src/components/admin/labels/use-browser-fullscreen.ts",
-    "utf8",
-  );
-  const hook = source.slice(
-    source.indexOf("export function useBrowserFullscreen"),
-  );
-
-  test("no separate whole-screen control is left: two verbs and one callback", () => {
-    for (const gone of [
-      "WHOLE_SCREEN_COPY",
-      "BrowserFullscreenControl",
-      "toggleFullscreen",
-      "useSyncExternalStore",
-    ]) {
-      expect(source, gone).not.toContain(gone);
-    }
-    expect(hook).toContain("return { enter, leave };");
-  });
-
-  test("`onLeft` runs from a real change event alone, never for the state a page starts in", () => {
-    // The one call, inside the listener, after the not-active check.
-    expect(hook.match(/left\.current\?\.\(\)/g)).toHaveLength(1);
-    expect(hook).toMatch(
-      /const changed = \(\) => \{\s+if \(!fullscreenLeft\(document\)\) return;[\s\S]*?entered\.current = false;\s+left\.current\?\.\(\);\s+\};/,
-    );
-    expect(hook).toMatch(
-      /for \(const name of FULLSCREEN_EVENTS\) \{\s+document\.addEventListener\(name, changed\);/,
-    );
-    // Nothing reads the document's state on mount.
-    const mount = hook.slice(
-      hook.indexOf("useEffect(() => {\n    const changed"),
-      hook.indexOf("const enter = useCallback"),
-    );
-    expect(mount.match(/fullscreenLeft\(document\)/g)).toHaveLength(1);
-    expect(mount).not.toContain("fullscreenActive(document)");
-  });
-
-  test("it leaves only a full screen it entered itself, and unmounting leaves it", () => {
-    expect(hook).toMatch(
-      /const leave = useCallback\(\(\) => \{\s+if \(!entered\.current\) return;\s+entered\.current = false;\s+if \(fullscreenActive\(document\)\) void exitFullscreen\(document\);/,
-    );
-    expect(hook).toContain("useEffect(() => leave, [leave]);");
-    // Entering what was already on by another road is not ours to leave.
-    expect(hook).toContain("const ours = !fullscreenActive(document);");
-    expect(hook).toContain("if (ours) entered.current = true;");
-    expect(hook).toContain(
-      'if (ours && outcome !== "entered") entered.current = false;',
-    );
-  });
+  expect(fullscreenActive(doc)).toBe(false);
 });

@@ -1,12 +1,8 @@
 /**
- * Loader for `/admin/labels` — the completed Advantage Intelligence jobs an
- * admin can hand-label, each with its match's players, its point count and
- * any label session already in progress.
- *
- * Service-role throughout: `label_sessions`/`label_points` carry admin-only
- * RLS (an authenticated admin's own session client would also pass it), but
- * `processing_jobs` and `matches` are read the same way every other admin
- * loader reads them — see `admin/layout.tsx`'s `loadRequestsCount`.
+ * Loader for `/admin/labels`: the completed Advantage Intelligence jobs an
+ * admin can hand-label, each with its match's players, its point count and any
+ * label session already in progress. Service-role throughout, as every other
+ * admin loader reads `processing_jobs` and `matches`.
  */
 
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
@@ -91,10 +87,7 @@ interface DbMatch {
   id: string;
   player1_name: string | null;
   player2_name: string | null;
-  /**
-   * `matches.score` (jsonb), read by the session loader only — the list does
-   * not select it. Parsed by `parseMatchScore` before anything trusts it.
-   */
+  /** `matches.score` (jsonb), parsed by `parseMatchScore`. */
   score?: unknown;
 }
 interface DbSession {
@@ -108,13 +101,7 @@ interface DbLabelPoint {
   checked_at: string | null;
 }
 
-/**
- * List every completed Advantage Intelligence job, newest-completed first.
- *
- * No server action: this is a page loader, called straight from the Server
- * Component, following `getAdminUploadHistory`'s shape rather than
- * `seedLabelSession`'s (a mutation, which is one).
- */
+/** List every completed Advantage Intelligence job, newest-completed first. */
 export async function listLabelJobs(
   deps: Dependencies = defaults,
 ): Promise<ListLabelJobsResult> {
@@ -243,12 +230,9 @@ async function countPointsByMatch(
 }
 
 /**
- * "N of M checked" for every session in `sessionIds`: M excludes deleted
- * tombstones, N is the subset of those with `checked_at` set.
- *
- * Read as rows rather than as per-session count queries — one query, grouped
- * in memory — since a job's session rarely holds more than a few hundred
- * points; `readAllPages` still walks it in case a session runs long.
+ * "N of M checked" for every session in `sessionIds`: M excludes tombstones, N
+ * is the subset with `checked_at` set. One query grouped in memory, walked by
+ * `readAllPages` in case a session runs long.
  */
 async function countLabelPointProgress(
   db: AdminClient,
@@ -277,7 +261,7 @@ async function countLabelPointProgress(
 }
 
 /* -------------------------------------------------------------------------
- * One session, for the console (T5)
+ * One session, for the console
  * ---------------------------------------------------------------------- */
 
 export type GetLabelSessionResult =
@@ -286,11 +270,10 @@ export type GetLabelSessionResult =
       session: LabelSession;
       video: LabelVideo | null;
       /**
-       * The derivation's marks on this session's rows (T34), built from the
-       * job's raw results file with the CURRENT derivation code. Null when the
-       * session has `marks_enabled` off (the ground-truth session), when its
-       * job is gone, or when the file could not be downloaded or derived — the
-       * console is usable without them.
+       * The derivation's marks on this session's rows, built from the job's raw
+       * results file with the CURRENT derivation code. Null when the session
+       * has `marks_enabled` off, when its job is gone, or when the file could
+       * not be downloaded or derived.
        */
       marks: LabelMarks | null;
     }
@@ -298,23 +281,22 @@ export type GetLabelSessionResult =
   | { ok: false; reason: "not-found" };
 
 export interface SessionDependencies extends Dependencies {
-  /**
-   * The job's playable file, or null. Allowed to fail: a video that cannot be
-   * signed leaves the console without a player, never without its table.
-   */
+  /** The job's playable file, or null. Allowed to fail. */
   loadVideo: (db: AdminClient, jobId: string) => Promise<LabelVideo | null>;
   /**
-   * The marks' source — the job's raw results file, downloaded and derived
-   * — as a join onto the session's rows once they are built. Allowed to
-   * fail — a throw is logged and the console opens without marks. Called
-   * only when the session has `marks_enabled` and a job, and started beside
-   * the row reads, since it needs only the job id.
+   * The marks' source: the job's raw results file, downloaded and derived, as a
+   * join onto the session's rows once they are built. Allowed to fail: a throw
+   * is logged and the console opens without marks. Called only when the session
+   * has `marks_enabled` and a job.
    */
   buildMarks: (db: AdminClient, jobId: string) => Promise<MarksJoin>;
 }
 
 /** The pure half of the marks: the derivation joined onto the built points. */
-export type MarksJoin = (points: readonly MarkablePoint[]) => LabelMarks;
+export type MarksJoin = (
+  points: readonly MarkablePoint[],
+  options?: { hidden?: boolean },
+) => LabelMarks;
 const sessionDefaults: SessionDependencies = {
   ...defaults,
   loadVideo: loadJobVideo,
@@ -338,14 +320,10 @@ interface DbSessionRow {
 }
 
 /**
- * One label session with its match's players, every point (tombstones
- * included — the console draws them as markers) and every point's strokes in
- * video order.
- *
- * Same shape as {@link listLabelJobs}: re-checks `requireAdmin` even though
- * `admin/layout.tsx` already gates the route, then reads service-role. A
- * malformed id is `not-found` rather than a PostgREST 22P02 thrown at the
- * page, since a hand-edited URL is the only way to produce one.
+ * One label session with its match's players, every point (tombstones included)
+ * and every point's strokes in video order. Re-checks `requireAdmin`, then
+ * reads service-role. A malformed id is `not-found` rather than a PostgREST
+ * 22P02 thrown at the page.
  */
 export async function getLabelSession(
   sessionId: string,
@@ -362,7 +340,52 @@ export async function getLabelSession(
   if (!isUuid(sessionId)) return { ok: false, reason: "not-found" };
 
   const db = deps.createAdminClient();
+  // The marks' transcript and the video need only the job id, so both run
+  // beside the row reads; the marks' join waits for the built points. A failure
+  // is held here and logged by `joinMarks`, never thrown.
+  const read = await readLabelSessionRows(db, sessionId, (row) =>
+    Promise.all([
+      row.marks_enabled && row.job_id
+        ? deps.buildMarks(db, row.job_id).then(
+            (join) => ({ join }),
+            (cause: unknown) => ({ cause }),
+          )
+        : null,
+      // A session whose job is gone has no video to sign; it still opens.
+      (row.job_id
+        ? deps.loadVideo(db, row.job_id)
+        : Promise.resolve(null)
+      ).catch((cause: unknown) => {
+        console.error("[labels] could not load the session's video", {
+          sessionId: row.id,
+          message: (cause as Error)?.message,
+        });
+        return null;
+      }),
+    ]),
+  );
+  if (!read) return { ok: false, reason: "not-found" };
+  const [marksFetch, video] = read.beside;
 
+  return {
+    ok: true,
+    session: read.session,
+    video,
+    marks: marksFetch ? joinMarks(marksFetch, read.session) : null,
+  };
+}
+
+/**
+ * One session's rows, read and built — the SELECTs `getLabelSession` and
+ * `scripts/label-scorecard.ts` share, with no admin check of their own: the
+ * caller's `db` is the authority. Null when there is no such session.
+ * `beside` runs next to the row reads once the session row is in.
+ */
+export async function readLabelSessionRows<T = undefined>(
+  db: AdminClient,
+  sessionId: string,
+  beside?: (row: DbSessionRow) => Promise<T>,
+): Promise<{ session: LabelSession; beside: T } | null> {
   const { data: session, error: sessionError } = await db
     .from("label_sessions")
     .select(
@@ -373,23 +396,11 @@ export async function getLabelSession(
   if (sessionError) {
     throw new Error(`Could not read label session: ${sessionError.message}`);
   }
-  if (!session) return { ok: false, reason: "not-found" };
+  if (!session) return null;
 
-  // The marks' transcript needs only the job id, so its fetch runs beside
-  // the row reads and the join waits for the built points. Only a session
-  // that computes marks and still has a job has any (the ground-truth
-  // session's labels were made blind to the derivation and stay that way);
-  // a failure is held here and logged by `joinMarks`, never thrown.
-  const marksFetch =
-    session.marks_enabled && session.job_id
-      ? deps.buildMarks(db, session.job_id).then(
-          (join) => ({ join }),
-          (cause: unknown) => ({ cause }),
-        )
-      : null;
-
-  const [matchResult, jobResult, pointRows, shotRows, video] =
+  const [extra, matchResult, jobResult, pointRows, shotRows] =
     await Promise.all([
+      beside?.(session) as Promise<T>,
       db
         .from("matches")
         .select("id, player1_name, player2_name, score")
@@ -415,17 +426,6 @@ export async function getLabelSession(
           .order("id"),
         "Could not read label shots",
       ),
-      // A session whose job is gone has no video to sign; it still opens.
-      (session.job_id
-        ? deps.loadVideo(db, session.job_id)
-        : Promise.resolve(null)
-      ).catch((cause: unknown) => {
-        console.error("[labels] could not load the session's video", {
-          sessionId: session.id,
-          message: (cause as Error)?.message,
-        });
-        return null;
-      }),
     ]);
   if (matchResult.error) {
     throw new Error(`Could not read match: ${matchResult.error.message}`);
@@ -434,19 +434,15 @@ export async function getLabelSession(
     throw new Error(`Could not read the job: ${jobResult.error.message}`);
   }
 
-  const built = buildLabelSession(
-    session,
-    matchResult.data ?? null,
-    pointRows,
-    shotRows,
-    jobResult.data ?? null,
-  );
-
   return {
-    ok: true,
-    session: built,
-    video,
-    marks: marksFetch ? await joinMarks(marksFetch, built) : null,
+    session: buildLabelSession(
+      session,
+      matchResult.data ?? null,
+      pointRows,
+      shotRows,
+      jobResult.data ?? null,
+    ),
+    beside: extra,
   };
 }
 
@@ -455,11 +451,10 @@ export async function getLabelSession(
  * join that does, is logged and leaves the session intact: the console is
  * usable without them.
  */
-async function joinMarks(
-  fetch: Promise<{ join: MarksJoin } | { cause: unknown }>,
+function joinMarks(
+  settled: { join: MarksJoin } | { cause: unknown },
   session: LabelSession,
-): Promise<LabelMarks | null> {
-  const settled = await fetch;
+): LabelMarks | null {
   try {
     if ("cause" in settled) throw settled.cause;
     return settled.join(session.points);
@@ -474,15 +469,11 @@ async function joinMarks(
 }
 
 /**
- * The default `buildMarks`: download the job's results file and derive it
- * with the current code; the join of its flags onto the label rows comes
- * back as a function, for the points once they are built. Throws when the
- * transcript could not be built or did not reconcile — `joinMarks` turns
- * that into a logged null. Exported for the spec.
- *
- * Reads nothing from `points.flags` or `shots.flags`: a stored flag is what
- * the derivation thought when the rows were written, a mark is what it thinks
- * now (marks.ts).
+ * The default `buildMarks`: download the job's results file and derive it with
+ * the current code; the join onto the label rows comes back as a function, for
+ * the points once they are built. Throws when the transcript could not be built
+ * or did not reconcile (`joinMarks` turns that into a logged null). Never reads
+ * a stored flags column (marks.ts).
  */
 export async function buildJobMarks(
   db: AdminClient,
@@ -495,7 +486,8 @@ export async function buildJobMarks(
   if (!transcript || !transcript.ok || !rallies) {
     throw new Error(reason ?? "transcript could not be built");
   }
-  return (points) => buildLabelMarks(transcript, rallies, points);
+  return (points, options) =>
+    buildLabelMarks(transcript, rallies, points, options);
 }
 
 /**
@@ -581,24 +573,20 @@ export function buildLabelSession(
 }
 
 /**
- * How long the console's playback link lasts. The film tab's 30 minutes is
- * backed by a credential refresh the console does not have: this URL is
- * signed once, when the page renders, and a labelling sitting runs for hours
- * — past expiry every seek to an unbuffered range fails and the player goes
- * dead with nothing on screen. Eight hours covers a working day's sitting;
- * the link is read-only, for one blob, and only ever handed to an admin.
+ * How long the console's playback link lasts. The URL is signed once, when the
+ * page renders, with no credential refresh, and a labelling sitting runs for
+ * hours: past expiry every seek to an unbuffered range fails. Eight hours
+ * covers a working day; the link is read-only, for one blob, and only ever
+ * handed to an admin.
  */
 const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
 
 /**
- * The labelled job's own file, signed for playback.
- *
- * Not `getMatchVideo`: that loader answers "what may this viewer watch of
- * this match" through the viewer's own RLS (and an admin is rarely a member
- * of the match's program), and it plays the NEWEST job. A label session is
- * pinned to one job, so this asks `choosePlaybackFile` — the same
- * upload-first, vendor-copy-second rule and the same offset — about exactly
- * that job, and signs with the same `mintPlaybackSas`.
+ * The labelled job's own file, signed for playback. Not `getMatchVideo`: that
+ * loader goes through the viewer's own RLS and plays the NEWEST job. A label
+ * session is pinned to one job, so this asks `choosePlaybackFile` (the same
+ * upload-first, vendor-copy-second rule and the same offset) about exactly that
+ * job, and signs with `mintPlaybackSas`.
  */
 async function loadJobVideo(
   db: AdminClient,

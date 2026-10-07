@@ -1,8 +1,7 @@
 /**
- * The console header's autosave indicator — its state machine and its words.
- * Pure, so every transition is a spec. There is no Save button anywhere on the
- * page: every edit writes the moment it is made, and this is the only place
- * the labeller learns whether it landed.
+ * The console's autosave indicator: its state machine and its words. Pure.
+ * Every edit writes the moment it is made, and this is the only place the
+ * labeller learns whether it landed.
  *
  *   idle     nothing saved yet this visit — the indicator draws nothing
  *   saving   at least one write in flight — "Saving…"
@@ -10,9 +9,9 @@
  *   error    the last write to settle failed — "Not saved · <reason>"; the
  *            console has already put the old value back
  *
- * The last write to SETTLE decides between saved and error, whichever
- * started first: each edit reverts on its own failure, so what is on screen
- * after a later success is saved data, and the error it replaced is stale.
+ * The last write to settle decides between saved and error, whichever started
+ * first: each edit reverts on its own failure, so what is on screen after a
+ * later success is saved data.
  */
 
 export interface SaveStatus {

@@ -5,53 +5,37 @@ import { useEffect, useRef, type RefObject } from "react";
 import { reducedMotionNow } from "./film-motion";
 
 /**
- * Follow the film, or hold the point being read — the scrolling half of the
- * T17 design (`2026-09-22-film-follow-hold-design.md`), shared by every
- * surface that lists points under a playing video: the Film tab's
- * `PointList` (the report column and the fullscreen room's drawer) and the
- * labelling console's points rail, each scrolling a list element of its
- * own. The focus state itself — `PointFocus` in
- * film-timeline.ts — stays with the caller; this hook does two things
- * against it:
+ * Follow the film, or hold the point being read: the scrolling half, shared by
+ * every surface that lists points under a playing video (the Film tab's
+ * `PointList` and the labelling console's points rail), each scrolling a list
+ * element of its own. The focus state (`PointFocus`, film-timeline.ts) stays
+ * with the caller.
  *
- * **Keep whatever is lit in view while following** — the playing shot while
- * a well is open, the playing row otherwise — and stop entirely while held.
- * Two ways to follow (T26). A re-follow — any held → follow transition — is a
- * JUMP: the playing point's row goes to the top of the box, 8px in
- * (`REFOLLOW_JUMP_INSET_PX`), clamped at the end of the scroller, even when
- * it is already in view. It always targets the point row, never the shot:
+ * Keep whatever is lit in view while following (the playing shot while a well
+ * is open, the playing row otherwise) and stop entirely while held. A re-follow
+ * (any held → follow transition, observed through `prevHeldRef`) is a jump: the
+ * playing point's row goes to the top of the box, `REFOLLOW_JUMP_INSET_PX` in,
+ * even when it is already in view. It targets the point row, never the shot:
  * the well mounts under the row, so aligning the shot would push the row off
- * the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), not one run: a
- * step re-follows before its seek lands, so the crossing that follows inside
- * the window is part of the same jump and the second scroll wins. Outside the
- * window it is CONTINUOUS keep-in-view: the minimal scroll that brings the
- * lit thing inside the box, and nothing when it already is — no lurch per
- * point. The transition is observed here (`prevHeldRef`), not signalled by a
- * prop.
+ * the top. The jump is a window (`REFOLLOW_JUMP_WINDOW_MS`), since a step
+ * re-follows before its seek lands. Outside the window it is the minimal scroll
+ * that brings the lit thing inside the box.
  *
- * **Read the viewer's own scrolling as intent to hold** — a `wheel`, a touch
- * drag, a `pointerdown` on the scroller's own gutter (the scrollbar is the
- * only part of a scroller that is not a child of it), or a scrolling key —
- * never the `scroll` event, which a programmatic scroll fires exactly as a
- * wheel does. So the hook's own travel can never hold. Each holds the
- * DISPLAYED point — an ENTER only: scrolling while already held keeps the
- * held point, so the well never wanders to whatever scrolled into view. With
- * nothing displayed the hold is `null` — held with no well (T25).
+ * Read the viewer's own scrolling as intent to hold: a `wheel`, a touch drag, a
+ * `pointerdown` on the scroller's own gutter, or a scrolling key. Never the
+ * `scroll` event, which a programmatic scroll fires too, so the hook's own
+ * travel can never hold. Each holds the displayed point, on entering only:
+ * scrolling while already held keeps the held point. With nothing displayed the
+ * hold is `null`.
  *
- * Moves the scroller's own offset and nothing else. The DOM's
- * scroll-an-element-into-view method walks every ancestor instead, and while
- * the room's drawer is still off-canvas mid-slide that dragged the whole room
- * — video included — sideways toward the row. The room's retired dark list
- * hit exactly that, which is why the rule is written down here.
- *
- * The scroller is a ref to the element whose `scrollTop` moves; its box is
- * its own bounding rect.
+ * Moves the scroller's own offset and nothing else: the DOM's
+ * scroll-an-element-into-view method walks every ancestor, and dragged the
+ * whole room sideways while its drawer was still off-canvas.
  */
 
 /**
- * Keys that scroll a scroller (or the row focused inside it) without a
- * `wheel`, `touchmove` or `pointerdown` — the fourth hold source (author's
- * answer to Open item 3).
+ * Keys that scroll a scroller (or the row focused inside it) without a `wheel`,
+ * `touchmove` or `pointerdown`: the fourth hold source.
  */
 export const SCROLL_KEYS = new Set([
   "PageDown",
@@ -70,10 +54,8 @@ export const SCROLL_KEYS = new Set([
 export const FOLLOW_SCROLL_FALLBACK_MS = 400;
 
 /**
- * Where a re-follow JUMP (T26) puts the playing row: its top this far below
- * the scroller's top edge. 8px is the spacing scale's 8px step (`gap-2`,
- * foundations.md) and clears the row's own `py-1.5`, so the row reads as the
- * first thing in the box rather than as one cut off by the edge.
+ * Where a re-follow jump puts the playing row: its top this far below the
+ * scroller's top edge, which clears the row's own `py-1.5`.
  */
 export const REFOLLOW_JUMP_INSET_PX = 8;
 
@@ -154,15 +136,11 @@ export function followScrollTarget(
 }
 
 /**
- * What the continuous keep-in-view holds when the surface asks for the
- * playing point's own row to stay on screen with its lit shot
- * (`keepPointRow`): the span from the point row to the shot, while that span
- * fits the box — so a seek BACK to an earlier point, whose shot then sits
- * above the box, brings the row down with it instead of parking the shot at
- * the box's top edge with its row cut off above. A rally longer than the box
- * cannot show both; there the shot wins, as it does without the option. With
- * no shot row to be found (a point with no stroke yet, a stroke that is a
- * tombstone) the point row is the whole of it.
+ * What the continuous keep-in-view holds under `keepPointRow`: the span from
+ * the point row to the shot, while that span fits the box, so a seek back to an
+ * earlier point brings the row down with its shot instead of parking the shot
+ * at the box's top with its row cut off. In a rally longer than the box the
+ * shot wins. With no shot row to be found, the point row is the whole of it.
  */
 export function followKeepSpan(
   shot: FollowRow | null,
@@ -278,7 +256,7 @@ export function useFollowScroll({
   const cancelSettleRef = useRef<() => void>(NOOP);
   /** `held` as of the effect's last run: the re-follow transition's memory. */
   const prevHeldRef = useRef(held);
-  /** `performance.now()` until which a follow run is a jump (T26). */
+  /** `performance.now()` until which a follow run is a jump. */
   const jumpUntilRef = useRef(0);
   useEffect(() => {
     const wasHeld = prevHeldRef.current;
@@ -340,9 +318,9 @@ export function useFollowScroll({
     if (!mounted) return;
     const target = scroller.current;
     if (!target) return;
-    // Null when nothing is displayed — dead time, or before the first point
-    // — and that still holds (T25): no well opens, and the list stays where
-    // the viewer put it instead of jumping to the next point that lights.
+    // Null when nothing is displayed (dead time, or before the first point),
+    // and that still holds: no well opens, and the list stays where the viewer
+    // put it.
     const hold = () => {
       if (heldRef.current) return;
       onHoldPoint(displayedPointRef.current);

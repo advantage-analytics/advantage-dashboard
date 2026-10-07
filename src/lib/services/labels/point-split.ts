@@ -1,34 +1,18 @@
 /**
  * Split a point at one of its shots: the vendor ran two real points into one
- * rally (a serve hit while the last ball was still being picked up, a score
- * stream that skipped a point), so one `label_points` row holds the strokes
- * of two. "Split point here" on a shot moves THAT shot and every shot after
- * it — in the point's video order, tombstones and ghosts included, so no
- * row is left pointing at a rally it was never part of — into a NEW point
- * directly below the anchor.
+ * rally. That shot and every shot after it (in video order, tombstones and
+ * ghosts included) move into a new point directly below the anchor.
  *
- * The new row is `planInsertedPoint`'s "after" insert (point-insert.ts): the
- * anchor's set, game, server and game type, `status: "added"`, every later
- * point moved up one index, highest first. Two things differ from an empty
- * "Add point below": the new point's `vendor_rally_ids` are the rallies its
- * moved vendor shots came from — read off each frozen `label_shots.vendor`
- * stroke's `pred_rally_id` by the session file, so the derivation's marks
- * (`buildLabelMarks`) still find a label point for every rally — and the
- * anchor loses a rally id only when NO shot of that rally stays behind.
- * Shot statuses are untouched: a moved vendor shot is still `kept`, since the
- * comparison joins on `event_id`, not on the point.
+ * The new row is `planInsertedPoint`'s "after" insert, except that its
+ * `vendor_rally_ids` are the rallies its moved vendor shots came from (each
+ * frozen stroke's `pred_rally_id`), so the derivation's marks still find a
+ * label point for every rally; the anchor loses a rally id only when no shot of
+ * that rally stays behind. Shot statuses are untouched. The anchor becomes
+ * `edited` (`added` stays `added`), and the menu holds its Reset back while
+ * another live point shares one of its rallies (`sharesVendorRally`).
  *
- * The anchor becomes `edited` (an `added` anchor stays `added`). Its `seed`
- * is kept, so Reset stays defined: it puts the anchor's OWN fields back to
- * the seed and leaves the shots where they are, as a point reset always has.
- * The menu does not offer that Reset while another live point shares one of
- * the anchor's rallies (`sharesVendorRally`) — "unchanged" would then claim
- * the vendor's rally was whole, which is the one thing a split says it was
- * not.
- *
- * Pure, and importable from the client bundle: the console runs
- * `applyPointSplit` for its optimistic rows and `point-split-session.ts`
- * runs `planPointSplit` before its writes.
+ * Pure: the console runs `applyPointSplit`, `point-split-session.ts` runs
+ * `planPointSplit`.
  */
 
 import type { Planned } from "./operations";
@@ -76,7 +60,6 @@ export interface SplitPointWrite {
   vendor_rally_ids: number[];
 }
 
-/** The anchor's columns after the split. */
 export interface SplitAnchorWrite {
   status: "edited" | "added";
   vendor_rally_ids: number[];

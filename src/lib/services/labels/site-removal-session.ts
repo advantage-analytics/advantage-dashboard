@@ -1,22 +1,13 @@
 /**
- * The labelling console's Restore of a ghost, admin-gated: put a vendor
- * stroke the SITE removed back into the rally (`site-removal.ts`).
+ * The console's Restore of a ghost: put a vendor stroke the site removed back
+ * into the rally (`site-removal.ts`). Admin-gated like edit-session.ts, with
+ * the marks gate (`checkSessionOpen` with `blind`).
  *
- * Same shape as operations-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session, and decides what to write with the pure rule in site-removal.ts —
- * the one the console ran for its optimistic update.
- *
- * Two things are this write's own. It also refuses a session whose
- * `marks_enabled` is false (`checkSessionOpen` with `blind`, the gate every
- * marks write shares): that session's labels were made blind to the derivation and
- * carry no ghost to restore — the ground-truth match is never written from
- * here. And its ONE write is an UPDATE of `label_shots` setting
- * `site_removal_restored_at`, matched on the id AND on the two columns the
- * plan read (`site_removal is not null`, `site_removal_restored_at is null`),
- * so two tabs restoring the same ghost cannot both report success, and
- * nothing but a ghost is ever touched. No other table, no other column, no
- * delete. `tests/label-operations.spec.ts` scans this file for a delete call.
+ * Its one write is an UPDATE of `label_shots` setting
+ * `site_removal_restored_at`, matched on the id and on the two columns the plan
+ * read (`site_removal is not null`, `site_removal_restored_at is null`), so two
+ * tabs restoring the same ghost cannot both report success and nothing but a
+ * ghost is ever touched.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -102,7 +93,6 @@ export async function writeLabelSiteRemovalRestore(params: {
   };
 }
 
-/** The admin-gated entry point behind `restoreLabelSiteRemovalAction`. */
 export function restoreLabelSiteRemoval(
   shotId: unknown,
   deps: LabelWriteDependencies = defaultLabelWriteDependencies,

@@ -6,6 +6,7 @@ import {
 } from "@/lib/services/labels/edit";
 import {
   LABEL_SPINS,
+  isMissedResult,
   isServeStroke,
   type LabelEnding,
   type LabelPoint,
@@ -53,10 +54,9 @@ export const RESULT_LABEL: Record<LabelShotResult, string> = {
 
 /**
  * A stroke's spin in the words the match Video tab prints for the same vendor
- * value — `shotSpinLabel` (`film-shots.ts`), the Current point table's own
- * source, handed the stroke the way that table's rows carry it. So a serve's
- * topspin is a "Kick" and its sidespin a "Slice", and a rally shot's prints
- * as recorded ("Topspin", "Backspin"); null when there is no spin.
+ * value (`shotSpinLabel`, film-shots.ts): a serve's topspin is a "Kick" and its
+ * sidespin a "Slice"; a rally shot's prints as recorded. Null when there is no
+ * spin.
  */
 export function spinLabel(
   stroke: LabelStroke | null,
@@ -160,7 +160,6 @@ export function parseCourtPoint(
   return { x, y };
 }
 
-/** The Player dropdown's rows: the two sides, by name. */
 export function sideOptions(
   names: SideNames,
 ): { value: LabelSide; label: string }[] {
@@ -170,16 +169,12 @@ export function sideOptions(
   ];
 }
 
-/** The Stroke dropdown's rows. */
 export const STROKE_OPTIONS: { value: LabelStroke; label: string }[] =
   LABEL_STROKES.map((value) => ({ value, label: STROKE_LABEL[value] }));
 
 /** A serve that did not go in: part of the point, not of the rally. */
 export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
-  return (
-    isServeStroke(shot.stroke) &&
-    (shot.result === "out" || shot.result === "net")
-  );
+  return isServeStroke(shot.stroke) && isMissedResult(shot.result);
 }
 
 /**

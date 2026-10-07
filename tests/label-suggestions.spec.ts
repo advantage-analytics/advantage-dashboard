@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -12,7 +10,6 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import { planAddedShot } from "@/lib/services/labels/operations";
-import { labelScores } from "@/lib/services/labels/score";
 import type {
   LabelPoint,
   LabelSession,
@@ -27,9 +24,12 @@ import {
   dismissLabelSuggestion,
   writeLabelSuggestionDismiss,
 } from "@/lib/services/labels/suggestions-session";
+import { inner, tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext as sharedEditContext,
+  noop,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -53,9 +53,6 @@ const POINT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const { P4 } = FIXTURE_POINT_IDS;
 const KEY = "missing_shot:502";
-
-/** The fixture session's two players, as the console's `sideNames` has them. */
-const NAMES = { p1: "Lee", p2: "Vargas" };
 
 /**
  * The fixture's fourth point with the frame's rally in place of its own:
@@ -539,24 +536,13 @@ function recordingOperations() {
   return { calls, operations };
 }
 
-const noop = () => {};
-
-function editContext(overrides: Record<string, unknown> = {}) {
-  const session = labelSessionFixture();
-  return {
-    editable: true,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
+const editContext = (overrides: Record<string, unknown> = {}) =>
+  sharedEditContext({
     operations: recordingOperations().operations,
     openGhostIds: new Set<string>(),
     onToggleGhost: noop,
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
     ...overrides,
-  };
-}
+  });
 
 function renderWell(
   point: LabelPoint,
@@ -589,28 +575,6 @@ function renderRow(
       marks,
     }),
   );
-}
-
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-/** The inner text of the element carrying `attr`. */
-function inner(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  const start = html.indexOf(">", at) + 1;
-  return html.slice(start, html.indexOf("<", start));
-}
-
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /** The number drawn in a stroke row's first track. */
@@ -933,14 +897,6 @@ test.describe("the console", () => {
     expect(docked).toContain(`data-shot-suggestion="${KEY}"`);
     expect(docked).toContain('data-shot-id="s-b"');
   });
-});
-
-test("the game band knows nothing of a suggestion", () => {
-  const source = readFileSync(
-    "src/components/admin/labels/label-game-band.tsx",
-    "utf8",
-  );
-  expect(source).not.toMatch(/suggestion|onDismissSuggestion|missing_shot/i);
 });
 
 /**

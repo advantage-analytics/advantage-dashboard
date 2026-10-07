@@ -1,25 +1,14 @@
 /**
- * The labelling console's "Add point", admin-gated: make room for a point the
- * vendor never saw — the suggestion's slot between two points served from
- * one side (board 08m §5), or any point's "Add point above" / "Add point
- * below" (`point-insert.ts`).
+ * The console's "Add point" (`point-insert.ts`): the suggestion's slot, or any
+ * point's "Add point above" / "Add point below". Admin-gated like
+ * edit-session.ts; not the marks gate (`checkSessionOpen`'s `blind`): adding a
+ * point is a manual label edit, so a session labelled without marks takes one
+ * too.
  *
- * Same shape as operations-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a session that is
- * not `labelling` (`checkSessionOpen`, the gate every row operation shares),
- * and decides what to write with the pure plan the console ran for its
- * optimistic rows. NOT the marks gate (`checkSessionOpen`'s `blind`): adding
- * a point is a manual label edit, not an answer to a mark, so a session
- * labelled without marks — the ground-truth match — takes one too. The
- * suggestion slot that also calls this only draws when marks are on.
- *
- * Its writes are all on `label_points` and nothing else: one UPDATE of
- * `point_index` per point at or after the slot, HIGHEST index first so no two
- * rows share an index while the shift is under way (the column has no unique
- * constraint, but the rail numbers rows by it), then ONE INSERT of the new
- * row — `winner`, `ending`, `ended_by`, `serve_side` and `seed` null, no
- * `checked_at`, no shots — returned as the console draws it. No row is ever
- * removed. `tests/label-operations.spec.ts` scans this file for a delete.
+ * Writes `label_points` only: one UPDATE of `point_index` per point at or after
+ * the slot, HIGHEST index first so no two rows share an index while the shift
+ * is under way, then one INSERT of the new row (`winner`, `ending`, `ended_by`,
+ * `serve_side` and `seed` null, no shots). No row is ever removed.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -49,7 +38,6 @@ function normalisePosition(position: unknown): InsertPosition {
   return position === "after" ? "after" : "before";
 }
 
-/** What the plan reads of each row of the session. */
 interface IndexRow {
   id: string;
   point_index: number;
@@ -75,10 +63,7 @@ function toInsertable(row: IndexRow): InsertablePoint {
   };
 }
 
-/**
- * Check the session, read its points, shift the later ones, insert the new
- * one. Never throws.
- */
+/** Shift the later points, insert the new one. Never throws. */
 export async function writeLabelPointInsert(params: {
   supabase: AdminClient;
   sessionId: unknown;
@@ -151,7 +136,6 @@ export async function writeLabelPointInsert(params: {
   return { ok: true, point: toLabelPoint(inserted) };
 }
 
-/** The admin-gated entry point behind `insertLabelPointAction`. */
 export function insertLabelPoint(
   sessionId: unknown,
   anchorPointId: unknown,

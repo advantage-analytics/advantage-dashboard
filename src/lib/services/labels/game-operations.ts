@@ -1,30 +1,20 @@
 /**
- * The labelling console's GAME operations — set who serves a game, set what
- * kind of game it is — as pure rules over the console's rows.
+ * The labelling console's game operations (set who serves a game, set what kind
+ * of game it is) as pure rules over the console's rows:
+ * game-operations-session.ts writes what they plan and the console runs the
+ * same ones.
  *
- * Pure and import-free of anything server-side, like operations.ts: the
- * admin-gated service (game-operations-session.ts) decides what to write with
- * these functions, and the `"use client"` console runs the same ones for its
- * optimistic update, so what the labeller sees the moment they act is what the
- * server is about to write.
+ * A game is the stored `(set_number, game_number)` within a session. Both
+ * operations touch every live point of the game and nothing else, naming only
+ * `server`, `game_type` (the type operation) and the `status` the server change
+ * implies.
  *
- * A game is the stored `(set_number, game_number)` within a session — the same
- * `LabelGame` the per-point move uses. Both operations touch every LIVE point
- * of the game and nothing else: one write per point, naming only `server`,
- * `game_type` (the type operation) and the `status` the server change implies.
- * `set_number` / `game_number` are never rewritten here, and a tombstone is
- * left exactly as it is.
- *
- * ── Who serves a tiebreak ───────────────────────────────────────────────────
- * In a tiebreak (and a match tiebreak) the serve rotates 1-2-2: the first
- * server serves point 1, then the other side serves points 2–3, the first
- * side 4–5, and so on. Only a point that was actually SERVED takes a turn in
- * that rotation: a replayed let or a row marked `not_a_point` is not a point,
- * so it takes the server of the next served point (the last one, when nothing
- * follows it) — the person who was serving while it happened. A point whose
+ * In a tiebreak the serve rotates 1-2-2. Only a point that was actually served
+ * takes a turn: a replayed let or a `not_a_point` row takes the server of the
+ * next served point (the last one, when nothing follows it). A point whose
  * winner is still blank is a served point all the same, which is why this is
  * not score.ts's `isCountedPoint`: the labeller sets a game's type before the
- * winners are in, and the rotation must not wait for them.
+ * winners are in.
  */
 
 import {
@@ -72,10 +62,7 @@ export type PlannedGameWrites =
 const UNSERVED_ENDINGS: ReadonlySet<NonNullable<LabelPoint["ending"]>> =
   new Set(["let_replayed", "not_a_point"]);
 
-/**
- * Whether a live point takes a turn in the tiebreak's serve rotation — every
- * live point except a replayed let or a row marked `not_a_point`.
- */
+/** Whether a live point takes a serve turn: not a let or `not_a_point`. */
 export function takesServeTurn(
   point: Pick<GamePoint, "status" | "ending">,
 ): boolean {
@@ -85,7 +72,6 @@ export function takesServeTurn(
   );
 }
 
-/** The game's live points, in `point_index` order. */
 export function livePointsOfGame<T extends GamePoint>(
   points: readonly T[],
   game: LabelGame,
@@ -175,14 +161,10 @@ function statusAfterServer(
 }
 
 /**
- * Give game `game` the server `server`: one write per live point of the game.
- * In an ordinary game every point gets `server`; in a tiebreak `server` is
- * who serves point 1 and the rest follow the rotation (see the file comment).
- *
- * The status of each write comes from the same rule as a point edit or a
- * move (edit.ts `labelPointStatusAfterChange`), measured against the point's
- * seed: a point set back to the server it was seeded with is `unchanged`
- * again, an added point stays `added`.
+ * Give game `game` the server `server`: one write per live point. In an
+ * ordinary game every point gets `server`; in a tiebreak `server` is who serves
+ * point 1 and the rest follow the rotation. Each status comes from
+ * `labelPointStatusAfterChange` against the point's seed.
  */
 export function planGameServer(
   points: readonly GamePoint[],
@@ -232,10 +214,7 @@ export function planGameType(
   };
 }
 
-/**
- * The console's rows with `writes` applied — the optimistic update. A row no
- * write names is returned as it is; order is kept.
- */
+/** The console's rows with `writes` applied; order is kept. */
 export function applyGameWrites<T extends LabelPoint>(
   points: readonly T[],
   writes: readonly GamePointWrite[],

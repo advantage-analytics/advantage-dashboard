@@ -25,38 +25,22 @@ import {
 import type { PlacementTarget } from "./court-placement";
 
 /**
- * Board 08i's court, as it is drawn inside the court panel
- * (`label-court-panel.tsx`): white lines on the panel's dark ground, the open
- * point's strokes marked on it — a hollow ring where the ball was hit, a
- * filled dot where it landed, a dashed line between.
+ * The court as drawn inside the court panel: the open point's strokes marked on
+ * it, a hollow ring where the ball was hit, a filled dot where it landed, a
+ * dashed line between.
  *
- * Two views of the same art:
+ * - `view="whole"`: the whole court (`COURT_VIEW_BOX`), read-only.
+ * - `view="near" | "far"`: zoomed to that half with its run-off, as a button. A
+ *   click anywhere in the box becomes metres through `toCourtInHalf` and goes
+ *   to `onPlace`; the end being placed carries the `--blue` ring.
  *
- * - `view="whole"` — the whole court (`COURT_VIEW_BOX`), read-only: a
- *   picture of the point as it happens.
- * - `view="near" | "far"` — zoomed to that half (`halfCourtViewBox`) with its
- *   run-off, as a button under a crosshair: a click ANYWHERE in the box —
- *   lines or surround, for a ball that went out — becomes metres through
- *   `toCourtInHalf` and goes to `onPlace`. Which end it places is
- *   court-placement.ts's sequence; that end of the target stroke carries the
- *   `--blue` ring, so the labeller sees what the click will move.
- *
- * What is drawn is the caller's: each stroke comes with an opacity for each
- * end (`label-court-marks.ts` for the fading rally, 1 for a selected stroke),
- * an end at 0 is not drawn at all, and the dashed path between them takes the
- * fainter of the two. Each end eases between opacity steps with the Video
- * tab's own `MARK_FADE_TRANSITION` and rises in on mount with its
- * `MARK_IN_ANIMATION`, so the two courts read as one.
+ * Each stroke comes with an opacity for each end: an end at 0 is not drawn, and
+ * the dashed path takes the fainter of the two. Ends ease and rise in with the
+ * Video tab's `MARK_FADE_TRANSITION` and `MARK_IN_ANIMATION`.
  *
  * The box is the largest one of the art's proportions that fits its size
- * container — the panel's court box — so it shrinks and grows with the
- * panel. The marks are placed in percent and a click is read against the
- * box's own bounding rect, so neither notices the scale.
- *
- * Both views keep the art's own proportions (0.4434 for the whole court,
- * 276 × 222 for a half), so a click converts to metres without distortion.
- * Marks whose end is off the zoomed half are clipped by the box, and their
- * dashed path runs out to the edge toward it.
+ * container. Marks are placed in percent and a click is read against the box's
+ * own bounding rect, so neither notices the scale.
  */
 
 /** One step up from the panel's ground, for the court's surface. */
@@ -141,17 +125,13 @@ export function LabelCourt({
   fadeOnZoom = false,
 }: {
   /**
-   * Fade the art in when the court changes between the whole court and a
-   * half (`label-court-view-in`, globals.css): the zoom reads as one court
-   * changing scale, not a cut. Opacity only — the SVG's geometry is never
-   * animated. Off (the default, and the panel's first court), the art is
-   * simply there. Near ↔ far is not a zoom and does not fade: it happens on
-   * every placing click.
+   * Fade the art in when the court changes between the whole court and a half
+   * (`label-court-view-in`, globals.css). Opacity only. Near ↔ far does not
+   * fade: it happens on every placing click.
    */
   fadeOnZoom?: boolean;
   /** The strokes to draw, each at its ends' opacities. Tombstones are skipped. */
   strokes: readonly CourtStroke[];
-  /** The whole court, or the half a click is being taken on. */
   view: CourtView;
   /** The stroke being placed: its `target` end carries the ring. */
   targetShotId?: string | null;

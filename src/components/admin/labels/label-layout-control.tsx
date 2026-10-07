@@ -11,15 +11,10 @@ import {
 } from "./label-layout";
 
 /**
- * The console header's "Layout" control: a `FloatMenu` listing the two ways
- * the console can sit — Docked side, in the page, and Full screen — with the
- * current one checked.
- *
- * The trigger is `MenuSelect`'s pill, drawn by hand because it names the
- * control ("Layout") rather than the value: the glyph beside the word is the
- * mode — a right panel for the docked rail, the expand arrows for the full
- * screen — so the current choice still reads at a glance. Each row carries a
- * second line saying what choosing it does.
+ * The console header's "Layout" control: a `FloatMenu` listing Docked side and
+ * Full screen, the current one checked. The trigger is `MenuSelect`'s pill
+ * drawn by hand, because it names the control ("Layout") rather than the value;
+ * the glyph beside the word is the mode.
  */
 
 const MODE_ICON: Record<LabelLayoutMode, typeof PanelRight> = {

@@ -1,21 +1,12 @@
 /**
- * The labelling console's Dismiss of a suggestion, admin-gated: remember that
- * the labeller looked at a proposed stroke (or point) and said no
- * (`suggestions.ts`).
+ * The console's Dismiss of a suggestion: remember that the labeller looked at a
+ * proposed stroke (or point) and said no (`suggestions.ts`). Admin-gated like
+ * edit-session.ts, with the marks gate (`checkSessionOpen` with `blind`).
  *
- * Same shape as site-removal-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false (`checkSessionOpen` with
- * `blind`, the gate every marks write shares — that session's labels were made blind
- * to the derivation and has no suggestion to dismiss; the ground-truth match
- * is never written from here) and decides what to write with the pure rule
- * the console ran for its optimistic update.
- *
- * Its ONE write is an UPDATE of `label_points` setting `dismissed` to the
- * array it read plus the key, matched on the id AND on the status the row
- * was read with, so a point deleted or restored in another tab meanwhile is
- * not written under it. No other table, no other column, no row removed.
- * `tests/label-operations.spec.ts` scans this file for a removal call.
+ * Its one write is an UPDATE of `label_points` setting `dismissed` to the array
+ * it read plus the key, matched on the id and on the status the row was read
+ * with, so a point deleted or restored in another tab meanwhile is not written
+ * under it.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -92,7 +83,6 @@ export async function writeLabelSuggestionDismiss(params: {
   return { ok: true, dismissed: plan.write.dismissed };
 }
 
-/** The admin-gated entry point behind `dismissLabelSuggestionAction`. */
 export function dismissLabelSuggestion(
   pointId: unknown,
   key: unknown,

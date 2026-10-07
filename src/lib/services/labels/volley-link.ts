@@ -1,43 +1,24 @@
 /**
  * A ball taken out of the air has no bounce between two strokes: where the
- * previous stroke's ball "landed" IS where the volley (or the overhead) met
- * it. So the two coordinates are one place, and the labeller sets it once.
+ * previous stroke's ball "landed" is where the volley (or the overhead) met it,
+ * so the labeller sets that place once. Pure; the console calls it after each
+ * of the labeller's own shot writes (`patchShot`).
  *
- * Pure and import-free of anything server-side — the `"use client"` console
- * calls it after each of the labeller's own shot writes
- * (label-console.tsx `patchShot`) and sends what it answers through the same
- * shot autosave. It only ever plans `label_shots` patches.
+ * - The stroke changed to an air stroke: the previous stroke's landing becomes
+ *   its contact or, when it has no contact, its contact becomes that landing.
+ * - An air stroke's contact was set: the previous stroke's landing follows it.
+ * - A landing was set and the next stroke is an air stroke: that stroke's
+ *   contact follows it.
  *
- * The rule, for the labeller's patch to ONE stroke:
- *
- * - the stroke CHANGED TO an air stroke (it was not one before): when it has
- *   a contact, the previous stroke's landing becomes that contact; else when
- *   the previous stroke has a landing, the air stroke's contact becomes that
- *   landing; with neither, nothing.
- * - the CONTACT of an air stroke was set or changed: the previous stroke's
- *   landing follows it.
- * - the LANDING of a stroke was set or changed and the NEXT stroke is an air
- *   stroke: that stroke's contact follows it.
- *
- * "Previous" and "next" are the nearest LIVE strokes of the same point, in
- * the point's own (video) order: a tombstone (`status: "deleted"`) is never
- * one, and nor is a ghost — a stroke the site removed and nobody restored —
- * while the session draws ghosts (`ghosts`, on by default; the marks-off
- * session numbers a ghost as an ordinary stroke, and passes `false`).
- *
- * Clearing a coordinate never clears the other side, and changing an air
- * stroke back to anything else (or one air stroke to another) changes
- * nothing. When the two already agree there is no write — so no "edited"
- * pencil on a row nobody moved.
- *
- * The follower's patch is the two coordinates and nothing else. Its In / Out
- * / Net is left as stored: a ball met in the air was played, wherever the
- * hitter stood, so a contact beyond the baseline must not turn the stroke
- * before it into "out".
+ * "Previous" and "next" are the nearest live strokes of the point: never a
+ * tombstone, nor a ghost while the session draws ghosts (`ghosts`). Clearing a
+ * coordinate clears nothing else, and no write goes out when the two already
+ * agree. The follower's patch is coordinates only: its In / Out / Net is left
+ * as stored, since a ball met in the air was played wherever the hitter stood.
  */
 
 import type { LabelShotPatch } from "./edit";
-import { isGhostShot, type LabelPoint, type LabelShot } from "./session";
+import { isLiveShot, type LabelPoint, type LabelShot } from "./session";
 
 /** A volley or an overhead: the ball is hit before it bounces. */
 export function isAirStroke(stroke: LabelShot["stroke"] | undefined): boolean {
@@ -104,9 +85,7 @@ export function volleyLinkWrites({
   patch: LabelShotPatch;
   ghosts?: boolean;
 }): VolleyLinkWrite[] {
-  const live = point.shots.filter(
-    (shot) => shot.status !== "deleted" && !(ghosts && isGhostShot(shot)),
-  );
+  const live = point.shots.filter((shot) => isLiveShot(shot, ghosts));
   const at = live.findIndex((shot) => shot.id === shotId);
   // Not a live stroke of this point: a tombstone's values link to nothing.
   if (at === -1) return [];

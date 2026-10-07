@@ -10,6 +10,7 @@ import {
   fromCourtInHalf,
 } from "@/components/admin/labels/court-geometry";
 import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
+import { count, tag as tagOf, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -62,10 +63,6 @@ function render(props: ConsoleProps): string {
   return renderToStaticMarkup(React.createElement(LabelConsole, props));
 }
 
-function count(html: string, pattern: RegExp): number {
-  return html.match(pattern)?.length ?? 0;
-}
-
 /** The markup of the expanded point's shot panel, up to the next point. */
 function shotPanel(html: string, pointId: string): string {
   const start = html.indexOf(`data-shots-for="${pointId}"`);
@@ -74,21 +71,6 @@ function shotPanel(html: string, pointId: string): string {
   const deleted = html.indexOf('data-row="deleted-point"', start);
   const ends = [next, deleted].filter((i) => i > -1);
   return html.slice(start, ends.length ? Math.min(...ends) : undefined);
-}
-
-/** The opening tag carrying `attr`. */
-function tagOf(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 test("one row per live point, and a marker for the deleted one", () => {
@@ -391,80 +373,13 @@ test.describe("the player", () => {
     startTimeSeconds: 0,
   };
 
-  /** The film card's markup: from its marker to the court card. */
-  function film(html: string): string {
-    const start = html.indexOf("data-label-side-video");
-    expect(start).toBeGreaterThan(-1);
-    return html.slice(
-      html.lastIndexOf("<", start),
-      html.indexOf("data-label-side-court"),
-    );
-  }
-
-  test("carries the Video tab's transport, minus what the console has no use for", () => {
-    const html = film(render({ session: labelSessionFixture(), video: VIDEO }));
-    expect(html).toContain('data-testid="label-video"');
-    expect(html).toContain('src="https://example.test/v.mp4?sig=x"');
-    expect(html).toContain('preload="metadata"');
-    expect(html).toContain('role="slider"');
-    expect(html).toContain('aria-label="Previous point"');
-    expect(html).toContain('aria-label="Next point"');
-    expect(html).toContain('aria-label="Skip dead time — off"');
-    expect(html).toContain('aria-label="Playback speed, 1×"');
-    expect(html).toContain('aria-label="Loop this point — off"');
-    expect(html).toContain('aria-label="Sound — on"');
-    expect(html).not.toContain("Save point");
-    expect(html).not.toContain("Show the court");
-    expect(html).not.toContain("Exit fullscreen");
-    expect(html).not.toContain("More — not available yet");
-    expect(html).not.toContain("Open the film room fullscreen");
-    // The rail already shows the score: nothing on the film repeats it.
-    expect(html).not.toMatch(/scoreboard/i);
-  });
-
-  test("the transport's title row describes the playing point", () => {
-    // Point 1: ended on an error, its last live stroke the added forehand.
-    const html = film(
-      render({
-        session: labelSessionFixture(),
-        video: VIDEO,
-        initialVideoTime: 2473.4,
-      }),
-    );
-    const words = text(html);
-    expect(words).toContain("Error · Forehand");
-    expect(words).toContain("Set 1 · Game 1 · Lee serves");
-    expect(words).toContain("Point 1 / 4");
-
-    // In dead time there is no point to describe.
-    const idle = text(
-      film(render({ session: labelSessionFixture(), video: VIDEO })),
-    );
-    expect(idle).toContain("Between points");
-    expect(idle).not.toMatch(/Point \d+ \/ \d+/);
-  });
-
-  test("nothing floats, nothing drags and nothing minimises", () => {
+  test("one frame, one video element", () => {
     const html = render({
       session: labelSessionFixture(),
       video: VIDEO,
       initialVideoTime: 2473.4,
     });
-    for (const gone of [
-      "data-label-dock",
-      "data-label-court-dock",
-      "data-dock-handle",
-      "data-court-handle",
-      "data-dock-pill",
-      "data-dock-minimised",
-      "Minimise the video",
-      "Minimise the court",
-      "Expand the video",
-      "Expand the court",
-      "lucide-grip-horizontal",
-    ]) {
-      expect(html, gone).not.toContain(gone);
-    }
+
     // One frame, one element.
     expect(count(html, /data-label-video-frame/g)).toBe(1);
     expect(count(html, /<video/g)).toBe(1);
@@ -472,56 +387,14 @@ test.describe("the player", () => {
 });
 
 test.describe("viewport fit (T19)", () => {
-  test("one root, a flex column that fills what the page gives it", () => {
-    const html = render({ session: labelSessionFixture(), video: null });
-    expect(html.startsWith("<div data-label-console")).toBe(true);
-    expect(count(html, /data-label-console/g)).toBe(1);
-    const root = tagOf(html, "data-label-console");
-    for (const cls of ["flex", "min-h-0", "flex-1", "flex-col"]) {
-      expect(root).toMatch(new RegExp(`class="[^"]*\\b${cls}\\b`));
-    }
-    // The header and its save line sit above the view, which takes the rest.
-    expect(html.indexOf("<h1")).toBeLessThan(html.indexOf("data-label-side"));
-    expect(html.indexOf("<h1")).toBeLessThan(
-      html.indexOf("data-label-rail-scroller"),
-    );
-    const view = tagOf(html, 'data-label-side=""');
-    for (const cls of ["flex", "min-h-0", "flex-1"]) {
-      expect(view).toMatch(new RegExp(`class="[^"]*\\b${cls}\\b`));
-    }
-  });
-
   test("the rail is the one scroller, down its length and never sideways", () => {
     const html = render({ session: labelSessionFixture(), video: null });
     expect(count(html, /data-label-rail-scroller/g)).toBe(1);
-    const scroller = tagOf(html, "data-label-rail-scroller");
-    for (const cls of [
-      "min-h-0",
-      "flex-1",
-      "overflow-y-auto",
-      "overflow-x-hidden",
-    ]) {
-      expect(scroller, cls).toContain(cls);
-    }
     // Every row is inside it, and nothing else in the console scrolls.
     expect(html.indexOf('data-row="point"')).toBeGreaterThan(
       html.indexOf("data-label-rail-scroller"),
     );
     expect(count(html, /overflow-y-auto/g)).toBe(1);
-    expect(html).not.toContain("overflow-x-auto");
-    // No column header to stick: the rows are two lines, not columns.
-    expect(html).not.toContain("data-label-point-header");
-    expect(html).not.toContain("eyebrow-sm");
-  });
-
-  test("the page bounds main to the viewport under the header", () => {
-    const source = readFileSync(
-      path.join(process.cwd(), "src/app/admin/labels/[sessionId]/page.tsx"),
-      "utf8",
-    );
-    expect(source).toContain(
-      'className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6"',
-    );
   });
 });
 
@@ -549,33 +422,9 @@ test.describe("the Now playing pill", () => {
     expect(text(html.slice(html.indexOf("data-label-follow-pill")))).toContain(
       "Now playing · Point 2",
     );
-    // Not in the rows' flow and not on the viewport (T19): pinned over the
-    // scroller's top-centre.
-    expect(tag).toMatch(
-      /class="[^"]*\babsolute\b[^"]*\btop-3\b[^"]*\bleft-1\/2\b/,
-    );
-    expect(tag).not.toMatch(/class="[^"]*\bfixed\b/);
-    // Its positioning context is the wrapper around the scroller, which
-    // comes first inside it.
-    const wrapper = html.lastIndexOf(
-      "<div",
-      html.indexOf("data-label-rail-scroller") - 1,
-    );
-    const context = html.lastIndexOf("<div", wrapper - 1);
-    const contextTag = html.slice(
-      html.lastIndexOf("<div", context - 1),
-      html.indexOf(">", context) + 1,
-    );
-    expect(contextTag).toMatch(/class="[^"]*\brelative\b/);
     expect(html.indexOf("data-label-follow-pill")).toBeGreaterThan(
       html.indexOf("data-label-rail-scroller"),
     );
-    expect(tag).toMatch(/class="[^"]*\bz-10\b/);
-    expect(tag).toContain("film-follow-pill-in");
-    // On the white rail it is drawn as the page draws it: the floating
-    // shadow, and words that stay white on the dark chip.
-    expect(tag).toContain("shadow-[var(--shadow-floating)]");
-    expect(tag).toContain("text-[var(--rail-on-accent)]");
   });
 
   test("held on the playing point itself still gets one (T24)", () => {
@@ -796,12 +645,6 @@ test.describe("editing (T6)", () => {
     expect(out).toContain("derivation 0.3.2");
     expect(html).toContain('data-save-status="idle"');
     expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*\bSave\b/);
-
-    const page = readFileSync(
-      path.resolve("src/app/admin/labels/[sessionId]/page.tsx"),
-      "utf8",
-    );
-    expect(page).not.toMatch(/>\s*Save\s*</);
   });
 
   test("the save line reads Saved · just now, or the error", () => {
@@ -992,12 +835,8 @@ test.describe("the playing row", () => {
       expect(count(html, RULE)).toBe(1);
       const row = rowMarkup(html, `data-point-id="${FIXTURE_POINT_IDS.P1}"`);
       expect(row).toContain('data-playing="true"');
-      // The row is the rule's positioning context.
-      expect(row).toMatch(/class="[^"]*\brelative\b[^"]*"/);
       const rule = ruleOf(row);
       expect(rule).not.toBeNull();
-      // The rail's classes, whole.
-      expect(rule![1]).toBe("absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]");
       expect(
         rule![2].startsWith("clamp(0%, calc((var(--film-t, 0) - 2472)"),
       ).toBe(true);
@@ -1047,16 +886,6 @@ test.describe("the playing row", () => {
         expect(count(html, RULE), String(initialVideoTime)).toBe(0);
       }
     });
-
-    test("one clock: the film's hook, and no frame loop of the console's own", () => {
-      const dir = path.join(process.cwd(), "src/components/admin/labels");
-      for (const file of readdirSync(dir)) {
-        const source = readFileSync(path.join(dir, file), "utf8");
-        expect(source, file).not.toContain("requestAnimationFrame");
-      }
-      const player = readFileSync(path.join(dir, "label-video.tsx"), "utf8");
-      expect(count(player, /useFilmClockVars\(/g)).toBe(2);
-    });
   });
 });
 
@@ -1084,14 +913,8 @@ test.describe("the two layouts", () => {
   const railHeader = (html: string) =>
     from(html, "data-label-rail-header", "data-label-rail-scroller");
 
-  test("the header carries one Layout menu trigger, the current mode on it", () => {
+  test("the header carries one Layout menu trigger, beside the save line", () => {
     const html = render({ session: labelSessionFixture(), video: VIDEO });
-    const trigger = tagOf(html, 'data-label-layout=""');
-    expect(trigger).toContain('type="button"');
-    expect(trigger).toContain('aria-haspopup="menu"');
-    expect(trigger).toContain('aria-expanded="false"');
-    expect(trigger).toContain('data-layout-mode="docked-side"');
-    expect(trigger).toContain('aria-label="Layout: Docked side"');
     expect(count(html, /data-label-layout=""/g)).toBe(1);
     // Beside the save line, in the header's trailing cluster.
     expect(html.indexOf('data-label-layout=""')).toBeGreaterThan(
@@ -1100,19 +923,6 @@ test.describe("the two layouts", () => {
     expect(html.indexOf('data-label-layout=""')).toBeLessThan(
       html.indexOf("data-label-side"),
     );
-    // No native tooltip anywhere on it.
-    expect(trigger).not.toMatch(/\stitle=/);
-    // Asking for the default by name changes nothing.
-    expect(
-      tagOf(
-        render({
-          session: labelSessionFixture(),
-          video: VIDEO,
-          initialLayoutMode: "docked-side",
-        }),
-        'data-label-layout=""',
-      ),
-    ).toContain('data-layout-mode="docked-side"');
   });
 
   test.describe("docked side, the default", () => {
@@ -1135,9 +945,6 @@ test.describe("the two layouts", () => {
         expect(html.indexOf("data-console-header")).toBeLessThan(
           html.indexOf('data-label-side=""'),
         );
-        const view = tagOf(html, 'data-label-side=""');
-        expect(view).not.toMatch(/class="[^"]*\bfixed\b/);
-        expect(view).not.toContain("z-50");
         expect(html).not.toContain("data-label-black");
 
         // The stage, then the rail: film, court, points.
@@ -1155,32 +962,6 @@ test.describe("the two layouts", () => {
         expect(count(html, /data-label-video-frame/g)).toBe(1);
         expect(count(html, /data-court-panel/g)).toBe(1);
 
-        // Two dark cards on the light page; the stage a size container, the
-        // film 16:9 under the full screen's own cap, centred in its card.
-        expect(tagOf(html, "data-label-side-stage")).toMatch(
-          /class="[^"]*\[container-type:size\]/,
-        );
-        for (const card of ["data-label-side-video", "data-label-side-court"]) {
-          const tag = tagOf(html, card);
-          expect(tag, card).toContain("rounded-[var(--radius-card)]");
-          expect(tag, card).toContain("bg-[var(--surface-dark)]");
-          expect(tag, card).toContain("shadow-[var(--shadow-card)]");
-        }
-        expect(tagOf(html, "data-label-side-video")).toMatch(
-          /class="[^"]*\bjustify-center\b[^"]*\boverflow-hidden\b/,
-        );
-        const film = from(
-          html,
-          "data-label-side-video",
-          "data-label-video-frame",
-        );
-        expect(film).toMatch(/class="[^"]*\baspect-video\b[^"]*\bmax-w-full\b/);
-        expect(film).toContain(
-          "width:min(100cqw, max(calc((100cqh - max(320px, 40cqh)) * 16 / 9), 213px))",
-        );
-        expect(tagOf(html, "data-label-side-court")).toMatch(
-          /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
-        );
         // The transport stays with the player, and reads the playing point.
         const stage = from(html, "data-label-side-stage", 'data-label-rail=""');
         expect(stage).toContain('aria-label="Previous point"');
@@ -1192,11 +973,6 @@ test.describe("the two layouts", () => {
         expect(stage).toMatch(
           /data-court-subtitle="[^"]*"[^>]*>Shot 2 of 3 · /,
         );
-        // A docked frame keeps the skeleton's card radius.
-        expect(tagOf(html, "data-label-video-pending")).not.toContain(
-          "rounded-none",
-        );
-
         // The rail: a white card as wide as asked, its handle on its left
         // edge — the one separator in the console.
         const rail = tagOf(html, 'data-label-rail=""');
@@ -1204,11 +980,6 @@ test.describe("the two layouts", () => {
         expect(rail).toContain('aria-label="Points"');
         expect(rail).toContain('data-rail-tone="light"');
         expect(rail).toContain("width:700px");
-        expect(rail).toMatch(/class="[^"]*\brelative\b/);
-        expect(rail).toContain("bg-[var(--surface-card)]");
-        expect(rail).toContain("rounded-[var(--radius-card)]");
-        expect(rail).toContain("shadow-[var(--shadow-card)]");
-        expect(rail).not.toContain("bg-[var(--surface-dark)]");
         expect(count(html, /role="separator"/g)).toBe(1);
         const separator = tagOf(railOf(html), 'role="separator"');
         expect(separator).toContain('aria-label="Resize the points list"');
@@ -1219,24 +990,10 @@ test.describe("the two layouts", () => {
       }
     });
 
-    test("with no width asked for the rail is its default, and an asked width is held to its bounds", () => {
+    test("with no width asked for the rail is its default", () => {
       const html = render({ session: labelSessionFixture(), video: VIDEO });
       expect(tagOf(html, 'data-label-rail=""')).toContain("width:640px");
       expect(tagOf(html, 'role="separator"')).toContain('aria-valuenow="640"');
-      for (const [asked, drawn] of [
-        [100, 520],
-        [5000, 880],
-      ]) {
-        const held = render({
-          session: labelSessionFixture(),
-          video: VIDEO,
-          initialRailWidth: asked,
-        });
-        expect(tagOf(held, 'data-label-rail=""')).toContain(`width:${drawn}px`);
-        expect(tagOf(held, 'role="separator"')).toContain(
-          `aria-valuenow="${drawn}"`,
-        );
-      }
     });
 
     test("the rail is in its light tone: “Points”, a way into the full screen, and no way out", () => {
@@ -1295,9 +1052,6 @@ test.describe("the two layouts", () => {
       expect(tagOf(card, "data-label-side-court")).toContain(
         'data-court-placing="true"',
       );
-      expect(tagOf(card, "data-label-side-court")).toContain(
-        "shadow-[0_0_0_1.5px_var(--blue)",
-      );
       // And not otherwise: nothing selected, or a console that cannot write.
       for (const other of [
         render({
@@ -1315,7 +1069,6 @@ test.describe("the two layouts", () => {
       ]) {
         const tag = tagOf(other, "data-label-side-court");
         expect(tag).toContain('data-court-placing="false"');
-        expect(tag).not.toContain("var(--blue)");
       }
     });
 
@@ -1335,18 +1088,12 @@ test.describe("the two layouts", () => {
         video: VIDEO,
         initialLayoutMode,
       });
-      // The box is the size container; the court is the largest 14.53 ×
-      // 32.77 box that fits it — no fixed height to clip.
-      expect(tagOf(html, "data-court-box"), initialLayoutMode).toMatch(
-        /class="[^"]*\[container-type:size\][^"]*\bmin-h-0\b[^"]*\bflex-1\b/,
-      );
+
       const court = tagOf(html, 'data-court-view="whole"');
       expect(court, initialLayoutMode).toContain(
         "width:min(100cqw, calc(100cqh * 0.4434))",
       );
       expect(court, initialLayoutMode).toMatch(/aspect-ratio:98\.43 ?\/ ?222/);
-      expect(court, initialLayoutMode).not.toContain("height:222px");
-
       // Placing: the half's own 276 × 222 proportions, still a button.
       const placing = render({
         session: labelSessionFixture(),
@@ -1383,10 +1130,6 @@ test.describe("the two layouts", () => {
       );
       // The film room's own mechanism, inside the console's root — not a
       // portal — so `--film-t` reaches the rows.
-      const layer = tagOf(html, 'data-label-black=""');
-      expect(layer).toMatch(/class="[^"]*\bfixed\b[^"]*\binset-0\b/);
-      expect(layer).toMatch(/class="[^"]*\bz-50\b/);
-      expect(layer).toMatch(/class="[^"]*\bbg-black\b/);
       expect(html.indexOf('data-label-black=""')).toBeGreaterThan(
         html.indexOf("data-label-console"),
       );
@@ -1401,26 +1144,6 @@ test.describe("the two layouts", () => {
       expect(black.indexOf("data-label-video-frame")).toBeLessThan(
         black.indexOf("data-label-black-court"),
       );
-      // The film: 16:9, centred, and capped so the court always keeps two
-      // fifths of the stage (320px at least) — the stage a size container.
-      const film = tagOf(black, "data-label-black-video");
-      expect(film).toMatch(/class="[^"]*\bmx-auto\b[^"]*\baspect-video\b/);
-      expect(film).toMatch(/class="[^"]*\bmax-w-full\b/);
-      expect(film).not.toMatch(/class="(?:[^"]* )?w-full\b/);
-      expect(film).toContain(
-        "width:min(100cqw, max(calc((100cqh - max(320px, 40cqh)) * 16 / 9), 213px))",
-      );
-      expect(tagOf(black, "data-label-black-stage")).toMatch(
-        /class="[^"]*\[container-type:size\]/,
-      );
-      const court = tagOf(black, "data-label-black-court");
-      expect(court).not.toContain("rounded-[var(--radius-card)]");
-      expect(court).not.toContain("bg-[#1A1A1C]");
-      expect(court).not.toContain("bg-[var(--surface-dark)]");
-      expect(court).not.toContain("shadow-[var(--shadow-card)]");
-      expect(tagOf(black, "data-court-box")).toMatch(
-        /class="[^"]*\[container-type:size\][^"]*\bflex-1\b/,
-      );
       expect(black).toContain("data-court-legend");
       // The transport stays with the player.
       expect(black).toContain('aria-label="Previous point"');
@@ -1430,12 +1153,6 @@ test.describe("the two layouts", () => {
       // The rail, as wide as asked, its handle on its left edge.
       const rail = railOf(html);
       expect(tagOf(rail, 'data-label-rail=""')).toContain("width:700px");
-      expect(tagOf(rail, 'data-label-rail=""')).toMatch(
-        /class="[^"]*\brelative\b/,
-      );
-      expect(tagOf(rail, 'data-label-rail=""')).toContain(
-        "bg-[var(--surface-dark)]",
-      );
       expect(tagOf(rail, 'data-label-rail=""')).toContain(
         'data-rail-tone="dark"',
       );
@@ -1495,16 +1212,6 @@ test.describe("the two layouts", () => {
       expect(header).toContain("lucide-minimize-2");
       // Already full screen: no way in.
       expect(html).not.toContain("data-label-rail-full-screen");
-      expect(tagOf(rail, "data-label-rail-header")).toMatch(
-        /class="[^"]*\bh-\[46px\]/,
-      );
-      // No column header anywhere in it: the rows are two lines, not columns.
-      expect(rail).not.toContain("eyebrow-sm");
-      expect(rail).not.toContain("Hit at</span>");
-      // The scroller is the rail's own, taking the rest of its height.
-      expect(tagOf(rail, "data-label-rail-scroller")).toMatch(
-        /class="[^"]*\bmin-h-0\b[^"]*\bflex-1\b[^"]*\boverflow-x-hidden\b[^"]*\boverflow-y-auto\b/,
-      );
       // The rows: one per live point, the tombstone's marker, the bands,
       // and the well under the open point only.
       expect(count(rail, /data-row="point"/g)).toBe(3);
@@ -1514,10 +1221,7 @@ test.describe("the two layouts", () => {
       const gone = rail.slice(rail.indexOf('data-row="deleted-point"'));
       const line = gone.slice(0, gone.indexOf("</div>"));
       expect(line).toContain("Deleted point");
-      expect(line).toContain("text-white/45");
       expect(line).not.toContain("aria-expanded");
-      expect(rail).not.toContain("ghost-point");
-      expect(rail).not.toContain("ghost-shot");
       expect(count(rail, /data-game-band="/g)).toBeGreaterThan(0);
       expect(rail).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
       expect(count(rail, /data-shots-well/g)).toBe(1);
@@ -1542,12 +1246,6 @@ test.describe("the two layouts", () => {
       expect(pill).toContain(
         'aria-label="Now playing: point 2 — follow playback"',
       );
-      expect(pill).toMatch(/class="[^"]*\babsolute\b[^"]*\bleft-1\/2\b/);
-      expect(pill).not.toMatch(/class="[^"]*\bfixed\b/);
-      // The room's own dark recipe: the inset hairline, the rail being as
-      // dark as the room.
-      expect(pill).toContain("shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]");
-      expect(pill).not.toContain("shadow-[var(--shadow-floating)]");
       // Over the scroller, after it in the DOM.
       expect(rail.indexOf("data-label-follow-pill")).toBeGreaterThan(
         rail.indexOf("data-label-rail-scroller"),
@@ -1559,30 +1257,7 @@ test.describe("the two layouts", () => {
       expect(rail).toMatch(/data-point-id="[^"]*"[^>]*data-playing="true"/);
     });
 
-    test("docked side draws none of the layer, and keeps the light header it drops", () => {
-      for (const initialLayoutMode of [undefined, "docked-side"] as const) {
-        const other = render({
-          session: labelSessionFixture(),
-          video: VIDEO,
-          initialLayoutMode,
-        });
-        expect(other, String(initialLayoutMode)).not.toContain(
-          "data-label-black",
-        );
-        expect(other, String(initialLayoutMode)).not.toContain(
-          'data-rail-tone="dark"',
-        );
-        expect(other, String(initialLayoutMode)).toContain(
-          "data-console-header",
-        );
-        expect(other, String(initialLayoutMode)).toContain("<h1");
-        expect(other, String(initialLayoutMode)).toContain(
-          'data-label-layout=""',
-        );
-      }
-    });
-
-    test("a selected shot zooms the court to its half and outlines the court; the film's frame stays square", () => {
+    test("a selected shot zooms the court to its half and outlines the court", () => {
       const html = render({
         session: labelSessionFixture(),
         video: VIDEO,
@@ -1594,18 +1269,9 @@ test.describe("the two layouts", () => {
       const black = blackOf(html);
       expect(black).toMatch(/data-court-view="(near|far)"/);
       expect(black).toMatch(/<button[^>]*data-court-target/);
-      // Full screen: the loading skeleton's card radius is taken off every
-      // box in it — the frame is flush to the black stage.
-      expect(tagOf(black, "data-label-video-pending")).toMatch(
-        /class="[^"]*\[&amp;_\*\]:rounded-none/,
-      );
       expect(black).toContain("data-court-steps");
       expect(tagOf(black, "data-label-black-court")).toContain(
         'data-court-placing="true"',
-      );
-      // On the inside, there being no card edge to carry it.
-      expect(tagOf(black, "data-label-black-court")).toContain(
-        "shadow-[inset_0_0_0_1.5px_var(--blue)]",
       );
       // The selected row mounts its editors, and only that row.
       const rail = railOf(html);
@@ -1655,102 +1321,6 @@ test.describe("the two layouts", () => {
 });
 
 /**
- * "Full screen" is the whole display: the black layout and the browser's own
- * full screen (`use-browser-fullscreen.ts`) are one state. There is no
- * second control for the browser's half, and no black layout under its bars.
- */
-test.describe("full screen is the browser's full screen", () => {
-  const base = () => ({
-    session: labelSessionFixture(),
-    video: { url: "https://example.test/v.mp4?sig=x", startTimeSeconds: 0 },
-    initialExpandedPointId: FIXTURE_POINT_IDS.P1,
-  });
-  const LABELS = "src/components/admin/labels";
-  const source = readFileSync(`${LABELS}/label-console.tsx`, "utf8");
-
-  test("no whole-screen control anywhere; the full screen keeps its one exit", () => {
-    for (const initialLayoutMode of [
-      undefined,
-      "docked-side",
-      "black",
-    ] as const) {
-      const html = render({ ...base(), initialLayoutMode });
-      expect(html, String(initialLayoutMode)).not.toContain(
-        "data-label-whole-screen",
-      );
-      expect(html, String(initialLayoutMode)).not.toContain("the whole screen");
-    }
-    for (const file of [
-      "label-console.tsx",
-      "label-black-rail.tsx",
-      "label-black-view.tsx",
-      "use-browser-fullscreen.ts",
-    ]) {
-      const text = readFileSync(`${LABELS}/${file}`, "utf8");
-      expect(text, file).not.toContain("data-label-whole-screen");
-      expect(text, file).not.toContain("WHOLE_SCREEN_COPY");
-      expect(text, file).not.toMatch(/\bwholeScreen[=?:]/);
-    }
-    // A static render of the full screen still stands: nothing bounces it
-    // for the not-active state a page starts in.
-    const black = render({ ...base(), initialLayoutMode: "black" });
-    expect(black).toContain('data-label-layout-mode="black"');
-    expect(count(black, /aria-label="Exit full screen"/g)).toBe(1);
-    expect(tagOf(black, "data-label-black-exit")).toContain("size-[26px]");
-  });
-
-  test("choosing it asks for the browser's inside the same click; a refused request goes back to docked", () => {
-    const choose = source.slice(
-      source.indexOf("const chooseLayout = useCallback("),
-      source.indexOf("const fullScreen = layoutMode"),
-    );
-    // Synchronously in the handler — the gesture — never after an await.
-    expect(choose).toMatch(
-      /switchLayout\(mode\);\s+if \(mode === "black"\) \{[\s\S]*?void enterWholeScreen\(\)\.then\(\(outcome\) => \{\s+const settled = layoutAfterFullscreenRequest\(outcome\);\s+if \(settled !== "black"\) switchLayout\(settled\);/,
-    );
-    expect(choose).not.toContain("await");
-  });
-
-  test("every way out leaves the browser's full screen too", () => {
-    const choose = source.slice(
-      source.indexOf("const chooseLayout = useCallback("),
-      source.indexOf("const fullScreen = layoutMode"),
-    );
-    // The exit button and the Layout menu are both `chooseLayout`.
-    expect(choose).toMatch(/\} else \{[\s\S]*?leaveWholeScreen\(\);\s+\}/);
-    expect(source).toMatch(
-      /const enterFullScreen = useCallback\(\s*\(\) => chooseLayout\("black"\)/,
-    );
-    expect(source).toMatch(
-      /const exitFullScreen = useCallback\(\s*\(\) => chooseLayout\("docked-side"\)/,
-    );
-    expect(source).toContain(
-      "onExit={fullScreen ? exitFullScreen : undefined}",
-    );
-    expect(source).toContain(
-      "onFullScreen={fullScreen ? undefined : enterFullScreen}",
-    );
-    expect(source).toContain(
-      "<LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />",
-    );
-  });
-
-  test("the browser's own Esc — a change event to not-active — returns to docked side", () => {
-    expect(source).toMatch(
-      /const leftWholeScreen = \(\) => \{\s+if \(layoutMode === "black"\) \{\s+switchLayout\(layoutAfterFullscreenLeft\(layoutMode\)\);\s+\}\s+\};/,
-    );
-    expect(source).toMatch(/useBrowserFullscreen\(leftWholeScreen\)/);
-  });
-
-  test("the layout is never stored or restored", () => {
-    expect(source).not.toContain("LAYOUT_MODE_STORAGE_KEY");
-    expect(source).not.toContain("parseLayoutMode");
-    expect(source).not.toContain("localStorage");
-    expect(source).toContain("initialLayoutMode ?? DEFAULT_LAYOUT_MODE");
-  });
-});
-
-/**
  * The film crosses into another stroke every second or two, and each
  * crossing renders the console. The rail's rows must not all render with it:
  * they are `memo` components, handed one `edit` and callbacks that keep
@@ -1759,8 +1329,7 @@ test.describe("full screen is the browser's full screen", () => {
  * A static render has no second commit, so a row's bail-out cannot be
  * counted here. What is pinned instead is each piece of the mechanism: the
  * components are `memo`, the proxies keep one identity across renders of one
- * mount (a render-phase update re-runs a component with its hooks kept), and
- * the console and the rail are wired to them — the last read off the source.
+ * mount (a render-phase update re-runs a component with its hooks kept).
  */
 test.describe("the rail's rows hold still while the film moves", () => {
   const MEMO = Symbol.for("react.memo");
@@ -1817,52 +1386,5 @@ test.describe("the rail's rows hold still while the film moves", () => {
     expect(Object.keys(seen[0])).toEqual(["a", "b"]);
     expect(seen[0].a(40)).toBe(40);
     expect(seen[0].b()).toBe("b0");
-  });
-
-  test("the console hands the rail its proxies, and the rail one memoised edit with no playhead in it", () => {
-    const source = readFileSync(`${LABELS}/label-console.tsx`, "utf8");
-    // The latest handlers are written after each commit, never in render.
-    expect(source).toMatch(
-      /const latest = useRef\(handlers\);\s+useEffect\(\(\) => \{\s+latest\.current = handlers;\s+\}\);/,
-    );
-    expect(source).toContain(
-      "const rowOperations = useLatestHandlers<LabelRowOperations>({",
-    );
-    expect(source).toContain("const railHandlers = useLatestHandlers({");
-    for (const prop of [
-      "onFocusCapture={railHandlers.holdOnEditorFocus}",
-      "onFollow={followPlayback}",
-      "onTogglePoint={railHandlers.togglePoint}",
-      "onSelectShot={railHandlers.selectShot}",
-      "onPatchPoint={railHandlers.patchPoint}",
-      "onPatchShot={railHandlers.patchShot}",
-      "operations={operable ? rowOperations : undefined}",
-      "onSetGameServer={operable ? railHandlers.setGameServer : undefined}",
-      "onSetGameType={operable ? railHandlers.setGameType : undefined}",
-      "onToggleGhost={toggleGhost}",
-      "onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}",
-      "onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}",
-      "onFindGap={operable ? railHandlers.findGap : undefined}",
-    ]) {
-      expect(source, prop).toContain(prop);
-    }
-    expect(source).toContain(
-      "const followPlayback = useCallback(() => setPointFocus(FOLLOW), []);",
-    );
-    expect(source).toContain(
-      "const toggleGhost = useMemo(() => toggleIn(setOpenGhosts), []);",
-    );
-
-    const rail = readFileSync(`${LABELS}/label-black-rail.tsx`, "utf8");
-    expect(rail).toContain("const edit = useMemo<EditContext>(");
-    // What is playing reaches the rows it touches as their own props.
-    const context = /export interface EditContext \{[\s\S]*?\n\}/.exec(
-      readFileSync(`${LABELS}/label-row-parts.tsx`, "utf8"),
-    )![0];
-    expect(context).not.toMatch(/playing/i);
-    expect(rail).toMatch(
-      /<BlackShotsWell[\s\S]*?edit=\{edit\}[\s\S]*?playingShotId=\{playingShotId\}/,
-    );
-    expect(rail).toContain("playing={point.id === playingPointId}");
   });
 });

@@ -17,10 +17,7 @@ import type { SideNames } from "./label-format";
  * imports neither kind of row, so both can import it without a cycle.
  */
 
-/**
- * The row operations a row can ask for. Each is a request: the console
- * decides whether it needs a confirm first, and does the write.
- */
+/** What a row can ask of the console, which decides and does the write. */
 export interface LabelRowOperations {
   onAskDeleteShot: (
     shotId: string,
@@ -40,50 +37,21 @@ export interface LabelRowOperations {
     pointNumber: number,
   ) => void;
   onAskResetPoint: (pointId: string) => void;
-  /**
-   * Put a stroke the SITE removed (a ghost, board 08m §3) back into the
-   * rally. The shown ghost row's Restore asks.
-   */
+  /** Put a stroke the site removed (a ghost) back into the rally. */
   onRestoreSiteRemoval: (shotId: string) => void;
-  /**
-   * Say no to a suggestion the marks made on a point (board 08m §4): `key`
-   * is the suggestion's own (`missing_shot:<vendor stroke id>`). The dashed
-   * suggestion's Dismiss asks.
-   */
+  /** Dismiss a suggestion on a point, by its own `key`. */
   onDismissSuggestion: (pointId: string, key: string) => void;
-  /**
-   * Add a point the vendor never saw beside `anchorPointId`: BEFORE it (the
-   * default — board 08m §5's slot on the second of two points served from
-   * one side, and the ⋯ menu's "Add point above") or AFTER it ("Add point below"). The later points move up one
-   * and the new one takes the slot, in the anchor's game.
-   */
+  /** Add a point beside `anchorPointId`: before it (the default) or after. */
   onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
-  /**
-   * Move the points left over past a game's end — the rows after the one
-   * that decided it, which read "Game–30" — into the next game, and on down
-   * the match while games run over (`game-shift.ts`). `fromPointId` is one of
-   * those leftovers. The rail's slot before the first of them asks; so does
-   * a leftover's ⋯ menu.
-   */
+  /** Move a game's leftover points into the next game (`game-shift.ts`). */
   onShiftGameOverflow: (fromPointId: string) => void;
-  /**
-   * Split a point at one of its shots (`point-split.ts`): that shot and
-   * every shot after it become a new point right below. A shot row's
-   * "Split point here" asks; never on the point's first live shot.
-   */
+  /** Split a point at one of its shots (`point-split.ts`). */
   onSplitPoint: (pointId: string, shotId: string) => void;
   /**
-   * Combine a point with its live neighbour above or below in the same game
-   * (`point-combine.ts`): the earlier point keeps every shot, the later
-   * becomes a tombstone. The ⋯ menu asks.
+   * Combine a point with a live neighbour in its game (`point-combine.ts`).
    */
   onCombinePoints: (pointId: string, direction: CombineDirection) => void;
-  /**
-   * Switch a point's players by hand (`player-swap.ts`): every stroke's
-   * hitter, the winner and ended by flipped; the server, set and game
-   * stay. The ⋯ menu asks — first of all on a point whose rows contradict
-   * its server.
-   */
+  /** Switch a point's players by hand (`player-swap.ts`). */
   onSwitchPlayers: (pointId: string) => void;
 }
 
@@ -109,20 +77,13 @@ export interface EditContext {
   points: readonly LabelPoint[];
   /** `labelScores(points, adScoring).points`, computed once by the console. */
   scores: ReadonlyMap<string, LabelPointScore>;
-  /**
-   * `session.adScoring`, for the rows that re-run the scoreboard's rule —
-   * the leftover check behind "Move leftover points to the next game".
-   * Absent means ad scoring, as the loader's own fallback does.
-   */
+  /** `session.adScoring`. Absent means ad scoring. */
   adScoring?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: import("./label-rail-tone").RailTone;
 }
 
-/**
- * The playing point's span on the FILE clock — the `<video>`'s own seconds,
- * which is what `--film-t` carries — from its `labelFilmStops` stop.
- */
+/** The playing point's span on the FILE clock, which `--film-t` carries. */
 export interface PlayingWindow {
   start: number;
   end: number;

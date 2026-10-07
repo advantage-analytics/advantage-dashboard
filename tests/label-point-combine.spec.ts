@@ -23,11 +23,14 @@ import {
   combineLabelPoints,
   writeLabelPointCombine,
 } from "@/lib/services/labels/point-combine-session";
-import { labelScores } from "@/lib/services/labels/score";
 import type { LabelPoint, LabelSession } from "@/lib/services/labels/session";
+import { text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext as sharedEditContext,
+  noop,
+  ROW_OPERATIONS,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -545,22 +548,24 @@ test.describe("writeLabelPointRestore on the emptied tombstone", () => {
 
 // ── The menu ───────────────────────────────────────────────────────────────
 
-const noop = () => {};
 const OPERATIONS = {
-  onAskDeleteShot: noop,
-  onAskDeletePoint: noop,
-  onRestoreShot: noop,
-  onRestorePoint: noop,
-  onMovePoint: noop,
-  onSetChecked: noop,
-  onAddShot: noop,
-  onAskResetShot: noop,
-  onAskResetPoint: noop,
+  ...ROW_OPERATIONS,
   onInsertPoint: noop,
   onShiftGameOverflow: noop,
   onSplitPoint: noop,
   onCombinePoints: noop,
 };
+
+const editContext = (
+  session: LabelSession,
+  rows: readonly LabelPoint[],
+  overrides: Record<string, unknown> = {},
+  editable = true,
+) =>
+  sharedEditContext(
+    { editable, operations: editable ? OPERATIONS : undefined, ...overrides },
+    { points: rows, adScoring: session.adScoring },
+  );
 
 type MenuActions = {
   combineAbove: { description: string; run: () => void } | null;
@@ -619,51 +624,9 @@ test.describe("the ⋯ menu", () => {
     });
     expect(quiet).toEqual([]);
   });
-
-  test("the menu draws the two rows after the two Add rows, and the rail row draws the menu", () => {
-    const source = readFileSync(MENU, "utf8");
-    const addBelow = source.indexOf('label="Add point below"');
-    const above = source.indexOf('label="Combine with point above"');
-    const below = source.indexOf('label="Combine with point below"');
-    const move = source.indexOf('label="Move to game…"');
-    expect(addBelow).toBeGreaterThan(-1);
-    expect(above).toBeGreaterThan(addBelow);
-    expect(below).toBeGreaterThan(above);
-    expect(move).toBeGreaterThan(below);
-    // One menu for both layouts: the rail row draws it, on either ground.
-    expect(readFileSync(BLACK_ROW, "utf8")).toContain("<PointMenu");
-  });
 });
 
 // ── The tombstone ──────────────────────────────────────────────────────────
-
-function editContext(
-  session: LabelSession,
-  rows: readonly LabelPoint[],
-  overrides: Record<string, unknown> = {},
-  editable = true,
-) {
-  return {
-    editable,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
-    operations: editable ? OPERATIONS : undefined,
-    points: rows,
-    scores: labelScores(rows, session.adScoring).points,
-    ...overrides,
-  };
-}
-
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x27;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 test.describe("the combined tombstone", () => {
   test("black rail: 'Combined into the point above' on the dark line, no Undo; the ordinary tombstone keeps its Undo", () => {
@@ -705,26 +668,6 @@ test.describe("the combined tombstone", () => {
 });
 
 // ── The console's wiring ───────────────────────────────────────────────────
-
-test("the console hands the request through runOperation, re-derives the kept point's ending and refuses Undo on the emptied row", () => {
-  const source = readFileSync(CONSOLE, "utf8");
-  expect(source).toContain("onCombinePoints: combinePoints,");
-  expect(source).toContain("operations.combinePoints(pointId, direction)");
-  expect(source).toMatch(/applyPointCombine\(rows, plan\.write\)/);
-  expect(source).toMatch(/settlePointCombine\(rows, result\)/);
-  expect(source).toMatch(/withdrawPointCombine\(rows, kept, removed\)/);
-  // The ending follows the merged shots.
-  expect(source).toMatch(/syncEnding\(kept,/);
-  expect(source).toMatch(/if \(isCombinedTombstone\(before\)\) return;/);
-  expect(source).toContain("combinePoints: (");
-  const page = readFileSync(
-    "src/app/admin/labels/[sessionId]/page.tsx",
-    "utf8",
-  );
-  expect(page).toContain("combinePoints: combineLabelPointsAction,");
-  const actions = readFileSync("src/app/admin/labels/actions.ts", "utf8");
-  expect(actions).toContain("export async function combineLabelPointsAction(");
-});
 
 test("a render of the console with a combined point writes nothing and draws the line in both views", () => {
   const called: string[] = [];

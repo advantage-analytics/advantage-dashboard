@@ -1,16 +1,12 @@
 /**
- * The labelling console's row operations — delete and Undo, add a stroke,
- * move a point to another game, mark a point checked — as pure rules.
+ * The labelling console's row operations (delete and Undo, add a stroke, move a
+ * point to another game, mark a point checked) as pure rules:
+ * operations-session.ts writes what they plan and the console runs the same
+ * ones for its optimistic update.
  *
- * Pure and import-free of anything server-side, like edit.ts: the admin-gated
- * services (operations-session.ts) decide what to write with these functions,
- * and the `"use client"` console runs the same ones for its optimistic update,
- * so what the labeller sees the moment they act is what the server is about
- * to write.
- *
- * Nothing here ever removes a row. A deleted point or stroke is a TOMBSTONE —
- * `status: 'deleted'`, with the status it had before kept in
- * `status_before_delete` — because the offline scorer needs to know the
+ * Nothing here ever removes a row. A deleted point or stroke is a tombstone
+ * (`status: 'deleted'`, the status it had before kept in
+ * `status_before_delete`), because the offline scorer needs to know the
  * labeller rejected a vendor stroke, not merely that it is missing.
  */
 
@@ -54,7 +50,6 @@ export function isLabelDeleteReason(
 type LiveShotStatus = Exclude<LabelShotStatus, "deleted">;
 type LivePointStatus = Exclude<LabelPointStatus, "deleted">;
 
-/** The columns a shot delete writes. */
 export interface ShotDeleteWrite {
   status: "deleted";
   status_before_delete: LiveShotStatus;
@@ -254,30 +249,17 @@ type PlanShot = Pick<
 >;
 
 /**
- * A new stroke for a point, placed after `afterShotId` — or, when that is
- * null, after the rally's last live stroke (the end of the rally).
+ * A new stroke for a point, placed after `afterShotId`, or after the rally's
+ * last live stroke when that is null. `shots` must be in video order
+ * (`orderLabelShots`).
  *
- * `shots` must be in video order (`orderLabelShots`), as the loader and the
- * console keep them.
+ * `after_event_id` is the vendor stroke id the new stroke follows. When the
+ * stroke it follows was itself added, it inherits that stroke's
+ * `after_event_id`, so two strokes the vendor missed in a row both point at the
+ * last stroke it did see. Null means no vendor stroke precedes it.
  *
- * ── after_event_id ──────────────────────────────────────────────────────────
- * The vendor stroke id the new stroke follows, so the scorer can say where in
- * the vendor's rally the missed stroke belonged. When the stroke it follows
- * was itself ADDED (no vendor id), it inherits THAT stroke's
- * `after_event_id` — the nearest preceding vendor stroke — so two strokes the
- * vendor missed in a row both point at the last stroke it did see. Null means
- * no vendor stroke precedes it (an empty rally, or one that opens with added
- * strokes).
- *
- * ── Seeded values ───────────────────────────────────────────────────────────
- *   hitter      the opponent of the stroke it follows (rallies alternate); the
- *               point's server when it is the rally's first; null when the
- *               stroke it follows has no hitter.
- *   video_time  the midpoint of its two live neighbours when both are timed,
- *               so it sorts between them at once. Otherwise null — a stroke
- *               with no time sorts after every timed one (`orderLabelShots`),
- *               which is exactly right at the end of a rally, and the
- *               labeller sets the time from the video.
+ * `hitter` is the opponent of the stroke it follows; the point's server when it
+ * is the rally's first; null when the stroke it follows has no hitter.
  */
 export function planAddedShot(
   point: Pick<LabelPoint, "server" | "status"> & {
@@ -310,10 +292,9 @@ export function planAddedShot(
     : point.server;
 
   // Between two timed strokes it sits halfway. With a timed stroke before it
-  // and nothing timed after — the end of the rally — it sits just after that
-  // stroke, so a run of strokes added one after another keeps the order they
-  // were added in. Without a time each would sort last and fall through to a
-  // random row id, showing the second before the first about half the time.
+  // and nothing timed after, it sits just after that stroke, so strokes added
+  // one after another keep the order they were added in; without a time each
+  // would sort last and fall through to a random row id.
   const videoTime =
     before?.videoTime == null
       ? null
@@ -399,25 +380,19 @@ export type PlannedPointMove =
 /**
  * Move a point into another game.
  *
- * The destination's server is `destinationServer` (see {@link gameServer}).
- * When it differs from the point's own, the move is REFUSED unless
- * `switchServer` is true — the console asks "<player> is serving this game,
- * switch players?" first, so a server only changes on a yes. A same-server
- * move (or a move into a game nobody else is in yet) needs no question and
- * leaves `server` alone.
+ * When the destination's server (`destinationServer`, see {@link gameServer})
+ * differs from the point's own, the move is refused unless `switchServer` is
+ * true: the console asks first. A same-server move, or a move into a game
+ * nobody else is in yet, leaves `server` alone.
  *
- * When the server does switch and the point's own strokes say the OLD server
- * served it, the players switch as a whole (player-swap.ts
- * `planPlayerSwap`): every stroke's hitter, and the point's winner and ended
- * by, come out in `shots` and `write` — so "switch players?" answered yes
- * visibly switches them. Rows that already agree with the new server are
- * left alone.
+ * When the server does switch and the point's own strokes say the old server
+ * served it, the players switch as a whole (player-swap.ts `planPlayerSwap`):
+ * every stroke's hitter and the point's winner and ended by come out in `shots`
+ * and `write`.
  *
- * Moving is a labelled change, and its status comes from the same rule as an
- * edit (edit.ts `labelPointStatusAfterChange`): measured against the point's
- * seed over the whole change (set, game, server, winner, ended by), so a
- * point moved away is `edited` and one moved back into its seeded game (with
- * its seeded server, and its players flipped back) is `unchanged` again.
+ * The status comes from the same rule as an edit (edit.ts
+ * `labelPointStatusAfterChange`), so a point moved back into its seeded game is
+ * `unchanged` again.
  */
 export function planPointMove(
   point: MovablePoint,
@@ -492,10 +467,7 @@ export function moveNeedsServerSwitch(
   return destinationServer !== null && destinationServer !== point.server;
 }
 
-/**
- * The server of game `to` as the console's rows have it — every live point
- * in that game except the one moving.
- */
+/** Game `to`'s server by the console's rows, the moving point excluded. */
 export function destinationServerIn(
   points: readonly Pick<
     LabelPoint,
@@ -553,10 +525,7 @@ export function neighbourGames(
   return games;
 }
 
-/**
- * `point` after a move, as the console shows it — its own columns only; the
- * flipped strokes go on through player-swap.ts `applyShotSwaps`.
- */
+/** `point` after a move, as the console shows it: its own columns only. */
 export function applyPointMove(
   point: LabelPoint,
   write: PointMoveWrite,

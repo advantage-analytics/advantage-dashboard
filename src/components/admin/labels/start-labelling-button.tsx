@@ -7,17 +7,11 @@ import { cn } from "@/lib/utils";
 import { seedLabelSessionAction } from "@/app/admin/labels/actions";
 
 /**
- * One row's "Start labelling" / "Continue" — the only write this page makes.
- *
- * Always calls `seedLabelSessionAction(jobId)`, whether or not a session
- * already exists: the action itself returns the job's open session rather
- * than starting a second one (T3's `findOpenSession`), so this component
- * never has to decide that — it only decides the button's label from
- * `hasSession`, and navigates on whatever `sessionId` comes back.
- *
- * A client component for the same reason `ApproveChip` is one: the action
- * call and the `router.push` that follows it need a real event handler,
- * which a Server Component page cannot pass across the boundary.
+ * One row's "Start labelling" / "Continue": the only write this page makes.
+ * Always calls `seedLabelSessionAction(jobId)`: the action returns the job's
+ * open session rather than starting a second one, so this only picks the
+ * button's label from `hasSession` and navigates to whatever `sessionId` comes
+ * back.
  */
 export function StartLabellingButton({
   jobId,

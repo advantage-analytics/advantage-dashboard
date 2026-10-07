@@ -1,21 +1,12 @@
 /**
- * The labelling console's "Split point here", admin-gated: a point the
- * vendor ran two real points into becomes two rows, the chosen shot and
- * every shot after it moving to a new point right below (`point-split.ts`).
+ * The console's "Split point here" (`point-split.ts`). Admin-gated like
+ * edit-session.ts; not the marks gate.
  *
- * Same shape as point-insert-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a session that is
- * not `labelling` (`checkSessionOpen`), and decides what to write with the
- * pure plan the console ran for its optimistic rows. A session labelled
- * without marks takes a split too — a manual edit, not an answer to a mark.
- *
- * Its writes, in order, on `label_points` and `label_shots` and nothing
- * else: one UPDATE of `point_index` per later point, HIGHEST first (the
- * column has no unique constraint, but the rail numbers rows by it); ONE
- * INSERT of the new row; ONE UPDATE moving the shots (`label_point_id`, by
- * id list) — their statuses untouched; ONE UPDATE of the anchor's status and
- * rally ids. No row is ever removed. `tests/label-operations.spec.ts` scans
- * this file for a delete.
+ * Its writes, in order, on `label_points` and `label_shots` only: one UPDATE of
+ * `point_index` per later point, HIGHEST first (the rail numbers rows by it);
+ * one INSERT of the new row; one UPDATE moving the shots (`label_point_id`, by
+ * id list), their statuses untouched; one UPDATE of the anchor's status and
+ * rally ids. No row is ever removed.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -41,7 +32,6 @@ import type {
 
 export type LabelSplitPointResult = LabelOpResult<PointSplitSaved>;
 
-/** What the plan reads of each point of the session. */
 interface PointRow {
   id: string;
   session_id: string;
@@ -114,10 +104,7 @@ function rallyId(text: string | null): number | null {
   return Number.isInteger(value) ? value : null;
 }
 
-/**
- * Check the session, read its points and the anchor's shots, shift the later
- * points, insert the new one, move the shots, mark the anchor. Never throws.
- */
+/** Shift, insert, move the shots, mark the anchor. Never throws. */
 export async function writeLabelPointSplit(params: {
   supabase: AdminClient;
   pointId: unknown;
@@ -228,7 +215,6 @@ export async function writeLabelPointSplit(params: {
   };
 }
 
-/** The admin-gated entry point behind `splitLabelPointAction`. */
 export function splitLabelPoint(
   pointId: unknown,
   shotId: unknown,

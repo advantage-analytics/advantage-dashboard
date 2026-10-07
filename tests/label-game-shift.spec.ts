@@ -22,7 +22,9 @@ import type {
   LabelShot,
   LabelSide,
 } from "@/lib/services/labels/session";
-import { labelSessionFixture } from "./fixtures/label-session";
+import { inner, tag } from "./fixtures/html-probe";
+import { labelPoint, labelSessionFixture } from "./fixtures/label-session";
+import { findWhere } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /**
@@ -46,28 +48,8 @@ const NAMES = { p1: "Lee", p2: "Vargas" };
 const UUID = (n: number) =>
   `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, "0")}`;
 
-function point(fields: Partial<LabelPoint> & { id: string }): LabelPoint {
-  return {
-    pointIndex: 0,
-    vendorRallyIds: [],
-    setNumber: 1,
-    gameNumber: 1,
-    server: "p1",
-    serveSide: null,
-    winner: null,
-    ending: null,
-    endedBy: null,
-    gameType: "game",
-    status: "unchanged",
-    statusBeforeDelete: null,
-    checkedAt: null,
-    note: null,
-    dismissed: [],
-    seed: null,
-    shots: [],
-    ...fields,
-  };
-}
+const point = (fields: Partial<LabelPoint> & { id: string }) =>
+  labelPoint(fields.id, 0, { vendorRallyIds: [], serveSide: null, ...fields });
 
 /**
  * A match from a sketch: one entry per game — its set, game number, server,
@@ -1095,21 +1077,6 @@ function black(
   });
 }
 
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-/** The inner text of the element carrying `attr`. */
-function inner(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  const start = html.indexOf(">", at) + 1;
-  return html.slice(start, html.indexOf("<", start));
-}
-
 /** The slot's markup. */
 function slot(html: string): string {
   const at = html.indexOf("data-game-overflow=");
@@ -1351,27 +1318,3 @@ test.describe("the ⋯ menu", () => {
     ).not.toBeNull();
   });
 });
-
-/** The first element in `node` whose props satisfy `pred`, through every child. */
-function findWhere(
-  node: React.ReactNode,
-  pred: (props: Record<string, unknown>) => boolean,
-): React.ReactElement<Record<string, unknown>> | null {
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findWhere(child, pred);
-      if (found) return found;
-    }
-    return null;
-  }
-  if (!React.isValidElement(node)) return null;
-  const element = node as React.ReactElement<Record<string, unknown>>;
-  if (pred(element.props)) return element;
-  for (const child of React.Children.toArray(
-    element.props.children as React.ReactNode,
-  )) {
-    const found = findWhere(child, pred);
-    if (found) return found;
-  }
-  return null;
-}

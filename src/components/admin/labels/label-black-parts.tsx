@@ -4,39 +4,29 @@ import type { ButtonHTMLAttributes } from "react";
 import { railAmber } from "./label-rail-tone";
 
 /**
- * The pieces the black view's rows share (board 08l / 08m): a text action in
- * the dark tone, the dashed amber slot's class, and the amber the frame draws
- * both with.
- *
- * The amber is the rail's (`--rail-amber` and its washes, set per ground in
- * `label-rail-tone.ts`: the frame's amber on black, the warning triple on
- * white). An ink a row sets by style is that variable at an alpha; inside a
- * Tailwind class it has to be a whole literal so the class is generated —
+ * The pieces the rail's rows share: a text action, the dashed amber slot's
+ * class and the rail's amber (`--rail-amber`, label-rail-tone.ts). Inside a
+ * Tailwind class an ink has to be a whole literal so the class is generated;
  * those live in the class constants below.
  */
 
 /**
- * A rail control's pressed state: the button dips to 0.96 under the pointer
- * — 100ms in, the hover's 200ms back out — on top of the colour and wash
- * transition every one of them already had. It stands IN for
- * `transition-colors` (one `transition-property` per element), and names
- * `scale` because that is the property Tailwind's `scale-*` sets. Reduced
- * motion keeps the colour change and drops the dip. Whole literals: the
- * classes are read off this string.
+ * A rail control's pressed state: the button dips to 0.96 under the pointer,
+ * 100ms in and 200ms back out. It stands in for `transition-colors` (one
+ * `transition-property` per element) and names `scale` because that is the
+ * property Tailwind's `scale-*` sets. Reduced motion drops the dip. Whole
+ * literals: the classes are read off this string.
  */
 export const RAIL_PRESS =
   "transition-[color,background-color,scale] duration-200 active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100";
 
-/** The slot's leading glyph — the frame's `.fx-slot .bk-pl`. */
 export const AMBER_SLOT_ICON_INK = railAmber(0.8);
-/** A suggested stroke's own ink — the frame's `.fx-sug .bk-n, .bk-tm, .bk-pl`. */
 export const AMBER_SUGGESTION_INK = railAmber(0.75);
 
 /**
- * A text action's resting ink: amber for the slot's one answer, quiet white
- * for its other answers, plain white for Undo / Show / Hide. Every one goes
- * full white on hover — "white" being the rail's ink, so the page's ink on a
- * light ground.
+ * A text action's resting ink: amber for the slot's one answer, quiet for its
+ * other answers, plain for Undo / Show / Hide. Every one goes to full strength
+ * on hover.
  */
 export type BlackTextActionInk = "amber" | "quiet" | "plain";
 
@@ -47,10 +37,9 @@ const TEXT_ACTION_INK: Record<BlackTextActionInk, string> = {
 };
 
 /**
- * A text action in the rail — words in the rail's ink (or the slot's amber),
- * to full strength on hover. Its `onClick` is the
- * caller's own, so a click that must not reach the row under it stops
- * propagation there, where a spec can see it.
+ * A text action in the rail. Its `onClick` is the caller's own, so a click that
+ * must not reach the row under it stops propagation there, where a spec can see
+ * it.
  */
 export function BlackTextAction({
   ink,
@@ -68,10 +57,7 @@ export function BlackTextAction({
   );
 }
 
-/**
- * Undo, in the rail: the plain text action — 70% of the rail's ink, to full
- * on hover. It never reaches the row under it.
- */
+/** Undo, in the rail. It never reaches the row under it. */
 export function BlackUndoButton({
   label,
   onClick,
@@ -95,11 +81,10 @@ export function BlackUndoButton({
 }
 
 /**
- * The dashed amber slot a question sits in, between two rows (board 08m §5's
- * suggested point, the game that runs over): a glyph on the number track, a
- * title over its reason and the answers at the right. The two slots keep
- * their own markup — a spec reads each by walking its element tree, which
- * stops at a component boundary — and share the frame's one class.
+ * The dashed amber slot a question sits in, between two rows: a glyph on the
+ * number track, a title over its reason and the answers at the right. The two
+ * slots keep their own markup (a spec reads each by walking its element tree,
+ * which stops at a component boundary) and share this one class.
  */
 export const BLACK_SLOT =
   "mx-2 my-0.5 grid min-h-[44px] grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-[10px] rounded-lg border border-dashed border-[var(--rail-amber-line)] bg-[var(--rail-amber-wash-faint)] py-1.5 pr-[10px] pl-1.5";

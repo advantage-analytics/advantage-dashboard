@@ -5,12 +5,9 @@ import type { FollowAffordance } from "@/components/dashboard/matches/match-deta
 import type { RailTone } from "./label-rail-tone";
 
 /**
- * The pill's shadow and ink on each of the rail's grounds. On the dark rail
- * it wears the room's inset hairline, since the rail is as dark as the room.
- * On the light one it wears the floating shadow — a hairline of the rail's
- * ink would be lost on the dark chip — and its words read
- * `--rail-on-accent`: inside the light rail "white" is the page's ink
- * (`label-rail-tone.ts`), which would vanish on the chip.
+ * The pill's shadow and ink on each ground. Dark: the room's inset hairline.
+ * Light: the floating shadow, and its words read `--rail-on-accent`
+ * (label-rail-tone.ts).
  */
 const TONE: Record<RailTone, { shadow: string; ink: string }> = {
   dark: {
@@ -24,11 +21,10 @@ const TONE: Record<RailTone, { shadow: string; ink: string }> = {
 };
 
 /**
- * The film room's return pill (point-list.tsx `FollowPill`) in the room's own
- * dark recipe — the way back to following once the labeller has held the
- * rail. Pinned to the top-centre of the rail's scroller, over its rows; no
- * chevron, since the lit row is wherever the rail is. The caller renders it
- * only while there is an affordance to show.
+ * The film room's return pill (point-list.tsx `FollowPill`): the way back to
+ * following once the labeller has held the rail. Pinned to the top-centre of
+ * the rail's scroller, over its rows. The caller renders it only while there is
+ * an affordance to show.
  */
 export function LabelFollowPill({
   affordance,
@@ -37,7 +33,6 @@ export function LabelFollowPill({
 }: {
   affordance: FollowAffordance;
   onFollow: () => void;
-  /** The rail's ground. */
   tone?: RailTone;
 }) {
   const at = TONE[tone];

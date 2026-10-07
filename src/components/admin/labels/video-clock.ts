@@ -1,16 +1,19 @@
 import type { PlayingRow } from "@/lib/services/labels/playback";
 
 /**
- * The console's video clock: where the player is, on the analysis clock,
- * as a tiny external store for `useSyncExternalStore`.
+ * The console's video clock: where the player is, on the analysis clock, as a
+ * tiny external store for `useSyncExternalStore`.
  *
- * Not React state. `timeupdate` fires about four times a second and a seek
- * fires `seeking` on every scrub step; state would re-render the whole points
- * rail on each. The console subscribes with a snapshot that is the PLAYING
- * ROW's key ({@link playingRowKey}), so React re-renders only when the video
- * crosses into another stroke or point — and, because the snapshot is taken
- * from the current rows on every render, an edit that retimes a stroke moves
- * the highlight at once, even with the video paused.
+ * Two clocks: the `<video>` element speaks FILE seconds; a label's `videoTime`
+ * is on the ANALYSIS clock. `LabelVideo.startTimeSeconds` is the offset between
+ * them, applied in label-video.tsx and label-film-stops.ts and nowhere else.
+ *
+ * Not React state: `timeupdate` fires about four times a second, and state
+ * would re-render the whole rail on each. The console subscribes with the
+ * playing row's key ({@link playingRowKey}) as its snapshot, so React
+ * re-renders only when the video crosses into another stroke or point; the
+ * snapshot is taken from the current rows, so a retimed stroke moves the
+ * highlight at once.
  */
 export interface VideoClock {
   get: () => number | null;

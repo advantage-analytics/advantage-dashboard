@@ -1,45 +1,20 @@
 /**
- * When a point moves into a game the OTHER player serves, its players switch
- * — as a whole, not just the `server` column. The same whole-point flip is
- * the ⋯ menu's "Switch players" (`planPlayerSwitch`), by hand and
- * unconditionally, for points moved before this rule existed.
+ * When a point moves into a game the other player serves, its players switch as
+ * a whole, not just `server`: the vendor assigns hitters from the game it
+ * thought the point was in. The one rule both moves call (`planPointMove`,
+ * `planGameShift`); "Switch players" (`planPlayerSwitch`) is the same flip by
+ * hand. Pure.
  *
- * The vendor assigns hitters from the game it thought the point was in. So a
- * point that lands in the wrong game has every stroke's `hitter` the wrong
- * way round, and its `winner` and `ended_by` name the wrong sides: changing
- * `server` alone (what a move used to do) answered "switch players?" with
- * nothing visibly switching. This module is the one rule both moves call —
- * the point menu's "Move to game…" (operations.ts `planPointMove`) and the
- * cascade "Move to game N+1" (game-shift.ts `planGameShift`) — pure, so the
- * console's optimistic rows and the server's writes come from one place.
+ * A swap applies only when the move changes the point's `server` and its own
+ * rows contradict the new one: its last live serve stroke (with no serve, its
+ * first live stroke that names a hitter) is hit by someone else. Then every
+ * stroke of the point, tombstones and ghosts included, gets `hitter` flipped,
+ * and `winner` and `ended_by` flip; `ending` is unchanged and null stays null.
  *
- * ── The rule ────────────────────────────────────────────────────────────────
- * A swap applies only when the move changes the point's `server` AND the
- * point's own rows contradict the new server: its last live serve stroke
- * (`first_serve` / `second_serve`, in video order; with no serve, its first
- * live stroke that names a hitter) is hit by someone other than the new
- * server. Then, as one change:
- *   - every stroke of the point — live, ghost and tombstone alike, so a
- *     later Undo is consistent — gets `hitter` flipped p1 ↔ p2 (null stays
- *     null);
- *   - `winner` and `ended_by` flip (null stays null); `ending` is unchanged;
- *   - `server` becomes the destination's (the move's own doing).
- * When the rows already agree with the new server, or the move does not
- * change it, or the point has no stroke to read, nothing but `server` moves.
- *
- * ── Statuses ────────────────────────────────────────────────────────────────
  * Each flipped stroke's status is what a hitter patch gives it
- * (edit.ts `labelShotStatusAfterPatch`): a vendor stroke whose hitter now
- * differs from its seed is `edited`, one flipped back to its seed is `kept`
- * again, `added` stays `added`. A tombstone keeps `deleted`, and its
- * `status_before_delete` — what Undo restores — is recomputed by that same
- * rule as if the stroke were live, so a flipped tombstone undone later reads
- * `edited`, and one flipped back then undone reads `kept`. (No existing
- * helper patches a tombstone's values: edit-session.ts refuses to edit one
- * at all, so this is the one place a tombstone's values ever change.) The
- * point's status is the move's to compute, with the flipped winner and
- * ended_by in the change — so a point moved away and back reads `unchanged`
- * with every stroke `kept` again.
+ * (`labelShotStatusAfterPatch`). A tombstone keeps `deleted` and its
+ * `status_before_delete` is recomputed as if the stroke were live: the one
+ * place a tombstone's values change.
  */
 
 import {
@@ -80,7 +55,6 @@ export type SwapShot = Pick<
   | "videoTime"
 >;
 
-/** What the rule reads of a point. */
 export type SwappablePoint = Pick<
   LabelPoint,
   "server" | "winner" | "endedBy"
@@ -121,10 +95,7 @@ export function servingShot<T extends SwapShot>(shots: readonly T[]): T | null {
   return live.find((shot) => shot.hitter !== null) ?? null;
 }
 
-/**
- * Whether moving `point` under `newServer` switches its players: the server
- * changes, and the point's serving stroke is hit by someone else.
- */
+/** Whether moving `point` under `newServer` switches its players. */
 export function moveSwapsPlayers(
   point: SwappablePoint,
   newServer: LabelSide | null,
@@ -150,10 +121,7 @@ export function planPlayerFlip(point: SwappablePoint): PlayerSwap {
   };
 }
 
-/**
- * The swap a move to `newServer` makes of `point`, or null when none applies
- * (see the file comment): {@link planPlayerFlip} behind the move's gate.
- */
+/** The swap a move to `newServer` makes of `point`, or null for none. */
 export function planPlayerSwap(
   point: SwappablePoint,
   newServer: LabelSide | null,
@@ -164,7 +132,6 @@ export function planPlayerSwap(
 
 // ── "Switch players", by hand ───────────────────────────────────────────────
 
-/** What the manual switch reads of a point. */
 export type SwitchablePoint = SwappablePoint &
   Pick<
     LabelPoint,
@@ -182,10 +149,7 @@ export type PlannedPlayerSwitch =
   | { ok: true; write: PlayerSwitchWrite; shots: ShotSwapWrite[] }
   | { error: string };
 
-/**
- * Whether the ⋯ menu offers "Switch players" on `point`: a live point with
- * at least one stroke row (any status) that names a hitter.
- */
+/** Whether "Switch players" is offered: a live point with a named hitter. */
 export function canSwitchPlayers(
   point: Pick<SwitchablePoint, "status" | "shots">,
 ): boolean {

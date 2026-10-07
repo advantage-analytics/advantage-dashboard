@@ -1,19 +1,16 @@
 /**
- * What a labelled point's strokes already say about how it ended, so a
- * labeller who corrects the shot rows never also has to re-pick "How it
- * ended" by hand.
+ * What a labelled point's strokes already say about how it ended. Pure; the
+ * console calls it around every shot change (`syncEnding`).
  *
- * Pure and import-free of anything server-side — the `"use client"` console
- * calls it around every shot change (label-console.tsx `syncEnding`).
- *
- * The last ball also settles who won, so the winner follows the rows and the
- * scoreboard with it: a ball that missed gives the point to the other side, a
- * ball marked in gives it to its hitter. Only a last ball with no result yet
- * settles nothing; there the labelled `winner` is read and never written.
+ * The last ball also settles who won: a ball that missed gives the point to the
+ * other side, a ball marked in gives it to its hitter. A last ball with no
+ * result yet settles nothing; there the labelled `winner` is read and never
+ * written.
  */
 
 import type { LabelPointPatch } from "./edit";
 import {
+  isMissedResult,
   isServeStroke,
   opponent,
   orderLabelShots,
@@ -36,10 +33,6 @@ export interface DerivedEnding {
 }
 
 type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
-
-function missed(shot: Pick<LabelShot, "result">): boolean {
-  return shot.result === "out" || shot.result === "net";
-}
 
 /**
  * The ending the point's live (non-deleted) strokes describe, read in video
@@ -65,7 +58,7 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
   const earlier = live.slice(0, -1);
 
   if (isServeStroke(last.stroke)) {
-    if (!missed(last)) {
+    if (!isMissedResult(last.result)) {
       return { ending: "ace", endedBy, winner: wonBy(last) };
     }
     return last.stroke === "second_serve" ||
@@ -74,7 +67,7 @@ export function deriveEnding(point: EndingPoint): DerivedEnding | null {
       : null;
   }
 
-  if (missed(last)) {
+  if (isMissedResult(last.result)) {
     const previous = earlier.at(-1);
     return {
       ending:
@@ -115,15 +108,14 @@ const HELD_ENDINGS: readonly (LabelEnding | null)[] = [
 ];
 
 /**
- * The point patch a shot change calls for, or `null` when it calls for none.
+ * The point patch a shot change calls for, or `null`. `before` and `after` are
+ * the same point around one shot change.
  *
- * `before` and `after` are the same point around one shot change. A patch is
- * due only when the change MOVED the derived ending — so an ending set by hand
- * survives every shot edit that leaves the rows saying the same thing — and
- * the new one is not null, not what the point already holds, and the point is
- * not a let or a non-point. When the rows now settle who won (the last stroke
- * missed) and the point says otherwise, the same patch carries the `winner`,
- * so the score after it follows.
+ * A patch is due only when the change moved the derived ending (so an ending
+ * set by hand survives edits that leave the rows saying the same thing), the
+ * new one is not null or what the point already holds, and the point is not a
+ * let or a non-point. When the rows now settle who won and the point says
+ * otherwise, the patch carries the `winner` too.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,

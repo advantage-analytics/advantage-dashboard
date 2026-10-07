@@ -34,61 +34,27 @@ import { cn } from "@/lib/utils";
 import { labelFilmStops, type LabelFilmStop } from "./label-film-stops";
 
 /**
- * The console's video: the labelled job's own file, with the match Video
- * tab's fullscreen transport (`FilmTransport` — title, "Point N / total", the
- * set-by-set track, then the control row) riding over the film's foot.
+ * The console's video: the labelled job's own file, with the Video tab's
+ * full-screen transport (`FilmTransport`) over its foot.
  *
- * It owns its `<video>` rather than mounting the tab's `FilmPlayer`: that
- * player draws a control bar of its own and keeps rate, loop, sound and skip
- * dead time to itself, so the transport would have had nothing to read. The
- * playback rules are the tab's, from the same `film-timeline.ts` functions:
+ * It owns its `<video>` rather than mounting `FilmPlayer`, whose own control
+ * bar and rate/loop/skip state would leave the transport nothing to read.
+ * Playback rules are the tab's (`film-timeline.ts`).
  *
- * - **The credential.** The signed URL `getLabelSession`'s `loadJobVideo`
- *   mints — the Advantage Intelligence lineage's contract: no refresh hook,
- *   and a media error raises "The film stopped loading · Reload", which is the
- *   right repair here too, since the page signs a fresh URL per render.
- *   `preload="metadata"`, for the tab's reason: these are multi-gigabyte
- *   files, and bytes should move when somebody presses play.
- * - **The stops.** The label points, on the console's playing rule
- *   (`label-film-stops.ts`), so Previous/Next point, Loop and Skip dead time
- *   walk exactly the spans the rail lights up.
- * - **What the bar leaves off** ({@link HIDDEN}): no bookmarks here, the
- *   court is a panel of its own, the layout's way out is the rail's, and
- *   "More" is inert. No scoreboard either — the rail already shows the score.
- *
- * ── Loading ─────────────────────────────────────────────────────────────────
- * Until the element can play (`canplay`, or `readyState` ≥ 3) the frame shows
- * `FilmFramePending` over the element and the transport is `inert`. The frame
- * itself stays clickable and Space still reaches the handle, so a browser that
- * holds at metadata until asked to play can always be asked.
- *
- * ── Two clocks ──────────────────────────────────────────────────────────────
- * The element speaks FILE seconds; a label's `videoTime` is on the ANALYSIS
- * clock. `startTimeSeconds` is subtracted on the way in (`seekTo`) and added
- * back on the way out (`onTime`), here and nowhere else in the console.
- *
- * ── The clock, as CSS ───────────────────────────────────────────────────────
- * `useFilmClockVars` writes `--film-t` / `--film-d` (FILE seconds) onto the
- * frame every animation frame, for the transport's track. `clockTargetRef`
- * names a second element to write them onto — the console's root, so the
- * rail's playing row can draw its progress rule from the same clock without
- * a render (`label-black-point-row.tsx`).
- *
- * ── Selecting a shot ────────────────────────────────────────────────────────
- * A shot click in the rail is a plain `seekTo` of the shot's time: the film
- * goes there and then carries on as it was — playing on if it was playing,
- * resting there if it was paused. Nothing replays a shot on its own; the
- * Loop button, `looping` and the `L` key mean "loop the point", and that is
- * the only loop there is.
- *
- * ── The frame's corners ─────────────────────────────────────────────────────
- * The frame itself is square; the pending skeleton over it rounds its own
- * corners (`FilmFramePending`), which suits a card. `square` switches that
- * off for a frame flush to a black stage (the full-screen view).
- *
- * ── The frame's box ─────────────────────────────────────────────────────────
- * A 16:9 box as wide as its parent, for a card or a stage, the picture
- * `object-contain` so it is never cropped and the transport on its foot.
+ * - Credential: the signed URL from `loadJobVideo`; a media error shows
+ *   "Reload", which re-signs. `preload="metadata"`, since files are
+ *   multi-gigabyte.
+ * - Stops: label points on the console's playing rule (`label-film-stops.ts`),
+ *   so Previous/Next, Loop and Skip dead time walk the spans the rail lights.
+ * - Left off the bar (`HIDDEN`): bookmarks, scoreboard, layout exit, "More".
+ * - Loading: `FilmFramePending` over the element and an `inert` transport until
+ *   `canplay`; the frame stays clickable so a browser that waits for play can
+ *   be asked.
+ * - Clocks: see video-clock.ts; `startTimeSeconds` is subtracted in `seekTo`
+ *   and added back in `onTime`, here only.
+ * - `useFilmClockVars` writes `--film-t` / `--film-d`; `clockTargetRef` names a
+ *   second element (the console root) so the rail shares the clock. `square`
+ *   flushes the frame to a black stage.
  */
 export interface LabelVideoHandle {
   /** Seek to a label's `videoTime` (analysis clock), converted to this file. */
@@ -133,26 +99,16 @@ export const LabelVideoPlayer = forwardRef<
     video: LabelVideo | null;
     /** The session's rows, for the player's point stops. */
     points: readonly LabelPoint[];
-    /** The transport's title row. */
     readout?: LabelVideoReadout;
-    /**
-     * Where the file is, on the analysis clock (the offset added back), on
-     * every `timeupdate` and `seeked` — the console's playing highlight. The
-     * console decides what, if anything, to re-render.
-     */
+    /** The file's position on the analysis clock, on every report. */
     onTime?: (videoTime: number) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /**
-     * A second element to carry `--film-t` / `--film-d`, beside the frame —
-     * an ancestor of whatever else draws from the film's clock.
+     * A second element to carry `--film-t` / `--film-d` (the console root).
      */
     clockTargetRef?: RefObject<HTMLElement | null>;
-    /**
-     * Square corners on everything in the frame, the loading skeleton
-     * included — for a frame flush to the full-screen view's black stage.
-     * Off, the skeleton keeps its card radius for the docked player.
-     */
+    /** Square corners throughout, for a frame flush to the black stage. */
     square?: boolean;
   }
 >(function LabelVideoPlayer(
@@ -211,7 +167,6 @@ export const LabelVideoPlayer = forwardRef<
     [onTime, offset, syncClock],
   );
 
-  /** Move the playhead, wherever it is read. */
   const seek = useCallback(
     (seconds: number) => {
       const el = videoRef.current;
@@ -463,10 +418,8 @@ export const LabelVideoPlayer = forwardRef<
           Your browser cannot play this video.
         </video>
 
-        {/* Over the element, never instead of it, and `pointer-events-none`:
-            a click still reaches the element, so a slow load never traps one.
-            `square` takes the skeleton's own card radius off every box in it:
-            the frame is then flush to a black stage with nothing to round to. */}
+        {/* Over the element and `pointer-events-none`: a click still
+            reaches the element, so a slow load never traps one. */}
         {!ready && (
           <div
             data-label-video-pending=""
@@ -479,7 +432,6 @@ export const LabelVideoPlayer = forwardRef<
           </div>
         )}
 
-        {/* The centre play affordance — only while paused and playable. */}
         {!playing && ready && (
           <button
             type="button"
@@ -497,8 +449,6 @@ export const LabelVideoPlayer = forwardRef<
           </button>
         )}
 
-        {/* The room's scrim, at the frame's scale: the transport has no
-            ground of its own. */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 bottom-0 h-[150px] bg-[linear-gradient(180deg,rgba(13,13,13,0)_0%,rgba(13,13,13,0.78)_70%,rgba(13,13,13,0.88)_100%)]"

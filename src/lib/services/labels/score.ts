@@ -1,24 +1,14 @@
 /**
- * The labelling console's scoreboard — the score before each point and the
- * games before each game — as a pure derivation over the session's points.
+ * The labelling console's scoreboard (the score before each point and the games
+ * before each game) as a pure derivation over the session's points. Nothing
+ * here is stored: everything is read off each point's `set_number`,
+ * `game_number`, `server` and `winner` in `point_index` order, so a corrected
+ * winner or a moved point redraws the whole column at once.
  *
- * Nothing here is stored. The label tables carry `set_number`, `game_number`,
- * `server` and `winner` per point; everything a scoreboard shows is read off
- * those in `point_index` order, every time, so a corrected winner or a moved
- * point redraws the whole column at once and `game_number` is never rewritten
- * to make the numbers line up.
- *
- * Pure and import-free of anything server-side, like edit.ts and
- * operations.ts: the `"use client"` table runs it on the rows it has.
- *
- * Two things a scoreboard gets wrong unless told otherwise:
- *
- * - `game_number` is match-cumulative in the vendor's data (set 2 opens with
- *   game 7 after a six-game set), so each game also gets `gameInSet`, its rank
- *   among the set's distinct games in point order.
- * - Not every row is a point. A let that was replayed, a row marked
- *   `not_a_point`, a tombstone, and a point whose winner is still blank do not
- *   move the score — the next point's `scoreBefore` is theirs.
+ * - `game_number` is match-cumulative in the vendor's data, so each game also
+ *   gets `gameInSet`, its rank among the set's distinct games in point order.
+ * - Not every row is a point: a replayed let, a `not_a_point` row, a tombstone
+ *   and a point whose winner is still blank do not move the score.
  */
 
 import {
@@ -46,15 +36,12 @@ export interface ScorablePoint {
   server: LabelSide | null;
   winner: LabelSide | null;
   ending: LabelEnding | null;
-  /** Missing (a row loaded before T9) or null means an ordinary `game`. */
+  /** Missing or null means an ordinary `game`. */
   gameType?: LabelGameType | null;
 }
 
 export interface LabelPointScore {
-  /**
-   * 1-based rank of the point's game among its set's games, in point order.
-   * Null when the point has no set or game to rank.
-   */
+  /** 1-based rank of the point's game in its set; null with no set or game. */
   gameInSet: number | null;
   /**
    * The score before the point, the point's server first: "30–15",
@@ -65,7 +52,6 @@ export interface LabelPointScore {
   scoreBefore: string | null;
 }
 
-/** One game band of the table. */
 export interface LabelGameBand {
   setNumber: number;
   gameNumber: number;
@@ -92,7 +78,6 @@ const UNCOUNTED_ENDINGS: ReadonlySet<LabelEnding> = new Set<LabelEnding>([
   "not_a_point",
 ]);
 
-/** Whether a point moves the score. */
 export function isCountedPoint(
   point: Pick<ScorablePoint, "status" | "winner" | "ending">,
 ): point is typeof point & { winner: LabelSide } {
@@ -123,10 +108,7 @@ interface GameAccumulator {
  * order; `adScoring` is whether a game at 40–40 goes to Ad (true) or ends on
  * the next point (false, "no-ad").
  */
-/**
- * `"{set}·{game}"` — the one key a point's game goes by in every map keyed
- * on games, here and in the console.
- */
+/** `"{set}·{game}"`: the one key a point's game goes by in every map. */
 export function gameKey(point: {
   setNumber: number | null;
   gameNumber: number | null;

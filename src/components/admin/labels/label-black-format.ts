@@ -17,13 +17,8 @@ import {
 } from "./label-format";
 
 /**
- * The black full-screen view's two lines for a point (board 08l's `.bk-t` and
- * `.bk-d`) — the points rail's sentence and detail, read off the LABELS rather
- * than the derived match: "Forehand error by Goodman" over
- * "Flat Down the Line · 12:45 · 7 shot rally".
- *
- * Pure: the row (`label-black-point-row.tsx`) prints these, and a spec reads
- * them without rendering.
+ * The rail's two lines for a point, read off the labels: "Forehand error by
+ * Goodman" over "Flat Down the Line · 12:45 · 7 shot rally". Pure.
  */
 
 type SentencePoint = Pick<
@@ -37,14 +32,10 @@ function liveShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
 }
 
 /**
- * The point without its ghosts — the strokes the site removed that the
- * labeller has neither restored nor deleted (`isGhostShot`) — for every
- * reading the black view makes while it DRAWS them as ghosts: the sentence,
- * the detail line's deciding stroke and rally count, the marks' hover
- * sentence and the shot numbering all skip a ghost then, and only then. With
- * the session's marks off, or none built, a ghost is an ordinary stroke and
- * the point is handed over as it is — the same object, so nothing downstream
- * re-computes for a point that has no ghost either.
+ * The point without its ghosts (`isGhostShot`), for every reading the rail
+ * makes while it draws them as ghosts: the sentence, the deciding stroke, the
+ * rally count, the marks' hover sentence and the shot numbering. A point with
+ * no ghost is handed back as the same object.
  */
 export function withoutGhosts<T extends Pick<LabelPoint, "shots">>(
   point: T,
@@ -90,12 +81,7 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
   }
 }
 
-/**
- * Seconds → the rail's clock: "12:45", or "1:02:03" past the hour. Whole
- * seconds, no tenths — the second the stroke falls in, as a player's clock
- * shows it. (`formatVideoTime` keeps the tenths, for the strokes' own cells.)
- * The match page's `formatClock`, under the name the rail knows it by.
- */
+/** Seconds → the rail's clock: "12:45", or "1:02:03". Whole seconds. */
 export const formatClockTime = (seconds: number): string =>
   formatClock(seconds);
 

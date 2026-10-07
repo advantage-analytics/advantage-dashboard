@@ -20,43 +20,21 @@ import type { SideNames } from "./label-format";
 import type { VideoClock } from "./video-clock";
 
 /**
- * The court panel's body (board 08i): the two-line readout header, the court
- * itself, and the foot — the Contact / Landing switch and "Flip side" while
- * placing, the Hit / Landed legend otherwise.
+ * The court panel's body: the two-line readout header, the court, and the foot
+ * (the Contact / Landing switch and "Flip side" while placing, the Hit / Landed
+ * legend otherwise). The view owns the region's ground and outline, so this
+ * body never paints its own. The court box is the court's size container
+ * (`LabelCourt` scales to fit).
  *
- * The console renders it into each layout's court region, and the view owns
- * that region — ground, padding, radius, shadow and the blue outline while
- * placing — so this body never paints its own ground.
- *
- * The court box takes the rest of the panel's height and is the court's size
- * container: the court scales to the largest box of its own proportions that
- * fits (`LabelCourt`), centred, so a region shorter or taller than the art
- * shrinks or grows the court rather than clipping it.
- *
- * ── Two states ──────────────────────────────────────────────────────────────
- * - **Not placing** (the film is playing, nothing is selected, or the session
- *   is read-only): the WHOLE court, read-only. A click does nothing. There is
- *   no shot list — the rail is the list.
- * - **Placing** (a stroke is selected and the console is editable): the court
- *   ZOOMS to the half the next click belongs on (court-placement.ts), with the
- *   run-off round it clickable for a ball that went out. The foot holds the
- *   Contact / Landing switch — which end the click places — and "Flip side",
- *   for a ball into the net.
- *
- * ── What is on the court ────────────────────────────────────────────────────
- * Never the whole point at once. With nothing selected the marks follow the
- * film the way the Video tab's court does (`label-court-marks.ts`): each
- * contact appears at its stroke, each landing when the ball comes down, holds,
- * fades and goes — so the panel reads the rally one stroke at a time, and
- * pausing freezes it. The body subscribes to the console's `VideoClock`
- * itself, with the marks' string key as its snapshot, so an opacity step
- * re-renders this body and nothing else.
- *
- * With a stroke selected — editable or not — the court shows THAT stroke
- * alone, both ends at full strength: the labeller is looking at one shot and
- * placing it, so the end just clicked appears at once and nothing else
- * competes with it. A selected stroke with no coordinates yet is a blank
- * court, still clickable where editable.
+ * - Not placing: the whole court, read-only. With nothing selected the marks
+ *   follow the film as the Video tab's court does (`label-court-marks.ts`). The
+ *   body subscribes to the console's `VideoClock` itself, with the marks'
+ *   string key as its snapshot, so an opacity step re-renders this body and
+ *   nothing else.
+ * - Placing (a stroke selected, the console editable): the court zooms to the
+ *   half the next click belongs on (court-placement.ts), run-off included.
+ * - With a stroke selected, editable or not, the court shows that stroke alone
+ *   at full strength; one with no coordinates yet is a blank court.
  */
 
 /** No point open: one shared empty list, so the marks memo holds. */
@@ -68,14 +46,10 @@ interface CourtReadout {
 }
 
 /**
- * The panel's two header lines.
- *
- * Placing: "Shot 3 · contact" over whose half is on screen — the hitter's
- * for a contact, the other player's for a landing, and "Flipped to <hitter>'s
- * side · Net" when Flip side has brought a landing back across.
- *
- * Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the lit (playing)
- * stroke, or just the stroke count; "Court" with no point open.
+ * The panel's two header lines. Placing: "Shot 3 · contact" over whose half is
+ * on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
+ * landing back across. Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the
+ * playing stroke, or just the stroke count; "Court" with no point open.
  */
 function courtReadout(
   point: LabelPoint | null,
@@ -178,9 +152,7 @@ export function LabelCourtPanel({
   clock: VideoClock;
   /** A click on the zoomed half, in metres. */
   onPlace: (point: CourtPoint) => void;
-  /** The Contact / Landing switch. */
   onTarget: (target: PlacementTarget) => void;
-  /** "Flip side". */
   onFlip: () => void;
 }) {
   const shots = point?.shots ?? NO_SHOTS;
@@ -198,18 +170,14 @@ export function LabelCourtPanel({
       : null;
   const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
   // The court crossfades between the whole court and the zoomed half
-  // (`label-court-view-in`, globals.css) — but only once the labeller has
-  // made it switch: the court this panel mounted with, on page load or after
-  // a layout change, is simply there. Latched in render, so the first
-  // switched court already mounts with it.
+  // (`label-court-view-in`, globals.css) only once the labeller has made it
+  // switch, never for the court this panel mounted with. Latched in render.
   const [zoomAtMount] = useState(placing);
   const [zoomSwitched, setZoomSwitched] = useState(false);
   if (!zoomSwitched && placing !== zoomAtMount) setZoomSwitched(true);
 
   // The marks the film is showing right now, as a string snapshot: React
-  // re-renders this body only when an opacity steps, and the console — which
-  // owns the clock but never subscribes to this — not at all. Taken from the
-  // current strokes on every render, so a retimed stroke moves at once.
+  // re-renders this body only when an opacity steps.
   const marksSnapshot = () => courtMarksKey(courtMarksAt(shots, clock.get()));
   const marksKey = useSyncExternalStore(
     clock.subscribe,
@@ -238,21 +206,19 @@ export function LabelCourtPanel({
         {prompt}
       </span>
 
-      <div className="flex h-[34px] shrink-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span
-            data-court-title=""
-            className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
-          >
-            {readout.title}
-          </span>
-          <span
-            data-court-subtitle=""
-            className="truncate text-[10px] leading-[13px] text-white/55"
-          >
-            {readout.subtitle}
-          </span>
-        </div>
+      <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
+        <span
+          data-court-title=""
+          className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
+        >
+          {readout.title}
+        </span>
+        <span
+          data-court-subtitle=""
+          className="truncate text-[10px] leading-[13px] text-white/55"
+        >
+          {readout.subtitle}
+        </span>
       </div>
 
       <div

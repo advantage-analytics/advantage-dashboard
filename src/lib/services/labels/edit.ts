@@ -3,15 +3,13 @@
  * `label_points` columns a labeller may change, what each may hold, and how a
  * change moves the row's `status`.
  *
- * Pure and import-free of anything server-side — the server actions validate
- * with it (edit-session.ts) and the `"use client"` console uses the same
- * functions for its optimistic update, so the pill a labeller sees the moment
- * they edit is the status the server is about to write.
+ * Pure: the server actions validate with it (edit-session.ts) and the console
+ * uses the same functions for its optimistic update, so the two cannot
+ * disagree.
  *
- * Patches are keyed by COLUMN name (`contact_x`, `ended_by`), the wire format
- * of `updateLabelShot` / `updateLabelPoint`. Every allowed value is one the
- * migration's CHECK accepts (supabase/migrations/20260928190122_label_sessions.sql),
- * so a patch that parses here can never be refused by the table.
+ * Patches are keyed by COLUMN name (`contact_x`, `ended_by`). Every allowed
+ * value is one the migration's CHECK accepts
+ * (supabase/migrations/20260928190122_label_sessions.sql).
  */
 
 import {
@@ -412,49 +410,22 @@ export type LabelPointState = LabelPointFields & {
 /**
  * The status a shot takes after `patch` is applied to `current`.
  *
- * ── The rule ────────────────────────────────────────────────────────────────
- *   added    stays added — a stroke the labeller put in has no vendor value
- *            to differ from (and the migration forbids an `added` row with an
- *            event id, so it can never become a vendor shot).
- *   deleted  is left alone — tombstones are T7's; edit-session.ts refuses to
- *            edit one at all.
- *   kept / edited, with a seed:
- *            `kept` when every value field, after the patch, equals its seed
- *            within its tolerance; otherwise `edited`. So an edit set back to
- *            what was seeded returns the shot to `kept`, both ways.
- *   kept / edited, without a seed (a vendor row seeded before
- *            `label_shots.seed` existed and not yet backfilled by
- *            scripts/label-backfill-seed.ts):
- *            `kept` becomes `edited` when a patched value differs from the
- *            stored one; `edited` stays `edited` — with nothing to compare
- *            against, a value set back cannot be told from a change.
+ * - `added` stays added; `deleted` is left alone (edit-session.ts refuses to
+ *   edit one).
+ * - `kept` / `edited` with a seed: `kept` when every value field equals its
+ *   seed within its tolerance after the patch, else `edited`. So an edit set
+ *   back returns the shot to `kept`.
+ * - `kept` / `edited` without a seed: `kept` becomes `edited` when a patched
+ *   value differs from the stored one; `edited` stays `edited`.
  *
- * ── The baseline: the seed, frozen ──────────────────────────────────────────
- * A field's baseline is the value the seed wrote for it (seed.ts
- * `buildLabelSeed`), kept whole in the row's `seed` jsonb
- * (supabase/migrations/20260928190425_label_rows_seed.sql) — never the value
- * currently in the row, which an edit overwrites.
+ * The baseline is the value the seed wrote (seed.ts `buildLabelSeed`), frozen
+ * in the row's `seed` jsonb, never re-derived from `vendor`: hitter, result and
+ * a serve's first or second cannot be derived from one stroke, and the rest
+ * only with today's derivation code rather than the session's pinned
+ * `derivation_version`.
  *
- * Why not re-derive each baseline from the `vendor` jsonb instead: three of
- * the nine fields cannot be derived from one stroke at all —
- *   hitter  the vendor names a free-text player label; which label is p1 is
- *           the fold's call over the whole match (transcript.ts `player1`);
- *   result  structural, from the stroke's rally position and the point's
- *           WINNER (result-type.ts `shotResult`) — the vendor's own `in` flag
- *           is contradicted on 16–38% of rally strokes;
- *   stroke  for a serve, first vs second depends on the other serves in the
- *           rally; the vendor says only "serve".
- * The other six (positions via `metersToCourtFrame`, time via the job's
- * `start_time_seconds`, spin via `labelSpin`) could be re-derived, but only
- * with TODAY's derivation code, while the seed used the session's pinned
- * `derivation_version` — once the two drift, a no-op edit would read as a
- * change. The frozen seed has neither problem.
- *
- * `unclear` never moves the status: it says the video cannot settle a field,
- * not that the field's value is different — and it is not part of the seed.
- *
- * The server's write (edit-session.ts) and the console's optimistic apply
- * ({@link applyLabelShotPatch}) both call this, so they cannot disagree.
+ * `unclear` never moves the status. The server's write (edit-session.ts) and
+ * the console's optimistic apply ({@link applyLabelShotPatch}) both call this.
  */
 export function labelShotStatusAfterPatch(
   current: LabelShotState,
@@ -485,15 +456,13 @@ export function labelShotStatusAfterPatch(
 }
 
 /**
- * The status a point takes when `change` is applied to `current` — a patch's
+ * The status a point takes when `change` is applied to `current`: a patch's
  * values, or a move's set, game and server.
  *
- * The shot rule, for points: `added` and `deleted` are left as they are;
- * with a seed, `unchanged` when every field (set, game, server, serve side,
- * won by, ending, ended by) equals its seed after the change, else `edited` —
- * so moving a point back to its seeded game, or setting a value back, returns
- * it to `unchanged`; without one, `unchanged` becomes `edited` on a changed
- * value and `edited` stays `edited`.
+ * The shot rule, for points: `added` and `deleted` are left as they are; with a
+ * seed, `unchanged` when every field equals its seed after the change, else
+ * `edited`; without one, `unchanged` becomes `edited` on a changed value and
+ * `edited` stays `edited`.
  */
 export function labelPointStatusAfterChange(
   current: LabelPointState,
@@ -714,12 +683,10 @@ export function labelPointFields(
   };
 }
 
-/** A console shot as the status rule reads it. */
 export function labelShotState(shot: LabelShot): LabelShotState {
   return { ...labelShotValues(shot), status: shot.status, seed: shot.seed };
 }
 
-/** A console point as the status rule reads it. */
 export function labelPointState(point: LabelPoint): LabelPointState {
   return { ...labelPointFields(point), status: point.status, seed: point.seed };
 }

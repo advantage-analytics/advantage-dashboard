@@ -25,6 +25,7 @@ import type {
 } from "@/lib/services/labels/game-shift";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
+import { pointChanged } from "@/lib/services/labels/marks-state";
 import { canResetPoint } from "@/lib/services/labels/reset";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
@@ -55,46 +56,29 @@ import {
 } from "./label-row-parts";
 
 /**
- * The rail's point rows (board 08l): the film room's points rail
- * (`film/point-list.tsx`, `ROW_TONE.dark` / `LIST_TONE.dark`) carrying the
- * labelling console's point — its labels, its writes and its requests — in
- * two lines.
- *
- * Colours are the frame's: white at an alpha on the room's black, `--blue`
- * for the one player's mark, the progress rule and the "changed" pencil,
- * `--success` for a checked tick. The same classes draw the row on the light
- * ground: there "white" is the page's ink (`label-rail-tone.ts`), so nothing
- * here names a light token, and nothing here may mean the COLOUR white by
- * writing `white` — that is `--rail-on-accent`.
+ * The rail's point rows: the film room's points rail (`film/point-list.tsx`)
+ * carrying the labelling console's point in two lines. "White" in these classes
+ * is the rail's ink (label-rail-tone.ts); the colour white is
+ * `--rail-on-accent`.
  */
 
 /**
- * The frame's `.bk-row` tracks: number · winner mark · the two lines · tail ·
- * score · tick. The row's actions take NO track: they are an overlay over
- * the score's right end (`ACTIONS_RIGHT`), revealed as the Video tab's point
- * row reveals its bookmark (`film-row-reveal.ts`) — the score slides 26px
- * left on a transform and the actions fade in where it was, so no column
- * re-lays and nothing changes width. The score's track is the Video tab's
- * 52px, which leaves the slide room inside the 10px gap before the tail.
+ * The row's tracks: number · winner mark · the two lines · tail · score · tick.
+ * The actions take no track: they overlay the score's right end
+ * (`ACTIONS_RIGHT`) and are revealed as the Video tab reveals its bookmark
+ * (`film-row-reveal.ts`), so no column re-lays.
  */
 const ROW_GRID =
   "grid grid-cols-[22px_30px_minmax(0,1fr)_auto_52px_22px] items-center gap-x-[10px] min-h-[52px] px-[14px] py-1.5";
 
-/**
- * Where the row's actions sit: over the score's right end, out of the grid —
- * the row's 14px of padding, the tick's 22px track and the 10px gap before
- * it. The Video tab puts its bookmark at the row's `right-[14px]`; the rail
- * has the tick there, so its overlay starts one track in.
- */
+/** Past the row's 14px padding, the tick's 22px track and the 10px gap. */
 const ACTIONS_RIGHT = "right-[46px]";
 
 /**
- * The rail's two additions to the Video tab's slide (`film-row-reveal.ts`).
- * The score also stays aside while the row's ⋯ menu is open — the menu is
- * portalled, so the row has neither the pointer nor the focus by then. And
- * under reduced motion the score still gets out of the way, at once: the
- * Video tab leaves it under its bookmark, a small glyph over a score's last
- * digit, but a 22px button over the rail's would hide it.
+ * The rail's two additions to the Video tab's slide. The score stays aside
+ * while the row's ⋯ menu is open: the menu is portalled, so the row has neither
+ * the pointer nor the focus by then. And under reduced motion the score still
+ * moves aside, at once: a 22px button over it would hide it.
  */
 const SCORE_ASIDE_FOR_MENU =
   "group-has-[[data-row-actions]_[aria-expanded=true]]/row:-translate-x-[26px]";
@@ -118,27 +102,16 @@ export function pointChangedByYou(
 }
 
 /**
- * One point of the black rail — the frame's `.bk-row`.
+ * One point of the rail: number · winner mark (the menu that changes who won) ·
+ * sentence over the deciding shot, time and rally · tail (mark chip, "changed"
+ * pencil) · score before the point · actions (⋯, on hover, focus and the
+ * playing row) · tick. The strokes arrive as `children` and are drawn under the
+ * open row.
  *
- * Left to right: the point's number · the
- * WINNER mark, which is the menu that changes who won · how the point ended
- * as a sentence over the deciding shot, the time and the rally · a tail slot
- * carrying the point's chip (board 08m: what to check, for the marks that
- * can change the score) and the blue pencil on a point the labeller has changed · the score
- * before the point · the row's actions (⋯), there only on hover, on
- * focus and on the playing row · the tick that marks the point checked.
- *
- * The PLAYING row draws the rail's progress rule along its foot, its width
- * CSS reading `--film-t` (`film-clock.ts`) so the row never re-renders to
- * move it.
- *
- * The strokes arrive as `children` and are drawn under the open row.
- *
- * Memoised, as the rail's other rows are: the film crosses into another
- * stroke every second or two, and only the rows whose own props changed —
- * the one it left, the one it entered, the open one — render for it. That
- * holds because the rail hands every row the same `edit` and callbacks that
- * keep their identity (`label-console.tsx`).
+ * The playing row's progress rule reads `--film-t`, so the row never re-renders
+ * to move it. Memoised: only rows whose own props changed render when the film
+ * crosses a stroke, which holds because the rail hands every row one `edit` and
+ * identity-stable callbacks.
  */
 export const BlackPointRow = memo(function BlackPointRow({
   point,
@@ -156,29 +129,23 @@ export const BlackPointRow = memo(function BlackPointRow({
   playing: boolean;
   /** The playing point's span in file seconds; only the playing row gets one. */
   playingWindow?: PlayingWindow | null;
-  /** The score before the point, as the scoreboard words it; null for none. */
   score: string | null;
   edit: EditContext;
-  /**
-   * The session's marks (`getLabelSession`'s `marks`). Null — a session
-   * seeded without them, or a build that failed — draws no chip at all.
-   */
+  /** The session's marks. Null draws no chip at all. */
   marks?: LabelMarks | null;
   onToggle?: (pointId: string) => void;
-  /** The open point's strokes; nothing when it is folded. */
   children?: React.ReactNode;
 }) {
   const { operations, names } = edit;
   const tone = edit.tone ?? "dark";
   const number = point.pointIndex + 1;
   const checked = point.checkedAt !== null;
-  // The point as the rail reads it (board 08m §3): without the strokes the
-  // site removed while the well draws them as ghosts, so the sentence, the
-  // deciding stroke and the rally count say what the rally is now. With the
-  // session's marks off or none built, a ghost is a stroke like any other.
+  // The point as the rail reads it: without the strokes the site removed while
+  // the well draws them as ghosts, so the sentence, the deciding stroke and the
+  // rally count say what the rally is now.
   const shown = drawsGhosts(marks) ? withoutGhosts(point) : point;
-  // A point the labeller just added (board 08m §5's "New point"): nothing on
-  // it yet, so the two lines say what to do next rather than how it ended.
+  // A point the labeller just added: nothing on it yet, so the two lines say
+  // what to do next.
   const fresh = isNewPoint(point);
   const sentence = fresh ? NEW_POINT_TITLE : pointSentence(shown, names);
   const detail = fresh
@@ -187,9 +154,9 @@ export const BlackPointRow = memo(function BlackPointRow({
   // The rail's rows go along so a "Same side twice" question reads settled
   // once a point the labeller added sits between the two (marks-state.ts).
   const rowMarks = pointRowMarks(point, marks, names, sentence, edit.points);
-  // ONE pencil: the roll-up's when the session has marks (it also counts a
-  // removed stroke the labeller put back), the row's own rule when not.
-  const changed = rowMarks ? rowMarks.pencil : pointChangedByYou(point);
+  // ONE pencil: with marks it also counts a removed stroke the labeller put
+  // back, the row's own rule when not.
+  const changed = marks ? pointChanged(point) : pointChangedByYou(point);
 
   return (
     <>
@@ -210,7 +177,6 @@ export const BlackPointRow = memo(function BlackPointRow({
           playing ? "bg-white/[0.08]" : "hover:bg-white/[0.06]",
         )}
       >
-        {/* The number: it stays put under the pointer and on the playing row. */}
         <span
           data-point-number=""
           className="mono tabular inline-flex items-center text-[10px] text-white/35"
@@ -225,10 +191,6 @@ export const BlackPointRow = memo(function BlackPointRow({
           fresh={fresh}
         />
 
-        {/* The two lines, as the row's control for a keyboard and a screen
-            reader — the row's own click does the same for a mouse: go to the
-            point, which makes it the current one and unfolds it. Not a
-            toggle: only the current point is unfolded, and nothing folds it. */}
         <button
           type="button"
           data-point-go=""
@@ -242,7 +204,6 @@ export const BlackPointRow = memo(function BlackPointRow({
             data-point-sentence=""
             className={cn(
               "truncate text-[12px] font-medium",
-              // The frame's `.fx-new .bk-t`: the new point's title in blue.
               fresh ? "text-[var(--blue)]" : "text-white",
             )}
           >
@@ -257,13 +218,10 @@ export const BlackPointRow = memo(function BlackPointRow({
           </span>
         </button>
 
-        {/* The tail: what to check — the one chip, for the marks that can
-            change the score — then the pencil, which is the point's Reset
-            as well, when its own fields have changed and it has a seed to
-            go back to (the same ask as the menu's). A chip's words go
-            before the two lines do — see `MarkChip` — so the tail never
-            takes the score's room. A hint is not here: it is a word in the
-            open point's well (`PointHintLine`). */}
+        {/* The tail: the one chip, then the pencil, which is also the
+            point's Reset when its own fields have changed and it has a
+            seed. A chip's words go before the two lines do (see
+            `MarkChip`), so the tail never takes the score's room. */}
         <span data-row-tail="" className="inline-flex items-center gap-2">
           {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
           {changed ? (
@@ -280,14 +238,12 @@ export const BlackPointRow = memo(function BlackPointRow({
           ) : null}
         </span>
 
-        {/* A new point has no score of its own yet — the frame draws a dash
-            until its winner is set — whatever the scoreboard says before it. */}
+        {/* A new point has no score of its own until its winner is set. */}
         <span
           data-point-score=""
           className={cn(
             "mono tabular truncate text-right text-[11px]",
             FILM_ROW_SLIDE_TRANSITION,
-            // Only a row with actions has anything to make room for.
             operations &&
               (playing
                 ? FILM_ROW_SLIDE_HELD
@@ -309,9 +265,6 @@ export const BlackPointRow = memo(function BlackPointRow({
           )}
         </span>
 
-        {/* Over the score's right end, out of the grid: faded in as the
-            score slides aside (the Video tab's reveal), lit at rest on the
-            playing row. A menu open from here holds it lit. */}
         <span
           data-row-actions=""
           data-cell=""
@@ -352,10 +305,9 @@ export const BlackPointRow = memo(function BlackPointRow({
             disabled={!operations}
             onClick={(event) => {
               event.stopPropagation();
-              // The glyph answers THIS click (`label-check-in`, globals.css):
-              // the mark is set here, on the element, and by nothing else —
-              // so a row that mounts already checked plays nothing, and the
-              // memoised row takes no state or prop for it.
+              // The glyph answers this click (`label-check-in`, globals.css):
+              // the mark is set here, on the element, so a row that mounts
+              // already checked plays nothing.
               if (checked) delete event.currentTarget.dataset.justChecked;
               else event.currentTarget.dataset.justChecked = "";
               operations?.onSetChecked(point.id, !checked);
@@ -380,8 +332,8 @@ export const BlackPointRow = memo(function BlackPointRow({
           </button>
         </ChromeTooltip>
 
-        {/* The playing row's rule, as the points rail draws it: out of the
-            grid's flow, so it takes no track. */}
+        {/* The playing row's rule: out of the grid's flow, so it takes no
+            track. */}
         {playing && playingWindow ? (
           <span
             aria-hidden="true"
@@ -399,9 +351,8 @@ export const BlackPointRow = memo(function BlackPointRow({
   );
 });
 
-/** The second line's ink — the frame's `.bk-d`. */
+/** The second line's ink. */
 const DETAIL_INK = railInk(0.45);
-/** The score before the point — the frame's `.bk-sc`. */
 const SCORE_INK = railInk(0.85);
 
 // ── A new point ────────────────────────────────────────────────────────────
@@ -409,12 +360,7 @@ const SCORE_INK = railInk(0.85);
 const NEW_POINT_TITLE = "New point";
 const NEW_POINT_DETAIL = "Set who won, then add its shots";
 
-/**
- * A point the labeller added and has not touched since: no winner and no
- * live stroke. The frame's "New point" row (board 08m §5) — a "?" in a blue
- * ring, the title in blue, the detail saying what to do next. Setting the
- * winner or adding a stroke makes it an ordinary row.
- */
+/** A point the labeller added and left: no winner and no live stroke. */
 function isNewPoint(
   point: Pick<LabelPoint, "status" | "winner" | "shots">,
 ): boolean {
@@ -426,11 +372,10 @@ function isNewPoint(
 }
 
 /**
- * The new point's detail line: "Set who won, then add its shots · between
- * {t1} and {t2}", where t1 is the last live stroke of the live point before
- * it on the rail and t2 the first live stroke of the one after, on the rail's
- * clock (`formatClockTime`). With only one neighbour timed it reads "after
- * t1" / "before t2"; with neither, the words alone.
+ * The new point's detail line: "Set who won, then add its shots · between {t1}
+ * and {t2}", from the last live stroke of the live point before it and the
+ * first of the one after (`formatClockTime`). With one neighbour timed it reads
+ * "after t1" / "before t2"; with neither, the words alone.
  */
 function newPointDetail(
   point: Pick<LabelPoint, "id">,
@@ -463,12 +408,9 @@ function newPointDetail(
 type PointSuggestion = Extract<LabelSuggestion, { kind: "missing_point" }>;
 
 /**
- * The missing-point suggestions still waiting for an answer, by the flagged
- * point's id (board 08m §5): the session computes marks and has them, both
- * points of the pair are live rows of the rail, and the suggestion is
- * neither dismissed nor answered — by a point added between the two, or by
- * the second marked a replayed let (`suggestionState`). With marks off, or
- * none built, there is none.
+ * The missing-point suggestions still open, by the flagged point's id: both
+ * points of the pair are live rows and the suggestion is neither dismissed nor
+ * answered (`suggestionState`).
  */
 export function openPointSuggestions(
   points: readonly LabelPoint[],
@@ -490,19 +432,11 @@ export function openPointSuggestions(
 }
 
 /**
- * A suggested point (board 08m §5, the frame's `.fx-psug`): two points of a
- * game were served from the same side, so one is probably missing between
- * them. A dashed amber slot between their rows — a plus on the row's number
- * track, the sentence over the reason, and three answers: "Add point" (the
- * insert, `onInsertPoint` before the flagged point), "{b} was a let" (the
- * existing point autosave, `ending: let_replayed` — the score stands, as
- * score.ts already rules), and "Dismiss" (the suggestion's key stored). The
- * answers are absent on a session that cannot be written.
- *
- * Built to fit the rail from 520px: the two lines truncate, the answers
- * never shrink or wrap (`shrink-0 whitespace-nowrap`), and at that width the
- * three take about 215px of the slot's 440, so they sit on one line with the
- * words. Nothing is added until a click.
+ * A suggested point: two points of a game were served from the same side, so
+ * one is probably missing between them. A dashed amber slot between their rows
+ * with three answers: "Add point" (`onInsertPoint` before the flagged point),
+ * "{b} was a let" (`ending: let_replayed`; the score stands) and "Dismiss". The
+ * two lines truncate; the answers never shrink or wrap.
  */
 export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
   suggestion,
@@ -596,20 +530,12 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
 // ── A game that runs over ──────────────────────────────────────────────────
 
 /**
- * A game already won with rows still sitting in it (`game-shift.ts`): the
- * rows after the one that decided it read "Game–30", and they belong to the
- * next game. The same dashed amber slot as the suggested point, before the
- * first of them — a corner arrow on the number track, "Game {n} is already
- * won" over how many rows sit past it, and ONE answer: "Move to game {m}",
- * the console's `onShiftGameOverflow` from that first row. No Dismiss: the
- * score column keeps reading "Game–30" until the rows move, and that is the
- * cue. When the move cascades past one game, the button's tooltip says how
- * far; when a moved point's players switch with its server, it says on how
- * many. Absent on a session that cannot be written. Read off the labeller's
- * own rows, so it draws on every session — marks on or off.
- *
- * Built to fit the rail from 520px as the suggested point is: the two lines
- * truncate, the one button never shrinks or wraps.
+ * A game already won with rows still sitting in it (`game-shift.ts`). The same
+ * dashed amber slot as the suggested point, before the first leftover, with one
+ * answer: "Move to game {m}" (`onShiftGameOverflow`). No Dismiss: the score
+ * column keeps reading "Game–30" until the rows move. The tooltip says how far
+ * a cascade goes and on how many points the players switch. Drawn with marks on
+ * or off.
  */
 export const BlackGameOverflow = memo(function BlackGameOverflow({
   overflow,
@@ -721,18 +647,10 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
 // ── A deleted point ────────────────────────────────────────────────────────
 
 /**
- * A deleted point, in the rail: ONE quiet line on the row's own first track
- * and padding — a dash where the number was, "Deleted point" and where it
- * was on the film — with Undo always at the right edge.
- *
- * Nothing folds open: the line is the whole tombstone. A deleted point has
- * no score and no band. Undo is the console's request (`onRestorePoint`),
- * absent on a session that cannot be written.
- *
- * A tombstone with no shot rows of its own is what a combine leaves behind
- * (`isCombinedTombstone`, point-combine.ts): its line reads "Combined into
- * the point above" and offers no Undo — restoring it would bring back an
- * empty point. The way back is "Split point here" on the first moved shot.
+ * A deleted point: one quiet line (a dash, "Deleted point" and where it was on
+ * the film) with Undo at the right edge. A tombstone with no shot rows is what
+ * a combine leaves (`isCombinedTombstone`): it reads "Combined into the point
+ * above" and offers no Undo.
  */
 export const BlackDeletedPoint = memo(function BlackDeletedPoint({
   point,
@@ -771,12 +689,9 @@ export const BlackDeletedPoint = memo(function BlackDeletedPoint({
 // ── The winner mark ────────────────────────────────────────────────────────
 
 /**
- * The frame's `.bk-mk`: a 30px square with the winner's initial — p1 on
- * `--blue` (its letter white on either ground: `--rail-on-accent`), p2 on a
- * white wash. Two grounds, not two hues, down the rail's own column. No
- * winner yet is the wash with a dash — or, on a point
- * the labeller just added (`fresh`, the frame's `.fx-new .bk-mk`), a "?" in a
- * `--blue` ring on the room's own black: the one thing to set first.
+ * A 30px square with the winner's initial: p1 on `--blue` (its letter
+ * `--rail-on-accent`), p2 on a white wash. No winner yet is the wash with a
+ * dash, or on a point just added (`fresh`) a "?" in a `--blue` ring.
  */
 function BlackWinnerMark({
   side,
@@ -805,11 +720,7 @@ function BlackWinnerMark({
   );
 }
 
-/**
- * The winner mark as the control that changes it — a menu in the rail's
- * tone: the two players, the current one checked; choosing the other saves
- * `{ winner }`. Read-only, it is the mark alone.
- */
+/** The winner mark as the menu that changes it; read-only, the mark alone. */
 function BlackWinnerCell({
   point,
   number,

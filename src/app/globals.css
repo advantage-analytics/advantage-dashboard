@@ -878,22 +878,17 @@
   }
 }
 
-/* The drawer's "Now playing" pill arriving (point-list.tsx `FollowPill`,
-   T17 design frame B1): 150ms (`--duration-fast`) opacity 0 → 1 with the
-   same 4px rise as `film-shot-row-in`, so the two things that appear in the
-   list arrive the same way. The pill is centred with Tailwind's
-   `-translate-x-1/2`, which is the `translate` property, not `transform`, so
-   this keyframe's `transform` composes with it rather than undoing it.
+/* The drawer's "Now playing" pill arriving (point-list.tsx `FollowPill`): 150ms
+   (`--duration-fast`) opacity 0 → 1 with the same 4px rise as
+   `film-shot-row-in`. The pill is centred with Tailwind's `-translate-x-1/2`,
+   which is the `translate` property, not `transform`, so this keyframe's
+   `transform` composes with it rather than undoing it.
 
-   The rise moves away from the edge the pill is pinned to (T21): pinned
-   bottom it comes up from 4px below; pinned top the pill sets
-   `--film-pill-rise: -4px` and drops in from 4px above. The header line in
-   the shell card sets nothing and rises as before.
+   The rise moves away from the edge the pill is pinned to: pinned top, the pill
+   sets `--film-pill-rise: -4px` and drops in from above.
 
-   Reduced motion keeps the fade and drops the rise ("skip transforms, keep
-   opacity") on both edges. Unlike the shot rows' `animation: none`, the
-   pill carries state — the film has moved on without you — so it must still
-   visibly arrive. */
+   Reduced motion keeps the fade and drops the rise: the pill carries state, so
+   it must still visibly arrive. */
 @keyframes film-follow-pill-in {
   from {
     opacity: 0;
@@ -923,32 +918,15 @@
 }
 
 /* ── The labelling console (/admin/labels/[sessionId]) ───────────────────────
-   One person, for hours, labelling points against film: motion here answers
-   a click or carries one state into the next, and never makes them wait.
-   Nothing below plays on page load or on a tick of the film's clock.
+   Motion here answers a click or carries one state into the next; nothing plays
+   on page load or on a tick of the film's clock. The shots well, its rows and
+   the "Now playing" pill reuse the Film tab's classes above. */
 
-   The rail borrows the Film tab's own vocabulary above rather than a second
-   one: its shots well opens on `film-shot-well-open` and its stroke rows
-   arrive on `film-shot-row-in` with the same 25ms × 8 stagger
-   (`BlackShotsWell`, label-black-shot-row.tsx), and its "Now playing" pill
-   arrives on `film-follow-pill-in` (label-follow-pill.tsx). What follows is
-   only what the console needs that the Film tab does not have. */
-
-/* The well, once its rally has arrived. `BlackShotsWell` marks itself
-   `data-well-settled` when the last row's arrival ends (or the labeller
-   reaches into the well first — nothing holds a row back from a click). From
-   then on a row that mounts in the open well is an EDIT, not the rally
-   unfolding: a new stroke simply is there (0s — a draft row is replaced by
-   its saved one a moment later, and a rise would play twice), with no
-   stagger delay to sit invisible through. Only the duration and the delay
-   change, never the animation's name, so the rows already in place — their
-   arrival finished — replay nothing when the mark lands.
-
-   The one row that DOES answer is a tombstone (`label-row-arrive`,
-   `BlackDeletedShot`): deleting a stroke swaps its row for the struck line,
-   and that line rises in over `--duration-fast` so the delete visibly lands
-   where the stroke was. Reduced motion: `film-shot-row-in` is already
-   `animation: none` above, which covers both. */
+/* `BlackShotsWell` sets `data-well-settled` once its rally has arrived; a row
+   mounting after that is an edit, so it loses the stagger and the rise. Only
+   duration and delay change, never the name, so rows already in place replay
+   nothing. A tombstone (`label-row-arrive`) still rises: the delete lands where
+   the stroke was. */
 [data-well-settled] .film-shot-row-in {
   animation-duration: 0s;
   /* The stagger is an inline style on each row. */
@@ -958,24 +936,11 @@
   animation-duration: var(--duration-fast);
 }
 
-/* Ticking a point checked (`data-check-row`, label-black-point-row.tsx): the
-   check glyph answers the click — 150ms (`--duration-fast`) from 0.8 to its
-   own size on `--ease-out-expo`, alongside the button's colour going green.
-   No overshoot; the DS bans bounce.
-
-   Click-driven, never mount-driven: the click handler marks its own button
-   `data-just-checked`, so a point that was already checked when the page
-   loaded, or a row that re-renders, plays nothing — the selector needs the
-   mark AND the pressed state. Unchecking takes the mark off again.
-
-   Reduced motion drops the scale; the colour change (a 200ms
-   `transition-colors` on the button) still confirms the tick. */
+/* The tick's glyph answers the click that set `data-just-checked`; a row that
+   mounts already checked plays nothing. Reduced motion drops the scale. */
 @keyframes label-check-in {
   from {
     transform: scale(0.8);
-  }
-  to {
-    transform: scale(1);
   }
 }
 [data-just-checked][aria-pressed="true"] > .label-check-in {
@@ -987,36 +952,14 @@
   }
 }
 
-/* Continuity, opacity only — one keyframe, three uses. It names only the
-   `from`, so each element ends at its own opacity and is fully visible by
-   default: if the animation never runs, nothing is left hidden. Each class
-   is put on by the console only for a change the labeller made (never on
-   first render), on an element that mounts for it.
-
-   · `label-court-view-in` — the court's art when the panel switches between
-     the whole court and the half-court zoom (`data-court-view`,
-     label-court.tsx): 200ms (`--duration-hover`) on `--ease-primary`, so the
-     zoom reads as one court changing scale rather than a cut. The SVG's
-     geometry is not animated.
-   · `label-layer-in-full` — the full-screen black layer arriving
-     (label-black-view.tsx): 200ms.
-   · `label-layer-in-docked` — the docked view coming back
-     (label-side-view.tsx): 150ms (`--duration-fast`); leaving is quicker
-     than entering.
-
-   Reduced motion keeps all three — a short fade is what DS foundations
-   leave on — capped at `--duration-fast`. */
-@keyframes label-fade-in {
-  from {
-    opacity: 0;
-  }
-}
+/* Opacity-only fade for a view the labeller changed (court whole/half, layout
+   switch), never on first render. Kept under reduced motion, capped short. */
 .label-court-view-in,
 .label-layer-in-full {
-  animation: label-fade-in var(--duration-hover) var(--ease-primary) both;
+  animation: film-mark-in var(--duration-hover) var(--ease-primary) both;
 }
 .label-layer-in-docked {
-  animation: label-fade-in var(--duration-fast) var(--ease-primary) both;
+  animation: film-mark-in var(--duration-fast) var(--ease-primary) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .label-court-view-in,

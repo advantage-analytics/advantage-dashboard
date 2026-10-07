@@ -2,43 +2,28 @@
  * The labelling console's vertical court: one frame, and the pure conversion
  * between it and the metres every label is stored in.
  *
- * ── The two frames ─────────────────────────────────────────────────────────
- * **Court (metres)** — the `shots` / `label_shots` frame: `x` is lateral
- * metres from the centre line, `y` is metres from the NEAR baseline, so the
- * near baseline is `y = 0`, the net `y = 11.885` and the far baseline
- * `y = 23.77`.
+ * Court (metres), the `label_shots` frame: `x` is lateral metres from the
+ * centre line, `y` metres from the NEAR baseline, so the net is `y = 11.885`
+ * and the far baseline `y = 23.77`.
  *
- * **Screen (percent)** — where a mark sits over the drawn court, as
- * `{ sx, sy }` in PERCENT, 0–100, of the art box: `sx` from its left edge,
- * `sy` from its top. Percent rather than 0–1 because that is what the
- * overlay's SVG attributes take verbatim (`cx="43.55%"`), so no call site
- * multiplies by 100.
- *
- * The art box is {@link COURT_VIEW_BOX}: the doubles court plus a 1.78 m
- * apron at each side and 4.5 m behind each baseline. Board 08 drew 0.715 m
- * and 2.1 m, which clipped real contact points: players routinely strike the
- * ball 3–4 m behind the baseline. The two aprons grew together so the box
- * keeps board 08's 86 × 194 proportions.
- * The near baseline is drawn at the BOTTOM (`sy ≈ 86.3`), so `y` grows up
- * the screen while `sy` grows down it:
+ * Screen (percent): `{ sx, sy }` in percent, 0–100, of the art box, which is
+ * what the overlay's SVG attributes take verbatim. The art box is {@link
+ * COURT_VIEW_BOX}: the doubles court plus a 1.78 m apron at each side and 4.5 m
+ * behind each baseline, since players routinely strike the ball 3–4 m behind
+ * it. The near baseline is drawn at the bottom, so `y` grows up the screen
+ * while `sy` grows down it:
  *
  *   sx = (x + 7.265) / 14.53 × 100
  *   sy = (28.27 − y) / 32.77 × 100
  *
- * {@link toCourt} and {@link fromCourt} are exact inverses of each other
- * (`tests/label-court-geometry.spec.ts` holds them to it).
+ * {@link toCourt} and {@link fromCourt} are exact inverses of each other.
  *
- * ── The half-court frame (board 08i) ────────────────────────────────────────
- * While a stroke is being placed the court card zooms to ONE half, with a
- * wide clickable surround for out balls and deep contact: 4.6 m beside each
- * doubles sideline and 3.5 m behind the baseline, in the board's 276 × 222
- * box (13.7px to the metre, so nothing is stretched). What is left of the
- * height runs 0.84 m past the net, so a ball on the tape is still on screen.
- * The orientation is the whole court's — near baseline toward the bottom —
- * so the near half shows the net along its top and the far half along its
- * bottom. {@link halfCourtViewBox} is that window in the art's own SVG frame
- * (drawn top-down, far baseline at `0`); {@link toCourtInHalf} and
- * {@link fromCourtInHalf} are its percent conversions, exact inverses too.
+ * Half-court: while a stroke is being placed the court zooms to one half, with
+ * 4.6 m of run-off beside each doubles sideline, 3.5 m behind the baseline and
+ * 0.84 m past the net. The orientation is the whole court's. {@link
+ * halfCourtViewBox} is that window in the art's own SVG frame (drawn top-down,
+ * far baseline at `0`); {@link toCourtInHalf} and {@link fromCourtInHalf} are
+ * its percent conversions, exact inverses too.
  */
 
 import {
@@ -123,7 +108,7 @@ const HALF_BACK_RUNOFF = 3.5;
 
 export const HALF_LEFT = -(DOUBLES_HALF_WIDTH + HALF_SIDE_RUNOFF); // -10.085
 export const HALF_WIDTH = 2 * (DOUBLES_HALF_WIDTH + HALF_SIDE_RUNOFF); // 20.17
-/** The board's 276 × 222 box, in metres: 16.224. */
+/** The half's 276 × 222 box, in metres: 16.224. */
 export const HALF_HEIGHT = (HALF_WIDTH * 222) / 276;
 
 /** Metres of `y` at the top edge of a half's box. */

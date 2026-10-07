@@ -3,13 +3,10 @@ import type { LabelSide } from "@/lib/services/labels/session";
 import type { SideNames } from "./label-format";
 
 /**
- * The console's two questions, as data: which confirm is open, and what it
- * says. Pure, so a spec can hold the copy without mounting Radix (whose
- * portal renders nothing under `renderToStaticMarkup`).
- *
- * Nothing is written while a confirm is open. The ✕ on a row, a row's Reset
- * and a move into a game someone else serves only ever OPEN one of these; the
- * write happens on the dialog's action, and Cancel leaves every row as it was.
+ * The console's questions, as data: which confirm is open, and what it says.
+ * Pure, so a spec can hold the copy without mounting Radix. Nothing is written
+ * while a confirm is open: the write happens on the dialog's action, and Cancel
+ * leaves every row as it was.
  */
 export type LabelConfirm =
   | {

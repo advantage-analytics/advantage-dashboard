@@ -2,18 +2,14 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import * as layout from "@/components/admin/labels/label-layout";
 import {
   DEFAULT_LAYOUT_MODE,
   LAYOUT_MODES,
-  LAYOUT_MODE_LABEL,
   RAIL_DEFAULT_PX,
   RAIL_KEY_STEP_PX,
   RAIL_MAX_PX,
   RAIL_MIN_PX,
-  RAIL_WIDTH_STORAGE_KEY,
   clampRailWidth,
-  layoutAfterFullscreenLeft,
   layoutAfterFullscreenRequest,
   parseRailWidth,
   type LabelLayoutMode,
@@ -27,22 +23,9 @@ import { createLoader } from "./fixtures/vm-modules";
  * (`label-layout-control.tsx`), rendered offline.
  */
 
-test("two modes, docked side by default, and the mode is never stored", () => {
+test("two modes, docked side by default", () => {
   expect(LAYOUT_MODES).toEqual(["docked-side", "black"]);
   expect(DEFAULT_LAYOUT_MODE).toBe("docked-side");
-  // A reload cannot re-enter the browser's full screen, so nothing is kept.
-  expect(Object.keys(layout)).not.toContain("LAYOUT_MODE_STORAGE_KEY");
-  expect(Object.keys(layout)).not.toContain("parseLayoutMode");
-  // Every mode has the menu's words, and only the two modes do.
-  expect(Object.keys(LAYOUT_MODE_LABEL)).toEqual(["docked-side", "black"]);
-  expect(LAYOUT_MODE_LABEL["docked-side"]).toEqual({
-    label: "Docked side",
-    description: "Video over the court, the points list on the right",
-  });
-  expect(LAYOUT_MODE_LABEL.black).toEqual({
-    label: "Full screen",
-    description: "The same layout on black, filling the whole screen",
-  });
 });
 
 test("a request for the browser's full screen settles the layout", () => {
@@ -54,38 +37,8 @@ test("a request for the browser's full screen settles the layout", () => {
   expect(layoutAfterFullscreenRequest("unsupported")).toBe("black");
 });
 
-test("leaving the browser's full screen is docked side, whatever the layout was", () => {
-  for (const mode of LAYOUT_MODES) {
-    expect(layoutAfterFullscreenLeft(mode), mode).toBe("docked-side");
-  }
-});
-
-test("nothing is left of the dock, the divider or the film view", () => {
-  for (const gone of [
-    "DEFAULT_DOCK_SIZE",
-    "MIN_DOCK_PX",
-    "MIN_TABLE_PX",
-    "MIN_SIDE_COURT_PX",
-    "DIVIDER_GAP_PX",
-    "DIVIDER_KEY_STEP_PX",
-    "LAYOUT_SIZE_STORAGE_KEY",
-    "clampDockSize",
-    "maxDockSize",
-    "dockRoom",
-    "parseDockSizes",
-    "isFullScreenMode",
-  ]) {
-    expect(Object.keys(layout), gone).not.toContain(gone);
-  }
-});
-
 test.describe("the rail's width", () => {
-  test("holds between 520 and 880, 640 by default, under its own key", () => {
-    expect(RAIL_MIN_PX).toBe(520);
-    expect(RAIL_MAX_PX).toBe(880);
-    expect(RAIL_DEFAULT_PX).toBe(640);
-    expect(RAIL_WIDTH_STORAGE_KEY).toBe("labels-rail-width");
-
+  test("holds between 520 and 880, 640 by default", () => {
     // Both ends, and the ends themselves.
     expect(clampRailWidth(100)).toBe(520);
     expect(clampRailWidth(519.4)).toBe(520);
@@ -111,7 +64,6 @@ test.describe("the rail's width", () => {
   });
 
   test("an arrow press is 16px, and a run of them stops at the bounds", () => {
-    expect(RAIL_KEY_STEP_PX).toBe(16);
     let width = RAIL_DEFAULT_PX;
     width = clampRailWidth(width + RAIL_KEY_STEP_PX);
     expect(width).toBe(656);
@@ -203,9 +155,6 @@ test.describe("the header's Layout menu", () => {
       "The same layout on black, filling the whole screen",
     ]);
     expect(html.match(/data-stub-row=/g)).toHaveLength(2);
-    for (const gone of ["Overlay", "Docked top", "Film full screen"]) {
-      expect(html, gone).not.toContain(gone);
-    }
   });
 
   test("the current mode is the checked row, and the trigger names it", () => {

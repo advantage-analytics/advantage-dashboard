@@ -9,6 +9,7 @@ import {
   playingRowAt,
 } from "@/lib/services/labels/playback";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import { tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -141,7 +142,7 @@ test.describe("the player's film", () => {
   };
   const NAMES = { p1: "Lee", p2: "Vargas" };
 
-  type NowPlaying = { id: string; point: number; shot: number | null } | null;
+  type NowPlaying = { id: string; point: number } | null;
   type Readout = {
     title: string;
     subtitle: string | null;
@@ -193,7 +194,7 @@ test.describe("the player's film", () => {
         points: list,
         readout: nowPlayingReadout(
           list,
-          { id: P1, point: 1, shot: 2 },
+          { id: P1, point: 1 },
           NAMES,
           labelScores(list, true),
         ),
@@ -201,20 +202,6 @@ test.describe("the player's film", () => {
         ...props,
       }),
     );
-  }
-
-  function text(html: string): string {
-    return html
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  /** One element's opening tag, found by an attribute on it. */
-  function tag(html: string, attr: string): string {
-    const at = html.indexOf(attr);
-    expect(at, attr).toBeGreaterThan(-1);
-    return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
   }
 
   /** The transport block: the element that holds the seek track. */
@@ -331,7 +318,7 @@ test.describe("the player's film", () => {
 
     // The tombstone at 2473.6 is not the last stroke; the added forehand is.
     expect(
-      nowPlayingReadout(list, { id: P1, point: 1, shot: 1 }, NAMES, scores),
+      nowPlayingReadout(list, { id: P1, point: 1 }, NAMES, scores),
     ).toEqual({
       title: "Error · Forehand",
       subtitle: "Set 1 · Game 1 · Lee serves",
@@ -351,7 +338,7 @@ test.describe("the player's film", () => {
     );
     const readout = nowPlayingReadout(
       bare,
-      { id: P2, point: 2, shot: null },
+      { id: P2, point: 2 },
       NAMES,
       labelScores(bare, true),
     );
@@ -360,7 +347,7 @@ test.describe("the player's film", () => {
     expect(readout.position).toEqual({ index: 2, total: 4 });
   });
 
-  test("the playing row as the list numbers it: point N, and its live stroke M", () => {
+  test("the playing row as the list numbers it: point N", () => {
     const { nowPlayingOf } = load();
     const list = points();
     expect(nowPlayingOf(list, null)).toBeNull();
@@ -370,18 +357,6 @@ test.describe("the player's film", () => {
     expect(nowPlayingOf(list, { pointId: P1, shotId: "s-return" })).toEqual({
       id: P1,
       point: 1,
-      shot: 2,
-    });
-    // The tombstone at 2473.6 is not counted: the stroke after it is the 3rd.
-    const live = list[0].shots.filter((shot) => shot.status !== "deleted");
-    expect(
-      nowPlayingOf(list, { pointId: P1, shotId: live[live.length - 1].id }),
-    ).toEqual({ id: P1, point: 1, shot: live.length });
-    // A stroke that is not among the point's live ones has no number.
-    expect(nowPlayingOf(list, { pointId: P2, shotId: "nowhere" })).toEqual({
-      id: P2,
-      point: 2,
-      shot: null,
     });
   });
 });

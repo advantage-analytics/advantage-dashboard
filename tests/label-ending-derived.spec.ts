@@ -10,6 +10,7 @@ import type {
   LabelShot,
   LabelSide,
 } from "@/lib/services/labels/session";
+import { labelShot } from "./fixtures/label-session";
 
 /**
  * T28: "How it ended" read off the shot rows. `deriveEnding` looks at the
@@ -18,33 +19,18 @@ import type {
  */
 
 let clock = 0;
-
-/** A stroke, timed after every stroke made before it. */
 function shot(fields: Partial<LabelShot>): LabelShot {
   clock += 1;
-  return {
-    id: `s-${clock}`,
-    labelPointId: "p-1",
+  return labelShot(`s-${clock}`, "p-1", {
     eventId: clock,
-    afterEventId: null,
-    status: "kept",
-    statusBeforeDelete: null,
-    deleteReason: null,
-    hitter: "p1",
     stroke: "forehand",
     result: "in",
-    spin: null,
-    contactX: null,
-    contactY: null,
-    landingX: null,
-    landingY: null,
     videoTime: clock,
-    siteRemoval: null,
-    siteRemovalRestoredAt: null,
-    seed: null,
     ...fields,
-  };
+  });
 }
+
+/** A stroke, timed after every stroke made before it. */
 
 const serve = (fields: Partial<LabelShot> = {}) =>
   shot({ hitter: "p1", stroke: "first_serve", ...fields });

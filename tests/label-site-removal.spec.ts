@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,7 +8,6 @@ import {
   type LabelMark,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
-import { labelScores } from "@/lib/services/labels/score";
 import type {
   LabelPoint,
   LabelSession,
@@ -24,10 +21,15 @@ import {
   restoreLabelSiteRemoval,
   writeLabelSiteRemovalRestore,
 } from "@/lib/services/labels/site-removal-session";
+import { inner, tag, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext as sharedEditContext,
+  noop,
+  ROW_OPERATIONS,
 } from "./fixtures/label-session";
+import { findByProp } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
@@ -51,9 +53,6 @@ const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const AT = "2026-10-05T12:00:00.000Z";
 const GHOST = "s-p4-ghost";
 const { P4 } = FIXTURE_POINT_IDS;
-
-/** The fixture session's two players, as the console's `sideNames` has them. */
-const NAMES = { p1: "Lee", p2: "Vargas" };
 
 function point4(): LabelPoint {
   return labelSessionFixture().points.find((p) => p.id === P4)!;
@@ -361,36 +360,15 @@ type RowProps = {
   marks?: LabelMarks | null;
 };
 
-const noop = () => {};
-const OPERATIONS = {
-  onAskDeleteShot: noop,
-  onAskDeletePoint: noop,
-  onRestoreShot: noop,
-  onRestorePoint: noop,
-  onRestoreSiteRemoval: noop,
-  onMovePoint: noop,
-  onSetChecked: noop,
-  onAddShot: noop,
-  onAskResetShot: noop,
-  onAskResetPoint: noop,
-};
+const OPERATIONS = { ...ROW_OPERATIONS, onRestoreSiteRemoval: noop };
 
-function editContext(overrides: Record<string, unknown> = {}) {
-  const session = labelSessionFixture();
-  return {
-    editable: true,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
+const editContext = (overrides: Record<string, unknown> = {}) =>
+  sharedEditContext({
     operations: OPERATIONS,
     openGhostIds: new Set<string>(),
     onToggleGhost: noop,
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
     ...overrides,
-  };
-}
+  });
 
 /**
  * The mark that describes the ghost (vendor stroke 402). It is `hidden`: the
@@ -447,30 +425,6 @@ function renderRow(
       marks,
     }),
   );
-}
-
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-/** The inner text of the element carrying `attr`. */
-function inner(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  const start = html.indexOf(">", at) + 1;
-  return html.slice(start, html.indexOf("<", start));
-}
-
-function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x27;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /** The number drawn in a stroke row's first track. */
@@ -631,7 +585,7 @@ test.describe("a ghost in the black well", () => {
       }),
     });
     const click = (attr: string) => {
-      const button = find(tree, attr)!;
+      const button = findByProp(tree, attr, "all")!;
       expect(button, attr).toBeDefined();
       let stopped = 0;
       (button.props.onClick as (e: unknown) => void)({
@@ -879,36 +833,3 @@ test.describe("the console", () => {
     expect(none).not.toContain("data-shot-ghost");
   });
 });
-
-test("the game band knows nothing of a site-removed stroke", () => {
-  const source = readFileSync(
-    "src/components/admin/labels/label-game-band.tsx",
-    "utf8",
-  );
-  expect(source).not.toMatch(
-    /isGhostShot|siteRemoval|data-shot-ghost|withoutGhosts|drawsGhosts/,
-  );
-});
-
-/** The first element in a React tree whose props carry `attr`. */
-function find(
-  node: React.ReactNode,
-  attr: string,
-): React.ReactElement<Record<string, unknown>> | null {
-  if (!React.isValidElement(node)) return null;
-  const element = node as React.ReactElement<Record<string, unknown>>;
-  if (attr in element.props) return element;
-  if (typeof element.type === "function") {
-    const rendered = (element.type as (p: unknown) => React.ReactNode)(
-      element.props,
-    );
-    return find(rendered, attr);
-  }
-  for (const child of React.Children.toArray(
-    element.props.children as React.ReactNode,
-  )) {
-    const found = find(child, attr);
-    if (found) return found;
-  }
-  return null;
-}

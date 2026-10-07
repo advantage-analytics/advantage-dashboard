@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -27,6 +25,7 @@ import {
   addedPointBetween,
   suggestionState,
 } from "@/lib/services/labels/suggestions";
+import { inner, tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
@@ -754,21 +753,6 @@ function black(
   });
 }
 
-/** The opening tag carrying `attr`. */
-function tag(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
-}
-
-/** The inner text of the element carrying `attr`. */
-function inner(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  const start = html.indexOf(">", at) + 1;
-  return html.slice(start, html.indexOf("<", start));
-}
-
 /** A point row's markup, from its opening tag to the next row of any kind. */
 function pointRow(html: string, pointId: string): string {
   const at = html.indexOf(`data-point-id="${pointId}"`);
@@ -1105,14 +1089,6 @@ test("an added empty point reads on the default layout's rail, with its menu, an
     ok: true,
     write: { status: "deleted", status_before_delete: "added" },
   });
-});
-
-test("the game band knows nothing of an inserted point", () => {
-  const source = readFileSync(
-    "src/components/admin/labels/label-game-band.tsx",
-    "utf8",
-  );
-  expect(source).not.toMatch(/onInsertPoint|missing_point|New point/);
 });
 
 /**

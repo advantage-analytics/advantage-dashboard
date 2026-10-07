@@ -1,22 +1,13 @@
 /**
- * The "Score doesn't add up" banner's two writes, admin-gated (board 08m,
- * `BANNER`): "Fix the entered score" stores the labelled sets as
- * `label_sessions.final_score`; "Video ends early" stores
- * `label_sessions.video_ends_early = true`.
+ * The "Score doesn't add up" banner's two writes: "Fix the entered score"
+ * stores the labelled sets as `label_sessions.final_score`; "Video ends early"
+ * stores `label_sessions.video_ends_early = true`. Admin-gated like
+ * edit-session.ts, with the marks gate (`checkSessionOpen` with `blind`); the
+ * patch is validated first (`parseLabelSessionPatch`).
  *
- * Same shape as suggestions-session.ts: the entry point re-checks
- * `requireAdmin`, runs on the service-role client, refuses a `complete`
- * session and one whose `marks_enabled` is false (`checkSessionOpen` with
- * `blind`, the gate every marks write shares — the ground-truth match is never written
- * from here) and validates the patch with the pure rule
- * (`parseLabelSessionPatch`) before touching anything.
- *
- * Its ONE write is an UPDATE of `label_sessions` with the parsed patch and
- * nothing else, matched on the id AND on `status = 'labelling'`, so a session
- * completed in another tab meanwhile is not written under it. No other
- * table — `matches` is read elsewhere and written nowhere in labels code —
- * no other column, no row removed. `tests/label-operations.spec.ts` scans
- * this file for a removal call.
+ * Its one write is an UPDATE of `label_sessions` with the parsed patch, matched
+ * on the id and on `status = 'labelling'`, so a session completed in another
+ * tab meanwhile is not written under it. `matches` is never written.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -72,7 +63,6 @@ export async function writeLabelSessionFields(params: {
   return { ok: true, fields: parsed.patch };
 }
 
-/** The admin-gated entry point behind `updateLabelSessionFieldsAction`. */
 export function updateLabelSessionFields(
   sessionId: unknown,
   patch: unknown,

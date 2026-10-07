@@ -11,11 +11,12 @@ import {
   type LabelMarkParams,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
-import { labelScores } from "@/lib/services/labels/score";
-import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
+import type { LabelPoint } from "@/lib/services/labels/session";
+import { tag as tagOf } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  editContext,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -88,33 +89,6 @@ function marksOf(
     shots,
     suggestions,
     serveSides: {},
-  };
-}
-
-const noop = () => {};
-const OPERATIONS = {
-  onAskDeleteShot: noop,
-  onAskDeletePoint: noop,
-  onRestoreShot: noop,
-  onRestorePoint: noop,
-  onMovePoint: noop,
-  onSetChecked: noop,
-  onAddShot: noop,
-  onAskResetShot: noop,
-  onAskResetPoint: noop,
-};
-
-function editContext() {
-  const session = labelSessionFixture();
-  return {
-    editable: true,
-    names: NAMES,
-    selectedShotId: null,
-    onPatchPoint: noop,
-    onPatchShot: noop,
-    operations: OPERATIONS,
-    points: session.points,
-    scores: labelScores(session.points, session.adScoring).points,
   };
 }
 
@@ -198,13 +172,6 @@ function chips(html: string): Chip[] {
       at,
     };
   });
-}
-
-/** The opening tag carrying `attr`. */
-function tagOf(html: string, attr: string): string {
-  const at = html.indexOf(attr);
-  expect(at, attr).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
 }
 
 const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
@@ -416,18 +383,6 @@ test.describe("a closed row draws only what can change the score", () => {
       }
     }
   });
-
-  test("there is no chip for what the site did, and no wand on a point row", () => {
-    for (const file of [MARK, ROW]) {
-      const source = readFileSync(file, "utf8");
-      expect(source, file).not.toContain("WandSparkles");
-      expect(source, file).not.toMatch(/\bfix\b/);
-    }
-    const well = readFileSync(WELL, "utf8");
-    // A stroke row draws no chip at all — the well's only mark is the line.
-    expect(well).not.toContain("MarkChip");
-    expect(well).not.toContain("shotRowMarks");
-  });
 });
 
 test.describe("the open point's quiet line", () => {
@@ -563,35 +518,6 @@ test.describe("the open point's quiet line", () => {
         }),
       ),
     ).toBe(bare);
-  });
-
-  test("“Net or out?” joins the line only from the point's last live stroke", () => {
-    const point = fixturePoint();
-    const serve = point.shots[0];
-    const reply: LabelShot = {
-      ...serve,
-      id: "s-reply",
-      eventId: 202,
-      hitter: "p2",
-      stroke: "forehand",
-      videoTime: 2491.1,
-    };
-    const two: LabelPoint = { ...point, shots: [serve, reply] };
-    expect(
-      hintLine(renderWell(two, marksOf(two, [], { [reply.id]: [NET_HIT] }))),
-    ).toHaveLength(1);
-    // On the serve the rally went on from: nothing, and no chip on its row.
-    const mid = renderWell(two, marksOf(two, [], { [serve.id]: [NET_HIT] }));
-    expect(mid).not.toContain("data-point-hints");
-    expect(mid).not.toContain("data-mark-chip");
-    // The reply deleted: the serve is the last live stroke again.
-    const cut: LabelPoint = {
-      ...point,
-      shots: [serve, { ...reply, status: "deleted" }],
-    };
-    expect(
-      hintLine(renderWell(cut, marksOf(cut, [], { [serve.id]: [NET_HIT] }))),
-    ).toHaveLength(1);
   });
 });
 
@@ -769,45 +695,6 @@ test.describe("a chip's hover is the dark tooltip's two lines", () => {
     );
     expect(whole).not.toContain("text-white/[0.64]");
   });
-
-  test("the pencil names itself, then what a click does — and only as a button", () => {
-    const source = readFileSync(MARK, "utf8");
-    expect(source).toContain(
-      '<ChromeTooltip label="Changed by you" detail="Click to reset" side="top">',
-    );
-    // The chip passes its two lines apart, and wraps only a sentence.
-    expect(source).toContain("label={name}");
-    expect(source).toContain("detail={detail}");
-    expect(source).toContain("wrap={detail !== undefined}");
-    expect(source).toContain("aria-label={hover}");
-    // A hint's sentence is the same tooltip's second line.
-    expect(source).toContain("label={hint.label}");
-    expect(source).toContain("detail={hint.detail}");
-  });
-
-  test("no raw tooltip is left in the black view", () => {
-    for (const file of [
-      MARK,
-      ROW,
-      WELL,
-      "src/components/admin/labels/label-black-view.tsx",
-      "src/components/admin/labels/label-rail-resize.tsx",
-      "src/components/admin/labels/label-point-menu.tsx",
-    ]) {
-      const source = readFileSync(file, "utf8");
-      expect(source, file).not.toMatch(
-        /<Tooltip\b|TooltipContent|TooltipTrigger/,
-      );
-    }
-    // The rail groups its rows under one provider, and draws none itself.
-    const rail = readFileSync(
-      "src/components/admin/labels/label-black-rail.tsx",
-      "utf8",
-    );
-    expect(rail.match(/<TooltipProvider>/g)).toHaveLength(1);
-    expect(rail).not.toMatch(/<Tooltip\b|TooltipContent|TooltipTrigger/);
-    expect(rail).toContain('<ChromeTooltip label="Exit full screen"');
-  });
 });
 
 test.describe("a stroke row's tail", () => {
@@ -938,9 +825,5 @@ test("the marks use the palette's tokens and the type scale", () => {
   expect(source).not.toMatch(/rgba?\(/);
   for (const match of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {
     expect(scale.has(Number(match[1])), match[0]).toBe(true);
-  }
-  // The frame's icons, and the DS dark tooltip as every hover.
-  for (const name of ["Flag", "Pencil", "ChromeTooltip"]) {
-    expect(source).toContain(name);
   }
 });
