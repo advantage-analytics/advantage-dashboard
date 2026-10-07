@@ -39,6 +39,7 @@ import {
   errorMadeBy,
   hasActiveMatchFilters,
   lastShotOf,
+  strokeOf,
   type MatchFilterContext,
   type MatchFilters,
 } from "../match-filters/model";
@@ -846,8 +847,11 @@ export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
  *   the opponent's court a folded "Won" would come back named "Points
  *   lost" and stop following the court. Aces alone is Serve › Result's
  *   ace; with Won or Lost picked too the whole group stays a pill group.
- * - Game or Result with every value picked is no constraint: it folds to
- *   nothing.
+ * - Game folds only with both values picked (no constraint, so nothing).
+ *   "Serving" is the COURT player's serve; Serve › Player names a player
+ *   outright and never follows the court (`withPlayer`), so a folded
+ *   "Serving" would stop following it.
+ * - Result with every value picked is no constraint: it folds to nothing.
  * - Ball never folds. Its "1st" counts a point with no recorded serve type
  *   as a first serve (`isFirstServeShotType`), where Serve › Type needs a
  *   "First Serve" row; and on a return cut it is the return of a first
@@ -860,9 +864,8 @@ export type FoldedKey = "set" | "game" | "pressure" | "result" | "rally";
  *   match.
  *
  * The pill groups are SUBJECT-relative (Game "Serving", Result "Won" are
- * the court's player); the advanced filters are YOU-relative, so a court of
- * the opponent's flips them. `withPlayer` keeps them following the court
- * when its player changes later.
+ * the court's player); the advanced filters name players outright, as on
+ * the Video tab — which is why neither of those groups ever folds.
  */
 export function foldedMatchFilters(filters: VizFilters): {
   match: MatchFilters;
@@ -873,8 +876,6 @@ export function foldedMatchFilters(filters: VizFilters): {
     ...base,
   };
   const folded: FoldedKey[] = [];
-  const subject = filters.player;
-  const other: PlayerFilter = subject === "you" ? "opponent" : "you";
 
   function list<T>(
     key: FoldedKey,
@@ -906,10 +907,6 @@ export function foldedMatchFilters(filters: VizFilters): {
   );
 
   if (filters.game.length === 2) folded.push("game");
-  else if (filters.game.length === 1 && base.server === null) {
-    match.server = filters.game[0] === "serving" ? subject : other;
-    folded.push("game");
-  }
 
   const won = filters.result.includes("won");
   const lost = filters.result.includes("lost");
@@ -936,31 +933,18 @@ export function withFoldedFilters(
 }
 
 /**
- * `filters` with the court's player set to `player`. Who served, hit the
- * last shot or hit the Custom shot swap with it, so they keep naming the
- * court's player ("serving" stays the court player's serve) as the
- * subject-relative pill groups always have. Result › Outcome does NOT: it
- * is read from your side everywhere (`matchesOutcome`), so "Won" stays the
- * points you won whichever court is drawn — the Video tab's meaning.
+ * `filters` with the court's player set to `player`. The advanced filters
+ * are left exactly as picked: they name players outright ("Hit by Rudy",
+ * "Rudy serving") and Result › Outcome is read from your side
+ * (`matchesOutcome`), the Video tab's meaning everywhere — switching whose
+ * court is drawn never rewrites a filter the user chose.
  */
 export function withPlayer(
   filters: VizFilters,
   player: PlayerFilter,
 ): VizFilters {
   if (filters.player === player) return filters;
-  const match = filters.match ?? EMPTY_MATCH_FILTERS;
-  const swap = (side: PlayerFilter | null): PlayerFilter | null =>
-    side === null ? null : side === "you" ? "opponent" : "you";
-  return {
-    ...filters,
-    player,
-    match: {
-      ...match,
-      server: swap(match.server),
-      resultPlayer: swap(match.resultPlayer),
-      customPlayer: swap(match.customPlayer),
-    },
-  };
+  return { ...filters, player };
 }
 
 /**
@@ -1999,14 +1983,11 @@ function errorStats(result: VizResult): StatGroup[] {
   ];
 }
 
+/** Result › Shot's own stroke rule (`strokeOf`), so a row here and the
+ * advanced filter always agree on a shot; serves first, as `finalShotOf`. */
 function errorStrokeLabel(shotType: string | null | undefined): string {
-  const t = (shotType ?? "").toLowerCase();
   if (isServeShotType(shotType ?? null)) return "Serve";
-  if (t.includes("overhead") || t.includes("smash")) return "Overhead";
-  if (t.includes("volley")) return "Volley";
-  if (t.includes("backhand") || t.startsWith("bh")) return "Backhand";
-  if (t.includes("forehand") || t.startsWith("fh")) return "Forehand";
-  return "Other";
+  return strokeOf(shotType) ?? "Other";
 }
 
 /** Geometry and values share the SAME settings and computed statistics. */

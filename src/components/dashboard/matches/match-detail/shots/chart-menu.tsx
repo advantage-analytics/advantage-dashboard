@@ -29,6 +29,9 @@ export function ChartMenu({
     setOpen(false);
   }
 
+  // One rule for the Zones item and its note, so they never disagree.
+  const zonesAllowed = state.cut === null || chartAllowedOn(state.cut, "zones");
+
   const triggerIcon =
     state.chart === "zones"
       ? Grid3x3
@@ -78,7 +81,7 @@ export function ChartMenu({
         }
         onSelect={() => selectChart("heat")}
       />
-      {(state.cut === null || chartAllowedOn(state.cut, "zones")) && (
+      {zonesAllowed && (
         <FloatMenuItem
           label="Zones"
           description={
@@ -91,7 +94,7 @@ export function ChartMenu({
         />
       )}
 
-      {(state.cut === null || chartAllowedOn(state.cut, "zones")) && (
+      {zonesAllowed && (
         <FloatMenuNote>
           Zones follows the service boxes or the current depth and contact
           bands.

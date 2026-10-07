@@ -304,7 +304,7 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   const { match, folded } = foldedMatchFilters(filters);
   expect(match).toMatchObject({
     sets: [1],
-    server: "opponent",
+    server: null,
     serveType: [],
     court: null,
     serveZone: [],
@@ -318,8 +318,11 @@ test("the pill groups fold into advanced filters, you-relative", () => {
   // Won/Lost are the court player's; Result › Outcome is always yours, so
   // the group stays a pill group rather than coming back named "lost".
   expect(applied.result).toEqual(["won", "ace"]);
-  for (const key of ["set", "game", "pressure", "rally"] as const)
+  for (const key of ["set", "pressure", "rally"] as const)
     expect(applied[key]).toEqual([]);
+  // "Serving" is the court player's serve; Serve › Player names a player
+  // outright, so a single Game value stays a pill group.
+  expect(applied.game).toEqual(["serving"]);
   // Ball's "1st" counts a point with no serve type as a first serve, which
   // Serve › Type does not: it stays a pill group.
   expect(applied.ball).toEqual(["first"]);
@@ -368,9 +371,10 @@ test("a pill group the advanced filters cannot say exactly stays a pill group", 
   expect(withFoldedFilters(both, kept.match, kept.folded)).toEqual(both);
 });
 
-test("switching the court's player swaps who served, never who won", () => {
+test("switching the court's player never rewrites the advanced filters", () => {
   const mine: VizFilters = {
     ...EMPTY_VIZ_FILTERS,
+    game: ["serving"],
     match: {
       ...EMPTY_MATCH_FILTERS,
       server: "you",
@@ -382,34 +386,21 @@ test("switching the court's player swaps who served, never who won", () => {
   };
   const theirs = withPlayer(mine, "opponent");
   expect(theirs.player).toBe("opponent");
-  expect(theirs.match).toMatchObject({
-    server: "opponent",
-    resultPlayer: "you",
-    customPlayer: "opponent",
-    // Result › Outcome is yours on every court, as on the Video tab.
-    resultOutcome: ["won"],
-    serveType: ["second"],
-  });
-  expect(withPlayer(theirs, "you")).toEqual(mine);
+  // Named players and your Outcome stay exactly as picked, as on the Video
+  // tab; only the subject-relative pill groups follow the court.
+  expect(theirs.match).toBe(mine.match);
+  expect(theirs.game).toEqual(["serving"]);
   expect(withPlayer(mine, "you")).toBe(mine);
 
-  // "Serving" on your serve court keeps drawing the court player's serves.
+  // The Game pill keeps drawing the court player's serves on either court.
   const serves = [
     servePoint({ id: "p1-serve", player1: true }),
     servePoint({ id: "p2-serve", player1: false }),
   ];
   const ctx = { youIsPlayer1: true, hands: { player1: null, player2: null } };
-  const folded = foldedMatchFilters({
-    ...EMPTY_VIZ_FILTERS,
-    game: ["serving"],
-  });
-  const yours = withFoldedFilters(
-    { ...EMPTY_VIZ_FILTERS, game: ["serving"] },
-    folded.match,
-    folded.folded,
-  );
+  const serving = { ...EMPTY_VIZ_FILTERS, game: ["serving" as const] };
   expect(
-    computeViz(serves, "serve", yours, true, "scatter", ctx).dots.map(
+    computeViz(serves, "serve", serving, true, "scatter", ctx).dots.map(
       (d) => d.id,
     ),
   ).toEqual(["p1-serve"]);
@@ -417,7 +408,7 @@ test("switching the court's player swaps who served, never who won", () => {
     computeViz(
       serves,
       "serve",
-      withPlayer(yours, "opponent"),
+      withPlayer(serving, "opponent"),
       false,
       "scatter",
       ctx,
@@ -488,14 +479,16 @@ test("saved views keep the errors cut and advanced filters, and drop garbage", (
   expect(stale?.filters.match).toEqual(EMPTY_MATCH_FILTERS);
 });
 
-test("switching to Errors drops a carried Won or Aces, keeps Lost", () => {
+test("switching to Errors drops the whole Result pill group", () => {
   const won = {
     ...EMPTY_VIZ_FILTERS,
     result: ["won" as const, "ace" as const],
   };
   expect(carryFilters(won, "errors").result).toEqual([]);
   const lost = { ...EMPTY_VIZ_FILTERS, result: ["lost" as const] };
-  expect(carryFilters(lost, "errors").result).toEqual(["lost"]);
+  // Lost matches every errors dot: it would filter nothing yet count as
+  // applied.
+  expect(carryFilters(lost, "errors").result).toEqual([]);
   expect(carryFilters(won, "serve").result).toEqual(["won", "ace"]);
 });
 

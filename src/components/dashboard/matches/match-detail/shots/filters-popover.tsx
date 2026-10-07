@@ -55,7 +55,7 @@ import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
 
 /** The `VizFilters` keys still drawn as live pills here — everything else
  *  lives in the advanced panel. */
-type OptionFilterKey = "error" | "zone" | "court";
+type OptionFilterKey = "error" | "zone" | "court" | "ball";
 
 const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   serves: { one: "serve", many: "serves" },
@@ -65,8 +65,8 @@ const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
 };
 
 /**
- * The Filters popover: whose court it is (Player); the serve's measured
- * Zone and Court (Court on every cut); on the errors cut which errors
+ * The Filters popover: whose court it is (Player); the cut's own Serve
+ * (1st/2nd); the serve's measured Zone and Court (Court on every cut); on the errors cut which errors
  * (Error type) — all applied live on click — and "Advanced filters", which swaps the
  * popover's body for the Video tab's own `FiltersPanel` (Score / Serve /
  * Return / Result / Custom, the same catalog, wording and draft-then-Show
@@ -74,15 +74,15 @@ const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
  * its count is this court's (`computeViz` under the draft), so "Show 12
  * serves" is exactly what the court will draw.
  *
- * The other pill groups this popover used to draw (Ball, Result, Pressure,
- * Rally, Set, Game) are advanced options now. A default tile
+ * The other pill groups this popover used to draw (Result, Pressure, Rally,
+ * Set, Game) are advanced options now. A default tile
  * or an older saved view can still carry them: the panel opens on them
  * folded in (`foldedMatchFilters`), and its Show writes them back as
  * advanced filters (`withFoldedFilters`). A group the advanced filters
  * cannot say exactly stays a pill group, applied and removable in the
  * strip, rather than being changed by a Show nobody meant to change it.
- * Picking the other Player mirrors the advanced filters (`withPlayer`), so
- * they keep following the court the way the pill groups do.
+ * Picking the other Player leaves the advanced filters as picked: they name
+ * players outright, as on the Video tab (`withPlayer`).
  *
  * Built on the same Radix `Popover` primitive `ui/float-menu.tsx` wraps
  * (click-outside, Esc, focus-return all come from Radix). `count`/`total`/
@@ -260,7 +260,7 @@ export function FiltersPopover({
       >
         <div ref={bodyRef}>
           {advanced ? (
-            <div className="flex h-[min(560px,calc(var(--radix-popover-content-available-height)-8px))] min-h-[320px] flex-col">
+            <div className="flex h-[min(560px,calc(var(--radix-popover-content-available-height)-8px))] flex-col">
               <span id={headingId} className="sr-only">
                 Advanced filters
               </span>
@@ -338,6 +338,17 @@ export function FiltersPopover({
                     dark={dark}
                   />
                 </FilterGroup>
+
+                {/* Ball's 1st/2nd is the cut's own serve rule (a first-serve
+                    RETURN on a return cut) — never Serve › Type, which counts
+                    other points — so it stays a quick pill on every cut. */}
+                <OptionsGroup
+                  filterKey="ball"
+                  label="Serve"
+                  dark={dark}
+                  active={filters.ball}
+                  onToggle={(value) => toggle("ball", value)}
+                />
 
                 {/* Zone and Court read the serve's MEASURED landing on the
                     serve cut (the score's court elsewhere) — what the
