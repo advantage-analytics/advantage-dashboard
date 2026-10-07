@@ -403,9 +403,17 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
 
   const { programName, programOrgType, mode } = preview;
 
-  if (!user) return { kind: "link_sign_up", programName, programOrgType, mode };
+  // Full is decided before sign-up, so nobody is asked to create an account
+  // only to be refused on the next click. A roster row already carrying the
+  // session's address holds its own seat — `accept_program_join_link` never
+  // refuses that claim for seats — so a matched player is not told "full";
+  // signed out, `rosterMatchName` is always null and the full screen's
+  // "sign in" exit is how a rostered player reaches that branch.
+  if (!preview.seatsFree && !preview.rosterMatchName) {
+    return { kind: "link_full", programName };
+  }
 
-  if (!preview.seatsFree) return { kind: "link_full", programName };
+  if (!user) return { kind: "link_sign_up", programName, programOrgType, mode };
 
   const email = (user.email ?? "").trim().toLowerCase();
   if (

@@ -266,17 +266,23 @@ export default async function JoinPage({
         </JoinPane>
       );
 
-    case "link_full":
+    case "link_full": {
+      const signedIn = await isSignedIn();
       return (
         <JoinPane
           width={440}
           eyebrow={state.programName}
           title={`${state.programName} is full`}
-          body="Every player seat is taken. Ask a coach to free one, then open this link again."
+          body={
+            signedIn
+              ? "Every player seat is taken. Ask a coach to free one, then open this link again."
+              : "Every player seat is taken. If your coach already has you on the roster, sign in with the address they have for you and your seat is waiting. Otherwise ask a coach to free one, then open this link again."
+          }
         >
-          <JoinLinkFull signedIn={await isSignedIn()} />
+          <JoinLinkFull signedIn={signedIn} />
         </JoinPane>
       );
+    }
   }
 }
 
