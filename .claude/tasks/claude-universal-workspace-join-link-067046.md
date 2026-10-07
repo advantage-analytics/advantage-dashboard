@@ -74,7 +74,7 @@ ready).
 
 ## T5 · `/join/[token]` link screens
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/app/join/[token]/page.tsx, src/components/join/join-forms.tsx, src/components/join/join-terms.tsx (read — `JoinSharingTerms`), src/components/join/nothing-sent.tsx (guess — `not_found` copy may live here)

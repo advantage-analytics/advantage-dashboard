@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
 import {
   JoinAskAgain,
+  JoinLinkFull,
+  JoinLinkReady,
+  JoinLinkRequested,
+  JoinLinkSignUp,
   JoinReady,
   JoinSignUp,
   JoinWrongAccount,
@@ -16,6 +20,7 @@ import {
   signInThenHref,
 } from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Join your program" };
 
@@ -79,7 +84,7 @@ export default async function JoinPage({
           width={440}
           eyebrow="Invitation"
           title="That link isn't valid"
-          body="It may have been withdrawn, or already replaced by a newer one. Ask whoever invited you to send another."
+          body="That link isn't valid. It may have been turned off or replaced. Ask whoever shared it for a new one."
         >
           <ClaimActions>
             <Link href="/login" className={CLAIM_BUTTON}>
@@ -194,5 +199,96 @@ export default async function JoinPage({
           />
         </JoinPane>
       );
+
+    // ── Join links ──────────────────────────────────────────────────────────
+    // The reusable, un-addressed door. Same rule as the invitation states:
+    // this GET only previews; joining is the POST behind the button.
+    case "link_ready":
+      if (declined) {
+        return (
+          <NothingSent
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
+      return (
+        <JoinPane
+          eyebrow={state.programName}
+          title={`Join ${state.programName}`}
+        >
+          <JoinLinkReady
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+            inviterName={state.inviterName}
+            rosterMatchName={state.rosterMatchName}
+            programHours={programHours}
+            personalHours={personalHours}
+          />
+        </JoinPane>
+      );
+
+    case "link_sign_up":
+      if (declined) {
+        // `link_sign_up` carries no inviter: the preview is read without a
+        // session, and nobody needs naming to someone who has not signed in.
+        return (
+          <NothingSent
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={null}
+          />
+        );
+      }
+      return (
+        <JoinPane eyebrow={state.programName} title="Set up your account">
+          <JoinLinkSignUp
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+            programHours={programHours}
+            personalHours={personalHours}
+          />
+        </JoinPane>
+      );
+
+    case "link_requested":
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title="Request sent"
+          body={`${state.programName}'s coaches will see your request on their roster. You'll get an email when they approve it.`}
+        >
+          <JoinLinkRequested />
+        </JoinPane>
+      );
+
+    case "link_full":
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title={`${state.programName} is full`}
+          body="Every player seat is taken. Ask a coach to free one, then open this link again."
+        >
+          <JoinLinkFull signedIn={await isSignedIn()} />
+        </JoinPane>
+      );
   }
+}
+
+/**
+ * Whether a session is open, for the one screen whose way out depends on it.
+ * Read here rather than added to `JoinState` so the link states keep T2's
+ * shape; `link_full` is rare enough that the second `getUser` costs nothing.
+ */
+async function isSignedIn(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user !== null;
 }
