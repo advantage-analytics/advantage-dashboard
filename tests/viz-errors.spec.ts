@@ -18,6 +18,7 @@ import {
   activeFilterEntries,
   carryFilters,
   courtFor,
+  cutAvailability,
   parseVizState,
   sameView,
   VIZ_MATCH_FILTERS_PARAM,
@@ -26,6 +27,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import {
   EMPTY_MATCH_FILTERS,
+  optionAvailability,
   type MatchFilterContext,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { validateVizInput } from "@/lib/data/saved-views-logic";
@@ -571,7 +573,7 @@ test("Ball never folds, and return nouns never read Serve › Type", () => {
   expect(stats.subtitle).not.toContain("first-serve");
 });
 
-test("switching player on Errors drops an Outcome that would empty it", () => {
+test("switching player on Errors keeps the Outcome, round trip included", () => {
   const state = {
     cut: "errors" as const,
     chart: "scatter" as const,
@@ -583,7 +585,11 @@ test("switching player on Errors drops an Outcome that would empty it", () => {
   };
   const theirs = courtFor(state, "opponent");
   expect(theirs.player).toBe("opponent");
-  expect(theirs.match.resultOutcome).toEqual([]);
+  // The opponent's errors are points you won: "lost" on your court is
+  // "won" on theirs, and switching back restores it.
+  expect(theirs.match.resultOutcome).toEqual(["won"]);
+  const back = courtFor({ ...state, filters: theirs }, "you");
+  expect(back.match.resultOutcome).toEqual(["lost"]);
   // Off Errors the outcome is left alone.
   expect(
     courtFor({ ...state, cut: "serve" }, "opponent").match.resultOutcome,
@@ -633,4 +639,52 @@ test("Show on Errors writes what a reload reads back", () => {
   );
   expect(reread.filters.match.resultOutcome).toEqual(shown.match.resultOutcome);
   expect(shown.match.resultOutcome).toEqual([]);
+});
+
+test("an error with no recorded type counts as unforced", () => {
+  const untyped: MatchPoint = {
+    ...UNFORCED_NET,
+    id: "untyped",
+    resultType: "",
+  };
+  const result = computeViz(
+    [untyped],
+    "errors",
+    { ...EMPTY_VIZ_FILTERS, error: ["unforced"] },
+    true,
+  );
+  expect(result.dots.map((d) => d.id)).toEqual(["untyped"]);
+  expect(
+    computeViz(
+      [untyped],
+      "errors",
+      { ...EMPTY_VIZ_FILTERS, error: ["forced"] },
+      true,
+    ).count,
+  ).toBe(0);
+});
+
+test("the advanced panel offers only what the cut keeps", () => {
+  const all = optionAvailability(POINTS, CTX_P1);
+  const withAll = {
+    ...all,
+    resultOutcome: new Set(["won", "lost"] as const),
+    serveResult: new Set(["ace", "service-winner", "double-fault"] as const),
+  };
+  const mine = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "errors");
+  expect([...mine.resultOutcome]).toEqual(["lost"]);
+  expect([...mine.serveResult]).toEqual(["double-fault"]);
+  const theirs = cutAvailability(
+    withAll,
+    { ...EMPTY_VIZ_FILTERS, player: "opponent" },
+    "errors",
+  );
+  expect([...theirs.resultOutcome]).toEqual(["won"]);
+  const serve = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "serve");
+  expect([...serve.serveResult].sort()).toEqual(
+    ["ace", "double-fault", "service-winner"].sort(),
+  );
+  expect([...serve.resultOutcome].sort()).toEqual(["lost", "won"]);
+  const rally = cutAvailability(withAll, EMPTY_VIZ_FILTERS, "rallyPlacement");
+  expect([...rally.serveResult]).toEqual(["double-fault"]);
 });

@@ -1137,8 +1137,13 @@ function computeErrorsViz(
     }
     if (matchPass !== null && !matchPass(p)) continue;
     if (filters.error.length) {
-      const kind = errorKindOf(p);
-      if (kind === null || !filters.error.includes(kind)) continue;
+      // An error the source left unclassified (no result type — found from
+      // an Out/Net last shot) is unforced: the bucket the derivation and
+      // `calculate_match_stats` fold every non-forced error into. Without
+      // this the default "Unforced errors" tile read 0 on such a match while
+      // the unfiltered cut drew every one of them.
+      const kind = errorKindOf(p) ?? "unforced";
+      if (!filters.error.includes(kind)) continue;
     }
     count++;
 

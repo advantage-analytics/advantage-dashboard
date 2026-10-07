@@ -26,6 +26,10 @@ import {
 } from "../match-filters/applied-words";
 import {
   filtersEqual,
+  MATCH_FILTER_KEYS,
+  toggleMatchFilter,
+  type MatchFilterAvailability,
+  type MatchFilterValue,
   hasActiveMatchFilters,
   parseMatchFilters,
   serializeMatchFilters,
@@ -568,14 +572,61 @@ export function clearedFilters(state: VizState): VizState {
 
 /**
  * `state`'s filters with the court's player set to `player` (`withPlayer`).
- * On the errors cut the advanced Result › Outcome is yours and does not
- * follow the court, so a "Lost" set on your court would ask the
- * opponent's court for points you lost — their wins, never their errors —
- * and draw nothing; the same carry rule a cut switch applies drops it.
+ * On the errors cut Result › Outcome can only ever say "the court player
+ * lost" (every errors dot is their lost point; the panel hides the other
+ * value — `cutAvailability`). It is yours, so it names the opposite word on
+ * the opponent's court: mirroring it with the court keeps it meaning the
+ * same thing, so switching away and back restores it and never empties the
+ * cut. Everywhere else Outcome stays yours, as on the Video tab.
  */
 export function courtFor(state: VizState, player: PlayerFilter): VizFilters {
   const next = withPlayer(state.filters, player);
-  return state.cut === "errors" ? carryFilters(next, "errors") : next;
+  if (state.cut !== "errors" || next === state.filters) return next;
+  return carryFilters(
+    {
+      ...next,
+      match: {
+        ...next.match,
+        resultOutcome: next.match.resultOutcome.map((v) =>
+          v === "won" ? "lost" : "won",
+        ),
+      },
+    },
+    "errors",
+  );
+}
+
+/**
+ * `availability` narrowed to the options the carry rule keeps on `cut` for
+ * `filters`' court player — what the advanced panel offers there. Each
+ * option is probed through `carryFilters` itself, so the panel can never
+ * offer a pick the cut then silently drops (Won on your Errors court, Aces
+ * off serve) and the two rules cannot drift apart.
+ */
+export function cutAvailability(
+  availability: MatchFilterAvailability,
+  filters: VizFilters,
+  cut: Cut,
+): MatchFilterAvailability {
+  const out: Record<string, ReadonlySet<unknown>> = {};
+  for (const key of MATCH_FILTER_KEYS) {
+    const kept = [...(availability[key] as ReadonlySet<unknown>)].filter(
+      (value) => {
+        const probe = toggleMatchFilter(
+          EMPTY_VIZ_FILTERS.match,
+          key,
+          value as MatchFilterValue<typeof key>,
+        );
+        const carried = carryFilters(
+          { ...EMPTY_VIZ_FILTERS, player: filters.player, match: probe },
+          cut,
+        );
+        return filtersEqual(carried.match, probe);
+      },
+    );
+    out[key] = new Set(kept);
+  }
+  return out as unknown as MatchFilterAvailability;
 }
 
 /** Serve › Result values for a serve no one returned (an ace, a service

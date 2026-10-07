@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import {
   Popover,
@@ -39,6 +46,7 @@ import {
   carryFilters,
   clearedFilters,
   courtFor,
+  cutAvailability,
   OPTIONS,
 } from "./viz-url";
 import { useVizPoints } from "./use-viz-points";
@@ -461,6 +469,12 @@ function AdvancedPanel({
   const { context } = useMatchFilters();
   // Short names, as the strip tokens and the Video tab's panel word them.
   const { availability, youName, oppName } = useFiltersPanelData();
+  // Only what this cut keeps for this court — never an option Show would
+  // then silently drop (`cutAvailability`).
+  const offered = useMemo(
+    () => cutAvailability(availability, filters, cut),
+    [availability, filters, cut],
+  );
   const subjectIsPlayer1 = subjectFor(filters, you.isPlayer1);
   const { folded } = fold;
   const countFor = useCallback(
@@ -480,7 +494,7 @@ function AdvancedPanel({
       className="min-h-0 flex-1"
       tone={dark ? "dark" : "light"}
       filters={fold.match}
-      availability={availability}
+      availability={offered}
       youName={youName}
       oppName={oppName}
       countFor={countFor}
