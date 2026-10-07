@@ -749,6 +749,17 @@ export function starPoints(cx: number, cy: number, outerR: number): string {
  * results, so a future frame resize keeps them in sync automatically.
  */
 
+/** Cuts plotted where the ball landed (`viz-model.ts`'s `isPlacementCut`
+ * plus serve) — restated over `Cut` here to keep this module value-import-free. */
+function isLandingCut(cut: Cut): boolean {
+  return (
+    cut === "serve" ||
+    cut === "returnPlacement" ||
+    cut === "rallyPlacement" ||
+    cut === "errors"
+  );
+}
+
 // Real-world metres, matching `viz-model.ts`'s own (private) constants of
 // the same names — kept as a separate local copy rather than a VALUE import
 // since this module stays plain geometry/SVG-adjacent and shouldn't reach
@@ -1179,11 +1190,7 @@ export function projectViewerDot(
 ): { x: number; y: number } {
   const rawX =
     VIEWER_COURT.centreX + dot.lateralM * SERVE_LATERAL_UNITS_PER_METER;
-  const isLanding =
-    cut === "serve" ||
-    cut === "returnPlacement" ||
-    cut === "rallyPlacement" ||
-    cut === "errors";
+  const isLanding = isLandingCut(cut);
   const rawY = dot.atNet
     ? VIEWER_COURT.netY
     : isLanding
@@ -1248,11 +1255,7 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const frameW = frame.w * pxPerUnit;
   const frameH = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
-  const isLanding =
-    cut === "serve" ||
-    cut === "returnPlacement" ||
-    cut === "rallyPlacement" ||
-    cut === "errors";
+  const isLanding = isLandingCut(cut);
   const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
   const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
 

@@ -22,7 +22,13 @@ import {
   trianglePointsFor,
   starPoints,
 } from "./court-geometry";
-import type { Chart, Cut, VizDot, VizBandZones } from "./viz-model";
+import {
+  isPlacementCut,
+  type Chart,
+  type Cut,
+  type VizDot,
+  type VizBandZones,
+} from "./viz-model";
 import { nextMarkIndex } from "./viz-mark-roving";
 
 /**
@@ -160,9 +166,7 @@ function CourtMark({
         points={trianglePointsFor(
           cut === "serve"
             ? "serve"
-            : cut === "returnPlacement" ||
-                cut === "rallyPlacement" ||
-                cut === "errors"
+            : isPlacementCut(cut)
               ? "placement"
               : "contact",
           cx,
@@ -645,9 +649,7 @@ export function CourtArt({
   const heatProject =
     cut === "serve"
       ? projectServeHeatDot
-      : cut === "returnPlacement" ||
-          cut === "rallyPlacement" ||
-          cut === "errors"
+      : isPlacementCut(cut)
         ? projectReturnPlacementHeatDot
         : projectReturnContactHeatDot;
 
@@ -869,10 +871,7 @@ export function CourtArt({
   // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
   // not. `projectReturnDot` accounts for that extra flip in the lateral
   // sign it uses for each kind — see its own doc comment.
-  const kind =
-    cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors"
-      ? "placement"
-      : "contact";
+  const kind = isPlacementCut(cut) ? "placement" : "contact";
   return (
     <svg
       viewBox={`${RETURN_COURT.viewBox.minX} ${RETURN_COURT.viewBox.minY} ${RETURN_COURT.viewBox.w} ${RETURN_COURT.viewBox.h}`}

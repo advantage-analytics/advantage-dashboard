@@ -28,7 +28,7 @@ import { VizToolbar } from "./viz-toolbar";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
-import { EMPTY_VIZ_FILTERS, type Cut } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, isPlacementCut, type Cut } from "./viz-model";
 import { clearedFilters, viewIdentityKey } from "./viz-url";
 import {
   CUT_LABEL,
@@ -452,7 +452,7 @@ export function VizFocused({
           <div
             ref={courtArtRef}
             data-viz-focused-art
-            className={`relative w-full ${cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors" ? "pb-[var(--space-4)]" : ""}`}
+            className={`relative w-full ${isPlacementCut(cut) ? "pb-[var(--space-4)]" : ""}`}
             onClick={(event) => {
               if (!(event.target as Element).closest("[data-viz-mark]")) {
                 if (readoutLeaveTimer.current)

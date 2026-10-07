@@ -12,6 +12,7 @@ import type { FloatMenuTone } from "@/components/ui/float-menu";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { FiltersPanel } from "../match-filters/filters-panel";
+import type { CountNoun } from "../match-filters/panel-draft";
 import {
   activeFilterCount,
   serializeMatchFilters,
@@ -44,7 +45,7 @@ import { VizMenuTrigger, VIZ_PILL_RADIUS } from "./viz-labels";
  *  lives in the advanced panel. */
 type OptionFilterKey = "error";
 
-const COUNT_NOUN: Record<VizResult["noun"], { one: string; many: string }> = {
+const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   serves: { one: "serve", many: "serves" },
   returns: { one: "return", many: "returns" },
   shots: { one: "shot", many: "shots" },

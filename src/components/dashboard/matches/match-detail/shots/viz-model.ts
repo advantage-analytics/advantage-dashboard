@@ -232,6 +232,15 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
   );
 }
 
+/** Cuts plotted where the ball LANDED, on the full-court landing frame
+ * (rally placement, return placement, errors) — as against the contact-side
+ * cuts. Serve lands too, but on its own service-box frame, so it is not here. */
+export function isPlacementCut(cut: Cut): boolean {
+  return (
+    cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors"
+  );
+}
+
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
 const REAL_NET_Y = 11.885;
