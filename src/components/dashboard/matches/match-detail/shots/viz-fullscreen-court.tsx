@@ -36,7 +36,13 @@ import {
 } from "./viz-bands-overlay";
 import { buildReadout } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
-import type { Chart, Cut, VizDot, VizFilters } from "./viz-model";
+import { isPlacementCut } from "./cut-kinds";
+import {
+  type Chart,
+  type Cut,
+  type VizDot,
+  type VizFilters,
+} from "./viz-model";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
@@ -136,14 +142,18 @@ function fillFor(dot: VizDot): string {
  */
 function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
   const keys = new Set<ZoneKey>();
-  if (filters.zone.length === 0) return keys;
+  // The Zone and Court pills only: they filter by the MEASURED landing these
+  // cells stand for. The advanced Serve › Zone and Court read the tracker's
+  // label and the score's court, so a cell they named could hold none of
+  // the dots they let through.
+  const zones: readonly string[] = filters.zone;
+  const courts: readonly string[] = filters.court;
+  if (zones.length === 0) return keys;
   for (const zone of ZONES) {
     const family = zone.label.toLowerCase(); // "wide" | "body" | "t"
     const side = zone.key.startsWith("ad-") ? "ad" : "deuce";
-    if (!filters.zone.some((v) => v === family)) continue;
-    if (filters.court.length > 0 && !filters.court.some((v) => v === side)) {
-      continue;
-    }
+    if (!zones.includes(family)) continue;
+    if (courts.length > 0 && !courts.includes(side)) continue;
     keys.add(zone.key);
   }
   return keys;
@@ -385,7 +395,7 @@ export function VizFullscreenCourt({
             fontFamily="var(--font-sans)"
             fontSize={8}
           >
-            {cut === "returnPlacement" || cut === "rallyPlacement"
+            {isPlacementCut(cut)
               ? "No depth bands selected"
               : "No contact bands selected"}
           </text>
@@ -769,6 +779,7 @@ const VIEWER_HEAT_PROJECTORS: Record<
   returnContact: (d) => toCxCy("returnContact", d),
   rallyPosition: (d) => toCxCy("rallyPosition", d),
   rallyPlacement: (d) => toCxCy("rallyPlacement", d),
+  errors: (d) => toCxCy("errors", d),
 };
 
 function toCxCy(cut: Cut, dot: VizDot): { cx: number; cy: number } {

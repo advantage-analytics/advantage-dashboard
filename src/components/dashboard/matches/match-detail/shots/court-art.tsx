@@ -22,7 +22,13 @@ import {
   trianglePointsFor,
   starPoints,
 } from "./court-geometry";
-import type { Chart, Cut, VizDot, VizBandZones } from "./viz-model";
+import { isPlacementCut } from "./cut-kinds";
+import {
+  type Chart,
+  type Cut,
+  type VizDot,
+  type VizBandZones,
+} from "./viz-model";
 import { nextMarkIndex } from "./viz-mark-roving";
 
 /**
@@ -160,7 +166,7 @@ function CourtMark({
         points={trianglePointsFor(
           cut === "serve"
             ? "serve"
-            : cut === "returnPlacement" || cut === "rallyPlacement"
+            : isPlacementCut(cut)
               ? "placement"
               : "contact",
           cx,
@@ -343,6 +349,7 @@ const CUT_NOUN: Record<Cut, string> = {
   returnContact: "return contact",
   rallyPosition: "rally position",
   rallyPlacement: "rally placement",
+  errors: "errors",
 };
 
 // Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
@@ -356,13 +363,15 @@ const HEAT_CUT_LABEL: Record<Cut, string> = {
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
+  errors: "Errors",
 };
-const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots"> = {
+const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots" | "errors"> = {
   serve: "serves",
   returnPlacement: "returns",
   returnContact: "returns",
   rallyPosition: "shots",
   rallyPlacement: "shots",
+  errors: "errors",
 };
 
 /**
@@ -617,15 +626,21 @@ export function CourtArt({
     : 0;
   const apronFill = showHeat ? HEAT_APRON_FILL : APRON_FILL;
   const courtFillColor = showHeat ? HEAT_COURT_FILL : COURT_FILL;
+  const dotNoun =
+    cut === "errors"
+      ? "error"
+      : cut === "rallyPosition" || cut === "rallyPlacement"
+        ? "shot"
+        : "point";
   const ariaLabel = draft
     ? "Empty court — pick what to plot"
     : showHeat
       ? `${HEAT_CUT_LABEL[cut]} heat map, ${dots.length} ${HEAT_NOUN[cut]}`
       : chart === "zones" && cut !== "serve"
-        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (cut === "returnPlacement" || cut === "rallyPlacement" ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
+        ? `${CUT_NOUN[cut]} by ${bandZones?.kind ?? (isPlacementCut(cut) ? "depth" : "contact")} bands${bandZones ? "" : " — no bands selected"}`
         : showZones
           ? "Serve placement by zone: six service-box zones shaded by serve frequency"
-          : `${CUT_NOUN[cut]} court, ${dots.length} ${cut === "rallyPosition" || cut === "rallyPlacement" ? `shot${dots.length === 1 ? "" : "s"}` : `point${dots.length === 1 ? "" : "s"}`} shown`;
+          : `${CUT_NOUN[cut]} court, ${dots.length} ${dotNoun}${dots.length === 1 ? "" : "s"} shown`;
   // Zero dots ⇒ drawing the filter would still paint the floor tint over
   // the whole view (every pixel of the filter region gets touched, dots or
   // not — see `HeatFilterDef`'s doc comment), which would wash an empty
@@ -640,7 +655,7 @@ export function CourtArt({
   const heatProject =
     cut === "serve"
       ? projectServeHeatDot
-      : cut === "returnPlacement" || cut === "rallyPlacement"
+      : isPlacementCut(cut)
         ? projectReturnPlacementHeatDot
         : projectReturnContactHeatDot;
 
@@ -862,10 +877,7 @@ export function CourtArt({
   // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
   // not. `projectReturnDot` accounts for that extra flip in the lateral
   // sign it uses for each kind — see its own doc comment.
-  const kind =
-    cut === "returnPlacement" || cut === "rallyPlacement"
-      ? "placement"
-      : "contact";
+  const kind = isPlacementCut(cut) ? "placement" : "contact";
   return (
     <svg
       viewBox={`${RETURN_COURT.viewBox.minX} ${RETURN_COURT.viewBox.minY} ${RETURN_COURT.viewBox.w} ${RETURN_COURT.viewBox.h}`}

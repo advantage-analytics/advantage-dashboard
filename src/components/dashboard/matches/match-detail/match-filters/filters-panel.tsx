@@ -22,6 +22,7 @@ import {
   pointGridCell,
   sectionSummary,
   showPointsLabel,
+  type CountNoun,
   type PanelGroup,
   type PanelSection,
 } from "./panel-draft";
@@ -76,6 +77,7 @@ export function FiltersPanel({
   className,
   tone = "light",
   filmCut = null,
+  noun,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -100,6 +102,8 @@ export function FiltersPanel({
    * that explains the part of the footer count the pills do not.
    */
   filmCut?: string | null;
+  /** What `countFor` counts, when not points (the Visualizations tab). */
+  noun?: CountNoun;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
@@ -199,7 +203,7 @@ export function FiltersPanel({
           className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap tabular-nums"
           style={{ color: "var(--ink-500)" }}
         >
-          {draftCountLine(count, total)}
+          {draftCountLine(count, total, noun)}
         </span>
         <button
           type="button"
@@ -207,7 +211,7 @@ export function FiltersPanel({
           disabled={!canApply(draft, filters)}
           className={cn(advButton("primary", "sm"), "whitespace-nowrap")}
         >
-          {showPointsLabel(count)}
+          {showPointsLabel(count, noun)}
         </button>
       </div>
     </section>
