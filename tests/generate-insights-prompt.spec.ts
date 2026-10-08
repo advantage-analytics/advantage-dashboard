@@ -35,7 +35,10 @@ interface GeminiRequestBody {
   generationConfig: {
     responseMimeType: string;
     responseSchema: unknown;
-    temperature: number;
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    thinkingConfig?: unknown;
   };
 }
 
@@ -250,7 +253,12 @@ test("the summary names no vendor and speaks of Player 1 / Player 2", async () =
 test("the generation config and model are the ones the prompt was tuned for", async () => {
   const { url, body } = await captureGeminiRequest();
   expect(url).toContain("/models/gemini-3.5-flash:generateContent");
-  expect(body.generationConfig.temperature).toBe(0.4);
+  // Gemini is retiring custom sampling and `thinkingBudget`: models after 3.6
+  // Flash answer either with 400 INVALID_ARGUMENT, so none may be sent.
+  expect(body.generationConfig).not.toHaveProperty("temperature");
+  expect(body.generationConfig).not.toHaveProperty("topP");
+  expect(body.generationConfig).not.toHaveProperty("topK");
+  expect(JSON.stringify(body)).not.toMatch(/thinking_?budget/i);
   expect(body.generationConfig.responseMimeType).toBe("application/json");
   expect(body.generationConfig.responseSchema).toMatchObject({
     type: "OBJECT",

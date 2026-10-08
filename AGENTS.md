@@ -147,8 +147,9 @@ mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the Op
 against Gemini (`gemini-3.5-flash-lite`), and production runs it.
 
 Match-report insights come from the `generate-insights` edge function (Gemini,
-`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash-lite`, since
-2.5-flash is refused to new keys; temperature 0.4, JSON `responseSchema`). The summary
+`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash`, since
+2.5-flash is refused to new keys; JSON `responseSchema`, and no sampling parameters or
+`thinkingBudget` — Gemini is retiring both and will answer them with a 400). The summary
 voice is settled: **2–3 sentences under 350 characters**, spoken to the player, the first
 sentence the single takeaway, key percentages quoted inline, no greeting, headers or
 bullet lists. A 4–5 sentence / 600-character version (`b317a1fe`, reverted) read wordier
