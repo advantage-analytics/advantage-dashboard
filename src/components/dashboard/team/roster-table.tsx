@@ -17,6 +17,7 @@ import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
 import {
@@ -28,7 +29,6 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
   InviteRing,
   InvitedLine,
-  SUBTLE_PILL,
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
@@ -294,7 +294,7 @@ function LastMatchCell({
           <span className="sr-only">Result unrecorded against</span>
         </MarkSlot>
         <span className={OPPONENT}>{lastMatch.opponent}</span>
-        <span className={cn(SUBTLE_PILL, "shrink-0")}>Review score</span>
+        <StatePill className="shrink-0">Review score</StatePill>
       </span>
     );
   }
@@ -605,7 +605,7 @@ function MemberRow({
               teammate it says nothing they can act on. Grey, because `You`
               and "New" are the only identity pills and neither is this. */}
           {canManage && member.managedBy === "coach" && (
-            <span className={cn(SUBTLE_PILL, "shrink-0")}>Coach-managed</span>
+            <StatePill className="shrink-0">Coach-managed</StatePill>
           )}
         </span>
       </span>

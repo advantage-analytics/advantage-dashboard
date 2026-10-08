@@ -15,6 +15,7 @@ import {
 } from "@/components/dashboard/settings/settings-card";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { advButton } from "@/lib/ui/adv-button";
+import { RolePill } from "@/components/ui/role-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   inviteMember,
@@ -672,9 +673,7 @@ export function RosterInviteDialog({
             <div className="flex flex-col gap-1.5">
               <span className="text-[11px] text-[var(--ink-600)]">Role</span>
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-[22px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-700)]">
-                  Player
-                </span>
+                <RolePill role="player" />
                 <span className="text-[11px] text-[var(--ink-400)]">
                   set by the profile
                 </span>

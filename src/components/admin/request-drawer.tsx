@@ -25,6 +25,7 @@ import {
 } from "@/components/dashboard/shared/vertical-steps";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { StatePill } from "@/components/ui/state-pill";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
@@ -375,12 +376,7 @@ export function RequestDrawer({
                 </h2>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {teamPills(detail).map((pill) => (
-                    <span
-                      key={pill}
-                      className="inline-flex h-[19px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[11px] text-[var(--ink-600)]"
-                    >
-                      {pill}
-                    </span>
+                    <StatePill key={pill}>{pill}</StatePill>
                   ))}
                 </div>
               </div>
