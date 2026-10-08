@@ -18,9 +18,9 @@ import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
 import { StatePill } from "@/components/ui/state-pill";
+import { RolePill } from "@/components/ui/role-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
-import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import {
   inviteMember,
   revokeInvite,
@@ -30,7 +30,6 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
   InviteRing,
   InvitedLine,
-  SUBTLE_PILL,
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
@@ -296,7 +295,7 @@ function LastMatchCell({
           <span className="sr-only">Result unrecorded against</span>
         </MarkSlot>
         <span className={OPPONENT}>{lastMatch.opponent}</span>
-        <span className={cn(SUBTLE_PILL, "shrink-0")}>Review score</span>
+        <StatePill className="shrink-0">Review score</StatePill>
       </span>
     );
   }
@@ -605,9 +604,7 @@ function MemberRow({
               themselves to the roster. Shown to everyone: it says why a name
               from the "Coached by" line is also a row here. */}
           {member.staffRole && (
-            <StatePill className="shrink-0">
-              {PROGRAM_ROLE_LABEL[member.staffRole]}
-            </StatePill>
+            <RolePill role={member.staffRole} className="shrink-0" />
           )}
           {/* Back after the Tb4 distillation dropped it: which rows have no
               login decides who can be invited to claim and whose video only
@@ -615,7 +612,7 @@ function MemberRow({
               teammate it says nothing they can act on. Grey, because `You`
               and "New" are the only identity pills and neither is this. */}
           {canManage && member.managedBy === "coach" && (
-            <span className={cn(SUBTLE_PILL, "shrink-0")}>Coach-managed</span>
+            <StatePill className="shrink-0">Coach-managed</StatePill>
           )}
         </span>
       </span>

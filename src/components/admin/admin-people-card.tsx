@@ -11,6 +11,7 @@ import { SettingsButton } from "@/components/dashboard/settings/settings-button"
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { RolePill } from "@/components/ui/role-pill";
 import { StatePill } from "@/components/ui/state-pill";
 import {
   RoleMenu,
@@ -354,7 +355,7 @@ export function AdminPeopleCard({
                   action={adminSetProgramMemberRole}
                 />
               ) : (
-                <StatePill>{capitalize(member.role)}</StatePill>
+                <RolePill role={member.role} />
               )}
             </AdminPersonRow>
           );

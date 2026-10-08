@@ -25,7 +25,7 @@ import {
   ChromeTooltip,
   CHROME_TOOLTIP_DELAY_MS,
 } from "@/components/dashboard/shared/chrome-tooltip";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import {
   isDestination,
@@ -41,6 +41,8 @@ import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { RolePill } from "@/components/ui/role-pill";
+import { StatePill } from "@/components/ui/state-pill";
 import {
   PendingBar,
   PendingRegion,
@@ -139,20 +141,6 @@ function getStaticBreadcrumbs(
 
   const label = navLabel(pathname);
   return label ? [{ label }] : [];
-}
-
-/** "coach" → "Coach". Used for both the role and plan chips. */
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-/** A quiet capsule for role and plan. Grey only — neither is an action. */
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] text-[var(--ink-600)]">
-      {children}
-    </span>
-  );
 }
 
 export function Header({
@@ -620,9 +608,11 @@ export function Header({
                           no one to have standing over, so it carries only the
                           plan. */}
                       {active.kind === "team" && (
-                        <Chip>{capitalize(active.role)}</Chip>
+                        <RolePill role={active.role} className="shrink-0" />
                       )}
-                      <Chip>{capitalize(viewer.plan)}</Chip>
+                      <StatePill className="shrink-0">
+                        {capitalize(viewer.plan)}
+                      </StatePill>
                     </div>
                     <span className="truncate text-[11px] text-[var(--ink-500)]">
                       {viewer.email}

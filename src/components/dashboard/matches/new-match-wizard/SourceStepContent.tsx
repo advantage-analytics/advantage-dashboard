@@ -65,7 +65,7 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
-import { noteIconCls, noteStripCls } from "./styles";
+import { errorStripCls, noteIconCls, noteStripCls } from "./styles";
 import { PendingTeamNote } from "./PendingTeamNote";
 import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -484,12 +484,8 @@ function SourceStepContentImpl({
       // trim, and being refused at submit. Advisory still —
       // `reserve_processing_quota()` remains the authority — so it states the
       // fact and does not disable the source.
-      <div className={NOTE_CLS} role="alert">
-        <XCircle
-          className={`${noteIconCls} text-[var(--error)]`}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
+      <div className={errorStripCls} role="alert">
+        <XCircle className={noteIconCls} strokeWidth={1.5} aria-hidden="true" />
         <span>{quotaRefusal}</span>
       </div>
     ) : videoRefusal ? (

@@ -1,4 +1,4 @@
-import type { TrimSkipReason } from "./trim-plan";
+import type { PreparedMode, TrimSkipReason } from "./trim-plan";
 
 /** Main thread → trim worker. */
 export type TrimWorkerRequest =
@@ -14,7 +14,14 @@ export type TrimWorkerRequest =
 
 /** Trim worker → main thread. */
 export type TrimWorkerResponse =
+  /** Sent once, before the first progress, when the file will be written. */
+  | { type: "mode"; mode: PreparedMode }
   | { type: "progress"; progress: number }
-  | { type: "done"; outputName: string; durationSeconds: number }
+  | {
+      type: "done";
+      outputName: string;
+      durationSeconds: number;
+      mode: PreparedMode;
+    }
   | { type: "skip"; reason: TrimSkipReason; detail?: string }
   | { type: "cancelled" };

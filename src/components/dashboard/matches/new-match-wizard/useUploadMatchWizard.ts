@@ -543,6 +543,8 @@ export interface UseUploadMatchWizardReturn {
   // Video analysis (processing providers only)
   videoProbe: VideoProbeSummary | null;
   videoWarnings: string[];
+  /** Facts about the video that are not cautions — drawn grey. */
+  videoNotes: string[];
   isProbing: boolean;
   /** Provider-owned media rules, so the wizard never names a vendor. */
   minTrimSeconds: number;
@@ -959,6 +961,7 @@ export function useUploadMatchWizard({
   // and the trim rail knows the true duration.
   const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
   const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
+  const [videoNotes, setVideoNotes] = useState<string[]>([]);
   const [isProbing, setIsProbing] = useState(false);
   /**
    * True from the moment a window start moved far enough to drop the
@@ -2387,6 +2390,7 @@ export function useUploadMatchWizard({
       const generation = resetFileGeneration();
       setUploadError(null);
       setVideoWarnings([]);
+      setVideoNotes([]);
       setVideoProbe(null);
       setUploadedFile(null);
       setIsProbing(true);
@@ -2397,7 +2401,7 @@ export function useUploadMatchWizard({
         if (generation !== fileGenerationRef.current) return;
 
         if (!result.success) {
-          setUploadError(result.error || "This video can't be analysed.");
+          setUploadError(result.error || "This video can't be analyzed.");
           return;
         }
 
@@ -2405,6 +2409,7 @@ export function useUploadMatchWizard({
 
         setVideoProbe(summary);
         setVideoWarnings(result.warnings ?? []);
+        setVideoNotes(result.notes ?? []);
         setUploadedFile({
           name: file.name,
           size: formatFileSize(file.size),
@@ -2458,8 +2463,13 @@ export function useUploadMatchWizard({
         });
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
+        // Lead-first, like the validator's refusals: the strip sets the first
+        // sentence as its lead, and a bare exception message ("The operation
+        // was aborted.") would otherwise be the whole notice.
         setUploadError(
-          err instanceof Error ? err.message : "Couldn't read this video.",
+          err instanceof Error && err.message
+            ? `Couldn't read this video. ${err.message}`
+            : "Couldn't read this video.",
         );
       } finally {
         if (generation === fileGenerationRef.current) setIsProbing(false);
@@ -2521,6 +2531,7 @@ export function useUploadMatchWizard({
     resetFileGeneration();
     setVideoProbe(null);
     setVideoWarnings([]);
+    setVideoNotes([]);
     setUploadedFile(null);
     setUploadError(null);
     forgetCameraAnswers();
@@ -3899,6 +3910,7 @@ export function useUploadMatchWizard({
     // Video analysis
     videoProbe,
     videoWarnings,
+    videoNotes,
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
     remainingQuotaSeconds,

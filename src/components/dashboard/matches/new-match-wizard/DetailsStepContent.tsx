@@ -104,7 +104,9 @@ import {
   floatMenuDividerCls,
   floatMenuLabelCls,
   floatMenuRowCls,
+  errorStripCls,
   focusRingCls,
+  noteIconCls,
   noteStripCls,
 } from "./styles";
 import { formatHoursMinutes } from "@/lib/format/duration";
@@ -1417,16 +1419,14 @@ function DetailsStepContentImpl({
   return (
     <div className="flex flex-col gap-8">
       {error && (
-        <div className={noteStripCls}>
+        <div className={errorStripCls}>
           <XCircle
-            className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+            className={noteIconCls}
             strokeWidth={1.5}
             aria-hidden="true"
           />
           <span>
-            <b className="font-medium text-[var(--ink-900)]">
-              Couldn&apos;t save this match
-            </b>
+            <b className="font-medium">Couldn&apos;t save this match</b>
             {" — "}
             {error}
           </span>

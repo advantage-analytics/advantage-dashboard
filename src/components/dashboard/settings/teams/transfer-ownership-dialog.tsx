@@ -9,11 +9,12 @@ import {
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsUnderlineInput } from "@/components/dashboard/settings/settings-card";
 import { ConfirmAside, ConfirmProse, Em } from "@/components/ui/confirm-dialog";
-import { StatePill } from "@/components/ui/state-pill";
+import { RolePill } from "@/components/ui/role-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { transferProgramOwnership } from "@/components/dashboard/settings/team-actions";
 import { getInitials } from "@/lib/data/match-utils";
 import type { TeamMember } from "@/lib/data/team-settings-server";
+import { PROGRAM_ROLE_LABEL, type ProgramRole } from "@/lib/workspace/types";
 
 /**
  * Two beats: confirm, done. No picker — "Make owner" on a member's row already
@@ -107,8 +108,8 @@ export function TransferOwnershipDialog({
         }
       >
         <div className="flex flex-col">
-          <SwapRow name={target.name} was="Coach" now="Owner" first />
-          <SwapRow name={viewerName} was="Owner" now="Coach" you />
+          <SwapRow name={target.name} was="coach" now="owner" first />
+          <SwapRow name={viewerName} was="owner" now="coach" you />
         </div>
       </RosterDialog>
     );
@@ -192,8 +193,8 @@ function SwapRow({
   you,
 }: {
   name: string;
-  was: string;
-  now: string;
+  was: ProgramRole;
+  now: ProgramRole;
   first?: boolean;
   you?: boolean;
 }) {
@@ -212,8 +213,10 @@ function SwapRow({
       </span>
       {you && <YouPill />}
       <span className="flex-1" />
-      <span className="text-[11px] text-[var(--ink-500)]">was {was}</span>
-      <StatePill>{now}</StatePill>
+      <span className="text-[11px] text-[var(--ink-500)]">
+        was {PROGRAM_ROLE_LABEL[was]}
+      </span>
+      <RolePill role={now} />
     </div>
   );
 }
