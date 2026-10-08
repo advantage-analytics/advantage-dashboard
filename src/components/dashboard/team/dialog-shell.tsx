@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -170,44 +170,68 @@ export function SeatBoxes({
   seats,
   adding = 0,
   full = false,
+  grouped = false,
 }: {
   seats: SeatUsage;
   /** Boxes the pending action would take, drawn light blue after the held ones. */
   adding?: number;
   full?: boolean;
+  /**
+   * Set the squares in fives, a wider gap after each fifth. Where the row has
+   * room to run on one line (the seat note), 25 undivided squares are a bar to
+   * be counted; five blocks of five are read. Off where the squares wrap in a
+   * narrow column, which already breaks them into rows.
+   */
+  grouped?: boolean;
 }) {
   const total = Math.max(seats.seats, seats.used + seats.pending);
+  const boxes = Array.from({ length: total }, (_, index) => {
+    const kind = full
+      ? "full"
+      : index < seats.used
+        ? "used"
+        : index < seats.used + seats.pending
+          ? "held"
+          : index < seats.used + seats.pending + adding
+            ? "adding"
+            : "free";
+    return (
+      <span
+        key={index}
+        className={cn(
+          "size-2 rounded-[2px]",
+          kind === "full" && "bg-[var(--danger)]",
+          kind === "used" && "bg-[var(--blue)]",
+          // Dashed, like the invited avatar's ring: an invitation reads
+          // apart from a free seat without relying on colour.
+          kind === "held" && "border border-dashed border-[var(--blue)]",
+          // The seat this action takes: the next square, in a lighter
+          // step of the same blue — "one more of these", read without a key.
+          kind === "adding" && "bg-[var(--blue)] opacity-40",
+          // ink-400: ink-300 all but vanished on the note's surface-subtle.
+          kind === "free" && "shadow-[inset_0_0_0_1px_var(--ink-400)]",
+        )}
+      />
+    );
+  });
+
+  if (!grouped) {
+    return (
+      <span className="flex flex-wrap gap-[3px]" aria-hidden>
+        {boxes}
+      </span>
+    );
+  }
+
+  const groups: React.ReactNode[][] = [];
+  for (let i = 0; i < boxes.length; i += 5) groups.push(boxes.slice(i, i + 5));
   return (
-    <span className="flex flex-wrap gap-[3px]" aria-hidden>
-      {Array.from({ length: total }, (_, index) => {
-        const kind = full
-          ? "full"
-          : index < seats.used
-            ? "used"
-            : index < seats.used + seats.pending
-              ? "held"
-              : index < seats.used + seats.pending + adding
-                ? "adding"
-                : "free";
-        return (
-          <span
-            key={index}
-            className={cn(
-              "size-2 rounded-[2px]",
-              kind === "full" && "bg-[var(--danger)]",
-              kind === "used" && "bg-[var(--blue)]",
-              // Dashed, like the invited avatar's ring: an invitation reads
-              // apart from a free seat without relying on colour.
-              kind === "held" && "border border-dashed border-[var(--blue)]",
-              // The seat this action takes: the next square, in a lighter
-              // step of the same blue — "one more of these", read without a key.
-              kind === "adding" && "bg-[var(--blue)] opacity-40",
-              // ink-400: ink-300 all but vanished on the note's surface-subtle.
-              kind === "free" && "shadow-[inset_0_0_0_1px_var(--ink-400)]",
-            )}
-          />
-        );
-      })}
+    <span className="flex flex-wrap gap-x-2 gap-y-[3px]" aria-hidden>
+      {groups.map((group, index) => (
+        <span key={index} className="flex gap-[3px]">
+          {group}
+        </span>
+      ))}
     </span>
   );
 }
@@ -248,7 +272,7 @@ export function SeatNote({
           {children && <> {children}</>}
         </span>
         <span className="flex items-center gap-2.5">
-          <SeatBoxes seats={seats} adding={adding} />
+          <SeatBoxes seats={seats} adding={adding} grouped />
           <span
             className="font-mono whitespace-nowrap text-[var(--ink-700)] tabular-nums"
             aria-label={`${taken} of ${seats.seats} seats taken${adding > 0 ? `, ${taken + adding} after this` : ""}`}
@@ -273,10 +297,18 @@ export function SeatNote({
  */
 export function RoleChoice({
   columns,
+  layout = "row",
   children,
 }: {
   /** One per option drawn, so the tiles share the row evenly. */
   columns: 2 | 3;
+  /**
+   * `stack` sets the cards one per row at every width. The Roster's invite
+   * dialog takes it (design owner's pick, 2026-10-08): beside the join link's
+   * stacked "Who can join" list, a row of tiles made the two halves of one
+   * dialog offer a choice two different ways. The staff invite keeps the row.
+   */
+  layout?: "row" | "stack";
   children: React.ReactNode;
 }) {
   return (
@@ -285,9 +317,11 @@ export function RoleChoice({
       <div
         role="radiogroup"
         aria-label="Role"
+        data-layout={layout}
         className={cn(
-          "grid grid-cols-1 gap-1.5",
-          columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          "group/roles grid grid-cols-1 gap-1.5",
+          layout === "row" &&
+            (columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"),
         )}
       >
         {children}
@@ -341,9 +375,91 @@ export function RoleCard({
           {title}
         </span>
       </span>
-      <span className="text-[11px] leading-[1.5] text-[var(--ink-600)]">
+      {/* Stacked, the line runs the card's width, so it hangs under the title
+          rather than under the check-dot (14px dot + 8px gap). */}
+      <span className="text-[11px] leading-[1.5] text-[var(--ink-600)] group-data-[layout=stack]/roles:pl-[22px]">
         {detail}
       </span>
     </button>
+  );
+}
+
+/**
+ * The switch between two ways of doing one dialog's job — the Roster's Invite
+ * is "by email" or "with a join link".
+ *
+ * Drawn as the Matches list's status pills (`lifecycle-chips.tsx`): a fixed
+ * pair, 26px, the chosen one on `--surface-subtle` under a `--border-medium`
+ * edge. No rule under it and no blue — the dialog's blue belongs to its
+ * primary and its chosen radio. Each pill leads with a 13px glyph, the one
+ * thing the status pills do not carry (design owner's call, 2026-10-08).
+ *
+ * A `tablist`, hand-built: there are two tabs and the hard part is the look.
+ * Arrow keys move and select together, since switching costs nothing and
+ * keeps whatever was typed.
+ */
+export function MethodPills<T extends string>({
+  label,
+  value,
+  onValueChange,
+  options,
+}: {
+  /** What the pair chooses between, for a screen reader. */
+  label: string;
+  value: T;
+  onValueChange: (value: T) => void;
+  options: readonly { value: T; label: string; icon: LucideIcon }[];
+}) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const step =
+      event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const at = options.findIndex((option) => option.value === value);
+    const next = options[(at + step + options.length) % options.length];
+    onValueChange(next.value);
+    event.currentTarget
+      .querySelector<HTMLElement>(`[data-method="${next.value}"]`)
+      ?.focus();
+  }
+
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      onKeyDown={onKeyDown}
+      className="flex items-center gap-2"
+    >
+      {options.map((option) => {
+        const isActive = option.value === value;
+        const Icon = option.icon;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            tabIndex={isActive ? 0 : -1}
+            data-method={option.value}
+            onClick={() => onValueChange(option.value)}
+            className={cn(
+              "flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200",
+              !isActive && "hover:bg-[var(--surface-subtle)]",
+            )}
+            style={{
+              border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
+              // Unset at rest so the hover class can paint the wash; see
+              // `lifecycle-chips.tsx`.
+              background: isActive ? "var(--surface-subtle)" : undefined,
+              color: isActive ? "var(--ink-900)" : "var(--ink-600)",
+              fontWeight: isActive ? 500 : 400,
+            }}
+          >
+            <Icon className="size-[13px]" strokeWidth={1.5} aria-hidden />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useId,
   useOptimistic,
   useState,
   useTransition,
@@ -8,7 +9,7 @@ import {
   type ComponentType,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, RefreshCw } from "lucide-react";
+import { Lock, Mail, RefreshCw, Users } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -22,7 +23,7 @@ import {
   UrlRow,
   moveFocusBetweenRungs,
 } from "@/components/ui/share-panel";
-import { SeatBoxes } from "@/components/dashboard/team/dialog-shell";
+import { SeatBoxes, SeatNote } from "@/components/dashboard/team/dialog-shell";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   createJoinLink,
@@ -46,6 +47,25 @@ export type JoinLinkTriggerProps = Omit<ComponentProps<"button">, "children">;
 /** The ladder's three rungs: no link, or a live link in one of its modes. */
 type Rung = "off" | JoinLinkMode;
 
+/** The ladder's rungs, top to bottom; both layouts draw the same three. */
+const RUNGS: readonly { rung: Rung; label: string; description: string }[] = [
+  {
+    rung: "off",
+    label: "Link off",
+    description: "Players join by email invite only",
+  },
+  {
+    rung: "open",
+    label: "Anyone with the link",
+    description: "Joins as a player right away",
+  },
+  {
+    rung: "approve",
+    label: "Anyone, with approval",
+    description: "Staff approve each person on the Roster",
+  },
+];
+
 /** What the panel needs to know about the program and the viewer. */
 export interface JoinLinkPanelProps {
   programId: string;
@@ -64,6 +84,14 @@ export interface JoinLinkPanelProps {
    * Roster passes nothing, and the note names the page in plain text.
    */
   rosterLink?: React.ReactNode;
+  /**
+   * Where the panel is drawn. `popover` is the 320px menu surface; `dialog`
+   * is the Roster's Invite dialog, which gives the same three parts room:
+   * captions in place of the menu's hairlines, the link's note beside its
+   * lesser actions, and the seats as the dialog's own seat note instead of
+   * squares squeezed into a rung.
+   */
+  variant?: "popover" | "dialog";
 }
 
 export interface JoinLinkPopoverProps extends JoinLinkPanelProps {
@@ -150,7 +178,7 @@ export function JoinLinkPopover({
  * `aria-disabled` (never `disabled`, so it stays in the tab order and
  * announces why), Copy and Email live, no Reset, and a note naming who can.
  */
-function JoinLinkPanel({
+export function JoinLinkPanel({
   programId,
   programName,
   joinLink,
@@ -158,8 +186,10 @@ function JoinLinkPanel({
   playersCanUpload,
   seats,
   rosterLink,
+  variant = "popover",
 }: JoinLinkPanelProps) {
   const router = useRouter();
+  const ladderLabelId = useId();
   const { viewer } = useWorkspace();
   const [link, setLink] = useState<string | null>(joinLink?.url ?? null);
   const [rung, setRung] = useState<Rung>(joinLink?.mode ?? "off");
@@ -257,8 +287,43 @@ function JoinLinkPanel({
     });
   }
 
+  // Email and Reset link, sized by the layout that draws them.
+  const linkActions = (url: string, sizing: string) => (
+    <>
+      <a
+        href={buildMailtoHref(programName, url)}
+        className={cn(SECONDARY_BUTTON, sizing)}
+      >
+        <Mail
+          className="size-3.5 text-[var(--nav-fg)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        Email
+      </a>
+      {!locked && (
+        <button
+          type="button"
+          onClick={reset}
+          disabled={pending}
+          className={cn(SECONDARY_BUTTON, sizing)}
+        >
+          <RefreshCw
+            className="size-3.5 text-[var(--nav-fg)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          Reset link
+        </button>
+      )}
+    </>
+  );
+
   // The row between the two hairlines, when there is one.
   let body: React.ReactNode = null;
+  // The question that row asks while stepping down to off, shared by both
+  // variants; each wraps it in its own spacing.
+  let confirm: React.ReactNode = null;
   if (confirmingOff) {
     const stay =
       meta.uses === 1
@@ -266,8 +331,8 @@ function JoinLinkPanel({
         : meta.uses > 1
           ? ` — the ${meta.uses} who already joined stay`
           : "";
-    body = (
-      <div className="flex flex-col gap-2.5 px-2.5 pt-2 pb-2.5">
+    confirm = (
+      <>
         <p className="text-[12px] leading-[17px] text-[var(--ink-700)]">
           {`Turn off the link? It stops working for everyone who has it${stay}. Turning it back on makes a new one.`}
         </p>
@@ -289,7 +354,10 @@ function JoinLinkPanel({
             Turn off
           </button>
         </div>
-      </div>
+      </>
+    );
+    body = (
+      <div className="flex flex-col gap-2.5 px-2.5 pt-2 pb-2.5">{confirm}</div>
     );
   } else if (on && link) {
     body = (
@@ -297,34 +365,7 @@ function JoinLinkPanel({
         <UrlRow url={link} />
         {/* The other ways out, one row of equal halves under the link — the
             same 32px and edges as Copy, so the link row stays the lead. */}
-        <div className="flex gap-2">
-          <a
-            href={buildMailtoHref(programName, link)}
-            className={cn(SECONDARY_BUTTON, "flex-1")}
-          >
-            <Mail
-              className="size-3.5 text-[var(--nav-fg)]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            Email
-          </a>
-          {!locked && (
-            <button
-              type="button"
-              onClick={reset}
-              disabled={pending}
-              className={cn(SECONDARY_BUTTON, "flex-1")}
-            >
-              <RefreshCw
-                className="size-3.5 text-[var(--nav-fg)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              Reset link
-            </button>
-          )}
-        </div>
+        <div className="flex gap-2">{linkActions(link, "flex-1")}</div>
       </div>
     );
   }
@@ -376,6 +417,96 @@ function JoinLinkPanel({
 
   const free = Math.max(0, seats.seats - seats.used - seats.pending);
 
+  if (variant === "dialog") {
+    const showLink = on && link !== null && !confirmingOff;
+    return (
+      <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-1.5">
+          <span
+            id={ladderLabelId}
+            className="text-[11px] text-[var(--ink-600)]"
+          >
+            Who can join
+          </span>
+          {/* Pulled back by the rung's own side padding, so the check-dots
+              sit on the dialog's text edge and the hover wash runs past it. */}
+          <div
+            role="radiogroup"
+            aria-labelledby={ladderLabelId}
+            aria-disabled={locked || undefined}
+            onKeyDown={moveFocusBetweenRungs}
+            className="-mx-2.5 flex flex-col"
+          >
+            {RUNGS.map((option) => (
+              <AccessOption
+                key={option.rung}
+                chosen={chosen === option.rung}
+                locked={locked}
+                onChoose={() => choose(option.rung)}
+                label={option.label}
+                description={option.description}
+              />
+            ))}
+          </div>
+          {/* With no link there is no link block to carry the closing
+              sentence, so it closes the ladder instead. */}
+          {!showLink && !confirmingOff && (
+            <div
+              aria-live="polite"
+              className="text-micro flex items-center gap-2 leading-[15px]"
+            >
+              {note}
+            </div>
+          )}
+        </div>
+
+        {confirmingOff && (
+          <div className="flex flex-col gap-2.5">{confirm}</div>
+        )}
+
+        {showLink && link && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[11px] text-[var(--ink-600)]">Link</span>
+            <UrlRow url={link} />
+            {/* What is true of this link on the left, the lesser ways to act
+                on it on the right — compact, so Copy stays the lead. */}
+            <div className="flex items-center gap-3">
+              <div
+                aria-live="polite"
+                className="text-micro flex min-w-0 flex-1 items-center gap-2 leading-[15px]"
+              >
+                {note}
+              </div>
+              {linkActions(link, "shrink-0")}
+            </div>
+          </div>
+        )}
+
+        {/* Seats are what a live link spends, so the ledger shows only while
+            there is one — the same note the email half of the dialog ends on. */}
+        {showLink && (
+          <SeatNote
+            icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
+            lead={
+              free === 0
+                ? "No seats free."
+                : free === 1
+                  ? "1 seat free."
+                  : `${free} seats free.`
+            }
+            seats={seats}
+          >
+            {free === 0
+              ? "The link reads as full until one opens."
+              : chosen === "approve"
+                ? "Each player you approve takes one."
+                : "Each player who joins takes one."}
+          </SeatNote>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       <div
@@ -385,38 +516,29 @@ function JoinLinkPanel({
         onKeyDown={moveFocusBetweenRungs}
         className="flex flex-col"
       >
-        <AccessOption
-          chosen={chosen === "off"}
-          locked={locked}
-          onChoose={() => choose("off")}
-          label="Link off"
-          description="Players join by email invite only"
-        />
-        <AccessOption
-          chosen={chosen === "open"}
-          locked={locked}
-          onChoose={() => choose("open")}
-          label="Anyone with the link"
-          description="Joins as a player right away"
-          trailing={
-            // A fixed 8-boxes-wide column, so a 25-seat program wraps into
-            // three short rows instead of taking the row's width and forcing
-            // the label to break one word per line (seen on ZZ Test Program).
-            <span className="flex w-[85px] shrink-0 justify-end self-center">
-              <SeatBoxes seats={seats} />
-              <span className="sr-only">
-                {free === 1 ? "1 seat free" : `${free} seats free`}
-              </span>
-            </span>
-          }
-        />
-        <AccessOption
-          chosen={chosen === "approve"}
-          locked={locked}
-          onChoose={() => choose("approve")}
-          label="Anyone, with approval"
-          description="Staff approve each person on the Roster"
-        />
+        {RUNGS.map((option) => (
+          <AccessOption
+            key={option.rung}
+            chosen={chosen === option.rung}
+            locked={locked}
+            onChoose={() => choose(option.rung)}
+            label={option.label}
+            description={option.description}
+            trailing={
+              option.rung === "open" ? (
+                // A fixed 8-boxes-wide column, so a 25-seat program wraps into
+                // three short rows instead of taking the row's width and forcing
+                // the label to break one word per line (seen on ZZ Test Program).
+                <span className="flex w-[85px] shrink-0 justify-end self-center">
+                  <SeatBoxes seats={seats} />
+                  <span className="sr-only">
+                    {free === 1 ? "1 seat free" : `${free} seats free`}
+                  </span>
+                </span>
+              ) : undefined
+            }
+          />
+        ))}
       </div>
 
       {body && (
