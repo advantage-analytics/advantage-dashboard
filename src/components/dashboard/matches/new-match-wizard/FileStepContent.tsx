@@ -44,6 +44,7 @@ import {
   warningStripCls,
 } from "./styles";
 import { NoticeText } from "./NoticeText";
+import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 import { VideoRequirements } from "./VideoRequirements";
 import { formatProbeFps } from "@/lib/services/upload/validators/splitstep-validator";
@@ -373,10 +374,7 @@ function FileStepContentImpl({
   // strip of its own: its first sentence only restates the measured value the
   // row already shows, so what is left is one clause, and a second grey strip
   // under "Nothing is uploading yet" was two notices where one is the rule.
-  const suggestion = notes
-    .map((n) => n.slice(n.indexOf(". ") + 2).replace(/\.$/, ""))
-    .filter(Boolean)
-    .join(" · ");
+  const suggestion = notes.map(noteSuggestion).filter(Boolean).join(" · ");
   const videoResult =
     isVideo && Boolean(uploadedFile) && !busy && probe
       ? {

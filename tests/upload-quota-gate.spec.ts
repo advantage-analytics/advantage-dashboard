@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { quotaRefusal } from "@/components/dashboard/matches/new-match-wizard/validation";
+import {
+  noteSuggestion,
+  quotaRefusal,
+} from "@/components/dashboard/matches/new-match-wizard/validation";
 
 /**
  * The quota gate, without a server.
@@ -112,4 +115,19 @@ test("a remainder under a minute never prints as the same amount as the overage"
   ).toBe(
     "This trim is 1 min over the 10 sec left this month. Shorten the selection to continue.",
   );
+});
+
+test("a note's suggestion is what follows its first sentence", () => {
+  expect(
+    noteSuggestion(
+      "Recorded at 30 fps. 60 fps gives noticeably better ball tracking.",
+    ),
+  ).toBe("60 fps gives noticeably better ball tracking");
+});
+
+test("a one-sentence note is used whole, not sliced from a missing separator", () => {
+  // `indexOf` is -1 with no ". " in the note; slicing from -1 + 2 dropped the
+  // first letter ("aster is better").
+  expect(noteSuggestion("Faster is better.")).toBe("Faster is better");
+  expect(noteSuggestion("")).toBe("");
 });
