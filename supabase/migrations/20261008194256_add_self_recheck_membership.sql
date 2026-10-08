@@ -6,11 +6,23 @@
 -- row and a seat with no member behind them, the state
 -- `20261008180000_remove_member_archives_profile` exists to prevent.
 --
--- The membership is now read a second time after the lock, `for share`. A
--- removal that already committed is refused here; one still in flight waits
--- for this transaction and then archives the profile it finds. The first,
--- unlocked read stays so a non-member is turned away before taking any lock.
--- Everything else is the previous body, unchanged.
+-- The membership is now read a second time once the program row is locked.
+-- That lock is already what a removal waits on (its after-delete trigger
+-- takes it before the profile is archived), so no lock on the member row is
+-- needed, and none is taken.
+--
+-- Two earlier attempts at this were applied live the same day and are
+-- superseded by this file, which is the only one kept in the repo:
+--   20261008193033  re-read `for share` after the program lock — could
+--                   deadlock against `remove_program_member`/`leave_program`
+--   20261008194010  `for share` before the program lock — could deadlock
+--                   against `set_program_member_role`/`transfer_program_ownership`
+-- The existing writers do not agree on member-vs-program order, so any lock
+-- on the member row here conflicts with one side or the other.
+--
+-- Not closed: the same login leaving the program (`leave_program`) at the
+-- instant it adds itself. Only that person can cause it, to themselves.
+-- Everything else in the function is the previous body, unchanged.
 create or replace function public.add_self_as_program_player(
   p_program_id  uuid,
   p_class_year  text    default null,
@@ -68,16 +80,19 @@ begin
   select p.seats into v_seats
     from public.programs p where p.id = p_program_id for update;
 
-  -- The membership again, now held: the first read above only decides whether
-  -- a stranger gets as far as the program lock. A removal that landed between
-  -- that read and here would otherwise leave a live profile with no member
-  -- behind it; with the row share-locked, a removal either already happened
-  -- (refused below) or waits for this to commit and then archives the profile
-  -- it finds, which is what `remove_program_member` does.
+  -- The membership again, now that the program row is held — a plain read,
+  -- with NO lock on the member row. The program lock is what serialises this
+  -- against a removal: `remove_program_member` deletes the member row, its
+  -- after-delete trigger then takes this same program lock, and only after
+  -- that does it archive the login's profile. So a removal that got the
+  -- program lock first has finished (no row here: refused), and one that has
+  -- not is waiting behind this call and will archive the profile it creates.
+  -- Locking the member row as well would order this against either the
+  -- removal path (member, then program) or the role-change and transfer path
+  -- (program, then member) and deadlock against the other.
   select pm.role into v_role
     from public.program_members pm
-   where pm.program_id = p_program_id and pm.user_id = v_uid
-     for share;
+   where pm.program_id = p_program_id and pm.user_id = v_uid;
 
   if v_role is null or v_role not in ('owner', 'coach', 'staff') then
     raise exception 'only the owner, a coach or staff can add themselves as a player'
