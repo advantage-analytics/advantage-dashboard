@@ -75,16 +75,17 @@ export default async function JoinPage({
   const declined = isNotNow(query);
 
   switch (state.kind) {
-    // Revoked, mistyped, or never real. One message for all three, because
-    // distinguishing them would confirm to whoever is holding a bad token
-    // whether it was ever a good one.
+    // Revoked, mistyped, never real — an invitation or a join link alike. One
+    // message for all of them, because distinguishing them would confirm to
+    // whoever is holding a bad token whether it was ever a good one. No
+    // eyebrow: the page cannot name a program it refuses to recognise, and
+    // "Invitation" was wrong for the link half of the door.
     case "not_found":
       return (
         <JoinPane
           width={440}
-          eyebrow="Invitation"
           title="That link isn't valid"
-          body="That link isn't valid. It may have been turned off or replaced. Ask whoever shared it for a new one."
+          body="It may have been turned off or replaced, or it was an invitation that has already been used. Ask whoever shared it for a new one."
         >
           <ClaimActions>
             <Link href="/login" className={CLAIM_BUTTON}>
@@ -207,6 +208,7 @@ export default async function JoinPage({
       if (declined) {
         return (
           <NothingSent
+            kind="link"
             reviewHref={joinHref(token)}
             programName={state.programName}
             inviterName={state.inviterName}
@@ -236,6 +238,7 @@ export default async function JoinPage({
         // session, and nobody needs naming to someone who has not signed in.
         return (
           <NothingSent
+            kind="link"
             reviewHref={joinHref(token)}
             programName={state.programName}
             inviterName={null}
