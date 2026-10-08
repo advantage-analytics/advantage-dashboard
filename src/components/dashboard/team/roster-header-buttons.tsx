@@ -127,7 +127,11 @@ export function RosterHeaderButtons({
     ? {
         email: viewer.email,
         onAddSelf: () => {
+          // Invite is held open by a claim target as well as by `inviting`
+          // (the drawer's "Invite to claim →"); clearing only one left it
+          // open underneath the dialog this hands off to.
           setInviting(false);
+          claim.clear();
           setAddingPlayer(false);
           setAddingSelf(true);
         },

@@ -150,6 +150,7 @@ import {
   ROSTER_MIN_WIDTH,
 } from "./roster-table-layout";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { mayRemoveStaffProfile } from "@/components/dashboard/team/add-self-dialog";
 
 /**
  * Horizontal padding belongs to the card; each row pulls 16px of it back so a
@@ -437,9 +438,21 @@ function MemberRow({
 }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const { viewer } = useWorkspace();
+  const { viewer, active } = useWorkspace();
+  // A duplicate pair that includes a staff-held profile merges under the
+  // removal ladder (`merge_program_players`), so the chip is offered only to
+  // somebody the function will not refuse. Presentation only.
+  const mayMerge =
+    member.duplicateHolder === null ||
+    mayRemoveStaffProfile(
+      active.role,
+      member.duplicateHolder.role,
+      member.duplicateHolder.userId === viewer.id,
+    );
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
+  const offersMerge =
+    canManage && mayMerge && !inLineupMode && !!member.duplicateOfPlayerId;
   // Held by either hand: lifted with Space, or under the pointer mid-drag.
   const lifted =
     lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
@@ -621,14 +634,11 @@ function MemberRow({
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
         <FormTicks form={member.form} slots={5} />
       </span>
-      <LastMatchCell
-        member={member}
-        yielding={canManage && !inLineupMode && !!member.duplicateOfPlayerId}
-      />
+      <LastMatchCell member={member} yielding={offersMerge} />
 
       {/* The merge repair is entered from the row, because a duplicate is
           found by looking at the list. Quiet — a question, not an alarm. */}
-      {canManage && !inLineupMode && member.duplicateOfPlayerId && (
+      {offersMerge && (
         <button
           type="button"
           onClick={(event) => {
