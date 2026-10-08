@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { AlertTriangle, Loader2, Lock, Users } from "lucide-react";
-import type { ProgramRole } from "@/lib/workspace/types";
 import { advButton } from "@/lib/ui/adv-button";
 import { YouPill } from "@/components/ui/you-pill";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
@@ -23,51 +22,15 @@ const APPEARS_NOTE = "You appear in the roster table and can be set on a line.";
 const REMOVE_NOTE =
   "Remove yourself from the roster at any time. Your matches stay with you.";
 
-/**
- * What Add player and Invite need to recognise the viewer typing their own
- * address: the address, and the way out. Null when the viewer is a player or
- * already holds a profile — then the address is simply a duplicate, and the
- * database's own sentence is the right one.
- */
-export type OwnAddressOffer = { email: string; onAddSelf: () => void } | null;
-
-/**
- * Who is offered "Add yourself as a player": the owner, a coach or staff, with
- * no live profile of their own on this roster. One rule, read by the wizard's
- * For menu and by the roster's dialogs, so the two cannot disagree. Presentation
- * only — `add_self_as_program_player` re-checks.
- */
-export function mayAddSelf(role: ProgramRole, holdsProfile: boolean): boolean {
-  return role !== "player" && !holdsProfile;
-}
-
-/** Whether `typed` is the viewer's own address, under an offer that applies. */
-export function isOwnAddress(offer: OwnAddressOffer, typed: string): boolean {
-  const address = typed.trim().toLowerCase();
-  return (
-    offer !== null &&
-    address !== "" &&
-    address === offer.email.trim().toLowerCase()
-  );
-}
-
-/**
- * Who may take a staff-held player profile off the roster — the mirror of
- * `archive_program_player`'s ladder: the person themselves, the owner, or a
- * coach acting on a staff member's. One rule for the drawer's menu and the
- * Edit player dialog. Presentation only — the function refuses the rest.
- */
-export function mayRemoveStaffProfile(
-  viewerRole: ProgramRole,
-  holderRole: Exclude<ProgramRole, "player">,
-  isViewer: boolean,
-): boolean {
-  return (
-    isViewer ||
-    viewerRole === "owner" ||
-    (viewerRole === "coach" && holderRole === "staff")
-  );
-}
+// The rules themselves live in a plain module so a spec can import them
+// without this file's UI; re-exported here because every caller already
+// imports them from the dialog they belong to.
+export {
+  isOwnAddress,
+  mayAddSelf,
+  mayRemoveStaffProfile,
+  type OwnAddressOffer,
+} from "./staff-profile-rules";
 
 /**
  * The question both dialogs ask instead of letting the server answer "that

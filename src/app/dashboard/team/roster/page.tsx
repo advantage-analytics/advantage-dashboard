@@ -249,7 +249,14 @@ async function RosterContent({
   // Design 9d's receipt. Everyone who bound a login today, in the roster's own
   // order. Two people can claim on the same day; every one is named and the
   // lead pluralised.
-  const claimants = players.filter((m) => m.claimedToday);
+  //
+  // Not a staff member who added themselves as a player today. That profile
+  // was created already bound to their login — nobody took over a row a coach
+  // was managing — and the receipt's "seats unchanged" is false for it: adding
+  // yourself is exactly the act that takes one.
+  const claimants = players.filter(
+    (m) => m.claimedToday && m.staffRole === null,
+  );
   const claimant = claimants[0];
   const soloClaim = claimants.length === 1;
   const names = claimants.map((m) => m.name);
