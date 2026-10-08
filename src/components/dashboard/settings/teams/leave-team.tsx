@@ -269,7 +269,11 @@ function LeaveTeamDialog({
               <FactRow
                 icon={<UserRound />}
                 label="Your player profile and its matches"
-                value="Stay with the program"
+                value={
+                  isStaff
+                    ? "Off the roster · Matches stay with the program"
+                    : "Stay with the program"
+                }
               />
             )}
             <FactRow
@@ -335,13 +339,23 @@ function LeaveTeamDialog({
           </p>
           <p>
             {isStaff && <>Team matches you uploaded stay with the program. </>}
-            {hasProfile && (
-              <>
-                Your <Em>player profile</Em> and its matches stay for{" "}
-                {ownerName ? `${ownerName} and the coaches` : "the coaches"} to
-                manage.{" "}
-              </>
-            )}
+            {hasProfile &&
+              (isStaff ? (
+                /* A coach or staff member who added themselves as a player:
+                   `leaveProgram` archives that profile before leaving, rather
+                   than leave a roster row for somebody no longer on the team. */
+                <>
+                  Your <Em>player profile</Em> comes off the roster; its matches
+                  stay with the program, and the team&apos;s staff can restore
+                  it.{" "}
+                </>
+              ) : (
+                <>
+                  Your <Em>player profile</Em> and its matches stay for{" "}
+                  {ownerName ? `${ownerName} and the coaches` : "the coaches"}{" "}
+                  to manage.{" "}
+                </>
+              ))}
             Matches in your personal workspace are unaffected.
           </p>
         </ConfirmProse>
