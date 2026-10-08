@@ -166,3 +166,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The harness pins every browser case to H.264; an opt-in VP9 fixture would make them runnable in containers without proprietary codecs.
+
+## T12 · Sample report page at /dashboard/matches/sample with tour and harness spec — done
+
+**gate:** mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4383 passed (+4) / 379 skipped (the fixture guard now runs against the committed `fixture.json`); all failures are the environmental browser set (now including the 4 new `sample-page` browser cases, which passed under a temporary, removed 1194 shim) except the known load-dependent flake `upload-line-swap.spec.ts:402`. completion — VERDICT: pass. pipeline-guardrails checklist (by hand): clean — attribution through `getMatchSides` on the pinned seat, no `matches` read. widget-states: `MatchReportSkeleton` fallback, fixture always populated, tour-flag read failure only skips auto-start.
+**changed:** new `src/lib/sample-match/index.ts` — static fixture import typed against the loader shape (`Widen<SampleMatchData>`, no cast), `SAMPLE_MATCH_ID`, `sampleMatchData()` (deep clone per call; `sourceProvider` → "splitstep" so the UI treats it as a video match; `kpiHistory` [] → null; `points` null → []; `MatchDetailData` has no `Date` fields, documented), `sampleMatchVideo()` (expired attachment carrying `SAMPLE_VIDEO_ATTACHMENT` id/version so the first renewal from `/api/sample-match/video` reads as "same video, fresh URL"). New `src/app/dashboard/matches/sample/page.tsx` — Server Component, `robots: { index: false, follow: false }`, mirrors the `[matchId]` full-report composition under `MatchReportProvider readOnly sample playbackEndpoint="/api/sample-match/video"`, `SampleBanner` first in the pane, omits title actions/share footer (null under readOnly, as `/m/[token]`); `TourRunner tour="sample"` starts in a personal workspace on `?tour=1` or when `users.sample_tour_done_at` is null (read error → no auto-start; team workspace never). MAP.md gains the route row. New browser harness + spec `tests/sample-page.spec.ts` (4) and 3 offline `sampleMatchData` tests.
+**follow-ups:**
+
+1. H1 (upload `sample/match-v1.mp4`) still gates film playback; until then the Video view shows the unavailable state with "Try again".
+2. The harness mirrors the page's client composition by hand — extract a shared `SampleReport` component if drift becomes a worry.
+3. The fixture carries `foldUnreconciled: true`, so the sample's Statistics view shows the unreconciled fold note — consider reconciling the source match and regenerating, or suppressing the note for the sample.
+4. Team workspaces reaching the URL see the same "Send your own match" banner link.

@@ -9,6 +9,12 @@ import {
   type SampleMatchData,
 } from "@/lib/sample-match/anonymise";
 import {
+  SAMPLE_MATCH_ID,
+  sampleMatchData,
+  sampleMatchVideo,
+} from "@/lib/sample-match";
+import { SAMPLE_VIDEO_ATTACHMENT } from "@/lib/services/sample-match/video";
+import {
   REAL_MATCH_ID,
   REAL_POINT_IDS,
   REAL_PROGRAM_ID,
@@ -186,5 +192,65 @@ test.describe("committed fixture", () => {
     expect("programId" in fixture.match).toBe(false);
     expect("eventId" in fixture.match).toBe(false);
     expect("uploadedBy" in fixture.match).toBe(false);
+  });
+});
+
+test.describe("sampleMatchData", () => {
+  test.skip(
+    !existsSync(FIXTURE_PATH),
+    `${FIXTURE_PATH} not committed yet — run scripts/build-sample-match.ts (H3)`,
+  );
+
+  test("round-trips the fixture into the loader's shape", () => {
+    const data = sampleMatchData();
+    const fixture = JSON.parse(
+      readFileSync(FIXTURE_PATH, "utf8"),
+    ) as SampleMatchData;
+
+    expect(SAMPLE_MATCH_ID).toBe(fixture.match.id);
+    expect(isSampleId(SAMPLE_MATCH_ID)).toBe(true);
+    expect(data.match.id).toBe(SAMPLE_MATCH_ID);
+    // The anonymiser names the vendor as the product does; the report's
+    // components branch on the internal name, so it is mapped back on load.
+    expect(fixture.match.sourceProvider).toBe("Advantage Intelligence");
+    expect(data.match.sourceProvider).toBe("splitstep");
+    // `[]` in the file, `null` to the consumers that type it so.
+    expect(fixture.kpiHistory).toEqual([]);
+    expect(data.kpiHistory).toBeNull();
+    expect(data.match.isUserPlayer1).toBe(true);
+    expect(data.match.won).toBe(true);
+    expect(data.points).toHaveLength(87);
+    expect(data.foldUnreconciled).toBe(fixture.foldUnreconciled);
+    expect(data.keyMoments).toEqual(fixture.keyMoments);
+    expect(data.insights).toEqual(fixture.insights);
+    expect(data.statsResult).toEqual(fixture.statsResult);
+    // The loader's two seat literals, narrowed from the file's strings.
+    expect(["player1", "player2"]).toContain(data.match.score.winner);
+    for (const point of data.points)
+      expect(["player1", "player2"]).toContain(point.player);
+  });
+
+  test("hands out a fresh object each time, leaving the fixture untouched", () => {
+    const first = sampleMatchData();
+    first.match.player1.name = "Edited";
+    first.points[0]!.saved = true;
+    const second = sampleMatchData();
+    expect(second.match.player1.name).toBe(SAMPLE_NAMES.player1);
+    expect(second.points[0]!.saved).toBe(false);
+    expect(second).not.toBe(first);
+    expect(second.points).not.toBe(first.points);
+  });
+
+  test("the sample video is the route's attachment with no credential yet", () => {
+    const video = sampleMatchVideo();
+    expect(video.source).toBe("attachment");
+    expect(video.attachment?.id).toBe(SAMPLE_VIDEO_ATTACHMENT.id);
+    expect(video.attachment?.version).toBe(SAMPLE_VIDEO_ATTACHMENT.version);
+    expect(isSampleId(video.attachment?.id ?? "")).toBe(true);
+    expect(video.url).toBe("");
+    // Already expired, so the Film view's first scheduled renewal fires at
+    // once and asks `/api/sample-match/video` for the real credential.
+    expect(Date.parse(video.expiresAt)).toBeLessThan(Date.now());
+    expect(video.attachment?.expiryWarning).toBe(false);
   });
 });
