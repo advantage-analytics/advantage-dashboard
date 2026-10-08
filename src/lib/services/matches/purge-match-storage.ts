@@ -214,7 +214,7 @@ export async function purgeMatchStorage(
   if (protectedMatch === false && !protectionError) {
     throw new PurgeRefusedError(
       "protected",
-      "Matches recorded or analyzed through the admin console cannot be deleted here.",
+      "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here. Contact support to remove them.",
     );
   }
   if (protectedMatch !== true || protectionError) {
