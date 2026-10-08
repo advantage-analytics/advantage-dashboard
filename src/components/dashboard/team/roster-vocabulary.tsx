@@ -1,4 +1,3 @@
-import { StatePill } from "@/components/ui/state-pill";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -35,17 +34,6 @@ export const INVITE_RING =
  */
 export function InviteRing() {
   return <span aria-hidden className={INVITE_RING} />;
-}
-
-/**
- * "Claimed today" — 7d's pill, and the only thing that marks a fresh claim.
- *
- * The row deliberately does not tint itself as well: `--surface-muted` is the
- * hover token, so a tinted row sat there looking permanently moused-over. The
- * pill says it in words instead.
- */
-export function ClaimedTodayPill() {
-  return <StatePill className="shrink-0">Claimed today</StatePill>;
 }
 
 /** "Invited Aug 4 as player" — what an outstanding invitation says about itself. */

@@ -14,7 +14,7 @@ import { YouPill } from "@/components/ui/you-pill";
 import { transferProgramOwnership } from "@/components/dashboard/settings/team-actions";
 import { getInitials } from "@/lib/data/match-utils";
 import type { TeamMember } from "@/lib/data/team-settings-server";
-import type { ProgramRole } from "@/lib/workspace/types";
+import { PROGRAM_ROLE_LABEL, type ProgramRole } from "@/lib/workspace/types";
 
 /**
  * Two beats: confirm, done. No picker — "Make owner" on a member's row already
@@ -108,8 +108,8 @@ export function TransferOwnershipDialog({
         }
       >
         <div className="flex flex-col">
-          <SwapRow name={target.name} was="Coach" now="owner" first />
-          <SwapRow name={viewerName} was="Owner" now="coach" you />
+          <SwapRow name={target.name} was="coach" now="owner" first />
+          <SwapRow name={viewerName} was="owner" now="coach" you />
         </div>
       </RosterDialog>
     );
@@ -193,7 +193,7 @@ function SwapRow({
   you,
 }: {
   name: string;
-  was: string;
+  was: ProgramRole;
   now: ProgramRole;
   first?: boolean;
   you?: boolean;
@@ -213,7 +213,9 @@ function SwapRow({
       </span>
       {you && <YouPill />}
       <span className="flex-1" />
-      <span className="text-[11px] text-[var(--ink-500)]">was {was}</span>
+      <span className="text-[11px] text-[var(--ink-500)]">
+        was {PROGRAM_ROLE_LABEL[was]}
+      </span>
       <RolePill role={now} />
     </div>
   );

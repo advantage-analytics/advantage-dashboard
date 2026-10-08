@@ -19,7 +19,11 @@ export function RolePill({
   role: ProgramRole;
   className?: string;
 }) {
+  // `?? role`: loaders cast the column to the union, so a value the label map
+  // has not learned yet prints its raw word rather than an empty pill.
   return (
-    <StatePill className={className}>{PROGRAM_ROLE_LABEL[role]}</StatePill>
+    <StatePill className={className}>
+      {PROGRAM_ROLE_LABEL[role] ?? role}
+    </StatePill>
   );
 }

@@ -25,7 +25,7 @@ import {
   ChromeTooltip,
   CHROME_TOOLTIP_DELAY_MS,
 } from "@/components/dashboard/shared/chrome-tooltip";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import {
   isDestination,
@@ -141,11 +141,6 @@ function getStaticBreadcrumbs(
 
   const label = navLabel(pathname);
   return label ? [{ label }] : [];
-}
-
-/** "pro" → "Pro". The plan pill's word; the role's comes from `RolePill`. */
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function Header({
