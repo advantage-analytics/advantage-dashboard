@@ -42,7 +42,7 @@ export default async function TeamPage({
   const billingMonth = currentBillingMonth();
   const [data, usage, pendingSeconds, seats] = await Promise.all([
     getTeamSettings(programId),
-    getProgramUsage(programId, billingMonth, program.orgType),
+    getProgramUsage(programId, billingMonth, program),
     getProgramUsagePending(programId, billingMonth),
     getProgramSeatUsage(programId),
   ]);

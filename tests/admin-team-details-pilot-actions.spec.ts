@@ -92,6 +92,7 @@ test("a non-admin caller is refused and no RPC is invoked", async () => {
     ],
     ["adminSetPilotEnd", [{ programId: "program", endsOn: day(30) }]],
     ["adminEndPilot", ["program"]],
+    ["adminSetPilotEligible", [{ programId: "program", eligible: true }]],
   ];
 
   for (const [name, args] of cases) {
@@ -251,6 +252,51 @@ test("ending a pilot calls admin_end_pilot and revalidates", async () => {
   expect(await failed.actions.adminEndPilot("program")).toEqual({
     ok: false,
     error: "not authorized",
+  });
+  expect(failed.refreshed).toEqual([]);
+});
+
+// ── Pool eligibility ───────────────────────────────────────────────────────
+
+test("granting and revoking the pool call admin_set_pilot_eligible with the flag, and revalidate", async () => {
+  const grant = actions();
+  expect(
+    await grant.actions.adminSetPilotEligible({
+      programId: "program",
+      eligible: true,
+    }),
+  ).toEqual({ ok: true });
+  expect(grant.calls).toEqual([
+    {
+      name: "admin_set_pilot_eligible",
+      args: { p_program_id: "program", p_eligible: true },
+    },
+  ]);
+  expect(grant.refreshed).toEqual([["/admin", "layout"]]);
+
+  const revoke = actions();
+  await revoke.actions.adminSetPilotEligible({
+    programId: "program",
+    eligible: false,
+  });
+  expect(revoke.calls[0].args).toEqual({
+    p_program_id: "program",
+    p_eligible: false,
+  });
+
+  // The RPC's own refusals — a college, a missing program — are written for
+  // a person and pass straight through.
+  const failed = actions({
+    rpcError: "Collegiate programs already draw the program pool.",
+  });
+  expect(
+    await failed.actions.adminSetPilotEligible({
+      programId: "college",
+      eligible: true,
+    }),
+  ).toEqual({
+    ok: false,
+    error: "Collegiate programs already draw the program pool.",
   });
   expect(failed.refreshed).toEqual([]);
 });

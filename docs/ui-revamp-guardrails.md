@@ -655,6 +655,40 @@ to put a testable seam.
 > Unchanged: what is sent to the vendor, the reserve RPCs and their SQL,
 > program and custom-org caps, and the open-beta ceiling. No migration.
 
+> **A reviewed exception, added 2026-10-07: admin-granted pilot eligibility for
+> non-college teams, from `claude/non-college-pilot-eligibility-eda3a1`.**
+> Owner decision: a custom org (club / high_school / academy / other) stays on
+> the individual 2h figure until an admin grants it the pilot's 75h program
+> pool from Admin › Teams › Pilot card ("Grant team pool" / "Revoke team pool").
+> The grant is an explicit flag, `programs.pilot_eligible`, never derived from
+> org_type or the pilot dates; granting also stamps `pilot_approved_by/at` (the
+> admin) and `pilot_ends_on` (2026-12-31 when unset, passed, or ended by hand).
+> Colleges are unchanged and the RPC refuses them. Frozen files that changed:
+>
+> - `quota.ts` — `quotaTierFor()` returns `"program"` for `kind === "team"`
+>   when `orgType === "college"` **or** `pilotEligible === true`; the Pick on
+>   it and `monthlyCapSecondsFor()` widened to carry the flag. Everything that
+>   reads a cap (wizard meter, Settings › Usage, Team home, admin Pilot card,
+>   `/api/splitstep/hours-left`, `reserveQuota()`, `peekQuota()`) follows.
+> - `resubmit-job.ts` — the auto-retry's team workspace re-reads
+>   `programs.pilot_eligible` beside `org_type`, so a retry draws the cap a
+>   fresh submission would.
+> - `active-workspace-server.ts` and `admin-upload-server.ts` read the column
+>   into `Workspace.pilotEligible` (optional, like `individualPilot`: a
+>   constructor that forgets it fails closed to 2h).
+> - SQL (`20261007142230_program_pilot_eligible.sql`, applied live
+>   2026-10-07): `admin_reserve_video_quota`, `individual_tier_usage` and
+>   `individual_pool_usage` read `org_type = 'college' or pilot_eligible` where
+>   they read `org_type = 'college'`, so an eligible org's admin uploads take
+>   the program cap and its spend leaves the shared pilot pool / open-beta
+>   ceiling; `admin_set_pilot_eligible` is the only writer and logs
+>   `pilot.eligibility_changed`; `pending_program_invites` returns the flag so
+>   the join footer quotes the enforced figure.
+>
+> Unchanged: what is sent to the vendor, the reserve RPC cores
+> (`reserve_processing_quota`, `reserve_individual_quota`), the 2h / 10h / 75h
+> figures, and the open-beta ceiling.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

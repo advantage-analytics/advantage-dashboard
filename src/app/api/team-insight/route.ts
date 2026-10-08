@@ -109,11 +109,7 @@ export async function POST() {
   if (active.kind !== "team")
     return new Response("Not a program", { status: 404 });
 
-  const data = await getTeamHomeData(
-    active.id,
-    currentBillingMonth(),
-    active.orgType,
-  );
+  const data = await getTeamHomeData(active.id, currentBillingMonth(), active);
 
   // Nothing analyzed, no claim — the same 204 the personal route answers with,
   // and the same reason: the card's own render gate decides whether there are

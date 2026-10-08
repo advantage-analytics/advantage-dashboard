@@ -36,7 +36,7 @@ import {
  * SECURITY DEFINER functions instead, and what this spec is really asserting
  * is the shape of that window:
  *
- *  - `pending_program_invites()` returns TEN columns and no eleventh. Every
+ *  - `pending_program_invites()` returns ELEVEN columns and no twelfth. Every
  *    assertion on the row shape below is an assertion that `token_hash` is not
  *    in it.
  *  - It returns only invitations addressed to the caller's own confirmed
@@ -88,7 +88,7 @@ const DAY = 86_400_000;
 const junkHash = () => randomBytes(32).toString("hex");
 
 /**
- * The ten columns the migration declares, keyed by the loader's own row type.
+ * The eleven columns the migrations declare, keyed by the loader's own row type.
  * A column added to `DbPendingInviteRow` without a name here — or a name here
  * the interface does not have — is a compile error, so this list cannot drift
  * from the declaration `getPendingInvites` maps.
@@ -99,6 +99,7 @@ const COLUMNS: Record<keyof DbPendingInviteRow, true> = {
   school_name: true,
   team: true,
   org_type: true,
+  pilot_eligible: true,
   role: true,
   invited_by: true,
   inviter_first_name: true,
@@ -336,7 +337,7 @@ test.describe("pending invitations, read and accepted by id (live DB)", () => {
   // Read side.
   // -------------------------------------------------------------------------
 
-  test("the invitee reads exactly one invitation, in exactly the ten columns the migration declares", async () => {
+  test("the invitee reads exactly one invitation, in exactly the eleven columns the migration declares", async () => {
     const { data, error } = await invitee.client.rpc("pending_program_invites");
     expect(error).toBeNull();
 
@@ -345,7 +346,7 @@ test.describe("pending invitations, read and accepted by id (live DB)", () => {
     expect(firstReadIds).toEqual([liveInvite]);
 
     const row = rows[0];
-    // The projection IS the security boundary — an eleventh column here would
+    // The projection IS the security boundary — a twelfth column here would
     // be the one that hands the invitee a working link.
     expect(Object.keys(row).sort()).toEqual(Object.keys(COLUMNS).sort());
     expect(Object.keys(row)).not.toContain("token_hash");

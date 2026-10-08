@@ -63,7 +63,7 @@ import {
 } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
-import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { Workspace } from "@/lib/workspace/types";
 
 /**
  * What the program's home page reads.
@@ -1507,10 +1507,10 @@ export const getTeamHomePresence = cache(async function getTeamHomePresence(
 export function getTeamHomeResources(
   programId: string,
   billingMonth: string,
-  orgType: ProgramOrgType | null,
+  tier: Pick<Workspace, "orgType" | "pilotEligible">,
 ) {
   return {
-    usage: getProgramUsage(programId, billingMonth, orgType),
+    usage: getProgramUsage(programId, billingMonth, tier),
     roster: getRosterData(programId),
     schedule: getTeamHomeSchedule(programId),
     analytics: getTeamHomeAnalytics(programId),
@@ -1520,9 +1520,9 @@ export function getTeamHomeResources(
 export async function getTeamHomeData(
   programId: string,
   billingMonth: string,
-  orgType: ProgramOrgType | null,
+  tier: Pick<Workspace, "orgType" | "pilotEligible">,
 ): Promise<TeamHomeData> {
-  const resources = getTeamHomeResources(programId, billingMonth, orgType);
+  const resources = getTeamHomeResources(programId, billingMonth, tier);
   const [usage, roster, schedule, analytics] = await Promise.all([
     resources.usage,
     resources.roster,
