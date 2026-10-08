@@ -190,6 +190,21 @@ export function useMatchReport(): MatchReportContextValue {
   return value;
 }
 
+/**
+ * The same context, or `null` outside a provider — for the one subtree that
+ * is mounted both under the report and on its own: the Film tab's browser
+ * harness renders `FilmTab` with only the workspace and match-data providers,
+ * and a throwing read there would end every playback spec before the
+ * `<video>` mounted. `FilmTab` reads `meta.readOnly` and
+ * `meta.playbackEndpoint` through this and takes a real match's defaults
+ * (`false`, `null`) when there is no provider. Everything else in the report
+ * keeps {@link useMatchReport}: a missing provider there is a wiring bug, not
+ * a mount the code should quietly tolerate.
+ */
+export function useOptionalMatchReport(): MatchReportContextValue | null {
+  return use(MatchReportContext);
+}
+
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
   | "readOnly"

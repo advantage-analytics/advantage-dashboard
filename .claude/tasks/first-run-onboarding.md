@@ -83,7 +83,7 @@ ready).
 
 ## T6 · Read-only film tab: context playback endpoint, no viewed/bookmark/ball-path writes
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T5
 - **files:** src/components/dashboard/matches/match-detail/film/film-tab.tsx, film/use-attachment-playback.ts, film/record-video-view.ts, film/use-ball-paths.ts, tests/fixtures/film-playback-refresh-harness.tsx, tests/film-playback-refresh.spec.ts — guess

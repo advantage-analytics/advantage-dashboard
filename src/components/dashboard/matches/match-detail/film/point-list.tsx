@@ -271,7 +271,11 @@ interface PointListProps {
   activeEnd: number;
   /** Stable identity, please — `PointRow` is memoized on it. */
   onSelect: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
+  /**
+   * Absent on a read-only report (the share page, the sample): the rows then
+   * draw no bookmark button at all, rather than one that would write nothing.
+   */
+  onToggleSaved?: (pointId: string) => void;
   /**
    * The second door into the fullscreen room (spec § Doors): given only by the
    * shell's column, a ⇧-click on a seekable row opens that point in the room
@@ -1174,7 +1178,8 @@ export const PointRow = memo(function PointRow({
   activeStart: number;
   activeEnd: number;
   onSelect: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
+  /** Absent on a read-only report: no bookmark button on the row. */
+  onToggleSaved?: (pointId: string) => void;
   /** ⇧-click's door into the room; absent in the room's own drawer. */
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
@@ -1270,33 +1275,35 @@ export const PointRow = memo(function PointRow({
         </span>
       )}
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSaved(point.id);
-        }}
-        aria-label={point.saved ? "Remove bookmark" : "Bookmark this point"}
-        aria-pressed={point.saved}
-        className={cn(
-          t.save,
-          // The room's row: the bookmark sits over the row's right edge and
-          // fades in as the score slides aside; a saved point's stays lit.
-          point.saved
-            ? "opacity-100"
-            : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
-        )}
-      >
-        <Bookmark
-          className="h-[13px] w-[13px]"
-          strokeWidth={1.6}
-          style={{
-            color: point.saved ? t.savedInk : t.restingInk,
-            fill: point.saved ? t.savedInk : "none",
+      {onToggleSaved && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSaved(point.id);
           }}
-          aria-hidden="true"
-        />
-      </button>
+          aria-label={point.saved ? "Remove bookmark" : "Bookmark this point"}
+          aria-pressed={point.saved}
+          className={cn(
+            t.save,
+            // The room's row: the bookmark sits over the row's right edge and
+            // fades in as the score slides aside; a saved point's stays lit.
+            point.saved
+              ? "opacity-100"
+              : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+          )}
+        >
+          <Bookmark
+            className="h-[13px] w-[13px]"
+            strokeWidth={1.6}
+            style={{
+              color: point.saved ? t.savedInk : t.restingInk,
+              fill: point.saved ? t.savedInk : "none",
+            }}
+            aria-hidden="true"
+          />
+        </button>
+      )}
 
       {/* The playing row's rule, as the room draws it (`PanelRow`): a bare
           2px blue line growing from the row's left edge across its full

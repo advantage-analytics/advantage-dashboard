@@ -191,8 +191,12 @@ interface FilmPlayerProps {
   onFirstPlay?: (generation: number) => void;
   /** The terminal state's button, where the hook says one could help. */
   onRetry: () => void;
-  /** Bookmark or un-bookmark the playing point. */
-  onToggleSaved: () => void;
+  /**
+   * Bookmark or un-bookmark the playing point. Absent on a read-only report
+   * (the share page, the sample), where the Save glyph is not drawn at all —
+   * never a disabled one offering a write the page has no row for.
+   */
+  onToggleSaved?: () => void;
   /** The fullscreen glyph. Entered by user action only, never automatically. */
   onEnterFullscreen: () => void;
   /**
@@ -825,19 +829,21 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
               <div className="flex-1" />
 
-              <Glyph
-                label={saved ? "Saved — remove bookmark" : "Save point"}
-                shortcut="S"
-                pressed={saved === true}
-                disabled={saved === null}
-                onClick={onToggleSaved}
-              >
-                <Bookmark
-                  {...ICON}
-                  aria-hidden="true"
-                  fill={saved ? "currentColor" : "none"}
-                />
-              </Glyph>
+              {onToggleSaved && (
+                <Glyph
+                  label={saved ? "Saved — remove bookmark" : "Save point"}
+                  shortcut="S"
+                  pressed={saved === true}
+                  disabled={saved === null}
+                  onClick={onToggleSaved}
+                >
+                  <Bookmark
+                    {...ICON}
+                    aria-hidden="true"
+                    fill={saved ? "currentColor" : "none"}
+                  />
+                </Glyph>
+              )}
 
               <Glyph
                 label={

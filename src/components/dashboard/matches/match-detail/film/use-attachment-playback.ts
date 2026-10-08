@@ -349,6 +349,22 @@ export type RefreshOutcome =
   | { kind: "unavailable"; detail: string };
 
 /**
+ * Where the credential is renewed: the match's own route unless the report
+ * names another (`MatchReportMeta.playbackEndpoint`). The sample match is the
+ * case — its placeholder id names no row, so `/api/matches/sample/video` would
+ * answer 404 and the hook would read that as `removed`, blanking a clip that
+ * plays perfectly well; `/api/sample-match/video` mints it instead. `null`
+ * and `undefined` both mean the default, so a caller with nothing to say can
+ * pass the meta field straight through.
+ */
+export function playbackEndpointFor(
+  matchId: string,
+  endpoint?: string | null,
+): string {
+  return endpoint ?? `/api/matches/${encodeURIComponent(matchId)}/video`;
+}
+
+/**
  * One GET, translated.
  *
  * `409 stale_attachment` joins `attachment: null` under `removed` because both
@@ -357,18 +373,24 @@ export type RefreshOutcome =
  * the one a client must not retry into a loop. A 4xx that is neither is
  * treated as denied rather than transient: retrying a refusal is how a loop
  * starts.
+ *
+ * `endpoint` overrides the match's own route (see {@link playbackEndpointFor});
+ * the answer's shape is the same whichever route it is.
  */
 export async function fetchPlaybackSource(
   matchId: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
+  endpoint?: string | null,
 ): Promise<RefreshOutcome> {
   let response: Response;
   try {
-    response = await fetchImpl(
-      `/api/matches/${encodeURIComponent(matchId)}/video`,
-      { method: "GET", credentials: "same-origin", cache: "no-store", signal },
-    );
+    response = await fetchImpl(playbackEndpointFor(matchId, endpoint), {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal,
+    });
   } catch {
     return { kind: "unavailable", detail: "network" };
   }
@@ -456,9 +478,16 @@ export interface AttachmentPlaybackDeps {
   now(): number;
   setTimer(run: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
+  /**
+   * `endpoint` is the resolved renewal URL ({@link playbackEndpointFor}) —
+   * the match's own route unless the controller was given another. A test
+   * seam that ignores it renews the match id's route, as every existing one
+   * does.
+   */
   fetchPlayback(
     matchId: string,
     signal: AbortSignal | undefined,
+    endpoint: string,
   ): Promise<RefreshOutcome>;
 }
 
@@ -466,6 +495,8 @@ export interface AttachmentPlaybackControllerOptions {
   matchId: string;
   initial: AttachmentPlaybackSource;
   points: MatchPoint[];
+  /** See {@link playbackEndpointFor}. Omitted: the match's own route. */
+  endpoint?: string | null;
   deps?: Partial<AttachmentPlaybackDeps>;
 }
 
@@ -499,11 +530,12 @@ function resolveDeps(
       ((handle) => globalThis.clearTimeout(handle as never)),
     fetchPlayback:
       overrides?.fetchPlayback ??
-      ((matchId, signal) =>
+      ((matchId, signal, endpoint) =>
         fetchPlaybackSource(
           matchId,
           (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
           signal,
+          endpoint,
         )),
   };
 }
@@ -520,6 +552,7 @@ export function createAttachmentPlaybackController(
 ): AttachmentPlaybackController {
   const deps = resolveDeps(options.deps);
   const { matchId } = options;
+  const endpoint = playbackEndpointFor(matchId, options.endpoint);
 
   let points = options.points;
   let state: AttachmentPlaybackSnapshot = {
@@ -757,7 +790,11 @@ export function createAttachmentPlaybackController(
     inFlight = (async () => {
       let outcome: RefreshOutcome;
       try {
-        outcome = await deps.fetchPlayback(matchId, controller.signal);
+        outcome = await deps.fetchPlayback(
+          matchId,
+          controller.signal,
+          endpoint,
+        );
       } catch {
         outcome = { kind: "unavailable", detail: "threw" };
       }
@@ -869,6 +906,13 @@ export interface UseAttachmentPlaybackOptions {
   video: MatchVideo;
   /** All points, timed or not — `filmStops` drops the untimed ones. */
   points: MatchPoint[];
+  /**
+   * Where the credential is renewed — `MatchReportMeta.playbackEndpoint`,
+   * handed down by `FilmTab`. `null`/omitted is the match's own route
+   * ({@link playbackEndpointFor}). Part of the controller's key: a different
+   * endpoint is a different server to ask, not a budget to carry over.
+   */
+  endpoint?: string | null;
   /** Test seam. Production passes nothing. */
   deps?: Partial<AttachmentPlaybackDeps>;
 }
@@ -901,18 +945,25 @@ export function useAttachmentPlayback(
   options: UseAttachmentPlaybackOptions,
 ): AttachmentPlaybackApi {
   const { matchId, video, points, deps } = options;
+  const endpoint = options.endpoint ?? null;
 
   const initial = sourceFromMatchVideo(video);
   // Identity of the server's answer, not of the props object: a re-render with
   // the same video must not rebuild the controller and lose its budgets.
   const key = initial
-    ? `${matchId}|${initial.attachmentId}|${initial.version}|${initial.url}`
+    ? `${matchId}|${endpoint ?? ""}|${initial.attachmentId}|${initial.version}|${initial.url}`
     : null;
 
   const controller = useMemo(
     () =>
       key && initial
-        ? createAttachmentPlaybackController({ matchId, initial, points, deps })
+        ? createAttachmentPlaybackController({
+            matchId,
+            initial,
+            points,
+            endpoint,
+            deps,
+          })
         : null,
     // Keyed on the server's answer alone. `points` and `deps` are handed to a
     // fresh controller and pushed into an existing one below; rebuilding on

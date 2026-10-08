@@ -158,3 +158,11 @@ is the runner's. Newest entries at the bottom.
 
 1. Open author decision: veterans read "2 of 4" (criterion) where the task note expected today's two-step count.
 2. No spec pins the line's rendered copy or the all-done hide — a small offline spec over a pure "next step / count" helper would.
+
+## T6 · Read-only film tab: context playback endpoint, no viewed/bookmark/ball-path writes — done
+
+**gate:** retry of the blocked attempt (stash 225c9d84 applied). mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4379 passed (+3 new offline) / 380 skipped; all failures are the environmental browser set (now including the new read-only `film-playback-refresh` case) except the known load-dependent flake `upload-line-swap.spec.ts:402`. The read-only browser case passed 3/3 under a temporary 1194 shim with the VP9 fixture swapped in (alone and between two writing cases; fixture restored, shim removed). completion — VERDICT: pass (reviewer grepped every action render site in `film/`). widget-states: read-only gating only, no loader/fallback change.
+**changed:** the blocked attempt (endpoint threading via `playbackEndpointFor` and `useAttachmentPlayback({ endpoint })`; `useOptionalMatchReport()`; readOnly guards on first-play view recording, bookmark writes and controls, `useBallPaths`, and the room's `FilmEntryActions`; harness `?readOnly=1` + new case) plus the fixes: `FilmTab`'s no-video branch passes `readOnly` to `FilmEmptyState`, `FilmExpiredState` and `FilmUnavailableState`, which suppress their add/replace/align offers (the empty state had offered "Add video" to every non-SwingVision match regardless of entry actions); `/__api-hits` returns every `/api/matches/` hit and the case asserts none since the page opened (mark/slice). New offline spec `tests/film-read-only-states.spec.ts` (3) renders the real no-video branch with readOnly true/false.
+**follow-ups:**
+
+1. The harness pins every browser case to H.264; an opt-in VP9 fixture would make them runnable in containers without proprietary codecs.

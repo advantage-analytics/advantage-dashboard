@@ -37,9 +37,19 @@ import {
 
 const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
 
-export function FilmExpiredState({ entry }: { entry: MatchFilmEntry }) {
+export function FilmExpiredState({
+  entry,
+  readOnly = false,
+}: {
+  entry: MatchFilmEntry;
+  /**
+   * `MatchReportMeta.readOnly`, resolved by `FilmTab`. The sentence stays
+   * and the offer is withheld, whatever the attachment list says.
+   */
+  readOnly?: boolean;
+}) {
   const { match } = useMatchData();
-  const mayAdd = canTakeFilmAction(entry, "add");
+  const mayAdd = !readOnly && canTakeFilmAction(entry, "add");
   const quota = mayAdd ? entry.quota : null;
   const atCap = atMatchVideoCap(quota);
   const holder = atCap ? (quota?.holder ?? null) : null;

@@ -41,10 +41,17 @@ export function FilmUnavailableState({
   matchId,
   entry,
   state,
+  readOnly = false,
 }: {
   matchId: string;
   entry: MatchFilmEntry;
   state: "unavailable" | "stale";
+  /**
+   * `MatchReportMeta.readOnly`, resolved by `FilmTab`. The sentence and the
+   * Back/Reload pair stay; the Replace/Align row is not drawn, since nothing
+   * on a read-only report is the viewer's to repair.
+   */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const { actions } = useMatchReport();
@@ -97,7 +104,7 @@ export function FilmUnavailableState({
         )}
       </div>
 
-      <FilmEntryActions matchId={matchId} entry={entry} />
+      {!readOnly && <FilmEntryActions matchId={matchId} entry={entry} />}
     </div>
   );
 }

@@ -108,7 +108,8 @@ export interface FilmTransportProps {
   onSeek: (seconds: number) => void;
   onTogglePlay: () => void;
   onStep: (direction: -1 | 1) => void;
-  onToggleSaved: () => void;
+  /** Absent on a read-only report: the Save glyph is then not drawn. */
+  onToggleSaved?: () => void;
   onToggleSkipDeadTime: () => void;
   onCycleRate: () => void;
   onToggleLoop: () => void;
@@ -148,7 +149,7 @@ export function FilmTransport(p: FilmTransportProps) {
     if (p.canStep) p.onStep(1);
   };
   const toggleSaved = () => {
-    if (p.saved !== null) p.onToggleSaved();
+    if (p.saved !== null) p.onToggleSaved?.();
   };
 
   return (
@@ -266,19 +267,21 @@ export function FilmTransport(p: FilmTransportProps) {
 
         <div className="flex-1" />
 
-        <Glyph
-          label={p.saved ? "Saved — remove bookmark" : "Save point"}
-          shortcut="S"
-          pressed={p.saved === true}
-          onClick={toggleSaved}
-        >
-          <Bookmark
-            className="h-full w-full"
-            strokeWidth={1.6}
-            fill={p.saved ? "currentColor" : "none"}
-            aria-hidden="true"
-          />
-        </Glyph>
+        {p.onToggleSaved && (
+          <Glyph
+            label={p.saved ? "Saved — remove bookmark" : "Save point"}
+            shortcut="S"
+            pressed={p.saved === true}
+            onClick={toggleSaved}
+          >
+            <Bookmark
+              className="h-full w-full"
+              strokeWidth={1.6}
+              fill={p.saved ? "currentColor" : "none"}
+              aria-hidden="true"
+            />
+          </Glyph>
+        )}
 
         <Glyph
           label={

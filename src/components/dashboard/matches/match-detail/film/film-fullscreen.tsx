@@ -197,7 +197,17 @@ export interface FilmFullscreenProps {
   visiblePoints: MatchPoint[];
   /** The list's filter layers, handed to the drawer's list untouched. */
   filmFilters: FilmListFilters;
-  onToggleSaved: (pointId: string) => void;
+  /**
+   * Absent on a read-only report: no Save glyph on the transport, no bookmark
+   * button in the drawer, and S does nothing.
+   */
+  onToggleSaved?: (pointId: string) => void;
+  /**
+   * `MatchReportMeta.readOnly`, from `FilmRoom`. The room's one request of
+   * its own — the ball-paths file — is not made: the sample's placeholder id
+   * names no `/api/matches` row to ask. Defaults to `false`.
+   */
+  readOnly?: boolean;
   /**
    * Follow-or-hold (T17 design), owned by `FilmRoom` so it outlives this
    * room. The state and the two callbacks are forwarded to the drawer's list
@@ -602,7 +612,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // bounce exactly as it does today.
   const ballPaths = useBallPaths({
     matchId: match.id,
-    enabled: courtOn && match.sourceProvider === "splitstep",
+    enabled: !p.readOnly && courtOn && match.sourceProvider === "splitstep",
     clock: p.clock,
   });
   // Both sides are film seconds: `ShotStop.start` already is, and the paths
@@ -959,7 +969,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   );
 
   const toggleSavedActive = useCallback(() => {
-    if (savePoint) p.onToggleSaved(savePoint.id);
+    if (savePoint) p.onToggleSaved?.(savePoint.id);
   }, [savePoint, p]);
 
   const cycleRate = useCallback(
@@ -1663,7 +1673,7 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                 onSeek={seek}
                 onTogglePlay={togglePlay}
                 onStep={step}
-                onToggleSaved={toggleSavedActive}
+                onToggleSaved={p.onToggleSaved ? toggleSavedActive : undefined}
                 onToggleSkipDeadTime={() => setSkipDead((v) => !v)}
                 onCycleRate={cycleRate}
                 onToggleLoop={() => setLooping((v) => !v)}

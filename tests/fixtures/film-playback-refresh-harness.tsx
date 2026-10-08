@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
+import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
 
 import type { FilmRefreshHarnessWindow } from "./film-playback-refresh-window";
@@ -206,6 +208,55 @@ function FilmTabSlot({ video }: { video: MatchVideo }) {
 }
 
 /**
+ * `?readOnly=1`: the tab under a read-only report — the sample match's shape
+ * (T6). Every case but this one mounts `FilmTab` with NO report provider,
+ * which is the tab's own contract (`useOptionalMatchReport` answers null and
+ * the tab takes a real match's defaults); this one supplies the provider so
+ * `meta.readOnly` and `meta.playbackEndpoint` really are read off it. The
+ * meta is the minimum a provider takes; nothing here asserts on the rest.
+ */
+const READ_ONLY = new URLSearchParams(location.search).get("readOnly") === "1";
+/**
+ * Where the read-only mount renews its credential. The spec's server answers
+ * it with a fresh credential, as it does the match route — and the spec names
+ * the same path by hand, so a drift between the two fails the case rather
+ * than moving with it.
+ */
+const SAMPLE_PLAYBACK_ENDPOINT = "/api/sample-match/video";
+
+function ReportSlot({
+  matchId,
+  children,
+}: {
+  matchId: string;
+  children: ReactNode;
+}) {
+  if (!READ_ONLY) return children;
+  return (
+    <MatchReportProvider
+      matchId={matchId}
+      summary={null}
+      canCompare={false}
+      isDerived={false}
+      statsPublished={false}
+      hasPlayableVideo
+      savedViews={[]}
+      workspaceRole="owner"
+      workspaceKind="personal"
+      workspaceName=""
+      bandSettings={DEFAULT_BANDS}
+      canEditBands={false}
+      unit="ft"
+      readOnly
+      sample
+      playbackEndpoint={SAMPLE_PLAYBACK_ENDPOINT}
+    >
+      {children}
+    </MatchReportProvider>
+  );
+}
+
+/**
  * The provider behind the harness's re-seed seam.
  *
  * `router.refresh()` re-renders the match layout with a FRESH points array
@@ -302,7 +353,9 @@ function boot() {
 
   root.render(
     <WorkspaceProvider value={WORKSPACE}>
-      <ProviderSlot matchId={matchId} video={video} />
+      <ReportSlot matchId={matchId}>
+        <ProviderSlot matchId={matchId} video={video} />
+      </ReportSlot>
     </WorkspaceProvider>,
   );
 

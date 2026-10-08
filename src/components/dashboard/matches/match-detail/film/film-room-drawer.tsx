@@ -46,7 +46,8 @@ export interface FilmRoomDrawerProps {
   activeStart: number;
   activeEnd: number;
   onSelect: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
+  /** Absent on a read-only report; the list then draws no bookmark buttons. */
+  onToggleSaved?: (pointId: string) => void;
   /** Every timed shot on the film clock; only the playing point's unfold. */
   shotStops: ShotStop[];
   activeShotId: string | null;
