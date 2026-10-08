@@ -179,6 +179,16 @@ export interface RosterMember {
    * be an affordance that always fails.
    */
   duplicateOfPlayerId: string | null;
+  /**
+   * Set on BOTH rows of a likely-duplicate pair when one of them is a player
+   * profile held by the owner, a coach or staff: who holds it. Merging such a
+   * pair follows `merge_program_players`' ladder rather than plain staff
+   * authority, so the row needs it to decide whether to offer the merge.
+   */
+  duplicateHolder: {
+    role: Exclude<MemberRole, "player">;
+    userId: string;
+  } | null;
   matchesPlayed: number;
   /**
    * Decided matches, each way. The Record column — "4–1" — is what a coach
@@ -564,6 +574,7 @@ export const getRosterData = cache(async function getRosterData(
       claimedToday: isToday(row.claimed_at, now, timeZone),
       // Filled in below, once every row is known.
       duplicateOfPlayerId: null,
+      duplicateHolder: null,
       matchesPlayed: results.length,
       wins,
       losses,
@@ -638,6 +649,12 @@ export const getRosterData = cache(async function getRosterData(
     if (pair.every((m) => m.managedBy === "self")) continue;
     pair[0].duplicateOfPlayerId = pair[1].playerId;
     pair[1].duplicateOfPlayerId = pair[0].playerId;
+    const held = pair.find((m) => m.staffRole !== null && m.userId !== null);
+    if (held?.staffRole && held.userId) {
+      const holder = { role: held.staffRole, userId: held.userId };
+      pair[0].duplicateHolder = holder;
+      pair[1].duplicateHolder = holder;
+    }
   }
 
   // Staff first, then players by lineup, each group alphabetical where nothing
