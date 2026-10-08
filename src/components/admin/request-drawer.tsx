@@ -1,5 +1,6 @@
 "use client";
 
+import { squadLabel } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Check,
@@ -110,7 +111,8 @@ function shortStamp(iso: string | null): string | undefined {
 function teamPills(detail: AdminRequestRow["detail"]): string[] {
   const pills: string[] = [];
   if (detail.division) pills.push(detail.division);
-  if (detail.team) pills.push(detail.team === "womens" ? "Women's" : "Men's");
+  const squad = squadLabel(detail.team);
+  if (squad) pills.push(squad);
   if (detail.state) pills.push(detail.state);
   return pills;
 }

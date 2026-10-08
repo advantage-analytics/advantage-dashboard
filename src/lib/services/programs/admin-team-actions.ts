@@ -1,5 +1,6 @@
 "use server";
 
+import type { Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -610,7 +611,7 @@ export async function adminResolveJoinRequest(
  */
 export type AdminProgramDetailsPatch = {
   schoolName?: string;
-  team?: "mens" | "womens" | null;
+  team?: Squad | null;
   city?: string | null;
   state?: string | null;
   staffPageUrl?: string | null;

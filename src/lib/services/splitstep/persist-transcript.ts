@@ -22,6 +22,7 @@ import {
   lineCallsFor,
   type LineCalls,
   type MatchScore,
+  type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
 } from "./derivation";
@@ -110,6 +111,20 @@ export async function buildTranscriptForJob(params: {
   /** Set whenever `transcript` is null or not ok; see {@link PersistFailure}. */
   failure: PersistFailure | null;
   job: JobRow | null;
+  /**
+   * The vendor's results JSON exactly as parsed from Storage, set whenever the
+   * download succeeded. The label seed (src/lib/services/labels) freezes each
+   * raw stroke next to its label row, and reading it here means one download
+   * serves both the transcript and the seed.
+   */
+  raw?: unknown;
+  /**
+   * The rallies the transcript was built from (`analyzeResults(raw).rallies`),
+   * set whenever `raw` is. The labels console's marks (src/lib/services/labels/
+   * marks.ts) read the rally beside the derived point — a serve called out, a
+   * stroke the derivation dropped — so the same download serves them too.
+   */
+  rallies?: SplitStepRally[];
 }> {
   const { supabase, jobId } = params;
 
@@ -170,7 +185,8 @@ export async function buildTranscriptForJob(params: {
   // `shots.video_time` are what the player seeks against, and the player seeks
   // in the ORIGINAL video while the vendor timestamps the trimmed one.
   const startTimeSeconds = Number(job.start_time_seconds ?? 0);
-  const analysis = analyzeResults(JSON.parse(await blob.text()), {
+  const raw: unknown = JSON.parse(await blob.text());
+  const analysis = analyzeResults(raw, {
     startTimeSeconds: Number.isFinite(startTimeSeconds) ? startTimeSeconds : 0,
   });
 
@@ -198,6 +214,8 @@ export async function buildTranscriptForJob(params: {
     reason: transcript.reason,
     failure: transcript.ok ? null : "refused",
     job,
+    raw,
+    rallies: analysis.rallies,
   };
 }
 

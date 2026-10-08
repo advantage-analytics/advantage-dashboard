@@ -79,6 +79,9 @@ function Glyph({
   );
 }
 
+/** The controls a host can leave off the bar (see `hide`). */
+export type FilmTransportControl = "saved" | "court" | "exit" | "more";
+
 export interface FilmTransportProps {
   /** Extra classes on the block — the room passes its pointer-events state. */
   className?: string;
@@ -115,6 +118,18 @@ export interface FilmTransportProps {
   onToggleMute: () => void;
   onToggleCourt: () => void;
   onExit: () => void;
+  /**
+   * Controls to leave off the bar. Default none — the room draws all of them.
+   * The admin labelling console's player has no bookmarks, a court panel of
+   * its own, its own way out of full screen and no use for an inert "More".
+   */
+  hide?: readonly FilmTransportControl[];
+  /**
+   * The film cannot play yet: the whole block is `inert` and dimmed. Default
+   * false — the room never does this (see `Glyph`). The labelling console's
+   * player sets it while its frame is still loading.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -151,10 +166,14 @@ export function FilmTransport(p: FilmTransportProps) {
     if (p.saved !== null) p.onToggleSaved();
   };
 
+  const shown = (control: FilmTransportControl) => !p.hide?.includes(control);
+
   return (
     <div
+      inert={p.disabled || undefined}
       className={cn(
         "absolute inset-x-0 bottom-0 flex flex-col gap-[9px] px-6 pb-3.5",
+        p.disabled && "opacity-45",
         p.className,
       )}
     >
@@ -266,19 +285,21 @@ export function FilmTransport(p: FilmTransportProps) {
 
         <div className="flex-1" />
 
-        <Glyph
-          label={p.saved ? "Saved — remove bookmark" : "Save point"}
-          shortcut="S"
-          pressed={p.saved === true}
-          onClick={toggleSaved}
-        >
-          <Bookmark
-            className="h-full w-full"
-            strokeWidth={1.6}
-            fill={p.saved ? "currentColor" : "none"}
-            aria-hidden="true"
-          />
-        </Glyph>
+        {shown("saved") && (
+          <Glyph
+            label={p.saved ? "Saved — remove bookmark" : "Save point"}
+            shortcut="S"
+            pressed={p.saved === true}
+            onClick={toggleSaved}
+          >
+            <Bookmark
+              className="h-full w-full"
+              strokeWidth={1.6}
+              fill={p.saved ? "currentColor" : "none"}
+              aria-hidden="true"
+            />
+          </Glyph>
+        )}
 
         <Glyph
           label={
@@ -362,43 +383,49 @@ export function FilmTransport(p: FilmTransportProps) {
         {/* A readout, not a surface: the court's own toggle. Off dims the
             glyph to 45% — the state is in the label, and this is the one
             control the frame colours rather than filling. */}
-        <Glyph
-          label={p.courtOn ? "Show the court — on" : "Show the court — off"}
-          shortcut="C"
-          pressed={p.courtOn}
-          className={p.courtOn ? "text-white" : "text-white/45"}
-          onClick={p.onToggleCourt}
-        >
-          <Grid2x2
-            className="h-full w-full"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        </Glyph>
-
-        <Glyph label="Exit fullscreen" shortcut="Esc" onClick={p.onExit}>
-          <Minimize
-            className="h-full w-full"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        </Glyph>
-
-        {/* Drawn on the handoff, defined nowhere. Inert and says so. */}
-        <ChromeTooltip label="More" detail="Not wired up yet" side="top">
-          <button
-            type="button"
-            aria-disabled="true"
-            aria-label="More — not available yet"
-            className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        {shown("court") && (
+          <Glyph
+            label={p.courtOn ? "Show the court — on" : "Show the court — off"}
+            shortcut="C"
+            pressed={p.courtOn}
+            className={p.courtOn ? "text-white" : "text-white/45"}
+            onClick={p.onToggleCourt}
           >
-            <MoreVertical
+            <Grid2x2
               className="h-full w-full"
               strokeWidth={1.6}
               aria-hidden="true"
             />
-          </button>
-        </ChromeTooltip>
+          </Glyph>
+        )}
+
+        {shown("exit") && (
+          <Glyph label="Exit fullscreen" shortcut="Esc" onClick={p.onExit}>
+            <Minimize
+              className="h-full w-full"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </Glyph>
+        )}
+
+        {/* Drawn on the handoff, defined nowhere. Inert and says so. */}
+        {shown("more") && (
+          <ChromeTooltip label="More" detail="Not wired up yet" side="top">
+            <button
+              type="button"
+              aria-disabled="true"
+              aria-label="More — not available yet"
+              className="block h-[15px] w-[15px] cursor-default rounded-[2px] text-white/85 opacity-45 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            >
+              <MoreVertical
+                className="h-full w-full"
+                strokeWidth={1.6}
+                aria-hidden="true"
+              />
+            </button>
+          </ChromeTooltip>
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { toSquad, type Squad } from "@/lib/data/squad";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -81,7 +82,7 @@ export interface PendingClaimSummary {
 export interface AdminTeamRow {
   id: string;
   name: string;
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   orgType: string;
   division: string | null;
   conference: string | null;
@@ -273,8 +274,7 @@ function toAdminTeamRow(
   return {
     id: row.id,
     name: programDisplayName(row.school_name, row.team),
-    team:
-      row.team === "womens" ? "womens" : row.team === "mens" ? "mens" : null,
+    team: toSquad(row.team),
     orgType: row.org_type,
     division: divisionLabel(row.division),
     conference: row.conference,

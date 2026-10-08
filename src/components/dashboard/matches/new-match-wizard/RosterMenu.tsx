@@ -31,8 +31,17 @@ export type RosterMenuPlayer = RosterPlayerOption & {
 /** "Cardinal · M" — the squad initial the frames put beside a team's name. */
 export function workspaceLabel(workspace: Workspace): string {
   if (workspace.kind !== "team") return "You";
+  // Spelled out rather than imported from `lib/data/squad`: this module's
+  // import list is pinned by `tests/upload-source.spec.ts`. Same marks as
+  // `squadMark()` there.
   const squad =
-    workspace.team === "mens" ? "M" : workspace.team === "womens" ? "W" : null;
+    workspace.team === "mens"
+      ? "M"
+      : workspace.team === "womens"
+        ? "W"
+        : workspace.team === "coed"
+          ? "Co-ed"
+          : null;
   return squad ? `${workspace.name} · ${squad}` : workspace.name;
 }
 

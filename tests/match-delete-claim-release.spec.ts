@@ -166,7 +166,7 @@ test("a protected refusal is a 409 with the console sentence: no delete, no rele
   expect(response.status).toBe(409);
   expect(response.body).toEqual({
     error:
-      "Matches recorded or analyzed through the admin console cannot be deleted here.",
+      "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.",
   });
   expect(JSON.stringify(response.body)).not.toContain(LEAKY);
   expect(h.effects).toEqual(["purge"]);

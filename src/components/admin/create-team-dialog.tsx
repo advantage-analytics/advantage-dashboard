@@ -1,5 +1,6 @@
 "use client";
 
+import { isSquadAllowed, squadOptionsFor, type Squad } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, X } from "lucide-react";
@@ -74,11 +75,6 @@ const ORG_TYPES: {
   { value: "high_school", label: "High school" },
   { value: "academy", label: "Academy" },
   { value: "other", label: "Other" },
-];
-
-const SQUADS = [
-  { value: "mens" as const, label: "Men's tennis" },
-  { value: "womens" as const, label: "Women's tennis" },
 ];
 
 /** The five `programs_division_check` allows, said the way every screen says them. */
@@ -166,7 +162,7 @@ export function CreateTeamDialog({
 
   const [orgType, setOrgType] = useState<ProgramOrgType | undefined>(undefined);
   const [name, setName] = useState("");
-  const [team, setTeam] = useState<"mens" | "womens" | undefined>(undefined);
+  const [team, setTeam] = useState<Squad | undefined>(undefined);
   const [division, setDivision] = useState<string | undefined>(undefined);
   const [conference, setConference] = useState("");
   const [city, setCity] = useState("");
@@ -244,7 +240,7 @@ export function CreateTeamDialog({
       const result = await createProgram({
         orgType,
         schoolName: name,
-        team: isCollege ? (team ?? null) : null,
+        team: team ?? null,
         division: isCollege ? (division ?? null) : null,
         conference: conference.trim() || null,
         city: city.trim() || null,
@@ -330,11 +326,15 @@ export function CreateTeamDialog({
                     options={ORG_TYPES}
                     onChange={(next) => {
                       setOrgType(next);
-                      // A squad, a division and a conference are a college's
-                      // record. Carrying them onto a club would write fields
-                      // the constraint forbids.
-                      if (next !== "college") {
+                      // A division and a conference are a college's record.
+                      // Carrying them onto a club would write fields the
+                      // constraint forbids. The squad survives the switch
+                      // unless the new type cannot field it — co-ed is for
+                      // everyone but a college.
+                      if (team && !isSquadAllowed(next, team)) {
                         setTeam(undefined);
+                      }
+                      if (next !== "college") {
                         setDivision(undefined);
                         setConference("");
                       }
@@ -342,22 +342,25 @@ export function CreateTeamDialog({
                   />
                 </Field>
 
-                {/* Hidden rather than disabled for a club: a disabled control
-                    still looks like something the admin failed to fill in,
-                    where an absent one reads as not applying. */}
-                {isCollege && (
+                {/* Every type fields a squad. A college must say which of
+                    its two; a club, high school or academy may also be co-ed,
+                    and may be left unset for its owner to answer. */}
+                {orgType !== undefined && (
                   <Field label="Team">
                     <MenuSelect
                       label="Team"
                       variant="underline"
                       value={team}
-                      placeholder="Choose"
-                      options={SQUADS}
+                      placeholder={isCollege ? "Choose" : "Not set"}
+                      options={squadOptionsFor(orgType)}
                       onChange={setTeam}
                     />
                   </Field>
                 )}
 
+                {/* Hidden rather than disabled for a club: a disabled control
+                    still looks like something the admin failed to fill in,
+                    where an absent one reads as not applying. */}
                 {isCollege && (
                   <Field label="Division">
                     <MenuSelect

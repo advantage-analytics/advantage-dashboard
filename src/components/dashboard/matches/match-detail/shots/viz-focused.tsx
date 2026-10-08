@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
@@ -28,7 +28,8 @@ import { VizToolbar } from "./viz-toolbar";
 import { useVizState, useExternalSwapFadeIn } from "./use-viz-state";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useVizView } from "./use-viz-view";
-import { EMPTY_VIZ_FILTERS, availableSets, type Cut } from "./viz-model";
+import { EMPTY_VIZ_FILTERS, type Cut } from "./viz-model";
+import { isPlacementCut } from "./cut-kinds";
 import { clearedFilters, viewIdentityKey } from "./viz-url";
 import {
   CUT_LABEL,
@@ -71,6 +72,7 @@ const LEGEND_CAPTION: Record<Cut, string> = {
   serve: "Half court · Landing point",
   returnPlacement: "Far half · Landing point",
   rallyPlacement: "Far half · Landing point",
+  errors: "Far half · Where the error landed",
   returnContact: "Near half · Contact point",
   // rallyPosition renders through the returnContact frame — same caption,
   // since it's the same half.
@@ -121,10 +123,6 @@ export function VizFocused({
   } = useVizView();
   const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
-  // `availableSets` is an O(points) scan; this component re-renders on every
-  // filter/cut/chart click via the shared `VizStateProvider`, so it's
-  // memoized on `points` alone rather than re-scanning on every one of those.
-  const sets = useMemo(() => availableSets(points), [points]);
 
   // Everyone — including players — may save a view, so this is always on;
   // the ref is what lets the dialog anchor under the SAME button that opens
@@ -413,7 +411,6 @@ export function VizFocused({
             count={result.count}
             total={result.total}
             noun={result.noun}
-            sets={sets}
             youName={you.name}
             opponentName={opp.name}
           />
@@ -456,7 +453,7 @@ export function VizFocused({
           <div
             ref={courtArtRef}
             data-viz-focused-art
-            className={`relative w-full ${cut === "returnPlacement" || cut === "rallyPlacement" ? "pb-[var(--space-4)]" : ""}`}
+            className={`relative w-full ${isPlacementCut(cut) ? "pb-[var(--space-4)]" : ""}`}
             onClick={(event) => {
               if (!(event.target as Element).closest("[data-viz-mark]")) {
                 if (readoutLeaveTimer.current)

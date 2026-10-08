@@ -81,7 +81,7 @@ test("a null actor renders an em dash, not a blank", () => {
   expect(out).toContain("—");
 });
 
-test("every one of the 28 program_audit_log_action_check values has a label", () => {
+test("every one of the 32 program_audit_log_action_check values has a label", () => {
   // The live list, read via Supabase MCP `pg_get_constraintdef` of
   // `program_audit_log_action_check` — kept verbatim so a drift between the
   // constraint and this map fails here rather than in the console.
@@ -111,12 +111,16 @@ test("every one of the 28 program_audit_log_action_check values has a label", ()
     "join_request.declined",
     "pilot.end_changed",
     "pilot.ended",
+    "program.details_changed",
     "member.upload_changed",
     "program.crest_changed",
-    "program.details_changed",
+    "console.submission_reconciled",
+    "match.detached",
+    "match.round_changed",
+    "pilot.eligibility_changed",
   ];
 
-  expect(LIVE_ACTIONS).toHaveLength(28);
+  expect(LIVE_ACTIONS).toHaveLength(32);
 
   for (const action of LIVE_ACTIONS) {
     const label = ADMIN_ACTIVITY_LABELS[action];

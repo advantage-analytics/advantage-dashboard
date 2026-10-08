@@ -1,5 +1,6 @@
 "use server";
 
+import { toSquad, type Squad } from "@/lib/data/squad";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -55,6 +56,7 @@ export async function continueToPilotTerms(input: {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
+  team: Squad | null;
 }): Promise<
   CreateCustomProgramResult | { ok: false; reason: "invalid-owner-name" }
 > {
@@ -69,7 +71,16 @@ export async function continueToPilotTerms(input: {
   if (ownerName.length > OWNER_NAME_MAX) {
     return { ok: false, reason: "invalid-owner-name" };
   }
-  const pending = toPendingTeam({ name, orgType: input?.orgType, ownerName });
+  // Before `toPendingTeam`, which also refuses a missing squad: its refusal
+  // reads as a bad team type, and this one has its own field to point at.
+  const team = toSquad(input?.team);
+  if (!team) return { ok: false, reason: "invalid-team" };
+  const pending = toPendingTeam({
+    name,
+    orgType: input?.orgType,
+    ownerName,
+    team,
+  });
   if (!pending) return { ok: false, reason: "invalid-org-type" };
 
   if (await hasAcceptedCurrentPilotTerms()) {
@@ -153,6 +164,7 @@ async function createCustomTeam(input: {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
+  team: Squad;
 }): Promise<CreateCustomProgramResult> {
   const ownerName = (input?.ownerName ?? "").trim();
 
@@ -191,6 +203,7 @@ async function createCustomTeam(input: {
   return createCustomProgram({
     name: input.name,
     orgType: input.orgType,
+    team: input.team,
   });
 }
 

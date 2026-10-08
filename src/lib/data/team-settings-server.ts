@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { toSquad, type Squad } from "@/lib/data/squad";
 import { createClient } from "@/lib/supabase/server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { DIVISION_VALUES } from "@/lib/data/programs-server";
@@ -46,7 +47,14 @@ export interface TeamInvite {
 export interface TeamIdentity {
   id: string;
   schoolName: string;
-  team: "mens" | "womens";
+  /**
+   * `programs.team`, or null where the program never said. Null is NOT read
+   * as "mens": that default once printed "Men's tennis" on a club's Squad
+   * field and wrote it to the row on the next save.
+   */
+  team: Squad | null;
+  /** `programs.org_type` — decides which squads the Squad menu may offer. */
+  orgType: ProgramOrgType;
   conference: string | null;
   /** `programs.division` — D1, D2, D3, JUCO, NAIA; null for a custom org. */
   division: string | null;
@@ -206,7 +214,7 @@ export async function getTeamSettings(
       supabase
         .from("programs")
         .select(
-          "id, school_name, team, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+          "id, school_name, team, org_type, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
         )
         .eq("id", programId)
         .maybeSingle(),
@@ -288,7 +296,8 @@ export async function getTeamSettings(
     program: {
       id: row.id,
       schoolName: row.school_name,
-      team: row.team === "womens" ? "womens" : "mens",
+      team: toSquad(row.team),
+      orgType: row.org_type as ProgramOrgType,
       conference: row.conference,
       division: row.division ?? null,
       homeVenue: row.home_venue,
