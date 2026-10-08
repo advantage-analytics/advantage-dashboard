@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Link as LinkIcon, Lock, Plus } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
+import { RolePill } from "@/components/ui/role-pill";
 import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
@@ -239,7 +240,7 @@ export function TeamMembersCard({
                       aria-hidden="true"
                     />
                   )}
-                  <StatePill>{capitalize(member.role)}</StatePill>
+                  <RolePill role={member.role} />
                 </span>
               )}
             </PersonRow>
