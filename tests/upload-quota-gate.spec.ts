@@ -67,7 +67,7 @@ test("a trim over the remaining budget by one second is refused, and the overage
       workspaceKind: "personal",
     }),
   ).toBe(
-    "This trim is 1 min over the 10 min left this month. Shorten the selection to continue.",
+    "This trim is 1 sec over the 10 min left this month. Shorten the selection to continue.",
   );
 });
 
@@ -83,9 +83,42 @@ test("neither figure in the refusal rounds away to nothing", () => {
   });
 
   expect(message).toBe(
-    "This trim is 6 min over the 1 min left this month. Shorten the selection to continue.",
+    "This trim is 6 min over the 30 sec left this month. Shorten the selection to continue.",
   );
   expect(message).not.toContain("0.0");
+});
+
+test("a sub-minute remainder is not printed as the same figure as the overage", () => {
+  // Cap 7200 s, 7190 s used, a 70 s window: 60 s over the 10 s left. Rounded
+  // up to whole minutes both read "1 min" — a refusal on the grounds of an
+  // allowance that looks equal to the overage.
+  expect(
+    quotaRefusal({
+      ...BASE,
+      neededSeconds: 70,
+      remainingSeconds: 7200 - 7190,
+      workspaceKind: "personal",
+    }),
+  ).toBe(
+    "This trim is 1 min over the 10 sec left this month. Shorten the selection to continue.",
+  );
+});
+
+test("seconds give way to minutes at exactly one minute", () => {
+  const sentence = (remainingSeconds: number, neededSeconds: number) =>
+    quotaRefusal({
+      ...BASE,
+      neededSeconds,
+      remainingSeconds,
+      workspaceKind: "personal",
+    });
+
+  expect(sentence(59, 119)).toBe(
+    "This trim is 1 min over the 59 sec left this month. Shorten the selection to continue.",
+  );
+  expect(sentence(60, 119)).toBe(
+    "This trim is 59 sec over the 1 min left this month. Shorten the selection to continue.",
+  );
 });
 
 test("no user-visible string mentions splitstep", () => {
