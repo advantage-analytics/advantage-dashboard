@@ -451,6 +451,8 @@ function MemberRow({
     );
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
+  const offersMerge =
+    canManage && mayMerge && !inLineupMode && !!member.duplicateOfPlayerId;
   // Held by either hand: lifted with Space, or under the pointer mid-drag.
   const lifted =
     lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
@@ -632,16 +634,11 @@ function MemberRow({
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
         <FormTicks form={member.form} slots={5} />
       </span>
-      <LastMatchCell
-        member={member}
-        yielding={
-          canManage && mayMerge && !inLineupMode && !!member.duplicateOfPlayerId
-        }
-      />
+      <LastMatchCell member={member} yielding={offersMerge} />
 
       {/* The merge repair is entered from the row, because a duplicate is
           found by looking at the list. Quiet — a question, not an alarm. */}
-      {canManage && mayMerge && !inLineupMode && member.duplicateOfPlayerId && (
+      {offersMerge && (
         <button
           type="button"
           onClick={(event) => {
