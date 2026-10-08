@@ -123,14 +123,14 @@ export function checkVideoFileBasics(file: {
   if (!hasAcceptedExtension(file.name)) {
     return {
       success: false,
-      error: `Unsupported format. Use ${formatExtensionList(ACCEPTED_VIDEO_EXTENSIONS)} — MP4 (H.264) works best.`,
+      error: `Unsupported format. Use ${formatExtensionList(ACCEPTED_VIDEO_EXTENSIONS)}. MP4 (H.264) works best.`,
     };
   }
 
   if (file.size > MAX_VIDEO_SIZE_BYTES) {
     return {
       success: false,
-      error: `Video is ${formatGigabytes(file.size)}. The maximum is ${formatGigabytes(MAX_VIDEO_SIZE_BYTES)}.`,
+      error: `File too large. This video is ${formatGigabytes(file.size)} and the maximum is ${formatGigabytes(MAX_VIDEO_SIZE_BYTES)}.`,
     };
   }
 
@@ -198,7 +198,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   if (probe.width < MIN_VIDEO_WIDTH || probe.height < MIN_VIDEO_HEIGHT) {
     return {
       success: false,
-      error: `Video is ${probe.width}×${probe.height}. Analysis needs at least ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} (1080p).`,
+      error: `Resolution too low. This video is ${probe.width}×${probe.height} and analysis needs ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} (1080p) or higher.`,
       details,
     };
   }
@@ -218,7 +218,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   ) {
     return {
       success: false,
-      error: `Video runs at ${probe.fps} fps. Analysis needs at least ${MIN_VIDEO_FPS} fps.`,
+      error: `Frame rate too low. This video runs at ${probe.fps} fps and analysis needs ${MIN_VIDEO_FPS} or higher. Export at ${MIN_VIDEO_FPS} fps and add it again.`,
       details,
     };
   }
@@ -229,7 +229,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   if (averageBelow(probe, MIN_CONTAINER_AVERAGE_FPS)) {
     return {
       success: false,
-      error: `This recording averages ${formatAverage(probe.averageFps)}, which usually means a variable frame rate. ${PROVIDER_DISPLAY_NAME} needs at least ${MIN_CONTAINER_AVERAGE_FPS} fps, so export it at a constant 30 fps and pick it again.`,
+      error: `Frame rate too low. This video averages ${formatAverage(probe.averageFps)}, and analysis needs at least ${MIN_CONTAINER_AVERAGE_FPS} fps. Export at a constant 30 fps and add it again.`,
       details,
     };
   }
@@ -242,30 +242,35 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   ) {
     return {
       success: false,
-      error: `Video is only ${Math.round(probe.durationSeconds)}s long. That's too short to contain a match.`,
+      error: `Video too short. It is only ${Math.round(probe.durationSeconds)}s long, which can't contain a match.`,
       details,
     };
   }
 
   const warnings: string[] = [];
+  const notes: string[] = [];
 
   if (fps === null) {
     // Says three things on purpose: what we could not do, that the requirement
     // is unchanged by our not being able to check it, and who refuses the file
     // if it is wrong. Without the last clause this reads as permission.
     warnings.push(
-      `This browser can't measure frame rate. Analysis still needs at least ${MIN_VIDEO_FPS} fps — check your camera setting, because ${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
+      `Frame rate couldn't be read. Analysis needs at least ${MIN_VIDEO_FPS} fps, so check your camera setting. ${PROVIDER_DISPLAY_NAME} can still reject the video after it uploads.`,
     );
   } else if (averageBelow(probe, RECOMMENDED_CONTAINER_AVERAGE_FPS)) {
     // The band the refusal above lets through. One line, not two: this
     // subsumes the 60 fps nudge below, which would only repeat "faster is
     // better" under a warning that already says so.
     warnings.push(
-      `This recording averages ${formatAverage(probe.averageFps)}, which usually means a variable frame rate. ${PROVIDER_DISPLAY_NAME} recommends a constant ${RECOMMENDED_CONTAINER_AVERAGE_FPS} fps or higher; it will still analyse this file, but ball tracking may be less accurate.`,
+      `Averages ${formatAverage(probe.averageFps)}. We'll still analyze it, but ball tracking may be less accurate. Export at a constant 30 fps for the best result.`,
     );
   } else if (fps < RECOMMENDED_VIDEO_FPS) {
-    warnings.push(
-      `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps produces noticeably better ball tracking.`,
+    // A fact, not a caution: the file meets the floor and nothing is at risk.
+    // It rides in `notes`, which the wizard folds into the requirement row's
+    // own line — as a warning it turned nearly every 30 fps upload yellow,
+    // which is how a colour stops meaning anything.
+    notes.push(
+      `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps gives noticeably better ball tracking.`,
     );
   }
 
@@ -275,6 +280,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   return {
     success: true,
     warnings: warnings.length > 0 ? warnings : undefined,
+    notes: notes.length > 0 ? notes : undefined,
     details,
   };
 }

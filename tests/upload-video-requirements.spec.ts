@@ -70,7 +70,7 @@ test.describe("size boundary — the guide's 'under 8,000,000,000 bytes'", () =>
     // 7.5 GB. The maximum is 7.5 GB." — the same number twice, and neither of
     // them the "Under 8 GB" shown beside the drop zone.
     const result = checkVideoFileBasics({ name: "m.mp4", size: 8_100_000_000 });
-    expect(result?.error).toContain("Video is 8.1 GB");
+    expect(result?.error).toContain("This video is 8.1 GB");
     expect(result?.error).toContain("maximum is 8.0 GB");
   });
 });
@@ -182,10 +182,14 @@ test.describe("frame-rate boundary", () => {
     expect(result.error).toContain(`${MIN_VIDEO_FPS} fps`);
   });
 
-  test("meeting the floor but not the preference warns instead of blocking", () => {
+  test("meeting the floor but not the preference is a note, not a warning", () => {
+    // A fact about a file that passes. As a warning it turned nearly every
+    // 30 fps upload yellow in the wizard; `notes` is drawn grey.
     const result = evaluateVideoProbe(probe({ fps: MIN_VIDEO_FPS }));
     expect(result.success).toBe(true);
-    expect(result.warnings?.[0]).toContain(`${RECOMMENDED_VIDEO_FPS} fps`);
+    expect(result.warnings).toBeUndefined();
+    expect(result.notes).toHaveLength(1);
+    expect(result.notes?.[0]).toContain(`${RECOMMENDED_VIDEO_FPS} fps`);
   });
 
   test("the preferred rate passes with nothing to say", () => {
@@ -200,8 +204,8 @@ test.describe("frame-rate boundary", () => {
     expect(result.success).toBe(false);
     const error = result.error ?? "";
     expect(error).toContain("29.2 fps");
-    expect(error).toContain("variable");
-    expect(error).toContain(PROVIDER_DISPLAY_NAME);
+    // Lead-first: the strip sets the first sentence as the lead.
+    expect(error.startsWith("Frame rate too low. ")).toBe(true);
     expect(error).toContain(`${MIN_CONTAINER_AVERAGE_FPS} fps`);
     expect(error).toContain("constant 30 fps");
     expect(error).not.toMatch(/splitstep|swingvision/i);
@@ -231,10 +235,10 @@ test.describe("frame-rate boundary", () => {
       expect(result.warnings, `${averageFps}`).toHaveLength(1);
       const warning = result.warnings?.[0] ?? "";
       expect(warning).toContain(`${averageFps} fps`);
-      expect(warning).toContain("variable");
-      expect(warning).toContain(PROVIDER_DISPLAY_NAME);
-      expect(warning).toContain(`${RECOMMENDED_CONTAINER_AVERAGE_FPS} fps`);
-      expect(warning).toContain("still analyse");
+      expect(warning.startsWith(`Averages ${averageFps} fps. `)).toBe(true);
+      expect(warning).toContain("still analyze");
+      expect(warning).toContain("constant 30 fps");
+      expect(result.notes, `${averageFps}`).toBeUndefined();
       expect(warning).not.toContain(`${RECOMMENDED_VIDEO_FPS} fps`);
       expect(warning).not.toMatch(/splitstep|swingvision/i);
       expect(formatProbeFps(input)).toBe(`${averageFps} fps`);
@@ -360,7 +364,7 @@ test.describe("unknown metadata stays distinct from a known violation", () => {
     expect(result.error).toBeUndefined();
 
     const warning = result.warnings?.[0] ?? "";
-    expect(warning).toContain("can't measure");
+    expect(warning).toContain("couldn't be read");
     expect(warning).toContain(`${MIN_VIDEO_FPS} fps`);
     // Names who refuses the file if the guess is wrong — otherwise silence on
     // an unchecked requirement reads as permission.

@@ -194,9 +194,32 @@ export function quotaRefusal(input: {
     // "5 min over the 0.0 h left" is the same rounding on the other number —
     // a sentence refusing on the grounds of an allowance it prints as empty.
     const over = formatAllowanceSpan(neededWhole - remainingSeconds);
-    const remaining = formatAllowanceSpan(remainingSeconds);
+    // The one case the minutes floor gets wrong: under a minute left and an
+    // overage that also prints "1 min" — "1 min over the 1 min left" reads as
+    // two equal amounts. Only then does the remainder print in seconds.
+    const remainingSpan = formatAllowanceSpan(remainingSeconds);
+    const remaining =
+      remainingSeconds < 60 && remainingSpan === over
+        ? `${Math.max(1, Math.floor(remainingSeconds))} sec`
+        : remainingSpan;
     return `This trim is ${over} over the ${remaining} left this month. Shorten the selection to continue.`;
   }
 
   return null;
+}
+
+/**
+ * The clause of a validator note that is worth a place in the requirement
+ * row: everything after its first sentence, without the closing full stop.
+ *
+ * Notes are written lead-first ("Recorded at 30 fps. 60 fps gives noticeably
+ * better ball tracking."), and the lead only restates the measured value the
+ * row already shows. A note of ONE sentence has no lead to drop, so the whole
+ * of it is the clause — never a slice from wherever a missing separator's
+ * `indexOf` happens to land.
+ */
+export function noteSuggestion(note: string): string {
+  const cut = note.indexOf(". ");
+  const clause = cut === -1 ? note : note.slice(cut + 2);
+  return clause.trim().replace(/\.$/, "");
 }

@@ -56,6 +56,7 @@ import {
   type MatchVideoMode,
 } from "@/lib/match-video/types";
 import {
+  errorStripCls,
   noteIconCls,
   noteStripCls,
   warningStripCls,
@@ -483,18 +484,18 @@ export function MatchVideoAttachmentFlow({
 
         {save.status === "failed" && (
           <div
-            className={noteStripCls}
+            className={errorStripCls}
             role="alert"
             data-testid="attachment-save-error"
             data-error-code={save.error.code}
           >
             <XCircle
-              className={`${noteIconCls} text-[var(--error)]`}
+              className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
             />
             <span>
-              <b className="font-medium text-[var(--ink-900)]">
+              <b className="font-medium">
                 {uploadsFile ? "The video was not saved" : "Nothing changed"}
               </b>
               {" — "}
