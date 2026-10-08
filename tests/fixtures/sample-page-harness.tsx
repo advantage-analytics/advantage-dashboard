@@ -190,7 +190,12 @@ function SampleReport() {
                   </MatchReportWhen>
                 </MatchReportPane>
               </MatchReportFrame>
-              <TourRunner tour="sample" start={START_TOUR} />
+              <TourRunner
+                tour="sample"
+                viewerId={WORKSPACE.viewer.id}
+                start={START_TOUR}
+                requested={START_TOUR}
+              />
             </MatchReportProvider>
           </MatchFiltersProvider>
         </Suspense>

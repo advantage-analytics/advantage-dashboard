@@ -28,6 +28,13 @@ type WebpackStats = { toJson(): { errors?: unknown[] } };
  *      reopen the tour: the `sessionStorage` guard holds.
  *   4. A step with a `tab` switches the view first and anchors once the
  *      target is in the document.
+ *   5. Opened on Film (`?tab=film`), the Statistics steps are kept — their
+ *      targets are out of view, not absent — and resolved after their step
+ *      switches back to Statistics.
+ *   6. A kept step whose target never appears after the switch is skipped,
+ *      and the counter shrinks by one.
+ *   7. The guard is the viewer's: `?tour=1` (`requested`) opens despite it,
+ *      and another viewer id is not blocked by it.
  */
 
 let server: Server;
@@ -142,7 +149,9 @@ test("Next, Next, Done walks three steps and stamps the tour once", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await calls(page)).toEqual(["sample"]);
   expect(
-    await page.evaluate(() => sessionStorage.getItem("tour-done:sample")),
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:sample:viewer-1"),
+    ),
   ).toBe("1");
 
   // Remounting with `start` still true does not reopen it…
@@ -173,7 +182,9 @@ test("an absent middle target drops its step, and Skip closes through a failing 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await calls(page)).toEqual(["sample"]);
   expect(
-    await page.evaluate(() => sessionStorage.getItem("tour-done:sample")),
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:sample:viewer-1"),
+    ),
   ).toBe("1");
 });
 
@@ -202,4 +213,112 @@ test("a step with a tab switches the view before anchoring", async ({
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await calls(page)).toEqual(["sample"]);
+});
+
+test("opened on Film, the Statistics steps are kept and resolved after the switch back", async ({
+  page,
+}) => {
+  // The viewer's "Match report opens at" preference, or a `?tab=film` link:
+  // the insight and head-to-head sections are not in the document at open.
+  await open(page, "?tabs=1&tab=film");
+  await expect(page.locator('[data-view="film"]')).toBeVisible();
+  await expect(page.locator('[data-tour="insight"]')).toHaveCount(0);
+
+  const first = page.getByRole("dialog", { name: "Scoreboard" });
+  await expect(first).toContainText("1 of 5");
+  // The scoreboard is in the rail: no view switch for it.
+  expect(new URL(page.url()).searchParams.get("tab")).toBe("film");
+
+  await page.getByRole("button", { name: "Next" }).click();
+  const second = page.getByRole("dialog", { name: "Match summary" });
+  await expect(second).toContainText("2 of 5");
+  // Statistics is the default view, so selecting it clears `tab`.
+  expect(new URL(page.url()).searchParams.get("tab")).toBeNull();
+  await expect(page.locator('[data-tour="insight"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Head-to-head" }),
+  ).toContainText("3 of 5");
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Serve placement" }),
+  ).toContainText("4 of 5");
+  expect(new URL(page.url()).searchParams.get("tab")).toBe("shots");
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("dialog", { name: "Film" })).toContainText(
+    "5 of 5",
+  );
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual(["sample"]);
+});
+
+test("a kept step whose target never appears is skipped, and the counter shrinks", async ({
+  page,
+}) => {
+  // Opened on Film with a report that renders no insight and no head-to-head:
+  // at open the two are only out of view, so they are kept ("1 of 5"); once
+  // their step has switched to Statistics and waited, each is dropped in turn
+  // and the count tells the truth from then on.
+  await open(page, "?tabs=1&tab=film&targets=scoreboard");
+  await expect(page.getByRole("dialog", { name: "Scoreboard" })).toContainText(
+    "1 of 5",
+  );
+
+  await page.getByRole("button", { name: "Next" }).click();
+  const shots = page.getByRole("dialog", { name: "Serve placement" });
+  await expect(shots).toContainText("2 of 3", { timeout: 10_000 });
+  expect(new URL(page.url()).searchParams.get("tab")).toBe("shots");
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("dialog", { name: "Film" })).toContainText(
+    "3 of 3",
+  );
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual(["sample"]);
+});
+
+test("the this-session guard is the viewer's, and an explicit request bypasses it", async ({
+  page,
+}) => {
+  await open(page);
+  await expect(page.getByRole("dialog", { name: "Scoreboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip tour" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:sample:viewer-1"),
+    ),
+  ).toBe("1");
+
+  // The same viewer, back on the page: still guarded…
+  await open(page);
+  await settle(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // …unless they asked for it by URL (`?tour=1` → `requested`).
+  await open(page, "?requested=1");
+  await expect(page.getByRole("dialog", { name: "Scoreboard" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip tour" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // Another viewer in the same tab is not blocked by the first one's guard.
+  await open(page, "?viewer=viewer-2");
+  await expect(page.getByRole("dialog", { name: "Scoreboard" })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:sample:viewer-2"),
+    ),
+  ).toBeNull();
+  await page.getByRole("button", { name: "Skip tour" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:sample:viewer-2"),
+    ),
+  ).toBe("1");
 });

@@ -61,6 +61,12 @@ export interface Match {
    * `isUserPlayer1`'s question, never this one's.
    */
   createdBy?: string | null;
+  /**
+   * The program the match was filed under, or `null` for a personal match.
+   * Set by `match-detail-server.ts` only, beside `createdBy`; the report page
+   * uses it to keep the first-report tour to personal matches.
+   */
+  programId?: string | null;
   player1: Player;
   player2: Player;
   score: MatchScore;

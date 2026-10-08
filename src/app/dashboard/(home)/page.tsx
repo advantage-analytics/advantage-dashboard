@@ -190,9 +190,10 @@ function startHomeResources(
       .select("user_id")
       .eq("user_id", userId)
       .maybeSingle(),
-    // `null` when the count fails: without it the tour steps cannot tell a
-    // veteran from a newcomer, so the line stays out rather than guess — and
-    // the usage footer it shares a region with still renders.
+    // `null` when the count fails: `setupSteps` then counts the two tour
+    // steps as settled (it cannot tell a veteran from a newcomer) and the
+    // line still names an outstanding profile or preferences step — and the
+    // usage footer it shares a region with still renders.
     countFinishedMatchesFor(userId).catch(() => null),
   ]);
   return {
@@ -296,17 +297,15 @@ async function Footer({ resources }: { resources: HomeResources }) {
   const [{ data: user }, { data: preferences }, finishedMatchCount] = profile;
   return (
     <>
-      {finishedMatchCount !== null && (
-        <SetupLine
-          facts={{
-            sampleTourDoneAt: user?.sample_tour_done_at ?? null,
-            firstReportTourDoneAt: user?.first_report_tour_done_at ?? null,
-            finishedMatchCount,
-            playingProfile: Boolean(user?.hand && user?.backhand),
-            notifications: Boolean(preferences),
-          }}
-        />
-      )}
+      <SetupLine
+        facts={{
+          sampleTourDoneAt: user?.sample_tour_done_at ?? null,
+          firstReportTourDoneAt: user?.first_report_tour_done_at ?? null,
+          finishedMatchCount,
+          playingProfile: Boolean(user?.hand && user?.backhand),
+          notifications: Boolean(preferences),
+        }}
+      />
       <UsageFooter
         usedSeconds={u.usedSeconds}
         capSeconds={u.capSeconds}

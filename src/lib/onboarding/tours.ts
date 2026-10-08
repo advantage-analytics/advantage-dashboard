@@ -27,8 +27,34 @@ export const TOUR_TARGETS = [
 
 export type TourTarget = (typeof TOUR_TARGETS)[number];
 
-/** The report tab a step switches to (via `?tab=`) before anchoring. */
-export type TourTab = "shots" | "film";
+/** The report view a step switches to (via `?tab=`) before anchoring. */
+export type TourTab = "statistics" | "shots" | "film";
+
+/**
+ * The view each target is rendered in, or `null` for the rail, which every
+ * view keeps. The runner uses it to tell a target that is merely out of view
+ * (the Statistics sections while Film is open) from one the report never
+ * rendered: only the latter drops its step before the tour opens.
+ */
+export const TOUR_TARGET_VIEW: Record<TourTarget, TourTab | null> = {
+  scoreboard: null,
+  insight: "statistics",
+  "head-to-head": "statistics",
+  shots: null,
+  film: null,
+};
+
+/**
+ * `users` column each tour stamps when it is finished or skipped. Shared by
+ * the `markTourDone` action (the write) and `getTourDoneAt` (the read), so
+ * the two can never name different columns. Exported from here, a plain
+ * module, because the action file is `"use server"` and may export only
+ * async functions.
+ */
+export const TOUR_COLUMN = {
+  sample: "sample_tour_done_at",
+  "first-report": "first_report_tour_done_at",
+} as const satisfies Record<TourId, string>;
 
 export interface TourStep {
   target: TourTarget;
@@ -47,11 +73,13 @@ export const TOURS: Record<TourId, readonly TourStep[]> = {
     },
     {
       target: "insight",
+      tab: "statistics",
       title: "Match summary",
       body: "A short read of the match that names the one thing that decided it.",
     },
     {
       target: "head-to-head",
+      tab: "statistics",
       title: "Head-to-head",
       body: "Each player's serve, return and rally numbers side by side.",
     },
@@ -65,7 +93,7 @@ export const TOURS: Record<TourId, readonly TourStep[]> = {
       target: "film",
       tab: "film",
       title: "Film",
-      body: "The match video, cut to the points so you can jump straight to any rally.",
+      body: "The match video, with a point list so you can jump straight to any rally.",
     },
   ],
   "first-report": [
@@ -76,11 +104,13 @@ export const TOURS: Record<TourId, readonly TourStep[]> = {
     },
     {
       target: "insight",
+      tab: "statistics",
       title: "Your summary",
       body: "A short read of your match that names the one thing that decided it.",
     },
     {
       target: "head-to-head",
+      tab: "statistics",
       title: "Head-to-head",
       body: "Your serve, return and rally numbers set against your opponent's.",
     },
@@ -94,7 +124,7 @@ export const TOURS: Record<TourId, readonly TourStep[]> = {
       target: "film",
       tab: "film",
       title: "Your film",
-      body: "Your match video, cut to the points so you can jump straight to any rally.",
+      body: "Your match video, with a point list so you can jump straight to any rally.",
     },
   ],
 };
@@ -102,7 +132,10 @@ export const TOURS: Record<TourId, readonly TourStep[]> = {
 /**
  * The tour's steps whose target is on the page, in tour order. A report with
  * no film or no points drops those steps; when nothing is present the result
- * is empty and the tour never opens.
+ * is empty and the tour never opens. The runner passes every target it has
+ * not seen missing from its own view (`TOUR_TARGET_VIEW`), and calls again as
+ * a step's target turns out never to appear — so the count a step prints can
+ * shrink, but never names a step the report has already been seen to lack.
  */
 export function resolveSteps(
   tour: TourId,
@@ -134,25 +167,44 @@ export interface FirstReportTourFacts {
   workspaceKind: WorkspaceKind;
   /** The viewer created the match being shown. */
   isCreator: boolean;
-  /** Finished (analysed) matches the viewer has created. */
-  finishedMatchCount: number;
-  /** `users.first_report_tour_done_at`. */
-  doneAt: string | null;
+  /** `matches.program_id` of the match being shown: `null` for a personal match. */
+  matchProgramId: string | null;
+  /** The match being shown has published statistics — a report to tour. */
+  statsPublished: boolean;
+  /**
+   * Finished (analysed) matches the viewer has created, or `null` when the
+   * count could not be read.
+   */
+  finishedMatchCount: number | null;
+  /**
+   * `users.first_report_tour_done_at`: `null` when never finished, `undefined`
+   * when it could not be read (`getTourDoneAt`).
+   */
+  doneAt: string | null | undefined;
 }
 
 /**
- * Whether the match page mounts the first-report tour. Exactly one finished
- * match is what keeps players with a history from ever seeing it.
+ * Whether the match page mounts the first-report tour: a personal match the
+ * viewer filed, in their personal workspace, with a report to read — exactly
+ * one finished match is what keeps players with a history from ever seeing
+ * it. A match whose statistics were never published (`stats_unavailable`)
+ * has no report to tour, so it is not the first one. Either fact the page
+ * could not read answers "no": a tour that waits for the next report is
+ * harmless, one pushed at someone who already dismissed it is not.
  */
 export function firstReportTourEligible({
   workspaceKind,
   isCreator,
+  matchProgramId,
+  statsPublished,
   finishedMatchCount,
   doneAt,
 }: FirstReportTourFacts): boolean {
   return (
     workspaceKind === "personal" &&
     isCreator &&
+    matchProgramId === null &&
+    statsPublished &&
     finishedMatchCount === 1 &&
     doneAt === null
   );
@@ -169,8 +221,11 @@ export interface SetupFacts {
   sampleTourDoneAt: string | null;
   /** `users.first_report_tour_done_at`. */
   firstReportTourDoneAt: string | null;
-  /** Finished (analysed) matches the user has created. */
-  finishedMatchCount: number;
+  /**
+   * Finished (analysed) matches the user has created, or `null` when the
+   * count could not be read.
+   */
+  finishedMatchCount: number | null;
   /** `users.hand` and `users.backhand` are both set. */
   playingProfile: boolean;
   /** A `user_preferences` row exists. */
@@ -192,24 +247,28 @@ export interface SetupStep {
 /**
  * The getting-set-up steps in order: the two tours, then playing profile and
  * preferences. An account with more than one finished match counts both tours
- * as done, so a veteran's line is unchanged by them.
+ * as done, so a veteran's line is unchanged by them. An unknown count
+ * (`null`) counts them as done too: without it a veteran cannot be told from
+ * a newcomer, and the line must not ask a veteran to take a tour — the
+ * profile and preferences steps still read from their own facts.
  */
 export function setupSteps(facts: SetupFacts): SetupStep[] {
-  const veteran = facts.finishedMatchCount > 1;
+  const toursSettled =
+    facts.finishedMatchCount === null || facts.finishedMatchCount > 1;
   return [
     {
       key: "sampleTour",
       label: "See the sample report",
       href: "/dashboard/matches/sample?tour=1",
       link: "Open sample",
-      done: facts.sampleTourDoneAt !== null || veteran,
+      done: facts.sampleTourDoneAt !== null || toursSettled,
     },
     {
       key: "firstReportTour",
       label: "Read your first report",
       href: "/dashboard/matches",
       link: "Open matches",
-      done: facts.firstReportTourDoneAt !== null || veteran,
+      done: facts.firstReportTourDoneAt !== null || toursSettled,
     },
     {
       key: "playingProfile",

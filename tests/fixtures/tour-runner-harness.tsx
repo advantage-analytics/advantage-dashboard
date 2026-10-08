@@ -24,6 +24,14 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
  *                                              as in the real rail — and the
  *                                              view each switches to
  *   ?reject=1                                  make the action mock reject
+ *   ?viewer=<id>                               whose tour it is (default
+ *                                              `viewer-1`): keys the
+ *                                              this-session guard
+ *   ?requested=1                               the page's `?tour=1`: open
+ *                                              even if seen this session
+ *   ?tab=<view>                                the view the report opens on,
+ *                                              read by the provider as in the
+ *                                              app
  *
  * The address-bar mock reads `window.location` at render time and nothing
  * re-renders on `pushState`, so the harness patches `pushState` to bump a
@@ -35,6 +43,8 @@ const TARGETS = (params.get("targets") ?? "scoreboard,insight,head-to-head")
   .split(",")
   .filter(Boolean);
 const TABS = params.get("tabs") === "1";
+const VIEWER = params.get("viewer") ?? "viewer-1";
+const REQUESTED = params.get("requested") === "1";
 window.__markTourDoneRejects = params.get("reject") === "1";
 window.__markTourDoneCalls = [];
 
@@ -133,7 +143,15 @@ function Harness() {
       >
         Remount runner
       </button>
-      {mounted && <TourRunner key={runnerKey} tour="sample" start />}
+      {mounted && (
+        <TourRunner
+          key={runnerKey}
+          tour="sample"
+          viewerId={VIEWER}
+          start
+          requested={REQUESTED}
+        />
+      )}
     </MatchReportProvider>
   );
 }

@@ -601,6 +601,7 @@ export async function loadMatchDetail(
   match.eventId = eventId;
   match.uploadedBy = uploadedBy;
   match.createdBy = dbRow.created_by;
+  match.programId = dbRow.program_id;
   if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
     match.durationSec = windowSeconds;
     match.duration = formatMatchDuration(windowSeconds * 1000);

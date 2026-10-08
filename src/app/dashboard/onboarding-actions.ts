@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import type { TourId } from "@/lib/onboarding/tours";
+import { TOUR_COLUMN, type TourId } from "@/lib/onboarding/tours";
 
 /**
  * Record that the signed-in player has finished (or skipped) a first-run
@@ -11,24 +11,28 @@ import type { TourId } from "@/lib/onboarding/tours";
  * Writes with the cookie client, so `users`' own-row ALL policy
  * (`auth.uid() = id`) and the column-scoped UPDATE grant
  * (`20261007061209_users_onboarding_tours_column_grants.sql`) are what admit
- * the write; the id comes from the session, never from the caller. The tour id is mapped to its column
- * through `TOUR_COLUMN` below — the input is never interpolated into SQL.
+ * the write; the id comes from the session, never from the caller. The tour
+ * id is mapped to its column through `TOUR_COLUMN` (`lib/onboarding/tours.ts`,
+ * shared with `getTourDoneAt`) — the input is never interpolated into SQL.
+ * The update selects the row back, as `finishOnboarding` does: an update
+ * that matched nothing (RLS hid the row, or no `users` row exists) is an
+ * error, never a silent success that offers the tour again next session.
  *
  * Never throws: the runner closes the tour whatever comes back, and a
  * rejected promise there would surface as an unhandled rejection for a write
  * that only decides whether the tour is offered again next session.
  */
 
-const TOUR_COLUMN = {
-  sample: "sample_tour_done_at",
-  "first-report": "first_report_tour_done_at",
-} as const satisfies Record<TourId, string>;
-
 export interface MarkTourDoneResult {
   /** The sentence a client could show; `null` on success. */
   error: string | null;
   /** The slug a client branches on, present only beside an `error`. */
-  code?: "unknown_tour" | "unauthenticated" | "write_failed" | "unexpected";
+  code?:
+    | "unknown_tour"
+    | "unauthenticated"
+    | "write_failed"
+    | "no_row"
+    | "unexpected";
 }
 
 export async function markTourDone(tour: TourId): Promise<MarkTourDoneResult> {
@@ -54,14 +58,21 @@ export async function markTourDone(tour: TourId): Promise<MarkTourDoneResult> {
       };
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("users")
       .update({ [column]: new Date().toISOString() })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .select("id");
     if (error) {
       return {
         error: "Could not save that the tour was seen.",
         code: "write_failed",
+      };
+    }
+    if (!data?.length) {
+      return {
+        error: "Could not save that the tour was seen.",
+        code: "no_row",
       };
     }
     return { error: null };

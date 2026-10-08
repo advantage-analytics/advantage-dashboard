@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 
-import { createClient } from "@/lib/supabase/server";
+import { getTourDoneAt } from "@/lib/data/tour-done-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
@@ -80,9 +80,11 @@ import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
  * is null) — and only in a personal workspace. A team workspace reaching the
  * URL renders the same read-only report with no tour: no entry point links a
  * team here, and the tour's "you" is a solo player's. A failed read of the
- * column is treated as "unknown", not as "never seen": only `?tour=1` opens
- * it then, so a transient error cannot push the tour at someone who already
- * dismissed it. The report is the thing; the tour is a courtesy over it.
+ * column (`getTourDoneAt`) is "unknown", not "never seen": only `?tour=1`
+ * opens it then, so a transient error cannot push the tour at someone who
+ * already dismissed it — and `?tour=1` is passed on as `requested`, so the
+ * runner's own this-session guard yields to it too. The report is the thing;
+ * the tour is a courtesy over it.
  *
  * `robots: noindex` — a signed-in page carrying a fixture, not content.
  */
@@ -113,29 +115,6 @@ const SAMPLE_PLAYBACK_ENDPOINT = "/api/sample-match/video";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-/**
- * `users.sample_tour_done_at` for the viewer, through the cookie client (the
- * row's own-row RLS). `undefined` is "could not read" — distinct from `null`,
- * "never finished" — and the caller treats it as not knowing.
- */
-async function readSampleTourDoneAt(
-  viewerId: string,
-): Promise<string | null | undefined> {
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("users")
-      .select("sample_tour_done_at")
-      .eq("id", viewerId)
-      .maybeSingle();
-    if (error) throw error;
-    return (data?.sample_tour_done_at as string | null | undefined) ?? null;
-  } catch (cause) {
-    console.error("[sample tour] seen-state read failed", cause);
-    return undefined;
-  }
 }
 
 export default async function SampleMatchPage({ searchParams }: PageProps) {
@@ -174,7 +153,7 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
   if (activeWorkspace?.kind === "personal" && viewerId) {
     const sampleTourDoneAt = tourAsked
       ? null
-      : await readSampleTourDoneAt(viewerId);
+      : await getTourDoneAt(viewerId, "sample");
     startTour = tourAsked || sampleTourDoneAt === null;
   }
 
@@ -264,7 +243,14 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
               {/* After the frame, inside the provider: the runner switches
                   views through `useMatchReport()` and anchors on the
                   `[data-tour]` targets the report above has rendered. */}
-              <TourRunner tour="sample" start={startTour} />
+              {viewerId && (
+                <TourRunner
+                  tour="sample"
+                  viewerId={viewerId}
+                  start={startTour}
+                  requested={tourAsked}
+                />
+              )}
             </MatchReportProvider>
           </MatchFiltersProvider>
         </Suspense>
