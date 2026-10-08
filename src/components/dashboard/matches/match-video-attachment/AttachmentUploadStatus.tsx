@@ -121,7 +121,9 @@ function stepsFor(
         {
           key: "trim",
           state: "now",
-          label: "Trimming video",
+          label: save.converting
+            ? "Converting video to 1080p"
+            : "Trimming video",
           value:
             save.percent === null ? undefined : `${Math.floor(save.percent)}%`,
         },

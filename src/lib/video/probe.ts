@@ -10,7 +10,10 @@
  * for analysis must never take that path.
  */
 
-import { readAverageFrameRate } from "@/lib/video/container-frame-rate";
+import {
+  readAverageFrameRate,
+  readContainerVideoFormat,
+} from "@/lib/video/container-frame-rate";
 
 /** Metadata read from a local video file. */
 export interface VideoProbe {
@@ -31,6 +34,17 @@ export interface VideoProbe {
    * into this field beyond "the container's own average, if known".
    */
   averageFps?: number | null;
+  /**
+   * The container's name for the video codec ("avc" is H.264), or null/absent
+   * when it could not be read. With `width`/`height` it decides whether the
+   * file is re-encoded before upload (`src/lib/match-video/playback-format.ts`).
+   */
+  videoCodec?: string | null;
+  /**
+   * Whether this browser can do that re-encode. Only meaningful when the file
+   * needs one; null/absent when the container could not be read.
+   */
+  canConvert?: boolean | null;
   mimeType: string;
   sizeBytes: number;
 }
@@ -187,6 +201,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
   // never rejects (it resolves null on any failure or timeout), so no .catch
   // is needed here.
   const averageFpsPromise = readAverageFrameRate(file);
+  const formatPromise = readContainerVideoFormat(file);
   const objectUrl = URL.createObjectURL(file);
   const video = document.createElement("video") as FrameCallbackVideo;
 
@@ -236,6 +251,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
 
     const fps = await measureFps(video);
     const averageFps = await averageFpsPromise;
+    const format = await formatPromise;
 
     return {
       width,
@@ -243,6 +259,8 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
       durationSeconds,
       fps,
       averageFps,
+      videoCodec: format?.videoCodec ?? null,
+      canConvert: format?.canConvert ?? null,
       mimeType: file.type,
       sizeBytes: file.size,
     };

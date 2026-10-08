@@ -148,6 +148,7 @@ test.describe("the player's film", () => {
     readout?: Readout;
     onTime?: (videoTime: number) => void;
     initialReady?: boolean;
+    initialFailure?: "format" | "link" | null;
   };
 
   function load() {
@@ -275,6 +276,22 @@ test.describe("the player's film", () => {
     expect(live.slice(0, live.indexOf(">") + 1)).not.toContain("inert");
   });
 
+  test("a media error says which thing broke: the link, or the file's format", () => {
+    const link = render({ initialFailure: "link" });
+    expect(link).toContain('data-testid="film-reload-panel"');
+    expect(text(link)).toContain("The film stopped loading");
+    expect(text(link)).toContain("Reload");
+
+    // A good link the browser still refused: its own words, and Reload kept,
+    // because a storage failure at load raises the same error code.
+    const format = render({ initialFailure: "format" });
+    expect(format).toContain('data-testid="film-format-panel"');
+    expect(format).not.toContain('data-testid="film-reload-panel"');
+    expect(text(format)).toContain("This browser can't play this video");
+    expect(text(format)).toContain("If reloading doesn't help");
+    expect(text(format)).toContain("Reload");
+  });
+
   test("the title row leaves out what a point lacks, and says so in dead time", () => {
     const { nowPlayingReadout, labelScores } = load();
     const list = points();
@@ -396,4 +413,45 @@ test("the transport's two new props default to the room's bar", () => {
   expect(dock).not.toContain("Exit fullscreen");
   expect(dock).not.toContain("More — not available yet");
   expect(dock).toContain('inert=""');
+});
+
+test.describe("why a signed film failed", () => {
+  const { playbackFailure, signedUrlExpiry } = createLoader().load(
+    "src/components/dashboard/matches/match-detail/film/playback-failure.ts",
+  ) as typeof import("@/components/dashboard/matches/match-detail/film/playback-failure");
+
+  const EXPIRY = Date.parse("2026-10-08T20:00:00Z");
+  const URL_GOOD =
+    "https://acct.blob.core.windows.net/advantage-videos/videos/u/m/original.mp4?sv=2025-11-05&se=2026-10-08T20%3A00%3A00Z&sr=b&sp=r&sig=x";
+
+  test("the link's own expiry is read off the URL", () => {
+    expect(signedUrlExpiry(URL_GOOD)).toBe(EXPIRY);
+    expect(signedUrlExpiry("https://example.test/film.mp4")).toBeNull();
+    expect(signedUrlExpiry("not a url")).toBeNull();
+  });
+
+  test("a decode-shaped error on a live link is the file's format", () => {
+    for (const code of [3, 4]) {
+      expect(playbackFailure({ code, url: URL_GOOD, now: EXPIRY - 1 })).toBe(
+        "format",
+      );
+    }
+  });
+
+  test("anything else is still the link", () => {
+    // The same codes once the link has run out: a 403 reads as "not supported".
+    expect(playbackFailure({ code: 4, url: URL_GOOD, now: EXPIRY })).toBe(
+      "link",
+    );
+    // Aborted, network, or no error object at all.
+    for (const code of [1, 2, null, undefined]) {
+      expect(playbackFailure({ code, url: URL_GOOD, now: EXPIRY - 1 })).toBe(
+        "link",
+      );
+    }
+    // An expiry that cannot be read keeps the old answer.
+    expect(
+      playbackFailure({ code: 4, url: "https://example.test/f.mp4", now: 0 }),
+    ).toBe("link");
+  });
 });
