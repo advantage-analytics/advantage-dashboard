@@ -17,8 +17,11 @@ import type { EmailMessage } from "../send";
  * into an email per coach.
  *
  * It must say what stayed behind as plainly as what went. A coach reading
- * "left" worries about the match history; the profile and its matches are
- * still on the roster, coach-managed, and a fresh invitation can hand it back.
+ * "left" worries about the match history. For a PLAYER the profile and its
+ * matches are still on the roster, coach-managed, and a fresh invitation can
+ * hand it back. For a coach or staff member who had added themselves as a
+ * player, `leaveProgram` archived that profile as they went: it is off the
+ * roster, its matches stay, and Add player offers to restore it.
  */
 export interface MemberLeftOwnerInput {
   to: string;
