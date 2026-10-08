@@ -37,6 +37,13 @@ node --no-warnings scripts/eyes-on/capture.mjs --out "$OUT" /dashboard /dashboar
 (`--no-warnings` silences Node's note about importing a `.ts` loader from
 an `.mjs` script; it is not an error.)
 
+A path may carry clicks — `"/dashboard/team/roster::Invite::Join link"` loads
+the page, presses the button or tab with each exact name in turn, and captures
+the screen after the last. Use it when the intent is behind a dialog, popover
+or tab that no URL opens, rather than reporting it not covered. Name only
+controls that open or switch something; never one that sends, saves, deletes
+or confirms.
+
 `$OUT` is a scratch directory the orchestrator names. The script starts (or
 attaches to) a local dev server, signs in as the verifier account, and writes
 one full-page PNG per path plus `report.json` — final URL, HTTP status,

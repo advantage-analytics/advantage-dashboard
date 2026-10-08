@@ -8,6 +8,13 @@
 //
 //   node scripts/eyes-on/capture.mjs --out <dir> /dashboard /dashboard/matches …
 //
+// A path may carry clicks: "/dashboard/team/roster::Invite::Join link" loads
+// the page, then presses the button or tab named "Invite", then "Join link"
+// (exact accessible names, in order), and screenshots what is on screen after
+// the last one. This is how a dialog, popover or tab that no URL opens gets
+// looked at. Name only controls that OPEN or SWITCH something — never one that
+// sends, saves, deletes or confirms; the account is real and so is its data.
+//
 // Environment (loaded from the checkout's .env.local via scripts/lib/env.ts —
 // never pass the values on a command line, and never print them):
 //   EYES_ON_EMAIL / EYES_ON_PASSWORD   the verifier account. Unset → exit 2.
@@ -66,6 +73,7 @@ for (let i = 0; i < argv.length; i++) {
   } else if (a.startsWith("--out=")) {
     out = a.slice("--out=".length);
   } else if (a.startsWith("/")) {
+    // "<path>::<click>::<click>" — see the header.
     paths.push(a);
   } else {
     usage(`unknown argument: ${a} (paths start with "/")`);
@@ -361,12 +369,14 @@ async function main() {
   }
 
   // ── pages ──
-  for (const path of paths) {
+  for (const spec of paths) {
+    const [path, ...clicks] = spec.split("::");
     const entry = {
       path,
+      clicks,
       finalUrl: "",
       status: null,
-      screenshot: `${slugOf(path)}.png`,
+      screenshot: `${slugOf(spec)}.png`,
       title: "",
       consoleErrors: [],
       failedRequests: [],
@@ -413,6 +423,14 @@ async function main() {
           ),
         )
         .catch(() => []);
+      for (const label of clicks) {
+        const control = p
+          .getByRole("button", { name: label, exact: true })
+          .or(p.getByRole("tab", { name: label, exact: true }))
+          .first();
+        await control.click({ timeout: SETTLE_TIMEOUT });
+        await settle(p);
+      }
       await p.screenshot({ path: shotPath, fullPage: true });
     } catch (e) {
       entry.note = `error: ${String(e).slice(0, 300)}`;
