@@ -242,6 +242,7 @@ test.describe("resolveJoinState — invitation tokens", () => {
       kind: "ready",
       programName: "Lakeside",
       programOrgType: "club",
+      programPilotEligible: false,
       role: "player",
       email: INVITED,
       inviterName: "Elena Vasquez",
@@ -287,6 +288,7 @@ test.describe("resolveJoinState — invitation tokens", () => {
       kind: "sign_up",
       programName: "your program",
       programOrgType: "college",
+      programPilotEligible: false,
       role: "player",
       email: INVITED,
       inviterName: null,
@@ -344,6 +346,7 @@ test.describe("resolveJoinState — join links", () => {
       kind: "link_sign_up",
       programName: programDisplayName("Lakeside", "womens"),
       programOrgType: "club",
+      programPilotEligible: false,
       mode: "approve",
     });
   });
@@ -387,6 +390,7 @@ test.describe("resolveJoinState — join links", () => {
       kind: "link_ready",
       programName: "Northside Club",
       programOrgType: "club",
+      programPilotEligible: false,
       mode: "open",
       seatsFree: false,
       inviterName: "Sam Coach",
@@ -449,6 +453,27 @@ test.describe("resolveJoinState — join links", () => {
     expect(reads.map((r) => r.table)).not.toContain("program_requests");
   });
 
+  test("a pilot-eligible program's link carries it, read by token with the service role", async () => {
+    const { resolve, reads } = load({
+      invite: null,
+      user: null,
+      preview: previewRow({}),
+      link: { program_id: PROGRAM_ID },
+      program: { pilot_eligible: true },
+    });
+    expect(await resolve(TOKEN)).toMatchObject({
+      kind: "link_sign_up",
+      programPilotEligible: true,
+    });
+    const linkRead = reads.find((r) => r.table === "program_join_links");
+    expect(linkRead?.filters).toEqual([
+      ["eq", "token", TOKEN],
+      ["is", "revoked_at", null],
+    ]);
+    const programRead = reads.filter((r) => r.table === "programs").pop();
+    expect(programRead?.filters).toEqual([["eq", "id", PROGRAM_ID]]);
+  });
+
   test("open mode, signed in → link_ready carrying rosterMatchName from the preview", async () => {
     const { resolve } = load({
       invite: null,
@@ -462,6 +487,7 @@ test.describe("resolveJoinState — join links", () => {
       kind: "link_ready",
       programName: "Northside Club",
       programOrgType: "club",
+      programPilotEligible: false,
       mode: "open",
       seatsFree: true,
       inviterName: "Sam Coach",
@@ -484,6 +510,7 @@ test.describe("resolveJoinState — join links", () => {
       kind: "link_ready",
       programName: "your program",
       programOrgType: "college",
+      programPilotEligible: false,
       mode: "open",
       seatsFree: true,
       inviterName: null,

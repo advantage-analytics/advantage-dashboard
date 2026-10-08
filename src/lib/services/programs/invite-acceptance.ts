@@ -112,6 +112,8 @@ export type JoinState =
       kind: "link_ready";
       programName: string;
       programOrgType: ProgramOrgType;
+      /** `programs.pilot_eligible` — see `InviteRecord.programPilotEligible`. */
+      programPilotEligible: boolean;
       mode: JoinLinkMode;
       seatsFree: boolean;
       inviterName: InviterName;
@@ -127,6 +129,7 @@ export type JoinState =
       kind: "link_sign_up";
       programName: string;
       programOrgType: ProgramOrgType;
+      programPilotEligible: boolean;
       mode: JoinLinkMode;
     }
   /** Approve mode, and this address already has an open request in the queue. */
@@ -362,9 +365,35 @@ function ilikeLiteral(value: string): string {
  * the row comes back but yes or no.
  */
 async function hasOpenJoinRequest(
-  token: string,
+  programId: string,
   email: string,
 ): Promise<boolean> {
+  const admin = createAdminClient();
+
+  const { data } = await admin
+    .from("program_requests")
+    .select("id")
+    .eq("kind", "invite_request")
+    .eq("program_id", programId)
+    .eq("status", "open")
+    .ilike("email", ilikeLiteral(email))
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+/**
+ * The program behind a live join link, as much as the server needs and the
+ * preview deliberately does not return: its id (for the open-request lookup)
+ * and `pilot_eligible` (so the quota line on the join screen promises the
+ * allowance `quotaTierFor()` will enforce — the same reason `InviteRecord`
+ * carries it). Service role, keyed on the token the caller already holds;
+ * neither value is sent to the browser except as the hours figure it implies.
+ */
+async function loadJoinLinkProgram(
+  token: string,
+): Promise<{ programId: string; pilotEligible: boolean } | null> {
   const admin = createAdminClient();
 
   const { data: link } = await admin
@@ -373,19 +402,16 @@ async function hasOpenJoinRequest(
     .eq("token", token)
     .is("revoked_at", null)
     .maybeSingle();
-  if (!link) return false;
+  if (!link) return null;
 
-  const { data } = await admin
-    .from("program_requests")
-    .select("id")
-    .eq("kind", "invite_request")
-    .eq("program_id", link.program_id as string)
-    .eq("status", "open")
-    .ilike("email", ilikeLiteral(email))
-    .limit(1)
+  const programId = link.program_id as string;
+  const { data: program } = await admin
+    .from("programs")
+    .select("pilot_eligible")
+    .eq("id", programId)
     .maybeSingle();
 
-  return Boolean(data);
+  return { programId, pilotEligible: program?.pilot_eligible === true };
 }
 
 /**
@@ -405,13 +431,18 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
     {
       data: { user },
     },
+    linkProgram,
   ] = await Promise.all([
     loadJoinLinkPreview(token, supabase),
     supabase.auth.getUser(),
+    loadJoinLinkProgram(token.trim()),
   ]);
   if (!preview) return { kind: "not_found" };
 
   const { programName, programOrgType, mode } = preview;
+  // False when the row vanished between the two reads: the lower allowance is
+  // the honest promise, and the accept RPC will answer `not_found` anyway.
+  const programPilotEligible = linkProgram?.pilotEligible ?? false;
 
   // Full is decided before sign-up, so nobody is asked to create an account
   // only to be refused on the next click. A roster row already carrying the
@@ -423,13 +454,22 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
     return { kind: "link_full", programName, signedIn: user !== null };
   }
 
-  if (!user) return { kind: "link_sign_up", programName, programOrgType, mode };
+  if (!user) {
+    return {
+      kind: "link_sign_up",
+      programName,
+      programOrgType,
+      programPilotEligible,
+      mode,
+    };
+  }
 
   const email = (user.email ?? "").trim().toLowerCase();
   if (
     mode === "approve" &&
     email &&
-    (await hasOpenJoinRequest(token.trim(), email))
+    linkProgram &&
+    (await hasOpenJoinRequest(linkProgram.programId, email))
   ) {
     return { kind: "link_requested", programName };
   }
@@ -438,6 +478,7 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
     kind: "link_ready",
     programName,
     programOrgType,
+    programPilotEligible,
     mode,
     seatsFree: preview.seatsFree,
     inviterName: preview.inviterName,
