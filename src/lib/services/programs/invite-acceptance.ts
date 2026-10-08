@@ -415,6 +415,26 @@ async function loadJoinLinkProgram(
 }
 
 /**
+ * Is this login already a member of the program? Service role because the
+ * program id came off the link row rather than from anything the viewer was
+ * handed, and keyed on the session's own id — it answers yes or no about the
+ * caller and nobody else.
+ */
+async function isProgramMember(
+  programId: string,
+  userId: string,
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("program_members")
+    .select("user_id")
+    .eq("program_id", programId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/**
  * The join-link half of `resolveJoinState`, reached only when no invitation
  * carries the token.
  *
@@ -431,13 +451,15 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
     {
       data: { user },
     },
-    linkProgram,
   ] = await Promise.all([
     loadJoinLinkPreview(token, supabase),
     supabase.auth.getUser(),
-    loadJoinLinkProgram(token.trim()),
   ]);
   if (!preview) return { kind: "not_found" };
+
+  // After the preview, not beside it: a junk token (anyone can request
+  // `/join/<anything>`) stops above and never costs a service-role read.
+  const linkProgram = await loadJoinLinkProgram(token.trim());
 
   const { programName, programOrgType, mode } = preview;
   // False when the row vanished between the two reads: the lower allowance is
@@ -450,8 +472,18 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
   // refuses that claim for seats — so a matched player is not told "full";
   // signed out, `rosterMatchName` is always null and the full screen's
   // "sign in" exit is how a rostered player reaches that branch.
+  // Nor is somebody who is already ON the team: `accept_program_join_link`
+  // answers a member `ok` before it looks at seats, so a player re-opening
+  // the link from the group chat after the roster filled goes through to the
+  // one-click screen and on into the program, not to "ask a coach".
   if (!preview.seatsFree && !preview.rosterMatchName) {
-    return { kind: "link_full", programName, signedIn: user !== null };
+    const alreadyMember =
+      user !== null &&
+      linkProgram !== null &&
+      (await isProgramMember(linkProgram.programId, user.id));
+    if (!alreadyMember) {
+      return { kind: "link_full", programName, signedIn: user !== null };
+    }
   }
 
   if (!user) {

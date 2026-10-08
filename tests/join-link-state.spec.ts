@@ -38,6 +38,8 @@ interface Scenario {
   /** The live `program_join_links` row `hasOpenJoinRequest` reads. */
   link?: Row | null;
   openRequest?: boolean;
+  /** A `program_members` row for the session's user in the link's program. */
+  member?: boolean;
 }
 
 interface Read {
@@ -73,6 +75,11 @@ function load(scenario: Scenario) {
       case "program_requests":
         return {
           data: scenario.openRequest ? { id: "req-1" } : null,
+          error: null,
+        };
+      case "program_members":
+        return {
+          data: scenario.member ? { user_id: "member" } : null,
           error: null,
         };
       default:
@@ -375,6 +382,35 @@ test.describe("resolveJoinState — join links", () => {
       programName: "Northside Club",
       signedIn: true,
     });
+  });
+
+  test("signed in, full, but already a member → link_ready, not full", async () => {
+    // `accept_program_join_link` answers a member `ok` before it looks at
+    // seats, so the screen must not tell them to go and ask a coach.
+    const { resolve, reads } = load({
+      invite: null,
+      user: SIGNED_IN,
+      preview: previewRow({ seats_free: false }),
+      link: { program_id: PROGRAM_ID },
+      member: true,
+    });
+    expect(await resolve(TOKEN)).toMatchObject({ kind: "link_ready" });
+    const memberRead = reads.find((r) => r.table === "program_members");
+    expect(memberRead?.filters).toEqual([
+      ["eq", "program_id", PROGRAM_ID],
+      ["eq", "user_id", SIGNED_IN.id],
+    ]);
+  });
+
+  test("a junk token never costs a service-role link read", async () => {
+    const { resolve, reads } = load({
+      invite: null,
+      user: null,
+      preview: null,
+    });
+    expect(await resolve(TOKEN)).toEqual({ kind: "not_found" });
+    expect(reads.some((r) => r.table === "program_join_links")).toBe(false);
+    expect(reads.some((r) => r.table === "programs")).toBe(false);
   });
 
   test("signed in, full, but a roster row carries the address → link_ready, not full", async () => {

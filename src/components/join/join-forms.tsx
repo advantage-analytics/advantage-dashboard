@@ -456,32 +456,24 @@ export function JoinLinkSignUp({
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const approve = mode === "approve";
 
-  // Confirmations on (the deployed configuration): the account exists but
-  // cannot join until its address is proven. The mail's link comes back to
-  // this token signed in, where the page answers `link_ready`. The sentence
-  // is deliberately the same whether the address was new or already had an
-  // account — see `createAccountAndJoinByLink` for why this screen must not
-  // say which.
+  // The link is on its way. Whoever opens it is the mailbox owner; it comes
+  // back to this token signed in, where the page answers `link_ready`. One
+  // sentence for a new address and one that already has an account — both
+  // get a link — so nothing here says which (`createAccountAndJoinByLink`).
   if (sentTo) {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-body max-w-[58ch]" role="status">
-          Check your email. If{" "}
-          <span className="text-[var(--ink-900)]">{sentTo}</span> is new to
-          Advantage, a confirmation is on its way — open it and you&apos;ll land
-          back here to finish joining. If you already have an account, sign in
-          instead.
+          Check your email. We sent a link to{" "}
+          <span className="text-[var(--ink-900)]">{sentTo}</span> — open it and
+          you&apos;ll land back here to finish joining.
         </p>
         <ClaimActions>
-          <Link href={signInThenHref(joinHref(token))} className={CLAIM_BUTTON}>
-            Sign in
-          </Link>
           <Link href="/claim/exit" className={advButton("ghost")}>
             Close
           </Link>
@@ -498,13 +490,10 @@ export function JoinLinkSignUp({
         event.preventDefault();
         start(async () => {
           setError(null);
-          // A session at sign-up (confirmations off) ends in a redirect, so
-          // only a refusal or the confirmation note ever comes back.
           const result = await createAccountAndJoinByLink(token, {
             email,
             firstName,
             lastName,
-            password,
           });
           if (!result.ok) setError(result.error);
           else setSentTo(result.email);
@@ -513,8 +502,8 @@ export function JoinLinkSignUp({
     >
       <p className="text-body max-w-[58ch]">
         {approve
-          ? `Set up your account to ask to join ${programName}. Its coaches approve each person who joins by this link.`
-          : `Set up your account and you’ll join ${programName} as a player.`}{" "}
+          ? `Tell us who you are to ask to join ${programName}. Its coaches approve each person who joins by this link.`
+          : `Tell us who you are and you’ll join ${programName} as a player.`}{" "}
         Use the address your coach has for you, if you have one — it puts you on
         your own roster row.
       </p>
@@ -562,40 +551,23 @@ export function JoinLinkSignUp({
             />
           </div>
         </div>
-        <div>
-          <label className={CLAIM_LABEL} htmlFor="join-link-password">
-            Password
-          </label>
-          <input
-            id="join-link-password"
-            type="password"
-            autoComplete="new-password"
-            aria-describedby="join-link-password-rule"
-            className={CLAIM_FIELD}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <p
-            id="join-link-password-rule"
-            className="mt-1.5 text-[11px] leading-[16px] text-[var(--ink-500)]"
-          >
-            {PASSWORD_RULE}
-          </p>
-        </div>
       </div>
+
+      {/* No password here, on purpose: a link pasted into a group chat cannot
+          know whose address was typed, so the account's credential is never
+          chosen on this screen (see `createAccountAndJoinByLink`). */}
+      <p className="text-micro max-w-[58ch]">
+        We&apos;ll email you a link to finish — no password to choose.
+      </p>
 
       <Problem message={error} />
 
       <div className="border-t border-[var(--border-hairline)] pt-[18px]">
         <ClaimActions>
+          {/* The button says what pressing it does: it sends mail. The join
+              itself is one click on the screen that mail comes back to. */}
           <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
-            {pending
-              ? approve
-                ? "Sending…"
-                : "Joining…"
-              : approve
-                ? "Request to join"
-                : `Join ${programName}`}
+            {pending ? "Sending…" : "Email me a link"}
           </button>
           <NotNowLink href={notNowHref(joinHref(token))} />
           {/* Google lives on `/login`; `?next=` brings them back here holding
