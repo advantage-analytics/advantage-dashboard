@@ -130,7 +130,7 @@ export type JoinState =
   /** Approve mode, and this address already has an open request in the queue. */
   | { kind: "link_requested"; programName: string }
   /** Every seat is taken or reserved. Nothing to do here but tell them. */
-  | { kind: "link_full"; programName: string };
+  | { kind: "link_full"; programName: string; signedIn: boolean };
 
 export interface InviteRecord {
   id: string;
@@ -410,7 +410,7 @@ async function resolveJoinLinkState(token: string): Promise<JoinState> {
   // signed out, `rosterMatchName` is always null and the full screen's
   // "sign in" exit is how a rostered player reaches that branch.
   if (!preview.seatsFree && !preview.rosterMatchName) {
-    return { kind: "link_full", programName };
+    return { kind: "link_full", programName, signedIn: user !== null };
   }
 
   if (!user) return { kind: "link_sign_up", programName, programOrgType, mode };

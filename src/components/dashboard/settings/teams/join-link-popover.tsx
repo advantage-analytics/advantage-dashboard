@@ -179,7 +179,7 @@ function JoinLinkPanel({
 
   // Owner and coaches change the link; staff only hand it out. Players never
   // reach this panel (the Members card gates on staff), but are locked too.
-  const locked = role === "staff" || role === "player";
+  const locked = role !== "owner" && role !== "coach";
   const chosen: Rung = confirmingOff ? "off" : optimisticRung;
   const on = optimisticRung !== "off" && link !== null;
 

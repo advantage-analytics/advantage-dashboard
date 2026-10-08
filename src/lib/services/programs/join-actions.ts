@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateEmail, validatePassword } from "@/lib/auth/error-messages";
-import { requestOrigin } from "@/lib/request-origin";
+import { emailOrigin } from "@/lib/site-url";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import {
   expiredInviteNudgeEmail,
@@ -662,10 +662,14 @@ export async function createAccountAndJoinByLink(
       // `handle_new_user` reads `full_name` only — see `createAccountAndAccept`
       // for why nothing trust-bearing may ride in metadata.
       data: { full_name: fullName },
-      // The request's own origin, like every other `redirectTo` in the app
-      // (`sendClaimOtp`): Supabase honours allow-listed URLs only, so a dev
-      // worktree's port comes back to that worktree and nothing else does.
-      emailRedirectTo: `${await requestOrigin()}/confirm?next=${encodeURIComponent(joinHref(token))}`,
+      // `emailOrigin()`, NOT `requestOrigin()`. This mail goes to whatever
+      // address was typed — which on a link pasted into a group chat may be
+      // somebody else's — so its link must never be built from the caller's
+      // `host` headers. `sendClaimOtp` may use the request origin because it
+      // mails the requester's own address; this path cannot assume that.
+      // The cost is that a dev worktree confirms on the configured origin
+      // rather than its own port.
+      emailRedirectTo: `${emailOrigin()}/confirm?next=${encodeURIComponent(joinHref(token))}`,
     },
   });
 

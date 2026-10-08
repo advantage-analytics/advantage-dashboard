@@ -20,7 +20,6 @@ import {
   signInThenHref,
 } from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
-import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Join your program" };
 
@@ -270,7 +269,7 @@ export default async function JoinPage({
       );
 
     case "link_full": {
-      const signedIn = await isSignedIn();
+      const { signedIn } = state;
       return (
         <JoinPane
           width={440}
@@ -287,17 +286,4 @@ export default async function JoinPage({
       );
     }
   }
-}
-
-/**
- * Whether a session is open, for the one screen whose way out depends on it.
- * Read here rather than added to `JoinState` so the link states keep T2's
- * shape; `link_full` is rare enough that the second `getUser` costs nothing.
- */
-async function isSignedIn(): Promise<boolean> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user !== null;
 }

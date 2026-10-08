@@ -44,6 +44,7 @@ const SLOTS = [
   "join-link-rls-coach",
   "join-link-rls-staff",
   "join-link-rls-player",
+  "join-link-rls-removed",
 ];
 
 test.describe("program_join_links RLS (live)", () => {
@@ -54,6 +55,7 @@ test.describe("program_join_links RLS (live)", () => {
   let coach: Session; // program member, role coach
   let staff: Session; // program member, role staff
   let player: Session; // program member, role player
+  let removed: Session; // no membership; an archived roster row still claims their login
 
   let programId: string | null = null;
   // Same shape `generateToken()` mints: 32 CSPRNG bytes, base64url (43 chars).
@@ -71,7 +73,7 @@ test.describe("program_join_links RLS (live)", () => {
 
     await clearPoolLeftovers(admin, SLOTS);
 
-    [coach, staff, player] = await poolLogins(admin, SLOTS);
+    [coach, staff, player, removed] = await poolLogins(admin, SLOTS);
 
     const program = await admin
       .from("programs")
@@ -102,6 +104,23 @@ test.describe("program_join_links RLS (live)", () => {
       created_by: coach.userId,
     });
     if (link.error) throw new Error(`link: ${link.error.message}`);
+
+    // A player the coach removed: an ARCHIVED roster row still claimed by
+    // their login, and no membership. The link must not be their way back.
+    const removedUser = await admin.auth.admin.getUserById(removed.userId);
+    if (removedUser.error) {
+      throw new Error(`removed user: ${removedUser.error.message}`);
+    }
+    const gone = await admin.from("program_players").insert({
+      program_id: programId,
+      first_name: "Removed",
+      last_name: "Player",
+      email: removedUser.data.user.email,
+      claimed_by_user_id: removed.userId,
+      claimed_at: new Date().toISOString(),
+      archived_at: new Date().toISOString(),
+    });
+    if (gone.error) throw new Error(`removed player: ${gone.error.message}`);
   });
 
   test.afterAll(async () => {
@@ -112,6 +131,7 @@ test.describe("program_join_links RLS (live)", () => {
         .delete()
         .eq("program_id", programId);
       await admin.from("program_members").delete().eq("program_id", programId);
+      await admin.from("program_players").delete().eq("program_id", programId);
       await admin.from("programs").delete().eq("id", programId);
     }
     await clearPoolLeftovers(admin, SLOTS);
@@ -184,6 +204,42 @@ test.describe("program_join_links RLS (live)", () => {
       .maybeSingle();
     expect(error).toBeNull();
     expect(data).toBeNull();
+  });
+
+  test("staff cannot mint or reset the link either (20261007231013)", async () => {
+    // Minting replaces the live row AND sets its mode, so it carries the same
+    // owner/coach gate as the mode change — otherwise "reset" was a way for
+    // staff to drop a coach's approval requirement.
+    const refused = await staff.client.rpc("set_program_join_link", {
+      p_program_id: programId,
+      p_token: randomBytes(32).toString("base64url"),
+      p_mode: "open",
+    });
+    expect(refused.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const still = await coach.client
+      .from("program_join_links")
+      .select("token")
+      .eq("program_id", programId!)
+      .is("revoked_at", null)
+      .single();
+    expect(still.error).toBeNull();
+    expect(still.data?.token).toBe(token);
+  });
+
+  test("a removed player is refused by the link, not re-admitted", async () => {
+    const { data, error } = await removed.client
+      .rpc("accept_program_join_link", { p_token: token })
+      .maybeSingle();
+    expect(error).toBeNull();
+    expect((data as { status: string } | null)?.status).toBe("removed");
+
+    const membership = await admin
+      .from("program_members")
+      .select("user_id")
+      .eq("program_id", programId!)
+      .eq("user_id", removed.userId);
+    expect(membership.data).toEqual([]);
   });
 
   test("staff cannot change the link's mode; a coach can", async () => {

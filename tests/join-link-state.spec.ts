@@ -357,6 +357,7 @@ test.describe("resolveJoinState — join links", () => {
     expect(await resolve(TOKEN)).toEqual({
       kind: "link_full",
       programName: "Northside Club",
+      signedIn: false,
     });
   });
 
@@ -369,6 +370,7 @@ test.describe("resolveJoinState — join links", () => {
     expect(await resolve(TOKEN)).toEqual({
       kind: "link_full",
       programName: "Northside Club",
+      signedIn: true,
     });
   });
 

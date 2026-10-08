@@ -747,9 +747,10 @@ export async function setPlayersCanUpload(
  * can be shown again after a reload (the migration header says why). The
  * token is still minted here with `generateToken()`, never by the browser.
  *
- * Authority lives in SQL, like everything else in this file: any staff member
- * may mint or reset; owner and coaches change the mode or turn it off. The
- * RPCs say each refusal in words the popover shows.
+ * Authority lives in SQL, like everything else in this file: the owner and
+ * coaches mint, reset, change the mode and turn it off (20261007231013 gave
+ * minting the same gate as the other two); staff read and copy the live link.
+ * The RPCs say each refusal in words the popover shows.
  */
 export type JoinLinkResult =
   { ok: true; url: string } | { ok: false; error: string };
