@@ -243,7 +243,7 @@ ready).
 
 ## T18 · First-upload caption under "{who} at the start"
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/TrimStepContent.tsx, UploadWizardSteps.tsx, UploadWizardProvider.tsx, src/app/dashboard/matches/new/page.tsx (match-count read) — guess
 - **done when:**

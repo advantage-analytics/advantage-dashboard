@@ -54,6 +54,8 @@ export interface UploadWizardContextValue {
     scoreCheckVisible: boolean;
     /** "No, it was a one-set match" is in force — the notice's Undo line. */
     oneSetSettled: boolean;
+    /** The viewer has never created a match — the trim step's caption. */
+    firstUpload: boolean;
   };
   /** What the page itself adds on top of the hook's handlers. */
   actions: {
@@ -101,6 +103,8 @@ export interface UploadWizardProviderProps {
   initialProvider: ProviderId | null;
   preferredProvider: ProviderId | null;
   initialSubject: RosterSubject | null;
+  /** The entry page's count: the viewer has never created a match. */
+  firstUpload?: boolean;
   children: ReactNode;
 }
 
@@ -115,6 +119,7 @@ export function UploadWizardProvider({
   initialProvider,
   preferredProvider,
   initialSubject,
+  firstUpload = false,
   children,
 }: UploadWizardProviderProps) {
   const admin = useAdminWizardMode();
@@ -206,6 +211,7 @@ export function UploadWizardProvider({
       subjectFirstName,
       scoreCheckVisible: scoreCheck.visible,
       oneSetSettled: scoreCheck.oneSetSettled,
+      firstUpload,
     },
     actions: {
       continue: continueHandler,

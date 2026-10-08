@@ -86,6 +86,34 @@ async function rosterSubjectFor(
 }
 
 /**
+ * Whether the viewer has never created a match — the trim step's first-upload
+ * caption under "{who} at the start" keys off it.
+ *
+ * "Owns zero matches" means **no `matches` row with `created_by = viewer`, in
+ * any workspace**. The caption explains a question a player meets on their
+ * first ever upload, so a coach who has filed team matches has met it already
+ * and a personal-only scope would show it to them again. One `head: true`
+ * count through the cookie client, so RLS bounds it to rows the viewer may
+ * see anyway.
+ *
+ * Failure-safe by construction: an error, a missing count or a throw all read
+ * as `false` — the caption is a nicety, and a broken read must never cost the
+ * page its wizard.
+ */
+async function viewerHasNoMatches(viewerId: string): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { count, error } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("created_by", viewerId);
+    return !error && count === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The wizard, fresh — or resumed from a draft the Matches table offered
  * (`?draft=`).
  *
@@ -210,10 +238,13 @@ export default async function NewMatchPage({
   // Only a team workspace has a roster to name, and only there does the wizard
   // ask For at all — in a personal one the uploader IS the player, so a
   // `?player=` has nowhere to land.
-  const initialSubject =
+  // Independent of each other, so they overlap too.
+  const [initialSubject, firstUpload] = await Promise.all([
     player && workspace?.active.kind === "team"
-      ? await rosterSubjectFor(workspace.active.id, player)
-      : null;
+      ? rosterSubjectFor(workspace.active.id, player)
+      : null,
+    workspace ? viewerHasNoMatches(workspace.viewer.id) : false,
+  ]);
 
   return (
     <UploadMatchFlow
@@ -222,6 +253,7 @@ export default async function NewMatchPage({
       initialProvider={initialProvider}
       preferredProvider={preferredProvider}
       initialSubject={initialSubject}
+      firstUpload={firstUpload}
     />
   );
 }

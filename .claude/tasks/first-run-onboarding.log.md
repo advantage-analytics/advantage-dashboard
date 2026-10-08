@@ -139,3 +139,13 @@ is the runner's. Newest entries at the bottom.
 1. To resume: `git stash apply cbc4e8c3`, then either add a stub for `@/lib/data/finished-match-count-server` to `tests/home-streaming.spec.ts`'s module map (matching how its other data modules are stubbed) or make the call robust (`Promise.resolve().then(() => countFinishedMatchesFor(userId)).catch(() => null)`); re-run `npm run test -- home-streaming home-empty-loading onboarding-tours`; reset T17 to `todo`.
 2. Open author decision: the task note says veterans see "the same two-step line as today"; the shipped criterion gives them "2 of 4".
 3. The gate's summary prints only the last 40 failures, which hid this regression among the environmental ones; a per-file diff against a baseline failing set would catch it reliably.
+
+## T18 · First-upload caption under "{who} at the start" — done
+
+**gate:** mechanical — lint pass, typecheck pass, full suite run with a JSON reporter and every failure classified: 4376 passed / 380 skipped; all failures are the environmental browser set (missing Playwright Chromium headless shell 1200) except `upload-line-swap.spec.ts:402`, which also failed in T17's run before T18 existed and passes 25/25 in isolation three times with T18 applied — load-dependent flake, pre-existing. Implementer ran all 18 spec files touching the changed files under a temporary (removed) 1194 shim: identical results with and without the change (19 `trim-step-navigation` H.264-decode failures either way). completion — VERDICT: pass. pipeline-guardrails checklist (by hand): clean — Question options/values, null-typed answer, stale reset and payload untouched. widget-states: caption only, no loader/Suspense change.
+**changed:** `new/page.tsx` — local `viewerHasNoMatches(viewerId)` (`head: true` count on `matches` where `created_by = viewer`, any workspace; error → false), run in a `Promise.all` with `rosterSubjectFor`; `firstUpload` threaded `UploadMatchFlow` → `UploadWizardProvider` (`view.firstUpload`, default false) → `TrimStep` → `TrimStepContent` (default false). Caption "Top of frame means the far end, away from the camera, in the first frame of your selected window." renders in the camera-questions grid's second row under the top-player question when `firstUpload`; grid gap split into `gap-x-8 gap-y-2.5`.
+**follow-ups:**
+
+1. No spec pins the caption (true shows the exact sentence, false nothing) — a VM-render spec in the style of `upload-player-details` would work without a browser.
+2. The count includes analysing/failed matches — fine for "first ever upload"; switch to `countFinishedMatchesFor` if the product means "first finished match".
+3. `upload-line-swap.spec.ts:402` is flaky under full-suite load — worth a look independent of this branch.
