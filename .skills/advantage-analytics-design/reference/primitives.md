@@ -106,8 +106,10 @@ reads the two upload flows and fails on one.
 - **Grey for a wait or a fact** — nothing is wrong and nothing is the person's
   to fix: what an export includes, a team still being confirmed (the note sits
   under the source it's about, Continue stays off, and it ends with a
-  `mailto:` link to team@advantage-analytics.com), a video that would track
-  better at 60 fps. Glyph: `Info` in `--ink-400`.
+  `mailto:` link to team@advantage-analytics.com), the file step's "Nothing
+  is uploading yet". Glyph: `Info` in `--ink-400`. One grey strip per place: a
+  second fact about the same thing joins the row or line it qualifies (the
+  60 fps nudge sits in the requirement row's detail), never a second strip.
 - **Yellow for what must be answered or must not be missed** — a Warning
   question, "keep this tab open", a video accepted with a caution (a
   variable frame rate). Never stack a yellow strip under a grey one that

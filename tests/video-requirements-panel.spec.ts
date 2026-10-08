@@ -25,7 +25,11 @@ function text(html: string): string {
     .trim();
 }
 
-type Result = { status: "pass" | "warn"; label: string };
+type Result = {
+  status: "pass" | "warn";
+  label: string;
+  suggestion?: string;
+};
 
 function renderPanel(result?: Result): string {
   const loader = createLoader({
@@ -107,4 +111,17 @@ test("a video accepted with a caution reads as one, in the warning ink", () => {
   expect(out).toContain("Accepted · See the note above");
   expect(out).toContain("1080p · 29.95 fps");
   expect(html).toContain("var(--warning-text)");
+});
+
+test("a passing video's suggestion joins row 1 instead of taking a strip", () => {
+  const out = text(
+    renderPanel({
+      status: "pass",
+      label: "1080p · 30 fps",
+      suggestion: "60 fps gives noticeably better ball tracking",
+    }),
+  );
+  expect(out).toContain(
+    "This video meets it · 60 fps gives noticeably better ball tracking",
+  );
 });

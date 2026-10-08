@@ -34,7 +34,7 @@ export interface ValidationResult {
   /**
    * Things worth one quiet line that are neither a problem nor a risk — a
    * video that meets the floor but would track better at the recommended
-   * rate. Drawn grey; a warning is drawn yellow.
+   * rate. Shown quietly beside what it qualifies; a warning is drawn yellow.
    */
   notes?: string[];
   details?: {

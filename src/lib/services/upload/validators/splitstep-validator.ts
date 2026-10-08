@@ -265,9 +265,9 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     );
   } else if (fps < RECOMMENDED_VIDEO_FPS) {
     // A fact, not a caution: the file meets the floor and nothing is at risk.
-    // It rides in `notes` so the wizard draws it grey — as a warning it turned
-    // nearly every 30 fps upload yellow, which is how a colour stops meaning
-    // anything.
+    // It rides in `notes`, which the wizard folds into the requirement row's
+    // own line — as a warning it turned nearly every 30 fps upload yellow,
+    // which is how a colour stops meaning anything.
     notes.push(
       `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps gives noticeably better ball tracking.`,
     );

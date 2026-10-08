@@ -61,7 +61,7 @@ export interface FileStepContentProps {
   probe: VideoProbeSummary | null;
   /** Probe warnings — the file passed, with a caution. Drawn yellow. */
   warnings: string[];
-  /** Facts about the file that are not cautions. Drawn grey. */
+  /** Facts about the file that are not cautions. They join row 1's line. */
   notes?: string[];
   /** Probing a video, validating or reading an export. */
   busy: boolean;
@@ -368,10 +368,20 @@ function FileStepContentImpl({
   // What row 1 of the requirements reports once a video has passed the check.
   // Nothing for a refused file: the wizard holds no probe for one, and the red
   // strip under the drop zone already says what was wrong.
+  //
+  // A note ("Recorded at 30 fps. 60 fps gives…") rides in the row too, not in a
+  // strip of its own: its first sentence only restates the measured value the
+  // row already shows, so what is left is one clause, and a second grey strip
+  // under "Nothing is uploading yet" was two notices where one is the rule.
+  const suggestion = notes
+    .map((n) => n.slice(n.indexOf(". ") + 2).replace(/\.$/, ""))
+    .filter(Boolean)
+    .join(" · ");
   const videoResult =
     isVideo && Boolean(uploadedFile) && !busy && probe
       ? {
           status: warnings.length > 0 ? ("warn" as const) : ("pass" as const),
+          suggestion: suggestion || undefined,
           label: [
             formatResolution(probe.width, probe.height),
             formatProbeFps(probe),
@@ -597,17 +607,6 @@ function FileStepContentImpl({
               </span>
             </div>
           )}
-
-          {notes.map((n) => (
-            <div key={n} className={noteStripCls}>
-              <Info
-                className={`${noteIconCls} text-[var(--ink-400)]`}
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>{n}</span>
-            </div>
-          ))}
 
           {parsingState.parseWarnings.map((w) => (
             <div key={w} className={warningStripCls}>

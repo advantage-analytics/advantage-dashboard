@@ -78,6 +78,8 @@ function RowText({ title, detail }: { title: string; detail: string }) {
 export interface VideoRequirementResult {
   status: "pass" | "warn";
   label: string;
+  /** One clause on how a passing video could be better, e.g. the 60 fps nudge. */
+  suggestion?: string;
 }
 
 /** The measured value at the end of row 1, marked by how it did. */
@@ -121,7 +123,11 @@ export function VideoRequirements({
             <RowMark icon={Video} />
             <RowText
               title="1080p at 30 fps or higher"
-              detail={QUALITY_DETAIL[result?.status ?? "none"]}
+              detail={
+                result?.status === "pass" && result.suggestion
+                  ? `${QUALITY_DETAIL.pass} · ${result.suggestion}`
+                  : QUALITY_DETAIL[result?.status ?? "none"]
+              }
             />
             {result && <ResultReadout result={result} />}
           </div>
