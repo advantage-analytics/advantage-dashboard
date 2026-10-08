@@ -264,25 +264,24 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
       target: new StreamTarget(writable, { chunked: true }),
     });
 
-    const mode: PreparedMode =
-      decision.kind === "transcode" && sourceVideo ? "transcode" : "remux";
-    const how: Pick<ConversionOptions, "video" | "copy"> =
-      decision.kind === "transcode" && sourceVideo
-        ? {
-            video: transcodeVideoOptions(sourceVideo, decision.videoBitrate),
-            // Audio is still copied when MP4 can hold it. Shift 0 keeps the
-            // timeline exact either way: output t=0 is the selected start.
-            copy: { shiftTolerance: 0, boundaryPolicy: "expand" },
-          }
-        : {
-            // `expand` keeps every selected frame even when the nearest
-            // keyframe is a little earlier.
-            copy: {
-              mode: "forced",
-              shiftTolerance: 0,
-              boundaryPolicy: "expand",
-            },
-          };
+    const transcoding = decision.kind === "transcode" && sourceVideo;
+    const mode: PreparedMode = transcoding ? "transcode" : "remux";
+    const how: Pick<ConversionOptions, "video" | "copy"> = transcoding
+      ? {
+          video: transcodeVideoOptions(sourceVideo, decision.videoBitrate),
+          // Audio is still copied when MP4 can hold it. Shift 0 keeps the
+          // timeline exact either way: output t=0 is the selected start.
+          copy: { shiftTolerance: 0, boundaryPolicy: "expand" },
+        }
+      : {
+          // `expand` keeps every selected frame even when the nearest
+          // keyframe is a little earlier.
+          copy: {
+            mode: "forced",
+            shiftTolerance: 0,
+            boundaryPolicy: "expand",
+          },
+        };
 
     conversion = await Conversion.init({
       input,

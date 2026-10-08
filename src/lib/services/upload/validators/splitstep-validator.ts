@@ -295,12 +295,11 @@ export function conversionNotice(probe: VideoProbe): string | null {
   });
   if (!reason) return null;
 
-  const what =
-    reason === "codec"
-      ? "This video isn't H.264"
-      : reason === "resolution"
-        ? "This video is above 1080p"
-        : "This video is above 1080p and isn't H.264";
+  const what = {
+    codec: "This video isn't H.264",
+    resolution: "This video is above 1080p",
+    "codec-and-resolution": "This video is above 1080p and isn't H.264",
+  }[reason];
 
   if (probe.canConvert === false) {
     return `${what}, and this browser can't convert it. It will upload as recorded, but some browsers won't be able to play it back. For reliable playback, export it as 1080p H.264 (on iPhone: Settings › Camera › Formats › Most Compatible) and pick it again.`;

@@ -111,25 +111,23 @@ export function decideTrim(input: TrimInputs): TrimDecision {
     // The window as asked, even when it is the whole clip to within the
     // tolerance: callers place their own clocks from the start they requested
     // (the attachment flow's `marked − start`), so the file must begin there.
-    const from = start;
-    const to = end;
     // A very long match gives up bitrate before it gives up the upload.
     const ceiling =
-      (TRANSCODE_MAX_OUTPUT_BYTES * 8) / (to - from) -
+      (TRANSCODE_MAX_OUTPUT_BYTES * 8) / (end - start) -
       TRANSCODE_OVERHEAD_BITRATE;
     const videoBitrate = Math.floor(
       Math.min(transcodeVideoBitrate(input.frameRate ?? null), ceiling),
     );
     // The output's size follows the target bitrate, not the source's.
     const needed =
-      ((videoBitrate + TRANSCODE_OVERHEAD_BITRATE) / 8) * (to - from) * 1.05;
+      ((videoBitrate + TRANSCODE_OVERHEAD_BITRATE) / 8) * (end - start) * 1.05;
     if (input.quotaFreeBytes !== null && input.quotaFreeBytes < needed) {
       return { kind: "skip", reason: "no-quota" };
     }
     return {
       kind: "transcode",
-      startSeconds: from,
-      endSeconds: to,
+      startSeconds: start,
+      endSeconds: end,
       videoBitrate,
     };
   }
