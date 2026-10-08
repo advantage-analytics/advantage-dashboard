@@ -203,3 +203,22 @@ test("a very long match gives up bitrate so the re-encode still fits the upload"
     MAX_VIDEO_SIZE_BYTES,
   );
 });
+
+test("a browser that cannot re-encode still cuts a window, and says why a whole clip is not", () => {
+  const stuck = {
+    ...base,
+    normalise: "codec" as const,
+    frameRate: 60,
+    canTranscode: false,
+  };
+  // A trimmed window: the copy-only cut it has always had, not the whole file.
+  expect(decideTrim(stuck)).toEqual({
+    kind: "remux",
+    startSeconds: 600,
+    endSeconds: 3600,
+  });
+  expect(decideTrim({ ...stuck, startSeconds: 0, endSeconds: 5400 })).toEqual({
+    kind: "skip",
+    reason: "no-encoder",
+  });
+});

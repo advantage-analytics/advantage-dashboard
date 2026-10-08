@@ -294,6 +294,9 @@ export function conversionNotice(probe: VideoProbe): string | null {
     codedHeight: probe.height,
   });
   if (!reason) return null;
+  // The container could not be read here, so the worker will not read it
+  // either and nothing would be converted: promise nothing.
+  if (probe.canConvert == null) return null;
 
   const what = {
     codec: "This video isn't H.264",

@@ -282,13 +282,14 @@ test.describe("the player's film", () => {
     expect(text(link)).toContain("The film stopped loading");
     expect(text(link)).toContain("Reload");
 
-    // A good link the browser still refused: no Reload, which would only sign
-    // the same file again.
+    // A good link the browser still refused: its own words, and Reload kept,
+    // because a storage failure at load raises the same error code.
     const format = render({ initialFailure: "format" });
     expect(format).toContain('data-testid="film-format-panel"');
     expect(format).not.toContain('data-testid="film-reload-panel"');
     expect(text(format)).toContain("This browser can't play this video");
-    expect(format).not.toContain("<button");
+    expect(text(format)).toContain("If reloading doesn't help");
+    expect(text(format)).toContain("Reload");
   });
 
   test("the title row leaves out what a point lacks, and says so in dead time", () => {

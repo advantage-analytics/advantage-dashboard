@@ -18,13 +18,15 @@
  * Anything else (`normaliseReason()`; in practice a phone's 4K HEVC) has its
  * video re-encoded to 1080p H.264 through WebCodecs, at the source's own frame
  * rate and timestamps, with audio still copied when it can be. A browser that
- * cannot decode the source or encode H.264 reports "no-encoder" and the
- * original is uploaded, as with every other skip. See trim-plan.ts.
+ * cannot decode the source or encode H.264 falls back to the copy-only rules:
+ * a trimmed window is still cut, and a whole clip reports "no-encoder" and is
+ * uploaded as shot, as with every other skip. See trim-plan.ts.
  */
 
 import {
   ALL_FORMATS,
   BlobSource,
+  canEncodeVideo,
   Conversion,
   Input,
   Mp4OutputFormat,
@@ -58,8 +60,13 @@ function post(message: TrimWorkerResponse) {
 /** A second between key frames: every point start seeks to within one. */
 const TRANSCODE_KEY_FRAME_INTERVAL_SECONDS = 1;
 
+/** Packets averaged for the frame rate: ten seconds at 60 fps. */
+const FRAME_RATE_SAMPLE_PACKETS = 600;
+
 interface SourceVideo {
   normalise: NormaliseReason | null;
+  /** Whether this browser can decode it and encode 1080p H.264. */
+  canTranscode: boolean;
   frameRate: number | null;
   displayWidth: number;
   displayHeight: number;
@@ -83,14 +90,29 @@ async function readSourceVideo(input: Input): Promise<SourceVideo | null> {
       ]);
     const normalise = normaliseReason({ videoCodec, codedWidth, codedHeight });
     let frameRate: number | null = null;
+    let canTranscode = false;
     if (normalise) {
-      // Only walked when it will be used: it reads the whole packet index.
-      const { averagePacketRate } = await track.computePacketStats();
+      const [decodes, encodes] = await Promise.all([
+        track.canDecode(),
+        canEncodeVideo(PLAYBACK_SAFE_VIDEO_CODEC, {
+          width: 1920,
+          height: 1080,
+        }),
+      ]);
+      canTranscode = decodes && encodes;
+    }
+    if (normalise && canTranscode) {
+      // Only read when it will be used, and only a sample: without a limit
+      // this walks every packet, which for a container with no index (MKV,
+      // WebM) means reading the whole file before anything is written.
+      const { averagePacketRate } = await track.computePacketStats(
+        FRAME_RATE_SAMPLE_PACKETS,
+      );
       if (Number.isFinite(averagePacketRate) && averagePacketRate > 0) {
         frameRate = averagePacketRate;
       }
     }
-    return { normalise, frameRate, displayWidth, displayHeight };
+    return { normalise, canTranscode, frameRate, displayWidth, displayHeight };
   } catch {
     return null;
   }
@@ -201,6 +223,7 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
       quotaFreeBytes,
       normalise: sourceVideo?.normalise ?? null,
       frameRate: sourceVideo?.frameRate ?? null,
+      canTranscode: sourceVideo?.canTranscode,
     });
     if (decision.kind === "skip" || !root) {
       post({

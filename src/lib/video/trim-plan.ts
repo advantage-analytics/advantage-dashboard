@@ -96,6 +96,12 @@ export interface TrimInputs {
   normalise?: NormaliseReason | null;
   /** The source's average frame rate, when the container gives one. */
   frameRate?: number | null;
+  /**
+   * Whether this browser can decode the source and encode 1080p H.264. False
+   * sends a file that needs re-encoding down the copy-only rules instead, so
+   * a trimmed window is still cut rather than the whole recording uploaded.
+   */
+  canTranscode?: boolean;
 }
 
 export function decideTrim(input: TrimInputs): TrimDecision {
@@ -106,7 +112,11 @@ export function decideTrim(input: TrimInputs): TrimDecision {
     start <= WHOLE_CLIP_TOLERANCE_SECONDS &&
     end >= input.sourceDurationSeconds - WHOLE_CLIP_TOLERANCE_SECONDS;
 
-  if (input.normalise && end > start) {
+  if (input.normalise && end > start && input.canTranscode === false) {
+    // Nothing here can fix the format. A real cut is still worth making; the
+    // whole clip would be a byte-for-byte copy, so say why it goes up as shot.
+    if (wholeClip) return { kind: "skip", reason: "no-encoder" };
+  } else if (input.normalise && end > start) {
     if (!input.opfsAvailable) return { kind: "skip", reason: "no-opfs" };
     // The window as asked, even when it is the whole clip to within the
     // tolerance: callers place their own clocks from the start they requested

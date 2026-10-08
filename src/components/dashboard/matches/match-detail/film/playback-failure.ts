@@ -6,9 +6,12 @@
  * The element's own code cannot say on its own: `MEDIA_ERR_SRC_NOT_SUPPORTED`
  * is what a browser reports for a file it has no decoder for AND for a 403 on
  * a link that has run out. The link carries its own expiry (`se=`), so a
- * decode-shaped error on a link that is still good is the file — in practice
- * 4K HEVC from a phone, which a browser without that decoder refuses — and
- * reloading signs a fresh link to the same unplayable bytes.
+ * decode-shaped error on a link that is still good is most likely the file —
+ * in practice 4K HEVC from a phone, which a browser without that decoder
+ * refuses — and reloading signs a fresh link to the same unplayable bytes.
+ * "Most likely": a missing blob or a storage failure at load raises the same
+ * code, so the panel for `format` still offers Reload and says what it means
+ * if that does not help.
  *
  * Pure and JSX-free so both hosts and a spec can read it.
  */

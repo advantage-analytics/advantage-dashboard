@@ -431,9 +431,22 @@ test.describe("a file not every browser can play is converted, never refused", (
     ).toMatch(/^This video isn't H\.264, so/);
     expect(
       evaluateVideoProbe(
-        probe({ width: 3840, height: 2160, videoCodec: "avc" }),
+        probe({
+          width: 3840,
+          height: 2160,
+          videoCodec: "avc",
+          canConvert: true,
+        }),
       ).warnings?.[0],
     ).toMatch(/^This video is above 1080p, so/);
+  });
+
+  test("a container we could not read is promised nothing", () => {
+    // The worker reads the same container: unread here means unread there,
+    // and the file would go up as shot.
+    expect(
+      evaluateVideoProbe(probe({ width: 3840, height: 2160 })).warnings,
+    ).toBeUndefined();
   });
 
   test("a browser that cannot convert still uploads, and says what that costs", () => {

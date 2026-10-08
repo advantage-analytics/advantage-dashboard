@@ -647,8 +647,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       );
     }
 
-    // The link is still good, so the file is what this browser refused, and a
-    // reload would sign the same bytes again.
+    // The link is still good, so it is most likely the file this browser
+    // refused. Reload stays: a storage hiccup at load raises the same code.
     if (failed === "format") {
       return (
         <div
@@ -665,6 +665,13 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
           >
             {FILM_REFUSAL_COPY.unsupportedFormat.body}
           </span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className={advButton("primary", "md")}
+          >
+            Reload
+          </button>
         </div>
       );
     }
