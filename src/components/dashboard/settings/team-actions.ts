@@ -302,7 +302,8 @@ export type LeaveResult =
  * The caller leaves a program — any member but the owner.
  *
  * `leave_program` is the authority: it refuses the owner, un-claims the
- * caller's roster profile (so a fresh invitation can hand it back), clears the
+ * caller's roster profile (so a fresh invitation can hand it back — and, for a
+ * coach or staff member, this action archives that profile first), clears the
  * uploader columns that would otherwise keep the team's matches readable, and
  * drops the membership. The owner check here is the RPC's rule restated so the
  * form can say it in words: a program without an owner has nobody who can
@@ -329,6 +330,44 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
   }
 
   const supabase = await createClient();
+
+  // A coach or staff member who added themselves as a player takes that
+  // profile off the roster as they go. `leave_program` only un-claims a
+  // profile and leaves it live — right for a player, whose row the coach goes
+  // on managing, and wrong here: it would leave a roster row holding a seat,
+  // named after somebody no longer on the team. Archived FIRST, while they are
+  // still a member: the holder may always archive their own profile, and once
+  // they have left they may archive nothing. The matches stay on the profile,
+  // and a coach can restore it.
+  //
+  // Refused rather than skipped if the archive fails: nothing has happened
+  // yet, so "try again" is true, where leaving anyway would strand the row.
+  if (member.program.role !== "player") {
+    const { data: profile } = await supabase
+      .from("program_players")
+      .select("id")
+      .eq("program_id", programId)
+      .eq("claimed_by_user_id", member.viewer.id)
+      .is("archived_at", null)
+      .is("merged_into_id", null)
+      .maybeSingle();
+    if (profile?.id) {
+      const { error: archiveError } = await supabase.rpc(
+        "archive_program_player",
+        { p_player_id: profile.id },
+      );
+      if (archiveError) {
+        return {
+          ok: false,
+          error: toMessage(
+            archiveError,
+            "Couldn't take your player profile off the roster. Try again.",
+          ),
+        };
+      }
+    }
+  }
+
   const { data, error } = await supabase.rpc("leave_program", {
     p_program_id: programId,
   });
