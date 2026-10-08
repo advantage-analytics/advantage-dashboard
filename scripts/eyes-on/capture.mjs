@@ -79,6 +79,23 @@ for (let i = 0; i < argv.length; i++) {
     usage(`unknown argument: ${a} (paths start with "/")`);
   }
 }
+// The header's rule, enforced where it can be: a click whose name reads as an
+// action on real data is refused before a browser starts. It cannot catch
+// every such control (a dialog's own "Add player" shares the opener's name),
+// so the rule in the header still stands for whoever writes the path.
+const ACTS_ON_DATA =
+  /\b(send|save|delete|remove|revoke|confirm|submit|turn off|reset|sign out|leave|archive|approve|decline|accept|transfer|upgrade|pay)\b/i;
+for (const spec of paths) {
+  const refused = spec
+    .split("::")
+    .slice(1)
+    .find((c) => ACTS_ON_DATA.test(c));
+  if (refused) {
+    usage(
+      `refusing to press "${refused}": clicks may only open or switch something`,
+    );
+  }
+}
 if (!out) usage("--out <dir> is required");
 if (paths.length === 0) usage("give at least one path to capture");
 out = resolve(out);
