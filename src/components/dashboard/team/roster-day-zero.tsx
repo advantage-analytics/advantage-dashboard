@@ -17,6 +17,7 @@ import type {
   RosterMember,
   SeatUsage,
 } from "@/lib/data/team-roster-server";
+import type { TeamJoinLink } from "@/lib/data/team-settings-server";
 
 /**
  * Roster before the program has a player on it.
@@ -79,6 +80,8 @@ export interface RosterDayZeroButtons {
   playersCanUpload: boolean;
   /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
   former: FormerPlayer[];
+  /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
+  joinLink: TeamJoinLink | null;
 }
 
 export function RosterDayZero({

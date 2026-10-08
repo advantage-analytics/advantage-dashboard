@@ -15,11 +15,17 @@ import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
 import { useClaimInvite } from "./roster-claim-invite";
+import {
+  JoinLinkPopover,
+  type JoinLinkTriggerProps,
+} from "@/components/dashboard/settings/teams/join-link-popover";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type {
   FormerPlayer,
   RosterMember,
   SeatUsage,
 } from "@/lib/data/team-roster-server";
+import type { TeamJoinLink } from "@/lib/data/team-settings-server";
 
 /**
  * The coach's own three writes, which is what this dialog has always called.
@@ -35,6 +41,24 @@ const MEMBER_ACTIONS: AddPlayerActions = {
   invite: inviteMember,
   restore: restoreProgramPlayer,
 };
+
+/**
+ * The header's ghost **Invite**, drawn as `JoinLinkPopover`'s trigger so the
+ * join-link panel anchors to it.
+ *
+ * It still opens the Invite dialog, not the popover: Radix's trigger toggle
+ * reaches `RosterHeaderButtons` as `onOpenChange(true)`, which that component
+ * reads as "open Invite" (see the note at the mount). Radix hands this the
+ * click handler, the popover ARIA and a `ref` (a plain prop in React 19); all
+ * of them land on the one `<button>`.
+ */
+function InviteTrigger(props: JoinLinkTriggerProps) {
+  return (
+    <button type="button" {...props} className={advButton("ghost")}>
+      Invite
+    </button>
+  );
+}
 
 /**
  * `RosterHeaderButtons` before the page has the seat count its dialogs open
@@ -72,6 +96,7 @@ export function RosterHeaderButtons({
   roster,
   playersCanUpload,
   former,
+  joinLink,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
@@ -94,8 +119,17 @@ export function RosterHeaderButtons({
    * profile beside their old one.
    */
   former: FormerPlayer[];
+  /**
+   * The program's live join link, or null — `getRosterJoinLink`, the same
+   * `TeamJoinLink` Settings › Teams reads, so the popover opens on the rung
+   * that is really live.
+   */
+  joinLink: TeamJoinLink | null;
 }) {
+  const { active } = useWorkspace();
   const [inviting, setInviting] = useState(false);
+  /** The join-link popover, opened only by the Invite dialog's hand-off. */
+  const [linkOpen, setLinkOpen] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
   /**
    * What Add player should open holding.
@@ -142,13 +176,27 @@ export function RosterHeaderButtons({
           `Tb4c`: "ghost Invite beside primary Add player". It was `outline`,
           which the v3 readme rules out beside a primary on a grey page. */}
       <div className="flex shrink-0 items-center gap-2.5">
-        <button
-          type="button"
-          className={advButton("ghost")}
-          onClick={() => setInviting(true)}
-        >
-          Invite
-        </button>
+        {/* Invite IS the popover's trigger, so the join-link panel anchors
+            under it — but a click on it still opens the Invite dialog. The
+            popover is controlled, and the only way Radix asks to OPEN it is
+            the trigger's own toggle; that request is answered by opening the
+            dialog instead. The panel itself opens only from the dialog's
+            "Share a join link instead" (`onShareJoinLink` below). Pressing
+            Invite while the panel is open asks to close it, which it does. */}
+        <JoinLinkPopover
+          trigger={InviteTrigger}
+          open={linkOpen}
+          onOpenChange={(next) => {
+            if (next) setInviting(true);
+            else setLinkOpen(false);
+          }}
+          programId={active.id}
+          programName={active.name}
+          joinLink={joinLink}
+          role={active.role}
+          playersCanUpload={playersCanUpload}
+          seats={seats}
+        />
         <button
           type="button"
           className={advButton("primary")}
@@ -174,6 +222,11 @@ export function RosterHeaderButtons({
         openInviteEmails={openInviteEmails}
         playersCanUpload={playersCanUpload}
         onHandOffToAddPlayer={handOffToAddPlayer}
+        onShareJoinLink={() => {
+          setInviting(false);
+          claim.clear();
+          setLinkOpen(true);
+        }}
       />
 
       <AddPlayerDialog

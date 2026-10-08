@@ -8,8 +8,24 @@
  * re-renders the offer. So the flag has one name, one writer and one reader.
  *
  * A leaf on purpose: no imports, so client components can build a link
- * without dragging server code into their bundle.
+ * without dragging server code into their bundle. That is also why the
+ * ABSOLUTE join-link URL is not built here: it needs `siteUrl()`, which reads
+ * `VERCEL_*` variables a browser bundle does not have and would silently
+ * resolve to `localhost`. `joinLinkUrl()` in `lib/data/team-settings-server.ts`
+ * composes `siteUrl()` with `joinHref()` the way `matchShareUrl()` does, and
+ * every URL a client sees is handed down from the server already built.
  */
+
+/**
+ * Who a program's join link admits — `program_join_links.mode`.
+ *
+ *   open     anyone who opens it joins as a player at once
+ *   approve  opening it files a join request for staff to approve on the Roster
+ *
+ * Here rather than in the server modules so the popover and the `/join`
+ * screens can type their props without importing them.
+ */
+export type JoinLinkMode = "open" | "approve";
 
 /** The mailed link's page. */
 export function joinHref(token: string): string {

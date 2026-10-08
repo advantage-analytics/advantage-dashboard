@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
@@ -20,7 +20,9 @@ import {
 } from "@/components/join/join-terms";
 import {
   acceptInvite,
+  acceptJoinLink,
   createAccountAndAccept,
+  createAccountAndJoinByLink,
   requestFreshInvite,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
@@ -28,7 +30,9 @@ import {
   joinHref,
   notNowHref,
   signInThenHref,
+  type JoinLinkMode,
 } from "@/lib/services/programs/join-links";
+import type { InviterName } from "@/lib/services/programs/invite-acceptance";
 import { ROLE_NOUN, type JoinRole } from "@/lib/services/programs/join-role";
 import { PASSWORD_RULE } from "@/lib/auth/error-messages";
 
@@ -352,5 +356,282 @@ export function JoinWrongAccount({
         </button>
       </ClaimActions>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Join links — the reusable, un-addressed door (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Signed in, holding a live join link. One button.
+ *
+ * A form action rather than a click handler, so the join is a POST by
+ * construction: nothing the page renders on a GET can reach `acceptJoinLink`.
+ * On success the action redirects (into the program, or back here as
+ * `link_requested` in approve mode), so only a refusal ever comes back.
+ */
+export function JoinLinkReady({
+  token,
+  programName,
+  mode,
+  inviterName,
+  rosterMatchName,
+  programHours,
+  personalHours,
+}: {
+  token: string;
+  programName: string;
+  mode: JoinLinkMode;
+  inviterName: InviterName;
+  rosterMatchName: string | null;
+} & JoinTermsProps) {
+  const [result, submit, pending] = useActionState(
+    () => acceptJoinLink(token),
+    null,
+  );
+  const error = result && !result.ok ? result.error : null;
+  const approve = mode === "approve";
+
+  return (
+    <form action={submit} className="flex flex-col gap-4">
+      <p className="text-body max-w-[58ch]">
+        {approve
+          ? `${programName}’s coaches approve each person who joins by this link. You’ll join as a player once they do.`
+          : "You’ll join as a player."}{" "}
+        {inviterName
+          ? `${inviterName} shared this link.`
+          : "A coach shared this link."}
+        {rosterMatchName && (
+          <>
+            {" "}
+            Your coach already has you on the roster as{" "}
+            <span className="text-[var(--ink-900)]">{rosterMatchName}</span> —
+            your matches will be waiting.
+          </>
+        )}
+      </p>
+      <JoinSharingTerms />
+      <Problem message={error} />
+      <ClaimActions>
+        <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
+          {approve
+            ? pending
+              ? "Sending…"
+              : "Request to join"
+            : pending
+              ? "Joining…"
+              : `Join ${programName}`}
+        </button>
+        <NotNowLink href={notNowHref(joinHref(token))} />
+        <JoinQuotaFooter
+          programHours={programHours}
+          personalHours={personalHours}
+        />
+      </ClaimActions>
+    </form>
+  );
+}
+
+/**
+ * Nobody signed in, holding a live join link.
+ *
+ * Unlike `JoinSignUp` this one asks for the address: the link was pasted into
+ * a group chat, not mailed to anyone, so there is no address to read off it.
+ * That is also why the account is not confirmed on the spot — see
+ * `createAccountAndJoinByLink` — and why, in production, the form gives way to
+ * a "check your email" note instead of landing inside the program.
+ */
+export function JoinLinkSignUp({
+  token,
+  programName,
+  mode,
+  programHours,
+  personalHours,
+}: {
+  token: string;
+  programName: string;
+  mode: JoinLinkMode;
+} & JoinTermsProps) {
+  const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const approve = mode === "approve";
+
+  // The link is on its way. Whoever opens it is the mailbox owner; it comes
+  // back to this token signed in, where the page answers `link_ready`. One
+  // sentence for a new address and one that already has an account — both
+  // get a link — so nothing here says which (`createAccountAndJoinByLink`).
+  if (sentTo) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-body max-w-[58ch]" role="status">
+          Check your email. We sent a link to{" "}
+          <span className="text-[var(--ink-900)]">{sentTo}</span> — open it and
+          you&apos;ll land back here to finish joining.
+        </p>
+        <ClaimActions>
+          <Link href="/claim/exit" className={advButton("ghost")}>
+            Close
+          </Link>
+        </ClaimActions>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      noValidate
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        start(async () => {
+          setError(null);
+          const result = await createAccountAndJoinByLink(token, {
+            email,
+            firstName,
+            lastName,
+          });
+          if (!result.ok) setError(result.error);
+          else setSentTo(result.email);
+        });
+      }}
+    >
+      <p className="text-body max-w-[58ch]">
+        {approve
+          ? `Tell us who you are to ask to join ${programName}. Its coaches approve each person who joins by this link.`
+          : `Tell us who you are and you’ll join ${programName} as a player.`}{" "}
+        Use the address your coach has for you, if you have one — it puts you on
+        your own roster row.
+      </p>
+
+      <JoinSharingTerms />
+
+      <div className="flex max-w-[380px] flex-col gap-3.5">
+        <div>
+          <label className={CLAIM_LABEL} htmlFor="join-link-email">
+            Email
+          </label>
+          <input
+            id="join-link-email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@school.edu"
+            className={CLAIM_FIELD}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </div>
+        <div className="flex gap-3">
+          <div className="min-w-0 flex-1">
+            <label className={CLAIM_LABEL} htmlFor="join-link-first">
+              First name
+            </label>
+            <input
+              id="join-link-first"
+              autoComplete="given-name"
+              className={CLAIM_FIELD}
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <label className={CLAIM_LABEL} htmlFor="join-link-last">
+              Last name
+            </label>
+            <input
+              id="join-link-last"
+              autoComplete="family-name"
+              className={CLAIM_FIELD}
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* No password here, on purpose: a link pasted into a group chat cannot
+          know whose address was typed, so the account's credential is never
+          chosen on this screen (see `createAccountAndJoinByLink`). */}
+      <p className="text-micro max-w-[58ch]">
+        We&apos;ll email you a link to finish — no password to choose.
+      </p>
+
+      <Problem message={error} />
+
+      <div className="border-t border-[var(--border-hairline)] pt-[18px]">
+        <ClaimActions>
+          {/* The button says what pressing it does: it sends mail. The join
+              itself is one click on the screen that mail comes back to. */}
+          <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
+            {pending ? "Sending…" : "Email me a link"}
+          </button>
+          <NotNowLink href={notNowHref(joinHref(token))} />
+          {/* Google lives on `/login`; `?next=` brings them back here holding
+              a session, where this screen becomes the Join button. */}
+          <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
+            Sign in with Google instead
+          </Link>
+          <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
+            Already have an account? Sign in
+          </Link>
+          <JoinQuotaFooter
+            programHours={programHours}
+            personalHours={personalHours}
+          />
+        </ClaimActions>
+      </div>
+    </form>
+  );
+}
+
+/** Approve mode, and the request is already in the queue. */
+export function JoinLinkRequested() {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
+        <span
+          aria-hidden="true"
+          className="size-[22px] shrink-0 rounded-full border border-dashed border-[var(--blue)]"
+        />
+        <span className="text-body-sm">
+          Nothing else to do. Opening this link again won&apos;t send a second
+          request.
+        </span>
+      </div>
+      <ClaimActions>
+        <Link href="/dashboard" className={CLAIM_BUTTON}>
+          Go to your dashboard
+        </Link>
+        <span className="text-micro">
+          Your personal matches are there in the meantime.
+        </span>
+      </ClaimActions>
+    </div>
+  );
+}
+
+/** Every seat taken. The link still works once a coach frees one. */
+export function JoinLinkFull({ signedIn }: { signedIn: boolean }) {
+  return (
+    <ClaimActions>
+      {signedIn ? (
+        <>
+          <Link href="/dashboard" className={CLAIM_BUTTON}>
+            Go to your dashboard
+          </Link>
+          <span className="text-micro">
+            Your personal matches are there in the meantime.
+          </span>
+        </>
+      ) : (
+        <Link href="/login" className={CLAIM_BUTTON}>
+          Go to sign in
+        </Link>
+      )}
+    </ClaimActions>
   );
 }

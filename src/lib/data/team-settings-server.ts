@@ -1,7 +1,13 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { toSquad, type Squad } from "@/lib/data/squad";
 import { createClient } from "@/lib/supabase/server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { DIVISION_VALUES } from "@/lib/data/programs-server";
+import {
+  joinHref,
+  type JoinLinkMode,
+} from "@/lib/services/programs/join-links";
+import { siteUrl } from "@/lib/site-url";
 import type {
   EventsPolicy,
   ProgramOrgType,
@@ -74,11 +80,113 @@ export interface TeamIdentity {
   timeZone: string;
 }
 
+/**
+ * `${siteUrl()}/join/${token}` — one spelling, shared by this loader and the
+ * Settings › Teams actions, the way `matchShareUrl()` is shared by its loader
+ * and `share-actions.ts`. Lives here and not in `join-links.ts` because that
+ * file is a dependency-free leaf imported by client components, and
+ * `siteUrl()` is a server-side resolver (see the note at the top of it).
+ */
+export function joinLinkUrl(token: string): string {
+  return `${siteUrl()}${joinHref(token)}`;
+}
+
+/**
+ * The program's live join link — `program_join_links` where `revoked_at is
+ * null` — as the Members card and its popover show it.
+ *
+ * `url` carries the raw token: the table stores it in plaintext precisely so
+ * staff can copy the same link again after a reload (see the migration
+ * header). Only staff can read the row under RLS, so a player viewer gets
+ * `null` here, the same as a program with no link.
+ */
+export interface TeamJoinLink {
+  url: string;
+  mode: JoinLinkMode;
+  createdAt: string;
+  /** Who made it, as the roster names them; null once they left the program. */
+  createdByName: string | null;
+  /** The viewer made it — the popover says "by you" instead of a name. */
+  createdByMe: boolean;
+  /** Completed joins through this link (approve-mode requests do not count). */
+  uses: number;
+}
+
+/**
+ * Who is reading the join link, and how to name its maker — the two facts
+ * `loadProgramJoinLink` needs beyond the row itself.
+ *
+ * `nameOf` resolves a `users.id` off a roster the caller already holds: the
+ * maker is named from the program's own roster rather than a `users` read the
+ * viewer could not make anyway (`users` RLS is own-row only).
+ */
+export interface JoinLinkReader {
+  viewerId: string | null;
+  nameOf: (userId: string) => string | null;
+}
+
+/**
+ * The program's live join link as `TeamJoinLink`, or null — the ONE query
+ * shape for it, shared by Settings › Teams (`getTeamSettings`) and the Roster
+ * page (`getRosterJoinLink`), so the popover both mount reads the same thing.
+ *
+ * `reader` may be a promise: the row is requested at once and the names are
+ * awaited only to map it, so a caller can start this beside the roster read
+ * it names people from instead of after it.
+ *
+ * Staff-only under RLS; a player's read is an empty result, not an error. A
+ * failed read logs and answers null — the link is a secondary control on
+ * both pages, never a reason to fail the page.
+ */
+export async function loadProgramJoinLink(
+  supabase: SupabaseClient,
+  programId: string,
+  reader: JoinLinkReader | PromiseLike<JoinLinkReader>,
+): Promise<TeamJoinLink | null> {
+  const [result, who] = await Promise.all([
+    supabase
+      .from("program_join_links")
+      .select("token, mode, created_at, created_by, uses")
+      .eq("program_id", programId)
+      .is("revoked_at", null)
+      .maybeSingle(),
+    reader,
+  ]);
+
+  if (result.error) {
+    console.error("[join link] could not read the join link", {
+      error: result.error.message,
+    });
+    return null;
+  }
+  const row = result.data as {
+    token: string;
+    mode: string;
+    created_at: string;
+    created_by: string | null;
+    uses: number;
+  } | null;
+  if (!row) return null;
+
+  return {
+    url: joinLinkUrl(row.token),
+    mode: row.mode === "approve" ? "approve" : "open",
+    createdAt: row.created_at,
+    createdByName: row.created_by ? who.nameOf(row.created_by) : null,
+    createdByMe: Boolean(
+      who.viewerId && row.created_by && who.viewerId === row.created_by,
+    ),
+    uses: row.uses ?? 0,
+  };
+}
+
 export interface TeamSettingsData {
   program: TeamIdentity;
   members: TeamMember[];
   /** Outstanding only — accepted invites are members now. */
   invites: TeamInvite[];
+  /** The live join link, or null when the program has none (or the viewer may not see it). */
+  joinLink: TeamJoinLink | null;
   /**
    * Who to ask about the fields only the owner may change. Derived from the
    * roster rather than `programs.owner_user_id` because the roster row is the
@@ -93,7 +201,15 @@ export async function getTeamSettings(
 ): Promise<TeamSettingsData | null> {
   const supabase = await createClient();
 
-  const [programResult, rosterResult, invitesResult, avatars] =
+  // Started once and shared: the roster is both a result here and where the
+  // join link names its maker. `Promise.resolve` because a PostgREST builder
+  // re-sends its request on every `then`.
+  const rosterRead = Promise.resolve(
+    supabase.rpc("program_roster", { p_program_id: programId }),
+  );
+  const userRead = supabase.auth.getUser();
+
+  const [programResult, rosterResult, invitesResult, avatars, joinLink] =
     await Promise.all([
       supabase
         .from("programs")
@@ -102,7 +218,7 @@ export async function getTeamSettings(
         )
         .eq("id", programId)
         .maybeSingle(),
-      supabase.rpc("program_roster", { p_program_id: programId }),
+      rosterRead,
       supabase
         .from("program_invites")
         .select("id, email, role, created_at, invited_by")
@@ -110,6 +226,25 @@ export async function getTeamSettings(
         .is("accepted_at", null)
         .order("created_at", { ascending: false }),
       getMemberAvatarUrls(supabase, programId),
+      loadProgramJoinLink(
+        supabase,
+        programId,
+        Promise.all([rosterRead, userRead]).then(([roster, { data }]) => {
+          const rows = (roster.data ?? []) as {
+            user_id: string;
+            display_name: string | null;
+            email: string;
+          }[];
+          return {
+            viewerId: data.user?.id ?? null,
+            // The same fallback the member rows below use.
+            nameOf: (userId: string) => {
+              const row = rows.find((member) => member.user_id === userId);
+              return row ? (row.display_name ?? row.email) : null;
+            },
+          };
+        }),
+      ),
     ]);
 
   if (programResult.error || !programResult.data) {
@@ -175,6 +310,7 @@ export async function getTeamSettings(
     },
     members,
     invites,
+    joinLink,
     ownerName: members.find((member) => member.role === "owner")?.name ?? null,
   };
 }

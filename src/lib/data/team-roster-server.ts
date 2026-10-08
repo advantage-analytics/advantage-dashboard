@@ -17,7 +17,11 @@ import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { isLiveUpdating, type AnalysisStatus } from "@/lib/data/match-analysis";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
-import type { MemberRole } from "@/lib/data/team-settings-server";
+import {
+  loadProgramJoinLink,
+  type MemberRole,
+  type TeamJoinLink,
+} from "@/lib/data/team-settings-server";
 
 /**
  * What the Roster page reads.
@@ -719,4 +723,30 @@ export async function getFormerPlayers(
     archivedOn: shortDate(row.archived_at),
     matchCount: Number(row.match_count),
   }));
+}
+
+/**
+ * The program's live join link for the Roster's Invite popover — the same
+ * `TeamJoinLink` Settings › Teams reads, through the same
+ * `loadProgramJoinLink` query.
+ *
+ * Names the link's maker off `getRosterData`, which is `cache()`d, so this
+ * shares the page's roster read rather than repeating it, and the link row is
+ * requested beside it rather than after. Staff-only under RLS: a player reads
+ * null, and the page does not ask for one.
+ */
+export async function getRosterJoinLink(
+  programId: string,
+  viewerId: string,
+): Promise<TeamJoinLink | null> {
+  const supabase = await createClient();
+  return loadProgramJoinLink(
+    supabase,
+    programId,
+    getRosterData(programId).then((roster) => ({
+      viewerId,
+      nameOf: (userId: string) =>
+        roster.members.find((member) => member.userId === userId)?.name ?? null,
+    })),
+  );
 }

@@ -10,7 +10,11 @@ import {
   teamLabel,
   type UploadPolicy,
 } from "@/lib/workspace/types";
-import { getFormerPlayers, getRosterData } from "@/lib/data/team-roster-server";
+import {
+  getFormerPlayers,
+  getRosterData,
+  getRosterJoinLink,
+} from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
@@ -117,16 +121,19 @@ async function RosterContent({
   const { player } = await searchParams;
   const initialSelectedId = typeof player === "string" ? player : null;
 
-  // Three independent reads start together. The join-request queue and the
-  // former-players list are both staff-only: `program_join_requests` and
+  // Four reads start together. The join-request queue, the former-players
+  // list and the join link are staff-only: `program_join_requests` and
   // `program_former_players` are SECURITY DEFINER and hand a player the same
   // empty array they hand a stranger, so this only declines to ask for
   // something the database would refuse to fill.
-  const [rosterResult, joinRequestsResult, formerResult] =
+  const [rosterResult, joinRequestsResult, formerResult, joinLinkResult] =
     await Promise.allSettled([
       getRosterData(active.id),
       canManage ? getPendingJoinRequests(active.id, true) : Promise.resolve([]),
       canManage ? getFormerPlayers(active.id) : Promise.resolve([]),
+      canManage
+        ? getRosterJoinLink(active.id, viewer.id)
+        : Promise.resolve(null),
     ]);
   if (rosterResult.status === "rejected") throw rosterResult.reason;
   const roster = rosterResult.value;
@@ -134,6 +141,10 @@ async function RosterContent({
   // empty list on failure degrades to the dialog behaving as if nobody has
   // ever been archived, which is a worse hint, not a broken page.
   const former = formerResult.status === "fulfilled" ? formerResult.value : [];
+  // The Invite popover's starting state. A failed read draws the ladder at
+  // "Link off" — choosing a rung still asks the server, which knows better.
+  const joinLink =
+    joinLinkResult.status === "fulfilled" ? joinLinkResult.value : null;
 
   // Join requests decide whether an otherwise empty program is truly at day
   // zero, so failure is fatal only in that state. Once a roster row or invite
@@ -228,6 +239,7 @@ async function RosterContent({
             roster: players,
             playersCanUpload: roster.playersCanUpload,
             former,
+            joinLink,
           }}
         />
       </>
@@ -328,6 +340,7 @@ async function RosterContent({
       roster={players}
       playersCanUpload={roster.playersCanUpload}
       former={former}
+      joinLink={joinLink}
     />
   ) : null;
 

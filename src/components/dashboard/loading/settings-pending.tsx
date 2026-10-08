@@ -903,7 +903,11 @@ export function SettingsTeamDetailPending() {
         <div className="flex items-center gap-2.5">
           <CardTitle>Members</CardTitle>
           {isStaff && (
-            <div className="flex flex-1 items-center justify-end">
+            <div className="flex flex-1 items-center justify-end gap-2.5">
+              <Button>
+                <span className="size-3" />
+                Invite link
+              </Button>
               <Button>
                 <span className="size-3" />
                 Invite staff

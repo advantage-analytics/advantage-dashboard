@@ -4,6 +4,7 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { titleCaseName } from "@/lib/data/person-name";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 import type { JoinRole } from "./join-role";
+import type { JoinLinkMode } from "./join-links";
 import { hashToken } from "./tokens";
 
 /**
@@ -19,6 +20,16 @@ import { hashToken } from "./tokens";
  * The state machine is here rather than in the page so the page renders and
  * nothing else, and so the actions can re-derive the same answer on submit
  * instead of trusting whatever the browser posts back.
+ *
+ * ── Two kinds of token behind one door ──────────────────────────────────────
+ * `/join/[token]` opens an INVITATION (hashed, addressed to one person) or a
+ * JOIN LINK (`program_join_links`, plaintext, reusable, players only). The
+ * invitation is tried first and the link only on a miss, so every state the
+ * invitation path returned before links existed is returned unchanged. The
+ * link's preview is read through the cookie client, not the service role:
+ * `program_join_link_preview` is the one anon-callable function of its
+ * migration, returns no token, id or member, and reads `auth.email()` for the
+ * roster match — so the session has to be the one asking.
  */
 
 /**
@@ -90,7 +101,41 @@ export type JoinState =
       role: JoinRole;
       email: string;
       inviterName: InviterName;
-    };
+    }
+  /**
+   * A live join link, and a session to join with. One button; `mode` decides
+   * whether it joins at once or files a request. `rosterMatchName` is the
+   * unclaimed roster row carrying the session's address, so the screen can
+   * say the coach already has them down — null when nothing matches.
+   */
+  | {
+      kind: "link_ready";
+      programName: string;
+      programOrgType: ProgramOrgType;
+      /** `programs.pilot_eligible` — see `InviteRecord.programPilotEligible`. */
+      programPilotEligible: boolean;
+      mode: JoinLinkMode;
+      seatsFree: boolean;
+      inviterName: InviterName;
+      rosterMatchName: string | null;
+    }
+  /**
+   * A live join link and nobody signed in. Unlike `sign_up`, no address is
+   * known — the link was addressed to nobody — so the form asks for one, and
+   * an existing account is offered sign-in rather than a password box (see
+   * `createAccountAndJoinByLink`).
+   */
+  | {
+      kind: "link_sign_up";
+      programName: string;
+      programOrgType: ProgramOrgType;
+      programPilotEligible: boolean;
+      mode: JoinLinkMode;
+    }
+  /** Approve mode, and this address already has an open request in the queue. */
+  | { kind: "link_requested"; programName: string }
+  /** Every seat is taken or reserved. Nothing to do here but tell them. */
+  | { kind: "link_full"; programName: string; signedIn: boolean };
 
 export interface InviteRecord {
   id: string;
@@ -225,22 +270,263 @@ export function displayName(
  */
 export async function accountExists(email: string): Promise<boolean> {
   const admin = createAdminClient();
-  const pattern = email.replace(/[\\%_]/g, (char) => `\\${char}`);
 
   const { data } = await admin
     .from("users")
     .select("id")
-    .ilike("email", pattern)
+    .ilike("email", ilikeLiteral(email))
     .limit(1)
     .maybeSingle();
 
   return Boolean(data);
 }
 
-/** Which screen this link opens, for the person opening it right now. */
+/**
+ * What `program_join_link_preview` says about a live join link, or null for
+ * an unknown or revoked token.
+ *
+ * Read with the COOKIE client on purpose — see the header. `client` is
+ * accepted for the same reason `acceptWithSession` takes one: a path that has
+ * just established a session hands the client it did it on.
+ */
+export interface JoinLinkPreview {
+  programName: string;
+  programOrgType: ProgramOrgType;
+  mode: JoinLinkMode;
+  seatsFree: boolean;
+  /** Who shared it — `created_by`'s name, null once that account is gone. */
+  inviterName: InviterName;
+  /** Null signed out, and when no unclaimed roster row carries the session's address. */
+  rosterMatchName: string | null;
+}
+
+export async function loadJoinLinkPreview(
+  token: string,
+  client?: Awaited<ReturnType<typeof createClient>>,
+): Promise<JoinLinkPreview | null> {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  const supabase = client ?? (await createClient());
+  const { data, error } = await supabase
+    .rpc("program_join_link_preview", { p_token: trimmed })
+    .maybeSingle();
+
+  if (error) {
+    // Message only: the token is a working credential to a program.
+    console.error("[join] link preview failed", { message: error.message });
+    return null;
+  }
+  if (!data) return null;
+
+  const row = data as {
+    program_name: string | null;
+    program_team: string | null;
+    org_type: string | null;
+    mode: string;
+    seats_free: boolean | null;
+    created_by_name: string | null;
+    roster_match_name: string | null;
+  };
+
+  return {
+    programName: row.program_name
+      ? programDisplayName(row.program_name, row.program_team)
+      : "your program",
+    programOrgType: (row.org_type as ProgramOrgType | null) ?? "college",
+    mode: row.mode === "approve" ? "approve" : "open",
+    seatsFree: row.seats_free === true,
+    // Already a full name, trimmed in SQL; `titleCaseName` only tidies case.
+    inviterName: row.created_by_name
+      ? displayName(row.created_by_name, null)
+      : null,
+    rosterMatchName: row.roster_match_name?.trim() || null,
+  };
+}
+
+/**
+ * Escape a literal for `ilike`: `%` and `_` are wildcards, and an address
+ * containing one would otherwise match somebody else's row.
+ */
+function ilikeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/**
+ * Does this address already have an open join request in the program behind
+ * this link?
+ *
+ * Service role, for two reasons neither client could get round: the preview
+ * deliberately returns no `program_id`, so the link row is read by token the
+ * way `loadInvite` reads an invitation; and `program_requests` has RLS on
+ * with NO policies — only `service_role` holds a grant — so the person who
+ * filed the request cannot read it back. Both reads are keyed on the token
+ * the caller already holds and the session's own address, and nothing about
+ * the row comes back but yes or no.
+ */
+async function hasOpenJoinRequest(
+  programId: string,
+  email: string,
+): Promise<boolean> {
+  const admin = createAdminClient();
+
+  const { data } = await admin
+    .from("program_requests")
+    .select("id")
+    .eq("kind", "invite_request")
+    .eq("program_id", programId)
+    .eq("status", "open")
+    .ilike("email", ilikeLiteral(email))
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+/**
+ * The program behind a live join link, as much as the server needs and the
+ * preview deliberately does not return: its id (for the open-request lookup)
+ * and `pilot_eligible` (so the quota line on the join screen promises the
+ * allowance `quotaTierFor()` will enforce — the same reason `InviteRecord`
+ * carries it). Service role, keyed on the token the caller already holds;
+ * neither value is sent to the browser except as the hours figure it implies.
+ */
+async function loadJoinLinkProgram(
+  token: string,
+): Promise<{ programId: string; pilotEligible: boolean } | null> {
+  const admin = createAdminClient();
+
+  const { data: link } = await admin
+    .from("program_join_links")
+    .select("program_id")
+    .eq("token", token)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (!link) return null;
+
+  const programId = link.program_id as string;
+  const { data: program } = await admin
+    .from("programs")
+    .select("pilot_eligible")
+    .eq("id", programId)
+    .maybeSingle();
+
+  return { programId, pilotEligible: program?.pilot_eligible === true };
+}
+
+/**
+ * Is this login already a member of the program? Service role because the
+ * program id came off the link row rather than from anything the viewer was
+ * handed, and keyed on the session's own id — it answers yes or no about the
+ * caller and nobody else.
+ */
+async function isProgramMember(
+  programId: string,
+  userId: string,
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("program_members")
+    .select("user_id")
+    .eq("program_id", programId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/**
+ * The join-link half of `resolveJoinState`, reached only when no invitation
+ * carries the token.
+ *
+ * Order: no row → `not_found`; no session → `link_sign_up`; no seat →
+ * `link_full`; a request already filed → `link_requested`; else `link_ready`.
+ * Full is decided before requested so the screen matches what
+ * `accept_program_join_link` would answer a second click with (`no_seats`
+ * is tested before the approve branch there too).
+ */
+async function resolveJoinLinkState(token: string): Promise<JoinState> {
+  const supabase = await createClient();
+  const [
+    preview,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    loadJoinLinkPreview(token, supabase),
+    supabase.auth.getUser(),
+  ]);
+  if (!preview) return { kind: "not_found" };
+
+  // After the preview, not beside it: a junk token (anyone can request
+  // `/join/<anything>`) stops above and never costs a service-role read.
+  const linkProgram = await loadJoinLinkProgram(token.trim());
+
+  const { programName, programOrgType, mode } = preview;
+  // False when the row vanished between the two reads: the lower allowance is
+  // the honest promise, and the accept RPC will answer `not_found` anyway.
+  const programPilotEligible = linkProgram?.pilotEligible ?? false;
+
+  // Full is decided before sign-up, so nobody is asked to create an account
+  // only to be refused on the next click. A roster row already carrying the
+  // session's address holds its own seat — `accept_program_join_link` never
+  // refuses that claim for seats — so a matched player is not told "full";
+  // signed out, `rosterMatchName` is always null and the full screen's
+  // "sign in" exit is how a rostered player reaches that branch.
+  // Nor is somebody who is already ON the team: `accept_program_join_link`
+  // answers a member `ok` before it looks at seats, so a player re-opening
+  // the link from the group chat after the roster filled goes through to the
+  // one-click screen and on into the program, not to "ask a coach".
+  if (!preview.seatsFree && !preview.rosterMatchName) {
+    const alreadyMember =
+      user !== null &&
+      linkProgram !== null &&
+      (await isProgramMember(linkProgram.programId, user.id));
+    if (!alreadyMember) {
+      return { kind: "link_full", programName, signedIn: user !== null };
+    }
+  }
+
+  if (!user) {
+    return {
+      kind: "link_sign_up",
+      programName,
+      programOrgType,
+      programPilotEligible,
+      mode,
+    };
+  }
+
+  const email = (user.email ?? "").trim().toLowerCase();
+  if (
+    mode === "approve" &&
+    email &&
+    linkProgram &&
+    (await hasOpenJoinRequest(linkProgram.programId, email))
+  ) {
+    return { kind: "link_requested", programName };
+  }
+
+  return {
+    kind: "link_ready",
+    programName,
+    programOrgType,
+    programPilotEligible,
+    mode,
+    seatsFree: preview.seatsFree,
+    inviterName: preview.inviterName,
+    rosterMatchName: preview.rosterMatchName,
+  };
+}
+
+/**
+ * Which screen this link opens, for the person opening it right now.
+ *
+ * Invitation first, join link only on a miss — see the header for why that
+ * order keeps every pre-existing state exactly as it was.
+ */
 export async function resolveJoinState(token: string): Promise<JoinState> {
   const invite = await loadInvite(token);
-  if (!invite) return { kind: "not_found" };
+  if (!invite) return resolveJoinLinkState(token);
 
   const {
     programName,
@@ -325,6 +611,16 @@ export type AcceptOutcome =
        *   unconfirmed      the session's address is not yet confirmed, so
        *                    nothing proves it is the invited one
        *
+       * And one from the join-link door (`acceptJoinLinkWithSession`), which
+       * is not a refusal at all but is not a membership either:
+       *
+       *   requested        approve mode — a `program_requests` row now waits
+       *                    for staff; the action sends them back to the link,
+       *                    which resolves to `link_requested`
+       *   removed          the session's only roster row here is archived or
+       *                    merged away — a coach removed them, and a link is
+       *                    not the way back in
+       *
        * Each has its own sentence and its own way forward, which is why they
        * come back as a status rather than as a raised exception.
        */
@@ -336,7 +632,9 @@ export type AcceptOutcome =
         | "unconfirmed"
         | "no_seats"
         | "already_claimed"
-        | "player_gone";
+        | "player_gone"
+        | "requested"
+        | "removed";
     }
   | { ok: false; status: "error"; message: string };
 
@@ -380,7 +678,10 @@ const REFUSED: AcceptOutcome = {
  */
 async function acceptVia(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  rpc: "accept_program_invite" | "accept_pending_invite",
+  rpc:
+    | "accept_program_invite"
+    | "accept_pending_invite"
+    | "accept_program_join_link",
   args: Record<string, string>,
   logLabel: string,
 ): Promise<AcceptOutcome> {
@@ -432,5 +733,27 @@ export async function acceptPendingWithSession(
     "accept_pending_invite",
     { p_invite_id: inviteId },
     "[join] accept by id failed",
+  );
+}
+
+/**
+ * The same handshake for a join link.
+ *
+ * The raw token goes to the database as-is: `program_join_links.token` is
+ * plaintext (the migration header says why), so there is no hash to send.
+ * `accept_program_join_link` re-reads the row at the moment of the write —
+ * revoked, full, unconfirmed address — and in approve mode files the request
+ * itself and answers `requested` instead of `ok`. Always a POST server action
+ * behind it; the GET that renders the page never calls this.
+ */
+export async function acceptJoinLinkWithSession(
+  token: string,
+  client?: Awaited<ReturnType<typeof createClient>>,
+): Promise<AcceptOutcome> {
+  return acceptVia(
+    client ?? (await createClient()),
+    "accept_program_join_link",
+    { p_token: token.trim() },
+    "[join] accept by link failed",
   );
 }
