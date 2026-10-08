@@ -1,3 +1,4 @@
+import { toGenderedSquad } from "@/lib/data/squad";
 import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -197,7 +198,7 @@ export default async function ScoreEventPage({
         roundSeeds={roundSeeds}
         eventHref={`/dashboard/team/schedule/${eventId}`}
         canUpload={canUploadForProgram(active)}
-        ourTeam={active.team ?? null}
+        ourTeam={toGenderedSquad(active.team)}
       />
     </>
   );

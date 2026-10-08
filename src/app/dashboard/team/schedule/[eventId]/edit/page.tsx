@@ -1,3 +1,4 @@
+import { toGenderedSquad } from "@/lib/data/squad";
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
@@ -133,7 +134,7 @@ export default async function EditEventPage({
           // fetched for a screen nobody can open are round trips paid for
           // nothing.
           ourConference: settings?.program.conference ?? null,
-          ourTeam: settings?.program.team ?? null,
+          ourTeam: toGenderedSquad(settings?.program.team),
           ourDivision: null,
           ourProgramKey: null,
           directory: [],

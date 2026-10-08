@@ -1,3 +1,4 @@
+import type { Squad } from "@/lib/data/squad";
 import type { TeamSettingsData } from "@/lib/data/team-settings-server";
 import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
 
@@ -7,7 +8,8 @@ import type { EventsPolicy, UploadPolicy } from "@/lib/workspace/types";
  */
 export interface IdentityDraft {
   schoolName: string;
-  team: "mens" | "womens";
+  /** Null until the owner picks one — a custom org created before setup asked. */
+  team: Squad | null;
   conference: string;
   homeVenue: string;
   defaultSurface: "hard" | "clay" | "grass" | "carpet" | "";

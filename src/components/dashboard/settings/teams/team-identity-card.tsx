@@ -1,5 +1,7 @@
 "use client";
 
+import { squadOptionsFor } from "@/lib/data/squad";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 import { useMemo } from "react";
 import { Lock } from "lucide-react";
 import {
@@ -13,11 +15,6 @@ import { ProgramCrest } from "@/components/dashboard/settings/teams/program-cres
 import { ConferenceSelect } from "@/components/dashboard/settings/teams/conference-select";
 import type { IdentityDraft } from "@/components/dashboard/settings/teams/types";
 import { academicSeason, todayISO } from "@/lib/schedule/format";
-
-export const SQUAD_OPTIONS = [
-  { value: "mens" as const, label: "Men's tennis" },
-  { value: "womens" as const, label: "Women's tennis" },
-];
 
 export const SURFACE_OPTIONS = [
   { value: "hard" as const, label: "Hard" },
@@ -54,6 +51,7 @@ export function TeamIdentityCard({
   canEdit,
   isOwner,
   ownerName,
+  orgType,
   division,
   conferenceOptions,
   onCrestError,
@@ -69,6 +67,11 @@ export function TeamIdentityCard({
   canEdit: boolean;
   isOwner: boolean;
   ownerName: string | null;
+  /**
+   * Decides the Squad menu: a college is men's or women's; a club, high
+   * school or academy may also be co-ed.
+   */
+  orgType: ProgramOrgType;
   /** The program's division — names the picker's list. */
   division: string | null;
   /**
@@ -81,6 +84,7 @@ export function TeamIdentityCard({
 }) {
   // Once per mount — the season has no reason to turn over while the page is open.
   const season = useMemo(() => academicSeason(todayISO()), []);
+  const squadOptions = useMemo(() => squadOptionsFor(orgType), [orgType]);
 
   if (!canEdit) {
     return (
@@ -135,8 +139,11 @@ export function TeamIdentityCard({
             <MenuSelect
               label="Squad"
               variant="underline"
-              value={draft.team}
-              options={SQUAD_OPTIONS}
+              // Undefined for a team that never said: the menu shows "Not
+              // set" and draws no row as chosen, rather than a guess.
+              value={draft.team ?? undefined}
+              placeholder="Not set"
+              options={squadOptions}
               onChange={(value) => onChange("team", value)}
             />
           </SettingsField>
@@ -144,8 +151,8 @@ export function TeamIdentityCard({
           <LockedField
             label="Squad"
             value={
-              SQUAD_OPTIONS.find((option) => option.value === draft.team)
-                ?.label ?? ""
+              squadOptions.find((option) => option.value === draft.team)
+                ?.label ?? "Not set"
             }
             hint={lockedHint}
           />
