@@ -324,6 +324,7 @@ export default async function MatchDetailPage({
       <AnalysisSteps
         analysis={analysis}
         canAct={canAct}
+        showSampleLink={workspaceKind === "personal"}
         matchId={matchId}
         match={{
           player: sides.you.name,

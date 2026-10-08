@@ -30,6 +30,7 @@
  */
 
 import { useEffect, useId, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/format/duration";
@@ -81,6 +82,7 @@ export function AnalysisSteps({
   match,
   snapshotAt,
   canAct = false,
+  showSampleLink = false,
   onCancel,
   onResend,
 }: {
@@ -104,6 +106,12 @@ export function AnalysisSteps({
    * authorization input never defaults permissively.
    */
   canAct?: boolean;
+  /**
+   * Offer "While you wait, see a sample report" under the steps. The caller
+   * decides (the match page passes it for personal workspaces); it also needs
+   * `canAct`, so only the player who filed the match is pointed at the sample.
+   */
+  showSampleLink?: boolean;
   /** Replaces the queued step's "Cancel analysis" (which opens the dialog). */
   onCancel?: () => void;
   /** Replaces the cancelled step's "Send for analysis again" (the resubmit). */
@@ -189,6 +197,15 @@ export function AnalysisSteps({
             </VerticalStep>
           ))}
         </ol>
+
+        {showSampleLink && canAct && (
+          <Link
+            href="/dashboard/matches/sample?tour=1"
+            className="mt-8 self-start rounded-[4px] text-[12px] leading-4 font-medium text-[var(--ink-700)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
+          >
+            While you wait, see a sample report
+          </Link>
+        )}
       </div>
 
       {/* Mounted for the job once asked, not for the queued step: a Realtime

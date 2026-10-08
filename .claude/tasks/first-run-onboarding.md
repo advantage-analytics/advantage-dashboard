@@ -202,7 +202,7 @@ ready).
 
 ## T15 · "While you wait, see a sample report" line on the analysis steps
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T12
 - **files:** src/components/dashboard/matches/match-detail/analysis-steps-column.tsx, src/app/dashboard/matches/(detail)/[matchId]/page.tsx (prop pass only), tests/analysis-steps-column.spec.ts — guess

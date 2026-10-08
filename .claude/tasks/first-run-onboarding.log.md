@@ -182,3 +182,11 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4383 passed / 379 skipped; all failures are the environmental browser set except the known load-dependent flake `upload-line-swap.spec.ts:402`. completion — VERDICT: pass (whitespace-insensitive diff: the existing pair, `MATCH_OFFER_CONDITIONS` and `DayZeroOffer`'s props unchanged). widget-states: static link in the day-zero offer only.
 **changed:** `day-zero-offer.tsx` — `MatchOfferActions` wraps the existing primary/ghost pair (unchanged, now one indent deeper inside its own flex row) in a centred column and adds a third, quietest `Link` beneath it: "See a sample report" → `/dashboard/matches/sample?tour=1`, `text-micro` (11px, ink-500) hovering to ink-900. Home and Matches day zeros both get it; team day zeros pass their own `actions` and don't.
+
+## T15 · "While you wait, see a sample report" line on the analysis steps — done
+
+**gate:** mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4386 passed (+3) / 379 skipped; all failures are the environmental browser set except the known load-dependent flake `upload-line-swap.spec.ts:402`. completion — VERDICT: pass. pipeline-guardrails checklist (by hand): clean — §3.3 gate unchanged. widget-states: static gated link only.
+**changed:** `analysis-steps-column.tsx` — `AnalysisSteps` gains `showSampleLink?: boolean` (default false) and renders "While you wait, see a sample report" → `/dashboard/matches/sample?tour=1` after the stepper when `showSampleLink && canAct`, in the column's `QuietAction` style (shows in every status, including failed/cancelled). `[matchId]/page.tsx`: one added prop line, `showSampleLink={workspaceKind === "personal"}`, inside the existing `isAwaitingAnalysis` branch. 3 new cases in `tests/analysis-steps-column.spec.ts`.
+**follow-ups:**
+
+1. The link's classes duplicate `QuietAction`'s — share them if either changes.

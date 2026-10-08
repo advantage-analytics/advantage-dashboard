@@ -51,6 +51,7 @@ type ColumnProps = {
   match: MatchLineProps;
   snapshotAt?: number;
   canAct?: boolean;
+  showSampleLink?: boolean;
   onCancel?: () => void;
   onResend?: () => void;
 };
@@ -571,4 +572,46 @@ test("the match page offers the actions only to the job's creator", () => {
   );
   const loader = readFileSync("src/lib/data/match-analysis-server.ts", "utf8");
   expect(loader).toContain("createdBy: row.created_by ?? undefined");
+});
+
+// ── The sample-report line (first-run onboarding) ───────────────────────────
+// Offered while a personal player waits on their own match: a team workspace,
+// or a viewer who did not file the match, reads the steps with no such line.
+
+const SAMPLE_LINE = "While you wait, see a sample report";
+
+function renderSample(showSampleLink: boolean | undefined, canAct: boolean) {
+  return renderToStaticMarkup(
+    React.createElement(AnalysisSteps, {
+      analysis: QUEUED,
+      matchId: MATCH_ID,
+      match: MATCH,
+      snapshotAt: NOW,
+      canAct,
+      showSampleLink,
+    }),
+  );
+}
+
+test("personal + canAct: the sample-report line links to the tour sample", () => {
+  const html = renderSample(true, true);
+  expect(html).toMatch(
+    /<a href="\/dashboard\/matches\/sample\?tour=1"[^>]*>While you wait, see a sample report<\/a>/,
+  );
+  expect(html.split(SAMPLE_LINE)).toHaveLength(2);
+});
+
+test("team (showSampleLink off), or personal without canAct: no sample-report line", () => {
+  expect(renderSample(false, true)).not.toContain(SAMPLE_LINE);
+  expect(renderSample(undefined, true)).not.toContain(SAMPLE_LINE);
+  expect(renderSample(true, false)).not.toContain(SAMPLE_LINE);
+  expect(renderSample(false, false)).not.toContain(SAMPLE_LINE);
+});
+
+test("the match page passes showSampleLink for personal workspaces inside the gate", () => {
+  const page = readFileSync(
+    "src/app/dashboard/matches/(detail)/[matchId]/page.tsx",
+    "utf8",
+  );
+  expect(page).toContain('showSampleLink={workspaceKind === "personal"}');
 });
