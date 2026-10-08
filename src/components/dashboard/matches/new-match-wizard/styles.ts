@@ -74,6 +74,21 @@ export const warningStripCls =
   "flex items-start gap-2 rounded-[var(--radius-element)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-[11px] py-[9px] text-[11px] leading-[1.6] text-[var(--warning-text)]";
 
 /**
+ * The red twin, at the same size again: a refusal or a failure the person has
+ * to act on before they can go on — a video that can't be analysed, a save
+ * that didn't land, a window too short to submit. Text and glyph take the
+ * strip's own red (`--danger-text`), exactly as the yellow strip's take
+ * `--warning-text`, so an icon inside needs no colour class of its own.
+ *
+ * Three colours, one size: grey is a wait or a fact, yellow a caution or a
+ * question, red a refusal. A red `XCircle` on a GREY strip is the retired
+ * register — `tests/notice-strips.spec.ts` keeps it from coming back.
+ * (`primitives.md` › Notice strips.)
+ */
+export const errorStripCls =
+  "flex items-start gap-2 rounded-[var(--radius-element)] border border-[var(--danger-border)] bg-[var(--danger-bg)] px-[11px] py-[9px] text-[11px] leading-[1.6] text-[var(--danger-text)]";
+
+/**
  * How a notice state arrives — the settled line after an answer, the question
  * again after Change. 200ms on `--ease-out-expo` (a response to a click: moves
  * at once, then settles), a 4px drop, and a 2px blur that clears as it lands so

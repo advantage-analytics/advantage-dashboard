@@ -31,6 +31,12 @@ export interface ValidationResult {
    * floor but sits below the vendor's recommendation.
    */
   warnings?: string[];
+  /**
+   * Things worth one quiet line that are neither a problem nor a risk — a
+   * video that meets the floor but would track better at the recommended
+   * rate. Drawn grey; a warning is drawn yellow.
+   */
+  notes?: string[];
   details?: {
     sheetsValidated?: string[];
     totalRows?: Record<string, number>;
