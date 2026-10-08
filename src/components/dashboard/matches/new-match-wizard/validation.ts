@@ -194,7 +194,14 @@ export function quotaRefusal(input: {
     // "5 min over the 0.0 h left" is the same rounding on the other number —
     // a sentence refusing on the grounds of an allowance it prints as empty.
     const over = formatAllowanceSpan(neededWhole - remainingSeconds);
-    const remaining = formatAllowanceSpan(remainingSeconds);
+    // The one case the minutes floor gets wrong: under a minute left and an
+    // overage that also prints "1 min" — "1 min over the 1 min left" reads as
+    // two equal amounts. Only then does the remainder print in seconds.
+    const remainingSpan = formatAllowanceSpan(remainingSeconds);
+    const remaining =
+      remainingSeconds < 60 && remainingSpan === over
+        ? `${Math.max(1, Math.floor(remainingSeconds))} sec`
+        : remainingSpan;
     return `This trim is ${over} over the ${remaining} left this month. Shorten the selection to continue.`;
   }
 
