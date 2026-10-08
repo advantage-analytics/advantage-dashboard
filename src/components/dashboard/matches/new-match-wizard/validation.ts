@@ -193,6 +193,8 @@ export function quotaRefusal(input: {
     // is left" is what two minutes over reads as in tenths of an hour, and
     // "5 min over the 0.0 h left" is the same rounding on the other number —
     // a sentence refusing on the grounds of an allowance it prints as empty.
+    // Seconds under a minute for the same reason: 10 s left and 60 s over
+    // both rounded to "1 min", an allowance that looked equal to the overage.
     const over = formatAllowanceSpan(neededWhole - remainingSeconds);
     // The one case the minutes floor gets wrong: under a minute left and an
     // overage that also prints "1 min" — "1 min over the 1 min left" reads as
