@@ -1,10 +1,16 @@
 "use client";
 
-import { remuxedFileName, type TrimSkipReason } from "./trim-plan";
+import {
+  remuxedFileName,
+  type PreparedMode,
+  type TrimSkipReason,
+} from "./trim-plan";
 import type { TrimWorkerRequest, TrimWorkerResponse } from "./trim-protocol";
 
 /**
- * Cut the selected window out of a picked video before it is uploaded.
+ * Cut the selected window out of a picked video before it is uploaded, and
+ * re-encode it to 1080p H.264 on the way when it is not already a shape every
+ * browser plays (`mode: "transcode"`; see trim-plan.ts).
  *
  * Resolves to the file to upload and whether it is the cut. It never rejects
  * for "couldn't cut" — those resolve to the original with a reason, because a
@@ -31,6 +37,8 @@ export type PreparedVideo =
       file: File;
       /** Length of the cut, in seconds. The job window becomes [0, this]. */
       durationSeconds: number;
+      /** Copied as shot, or re-encoded to 1080p H.264. */
+      mode: PreparedMode;
       /** OPFS name, for `discardPreparedVideo`. */
       storageName: string;
     }
@@ -42,12 +50,15 @@ export async function prepareVideoForUpload(
     startSeconds,
     endSeconds,
     onProgress,
+    onMode,
     signal,
   }: {
     startSeconds: number;
     endSeconds: number;
     /** 0–1. */
     onProgress?: (progress: number) => void;
+    /** Fired once, before the first progress, when a file will be written. */
+    onMode?: (mode: PreparedMode) => void;
     signal?: AbortSignal;
   },
 ): Promise<PreparedVideo> {
@@ -76,6 +87,10 @@ export async function prepareVideoForUpload(
       const msg = event.data;
       if (msg.type === "progress") {
         onProgress?.(msg.progress);
+        return;
+      }
+      if (msg.type === "mode") {
+        onMode?.(msg.mode);
         return;
       }
       signal?.removeEventListener("abort", onAbort);
@@ -126,6 +141,7 @@ export async function prepareVideoForUpload(
       trimmed: true,
       file: cut,
       durationSeconds: result.durationSeconds,
+      mode: result.mode,
       storageName,
     };
   } catch (error) {

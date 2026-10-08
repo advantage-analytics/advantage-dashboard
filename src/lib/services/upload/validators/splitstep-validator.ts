@@ -74,6 +74,7 @@ import {
   RECOMMENDED_CONTAINER_AVERAGE_FPS,
   RECOMMENDED_VIDEO_FPS,
 } from "@/lib/services/splitstep/config";
+import { normaliseReason } from "@/lib/match-video/playback-format";
 import type { ValidationResult } from "../types";
 
 /**
@@ -268,11 +269,43 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     );
   }
 
+  const conversion = conversionNotice(probe);
+  if (conversion) warnings.push(conversion);
+
   return {
     success: true,
     warnings: warnings.length > 0 ? warnings : undefined,
     details,
   };
+}
+
+/**
+ * What happens to a file that is not 1080p-or-less H.264 (a phone's 4K or
+ * HEVC recording). The uploader's browser plays it, so nothing else here
+ * objects; a viewer's browser often cannot. It is re-encoded in this tab
+ * before upload when the browser can, and the uploader is told either way —
+ * the re-encode takes minutes, and the fallback is a file some people will not
+ * be able to watch. Never a refusal: the vendor reads these files fine.
+ */
+export function conversionNotice(probe: VideoProbe): string | null {
+  const reason = normaliseReason({
+    videoCodec: probe.videoCodec ?? null,
+    codedWidth: probe.width,
+    codedHeight: probe.height,
+  });
+  if (!reason) return null;
+
+  const what =
+    reason === "codec"
+      ? "This video isn't H.264"
+      : reason === "resolution"
+        ? "This video is above 1080p"
+        : "This video is above 1080p and isn't H.264";
+
+  if (probe.canConvert === false) {
+    return `${what}, and this browser can't convert it. It will upload as recorded, but some browsers won't be able to play it back. For reliable playback, export it as 1080p H.264 (on iPhone: Settings › Camera › Formats › Most Compatible) and pick it again.`;
+  }
+  return `${what}, so it will be converted to 1080p H.264 in this tab before it uploads. Keep the tab open: a full match can take a while.`;
 }
 
 /**

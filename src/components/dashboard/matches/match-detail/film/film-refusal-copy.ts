@@ -33,6 +33,12 @@ export const FILM_REFUSAL_COPY = {
     heading: "The film stopped loading",
     body: "The stream broke partway through. Your position is kept.",
   },
+  // The link is good and the browser still refused the file (see
+  // `playback-failure.ts`). No button: reloading re-signs the same bytes.
+  unsupportedFormat: {
+    heading: "This browser can't play this video",
+    body: "The recording is in a format this browser has no decoder for, usually HEVC from a phone camera. Reloading won't help. Open it in another browser.",
+  },
   buttons: {
     back: "Back to the report",
     retry: "Try again",

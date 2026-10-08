@@ -399,3 +399,50 @@ test.describe("duration boundary", () => {
     expect(short.error).toContain("too short");
   });
 });
+
+test.describe("a file not every browser can play is converted, never refused", () => {
+  test("1080p H.264, or a codec we could not read, says nothing", () => {
+    expect(
+      evaluateVideoProbe(probe({ videoCodec: "avc" })).warnings,
+    ).toBeUndefined();
+    expect(evaluateVideoProbe(probe()).warnings).toBeUndefined();
+  });
+
+  test("a phone's 4K HEVC is accepted and the uploader is told it will be converted", () => {
+    const result = evaluateVideoProbe(
+      probe({
+        width: 3840,
+        height: 2160,
+        videoCodec: "hevc",
+        canConvert: true,
+      }),
+    );
+    expect(result.success).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings?.[0]).toContain("above 1080p and isn't H.264");
+    expect(result.warnings?.[0]).toContain("converted to 1080p H.264");
+    expect(result.warnings?.[0]).toContain("Keep the tab open");
+  });
+
+  test("each reason is named on its own", () => {
+    expect(
+      evaluateVideoProbe(probe({ videoCodec: "hevc", canConvert: true }))
+        .warnings?.[0],
+    ).toMatch(/^This video isn't H\.264, so/);
+    expect(
+      evaluateVideoProbe(
+        probe({ width: 3840, height: 2160, videoCodec: "avc" }),
+      ).warnings?.[0],
+    ).toMatch(/^This video is above 1080p, so/);
+  });
+
+  test("a browser that cannot convert still uploads, and says what that costs", () => {
+    const result = evaluateVideoProbe(
+      probe({ videoCodec: "hevc", canConvert: false }),
+    );
+    expect(result.success).toBe(true);
+    expect(result.warnings?.[0]).toContain("this browser can't convert it");
+    expect(result.warnings?.[0]).toContain("export it as 1080p H.264");
+    expect(result.warnings?.[0]).not.toContain("will be converted");
+  });
+});

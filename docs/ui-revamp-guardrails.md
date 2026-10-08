@@ -53,6 +53,20 @@ comment on `fastStart` in `src/lib/video/trim.worker.ts`), so every trimmed file
 keeps its metadata at the tail; an untrimmed original keeps whatever layout the camera
 wrote.
 
+**One re-encode, October 2026.** The cut is copy-only for a file that is already
+1080p-or-less H.264. Anything else — in practice a phone's 4K or HEVC recording — has its
+video re-encoded to 1080p H.264 in the same worker before upload, at its own frame rate and
+timestamps, even when the window is the whole clip (`decideTrim` → `transcode` in
+`src/lib/video/trim-plan.ts`; the rule is `normaliseReason()` in
+`src/lib/match-video/playback-format.ts`). The uploader's browser decodes such a file, so
+every local check passes; a viewer's often cannot, and the first 4K HEVC match (Rhodri v
+Bao, 2026-10-08) raised a media error in the label console and ran the vendor's GPU out of
+memory. It is still one file — stored, sent to the vendor and played — so no clock moves.
+**Never scale below 1080p** (the vendor's floor) and never change the frame rate here. A
+browser that cannot convert uploads the original, as with every other skip, and the wizard
+says so at pick time (`conversionNotice` in `splitstep-validator.ts`).
+`scripts/scan-video-codecs.ts` lists stored videos that predate this.
+
 ---
 
 ## 2. Never touch

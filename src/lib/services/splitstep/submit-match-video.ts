@@ -54,6 +54,11 @@ export interface VideoUploadProgress {
    * `uploading` once bytes move. `pct` restarts from 0 at the switch.
    */
   stage: "preparing" | "uploading";
+  /**
+   * Set while `preparing` re-encodes the file to 1080p H.264 rather than
+   * copying it: minutes of work, and worth its own word on screen.
+   */
+  converting?: boolean;
   pct: number;
   bytesUploaded: number;
   bytesTotal: number;
@@ -233,11 +238,15 @@ export async function uploadAndSubmitVideo({
       }, 60_000);
 
       let lastSentTenth = -1;
+      let converting = false;
       try {
         const prepared = await prepareVideoForUpload(pickedFile, {
           startSeconds: trim.startSeconds,
           endSeconds: trim.endSeconds,
           signal: controller.signal,
+          onMode: (mode) => {
+            converting = mode === "transcode";
+          },
           onProgress: (progress) => {
             const tenth = Math.round(progress * 1000);
             if (tenth === lastSentTenth) return;
@@ -247,6 +256,7 @@ export async function uploadAndSubmitVideo({
               kind: "progress",
               progress: {
                 stage: "preparing",
+                converting,
                 pct: tenth / 10,
                 bytesUploaded: 0,
                 bytesTotal: pickedFile.size,

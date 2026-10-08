@@ -25,7 +25,8 @@
  *
  * Add and replace keep only the match: `defaultAttachmentTrimWindow` pads the
  * marked first point and the last required source instant by ten seconds, and
- * the upload wizard's own remux (`prepareVideoForUpload`, no re-encode) cuts
+ * the upload wizard's own remux (`prepareVideoForUpload`; no re-encode unless
+ * the file is not 1080p-or-less H.264, which it converts on the way) cuts
  * that window out locally before a byte is reserved. The completion then
  * carries the first point's position IN THE CUT (`marked − start`); the server
  * derives the same offset from it and re-checks coverage against the cut's
@@ -156,6 +157,11 @@ export type AttachmentSaveState =
        */
       percent: number | null;
       bytesTransferred: number;
+      /**
+       * While trimming: the file is being re-encoded to 1080p H.264 rather
+       * than copied (see `src/lib/video/trim-plan.ts`). Minutes, not seconds.
+       */
+      converting?: boolean;
       /** The size of the file being moved; while trimming, the original's. */
       totalBytes: number;
       /**
@@ -442,6 +448,8 @@ export function useAttachmentFlow(
   const pendingAttachmentId = useRef<string | null>(null);
   /** The last progress this hook actually pushed into React. */
   const lastReport = useRef<{ phase: string; percent: number } | null>(null);
+  /** Whether the cut in flight is a re-encode; set by the worker's `mode`. */
+  const converting = useRef(false);
   /** The first uploading report of this transfer — the ETA's baseline. */
   const rateStart = useRef<{ at: number; bytes: number } | null>(null);
 
@@ -612,7 +620,10 @@ export function useAttachmentFlow(
       setSave({
         status: "saving",
         phase: "trimming",
-        label: "Cutting the video to the match",
+        label: converting.current
+          ? "Converting the video to 1080p"
+          : "Cutting the video to the match",
+        converting: converting.current,
         percent: Math.round(percent * 10) / 10,
         bytesTransferred: 0,
         totalBytes,
@@ -729,6 +740,7 @@ export function useAttachmentFlow(
             const estimatedKept = Math.round(
               picked.sizeBytes * Math.min(1, Math.max(0, share)),
             );
+            converting.current = false;
             reportTrim(0, picked.sizeBytes, estimatedKept);
 
             let prepared: Awaited<ReturnType<typeof deps.prepare>> | null =
@@ -740,6 +752,9 @@ export function useAttachmentFlow(
                 signal: controller.signal,
                 onProgress: (fraction) =>
                   reportTrim(fraction, picked.sizeBytes, estimatedKept),
+                onMode: (mode) => {
+                  converting.current = mode === "transcode";
+                },
               });
             } catch {
               // `prepareVideoForUpload` rejects only on cancellation; anything
@@ -763,7 +778,7 @@ export function useAttachmentFlow(
                 file: prepared.file,
                 filename: prepared.file.name,
                 sizeBytes: prepared.file.size,
-                // The cut is always an MP4 remux, whatever was picked.
+                // The cut is always an MP4, whatever was picked.
                 contentType: "video/mp4",
                 durationSeconds: prepared.durationSeconds,
               };

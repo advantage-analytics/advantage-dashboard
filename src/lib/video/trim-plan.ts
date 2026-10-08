@@ -10,11 +10,23 @@
  * same resolution and frame rate), and that file is the one we store, send to
  * the vendor, and play back.
  *
+ * ── The one re-encode ───────────────────────────────────────────────────────
+ * A file that is not H.264, or is above 1080p (`normaliseReason()`), is
+ * re-encoded to 1080p H.264 on the way through, at its own frame rate — even
+ * when the window is the whole clip. Phones write 4K HEVC by default; the
+ * uploader's browser decodes it, a viewer's often cannot, and the vendor's GPU
+ * ran out of memory on one (Rhodri v Bao, 2026-10-08). The result is still the
+ * one file we store, send and play, so no clock moves. Never below 1080p: that
+ * is the vendor's floor.
+ *
  * ── When we don't ───────────────────────────────────────────────────────────
  * Every "skip" uploads the original untouched and sends the vendor the window
  * as before, which is exactly the pre-trim behaviour. A skip is never an
  * error: the upload still happens, it is just larger.
  */
+
+import type { NormaliseReason } from "@/lib/match-video/playback-format";
+import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 
 /** Handles this close to either end of the clip count as "not trimmed". */
 export const WHOLE_CLIP_TOLERANCE_SECONDS = 0.5;
@@ -28,12 +40,45 @@ export type TrimSkipReason =
   | "no-quota"
   /** The container can't be read, or a video/audio track can't be copied into MP4. */
   | "unsupported"
+  /** The file needs re-encoding and this browser cannot decode or encode it. */
+  | "no-encoder"
   /** Anything else the remux threw. Logged; the original is uploaded. */
   | "failed";
 
 export type TrimDecision =
   | { kind: "remux"; startSeconds: number; endSeconds: number }
+  | {
+      kind: "transcode";
+      startSeconds: number;
+      endSeconds: number;
+      /** Video bitrate to encode at, in bits per second. */
+      videoBitrate: number;
+    }
   | { kind: "skip"; reason: TrimSkipReason };
+
+/** How a prepared file was made. A transcode is also cut to its window. */
+export type PreparedMode = "remux" | "transcode";
+
+/**
+ * 1080p H.264 targets: several times what ball tracking has been fine on (most
+ * stored matches are ~2 Mbps) and a fraction of a 4K source. A match up to
+ * about two hours gets the full rate; a longer one gives some up to stay under
+ * the upload limit (`TRANSCODE_MAX_OUTPUT_BYTES`).
+ */
+export const TRANSCODE_BITRATE_30FPS = 6_000_000;
+export const TRANSCODE_BITRATE_60FPS = 8_000_000;
+/** Above this a clip is treated as high frame rate (50 and 60 fps footage). */
+const HIGH_FRAME_RATE = 40;
+/** Audio and container overhead allowed for on top of the video bitrate. */
+const TRANSCODE_OVERHEAD_BITRATE = 320_000;
+/** The re-encode must still fit the upload limit, with room to spare. */
+const TRANSCODE_MAX_OUTPUT_BYTES = MAX_VIDEO_SIZE_BYTES * 0.9;
+
+export function transcodeVideoBitrate(frameRate: number | null): number {
+  return frameRate !== null && frameRate > HIGH_FRAME_RATE
+    ? TRANSCODE_BITRATE_60FPS
+    : TRANSCODE_BITRATE_30FPS;
+}
 
 export interface TrimInputs {
   startSeconds: number;
@@ -44,6 +89,13 @@ export interface TrimInputs {
   opfsAvailable: boolean;
   /** Free quota in bytes, or null when the browser won't say. */
   quotaFreeBytes: number | null;
+  /**
+   * Why the file must be re-encoded, from `normaliseReason()`; null or absent
+   * for a file that is already 1080p-or-less H.264.
+   */
+  normalise?: NormaliseReason | null;
+  /** The source's average frame rate, when the container gives one. */
+  frameRate?: number | null;
 }
 
 export function decideTrim(input: TrimInputs): TrimDecision {
@@ -53,6 +105,35 @@ export function decideTrim(input: TrimInputs): TrimDecision {
   const wholeClip =
     start <= WHOLE_CLIP_TOLERANCE_SECONDS &&
     end >= input.sourceDurationSeconds - WHOLE_CLIP_TOLERANCE_SECONDS;
+
+  if (input.normalise && end > start) {
+    if (!input.opfsAvailable) return { kind: "skip", reason: "no-opfs" };
+    // The window as asked, even when it is the whole clip to within the
+    // tolerance: callers place their own clocks from the start they requested
+    // (the attachment flow's `marked − start`), so the file must begin there.
+    const from = start;
+    const to = end;
+    // A very long match gives up bitrate before it gives up the upload.
+    const ceiling =
+      (TRANSCODE_MAX_OUTPUT_BYTES * 8) / (to - from) -
+      TRANSCODE_OVERHEAD_BITRATE;
+    const videoBitrate = Math.floor(
+      Math.min(transcodeVideoBitrate(input.frameRate ?? null), ceiling),
+    );
+    // The output's size follows the target bitrate, not the source's.
+    const needed =
+      ((videoBitrate + TRANSCODE_OVERHEAD_BITRATE) / 8) * (to - from) * 1.05;
+    if (input.quotaFreeBytes !== null && input.quotaFreeBytes < needed) {
+      return { kind: "skip", reason: "no-quota" };
+    }
+    return {
+      kind: "transcode",
+      startSeconds: from,
+      endSeconds: to,
+      videoBitrate,
+    };
+  }
+
   if (!(end > start) || wholeClip)
     return { kind: "skip", reason: "whole-clip" };
 

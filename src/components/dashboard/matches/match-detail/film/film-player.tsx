@@ -34,6 +34,7 @@ import { useFilmClockVars } from "./film-clock";
 import { RepeatOff } from "./film-glyphs";
 import type { Rect } from "./film-motion";
 import { FILM_REFUSAL_COPY } from "./film-refusal-copy";
+import { playbackFailure, type PlaybackFailure } from "./playback-failure";
 import { FilmTrack } from "./film-track";
 import { useFilmTrace } from "./use-film-trace";
 import {
@@ -314,7 +315,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     const [rate, setRate] = useState<number>(1);
     const [looping, setLooping] = useState(false);
     const [skipDead, setSkipDead] = useState(false);
-    const [failed, setFailed] = useState(false);
+    const [failed, setFailed] = useState<PlaybackFailure | null>(null);
     // T16: dim the held frame while a seek the chrome already made is still
     // landing. Display only — `seekTo` / `pushTime` are untouched.
     // `seeking` is already gated on the element's first `loadeddata` (a cold
@@ -646,6 +647,28 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       );
     }
 
+    // The link is still good, so the file is what this browser refused, and a
+    // reload would sign the same bytes again.
+    if (failed === "format") {
+      return (
+        <div
+          role="alert"
+          data-testid="film-format-panel"
+          className="flex flex-col items-center justify-center gap-4 rounded-[14px] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-16 text-center"
+        >
+          <span className="text-title" style={{ fontSize: "16px" }}>
+            {FILM_REFUSAL_COPY.unsupportedFormat.heading}
+          </span>
+          <span
+            className="text-body-sm max-w-[380px]"
+            style={{ color: "var(--ink-600)" }}
+          >
+            {FILM_REFUSAL_COPY.unsupportedFormat.body}
+          </span>
+        </div>
+      );
+    }
+
     // The Advantage Intelligence lineage's whole error story, unchanged: no
     // endpoint re-signs that URL, so reloading the page is the only repair.
     if (failed) {
@@ -730,9 +753,15 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               settling.onSeeked();
               onTime(e.currentTarget.currentTime);
             }}
-            onError={() => {
+            onError={(e) => {
               if (passthrough) {
-                setFailed(true);
+                setFailed(
+                  playbackFailure({
+                    code: e.currentTarget.error?.code,
+                    url: url ?? "",
+                    now: Date.now(),
+                  }),
+                );
                 return;
               }
               // The dead element is covered until the hook's next generation
