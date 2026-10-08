@@ -144,6 +144,13 @@ export interface RosterMember {
   /** The login's profile photo, or null to draw initials. */
   avatarUrl: string | null;
   role: MemberRole;
+  /**
+   * The seat this player ALSO holds at the staff table — an owner, coach or
+   * staff member who added themselves to the roster. Such a person is two rows
+   * of `program_roster_full` sharing a `userId`: this player row, and a staff
+   * row. Null on every staff row and on a player who is only a player.
+   */
+  staffRole: Exclude<MemberRole, "player"> | null;
   /** "coach" until they claim the profile, then "self". */
   managedBy: "coach" | "self";
   uploadEnabled: boolean;
@@ -487,6 +494,17 @@ export const getRosterData = cache(async function getRosterData(
   await reconcileBeforePageRead(latestMatchIds, "roster");
   const analysisByMatch = await loadMatchAnalysis(supabase, latestMatchIds);
 
+  // Staff who also play: the login's staff role, keyed by the login.
+  const staffRoleByUser = new Map<string, Exclude<MemberRole, "player">>();
+  for (const row of rows) {
+    if (row.role !== "player" && row.user_id) {
+      staffRoleByUser.set(
+        row.user_id,
+        row.role as Exclude<MemberRole, "player">,
+      );
+    }
+  }
+
   const members: RosterMember[] = rows.map((row) => {
     const results = resultsByMember.get(row.player_id) ?? [];
 
@@ -533,6 +551,10 @@ export const getRosterData = cache(async function getRosterData(
       email: row.email,
       avatarUrl: row.user_id ? (avatars.get(row.user_id) ?? null) : null,
       role: row.role as MemberRole,
+      staffRole:
+        row.role === "player" && row.user_id
+          ? (staffRoleByUser.get(row.user_id) ?? null)
+          : null,
       managedBy:
         row.managed_by === "coach" ? ("coach" as const) : ("self" as const),
       uploadEnabled: row.upload_enabled,

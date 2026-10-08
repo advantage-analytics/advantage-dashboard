@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { canonicalRosterIds, rosterMatchIds } from "@/lib/data/roster-ids";
+import {
+  canonicalRosterIds,
+  idsResolvingTo,
+  rosterMatchIds,
+} from "@/lib/data/roster-ids";
 import {
   teamAttention,
   teamFirstReport,
@@ -432,4 +436,31 @@ test.describe("staff seats keep working exactly as they do now", () => {
     expect(card?.value).toBe("—");
     expect(card?.sparkline).toEqual([]);
   });
+});
+
+test.describe("a staff member who also plays", () => {
+  // `program_roster_full` returns them twice: a player row keyed by their
+  // profile, and a staff row keyed by their login. Both orders are tried,
+  // because the rule must not depend on which arm of the RPC comes first.
+  const PLAYER_ROW = { player_id: "pp-owner", user_id: "u-owner" };
+  const STAFF_ROW = { player_id: "u-owner", user_id: "u-owner" };
+
+  for (const [label, rows] of [
+    ["player row first", [PLAYER_ROW, STAFF_ROW]],
+    ["staff row first", [STAFF_ROW, PLAYER_ROW]],
+  ] as const) {
+    test(`their login id folds onto their profile — ${label}`, () => {
+      const canonical = canonicalRosterIds(rows);
+      expect(canonical.get("u-owner")).toBe("pp-owner");
+      expect(canonical.get("pp-owner")).toBe("pp-owner");
+      // Both eras of their matches are found for the profile...
+      expect(idsResolvingTo(canonical, "pp-owner").sort()).toEqual([
+        "pp-owner",
+        "u-owner",
+      ]);
+      // ...and the staff row, which nothing maps back to, still names itself:
+      // a caller building an `in.()` filter never gets an empty list.
+      expect(idsResolvingTo(canonical, "u-owner")).toEqual(["u-owner"]);
+    });
+  }
 });

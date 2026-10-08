@@ -90,6 +90,12 @@ export interface SourceStepContentProps {
    * it without re-asking the question.
    */
   quotaRefusal?: string | null;
+  /**
+   * The "Add yourself as a player" offer (`useAddSelfOffer`) — non-null only
+   * for an owner, coach or staff member this roster does not carry. Data, not
+   * a component: this module's imports are pinned by `upload-source.spec.ts`.
+   */
+  addSelf?: { roleLabel: string; onOpen: () => void } | null;
 }
 
 type FieldName = "workspace" | "for" | "source";
@@ -279,6 +285,7 @@ function SourceStepContentImpl({
   onProviderSelect,
   whoPlayed,
   quotaRefusal = null,
+  addSelf = null,
 }: SourceStepContentProps) {
   const { active, available, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
@@ -620,6 +627,47 @@ function SourceStepContentImpl({
               role="listbox"
               aria-label="Who played this match"
             >
+              {/* You — only for staff this roster does not carry. Not a
+                  "Myself" pick: a team match is recorded against a roster
+                  player, so the row offers the act that makes them one, and
+                  the hook picks the new profile once it exists. */}
+              {addSelf && (
+                <>
+                  <span className={MENU_LABEL_CLS}>Yourself</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      addSelf.onOpen();
+                    }}
+                    className="flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none"
+                  >
+                    {/* Their own face, solid — the same mark the personal For
+                        field draws. The dashed ring means "invited, not here
+                        yet" everywhere else in this menu, and the viewer is
+                        neither: the words beside the name say what is
+                        missing. */}
+                    <PersonAvatar
+                      initials={uploaderInitials}
+                      photoUrl={viewer.avatarUrl}
+                      className="size-[22px] text-[10px]"
+                    />
+                    <span className="text-[12px] font-medium whitespace-nowrap text-[var(--ink-900)]">
+                      {uploaderName}
+                    </span>
+                    <YouPill className="shrink-0" />
+                    <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)]">
+                      {addSelf.roleLabel} · Not on the roster yet
+                    </span>
+                    <span className="flex-1" />
+                    <span className="text-[11px] font-medium whitespace-nowrap text-[var(--blue)]">
+                      Add yourself as a player
+                    </span>
+                  </button>
+                  <span className="my-[5px] h-px bg-[var(--border-hairline)]" />
+                </>
+              )}
+
               {/* Someone new — first, above the hairline. The invite itself
                   lives on the roster page; the match waits for them there. */}
               <Link
@@ -644,12 +692,11 @@ function SourceStepContentImpl({
               </Link>
               <span className="my-[5px] h-px bg-[var(--border-hairline)]" />
 
-              {/* No "Myself" row. A team match is recorded against a roster
+              {/* No "Myself" pick. A team match is recorded against a roster
                   player, and a staff login is not one — the hook's eligibility
                   refuses `self` here, so offering it would be offering a
-                  refusal. A viewer who genuinely holds a player profile finds
-                  it in the list below, marked You: the hook folds their own
-                  `program_players` row in when the roster RPC leaves it out. */}
+                  refusal. Staff who hold a player profile find it in the list
+                  below, marked You; staff who do not get the offer above. */}
               <RosterMenuList
                 label={`Roster · ${workspaceLabel(active)}`}
                 roster={whoPlayed.roster}

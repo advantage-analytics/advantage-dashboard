@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { mayRemoveStaffProfile } from "./add-self-dialog";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { canUploadForProgram } from "@/lib/workspace/types";
+import { PROGRAM_ROLE_LABEL, canUploadForProgram } from "@/lib/workspace/types";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   ChevronDown,
@@ -352,12 +353,28 @@ function MemberMenu({
   // for owner, coach and staff before it reads `upload_enabled`, so on a staff
   // row this switch would move, write, and change nothing anyone could
   // observe. A coach-managed player has no account to grant it to.
-  const canToggleSend = member.userId !== null && member.role === "player";
-  const canRemove = member.role !== "owner" && !isViewer;
+  // Nor on a player row held by somebody who is ALSO staff: their sending is
+  // decided by the upload policy, exactly as on their staff row.
+  const playerOnly = member.role === "player" && member.staffRole === null;
+  const canToggleSend = member.userId !== null && playerOnly;
+  // Nobody removes themselves from the team here — except from a player row
+  // that sits beside a staff seat. Removing that one only takes them off the
+  // roster (`archive_program_player` keeps a staff member's membership), so it
+  // is offered on the viewer's own row too: it is how "add yourself as a
+  // player" is undone.
+  //
+  // Who may remove a staff-held profile mirrors `archive_program_player`: the
+  // person themselves, the owner, or a coach acting on a staff member's.
+  // Presentation only — the function refuses the rest.
+  const { active } = useWorkspace();
+  const canRemove =
+    member.staffRole !== null
+      ? mayRemoveStaffProfile(active.role, member.staffRole, isViewer)
+      : member.role !== "owner" && !isViewer;
   // Gated on there being a profile row to write. A coach and a claimed player
   // both have one; staff seats do not.
   const canEdit = member.profileId !== null;
-  const grantSlotFilled = canToggleSend || member.role === "player";
+  const grantSlotFilled = playerOnly;
 
   if (!canToggleSend && !canRemove && !canEdit) return null;
 
@@ -416,7 +433,7 @@ function MemberMenu({
             />
           </div>
         ) : (
-          member.role === "player" && (
+          playerOnly && (
             <p className="px-2 py-2 text-[11px] leading-[1.5] text-[var(--ink-500)]">
               No login yet, so there is no analysis time to grant.
             </p>
@@ -469,8 +486,9 @@ function MemberMenu({
               </span>
               {member.profileId && (
                 <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                  Their matches stay. Adding them again offers to restore this
-                  profile.
+                  {member.staffRole !== null
+                    ? `Only ${isViewer ? "your" : "the"} player profile goes. ${isViewer ? "Your" : "Their"} ${PROGRAM_ROLE_LABEL[member.staffRole].toLowerCase()} role and ${isViewer ? "your" : "their"} matches stay.`
+                    : "Their matches stay. Adding them again offers to restore this profile."}
                 </span>
               )}
             </span>

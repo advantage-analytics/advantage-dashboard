@@ -30,6 +30,8 @@ import {
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
 import type { RosterMember } from "@/lib/data/team-roster-server";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { mayRemoveStaffProfile } from "./add-self-dialog";
 
 /**
  * Correct a roster row — the other half of Add player.
@@ -97,6 +99,17 @@ export function EditPlayerDialog({
    */
   onRemoved?: () => void;
 }) {
+  // A staff-held profile is removed under `archive_program_player`'s ladder,
+  // not by any staff member — so the Remove slot follows the same rule the
+  // drawer's menu does, rather than offering a button the function refuses.
+  const { active, viewer } = useWorkspace();
+  const mayRemove =
+    !member?.staffRole ||
+    mayRemoveStaffProfile(
+      active.role,
+      member.staffRole,
+      member.userId === viewer.id,
+    );
   const [fields, setFields] = useState<PlayerFields | null>(null);
   const [error, setError] = useState<string | null>(null);
   const proseId = useId();
@@ -312,7 +325,7 @@ export function EditPlayerDialog({
           </>
         ) : (
           <>
-            {onRemoved && (
+            {onRemoved && mayRemove && (
               <button
                 type="button"
                 disabled={busy}
@@ -358,13 +371,20 @@ export function EditPlayerDialog({
               Their <Em>matches</Em> stay on the <Em>program&apos;s record</Em>,
               still attributed to this profile, and adding them again offers to
               restore it.
-              {member.userId !== null && (
-                <>
-                  {" "}
-                  Because they sign in for themselves, they also lose access to
-                  the team.
-                </>
-              )}
+              {member.userId !== null &&
+                (member.staffRole !== null ? (
+                  <>
+                    {" "}
+                    Only the player profile goes — they keep their place on the
+                    team&apos;s staff.
+                  </>
+                ) : (
+                  <>
+                    {" "}
+                    Because they sign in for themselves, they also lose access
+                    to the team.
+                  </>
+                ))}
             </p>
             <ConfirmAside>
               You&apos;ll land back on the roster — this profile page closes

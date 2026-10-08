@@ -17,8 +17,10 @@ import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
+import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import {
   inviteMember,
   revokeInvite,
@@ -599,6 +601,14 @@ function MemberRow({
             </Link>
           )}
           {isViewer && <YouPill className="shrink-0" />}
+          {/* A player who is also the owner, a coach or staff — they added
+              themselves to the roster. Shown to everyone: it says why a name
+              from the "Coached by" line is also a row here. */}
+          {member.staffRole && (
+            <StatePill className="shrink-0">
+              {PROGRAM_ROLE_LABEL[member.staffRole]}
+            </StatePill>
+          )}
           {/* Back after the Tb4 distillation dropped it: which rows have no
               login decides who can be invited to claim and whose video only
               staff can send, and a coach scans for it. Staff only — to a

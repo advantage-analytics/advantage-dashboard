@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   AddPlayerDialog,
@@ -13,6 +14,11 @@ import {
 } from "@/components/dashboard/team/roster-actions";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import { RosterInviteDialog } from "./roster-invite-dialog";
+import {
+  AddSelfDialog,
+  mayAddSelf,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
 import { useClaimInvite } from "./roster-claim-invite";
 import {
@@ -126,11 +132,51 @@ export function RosterHeaderButtons({
    */
   joinLink: TeamJoinLink | null;
 }) {
-  const { active } = useWorkspace();
+  const { active, viewer } = useWorkspace();
   const [inviting, setInviting] = useState(false);
+  /**
+   * "Add yourself as a player" — reached by typing your own address into
+   * either dialog. Offered to staff this roster does not carry as a player;
+   * for anybody else their own address is an ordinary duplicate.
+   */
+  const [addingSelf, setAddingSelf] = useState(false);
+  const self: OwnAddressOffer = mayAddSelf(
+    active.role,
+    roster.some(
+      (member) => member.role === "player" && member.userId === viewer.id,
+    ),
+  )
+    ? {
+        email: viewer.email,
+        onAddSelf: () => {
+          setInviting(false);
+          setAddingPlayer(false);
+          setAddingSelf(true);
+        },
+      }
+    : null;
   /** The join-link popover, opened only by the Invite dialog's hand-off. */
   const [linkOpen, setLinkOpen] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
+  /**
+   * `?add=player` lands with Add player already open — Team Home's day-zero
+   * "Add players" button, which names this dialog and should not need a second
+   * click to reach it. Consumed once, during render (the arrival is the event,
+   * so there is no frame with the dialog still closed), then taken off the URL
+   * so a reload or the back button does not reopen a dialog somebody closed.
+   */
+  const openOnArrival = useSearchParams().get("add") === "player";
+  const [arrival, setArrival] = useState(openOnArrival);
+  if (arrival) {
+    setArrival(false);
+    setAddingPlayer(true);
+  }
+  useEffect(() => {
+    if (!openOnArrival) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", url);
+  }, [openOnArrival]);
   /**
    * What Add player should open holding.
    *
@@ -222,6 +268,7 @@ export function RosterHeaderButtons({
         openInviteEmails={openInviteEmails}
         playersCanUpload={playersCanUpload}
         onHandOffToAddPlayer={handOffToAddPlayer}
+        self={self}
         onShareJoinLink={() => {
           setInviting(false);
           claim.clear();
@@ -254,7 +301,21 @@ export function RosterHeaderButtons({
         former={former}
         initial={addInitial}
         actions={MEMBER_ACTIONS}
+        self={self}
       />
+
+      {/* Mounted only while it can be opened, or is open: the roster refresh
+          after a success withdraws the offer before the dialog has closed. */}
+      {(self || addingSelf) && (
+        <AddSelfDialog
+          open={addingSelf}
+          onOpenChange={setAddingSelf}
+          programId={active.id}
+          viewerName={viewer.name}
+          teamName={active.name}
+          seats={seats}
+        />
+      )}
     </>
   );
 }

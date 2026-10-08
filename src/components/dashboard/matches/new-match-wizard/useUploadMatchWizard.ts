@@ -659,6 +659,13 @@ export interface UseUploadMatchWizardReturn {
     /** True in a team workspace with no preset — the wizard must ask. */
     required: boolean;
     /**
+     * The program `roster` belongs to, or null outside a team. Not always the
+     * switcher's active workspace: an attached line pins the wizard to the
+     * match's own program. Anything that ACTS on the roster — adding yourself
+     * to it — must agree with this, not with the switcher.
+     */
+    programId: string | null;
+    /**
      * The ELIGIBLE roster: the program's live players, the viewer's own
      * profile included when they genuinely hold one (see
      * `eligibleRosterOptions`). Nobody else is offered — there is no "Myself"
@@ -682,6 +689,13 @@ export interface UseUploadMatchWizardReturn {
      * anything else is ignored rather than installed.
      */
     choose: (subject: MatchSubject) => void;
+    /**
+     * Installs a roster profile that was created a moment ago — the viewer
+     * adding themselves as a player from the For menu. The list in hand
+     * predates that row, so this reloads it and holds the answer meanwhile;
+     * the fresh list is what confirms it, exactly as for a `?player=` seed.
+     */
+    chooseAdded: (subject: RosterSubject) => void;
   };
   /**
    * May this match be recorded here, and for whom — `uploadEligibility()`
@@ -1904,8 +1918,9 @@ export function useUploadMatchWizard({
    * so an owner or coach who also plays would otherwise have no row of their
    * own to pick — and no "Myself" to fall back on, since that is exactly the
    * fallback this wizard no longer has. `eligibleRosterOptions()` folds it in
-   * on the same terms as everyone else. Readable under the roster's own
-   * SELECT policy (`program_id in user_program_ids()`).
+   * on the same terms as everyone else. (The RPC stopped dropping it in
+   * `20261008160418`, so the fold is now a guard.) Readable under the roster's
+   * own SELECT policy (`program_id in user_program_ids()`).
    *
    * A failed RPC leaves the roster NULL and flags it, rather than reading as
    * an empty program: `uploadEligibility()` refuses on null as
@@ -2133,12 +2148,20 @@ export function useUploadMatchWizard({
    * longer offers it), and a roster id the loaded list does not carry is
    * refused too. A pick made before the list has loaded is accepted and
    * re-checked by the effect above once it has.
+   *
+   * `awaitingReload` is that same case made on purpose: the row was created
+   * after the list in hand was read, the caller has already asked for a fresh
+   * one, and the stale list must not be the thing that refuses it.
    */
   const chooseMatchSubject = useCallback(
-    (subject: MatchSubject) => {
+    (subject: MatchSubject, awaitingReload = false) => {
       if (eligibilityWorkspace.kind === "team") {
         if (subject.kind !== "roster") return;
-        if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
+        if (
+          !awaitingReload &&
+          teamRoster &&
+          rosterSubjectOrNull(subject, teamRoster) === null
+        )
           return;
       }
       const previous = matchSubjectRef.current;
@@ -2181,6 +2204,25 @@ export function useUploadMatchWizard({
       applyMatchSubject,
       resetIdentityAnswer,
     ],
+  );
+
+  /**
+   * `whoPlayed.choose` — one argument, on purpose. `chooseMatchSubject`'s
+   * second parameter skips the roster check, and a function handed out as a
+   * prop is one `onClick={choose}` away from receiving a truthy event there.
+   */
+  const chooseListedSubject = useCallback(
+    (subject: MatchSubject) => chooseMatchSubject(subject),
+    [chooseMatchSubject],
+  );
+
+  /** See `whoPlayed.chooseAdded`. Reload first, so the answer rides a null list. */
+  const chooseAddedSubject = useCallback(
+    (subject: RosterSubject) => {
+      reloadRoster();
+      chooseMatchSubject(subject, true);
+    },
+    [reloadRoster, chooseMatchSubject],
   );
 
   // Step navigation handlers
@@ -3878,12 +3920,15 @@ export function useUploadMatchWizard({
     handleFormatChange,
     whoPlayed: {
       required: askWhoPlayed,
+      programId:
+        eligibilityWorkspace.kind === "team" ? eligibilityWorkspace.id : null,
       roster: teamRoster,
       loadFailed: rosterLoadFailed,
       reload: reloadRoster,
       uploaderName,
       subject: matchSubject,
-      choose: chooseMatchSubject,
+      choose: chooseListedSubject,
+      chooseAdded: chooseAddedSubject,
     },
     eligibility,
     retryEligibility,

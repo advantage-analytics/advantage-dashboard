@@ -99,7 +99,11 @@ export default async function TeamHomePage() {
     return (
       <>
         {report}
-        <TeamHomeDayZeroPage canManage={isStaff} teamName={active.name} />
+        <TeamHomeDayZeroPage
+          canManage={isStaff}
+          canUpload={canUploadForProgram(active)}
+          teamName={active.name}
+        />
       </>
     );
   }

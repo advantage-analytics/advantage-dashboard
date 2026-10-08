@@ -15,11 +15,29 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  * While the Schedule is a coming-soon page (`lib/schedule/availability.ts`)
  * the offer promises no duals and offers no "Schedule a dual": the preview
  * below draws no dual cards, and the button would land on the stub.
+ *
+ * "Add players" lands on the Roster with Add player already open (`?add=player`,
+ * read by `RosterHeaderButtons`) — the dialog needs the roster's seats and
+ * names, and the row it makes should be what the coach sees next, so it opens
+ * there rather than here; but the button said what it does, so it is one click.
+ *
+ * The ghost slot is "Upload a match" while the Schedule is off. An empty
+ * roster used to make that a dead end; staff can now add themselves as a
+ * player from the wizard's For menu, so it leads somewhere. It stays the
+ * ghost: for most programs the roster comes first. One ghost only — when the
+ * Schedule returns, "Schedule a dual" takes the slot back.
  */
 export function TeamDayZeroHome({
   canManage,
+  canUpload,
   children,
 }: {
+  /**
+   * `canUploadForProgram()` for this viewer — the upload policy may be
+   * narrower than "staff", and a button that refuses on the next page is worse
+   * than no button.
+   */
+  canUpload: boolean;
   /** Staff can build the team; players see the same promise without controls. */
   canManage: boolean;
   children: React.ReactNode;
@@ -37,19 +55,26 @@ export function TeamDayZeroHome({
           canManage ? (
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
-                href="/dashboard/team/roster"
+                href="/dashboard/team/roster?add=player"
                 className={advButton("primary")}
               >
                 Add players
               </Link>
-              {SCHEDULE_ENABLED && (
+              {SCHEDULE_ENABLED ? (
                 <Link
                   href="/dashboard/team/schedule/new/dual"
                   className={advButton("ghost")}
                 >
                   Schedule a dual
                 </Link>
-              )}
+              ) : canUpload ? (
+                <Link
+                  href="/dashboard/matches/new"
+                  className={advButton("ghost")}
+                >
+                  Upload a match
+                </Link>
+              ) : null}
             </div>
           ) : null
         }
@@ -59,7 +84,9 @@ export function TeamDayZeroHome({
               ? "Build the roster first, then schedule a dual and send its match video for analysis."
               : "Your coaching staff build the roster, schedule duals, and send match video. Every report lands here for the team."
             : canManage
-              ? "Build the roster first, then send a match for analysis."
+              ? canUpload
+                ? "Build the roster, then send a match for analysis. If you play too, add yourself as a player when you upload."
+                : "Build the roster first, then send a match for analysis."
               : "Your coaching staff build the roster and send match video. Every report lands here for the team."
         }
       />

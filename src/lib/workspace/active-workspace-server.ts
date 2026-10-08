@@ -243,11 +243,13 @@ async function listProgramWorkspaces(
         memberUploadEnabled: Boolean(row.upload_enabled),
         // A player's matches carry their claimed profile's id; a player-role
         // member who never claimed one is listed under their user id (arm 3
-        // of `program_roster_full`). Staff have no player page of their own.
+        // of `program_roster_full`). Staff have a player page only once they
+        // have added themselves to the roster — and then it is that profile's
+        // id, never the login's: a staff login is not a player to fall back to.
         myPlayerId:
           row.role === "player"
             ? (claimedProfiles.get(program.id) ?? userId)
-            : null,
+            : (claimedProfiles.get(program.id) ?? null),
       },
     ];
   });

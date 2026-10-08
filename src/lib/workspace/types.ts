@@ -283,7 +283,10 @@ export interface Workspace {
    * The id this viewer's matches carry inside this program, when they are a
    * player here — the `program_players.id` they have claimed, else their own
    * user id for a player-role membership with no live profile (arm 3 of
-   * `program_roster_full`). Null for staff and for a personal workspace.
+   * `program_roster_full`). For an owner, coach or staff member it is the
+   * profile they hold after adding themselves to the roster, and null until
+   * they do — never their user id, since a staff login is not a player. Null
+   * for a personal workspace.
    *
    * On the workspace rather than fetched by the rail, because the rail is a
    * client component and this id comes from `program_players`, which only a
