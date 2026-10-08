@@ -34,12 +34,14 @@ import {
 import { shortDate } from "@/lib/data/match-utils";
 import {
   adminEndPilot,
+  adminSetPilotEligible,
   adminSetPilotEnd,
 } from "@/lib/services/programs/admin-team-actions";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import type { AdminTeamPilot } from "@/lib/data/admin-team-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 
 /**
  * This program's pilot, and the month of analysis hours it pays for.
@@ -67,6 +69,8 @@ export function PilotUsageCard({
   programName,
   usage,
   pilot,
+  orgType,
+  pilotEligible,
   teamPool,
 }: {
   programId: string;
@@ -74,6 +78,13 @@ export function PilotUsageCard({
   programName: string;
   usage: ProgramUsage;
   pilot: AdminTeamPilot;
+  /**
+   * `programs.org_type`. A college draws the program pool on its own and
+   * shows no pool control; every other kind shows Grant / Revoke.
+   */
+  orgType: ProgramOrgType | null;
+  /** `programs.pilot_eligible` — whether an admin already granted the pool. */
+  pilotEligible: boolean;
   /**
    * True when the team draws the program pool (`quotaTierFor` → `"program"`),
    * false when it shares the individual figure. Decided on the server: the
@@ -161,14 +172,17 @@ export function PilotUsageCard({
         />
         {/* Only where the team draws its own pool. On the individual figure
             the whole team shares one allowance (`quotaTierFor`), so a
-            per-member row would contradict the Usage card beside it; and even
-            on the program pool a member's own figure covers their personal
-            uploads, never this team's — hence the label. The figure is the
-            tier's own, never a literal 2 beside a cap that moves. */}
+            per-member row would contradict the Usage card beside it. Even on
+            the program pool there is NO per-member cap on team uploads: the
+            figure here is each member's own PERSONAL workspace allowance,
+            which never touches this team — the label says "outside this
+            team" because "2 h per member" read as a cap on the roster. The
+            figure is the tier's own, never a literal 2 beside a cap that
+            moves. */}
         {teamPool && (
           <Kv
-            label="Personal uploads"
-            value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h per member`}
+            label="Members' own workspaces"
+            value={`${formatHoursShort(getMonthlyCapSeconds("individual"))} h each, outside this team`}
           />
         )}
         <Kv label="Ends" value={endsValue(pilot, today)} />
@@ -196,6 +210,23 @@ export function PilotUsageCard({
           />
         )}
       </div>
+
+      {/* The pool itself is a decision only for a non-college team: a college
+          draws it from `org_type` alone (`quotaTierFor`), so offering to grant
+          or revoke there would be a button the RPC refuses. Its own row rather
+          than a third button in the one above — at the rail's width three
+          labels would wrap, and this one changes what the team can spend,
+          which the date controls do not. */}
+      {orgType !== "college" && (
+        <div className="mt-2 flex">
+          <PoolAccess
+            programId={programId}
+            programName={programName}
+            eligible={pilotEligible}
+            onChanged={() => router.refresh()}
+          />
+        </div>
+      )}
     </SettingsCard>
   );
 }
@@ -504,6 +535,130 @@ function EndPilot({
           Setting a new end date afterwards starts the pilot again.
         </ConfirmAside>
       </ConfirmDialog>
+    </>
+  );
+}
+
+/**
+ * Grant a non-college team the pilot's program pool, or take it back —
+ * `adminSetPilotEligible`. One button whose label is the other state, and a
+ * confirm that says what changes in prose: the figure the team draws from
+ * next, and (on a grant) the approver and end date the record gains. The
+ * figures come from `config.ts`, never literals, so they move with the tier.
+ *
+ * Grant is the primary tone: it is consequential (paid vendor hours) but
+ * creates, not destroys. Revoke is the danger tone — it takes spend away from
+ * a team mid-month, and the dialog says the dates stay so nobody reads it as
+ * ending the pilot.
+ */
+function PoolAccess({
+  programId,
+  programName,
+  eligible,
+  onChanged,
+}: {
+  programId: string;
+  programName: string;
+  eligible: boolean;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startChange] = useTransition();
+
+  const programHours = formatHoursShort(getMonthlyCapSeconds("program"));
+  const individualHours = formatHoursShort(getMonthlyCapSeconds("individual"));
+
+  const change = () => {
+    if (pending) return;
+    setError(null);
+    startChange(async () => {
+      const result = await adminSetPilotEligible({
+        programId,
+        eligible: !eligible,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      onChanged();
+    });
+  };
+
+  const onOpenChange = (next: boolean) => {
+    if (pending) return;
+    setOpen(next);
+    if (!next) setError(null);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`${advButton(eligible ? "outline" : "primary", "sm")} grow`}
+        onClick={() => setOpen(true)}
+      >
+        {eligible ? "Revoke team pool" : "Grant team pool"}
+      </button>
+
+      {eligible ? (
+        <ConfirmDialog
+          open={open}
+          onOpenChange={onOpenChange}
+          tone="danger"
+          title={`Take ${programName} off the team pool?`}
+          description="The team goes back to the individual figure, and the change is recorded in the program's history."
+          confirmLabel="Revoke pool"
+          pendingLabel="Revoking…"
+          pending={pending}
+          error={error}
+          onConfirm={change}
+        >
+          <ConfirmProse>
+            <p>
+              <Em>{programName}</Em> will draw the individual {individualHours}{" "}
+              h a month, shared by every member, from its next upload. Analysis
+              already running is not affected.
+            </p>
+            <p>
+              The pilot&rsquo;s approver and end date stay as they are — this
+              changes what the team can spend, not whether it is on the pilot.
+            </p>
+          </ConfirmProse>
+          <ConfirmAside>
+            Granting the pool again restores the figure.
+          </ConfirmAside>
+        </ConfirmDialog>
+      ) : (
+        <ConfirmDialog
+          open={open}
+          onOpenChange={onOpenChange}
+          title={`Put ${programName} on the team pool?`}
+          description="The team draws the program figure from now on, and the change is recorded in the program's history."
+          confirmLabel="Grant pool"
+          pendingLabel="Granting…"
+          pending={pending}
+          error={error}
+          onConfirm={change}
+        >
+          <ConfirmProse>
+            <p>
+              <Em>{programName}</Em> will draw {programHours} h of analysis a
+              month as a team, instead of the individual {individualHours} h
+              figure it shares today.
+            </p>
+            <p>
+              You are recorded as the approver if nobody is yet, and the pilot
+              end date is set to Dec 31, 2026 if none is set or it has passed.
+            </p>
+          </ConfirmProse>
+          <ConfirmAside>
+            Change the end date afterwards from this card; revoking the pool
+            does not end the pilot.
+          </ConfirmAside>
+        </ConfirmDialog>
+      )}
     </>
   );
 }

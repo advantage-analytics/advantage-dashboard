@@ -21,8 +21,10 @@
  * (`admin_reconcile_submission_item`, `admin_abandon_result_items`).
  * `match.detached` and `match.round_changed` come from
  * `detach_match_from_event_line` and `set_match_round_on_line` (2026-09-29).
- * `pilot.eligibility_changed` has no migration in the repo; its live writer is
- * `admin_set_pilot_eligible` (`details.from/to` booleans, `by_admin`).
+ * `pilot.eligibility_changed` is written only by `admin_set_pilot_eligible`
+ * (`20261007142230_program_pilot_eligible.sql`; `details.from/to` booleans,
+ * `by_admin`, `stamped`) — the admin granting or revoking a non-college team's
+ * program pool, hence "Team pool changed".
  *
  * `activityLabel()` never throws and never hides a row: an action this map
  * has not learned about yet falls back to printing the raw string, because an
@@ -62,7 +64,7 @@ export const ADMIN_ACTIVITY_LABELS: Record<string, string> = {
   "join_request.declined": "Join request declined",
   "pilot.end_changed": "Pilot end date changed",
   "pilot.ended": "Pilot ended",
-  "pilot.eligibility_changed": "Pilot eligibility changed",
+  "pilot.eligibility_changed": "Team pool changed",
 };
 
 /** The label for `action`, or the raw value when nothing maps it yet. */

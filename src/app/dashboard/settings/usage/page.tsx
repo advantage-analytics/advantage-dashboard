@@ -59,9 +59,7 @@ export default async function UsagePage() {
   const [videos, personal, ...programs] = await Promise.all([
     getMatchVideoUsage(workspace.active),
     getPersonalUsage(personalWorkspace, billingMonth),
-    ...teams.map((team) =>
-      getProgramUsage(team.id, billingMonth, team.orgType),
-    ),
+    ...teams.map((team) => getProgramUsage(team.id, billingMonth, team)),
   ]);
 
   // Needs the uploader ids the usage read returned, so it follows it.

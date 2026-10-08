@@ -137,7 +137,15 @@ export default async function InvitationPage({
       body={inviteSentence(invite)}
     >
       <InviteOffer
-        invites={[{ ...invite, ...quotaHours(invite.programOrgType) }]}
+        invites={[
+          {
+            ...invite,
+            ...quotaHours({
+              orgType: invite.programOrgType,
+              pilotEligible: invite.programPilotEligible,
+            }),
+          },
+        ]}
         notNowHref={notNowHref(here)}
       />
     </JoinPane>

@@ -89,8 +89,9 @@ export type WorkspaceKind = "personal" | "team";
  * 'college' rows come from the seeded ITA directory and enter ownership
  * through the claim flow's verification; every other value is a self-serve
  * org whose creator simply owns it (`create_custom_program`). The distinction
- * is entitlement-bearing: only verified collegiate programs draw the program
- * processing tier — see `quotaTierFor()` in `services/splitstep/quota.ts`.
+ * is entitlement-bearing: a verified collegiate program draws the program
+ * processing tier on its own; a custom org draws it only once an admin grants
+ * `pilotEligible` — see `quotaTierFor()` in `services/splitstep/quota.ts`.
  */
 export type ProgramOrgType =
   "college" | "club" | "high_school" | "academy" | "other";
@@ -167,6 +168,18 @@ export interface Workspace {
    * pilot raises the player's own allowance, never a team's.
    */
   individualPilot?: boolean;
+  /**
+   * `programs.pilot_eligible` — an admin put this NON-college team on the
+   * pilot's program processing pool (Admin › Teams › Pilot card, through
+   * `admin_set_pilot_eligible`). Raises `quotaTierFor()` to the program figure
+   * for a custom org exactly as `org_type = 'college'` does for a verified
+   * program. Absent or false for everyone else; a college never carries it.
+   *
+   * Optional, like `individualPilot`, so a constructor that does not read the
+   * column fails CLOSED to the individual figure — the right direction for a
+   * number that meters paid vendor spend.
+   */
+  pilotEligible?: boolean;
   /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no

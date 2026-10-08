@@ -69,6 +69,7 @@ const BASE: AdminTeamProgram = {
   timeZone: "America/New_York",
   status: "active",
   orgType: "college",
+  pilotEligible: false,
   primaryDomain: "dartmouth.edu",
   createdAt: "2026-01-01T00:00:00Z",
   claimedAt: "2026-02-01T00:00:00Z",
