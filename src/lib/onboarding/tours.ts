@@ -159,10 +159,10 @@ export function firstReportTourEligible({
 }
 
 /**
- * The facts the getting-set-up line is built from, every one read back out of
- * the database. A superset of `SetupProgress` in
- * `src/components/dashboard/home/setup-line.tsx` (`playingProfile`,
- * `notifications`), so the existing facts pass straight through.
+ * The facts the getting-set-up line (`SetupLine`,
+ * `src/components/dashboard/home/setup-line.tsx`) is built from, every one
+ * read back out of the database by Home's `Footer` region in
+ * `src/app/dashboard/(home)/page.tsx`.
  */
 export interface SetupFacts {
   /** `users.sample_tour_done_at`. */
@@ -182,10 +182,8 @@ export type SetupStepKey =
 
 export interface SetupStep {
   key: SetupStepKey;
-  /** How the step reads as a standalone label. */
+  /** How the step reads on the getting-set-up line, as its own sentence. */
   label: string;
-  /** How the step reads inside the sentence, lower case and mid-clause. */
-  phrase: string;
   href: string;
   link: string;
   done: boolean;
@@ -202,7 +200,6 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     {
       key: "sampleTour",
       label: "See the sample report",
-      phrase: "see the sample report",
       href: "/dashboard/matches/sample?tour=1",
       link: "Open sample",
       done: facts.sampleTourDoneAt !== null || veteran,
@@ -210,7 +207,6 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     {
       key: "firstReportTour",
       label: "Read your first report",
-      phrase: "read your first report",
       href: "/dashboard/matches",
       link: "Open matches",
       done: facts.firstReportTourDoneAt !== null || veteran,
@@ -218,7 +214,6 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     {
       key: "playingProfile",
       label: "Hand and backhand",
-      phrase: "hand and backhand",
       href: "/dashboard/settings/profile",
       link: "Open profile",
       done: facts.playingProfile,
@@ -226,7 +221,6 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     {
       key: "notifications",
       label: "How you hear that a report is ready",
-      phrase: "how you hear that a report is ready",
       href: "/dashboard/settings/preferences",
       link: "Open preferences",
       done: facts.notifications,

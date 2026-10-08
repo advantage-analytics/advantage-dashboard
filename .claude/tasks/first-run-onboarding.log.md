@@ -149,3 +149,12 @@ is the runner's. Newest entries at the bottom.
 1. No spec pins the caption (true shows the exact sentence, false nothing) — a VM-render spec in the style of `upload-player-details` would work without a browser.
 2. The count includes analysing/failed matches — fine for "first ever upload"; switch to `countFinishedMatchesFor` if the product means "first finished match".
 3. `upload-line-swap.spec.ts:402` is flaky under full-suite load — worth a look independent of this branch.
+
+## T17 · Getting-started line: tour steps first, n of 4 — done
+
+**gate:** retry of the blocked attempt (stash cbc4e8c3 applied). mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4376 passed / 380 skipped; all failures are the environmental browser set except the known load-dependent flake `upload-line-swap.spec.ts:402` (pre-existing; see T18); `home-streaming.spec.ts` passes. completion — VERDICT: pass. widget-states: loading `HomeFooterPending` unchanged; the line hides when all steps are done or the count read fails; region keeps its `WidgetBoundary`.
+**changed:** as in the blocked attempt — `(home)/page.tsx` (users select adds the two tour columns; `countFinishedMatchesFor` in the setup `Promise.all`; `Footer` passes `SetupFacts`), `setup-line.tsx` (renders from `setupSteps(facts)`: "Getting set up · n of 4", names the next undone step with one link), `tours.ts` (drops unused `SetupStep.phrase`) — plus the fix: `tests/home-streaming.spec.ts` stubs `@/lib/data/finished-match-count-server` (`countFinishedMatchesFor: async () => 0`) like the spec's other Home data modules, so the unstubbed import no longer falls through to a null placeholder.
+**follow-ups:**
+
+1. Open author decision: veterans read "2 of 4" (criterion) where the task note expected today's two-step count.
+2. No spec pins the line's rendered copy or the all-done hide — a small offline spec over a pure "next step / count" helper would.

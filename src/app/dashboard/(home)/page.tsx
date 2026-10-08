@@ -11,6 +11,7 @@ import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
 import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
+import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
 import type { Workspace } from "@/lib/workspace/types";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import {
@@ -179,12 +180,20 @@ function startHomeResources(
   );
   const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
   const setup = Promise.all([
-    supabase.from("users").select("hand, backhand").eq("id", userId).single(),
+    supabase
+      .from("users")
+      .select("hand, backhand, sample_tour_done_at, first_report_tour_done_at")
+      .eq("id", userId)
+      .single(),
     supabase
       .from("user_preferences")
       .select("user_id")
       .eq("user_id", userId)
       .maybeSingle(),
+    // `null` when the count fails: without it the tour steps cannot tell a
+    // veteran from a newcomer, so the line stays out rather than guess — and
+    // the usage footer it shares a region with still renders.
+    countFinishedMatchesFor(userId).catch(() => null),
   ]);
   return {
     matches,
@@ -284,15 +293,20 @@ async function Footer({ resources }: { resources: HomeResources }) {
   const { setup, usage } = resources;
   const [profile, u] = await Promise.all([setup, usage]);
   if (!profile || !u) return null;
-  const [{ data: user }, { data: preferences }] = profile;
+  const [{ data: user }, { data: preferences }, finishedMatchCount] = profile;
   return (
     <>
-      <SetupLine
-        setup={{
-          playingProfile: Boolean(user?.hand && user?.backhand),
-          notifications: Boolean(preferences),
-        }}
-      />
+      {finishedMatchCount !== null && (
+        <SetupLine
+          facts={{
+            sampleTourDoneAt: user?.sample_tour_done_at ?? null,
+            firstReportTourDoneAt: user?.first_report_tour_done_at ?? null,
+            finishedMatchCount,
+            playingProfile: Boolean(user?.hand && user?.backhand),
+            notifications: Boolean(preferences),
+          }}
+        />
+      )}
       <UsageFooter
         usedSeconds={u.usedSeconds}
         capSeconds={u.capSeconds}

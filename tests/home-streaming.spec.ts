@@ -83,6 +83,8 @@ function route(matchRows: { id: string; date: string }[], failure = false) {
           };
         if (id.includes("player-identity-server"))
           return { getMyPlayerIds: async () => ["viewer"] };
+        if (id.includes("finished-match-count-server"))
+          return { countFinishedMatchesFor: async () => 0 };
         if (id.includes("home-recent-data"))
           return {
             countViewerWins: () => 0,
