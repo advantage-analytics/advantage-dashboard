@@ -52,9 +52,13 @@ export function memberLeftOwnerEmail(
     heading: `${name} left ${programName}`,
     body: [
       `Hi${owner ? ` ${owner}` : ""} — ${who} left ${programName} from their team settings. Their seat is free again.`,
-      profileKept
-        ? "Their player profile and its matches stay on your roster, now managed by your staff. Invite them again and the same profile goes back to them."
-        : "Nothing of theirs stays on your roster. Invite them again if they should be back.",
+      !profileKept
+        ? "Nothing of theirs stays on your roster. Invite them again if they should be back."
+        : memberRole === "player"
+          ? "Their player profile and its matches stay on your roster, now managed by your staff. Invite them again and the same profile goes back to them."
+          : // A coach or staff member who had added themselves as a player:
+            // `leaveProgram` archives that profile as they go.
+            "Their player profile came off the roster with them. Its matches stay with the program, and adding them to the roster again offers to restore it.",
     ],
     facts: [
       { label: "Program", value: programName },

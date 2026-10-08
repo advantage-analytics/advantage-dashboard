@@ -343,7 +343,7 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
   // Refused rather than skipped if the archive fails: nothing has happened
   // yet, so "try again" is true, where leaving anyway would strand the row.
   if (member.program.role !== "player") {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("program_players")
       .select("id")
       .eq("program_id", programId)
@@ -351,6 +351,14 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
       .is("archived_at", null)
       .is("merged_into_id", null)
       .maybeSingle();
+    // A read that failed is not "no profile": leaving on it would strand the
+    // row this block exists to take off the roster.
+    if (profileError) {
+      return {
+        ok: false,
+        error: "Couldn't check your roster profile. Try again.",
+      };
+    }
     if (profile?.id) {
       const { error: archiveError } = await supabase.rpc(
         "archive_program_player",
