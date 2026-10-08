@@ -6,7 +6,7 @@ import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 import type { Discipline, EventSite, MatchEnding } from "@/lib/schedule/types";
 import type { Workspace } from "@/lib/workspace/types";
-import type { RetiredSide } from "./score-state";
+import type { RetiredSide, StopReason } from "./score-state";
 import type { StyleSaveChoice } from "./style-save-offer";
 
 /** Wizard step identifiers */
@@ -47,6 +47,12 @@ export interface FormData {
    * NOT retire), never as its own column.
    */
   retiredSide?: RetiredSide;
+  /**
+   * Why play stopped, as the "Did it end early?" answer gave it — detail on
+   * `result`, never the answer itself. Unset until answered, and for a
+   * SwingVision import that arrives "Unfinished". Words the settled line only.
+   */
+  stopReason?: StopReason;
   date: string;
   time: string;
   playerName: string;
@@ -182,6 +188,13 @@ export interface MatchData {
   };
   /** The caption over the score; null when there is none (never ""). */
   result: string | null;
+  /**
+   * Why a match stopped — detail on `result`, which keeps its caption
+   * unchanged. `retired` whenever `result` is "Retired"; `clinched` or
+   * `time_weather` with "Unfinished" when the wizard was told; null for a
+   * decided match and for a SwingVision import, which is never asked.
+   */
+  stop_reason: StopReason | null;
   date: string;
   private: boolean;
   score: {
@@ -217,6 +230,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   adScoring: undefined,
   playOnLets: false,
   result: "",
+  stopReason: undefined,
   date: "",
   time: "",
   playerName: "",
@@ -239,6 +253,48 @@ export const DEFAULT_FORM_DATA: FormData = {
   videoStartSeconds: undefined,
   videoEndSeconds: undefined,
 };
+
+/**
+ * The video check — the trim window and both camera answers. Never persisted.
+ *
+ * All four describe ONE picked file, and a `File` survives neither
+ * localStorage nor a draft row: the next pick resets the window to the whole
+ * clip and, with no recording to match the answers to, clears both of them.
+ * So a stored copy could only ever be put back over a live answer — which for
+ * `initialTopPlayerIsPlayer1` attributes every statistic to the wrong player
+ * (`docs/ui-revamp-guardrails.md` §4). Stripped on write, and on read for
+ * copies saved before this rule.
+ */
+export const VIDEO_CHECK_FIELDS = [
+  "videoStartSeconds",
+  "videoEndSeconds",
+  "fixedCamera",
+  "initialTopPlayerIsPlayer1",
+] as const satisfies readonly (keyof FormData)[];
+
+/**
+ * `formData` without {@link VIDEO_CHECK_FIELDS}. The keys are removed rather
+ * than set to `undefined`: callers spread the result over a live form.
+ */
+export function withoutVideoCheck<T extends Partial<FormData>>(
+  formData: T,
+): Omit<T, (typeof VIDEO_CHECK_FIELDS)[number]> {
+  const rest: Partial<FormData> = { ...formData };
+  for (const field of VIDEO_CHECK_FIELDS) delete rest[field];
+  return rest as Omit<T, (typeof VIDEO_CHECK_FIELDS)[number]>;
+}
+
+/** Only {@link VIDEO_CHECK_FIELDS} of `formData` — the live video check. */
+export function videoCheckOf(
+  formData: FormData,
+): Pick<FormData, (typeof VIDEO_CHECK_FIELDS)[number]> {
+  return {
+    videoStartSeconds: formData.videoStartSeconds,
+    videoEndSeconds: formData.videoEndSeconds,
+    fixedCamera: formData.fixedCamera,
+    initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+  };
+}
 
 /**
  * The format answers a workspace pre-selects over `DEFAULT_FORM_DATA`.

@@ -167,9 +167,12 @@ export function ImportIdentityNotice({
 export function SettledNotice({
   message,
   onChange,
+  actionLabel = "Change",
 }: {
   message: string;
   onChange: () => void;
+  /** The quiet button's word — "Undo" where the answer changed something else. */
+  actionLabel?: string;
 }) {
   return (
     <div
@@ -188,7 +191,7 @@ export function SettledNotice({
         onClick={onChange}
         className="cursor-pointer text-[11px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
       >
-        Change
+        {actionLabel}
       </button>
     </div>
   );

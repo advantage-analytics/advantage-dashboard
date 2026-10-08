@@ -12,6 +12,7 @@
  */
 
 import type { Cut, VizDot } from "./viz-model";
+import { isLandingCut } from "./cut-kinds";
 import {
   clamp as clampNum,
   clampPan,
@@ -1179,8 +1180,7 @@ export function projectViewerDot(
 ): { x: number; y: number } {
   const rawX =
     VIEWER_COURT.centreX + dot.lateralM * SERVE_LATERAL_UNITS_PER_METER;
-  const isLanding =
-    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
+  const isLanding = isLandingCut(cut);
   const rawY = dot.atNet
     ? VIEWER_COURT.netY
     : isLanding
@@ -1245,8 +1245,7 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const frameW = frame.w * pxPerUnit;
   const frameH = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameW, stage.h / frameH);
-  const isLanding =
-    cut === "serve" || cut === "returnPlacement" || cut === "rallyPlacement";
+  const isLanding = isLandingCut(cut);
   const rawZ = isLanding ? fitZ : fitZ * VIEWER_CONTACT_ZOOM_MULTIPLIER;
   const z = clampNum(rawZ, ZOOM_MIN, ZOOM_MAX);
 

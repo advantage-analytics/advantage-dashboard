@@ -1,5 +1,6 @@
 "use server";
 
+import type { Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -610,7 +611,7 @@ export async function adminResolveJoinRequest(
  */
 export type AdminProgramDetailsPatch = {
   schoolName?: string;
-  team?: "mens" | "womens" | null;
+  team?: Squad | null;
   city?: string | null;
   state?: string | null;
   staffPageUrl?: string | null;
@@ -810,6 +811,42 @@ export async function adminEndPilot(
 
   if (error) {
     return { ok: false, error: toMessage(error, "Couldn't end the pilot.") };
+  }
+
+  revalidatePath(ADMIN_PATH, "layout");
+  return { ok: true };
+}
+
+/**
+ * Put a NON-college team on the pilot's program processing pool, or take it
+ * off — `programs.pilot_eligible`, the admin-granted half of `quotaTierFor()`.
+ *
+ * `admin_set_pilot_eligible` refuses a college (`22023`: it draws the pool
+ * from `org_type` alone), is a no-op when the flag already holds the value,
+ * and on a grant also stamps the pilot record — approver = the caller when
+ * none is recorded, end date = the collegiate default when none is set or it
+ * has passed — so the Pilot card reads like a college's. Revoking leaves the
+ * dates as history. One `pilot.eligibility_changed` audit row per effective
+ * call, naming the admin: SESSION client, like every write in this module.
+ */
+export async function adminSetPilotEligible(input: {
+  programId: string;
+  eligible: boolean;
+}): Promise<AdminTeamOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: NOT_AUTHORIZED };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_pilot_eligible", {
+    p_program_id: input.programId,
+    p_eligible: input.eligible,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change the team's pool."),
+    };
   }
 
   revalidatePath(ADMIN_PATH, "layout");

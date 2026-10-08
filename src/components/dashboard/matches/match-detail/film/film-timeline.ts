@@ -116,9 +116,21 @@ export function toPointTime(filmTime: number, clock: FilmClock): number {
   return filmTime + clock.offset;
 }
 
+/**
+ * What a stop needs to know about its point: which one it is, and its set —
+ * the one field the track reads (`setSegments`). The film tab's stops carry
+ * the whole `MatchPoint`; the admin labelling console's carry a label point
+ * (`components/admin/labels/label-film-stops.ts`), which is why the walkers
+ * below are generic over it rather than typed to `MatchPoint`.
+ */
+export interface StopPoint {
+  id: string;
+  setNumber: number | null;
+}
+
 /** A point placed on the film's clock. */
-export interface FilmStop {
-  point: MatchPoint;
+export interface FilmStop<P extends StopPoint = MatchPoint> {
+  point: P;
   /** Film seconds where the point's window opens (the serve, less the buffer). */
   start: number;
   /** Film seconds of serve contact — the point's own recorded start. */
@@ -191,8 +203,8 @@ export function filmStops(points: MatchPoint[], clock: FilmClock): FilmStop[] {
   });
 }
 
-export interface ActiveStop {
-  stop: FilmStop;
+export interface ActiveStop<S extends FilmStop<StopPoint> = FilmStop> {
+  stop: S;
   /** 0–1 through the stop's window, clamped. */
   progress: number;
 }
@@ -202,10 +214,10 @@ export interface ActiveStop {
  * Progress is clamped, so the rule sits full through the changeover rather
  * than overrunning into the next row.
  */
-export function activeStopAt(
-  stops: FilmStop[],
+export function activeStopAt<S extends FilmStop<StopPoint>>(
+  stops: readonly S[],
   filmTime: number,
-): ActiveStop | null {
+): ActiveStop<S> | null {
   let index = -1;
   for (let i = 0; i < stops.length; i += 1) {
     if (stops[i].start - REACHED_EPSILON_SECONDS <= filmTime) index = i;
@@ -244,10 +256,10 @@ export function activeStopAt(
  * boundary second up, so a run of points with no gap between them never reads
  * as between points for a frame.
  */
-export function playingStopAt(
-  stops: FilmStop[],
+export function playingStopAt<S extends FilmStop<StopPoint>>(
+  stops: readonly S[],
   filmTime: number,
-): FilmStop | null {
+): S | null {
   for (const stop of stops) {
     // Sorted by start, so nothing after this one can have opened either.
     if (stop.start - REACHED_EPSILON_SECONDS > filmTime) break;
@@ -257,12 +269,18 @@ export function playingStopAt(
 }
 
 /** The next stop after the playhead, with the cushion. */
-export function nextStop(stops: FilmStop[], filmTime: number): FilmStop | null {
+export function nextStop<S extends FilmStop<StopPoint>>(
+  stops: readonly S[],
+  filmTime: number,
+): S | null {
   return stops.find((s) => s.start > filmTime + STEP_CUSHION_SECONDS) ?? null;
 }
 
 /** The previous stop before the playhead, with the cushion. */
-export function prevStop(stops: FilmStop[], filmTime: number): FilmStop | null {
+export function prevStop<S extends FilmStop<StopPoint>>(
+  stops: readonly S[],
+  filmTime: number,
+): S | null {
   for (let i = stops.length - 1; i >= 0; i -= 1) {
     if (stops[i].start < filmTime - STEP_CUSHION_SECONDS) return stops[i];
   }
@@ -367,7 +385,7 @@ export function followAffordance(
  * walk to the baseline before the first serve is part of the point.
  */
 export function deadTimeJump(
-  stops: FilmStop[],
+  stops: readonly FilmStop<StopPoint>[],
   filmTime: number,
 ): number | null {
   const active = activeStopAt(stops, filmTime);
@@ -393,7 +411,7 @@ export interface TrackSegment {
  * playhead percentage map straight onto them.
  */
 export function setSegments(
-  stops: FilmStop[],
+  stops: readonly FilmStop<StopPoint>[],
   duration: number,
 ): TrackSegment[] {
   if (!(duration > 0)) return [];

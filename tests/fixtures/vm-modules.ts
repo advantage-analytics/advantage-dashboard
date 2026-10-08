@@ -23,6 +23,20 @@ import ts from "typescript";
  */
 export type Stubs = Record<string, unknown>;
 
+/**
+ * The function behind a component, through `memo`: what a spec calls to
+ * read a hook-free component's element tree without a render.
+ */
+export function renderFunction<P>(
+  component: unknown,
+): (props: P) => React.ReactNode {
+  const inner =
+    typeof component === "function"
+      ? component
+      : (component as { type: unknown }).type;
+  return inner as (props: P) => React.ReactNode;
+}
+
 export function marker(name: string) {
   return function TestMarker() {
     return React.createElement("span", { "data-component": name });

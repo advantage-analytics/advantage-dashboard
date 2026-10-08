@@ -14,7 +14,15 @@ import {
   type Chart,
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
-import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  paramFor,
+  parseVizState,
+  VIZ_MATCH_FILTERS_PARAM,
+} from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import {
+  serializeMatchFilters,
+  type MatchFilters,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 
 export const SAVED_VIEW_NAME_MAX = 60;
@@ -96,11 +104,21 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       // is the one place a stored view's `filters.set` becomes a param, so it
       // has to follow the same mapping or a saved view's set filter would
       // silently fail to round-trip through `parseVizState`.
-      const paramKey = key === "set" ? "vset" : key;
+      const paramKey = key === "set" ? "vset" : paramFor(key);
 
       if (key === "player") {
         // The one scalar filter, old or new shape alike.
         params.set(paramKey, String(value));
+        continue;
+      }
+
+      // The advanced filters are an object, stored as `VizFilters.match`
+      // itself; they travel as the URL layer's one compact `vf` param, which
+      // `parseMatchFilters` then narrows to known groups and options, so a
+      // hand-edited blob reads as whatever it validly names, or nothing.
+      if (key === "match") {
+        const match = serializeMatchFilters(value as MatchFilters);
+        if (match) params.set(VIZ_MATCH_FILTERS_PARAM, match);
         continue;
       }
 

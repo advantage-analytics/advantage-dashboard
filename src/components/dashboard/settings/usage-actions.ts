@@ -16,7 +16,8 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
  *
  * The page lists every team the viewer belongs to, so the stepper names which
  * one. The id is looked up in the viewer's own workspaces rather than trusted —
- * that also supplies the `org_type` the cap figure depends on. The two RPCs are
+ * that also supplies the `org_type` and `pilot_eligible` the cap figure
+ * depends on. The two RPCs are
  * membership-gated in SQL either way; this is not the only guard.
  */
 export async function loadProgramUsage(
@@ -28,5 +29,5 @@ export async function loadProgramUsage(
     (candidate) => candidate.kind === "team" && candidate.id === programId,
   );
   if (!program) return emptyProgramUsage(billingMonth);
-  return getProgramUsage(program.id, billingMonth, program.orgType);
+  return getProgramUsage(program.id, billingMonth, program);
 }

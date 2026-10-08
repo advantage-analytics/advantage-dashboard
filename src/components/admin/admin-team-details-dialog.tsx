@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { X } from "lucide-react";
 
 import {
@@ -13,10 +13,8 @@ import { DialogProblem } from "@/components/ui/dialog-problem";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { SettingsField } from "@/components/dashboard/settings/settings-card";
-import {
-  SQUAD_OPTIONS,
-  SURFACE_OPTIONS,
-} from "@/components/dashboard/settings/teams/team-identity-card";
+import { SURFACE_OPTIONS } from "@/components/dashboard/settings/teams/team-identity-card";
+import { squadOptionsFor, type Squad } from "@/lib/data/squad";
 import {
   adminUpdateProgramDetails,
   type AdminProgramDetailsPatch,
@@ -53,7 +51,7 @@ import { cn } from "@/lib/utils";
  * to promise a save when nothing on screen differs from the saved record.
  *
  * The vocabularies it *renders* come from the modules that define them —
- * `SQUAD_OPTIONS` / `SURFACE_OPTIONS` from `team-identity-card.tsx`, and the
+ * `squadOptionsFor()` / `SURFACE_OPTIONS` (`team-identity-card.tsx`), and the
  * two policy ladders built from `UPLOAD_POLICIES` / `EVENTS_POLICIES` and
  * `uploadPolicyLabel()` in `workspace/types.ts`. A list retyped here would be
  * a third copy of a vocabulary the database already enforces.
@@ -99,7 +97,7 @@ const EVENTS_POLICY_OPTIONS = policyOptions(EVENTS_POLICIES);
 interface DetailsDraft {
   schoolName: string;
   /** Null when the program has no squad on record. */
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   city: string;
   state: string;
   staffPageUrl: string;
@@ -112,6 +110,9 @@ interface DetailsDraft {
   eventsPolicy: EventsPolicy;
   rosterPublic: boolean;
 }
+
+/** The menu row that clears the squad; never sent — it maps to null. */
+const NO_SQUAD = "none";
 
 function draftFrom(program: AdminTeamProgram): DetailsDraft {
   return {
@@ -176,6 +177,19 @@ export function AdminTeamDetailsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [draft, setDraft] = useState<DetailsDraft>(() => draftFrom(program));
+  // A college is men's or women's and must be one of them. Every other type
+  // may also be co-ed, and may be set back to nothing — the way out for a
+  // club that was stamped with a squad it never chose.
+  const squadOptions = useMemo<MenuOption<Squad | typeof NO_SQUAD>[]>(
+    () =>
+      program.orgType === "college"
+        ? squadOptionsFor(program.orgType)
+        : [
+            ...squadOptionsFor(program.orgType),
+            { value: NO_SQUAD, label: "Not set" },
+          ],
+    [program.orgType],
+  );
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, startSaving] = useTransition();
 
@@ -274,8 +288,10 @@ export function AdminTeamDetailsDialog({
                 variant="underline"
                 value={draft.team ?? undefined}
                 placeholder="Not set"
-                options={SQUAD_OPTIONS}
-                onChange={(value) => set("team", value)}
+                options={squadOptions}
+                onChange={(value) =>
+                  set("team", value === NO_SQUAD ? null : value)
+                }
               />
             </SettingsField>
 

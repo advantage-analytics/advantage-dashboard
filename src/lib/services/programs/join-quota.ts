@@ -1,6 +1,6 @@
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
-import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { Workspace } from "@/lib/workspace/types";
 
 /**
  * The two allowances 8.2's footer compares, in hours.
@@ -8,9 +8,11 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * Read on the server, from the function `reserveQuota()` asks when it decides
  * whether a submission is refused — so the number a player is shown at the
  * moment they agree to join is the number that will actually be enforced.
- * Which is why it takes the program's org type: a custom org's allowance is
- * the reduced tier (`quotaTierFor()`), and quoting a club's invitee the
- * collegiate 75 hours would break exactly the promise this comment makes.
+ * Which is why it takes the program's org type and its admin-granted
+ * `pilot_eligible`: a custom org's allowance is the reduced tier until an
+ * admin raises it (`quotaTierFor()`), and quoting a club's invitee the
+ * collegiate 75 hours — or an eligible club's invitee the 2 — would break
+ * exactly the promise this comment makes.
  *
  * The one rule: this file is server-only by construction and must stay that
  * way. Pages hand the join components two plain numbers rather than letting
@@ -19,12 +21,14 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * in a page so the second surface that shows the footer reads the same
  * numbers instead of copying them.
  */
-export function quotaHours(orgType: ProgramOrgType): {
+export function quotaHours(
+  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+): {
   programHours: number;
   personalHours: number;
 } {
   return {
-    programHours: monthlyCapSecondsFor({ kind: "team", orgType }) / 3600,
+    programHours: monthlyCapSecondsFor({ kind: "team", ...tier }) / 3600,
     personalHours: getMonthlyCapSeconds("individual") / 3600,
   };
 }

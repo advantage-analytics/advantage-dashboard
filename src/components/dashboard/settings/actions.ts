@@ -261,6 +261,13 @@ export async function deleteAccount(): Promise<ActionResult> {
   );
 
   if (releaseError) {
+    if (releaseError.message?.includes("label-session-protected")) {
+      return {
+        ok: false,
+        error:
+          "One of your matches is in use for Advantage's quality review, so your account can't be deleted yet. Nothing was changed. Contact support and we'll remove it.",
+      };
+    }
     if (releaseError.message?.includes("console-history-protected")) {
       return {
         ok: false,

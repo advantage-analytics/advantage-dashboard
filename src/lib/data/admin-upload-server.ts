@@ -238,7 +238,7 @@ export const getAdminUploadContext = cache(
       const program = await admin
         .from("programs")
         .select(
-          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone",
+          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone",
         )
         .eq("id", programId)
         .maybeSingle();
@@ -256,6 +256,7 @@ export const getAdminUploadContext = cache(
         name: p.school_name,
         team: p.team,
         orgType: p.org_type,
+        pilotEligible: p.pilot_eligible === true,
         timeZone: p.time_zone,
         programStatus: p.status,
         canSubmitVideo: p.status === "active",

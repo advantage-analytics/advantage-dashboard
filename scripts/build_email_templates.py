@@ -14,29 +14,38 @@ segment) using the token_hash OTP flow the route is built for:
 
     {{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=<TYPE>&next=<NEXT>
 
-confirmation and magic_link instead use redirect_url(), which prefers the
+confirmation and magic_link instead use link_prelude(), which prefers the
 app's emailRedirectTo — see that function for why, and for why recovery
 must not follow.
 
-Outputs:
-  - supabase/email-templates/<kind>.html   (version-controlled source)
-  - /tmp/email_templates_patch.json         (Supabase PATCH payload: subjects + content)
+The six .html files and this script must agree byte for byte —
+tests/email-templates-generated.spec.ts runs it into a temp directory and
+fails on any difference. Change the script, re-run it, commit both. Nothing
+deploys the result: paste each changed file, and any changed subject, into the
+hosted project (Authentication → Emails).
+
+    python3 scripts/build_email_templates.py                # write the repo's files
+    python3 scripts/build_email_templates.py --out DIR      # write somewhere else
+    python3 scripts/build_email_templates.py --patch F.json # + Supabase PATCH payload
 """
+import argparse
 import json
 import os
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # ---- Design tokens: v2 light ramp (src/styles/design-system/colors.css) ----
-INK_900 = "#0D0D0D"   # headings
-INK_700 = "#525252"   # body copy
-INK_600 = "#71717A"   # muted-but-readable — the AA floor for small print
-INK_400 = "#AAAAAA"   # section labels, legal line
+INK_900 = "#0D0D0D"  # headings
+INK_700 = "#525252"  # body copy
+INK_600 = "#71717A"  # muted-but-readable — the AA floor for small print
+INK_400 = "#AAAAAA"  # section labels, legal line
 SURFACE_PAGE = "#FAFAFA"
 SURFACE_CARD = "#FFFFFF"
 SURFACE_SUBTLE = "#F5F5F5"  # tinted insets (the code panel)
 HAIRLINE = "#F3F3F3"
 BLUE = "#3B82F6"
 BLUE_HOVER = "#2563EB"
-SHADOW_CARD = "0px 2px 8px 0px rgba(0,0,0,0.06)"   # rest elevation
+SHADOW_CARD = "0px 2px 8px 0px rgba(0,0,0,0.06)"  # rest elevation
 CTA_GLOW = "0 1px 3px rgba(57,134,243,0.25)"
 
 # ---- v2 dark ramp. Email can't read .dark, so these are inlined in the
@@ -46,8 +55,10 @@ D_HAIRLINE, D_BORDER = "#1F1F1F", "#2E2E2E"
 D_INK_900, D_INK_700, D_INK_600, D_INK_400 = "#F5F5F5", "#B5B5B5", "#9A9A9A", "#828282"
 D_BLUE = "#60A5FA"
 
-SANS = ("'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
-        "Helvetica,Arial,sans-serif")
+SANS = (
+    "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
+    "Helvetica,Arial,sans-serif"
+)
 # Machine values only, per v2. Roboto Mono won't load in mail clients; the
 # stack degrades to whatever mono the OS has, which is the point.
 MONO = "'Roboto Mono','SF Mono',SFMono-Regular,Menlo,Consolas,monospace"
@@ -62,7 +73,6 @@ SUPPORT_EMAIL = "team@advantage-analytics.com"
 YEAR = 2026
 
 STYLE = f"""
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
     body {{ margin:0; padding:0; width:100% !important; background:{SURFACE_PAGE};
       -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }}
@@ -95,6 +105,27 @@ STYLE = f"""
 """
 
 
+# Verbatim, not an f-string: the braces are CSS.
+FONTS = """  <!-- Inter sits in its own <style> block, deliberately after the layout rules.
+       Gmail strips @font-face and can discard the whole block it lives in, so the
+       expendable thing goes last: losing this costs the font and leaves the
+       responsive rules above untouched. Hidden from Outlook, which ignores
+       @font-face and drops to Times New Roman when it sees one. Order relative to
+       usage doesn't matter — @font-face registers at parse time.
+       One file covers all three weights; Inter v20 is a variable font. -->
+  <!--[if !mso]><!-->
+  <style>
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:300; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+  </style>
+  <!--<![endif]-->
+"""
+
+
 def shell(title, preheader, eyebrow, heading, blocks):
     """The card. `blocks` are complete <tr> rows slotted under the headline."""
     return f"""<!DOCTYPE html>
@@ -110,7 +141,8 @@ def shell(title, preheader, eyebrow, heading, blocks):
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>{STYLE}</style>
-</head>
+
+{FONTS}</head>
 <body class="bg" style="margin:0; padding:0; background:{SURFACE_PAGE};">
   <span style="display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden; mso-hide:all;">{preheader}</span>
 
@@ -276,125 +308,212 @@ def code_panel(token):
 
 def confirm_url(type_, next_):
     """Static link into the app's /confirm route via the configured Site URL."""
-    return "{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=%s&next=%s" % (type_, next_)
+    return "{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=%s&next=%s" % (
+        type_,
+        next_,
+    )
 
 
-def redirect_url(type_, next_):
-    """Honour the app's emailRedirectTo, falling back to the static link.
+LINK = "{{ $link }}"
+
+
+def link_prelude(type_, next_):
+    """Template actions that set `$link`, honouring the app's emailRedirectTo.
 
     {{ .SiteURL }} is the project's *configured* Site URL — always production —
     so a hardcoded link throws emailRedirectTo away and drops the user at
     `next` no matter where the flow started. That broke the program-claim
     flow, which has to land on /claim/verify rather than /dashboard.
 
-    The `&` is load-bearing: RedirectTo already carries a query string. Any
-    template whose caller sends a bare path (recovery does) must keep using
-    confirm_url — this would give it `/update-password&token_hash=...`.
+    `{{ if .RedirectTo }}` cannot make that choice: GoTrue never leaves
+    .RedirectTo empty. With no valid redirect_to it is the Referer, then the
+    Site URL, and appending `&token_hash=...` to a bare origin gives
+    `https://app.advantage-analytics.com&token_hash=...` — not a host. That is
+    what a confirmation resent from the Supabase dashboard carried (2026-10-03).
+    So .RedirectTo is used only when it contains a "?" (byte 63), the one shape
+    the `&` can be appended to; templates have no `contains`, hence the loop.
+    Any template whose caller sends a bare path (recovery does) must keep using
+    confirm_url.
+
+    Goes at the very top of the file (see main), trimmed so the output still
+    starts at <!DOCTYPE. Every use site is LINK.
     """
-    return ("{{ if .RedirectTo }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=%s"
-            "{{ else }}%s{{ end }}" % (type_, confirm_url(type_, next_)))
+    return (
+        "{{- /* The link. .RedirectTo is never empty: with no valid redirect_to GoTrue fills it\n"
+        "       from the Referer, then the Site URL. So it is used only when it carries a query\n"
+        '       string (the app\'s /confirm?next=...), the one shape "&token_hash" can be appended\n'
+        '       to. 63 is "?". See docs/email-system.md, "Auth mail links". */ -}}\n'
+        '{{- $link := print .SiteURL "/confirm?token_hash=" .TokenHash "&type=%s&next=%s" -}}\n'
+        "{{- range $i := len .RedirectTo }}{{ if eq (index $.RedirectTo $i) 63 }}"
+        '{{ $link = print $.RedirectTo "&token_hash=" $.TokenHash "&type=%s" }}{{ end }}{{ end -}}\n'
+        % (type_, next_, type_)
+    )
 
 
 def link_body(intro, cta, vml_width, url, expiry, ignore):
-    return "".join([
-        para(intro),
-        button(cta, url, vml_width),
-        fallback(url),
-        note(f"{expiry} {ignore}"),
-    ])
+    return "".join(
+        [
+            para(intro),
+            button(cta, url, vml_width),
+            fallback(url),
+            note(f"{expiry} {ignore}"),
+        ]
+    )
 
 
 # ---- Per-template definitions ----
 # Eyebrows are section labels, not restatements of the headline — "CONFIRM
 # YOUR EMAIL" over "Confirm your email address" reads as a stutter.
 TEMPLATES = {
-  "confirmation": dict(
-    subject="Confirm your email · Advantage Analytics",
-    title="Confirm your email", eyebrow="ACCOUNT SETUP",
-    preheader="Confirm your email address to finish setting up your Advantage Analytics account.",
-    heading="Confirm your email address",
-    body=link_body(
-      "Welcome to Advantage Analytics. Confirm your email to get started — Advantage Intelligence now takes your match video and turns it into court-level performance insight. SwingVision exports work too.",
-      "Confirm email", 170, redirect_url("email", "/dashboard"),
-      "This link expires in 24 hours.",
-      "If you didn't create an Advantage Analytics account, you can safely ignore this email.")),
-  "invite": dict(
-    subject="You're invited to Advantage",
-    title="You're invited", eyebrow="INVITATION",
-    preheader="Accept your invitation to Advantage and set up your account.",
-    heading="You've been invited to Advantage",
-    body=link_body(
-      "You've been invited to join Advantage. Accept your invitation to set up your account and start analyzing your matches.",
-      "Accept invitation", 195, confirm_url("invite", "/update-password"),
-      "This invitation expires in 24 hours.",
-      "If you weren't expecting this invite, you can safely ignore this email.")),
-  "magic_link": dict(
-    subject="Your sign-in link · Advantage Analytics",
-    title="Sign in", eyebrow="SIGN IN",
-    preheader="Your sign-in link for Advantage Analytics. No password needed.",
-    heading="Your sign-in link",
-    body=link_body(
-      "Use the button below to sign in to Advantage Analytics. No password needed.",
-      "Sign in", 130, redirect_url("magiclink", "/dashboard"),
-      "This link expires in 1 hour.",
-      "If you didn't request this link, you can safely ignore this email.")),
-  "recovery": dict(
-    subject="Reset your password · Advantage Analytics",
-    title="Reset your password", eyebrow="ACCOUNT SECURITY",
-    preheader="Choose a new password for your Advantage Analytics account.",
-    heading="Reset your password",
-    body=link_body(
-      "We received a request to reset your Advantage Analytics password. Choose a new one with the button below.",
-      "Reset password", 180, confirm_url("recovery", "/update-password"),
-      "This link expires in 1 hour.",
-      "If you didn't request a reset, you can safely ignore this email — your password won't change.")),
-  "email_change": dict(
-    subject="Confirm your new email · Advantage Analytics",
-    title="Confirm email change", eyebrow="ACCOUNT SETTINGS",
-    preheader="Confirm your new address to finish updating the email on your account.",
-    heading="Confirm your new email",
-    body="".join([
-      para("Confirm this address to finish updating the email on your Advantage Analytics account."),
-      # The two addresses carry more weight as hairline rows than as prose.
-      hairline(),
-      detail_row("CURRENT", "{{ .Email }}"),
-      inner_hairline(),
-      detail_row("NEW", "{{ .NewEmail }}", emphasis=True),
-      inner_hairline(),
-      button("Confirm email change",
-             confirm_url("email_change", "/dashboard/settings/account"), 215),
-      fallback(confirm_url("email_change", "/dashboard/settings/account")),
-      note("This link expires in 24 hours. If you didn't request this change, contact us right away."),
-    ])),
-  "reauthentication": dict(
-    subject="Your verification code · Advantage Analytics",
-    title="Verification code", eyebrow="SECURITY CHECK",
-    preheader="Your Advantage Analytics verification code.",
-    heading="Your verification code",
-    body="".join([
-      para("Enter this code to confirm it's you and continue."),
-      code_panel("{{ .Token }}"),
-      note("This code expires in 1 hour. If you didn't request it, you can safely ignore this email."),
-    ])),
+    "confirmation": dict(
+        prelude=link_prelude("email", "/dashboard"),
+        subject="Confirm your email · Advantage",
+        title="Confirm your email",
+        eyebrow="ACCOUNT SETUP",
+        preheader="Confirm your email address to finish setting up your Advantage account.",
+        heading="Confirm your email address",
+        body=link_body(
+            "Welcome to Advantage. Confirm your email to get started — Advantage Intelligence now takes your match video and turns it into court-level performance insight. SwingVision exports work too.",
+            "Confirm email",
+            170,
+            LINK,
+            "This link expires in 24 hours.",
+            "If you didn't create an Advantage account, you can safely ignore this email.",
+        ),
+    ),
+    "invite": dict(
+        subject="You're invited to Advantage",
+        title="You're invited",
+        eyebrow="INVITATION",
+        preheader="Accept your invitation to Advantage and set up your account.",
+        heading="You've been invited to Advantage",
+        body=link_body(
+            "You've been invited to join Advantage. Accept your invitation to set up your account and start analyzing your matches.",
+            "Accept invitation",
+            195,
+            confirm_url("invite", "/update-password"),
+            "This invitation expires in 24 hours.",
+            "If you weren't expecting this invite, you can safely ignore this email.",
+        ),
+    ),
+    "magic_link": dict(
+        prelude=link_prelude("magiclink", "/dashboard"),
+        subject="Your sign-in link · Advantage",
+        title="Sign in",
+        eyebrow="SIGN IN",
+        preheader="Your sign-in link for Advantage. No password needed.",
+        heading="Your sign-in link",
+        body=link_body(
+            "Use the button below to sign in to Advantage. No password needed.",
+            "Sign in",
+            130,
+            LINK,
+            "This link expires in 1 hour.",
+            "If you didn't request this link, you can safely ignore this email.",
+        ),
+    ),
+    "recovery": dict(
+        subject="Reset your password · Advantage",
+        title="Reset your password",
+        eyebrow="ACCOUNT SECURITY",
+        preheader="Choose a new password for your Advantage account.",
+        heading="Reset your password",
+        body=link_body(
+            "We received a request to reset your Advantage password. Choose a new one with the button below.",
+            "Reset password",
+            180,
+            confirm_url("recovery", "/update-password"),
+            "This link expires in 1 hour.",
+            "If you didn't request a reset, you can safely ignore this email — your password won't change.",
+        ),
+    ),
+    "email_change": dict(
+        subject="Confirm your new email · Advantage",
+        title="Confirm email change",
+        eyebrow="ACCOUNT SETTINGS",
+        preheader="Confirm your new address to finish updating the email on your account.",
+        heading="Confirm your new email",
+        body="".join(
+            [
+                para(
+                    "Confirm this address to finish updating the email on your Advantage account."
+                ),
+                # The two addresses carry more weight as hairline rows than as prose.
+                hairline(),
+                detail_row("CURRENT", "{{ .Email }}"),
+                inner_hairline(),
+                detail_row("NEW", "{{ .NewEmail }}", emphasis=True),
+                inner_hairline(),
+                button(
+                    "Confirm email change",
+                    confirm_url("email_change", "/dashboard/settings/account"),
+                    215,
+                ),
+                fallback(confirm_url("email_change", "/dashboard/settings/account")),
+                note(
+                    "This link expires in 24 hours. If you didn't request this change, contact us right away."
+                ),
+            ]
+        ),
+    ),
+    "reauthentication": dict(
+        subject="Your verification code · Advantage",
+        title="Verification code",
+        eyebrow="SECURITY CHECK",
+        preheader="Your Advantage verification code.",
+        heading="Your verification code",
+        body="".join(
+            [
+                para("Enter this code to confirm it's you and continue."),
+                code_panel("{{ .Token }}"),
+                note(
+                    "This code expires in 1 hour. If you didn't request it, you can safely ignore this email."
+                ),
+            ]
+        ),
+    ),
 }
 
 
+def render(kind):
+    t = TEMPLATES[kind]
+    return t.get("prelude", "") + shell(
+        t["title"], t["preheader"], t["eyebrow"], t["heading"], t["body"]
+    )
+
+
 def main():
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    out_dir = os.path.join(root, "supabase", "email-templates")
-    os.makedirs(out_dir, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--out",
+        default=os.path.join(ROOT, "supabase", "email-templates"),
+        help="directory to write the six .html files to (default: the repo's "
+        "supabase/email-templates). tests/email-templates-generated.spec.ts "
+        "points this at a temp directory.",
+    )
+    parser.add_argument(
+        "--patch",
+        help="also write the Supabase PATCH payload (subjects + content) to this "
+        "JSON file. Not written unless asked for.",
+    )
+    args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
     patch = {}
     for kind, t in TEMPLATES.items():
-        html = shell(t["title"], t["preheader"], t["eyebrow"], t["heading"], t["body"])
-        with open(os.path.join(out_dir, f"{kind}.html"), "w") as f:
+        html = render(kind)
+        # newline="\n": the files are compared byte for byte, on any platform.
+        path = os.path.join(args.out, f"{kind}.html")
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(html)
         patch[f"mailer_subjects_{kind}"] = t["subject"]
         patch[f"mailer_templates_{kind}_content"] = html
-    with open("/tmp/email_templates_patch.json", "w") as f:
-        json.dump(patch, f)
-    print(f"Wrote {len(TEMPLATES)} templates to {out_dir}")
-    for kind in TEMPLATES:
-        print(f"  - {kind}.html ({len(TEMPLATES[kind]['body'])} body chars)")
+    if args.patch:
+        with open(args.patch, "w", encoding="utf-8") as f:
+            json.dump(patch, f)
+    print(f"Wrote {len(TEMPLATES)} templates to {args.out}")
+    for kind, t in TEMPLATES.items():
+        print(f"  - {kind}.html  subject: {t['subject']}")
 
 
 if __name__ == "__main__":

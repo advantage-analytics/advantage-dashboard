@@ -16,6 +16,7 @@
  * entitlement out of a field nothing validates.
  */
 
+import { squadLabel, type Squad } from "@/lib/data/squad";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type { RecordingSource } from "@/app/onboarding/answers";
 
@@ -88,8 +89,9 @@ export type WorkspaceKind = "personal" | "team";
  * 'college' rows come from the seeded ITA directory and enter ownership
  * through the claim flow's verification; every other value is a self-serve
  * org whose creator simply owns it (`create_custom_program`). The distinction
- * is entitlement-bearing: only verified collegiate programs draw the program
- * processing tier — see `quotaTierFor()` in `services/splitstep/quota.ts`.
+ * is entitlement-bearing: a verified collegiate program draws the program
+ * processing tier on its own; a custom org draws it only once an admin grants
+ * `pilotEligible` — see `quotaTierFor()` in `services/splitstep/quota.ts`.
  */
 export type ProgramOrgType =
   "college" | "club" | "high_school" | "academy" | "other";
@@ -106,11 +108,12 @@ export interface Workspace {
   /** "Personal", or the school name for a program. */
   name: string;
   /**
-   * Which squad, where a school fields both. Null for personal workspaces —
-   * and for team workspaces backed by a custom org (club / high school /
-   * academy; `programs.org_type` other than 'college'), which field no squad.
+   * Which squad — `programs.team`. A college is always men's or women's; a
+   * club, high school or academy may also be co-ed. Null for personal
+   * workspaces, and for a custom org that has never said (the ones created
+   * before setup asked). Null is "not set", never a squad: see `lib/data/squad.ts`.
    */
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   /**
    * The backing program's `org_type` for a team workspace; null for personal.
    *
@@ -165,6 +168,18 @@ export interface Workspace {
    * pilot raises the player's own allowance, never a team's.
    */
   individualPilot?: boolean;
+  /**
+   * `programs.pilot_eligible` — an admin put this NON-college team on the
+   * pilot's program processing pool (Admin › Teams › Pilot card, through
+   * `admin_set_pilot_eligible`). Raises `quotaTierFor()` to the program figure
+   * for a custom org exactly as `org_type = 'college'` does for a verified
+   * program. Absent or false for everyone else; a college never carries it.
+   *
+   * Optional, like `individualPilot`, so a constructor that does not read the
+   * column fails CLOSED to the individual figure — the right direction for a
+   * number that meters paid vendor spend.
+   */
+  pilotEligible?: boolean;
   /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
@@ -689,9 +704,7 @@ export function squadDisambiguator(
  * only "Meridian State" would be a coin flip.
  */
 export function teamLabel(team: Workspace["team"]): string | null {
-  if (team === "mens") return "Men's";
-  if (team === "womens") return "Women's";
-  return null;
+  return squadLabel(team);
 }
 
 /**

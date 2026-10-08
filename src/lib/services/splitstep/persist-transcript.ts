@@ -22,6 +22,7 @@ import {
   lineCallsFor,
   type LineCalls,
   type MatchScore,
+  type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
 } from "./derivation";
@@ -110,6 +111,20 @@ export async function buildTranscriptForJob(params: {
   /** Set whenever `transcript` is null or not ok; see {@link PersistFailure}. */
   failure: PersistFailure | null;
   job: JobRow | null;
+  /**
+   * The vendor's results JSON exactly as parsed from Storage, set whenever the
+   * download succeeded. The label seed (src/lib/services/labels) freezes each
+   * raw stroke next to its label row, and reading it here means one download
+   * serves both the transcript and the seed.
+   */
+  raw?: unknown;
+  /**
+   * The rallies the transcript was built from (`analyzeResults(raw).rallies`),
+   * set whenever `raw` is. The labels console's marks (src/lib/services/labels/
+   * marks.ts) read the rally beside the derived point — a serve called out, a
+   * stroke the derivation dropped — so the same download serves them too.
+   */
+  rallies?: SplitStepRally[];
 }> {
   const { supabase, jobId } = params;
 
@@ -170,7 +185,8 @@ export async function buildTranscriptForJob(params: {
   // `shots.video_time` are what the player seeks against, and the player seeks
   // in the ORIGINAL video while the vendor timestamps the trimmed one.
   const startTimeSeconds = Number(job.start_time_seconds ?? 0);
-  const analysis = analyzeResults(JSON.parse(await blob.text()), {
+  const raw: unknown = JSON.parse(await blob.text());
+  const analysis = analyzeResults(raw, {
     startTimeSeconds: Number.isFinite(startTimeSeconds) ? startTimeSeconds : 0,
   });
 
@@ -198,7 +214,39 @@ export async function buildTranscriptForJob(params: {
     reason: transcript.reason,
     failure: transcript.ok ? null : "refused",
     job,
+    raw,
+    rallies: analysis.rallies,
   };
+}
+
+interface PointServer {
+  point_number: number;
+  server_is_player1: boolean;
+}
+
+/**
+ * Whether two transcripts of one match name the players the other way round.
+ *
+ * Both are built from the same rallies in the same order, and each rally's
+ * server is a fact of the footage, so `server_is_player1` agrees point for
+ * point unless the label-to-player mapping itself changed. A majority vote
+ * rather than point one alone: a derivation-version change may relabel a few
+ * servers (a frozen stretch), but never most of them.
+ */
+export function playerMappingFlipped(
+  before: readonly PointServer[],
+  after: readonly PointServer[],
+): boolean {
+  const was = new Map(before.map((p) => [p.point_number, p.server_is_player1]));
+  let compared = 0;
+  let flipped = 0;
+  for (const point of after) {
+    const previous = was.get(point.point_number);
+    if (previous === undefined) continue;
+    compared += 1;
+    if (previous !== point.server_is_player1) flipped += 1;
+  }
+  return compared > 0 && flipped * 2 > compared;
 }
 
 /**
@@ -212,8 +260,17 @@ export async function persistTranscript(params: {
   jobId: string;
   /** Build but do not write. Returns the transcript for inspection. */
   dryRun?: boolean;
+  /**
+   * Refuse a transcript that names the players the other way round from the
+   * rows already stored. Set when a published match is rebuilt after its
+   * score was edited: the fold names player1 from the entered score before it
+   * asks the camera, so a score typed from the opponent's side would move
+   * every statistic to the wrong player with nothing on screen looking wrong.
+   * The check runs before the delete, so a refusal leaves the match as it was.
+   */
+  keepPlayerMapping?: boolean;
 }): Promise<PersistOutcome> {
-  const { supabase, jobId, dryRun = false } = params;
+  const { supabase, jobId, dryRun = false, keepPlayerMapping = false } = params;
 
   try {
     const { transcript, reason, failure, job } = await buildTranscriptForJob({
@@ -266,6 +323,38 @@ export async function persistTranscript(params: {
         transcript,
         failure: "refused",
       };
+    }
+
+    if (keepPlayerMapping) {
+      const { data: previous, error: previousError } = await supabase
+        .from("points")
+        .select("point_number, server_is_player1")
+        .eq("match_id", job.match_id)
+        .eq("derived", true);
+      if (previousError) {
+        // Nothing has been written yet, so this is a refusal, not a failure
+        // mid-write: the caller keeps the published rows.
+        return {
+          ok: false,
+          reason: `could not read the previous points: ${previousError.message}`,
+          transcript,
+          failure: "refused",
+        };
+      }
+      if (
+        playerMappingFlipped(
+          (previous ?? []) as PointServer[],
+          transcript.points,
+        )
+      ) {
+        return {
+          ok: false,
+          reason:
+            "player_mapping_changed: the new score would swap which player the statistics belong to",
+          transcript,
+          failure: "refused",
+        };
+      }
     }
 
     // Rebuild rather than upsert. `shots.point_id` is ON DELETE CASCADE, so

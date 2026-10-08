@@ -129,6 +129,12 @@ export function RosterInviteDialog({
    * so there is no name to carry and none is invented.
    */
   onHandOffToAddPlayer,
+  /**
+   * Close this dialog and open the program's join link instead — the footer's
+   * left-hand "Share a join link instead". The caller owns the popover (the
+   * Roster header anchors it to its Invite button); absent, the slot is empty.
+   */
+  onShareJoinLink,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -150,6 +156,7 @@ export function RosterInviteDialog({
   initialTarget?: ManagedPlayer | null;
   initialEmail?: string;
   onHandOffToAddPlayer?: (email: string) => void;
+  onShareJoinLink?: () => void;
 }) {
   const [target, setTarget] = useState<ManagedPlayer | null>(initialTarget);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -460,7 +467,16 @@ export function RosterInviteDialog({
           </>
         ) : (
           <>
-            <CopyInviteLink />
+            {onShareJoinLink && (
+              <ShareJoinLinkInstead
+                onClick={() => {
+                  // The caller closes the dialog as it opens the popover;
+                  // what was typed here is dropped, as Cancel drops it.
+                  reset();
+                  onShareJoinLink();
+                }}
+              />
+            )}
             <div className="flex-1" />
             <button
               type="button"
@@ -904,44 +920,30 @@ export function RosterInviteDialog({
 }
 
 /**
- * 9b's left-hand footer action — and it is disabled, deliberately.
+ * 9b's left-hand footer action: the other way into the program, a link
+ * instead of an email.
  *
- * ── Why there is no URL to copy ─────────────────────────────────────────────
- * An invite link is `${emailOrigin()}/join/<token>`, and that token exists for
- * exactly one instant in one place: `inviteMember()` (`settings/team-actions.ts`)
- * mints it with `generateToken()`, hands it to `programInviteEmail()`, and
- * passes only `hashToken(token)` to `create_program_invite` — whose signature
- * is `p_token_hash text`. Nothing but the SHA-256 digest is ever stored, and
- * the action's return type (`InviteResult`) carries no token either. That is a
- * stated rule, not an oversight: a database dump must not be a set of working
- * links into somebody's program, and a token that reaches the browser has been
- * handed to whoever is looking at the screen rather than to the person invited.
+ * This slot held a disabled "Copy invite link" until `program_join_links`
+ * existed. An email invitation's token is stored only as a SHA-256 digest
+ * (`inviteMember` → `create_program_invite(p_token_hash)`), so there was never
+ * a URL to copy, and the button waited on a capability rather than a fix. The
+ * join link is that capability: one program-wide, players-only link that staff
+ * can read back and copy again, which is why it opens a panel of its own
+ * (`JoinLinkPopover`) rather than copying anything from here.
  *
- * So before Send there is no invite row and no token; after Send the row exists
- * but its token is unrecoverable — the digest is one-way. Both of the ways to
- * light this control up are worse than leaving it dark: minting an invitation
- * the coach has not asked for yet, or returning the raw token to a client
- * component. It renders as the affordance the design draws, disabled, saying
- * where the link actually goes, rather than putting a dead `/join/…` URL on
- * somebody's clipboard.
- *
- * When it can be enabled: a server action that returns a link for an invite
- * that already exists — minting a fresh token, storing the new hash through the
- * same upsert `inviteMember` uses, and handing back the one-time URL. That is a
- * new server-side capability with its own trade-off to weigh, not a copy
- * button.
+ * Canvas `Roster-Invite`: a quiet blue text action with lucide `Link`, on the
+ * footer's left, across the footer's own hairline from the email field.
  */
-function CopyInviteLink() {
-  const reason = "The link is emailed to them — it is never shown here.";
+function ShareJoinLinkInstead({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
-      disabled
-      className="inline-flex cursor-not-allowed items-center gap-1.5 text-[11px] font-medium text-[var(--ink-400)]"
+      aria-haspopup="dialog"
+      onClick={onClick}
+      className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
     >
       <LinkIcon className="size-3.5" strokeWidth={1.5} aria-hidden />
-      Copy invite link
-      <span className="sr-only"> — unavailable. {reason}</span>
+      Share a join link instead
     </button>
   );
 }

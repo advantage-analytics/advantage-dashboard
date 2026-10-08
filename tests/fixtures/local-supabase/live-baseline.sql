@@ -66,7 +66,7 @@ create table public.programs (
   school_name               text not null,
   school_abbrev             text,
   team                      text
-                              constraint programs_team_check check (team is null or team in ('mens', 'womens')),
+                              constraint programs_team_check check (team is null or team in ('mens', 'womens', 'coed')),
   division                  text
                               constraint programs_division_check check (division is null or division in ('D1', 'D2', 'D3', 'NAIA', 'JUCO')),
   conference                text,
@@ -104,6 +104,7 @@ create table public.programs (
   constraint programs_college_fields_check check (
     case when org_type = 'college'
          then program_key is not null and school_group is not null and team is not null
+              and team in ('mens', 'womens')
          else program_key is null end)
 );
 create unique index programs_group_team_key on public.programs (school_group, team);

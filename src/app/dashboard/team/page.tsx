@@ -68,7 +68,7 @@ export default async function TeamHomePage() {
   const resources = getTeamHomeResources(
     active.id,
     currentBillingMonth(),
-    active.orgType,
+    active,
   );
   // Nothing below awaits the schedule while it is closed, so a failed read
   // must not surface as an unhandled rejection.

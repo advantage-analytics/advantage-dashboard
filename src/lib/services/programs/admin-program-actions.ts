@@ -1,5 +1,6 @@
 "use server";
 
+import { isSquadAllowed, toSquad, type Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -77,8 +78,11 @@ export type ProgramOrgType =
 export interface CreateProgramInput {
   orgType: ProgramOrgType;
   schoolName: string;
-  /** `mens` / `womens`. Required for a college, meaningless anywhere else. */
-  team: "mens" | "womens" | null;
+  /**
+   * Required for a college, which is `mens` or `womens`. Optional for every
+   * other type, which may also be `coed`.
+   */
+  team: Squad | null;
   division: string | null;
   conference: string | null;
   city: string | null;
@@ -171,9 +175,12 @@ export async function createProgram(
   }
 
   const isCollege = input.orgType === "college";
-  const team = isCollege ? input.team : null;
+  const team = toSquad(input.team);
   if (isCollege && !team) {
     return { ok: false, error: "A college program needs a squad." };
+  }
+  if (team && !isSquadAllowed(input.orgType, team)) {
+    return { ok: false, error: "A college program is men's or women's." };
   }
 
   const state = input.state?.trim().toUpperCase() || null;

@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
 import {
   JoinAskAgain,
+  JoinLinkFull,
+  JoinLinkReady,
+  JoinLinkRequested,
+  JoinLinkSignUp,
   JoinReady,
   JoinSignUp,
   JoinWrongAccount,
@@ -61,7 +65,12 @@ export default async function JoinPage({
   // 'college' where the state carries no org type — those branches (not_found,
   // expired, already_used, wrong_account) never render an allowance figure.
   const { programHours, personalHours } = quotaHours(
-    "programOrgType" in state ? state.programOrgType : "college",
+    "programOrgType" in state
+      ? {
+          orgType: state.programOrgType,
+          pilotEligible: state.programPilotEligible,
+        }
+      : { orgType: "college", pilotEligible: false },
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
@@ -70,16 +79,17 @@ export default async function JoinPage({
   const declined = isNotNow(query);
 
   switch (state.kind) {
-    // Revoked, mistyped, or never real. One message for all three, because
-    // distinguishing them would confirm to whoever is holding a bad token
-    // whether it was ever a good one.
+    // Revoked, mistyped, never real — an invitation or a join link alike. One
+    // message for all of them, because distinguishing them would confirm to
+    // whoever is holding a bad token whether it was ever a good one. No
+    // eyebrow: the page cannot name a program it refuses to recognise, and
+    // "Invitation" was wrong for the link half of the door.
     case "not_found":
       return (
         <JoinPane
           width={440}
-          eyebrow="Invitation"
           title="That link isn't valid"
-          body="It may have been withdrawn, or already replaced by a newer one. Ask whoever invited you to send another."
+          body="It may have been turned off or replaced, or it was an invitation that has already been used. Ask whoever shared it for a new one."
         >
           <ClaimActions>
             <Link href="/login" className={CLAIM_BUTTON}>
@@ -194,5 +204,91 @@ export default async function JoinPage({
           />
         </JoinPane>
       );
+
+    // ── Join links ──────────────────────────────────────────────────────────
+    // The reusable, un-addressed door. Same rule as the invitation states:
+    // this GET only previews; joining is the POST behind the button.
+    case "link_ready":
+      if (declined) {
+        return (
+          <NothingSent
+            kind="link"
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
+      return (
+        <JoinPane
+          eyebrow={state.programName}
+          title={`Join ${state.programName}`}
+        >
+          <JoinLinkReady
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+            inviterName={state.inviterName}
+            rosterMatchName={state.rosterMatchName}
+            programHours={programHours}
+            personalHours={personalHours}
+          />
+        </JoinPane>
+      );
+
+    case "link_sign_up":
+      if (declined) {
+        // `link_sign_up` carries no inviter: the preview is read without a
+        // session, and nobody needs naming to someone who has not signed in.
+        return (
+          <NothingSent
+            kind="link"
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={null}
+          />
+        );
+      }
+      return (
+        <JoinPane eyebrow={state.programName} title="Set up your account">
+          <JoinLinkSignUp
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+            programHours={programHours}
+            personalHours={personalHours}
+          />
+        </JoinPane>
+      );
+
+    case "link_requested":
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title="Request sent"
+          body={`${state.programName}'s coaches will see your request on their roster. You'll get an email when they approve it.`}
+        >
+          <JoinLinkRequested />
+        </JoinPane>
+      );
+
+    case "link_full": {
+      const { signedIn } = state;
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title={`${state.programName} is full`}
+          body={
+            signedIn
+              ? "Every player seat is taken. Ask a coach to free one, then open this link again."
+              : "Every player seat is taken. If your coach already has you on the roster, sign in with the address they have for you and your seat is waiting. Otherwise ask a coach to free one, then open this link again."
+          }
+        >
+          <JoinLinkFull signedIn={signedIn} />
+        </JoinPane>
+      );
+    }
   }
 }

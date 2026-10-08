@@ -1,3 +1,4 @@
+import { toSquad, type Squad } from "@/lib/data/squad";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -34,6 +35,7 @@ import type {
   EventsPolicy,
   ProgramOrgType,
   UploadPolicy,
+  Workspace,
 } from "@/lib/workspace/types";
 
 /**
@@ -70,13 +72,7 @@ import type {
  * Settings › Team already renders — plus the five directory/lifecycle fields
  * that only an admin sees.
  */
-export interface AdminTeamProgram extends Omit<TeamIdentity, "team"> {
-  /**
-   * Null when the program has no squad on record (a high school, a custom
-   * org). `TeamIdentity` is Settings' member-facing shape and keeps its
-   * non-null squad; the console prints what the row actually holds.
-   */
-  team: "mens" | "womens" | null;
+export interface AdminTeamProgram extends Omit<TeamIdentity, "orgType"> {
   /** "Stanford (Men's)" — the directory's own display spelling. */
   name: string;
   /**
@@ -95,10 +91,16 @@ export interface AdminTeamProgram extends Omit<TeamIdentity, "team"> {
   /** `programs.status` — `unclaimed` | `claim_pending` | `active` | … */
   status: string;
   /**
-   * Decides the processing cap, not the ledger: only a verified collegiate
-   * program draws the 75-hour figure. See `quotaTierFor()`.
+   * Decides the processing cap, not the ledger: a verified collegiate program
+   * draws the 75-hour figure on its own, a custom org only with
+   * `pilotEligible`. See `quotaTierFor()`.
    */
   orgType: ProgramOrgType | null;
+  /**
+   * `programs.pilot_eligible` — an admin put this non-college team on the
+   * program pool. Always false for a college, which never needs it.
+   */
+  pilotEligible: boolean;
   /** The domain a claim's email is matched against, when one is known. */
   primaryDomain: string | null;
   createdAt: string;
@@ -381,8 +383,9 @@ const PROGRAM_SELECT = `
   id, program_key, school_name, team, conference, conference_id, division,
   city, state, staff_page_url, home_venue, default_surface, roster_public,
   players_can_upload, upload_policy, events_policy, time_zone, crest_path,
-  status, org_type, primary_domain, seats, created_at, claimed_at,
-  pilot_ends_on, pilot_approved_by, pilot_approved_at, pilot_ended_at
+  status, org_type, pilot_eligible, primary_domain, seats, created_at,
+  claimed_at, pilot_ends_on, pilot_approved_by, pilot_approved_at,
+  pilot_ended_at
 `;
 
 const CLAIM_SELECT = `
@@ -414,6 +417,7 @@ interface RawProgram {
   crest_path: string | null;
   status: string;
   org_type: string | null;
+  pilot_eligible: boolean;
   primary_domain: string | null;
   seats: number | null;
   created_at: string;
@@ -663,18 +667,19 @@ interface RawUsageRow {
  * thing deliberately dropped: it exists to stop a player reading the whole
  * program's ledger, and an admin is neither.
  *
- * The cap comes from `monthlyCapSecondsFor({ kind: 'team', orgType })` rather
+ * The cap comes from `monthlyCapSecondsFor({ kind: 'team', ...tier })` rather
  * than `getMonthlyCapSeconds('program')` — a custom org files under the program
- * ledger but draws the individual figure, and printing 75 hours beside a spend
- * that refuses at 2 is the exact divergence `quotaTierFor()` exists to prevent.
+ * ledger but draws the individual figure until an admin grants
+ * `pilot_eligible`, and printing 75 hours beside a spend that refuses at 2 is
+ * the exact divergence `quotaTierFor()` exists to prevent.
  */
 async function readUsage(
   admin: SupabaseClient,
   programId: string,
   billingMonth: string,
-  orgType: ProgramOrgType | null,
+  tier: Pick<Workspace, "orgType" | "pilotEligible">,
 ): Promise<ProgramUsage> {
-  const capSeconds = monthlyCapSecondsFor({ kind: "team", orgType });
+  const capSeconds = monthlyCapSecondsFor({ kind: "team", ...tier });
 
   const { data, error } = await admin
     .from("processing_usage")
@@ -1214,6 +1219,7 @@ export const getAdminTeam = cache(
 
     const row = programRow as unknown as RawProgram;
     const orgType = (row.org_type as ProgramOrgType | null) ?? null;
+    const pilotEligible = row.pilot_eligible === true;
     const billingMonth = currentBillingMonth();
 
     const [
@@ -1267,7 +1273,7 @@ export const getAdminTeam = cache(
         .eq("status", "open")
         .order("created_at", { ascending: true }),
       readSeatUsage(admin, programId, row.seats ?? 0),
-      readUsage(admin, programId, billingMonth, orgType),
+      readUsage(admin, programId, billingMonth, { orgType, pilotEligible }),
       readPilot(admin, row, viewer.id),
       readConference(admin, programId, row.conference_id),
       readActivity(admin, programId),
@@ -1310,7 +1316,7 @@ export const getAdminTeam = cache(
       // A program with no squad on record (a high school, a custom org) stays
       // null — coercing it to "mens" printed "Men's tennis" in Edit details
       // for a team that never said so.
-      team: row.team === "mens" || row.team === "womens" ? row.team : null,
+      team: toSquad(row.team),
       conference: row.conference,
       division: row.division ?? null,
       city: row.city,
@@ -1326,6 +1332,7 @@ export const getAdminTeam = cache(
       timeZone: row.time_zone,
       status: row.status,
       orgType,
+      pilotEligible,
       primaryDomain: row.primary_domain,
       createdAt: row.created_at,
       claimedAt: row.claimed_at,

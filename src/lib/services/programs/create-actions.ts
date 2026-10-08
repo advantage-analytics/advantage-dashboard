@@ -1,5 +1,6 @@
 "use server";
 
+import { isSquadAllowed, toSquad, type Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import {
   CUSTOM_ORG_NAME_MAX as NAME_MAX,
@@ -24,7 +25,7 @@ import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
  * hardened in 20260830050000) writes the program row (status `active`, roster
  * private) and the owner membership (`upload_enabled` true) in one atomic
  * step, deriving the owner from `auth.uid()` — the caller controls only the
- * new org's own name and type, and both are re-validated inside the function.
+ * new org's own name, type and squad, all re-validated inside the function.
  * Two guards on the vendor budget ride with it: an account may own at most 2
  * custom orgs (the RPC's own count, surfaced as `limit-reached` below), and a
  * custom org draws the reduced processing tier, not the collegiate 75h — see
@@ -47,6 +48,8 @@ export type CreateCustomProgramResult =
         | "no-session"
         | "invalid-name"
         | "invalid-org-type"
+        /** No squad, or one this type cannot field. The setup form requires it. */
+        | "invalid-team"
         /**
          * The per-account ownership cap: one account may own at most 2
          * custom orgs, enforced inside the RPC (migration 20260830050000)
@@ -85,9 +88,12 @@ const LIMIT_REACHED_SQLSTATE = "54000";
 export async function createCustomProgram(input: {
   name: string;
   orgType: CustomOrgType;
+  /** Men's, women's or co-ed. Required: an unanswered squad is not created. */
+  team: Squad;
 }): Promise<CreateCustomProgramResult> {
   const name = (input?.name ?? "").trim();
   const orgType = input?.orgType;
+  const team = toSquad(input?.team);
 
   // Client-side friendliness only — the RPC re-checks both under its own
   // rules, because a server action's arguments are still client input.
@@ -96,6 +102,9 @@ export async function createCustomProgram(input: {
   }
   if (name.length < NAME_MIN || name.length > NAME_MAX) {
     return { ok: false, reason: "invalid-name" };
+  }
+  if (!team || !isSquadAllowed(orgType, team)) {
+    return { ok: false, reason: "invalid-team" };
   }
 
   const supabase = await createClient();
@@ -107,6 +116,9 @@ export async function createCustomProgram(input: {
   const { data, error } = await supabase.rpc("create_custom_program", {
     p_name: name,
     p_org_type: orgType,
+    // The three-argument form (20261007 co-ed squads). The two-argument one
+    // still exists for the build that predates the question, and writes null.
+    p_team: team,
   });
 
   if (error) {

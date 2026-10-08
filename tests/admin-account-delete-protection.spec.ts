@@ -109,7 +109,7 @@ function harness(
         effects.push("purge");
         if (scenario.purgeThrows) {
           throw new Error(
-            "Matches recorded or analyzed through the admin console cannot be deleted here.",
+            "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here. Contact support to remove them.",
           );
         }
       },
@@ -173,6 +173,17 @@ test("ordinary actor reaches existing owner refusal after protection check", asy
     ok: false,
     error: expect.stringContaining("Transfer ownership"),
   });
+  expect(h.effects).toEqual(["prepare"]);
+});
+test("a labelled personal match refuses in the prepare step, before anything is released", async () => {
+  const h = harness({
+    prepare: { code: "22023", message: "label-session-protected" },
+  });
+  const result = await h.run();
+  expect(result).toMatchObject({ ok: false });
+  expect(result?.error).toContain("Nothing was changed");
+  expect(result?.error).toContain("quality review");
+  // The refusal is the RPC's own: no match is listed, purged or deleted.
   expect(h.effects).toEqual(["prepare"]);
 });
 test("unauthenticated caller cannot invoke the service protection lookup", async () => {

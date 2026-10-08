@@ -1,7 +1,8 @@
 /**
  * Rebuild a job's statistics from the results the vendor already delivered —
  * the recovery for a `derivation_failed` row whose build crashed
- * (`DERIVATION_ERROR`). No vendor call and no allowance.
+ * (`DERIVATION_ERROR`), and the rebuild after an analysed match's score is
+ * edited. No vendor call and no allowance.
  *
  * Wiring only: the session, the service-role client and `deriveAndPublish()`.
  * The ladder and its reasoning are in `handler.ts`.
@@ -51,7 +52,7 @@ export async function POST(
       const { data, error } = await adminClient()
         .from("processing_jobs")
         .select(
-          "id, created_by, status, derivation_version, error_code, error_category, error_step, external_job_id, updated_at, video_object_key, results_object_key",
+          "id, match_id, created_by, status, derivation_version, error_code, error_category, error_step, external_job_id, updated_at, video_object_key, results_object_key",
         )
         .eq("id", id)
         .maybeSingle();
@@ -61,12 +62,12 @@ export async function POST(
       };
     },
 
-    async claimJob(id) {
+    async claimJob(id, from) {
       const { data, error } = await adminClient()
         .from("processing_jobs")
         .update({ status: "deriving" })
         .eq("id", id)
-        .eq("status", "derivation_failed")
+        .eq("status", from)
         .select("id");
       return {
         claimed: (data?.length ?? 0) > 0,
@@ -74,13 +75,27 @@ export async function POST(
       };
     },
 
-    async derive(id, deadline) {
+    async newestJobId(matchId) {
+      const { data } = await adminClient()
+        .from("processing_jobs")
+        .select("id")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return (data as { id: string } | null)?.id ?? null;
+    },
+
+    async derive(id, deadline, from) {
       const outcome = await deriveAndPublish({
         supabase: adminClient(),
         jobId: id,
         deadline,
+        rebuild: from === "completed",
       });
-      return outcome.ok ? { ok: true } : { ok: false, reason: outcome.reason };
+      return outcome.ok
+        ? { ok: true }
+        : { ok: false, reason: outcome.reason, kept: outcome.kept };
     },
   };
 

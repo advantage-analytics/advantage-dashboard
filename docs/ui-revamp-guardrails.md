@@ -536,6 +536,37 @@ to put a testable seam.
 > `reconcile()`, winners, `calculate_match_stats` and the schema are untouched.
 > `DERIVATION_VERSION` is `0.5.0-unreconciled`.
 
+> **A reviewed exception, added 2026-10-03: vendor join keys for the
+> hand-labelling console, in `derivation/transcript.ts` and
+> `persist-transcript.ts`.** `DerivedShot` carries the vendor stroke's
+> `event_id` and `DerivedPoint` the rally's `rally_id`, and
+> `buildTranscriptForJob` also returns the parsed results file as `raw` and the
+> grouped `rallies`, so the admin label seed (`src/lib/services/labels`) can
+> join each label row back to the stroke it came from and rebuild its marks.
+> Additive only: neither field is a `points` or `shots` column — the insert
+> rows list their columns explicitly — and `persistTranscript` ignores `raw`
+> and `rallies`. `derivation/flags.ts` only gained `export` on
+> `SIDE_DEAD_ZONE_M` and `MAX_DEAD_TAIL`, values unchanged, so the label marks
+> read the same thresholds. Winners, `result_type`, `reconcile()`,
+> `calculate_match_stats`, the schema and `DERIVATION_VERSION` are untouched.
+>
+> The same branch changes the deletion path (§3.4), in three migrations dated
+> 2026-10-04 and two dated 2026-10-07. The latter revoke `insert`, `update`
+> and `delete` on the three `label_*` tables from `authenticated` (the console
+> writes through server actions on the service role, behind `requireAdmin`),
+> and `prepare_my_account_deletion()` raises `label-session-protected` — before
+> any claim or release — when the caller has a personal match with a label
+> session, so the account page says nothing was changed and to contact
+> support. `admin_claim_match_storage_purge` also answers false for a match
+> that has a label session, so the match delete route and account deletion
+> refuse it before any object is touched; `label_sessions` carries the
+> `reject_purging_match` trigger, so a session cannot be started on a match
+> whose deletion is in progress; and `label_sessions.match_id` is
+> `ON DELETE RESTRICT` while `label_sessions.job_id` is `ON DELETE SET NULL`.
+> The refusal sentence gained "hand-labeled"; the account-deletion copy of it
+> ends "Contact support to remove them." `purgeMatchStorage`'s ordering and
+> the three object keys it covers are unchanged.
+
 > **A reviewed exception, added 2026-09-30: cancelling a queued analysis, from
 > `claude/matches-rosters-design-consistency-c31a1d`.** An athlete can now
 > withdraw a video that is still waiting in the vendor's queue, and send a
@@ -624,6 +655,40 @@ to put a testable seam.
 > Unchanged: what is sent to the vendor, the reserve RPCs and their SQL,
 > program and custom-org caps, and the open-beta ceiling. No migration.
 
+> **A reviewed exception, added 2026-10-07: admin-granted pilot eligibility for
+> non-college teams, from `claude/non-college-pilot-eligibility-eda3a1`.**
+> Owner decision: a custom org (club / high_school / academy / other) stays on
+> the individual 2h figure until an admin grants it the pilot's 75h program
+> pool from Admin › Teams › Pilot card ("Grant team pool" / "Revoke team pool").
+> The grant is an explicit flag, `programs.pilot_eligible`, never derived from
+> org_type or the pilot dates; granting also stamps `pilot_approved_by/at` (the
+> admin) and `pilot_ends_on` (2026-12-31 when unset, passed, or ended by hand).
+> Colleges are unchanged and the RPC refuses them. Frozen files that changed:
+>
+> - `quota.ts` — `quotaTierFor()` returns `"program"` for `kind === "team"`
+>   when `orgType === "college"` **or** `pilotEligible === true`; the Pick on
+>   it and `monthlyCapSecondsFor()` widened to carry the flag. Everything that
+>   reads a cap (wizard meter, Settings › Usage, Team home, admin Pilot card,
+>   `/api/splitstep/hours-left`, `reserveQuota()`, `peekQuota()`) follows.
+> - `resubmit-job.ts` — the auto-retry's team workspace re-reads
+>   `programs.pilot_eligible` beside `org_type`, so a retry draws the cap a
+>   fresh submission would.
+> - `active-workspace-server.ts` and `admin-upload-server.ts` read the column
+>   into `Workspace.pilotEligible` (optional, like `individualPilot`: a
+>   constructor that forgets it fails closed to 2h).
+> - SQL (`20261007142230_program_pilot_eligible.sql`, applied live
+>   2026-10-07): `admin_reserve_video_quota`, `individual_tier_usage` and
+>   `individual_pool_usage` read `org_type = 'college' or pilot_eligible` where
+>   they read `org_type = 'college'`, so an eligible org's admin uploads take
+>   the program cap and its spend leaves the shared pilot pool / open-beta
+>   ceiling; `admin_set_pilot_eligible` is the only writer and logs
+>   `pilot.eligibility_changed`; `pending_program_invites` returns the flag so
+>   the join footer quotes the enforced figure.
+>
+> Unchanged: what is sent to the vendor, the reserve RPC cores
+> (`reserve_processing_quota`, `reserve_individual_quota`), the 2h / 10h / 75h
+> figures, and the open-beta ceiling.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
@@ -690,6 +755,13 @@ bytes move, and `submit-match-video.ts` rewrites the job row to `[0, cut length]
 up and the row keeps the window the wizard wrote. Removing the trim step means
 every job bills — and stores — the full recording.
 
+**The video check is never persisted** (2026-10-07). The trim window and both
+camera answers (`VIDEO_CHECK_FIELDS` in `new-match-wizard/types.ts`) describe one
+picked file, which survives neither localStorage nor a `match_drafts` row, so
+they are stripped on write and on read. A stored copy could only be put back over
+a live answer — which is how a resumed draft once reverted
+`initialTopPlayerIsPlayer1` on a server re-render of the page.
+
 **`useUploadMatchWizard.ts` invariants:**
 
 - The `processing_jobs` insert must `.select("id").single()`, and every later
@@ -753,7 +825,9 @@ exactly as before.
 
 ### 3.4 Match deletion — `app/api/matches/[matchId]/route.ts`
 
-Storage keys live on `processing_jobs`, which **cascades away with the match**.
+Storage keys live on `processing_jobs`, which **cascades away with the match**
+(a match with a hand-label session is the one exception: the purge claim refuses
+its deletion outright, and a label session outlives its job with `job_id` null).
 All cleanup must run _before_ the row delete, and must cover all three:
 `video_object_key`, `trimmed_object_key`, `results_object_key`. Missing one
 strands multi-GB blobs that nothing can name. This has been the bug twice.

@@ -1,5 +1,6 @@
 "use client";
 
+import { squadLabel } from "@/lib/data/squad";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -250,12 +251,9 @@ export function AdminUploadEntry({
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-[14px] font-medium">
-                {context.workspace.name}
-                {context.workspace.team === "mens"
-                  ? " Men’s"
-                  : context.workspace.team === "womens"
-                    ? " Women’s"
-                    : ""}
+                {[context.workspace.name, squadLabel(context.workspace.team)]
+                  .filter(Boolean)
+                  .join(" ")}
               </span>
               <span className="text-[12px] text-[var(--ink-600)]">
                 {context.workspace.programStatus === "active"

@@ -17,11 +17,13 @@ import {
   ClaimSelect,
 } from "./claim-shell";
 import { ExistingTeamMatches, TYPE_LABEL } from "./existing-team-matches";
+import { TeamPills } from "./team-pills";
+import { squadsFor, type Squad } from "@/lib/data/squad";
 
 /**
  * Onboarding & Team Setup, screen 7.2 — you name it, you own it, no
- * confirmation step. Two fields the coach fills plus their own name and role,
- * and a create button. The whole difference from the college path is what's
+ * confirmation step. The team's name and squad, plus the coach's own name and
+ * role, and a create button. The whole difference from the college path is what's
  * absent: no list, no domain note, no email link, no announced claim. The
  * "How this differs from a college team" aside lives in the page, passed to
  * `ClaimShell`'s right column.
@@ -53,6 +55,8 @@ function reasonMessage(reason: string): string {
       return "Give the team a name between 2 and 120 characters.";
     case "invalid-owner-name":
       return `Keep your name to ${OWNER_NAME_MAX} characters.`;
+    case "invalid-team":
+      return "Say whether the team is men's, women's or co-ed.";
     case "invalid-org-type":
       return "Something's off with the team type — go back a step and pick one.";
     case "no-session":
@@ -84,15 +88,22 @@ export function TeamSetupForm({
   orgType,
   defaultOwnerName,
   defaultTeamName = "",
+  defaultTeam = null,
 }: {
   orgType: CustomOrgType;
   defaultOwnerName: string;
   /** What the coach typed before going on to the terms and coming back. */
   defaultTeamName?: string;
+  /** The parked Team answer, on the same return trip. Null: not yet asked. */
+  defaultTeam?: Squad | null;
 }) {
   const copy = TYPE_LABEL[orgType];
   const [teamName, setTeamName] = useState(defaultTeamName);
   const [ownerName, setOwnerName] = useState(defaultOwnerName);
+  // Starts unanswered on purpose. A preselected "Men's" is how a mixed club
+  // ends up a men's team: the coach never sees a question, only a setting.
+  const [team, setTeam] = useState<Squad | null>(defaultTeam);
+  const squads = squadsFor(orgType);
   const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -135,7 +146,8 @@ export function TeamSetupForm({
     return () => clearTimeout(timer);
   }, [query, active, orgType]);
 
-  const canSubmit = teamName.trim().length >= 2 && ownerName.trim().length > 0;
+  const canSubmit =
+    teamName.trim().length >= 2 && ownerName.trim().length > 0 && team !== null;
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -148,6 +160,7 @@ export function TeamSetupForm({
         name: teamName,
         orgType,
         ownerName,
+        team,
       });
       if (result && !result.ok) setError(reasonMessage(result.reason));
     });
@@ -196,6 +209,11 @@ export function TeamSetupForm({
             onAskToJoin={askToJoin}
             pendingProgramId={askingId}
           />
+        </div>
+
+        <div>
+          <span className={CLAIM_LABEL}>Team</span>
+          <TeamPills value={team} onChange={setTeam} options={squads} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

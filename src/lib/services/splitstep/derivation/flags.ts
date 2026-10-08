@@ -113,10 +113,10 @@ const CONFIDENT_OUT_CALL = 0.85;
  * Servers stand close to the centre mark, so a stance this near x = 0 says
  * nothing about the side; `score_side_mismatch` ignores it.
  */
-const SIDE_DEAD_ZONE_M = 0.3;
+export const SIDE_DEAD_ZONE_M = 0.3;
 
 /** Strokes after a second serve that can still be the returner at a dead ball. */
-const MAX_DEAD_TAIL = 2;
+export const MAX_DEAD_TAIL = 2;
 
 export const SHOT_FLAGS = {
   /** Flagged out, yet the rally continued past it. */

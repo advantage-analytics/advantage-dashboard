@@ -42,7 +42,15 @@ export type DeriveOutcome =
       shotsWritten: number;
       transcript: Transcript;
     }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      reason: string;
+      /**
+       * A `rebuild` that was refused before anything was written: the job is
+       * back at `completed` and the published rows are untouched.
+       */
+      kept?: boolean;
+    };
 
 /**
  * Derive a job's match and publish what can be trusted.
@@ -67,8 +75,16 @@ export async function deriveAndPublish(params: {
    * no ceiling.
    */
   deadline?: number;
+  /**
+   * The job was `completed` and is being rebuilt on request (the edit dialog,
+   * after a score change). Two things differ: the player mapping is pinned to
+   * the rows already published, and a refusal restores `completed` instead of
+   * failing the job — a published match must not turn into "analysis failed",
+   * with its email, because a rebuild its owner asked for was turned down.
+   */
+  rebuild?: boolean;
 }): Promise<DeriveOutcome> {
-  const { supabase, jobId, deadline } = params;
+  const { supabase, jobId, deadline, rebuild = false } = params;
 
   try {
     // Never off `cancelled`. The user withdrew the job while it was queued
@@ -90,7 +106,25 @@ export async function deriveAndPublish(params: {
       return { ok: false, reason: "job is cancelled" };
     }
 
-    const written = await persistTranscript({ supabase, jobId });
+    const written = await persistTranscript({
+      supabase,
+      jobId,
+      keepPlayerMapping: rebuild,
+    });
+
+    if (!written.ok && rebuild && written.failure === "refused") {
+      // Refusals are decided before the delete (see persistTranscript), so
+      // the rows the job published are still there; so is its clean status.
+      await supabase
+        .from("processing_jobs")
+        .update({ status: "completed" })
+        .eq("id", jobId);
+      console.warn(`${LOG} rebuild refused; published rows kept`, {
+        jobId,
+        reason: written.reason,
+      });
+      return { ok: false, reason: written.reason, kept: true };
+    }
 
     if (!written.ok) {
       // A refusal is the system working. The transcript is reconciled against

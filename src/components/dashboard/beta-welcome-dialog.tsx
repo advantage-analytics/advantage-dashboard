@@ -11,7 +11,10 @@ import { LiveDots } from "@/components/ui/live-dots";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import {
+  monthlyCapSecondsFor,
+  quotaTierFor,
+} from "@/lib/services/splitstep/quota";
 import { PAID_PLANS_BEGIN, workspaceTier } from "@/lib/user/plan";
 
 /**
@@ -216,7 +219,7 @@ export function useBetaWelcomeTerms(): BetaWelcomeTerms {
   return {
     hours: monthlyCapSecondsFor(active) / 3600,
     programName:
-      active.kind === "team" && active.orgType === "college"
+      active.kind === "team" && quotaTierFor(active) === "program"
         ? active.name
         : null,
     tier: workspaceTier(active),

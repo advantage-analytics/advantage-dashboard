@@ -2,8 +2,15 @@
  * Utility functions for the Upload Match wizard
  */
 
-import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
+import {
+  FormData,
+  WinnerLoserResult,
+  MatchData,
+  UploadedFile,
+  withoutVideoCheck,
+} from "./types";
 import { lastEnteredSet, retiredWinner } from "./score-state";
+import type { StopReason } from "./score-state";
 
 /**
  * Get the number of sets to display/edit.
@@ -188,6 +195,11 @@ export function buildMatchData(
     // The caption over the score ("X Wins", "Retired"), not an outcome. No
     // caption is stored as null, never "": readers fall back to "Final Score".
     result: formData.result || null,
+    // Why it stopped, read off the result the caller settled on — never off
+    // the answer alone, so a reason left over from before the score was
+    // finished does not ride along with a decided match. "Retired" is its own
+    // reason; "Unfinished" carries the wizard's pick, when it made one.
+    stop_reason: stopReasonFor(formData.result, formData.stopReason),
     // Store the picked local date as the leading YYYY-MM-DD so it survives the
     // timestamptz round-trip (PostgREST returns timestamptz normalized to UTC, and the
     // heatmap buckets by date.slice(0,10)). getCurrentDate() already defaults this to
@@ -219,6 +231,24 @@ export function buildMatchData(
     opponent_hand: formData.opponentHand,
     opponent_backhand: formData.opponentBackhand,
   };
+}
+
+/**
+ * The `matches.stop_reason` a settled result writes. Only a stopped result
+ * carries one, and "Unfinished" only the two reasons that ride with it — a
+ * SwingVision import that arrives "Unfinished" has no `stopReason` and so
+ * writes null without the parser knowing the column exists.
+ */
+export function stopReasonFor(
+  result: string,
+  stopReason: StopReason | undefined,
+): StopReason | null {
+  if (result === "Retired") return "retired";
+  if (result === "Unfinished")
+    return stopReason === "clinched" || stopReason === "time_weather"
+      ? stopReason
+      : null;
+  return null;
 }
 
 /**
@@ -567,9 +597,11 @@ export function loadFormDataFromStorage(workspaceKey: string): FormData | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.FORM_DATA);
     if (!stored) return null;
-    const formData: FormData = JSON.parse(stored);
+    // A copy saved before the video check stopped being stored still carries
+    // it — see `VIDEO_CHECK_FIELDS`.
+    const formData = withoutVideoCheck(JSON.parse(stored) as FormData);
     if (localStorage.getItem(STORAGE_KEYS.FORM_DATA_WORKSPACE) === workspaceKey)
-      return formData;
+      return formData as FormData;
     // Removed rather than set to undefined: the caller spreads this over the
     // defaults, and an own `undefined` key would still overwrite them.
     const {
@@ -607,12 +639,16 @@ export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
 
 /**
  * Save form data to localStorage, tagged with the workspace it was answered
- * in (see `loadFormDataFromStorage`).
+ * in (see `loadFormDataFromStorage`). The video check is left out — see
+ * `VIDEO_CHECK_FIELDS`.
  */
 export function saveFormDataToStorage(
   formData: FormData,
   workspaceKey: string,
 ): void {
-  localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData));
+  localStorage.setItem(
+    STORAGE_KEYS.FORM_DATA,
+    JSON.stringify(withoutVideoCheck(formData)),
+  );
   localStorage.setItem(STORAGE_KEYS.FORM_DATA_WORKSPACE, workspaceKey);
 }
