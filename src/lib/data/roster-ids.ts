@@ -60,10 +60,18 @@ export function canonicalRosterIds(
   rows: readonly RosterIdRow[],
 ): Map<string, string> {
   const canonical = new Map<string, string>();
+  // Two passes, so the answer does not depend on the order the rows arrive in.
+  // A staff member who also plays is TWO rows sharing a login: a player row
+  // (`player_id` = their profile) and a staff row (`player_id` = the login
+  // itself). In one pass the staff row's self-mapping, arriving second, undid
+  // the player row's login → profile fold, and a match carrying the login id
+  // stopped counting for the person who played it. The profile wins: staff
+  // seats do not play matches, profiles do.
   for (const row of rows) {
-    if (!row.player_id) continue;
-    canonical.set(row.player_id, row.player_id);
-    if (row.user_id && row.user_id !== row.player_id) {
+    if (row.player_id) canonical.set(row.player_id, row.player_id);
+  }
+  for (const row of rows) {
+    if (row.player_id && row.user_id && row.user_id !== row.player_id) {
       canonical.set(row.user_id, row.player_id);
     }
   }
@@ -94,9 +102,12 @@ export function idsResolvingTo(
   canonical: ReadonlyMap<string, string>,
   playerId: string,
 ): string[] {
-  return [...canonical.entries()]
+  const ids = [...canonical.entries()]
     .filter(([, canonicalId]) => canonicalId === playerId)
     .map(([id]) => id);
+  // The staff row of somebody who also plays resolves to their profile, so
+  // nothing maps back to it. It still names itself — the promise above.
+  return ids.length > 0 ? ids : [playerId];
 }
 
 /**

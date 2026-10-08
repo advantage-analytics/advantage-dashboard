@@ -184,6 +184,7 @@ function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
       trimmed: true,
       file: cut,
       durationSeconds: options.endSeconds - options.startSeconds,
+      mode: "remux",
       storageName,
     };
   };

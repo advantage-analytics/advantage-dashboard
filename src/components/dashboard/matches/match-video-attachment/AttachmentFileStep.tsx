@@ -39,12 +39,16 @@ import {
   HardDrive,
   Info,
   Loader2,
+  VideoOff,
   X,
-  XCircle,
 } from "lucide-react";
 
 import { MATCH_VIDEO_MAX_BYTES_LABEL } from "@/lib/match-video/limits";
-import { noteIconCls, noteStripCls } from "../new-match-wizard/styles";
+import {
+  errorStripCls,
+  noteIconCls,
+  noteStripCls,
+} from "../new-match-wizard/styles";
 import { formatFileSize, formatTimecode } from "../new-match-wizard/utils";
 import {
   ATTACHMENT_ACCEPT,
@@ -243,20 +247,18 @@ function AttachmentFileStepImpl({
 
           {state.status === "rejected" && (
             <div
-              className={noteStripCls}
+              className={errorStripCls}
               role="alert"
               data-testid="attachment-file-error"
               data-error-code={state.error.code}
             >
-              <XCircle
-                className={`${noteIconCls} text-[var(--error)]`}
+              <VideoOff
+                className={noteIconCls}
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
               <span>
-                <b className="font-medium text-[var(--ink-900)]">
-                  This video can&apos;t be used
-                </b>
+                <b className="font-medium">This video can&apos;t be used</b>
                 {" — "}
                 {state.error.message}
               </span>

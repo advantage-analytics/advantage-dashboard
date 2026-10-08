@@ -80,11 +80,12 @@ export type RosterSubject = Extract<MatchSubject, { kind: "roster" }>;
  * The viewer's own live profile on the active program, as a direct read of
  * `program_players` returns it.
  *
- * Needed because `program_roster_full`'s player arm drops a profile claimed
- * by STAFF (`pm.role is null or pm.role = 'player'`), and `Workspace.myPlayerId`
- * is null for staff too — so an owner or coach who genuinely plays for the
- * program would never see their own profile in the picker, and the only row
- * left for them would be the uploader fallback this file forbids. The read
+ * It was needed because `program_roster_full`'s player arm used to drop a
+ * profile claimed by STAFF, so an owner or coach who genuinely plays for the
+ * program would never see their own profile in the picker. The RPC returns
+ * those rows now (`20261008160418_add_self_as_program_player`), which makes
+ * the fold below a guard rather than the mechanism: it adds the row only when
+ * the list lacks it, and a list that lacks it is a bug worth surviving. The read
  * mirrors `claimedProfilesByProgram()` in `active-workspace-server.ts`: live
  * (not archived, not merged), bound to this login, this program.
  */

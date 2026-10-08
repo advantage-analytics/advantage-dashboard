@@ -62,6 +62,10 @@ One shape for every person a card lists — members, invitees, usage lines:
   Placed straight after the name it lands at a different x on every row, and a
   long email drags it further than a short name — the column is what makes the
   list scan.
+- **The flat role pill is `RolePill`** (`ui/role-pill.tsx`, 2026-10-08) —
+  `StatePill`'s geometry, the word from `PROGRAM_ROLE_LABEL`. Every surface
+  that states a role as a pill draws it through this, the way `You` goes
+  through `YouPill`; a `<StatePill>{capitalize(role)}</StatePill>` is drift.
 - **Meta is not a biography.** Role is the pill; a position and a joining date
   beneath the name are a second, softer answer to the question the pill already
   answered. Slot the row's one useful variable there instead — a date on an

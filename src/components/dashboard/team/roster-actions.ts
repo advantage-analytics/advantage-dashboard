@@ -214,6 +214,84 @@ export async function addProgramPlayer(input: {
 }
 
 /**
+ * Put the CALLER on the roster as a player — the owner, a coach or a staff
+ * member who also plays.
+ *
+ * The one road onto a roster for somebody who is already a member:
+ * `add_program_player` and `create_program_invite` both refuse a member's own
+ * address, and rightly, since each would make a second identity for one
+ * person. This binds a profile to the login that is asking instead. It takes
+ * no person as input, so it cannot be turned on anybody else.
+ *
+ * Every guard lives in `add_self_as_program_player`: staff-only, the seat
+ * check, and restore-don't-duplicate for a profile this login held before.
+ * `name` comes back because the caller selects the new row somewhere — the
+ * wizard's picker — and the roster it holds predates the row.
+ */
+export type AddSelfResult =
+  { ok: true; profileId: string; name: string } | { ok: false; error: string };
+
+export async function addSelfAsPlayer(input: {
+  /**
+   * The program the dialog was showing. The workspace cookie can move while a
+   * dialog sits open (another tab, the switcher), and this action takes a seat
+   * — so it acts only when the two agree, never on whichever is active now.
+   */
+  programId: string;
+  classYear?: string | null;
+  lineupSpot?: number | null;
+}): Promise<AddSelfResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return {
+      ok: false,
+      error: "Switch to your team workspace to add yourself as a player.",
+    };
+  }
+  if (workspace.active.id !== input.programId) {
+    return {
+      ok: false,
+      error:
+        "Your workspace changed while this was open. Close this and try again from the team you meant.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("add_self_as_program_player", {
+    p_program_id: workspace.active.id,
+    p_class_year: input.classYear ?? null,
+    p_lineup_spot: input.lineupSpot ?? null,
+    p_hand: null,
+    p_backhand: null,
+  });
+
+  if (error || typeof data !== "string") {
+    const raw = error?.message?.trim();
+    return {
+      ok: false,
+      error: raw && raw.length > 0 ? raw : "Couldn't add you to the roster.",
+    };
+  }
+
+  // The roster row's own name, not the account's display name: a restored
+  // profile keeps the name it had, and `viewer.name` falls back to an email
+  // local part. This is what the wizard writes as the player's name.
+  const { data: row } = await supabase
+    .from("program_players")
+    .select("first_name, last_name")
+    .eq("id", data)
+    .maybeSingle();
+  const name =
+    [row?.first_name, row?.last_name].filter(Boolean).join(" ").trim() ||
+    workspace.viewer.name;
+
+  // One revalidation: the layout resolves the workspace (`myPlayerId`), and
+  // the Roster and Team Home both sit under it.
+  revalidatePath("/dashboard", "layout");
+  return { ok: true, profileId: data, name };
+}
+
+/**
  * One `program_players` row, as the edit form needs it.
  *
  * The five editable columns and nothing else, already in the shapes the fields

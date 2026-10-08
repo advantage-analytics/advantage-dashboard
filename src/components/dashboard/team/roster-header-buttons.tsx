@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   AddPlayerDialog,
@@ -13,13 +14,14 @@ import {
 } from "@/components/dashboard/team/roster-actions";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import { RosterInviteDialog } from "./roster-invite-dialog";
-import type { ManagedPlayer } from "./invite-target-picker";
-import { useClaimInvite } from "./roster-claim-invite";
 import {
-  JoinLinkPopover,
-  type JoinLinkTriggerProps,
-} from "@/components/dashboard/settings/teams/join-link-popover";
+  AddSelfDialog,
+  mayAddSelf,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
+import type { ManagedPlayer } from "./invite-target-picker";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { useClaimInvite } from "./roster-claim-invite";
 import type {
   FormerPlayer,
   RosterMember,
@@ -41,24 +43,6 @@ const MEMBER_ACTIONS: AddPlayerActions = {
   invite: inviteMember,
   restore: restoreProgramPlayer,
 };
-
-/**
- * The header's ghost **Invite**, drawn as `JoinLinkPopover`'s trigger so the
- * join-link panel anchors to it.
- *
- * It still opens the Invite dialog, not the popover: Radix's trigger toggle
- * reaches `RosterHeaderButtons` as `onOpenChange(true)`, which that component
- * reads as "open Invite" (see the note at the mount). Radix hands this the
- * click handler, the popover ARIA and a `ref` (a plain prop in React 19); all
- * of them land on the one `<button>`.
- */
-function InviteTrigger(props: JoinLinkTriggerProps) {
-  return (
-    <button type="button" {...props} className={advButton("ghost")}>
-      Invite
-    </button>
-  );
-}
 
 /**
  * `RosterHeaderButtons` before the page has the seat count its dialogs open
@@ -121,16 +105,58 @@ export function RosterHeaderButtons({
   former: FormerPlayer[];
   /**
    * The program's live join link, or null — `getRosterJoinLink`, the same
-   * `TeamJoinLink` Settings › Teams reads, so the popover opens on the rung
-   * that is really live.
+   * `TeamJoinLink` Settings › Teams reads, so the Invite dialog's "Join link"
+   * half opens on the rung that is really live.
    */
   joinLink: TeamJoinLink | null;
 }) {
-  const { active } = useWorkspace();
+  const { active, viewer } = useWorkspace();
   const [inviting, setInviting] = useState(false);
-  /** The join-link popover, opened only by the Invite dialog's hand-off. */
-  const [linkOpen, setLinkOpen] = useState(false);
+  /**
+   * "Add yourself as a player" — reached by typing your own address into
+   * either dialog. Offered to staff this roster does not carry as a player;
+   * for anybody else their own address is an ordinary duplicate.
+   */
+  const [addingSelf, setAddingSelf] = useState(false);
+  const self: OwnAddressOffer = mayAddSelf(
+    active.role,
+    roster.some(
+      (member) => member.role === "player" && member.userId === viewer.id,
+    ),
+  )
+    ? {
+        email: viewer.email,
+        onAddSelf: () => {
+          // Invite is held open by a claim target as well as by `inviting`
+          // (the drawer's "Invite to claim →"); clearing only one left it
+          // open underneath the dialog this hands off to.
+          setInviting(false);
+          claim.clear();
+          setAddingPlayer(false);
+          setAddingSelf(true);
+        },
+      }
+    : null;
   const [addingPlayer, setAddingPlayer] = useState(false);
+  /**
+   * `?add=player` lands with Add player already open — Team Home's day-zero
+   * "Add players" button, which names this dialog and should not need a second
+   * click to reach it. Consumed once, during render (the arrival is the event,
+   * so there is no frame with the dialog still closed), then taken off the URL
+   * so a reload or the back button does not reopen a dialog somebody closed.
+   */
+  const openOnArrival = useSearchParams().get("add") === "player";
+  const [arrival, setArrival] = useState(openOnArrival);
+  if (arrival) {
+    setArrival(false);
+    setAddingPlayer(true);
+  }
+  useEffect(() => {
+    if (!openOnArrival) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", url);
+  }, [openOnArrival]);
   /**
    * What Add player should open holding.
    *
@@ -176,27 +202,16 @@ export function RosterHeaderButtons({
           `Tb4c`: "ghost Invite beside primary Add player". It was `outline`,
           which the v3 readme rules out beside a primary on a grey page. */}
       <div className="flex shrink-0 items-center gap-2.5">
-        {/* Invite IS the popover's trigger, so the join-link panel anchors
-            under it — but a click on it still opens the Invite dialog. The
-            popover is controlled, and the only way Radix asks to OPEN it is
-            the trigger's own toggle; that request is answered by opening the
-            dialog instead. The panel itself opens only from the dialog's
-            "Share a join link instead" (`onShareJoinLink` below). Pressing
-            Invite while the panel is open asks to close it, which it does. */}
-        <JoinLinkPopover
-          trigger={InviteTrigger}
-          open={linkOpen}
-          onOpenChange={(next) => {
-            if (next) setInviting(true);
-            else setLinkOpen(false);
-          }}
-          programId={active.id}
-          programName={active.name}
-          joinLink={joinLink}
-          role={active.role}
-          playersCanUpload={playersCanUpload}
-          seats={seats}
-        />
+        {/* One way in. The join link used to open as a popover anchored
+            here, after the dialog closed to make room for it; it is now the
+            dialog's own second half ("Join link" beside "Email invite"). */}
+        <button
+          type="button"
+          className={advButton("ghost")}
+          onClick={() => setInviting(true)}
+        >
+          Invite
+        </button>
         <button
           type="button"
           className={advButton("primary")}
@@ -222,11 +237,8 @@ export function RosterHeaderButtons({
         openInviteEmails={openInviteEmails}
         playersCanUpload={playersCanUpload}
         onHandOffToAddPlayer={handOffToAddPlayer}
-        onShareJoinLink={() => {
-          setInviting(false);
-          claim.clear();
-          setLinkOpen(true);
-        }}
+        self={self}
+        joinLink={joinLink}
       />
 
       <AddPlayerDialog
@@ -254,7 +266,21 @@ export function RosterHeaderButtons({
         former={former}
         initial={addInitial}
         actions={MEMBER_ACTIONS}
+        self={self}
       />
+
+      {/* Mounted only while it can be opened, or is open: the roster refresh
+          after a success withdraws the offer before the dialog has closed. */}
+      {(self || addingSelf) && (
+        <AddSelfDialog
+          open={addingSelf}
+          onOpenChange={setAddingSelf}
+          programId={active.id}
+          viewerName={viewer.name}
+          teamName={active.name}
+          seats={seats}
+        />
+      )}
     </>
   );
 }

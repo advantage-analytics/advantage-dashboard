@@ -13,6 +13,11 @@ import {
 import { Play, VideoOff } from "lucide-react";
 import { FilmFramePending } from "@/components/dashboard/loading/film-frame-pending";
 import { useFilmClockVars } from "@/components/dashboard/matches/match-detail/film/film-clock";
+import { FILM_REFUSAL_COPY } from "@/components/dashboard/matches/match-detail/film/film-refusal-copy";
+import {
+  playbackFailure,
+  type PlaybackFailure,
+} from "@/components/dashboard/matches/match-detail/film/playback-failure";
 import {
   REACHED_EPSILON_SECONDS,
   activeStopAt,
@@ -105,6 +110,8 @@ export const LabelVideoPlayer = forwardRef<
     onTime?: (videoTime: number) => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
+    /** A media error on first render — for specs. */
+    initialFailure?: PlaybackFailure | null;
     /**
      * A second element to carry `--film-t` / `--film-d` (the console root).
      */
@@ -119,6 +126,7 @@ export const LabelVideoPlayer = forwardRef<
     readout = NO_READOUT,
     onTime,
     initialReady = false,
+    initialFailure = null,
     clockTargetRef,
     square = false,
   },
@@ -136,7 +144,7 @@ export const LabelVideoPlayer = forwardRef<
   const [rate, setRate] = useState<number>(1);
   const [looping, setLooping] = useState(false);
   const [skipDead, setSkipDead] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<PlaybackFailure | null>(initialFailure);
   const [ready, setReady] = useState(initialReady);
 
   const settling = useSeekSettling({ graceMs: 120, generation: 0 });
@@ -339,6 +347,35 @@ export const LabelVideoPlayer = forwardRef<
     );
   }
 
+  // The link is still good, so it is most likely the file this browser
+  // refused. Reload stays: a storage hiccup at load raises the same code.
+  if (failed === "format") {
+    return (
+      <div
+        role="alert"
+        data-testid="film-format-panel"
+        className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--surface-card)] px-6 text-center"
+      >
+        <span className="text-title" style={{ fontSize: "16px" }}>
+          {FILM_REFUSAL_COPY.unsupportedFormat.heading}
+        </span>
+        <span
+          className="text-body-sm max-w-[380px]"
+          style={{ color: "var(--ink-600)" }}
+        >
+          {FILM_REFUSAL_COPY.unsupportedFormat.body}
+        </span>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className={advButton("primary", "md")}
+        >
+          Reload
+        </button>
+      </div>
+    );
+  }
+
   // No endpoint re-signs this URL, so reloading the page is the only repair.
   if (failed) {
     return (
@@ -408,7 +445,15 @@ export const LabelVideoPlayer = forwardRef<
             checkReady();
             onPlayhead(e.currentTarget.currentTime);
           }}
-          onError={() => setFailed(true)}
+          onError={(e) =>
+            setFailed(
+              playbackFailure({
+                code: e.currentTarget.error?.code,
+                url: video.url,
+                now: Date.now(),
+              }),
+            )
+          }
         >
           Your browser cannot play this video.
         </video>

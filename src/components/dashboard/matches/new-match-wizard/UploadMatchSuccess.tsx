@@ -296,7 +296,11 @@ function successView(
           {
             key: "video",
             state: "now",
-            label: preparing ? "Trimming video" : UPLOADING_COPY.steps.video,
+            label: !preparing
+              ? UPLOADING_COPY.steps.video
+              : upload?.progress?.converting
+                ? "Converting video to 1080p"
+                : "Trimming video",
             value: pct === null ? undefined : `${pct}%`,
           },
           later,

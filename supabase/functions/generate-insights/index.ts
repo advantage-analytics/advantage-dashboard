@@ -106,7 +106,6 @@ async function captureGeminiGeneration({
           // player first names and stats, so only usage is recorded — the
           // same privacy mode the app's LLM adapter uses.
           $ai_latency: latency,
-          $ai_temperature: 0.4,
           $ai_http_status: 200,
         },
       }),
@@ -598,7 +597,6 @@ serve(async (req) => {
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        temperature: 0.4,
       },
     });
     // 6. Call Gemini, and once more if a headline breaks the card's rules

@@ -17,6 +17,8 @@ import { EmptyMark } from "@/components/ui/empty-mark";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { recordLabel } from "@/lib/data/player-profile";
 import { PlayerMark } from "@/components/ui/player-mark";
+import { StatePill } from "@/components/ui/state-pill";
+import { RolePill } from "@/components/ui/role-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { cn } from "@/lib/utils";
 import {
@@ -28,7 +30,6 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
   InviteRing,
   InvitedLine,
-  SUBTLE_PILL,
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
@@ -149,6 +150,7 @@ import {
   ROSTER_MIN_WIDTH,
 } from "./roster-table-layout";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { mayRemoveStaffProfile } from "@/components/dashboard/team/add-self-dialog";
 
 /**
  * Horizontal padding belongs to the card; each row pulls 16px of it back so a
@@ -294,7 +296,7 @@ function LastMatchCell({
           <span className="sr-only">Result unrecorded against</span>
         </MarkSlot>
         <span className={OPPONENT}>{lastMatch.opponent}</span>
-        <span className={cn(SUBTLE_PILL, "shrink-0")}>Review score</span>
+        <StatePill className="shrink-0">Review score</StatePill>
       </span>
     );
   }
@@ -436,9 +438,21 @@ function MemberRow({
 }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const { viewer } = useWorkspace();
+  const { viewer, active } = useWorkspace();
+  // A duplicate pair that includes a staff-held profile merges under the
+  // removal ladder (`merge_program_players`), so the chip is offered only to
+  // somebody the function will not refuse. Presentation only.
+  const mayMerge =
+    member.duplicateHolder === null ||
+    mayRemoveStaffProfile(
+      active.role,
+      member.duplicateHolder.role,
+      member.duplicateHolder.userId === viewer.id,
+    );
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
+  const offersMerge =
+    canManage && mayMerge && !inLineupMode && !!member.duplicateOfPlayerId;
   // Held by either hand: lifted with Space, or under the pointer mid-drag.
   const lifted =
     lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
@@ -599,13 +613,19 @@ function MemberRow({
             </Link>
           )}
           {isViewer && <YouPill className="shrink-0" />}
+          {/* A player who is also the owner, a coach or staff — they added
+              themselves to the roster. Shown to everyone: it says why a name
+              from the "Coached by" line is also a row here. */}
+          {member.staffRole && (
+            <RolePill role={member.staffRole} className="shrink-0" />
+          )}
           {/* Back after the Tb4 distillation dropped it: which rows have no
               login decides who can be invited to claim and whose video only
               staff can send, and a coach scans for it. Staff only — to a
               teammate it says nothing they can act on. Grey, because `You`
               and "New" are the only identity pills and neither is this. */}
           {canManage && member.managedBy === "coach" && (
-            <span className={cn(SUBTLE_PILL, "shrink-0")}>Coach-managed</span>
+            <StatePill className="shrink-0">Coach-managed</StatePill>
           )}
         </span>
       </span>
@@ -614,14 +634,11 @@ function MemberRow({
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
         <FormTicks form={member.form} slots={5} />
       </span>
-      <LastMatchCell
-        member={member}
-        yielding={canManage && !inLineupMode && !!member.duplicateOfPlayerId}
-      />
+      <LastMatchCell member={member} yielding={offersMerge} />
 
       {/* The merge repair is entered from the row, because a duplicate is
           found by looking at the list. Quiet — a question, not an alarm. */}
-      {canManage && !inLineupMode && member.duplicateOfPlayerId && (
+      {offersMerge && (
         <button
           type="button"
           onClick={(event) => {

@@ -88,7 +88,12 @@ import {
 } from "lucide-react";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import type { VideoProbeSummary } from "./types";
-import { focusRingCls, noteIconCls, noteStripCls } from "./styles";
+import {
+  errorStripCls,
+  focusRingCls,
+  noteIconCls,
+  noteStripCls,
+} from "./styles";
 import { Kbd } from "@/components/ui/kbd";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { isFormControl } from "./useWizardKeys";
@@ -1431,9 +1436,9 @@ function TrimStepContentImpl({
         </p>
 
         {tooShort ? (
-          <div className={noteStripCls}>
+          <div className={errorStripCls}>
             <XCircle
-              className={`${noteIconCls} text-[var(--error)]`}
+              className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
             />
@@ -1445,9 +1450,9 @@ function TrimStepContentImpl({
         ) : null}
 
         {refusal ? (
-          <div className={noteStripCls} role="alert">
+          <div className={errorStripCls} role="alert">
             <XCircle
-              className={`${noteIconCls} text-[var(--error)]`}
+              className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
             />
