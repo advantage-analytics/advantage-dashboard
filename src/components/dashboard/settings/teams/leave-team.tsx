@@ -271,7 +271,7 @@ function LeaveTeamDialog({
                 label="Your player profile and its matches"
                 value={
                   isStaff
-                    ? "Off the roster · matches stay with the program"
+                    ? "Off the roster · Matches stay with the program"
                     : "Stay with the program"
                 }
               />

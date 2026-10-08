@@ -58,7 +58,7 @@ export function memberLeftOwnerEmail(
           ? "Their player profile and its matches stay on your roster, now managed by your staff. Invite them again and the same profile goes back to them."
           : // A coach or staff member who had added themselves as a player:
             // `leaveProgram` archives that profile as they go.
-            "Their player profile came off the roster with them. Its matches stay with the program, and adding them to the roster again offers to restore it.",
+            "Their player profile came off the roster with them. Its matches stay with the program, and Add player offers to restore the profile if you put them back on the roster.",
     ],
     facts: [
       { label: "Program", value: programName },
