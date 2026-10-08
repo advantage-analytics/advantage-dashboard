@@ -1,0 +1,217 @@
+-- Two corrections to `20261008160418_add_self_as_program_player`, both found
+-- at the branch gate.
+--
+--   1 · archive_program_player       the removal ladder, for staff-held profiles
+--   2 · add_self_as_program_player   look for the caller's row AFTER the lock
+
+-- ── 1 · Who may take a staff member off the roster ──────────────────────────
+-- Archiving a claimed profile used to delegate to `remove_program_member`,
+-- which is where "coaches are the owner's to remove" is enforced. Keeping a
+-- staff member's membership (the previous migration) skipped that call and the
+-- ladder with it, so any staff login could archive the owner's or a coach's
+-- player profile. The same ladder now gates the profile: the person
+-- themselves, the owner, or a coach acting on a staff member's profile.
+create or replace function public.archive_program_player(p_player_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_uid     uuid := (select auth.uid());
+  v_program uuid;
+  v_claimed uuid;
+  v_role    text;
+  v_caller  text;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+
+  select program_id, claimed_by_user_id into v_program, v_claimed
+    from public.program_players
+   where id = p_player_id and archived_at is null and merged_into_id is null;
+
+  if v_program is null then
+    return;
+  end if;
+
+  if not public.is_program_staff(v_program) then
+    raise exception 'not authorized to edit this roster' using errcode = '42501';
+  end if;
+
+  if v_claimed is not null then
+    select pm.role into v_role
+      from public.program_members pm
+     where pm.program_id = v_program and pm.user_id = v_claimed;
+  end if;
+
+  -- A profile held by the owner, a coach or staff. Checked BEFORE the row is
+  -- touched, so a refusal leaves nothing half-archived. A player's profile
+  -- needs no branch here: `remove_program_member` below is its ladder.
+  if v_role in ('owner', 'coach', 'staff') and v_claimed <> v_uid then
+    v_caller := public.user_program_role(v_program);
+    if not (v_caller = 'owner' or (v_caller = 'coach' and v_role = 'staff')) then
+      raise exception '%',
+        case v_role
+          when 'owner' then 'Only the owner can take their own player profile off the roster.'
+          when 'coach' then 'A coach''s player profile is theirs or the owner''s to remove.'
+          else 'Only the owner or a coach can remove a staff member''s player profile.'
+        end
+        using errcode = '42501';
+    end if;
+  end if;
+
+  update public.program_players
+     set archived_at = now(), updated_at = now()
+   where id = p_player_id;
+
+  -- A claimed profile's seat goes back when the person leaves the program —
+  -- but only a PLAYER leaves with their profile. Staff who also play keep
+  -- their seat at the table; they have only stopped being on the roster.
+  if v_role = 'player' then
+    perform public.remove_program_member(v_program, v_claimed);
+  end if;
+
+  insert into public.program_audit_log (program_id, actor_user_id, action, subject_id, details)
+  values (v_program, v_uid, 'player.archived', p_player_id,
+          jsonb_build_object('had_account', v_claimed is not null,
+                             'kept_membership', v_role is not null and v_role <> 'player'));
+end;
+$function$;
+
+-- ── 2 · One caller, twice at once ───────────────────────────────────────────
+-- The caller's existing profile was read before the program row was locked, so
+-- two submissions (two tabs, a double click) both saw "no row"; the second
+-- then hit `program_players_claimed_key` as a raw constraint error, or a false
+-- "seats taken". The lock now comes first and the lookup under it, which makes
+-- the second call the no-op the first comment in this function promises.
+create or replace function public.add_self_as_program_player(
+  p_program_id  uuid,
+  p_class_year  text    default null,
+  p_lineup_spot integer default null,
+  p_hand        text    default null,
+  p_backhand    text    default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_uid      uuid := (select auth.uid());
+  v_role     text;
+  v_first    text;
+  v_last     text;
+  v_id       uuid;
+  v_archived timestamptz;
+  v_seats    integer;
+  v_used     integer;
+  v_pending  integer;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+
+  -- The caller's OWN membership, never a parameter: this function can only
+  -- ever put the person calling it on the roster.
+  select pm.role into v_role
+    from public.program_members pm
+   where pm.program_id = p_program_id and pm.user_id = v_uid;
+
+  -- A player already has a profile (or the safety arm of the roster speaks for
+  -- them); a stranger has no business here.
+  if v_role is null or v_role not in ('owner', 'coach', 'staff') then
+    raise exception 'only the owner, a coach or staff can add themselves as a player'
+      using errcode = '42501';
+  end if;
+
+  if p_lineup_spot is not null and p_lineup_spot < 1 then
+    raise exception 'a lineup spot starts at 1' using errcode = '22023';
+  end if;
+
+  if p_hand is not null and p_hand not in ('right', 'left') then
+    raise exception 'hand is right or left' using errcode = '22023';
+  end if;
+
+  if p_backhand is not null and p_backhand not in ('one-handed', 'two-handed') then
+    raise exception 'backhand is one-handed or two-handed' using errcode = '22023';
+  end if;
+
+  -- Locked first: everything below reads state a concurrent call could change
+  -- — this login's own row, and the seat count.
+  select p.seats into v_seats
+    from public.programs p where p.id = p_program_id for update;
+
+  -- `program_players_claimed_key` is one profile per login per program and
+  -- counts archived rows, so a profile this login once held is restored, never
+  -- duplicated. A live one makes the call a no-op: clicking twice is ordinary.
+  select pp.id, pp.archived_at into v_id, v_archived
+    from public.program_players pp
+   where pp.program_id = p_program_id
+     and pp.claimed_by_user_id = v_uid
+     and pp.merged_into_id is null
+   limit 1;
+
+  if v_id is not null and v_archived is null then
+    return v_id;
+  end if;
+
+  select btrim(coalesce(u.first_name, '')), btrim(coalesce(u.last_name, ''))
+    into v_first, v_last
+    from public.users u
+   where u.id = v_uid;
+
+  -- Same rule as `add_program_player`: a roster row needs both names.
+  if v_id is null and (coalesce(v_first, '') = '' or coalesce(v_last, '') = '') then
+    raise exception 'add your first and last name in Settings › Profile first'
+      using errcode = '22023';
+  end if;
+
+  select c.used, c.pending into v_used, v_pending
+    from public.program_seat_counts(p_program_id) c;
+
+  if v_used + v_pending + 1 > coalesce(v_seats, 0) then
+    raise exception
+      'all % seats are taken — archive a player or revoke an open invitation to free one',
+      coalesce(v_seats, 0)
+      using errcode = '54000';
+  end if;
+
+  if v_id is not null then
+    update public.program_players
+       set archived_at = null,
+           class_year  = coalesce(nullif(btrim(coalesce(p_class_year, '')), ''), class_year),
+           lineup_spot = p_lineup_spot,
+           updated_at  = now()
+     where id = v_id;
+  else
+    -- No `email`: the roster reads the login's own address for a claimed row,
+    -- and leaving the column null keeps `program_players_email_key` out of it.
+    insert into public.program_players
+      (program_id, first_name, last_name, class_year, lineup_spot,
+       claimed_by_user_id, claimed_at, created_by)
+    values
+      (p_program_id, v_first, v_last, nullif(btrim(coalesce(p_class_year, '')), ''),
+       p_lineup_spot, v_uid, now(), v_uid)
+    returning id into v_id;
+  end if;
+
+  -- Style lives on the account once a profile is claimed
+  -- (`set_program_player_style`), and only an answer given overwrites one.
+  if p_hand is not null or p_backhand is not null then
+    update public.users
+       set hand     = coalesce(p_hand, hand),
+           backhand = coalesce(p_backhand, backhand)
+     where id = v_uid;
+  end if;
+
+  insert into public.program_audit_log (program_id, actor_user_id, action, subject_id, details)
+  values (p_program_id, v_uid, 'player.added', v_id,
+          jsonb_build_object('name', v_first || ' ' || v_last, 'self', true,
+                             'member_role', v_role,
+                             'restored', v_archived is not null));
+
+  return v_id;
+end;
+$function$;

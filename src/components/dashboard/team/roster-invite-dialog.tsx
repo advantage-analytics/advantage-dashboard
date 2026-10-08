@@ -39,6 +39,11 @@ import {
 import { JoinLinkPanel } from "@/components/dashboard/settings/teams/join-link-popover";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
 import type { TeamJoinLink } from "@/lib/data/team-settings-server";
+import {
+  OwnAddressNotice,
+  isOwnAddress,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
 
 /**
  * Designs 6b, 7a and 7b — one dialog, not three.
@@ -120,6 +125,7 @@ export function RosterInviteDialog({
    * two different addresses must remount it (`key`) rather than swap the prop.
    */
   initialEmail = "",
+  self = null,
   /**
    * Offer the coach the other capability, when the address they have typed is
    * not going to anybody this dialog can bind to.
@@ -144,6 +150,11 @@ export function RosterInviteDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Staff inviting their own address as a player are offered "Add yourself as
+   * a player" instead of `create_program_invite`'s refusal.
+   */
+  self?: OwnAddressOffer;
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
   /**
@@ -457,6 +468,14 @@ export function RosterInviteDialog({
   // warning, send the first address and refuse the rest one by one. Refused
   // here instead, before anything is sent — the database still re-checks.
   const overCap = newSeats > remaining;
+  // A player invitation to the viewer's own address: the database refuses it
+  // ("that person is already on this roster"), so the dialog offers the door
+  // that works. Staff and coach invitations keep the refusal — there is no
+  // inviting yourself into a role. Advisory, like every note in this dialog:
+  // it adds no condition to `ready`, and Send pressed anyway gets the
+  // database's own sentence beside this one.
+  const ownAddress =
+    role === "player" && addresses.some((a) => isOwnAddress(self, a));
   const ready = addresses.length > 0 && !pending && !overCap;
   /**
    * The pair is offered only where both halves apply: not on the receipt, and
@@ -877,6 +896,10 @@ export function RosterInviteDialog({
                 </button>
               </span>
             </DialogInfoRow>
+          )}
+
+          {ownAddress && self && (
+            <OwnAddressNotice onAddSelf={self.onAddSelf} />
           )}
 
           <DialogProblem message={error} />

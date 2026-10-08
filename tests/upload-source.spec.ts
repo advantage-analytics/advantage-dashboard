@@ -73,6 +73,7 @@ interface StepProps {
     subject: { kind: "roster"; playerId: string; name: string } | null;
     choose: (subject: unknown) => void;
   };
+  addSelf?: { roleLabel: string; onOpen: () => void } | null;
 }
 
 interface WorkspaceContext {
@@ -743,4 +744,55 @@ test("a roster that could not load says so instead of rendering rows", () => {
   expect(
     menu(html, FOR_MENU).filter((r) => r.html.includes('role="option"')),
   ).toHaveLength(0);
+});
+
+// ─── 6. Staff who also play are offered the roster, not a "Myself" pick ────
+
+test("staff not on the roster are offered Add yourself as a player, above Someone new", () => {
+  const html = render(
+    {
+      whoPlayed: {
+        required: true,
+        roster: [player()],
+        loadFailed: false,
+        uploaderName: VIEWER.name,
+        subject: null,
+        choose: () => {},
+      },
+      addSelf: { roleLabel: "Owner", onOpen: () => {} },
+    },
+    { active: team(), available: [personal(), team()] },
+  );
+
+  const rows = menu(html, FOR_MENU);
+  expect(rows[0].text).toContain(VIEWER.name);
+  expect(rows[0].text).toContain("Owner · Not on the roster yet");
+  expect(rows[0].text).toContain("Add yourself as a player");
+  expect(rows[0].pill).toBe("You");
+  // An act, not a pick: it is never an option and never carries the check,
+  // because choosing it does not answer "who played" — the dialog does.
+  expect(rows[0].html).not.toContain('role="option"');
+  expect(rows[0].check).toBe(false);
+  expect(rows[1].text).toContain("Someone new");
+  expect(rows.some((r) => r.text.includes("Myself"))).toBe(false);
+});
+
+test("without the offer the menu opens on Someone new, as it always did", () => {
+  const html = render(
+    {
+      whoPlayed: {
+        required: true,
+        roster: [player()],
+        loadFailed: false,
+        uploaderName: VIEWER.name,
+        subject: null,
+        choose: () => {},
+      },
+      addSelf: null,
+    },
+    { active: team(), available: [personal(), team()] },
+  );
+  const rows = menu(html, FOR_MENU);
+  expect(rows[0].text).toContain("Someone new");
+  expect(strip(html)).not.toContain("Add yourself as a player");
 });

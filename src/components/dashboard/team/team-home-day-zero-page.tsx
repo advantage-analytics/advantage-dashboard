@@ -38,8 +38,11 @@ const EMPTY_FORM = { form: [], wins: 0, losses: 0 };
  */
 export function TeamHomeDayZeroPage({
   canManage,
+  canUpload,
   teamName,
 }: {
+  /** Whether the upload policy lets this viewer send a match. */
+  canUpload: boolean;
   /** The offer's actions. The preview cards below draw none, whoever views. */
   canManage: boolean;
   teamName: string;
@@ -47,7 +50,7 @@ export function TeamHomeDayZeroPage({
   return (
     <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
-        <TeamDayZeroHome canManage={canManage}>
+        <TeamDayZeroHome canManage={canManage} canUpload={canUpload}>
           <TeamHomeRegions
             kpis={
               <SeasonKpiStrip
