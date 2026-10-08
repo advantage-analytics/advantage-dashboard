@@ -90,7 +90,11 @@ export function RosterDialog({
           boxShadow: "var(--shadow-dropdown)",
         }}
       >
-        <div className="flex flex-col gap-[18px] p-6 pb-5">
+        {/* `min-w-0`: this column is the dialog grid's one item, and a grid
+            item is never narrower than its content. One unbreakable line — a
+            join link's URL — would otherwise widen the column past the
+            dialog and push everything in it out of the right edge. */}
+        <div className="flex min-w-0 flex-col gap-[18px] p-6 pb-5">
           <div className="flex items-start gap-2.5">
             <div className="flex-1">
               <DialogTitle className="text-left text-[16px] font-medium text-[var(--ink-900)]">

@@ -121,3 +121,12 @@ test("the popover layout is still the default, for Settings › Teams", () => {
   expect(dialog).not.toContain("<SeatBoxes");
   expect(dialog).toMatch(/\{showLink && \(\s*<SeatNote/);
 });
+
+test("the dialog column cannot be widened by one long line", () => {
+  // A join link's URL is one unbreakable run. The shell's column is the
+  // dialog grid's only item, so without `min-w-0` it grows to fit the URL and
+  // the whole body leaves the dialog's right edge (seen signed in, 2026-10-08).
+  expect(SHELL).toContain(
+    '<div className="flex min-w-0 flex-col gap-[18px] p-6 pb-5">',
+  );
+});
