@@ -123,15 +123,29 @@ export function DayZeroOffer({
  */
 export function MatchOfferActions() {
   return (
-    <div className="flex items-center gap-3">
-      <Link href="/dashboard/matches/new" className={advButton("primary")}>
-        Send match video
-      </Link>
+    <div className="flex flex-col items-center gap-3">
+      <div className="flex items-center gap-3">
+        <Link href="/dashboard/matches/new" className={advButton("primary")}>
+          Send match video
+        </Link>
+        <Link
+          href="/dashboard/matches/new?source=swing-vision"
+          className={advButton("ghost")}
+        >
+          Import instead
+        </Link>
+      </div>
+      {/*
+       * The quietest of the three: a text link beneath the pair, not a third
+       * button in the row. It leads nowhere the player has to go, so it takes
+       * 11px ink-500 and darkens on hover (ink text hovers to ink, never blue
+       * and never an underline) and leaves the pair's geometry untouched.
+       */}
       <Link
-        href="/dashboard/matches/new?source=swing-vision"
-        className={advButton("ghost")}
+        href="/dashboard/matches/sample?tour=1"
+        className="text-micro transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
       >
-        Import instead
+        See a sample report
       </Link>
     </div>
   );

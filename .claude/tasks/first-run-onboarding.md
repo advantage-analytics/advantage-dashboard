@@ -189,7 +189,7 @@ ready).
 
 ## T14 · Day-zero "See a sample report" link
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T12
 - **files:** src/components/dashboard/home/day-zero-offer.tsx — guess

@@ -177,3 +177,8 @@ is the runner's. Newest entries at the bottom.
 2. The harness mirrors the page's client composition by hand — extract a shared `SampleReport` component if drift becomes a worry.
 3. The fixture carries `foldUnreconciled: true`, so the sample's Statistics view shows the unreconciled fold note — consider reconciling the source match and regenerating, or suppressing the note for the sample.
 4. Team workspaces reaching the URL see the same "Send your own match" banner link.
+
+## T14 · Day-zero "See a sample report" link — done
+
+**gate:** mechanical — lint pass, typecheck pass, format:check pass, full suite with a JSON reporter and every failure classified: 4383 passed / 379 skipped; all failures are the environmental browser set except the known load-dependent flake `upload-line-swap.spec.ts:402`. completion — VERDICT: pass (whitespace-insensitive diff: the existing pair, `MATCH_OFFER_CONDITIONS` and `DayZeroOffer`'s props unchanged). widget-states: static link in the day-zero offer only.
+**changed:** `day-zero-offer.tsx` — `MatchOfferActions` wraps the existing primary/ghost pair (unchanged, now one indent deeper inside its own flex row) in a centred column and adds a third, quietest `Link` beneath it: "See a sample report" → `/dashboard/matches/sample?tour=1`, `text-micro` (11px, ink-500) hovering to ink-900. Home and Matches day zeros both get it; team day zeros pass their own `actions` and don't.
