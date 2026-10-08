@@ -160,7 +160,7 @@ ready).
 
 ## T12 · Sample report page at /dashboard/matches/sample with tour and harness spec
 
-- **status:** later
+- **status:** todo
 - **model:** fable
 - **needs:** T3, T5, T6, T7, T8, T9, T10, T11
 - **files:** src/app/dashboard/matches/sample/page.tsx (new), src/lib/sample-match/index.ts (new), MAP.md (via npm run map), tests/sample-page.spec.ts (new), tests/fixtures/sample-page-harness.tsx (new) — guess
