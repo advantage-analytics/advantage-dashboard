@@ -151,6 +151,49 @@ test.describe("the two lines", () => {
     );
   });
 
+  test("lets: counted after the rally, tombstones not", () => {
+    const { pointDetail } = format();
+    const letServe = (id: string, fields: Partial<LabelShot> = {}) =>
+      shot(id, {
+        stroke: "first_serve",
+        spin: "flat",
+        result: "let",
+        videoTime: 10,
+        ...fields,
+      });
+    const rally = shot("r", {
+      hitter: "p2",
+      stroke: "forehand",
+      spin: "topspin",
+      contactX: 2.0,
+      landingX: -3.0,
+      videoTime: 12,
+    });
+    const one = point({
+      shots: [
+        letServe("a"),
+        shot("b", { stroke: "first_serve", videoTime: 11 }),
+        rally,
+      ],
+    });
+    expect(pointDetail(one)).toBe(
+      "Topspin Crosscourt · 0:10 · 2 shot rally · 1 let",
+    );
+    const two = point({ shots: [letServe("a"), letServe("b"), rally] });
+    expect(pointDetail(two)).toMatch(/ · 2 lets$/);
+    const none = point({
+      shots: [shot("a", { stroke: "first_serve" }), rally],
+    });
+    expect(pointDetail(none)).not.toMatch(/let/);
+    const deleted = point({
+      shots: [
+        letServe("a", { status: "deleted", statusBeforeDelete: "kept" }),
+        rally,
+      ],
+    });
+    expect(pointDetail(deleted)).not.toMatch(/let/);
+  });
+
   test("a serve-only point, and the endings with no stroke in them", () => {
     const { pointSentence, pointDetail } = format();
     const ace = point({

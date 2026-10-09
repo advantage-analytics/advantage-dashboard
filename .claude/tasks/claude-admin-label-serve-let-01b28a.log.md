@@ -51,3 +51,9 @@ is the runner's. Newest entries at the bottom.
 **reason:** `pointDetail` let count (incl. tombstones) met and pinned; the court title criterion was not: ` · let` was added only to the placing title ("Shot N · contact · let"), while the criterion names the lit/selected shot — when a let serve is lit during playback with no placement active the title stays "Point N". Either handle the lit branch too or amend the criterion (the implementer notes the title only names the shot while placing; otherwise the shot is in the subtitle "Shot 2 of 3 · Vargas").
 
 **stash:** 7a594cd47c49e571875e798eacba81a81480e5af
+
+## T5 · Let count in point subtitle and court title — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Re-run from stash 7a594cd4 with the lit branch added. `pointDetail` appends "· 1 let" / "· N lets" after the rally (live lets only). `courtReadout` ends the title with " · let" both while placing a let ("Shot 2 · contact · let") and while one plays ("Point 1 · let"). Specs in label-black-rows and label-court-panel.

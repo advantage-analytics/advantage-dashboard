@@ -53,7 +53,8 @@ interface CourtReadout {
  * The panel's two header lines. Placing: "Shot 3 · contact" over whose half is
  * on screen, or "Flipped to <hitter>'s side · Net" when Flip side has brought a
  * landing back across. Otherwise: "Point 15" over "Shot 3 of 4 · Ace" for the
- * playing stroke, or just the stroke count; "Court" with no point open.
+ * playing stroke, or just the stroke count; "Court" with no point open. A let
+ * serve, placed or lit, adds " · let" to the title.
  */
 function courtReadout(
   point: LabelPoint | null,
@@ -75,8 +76,9 @@ function courtReadout(
     const other = hitter
       ? `${names[opponent(hitter)]}’s side`
       : "The other side";
+    const isLet = live[placing - 1].result === "let";
     return {
-      title: `Shot ${placing} · ${placement.target}`,
+      title: `Shot ${placing} · ${placement.target}${isLet ? " · let" : ""}`,
       subtitle:
         placement.target === "contact"
           ? own
@@ -91,7 +93,7 @@ function courtReadout(
   if (lit !== null) {
     const hitter = live[lit - 1].hitter;
     return {
-      title,
+      title: live[lit - 1].result === "let" ? `${title} · let` : title,
       subtitle: [`Shot ${lit} of ${live.length}`, hitter ? names[hitter] : null]
         .filter((part) => part !== null)
         .join(" · "),

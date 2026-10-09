@@ -108,6 +108,39 @@ test.describe("the court panel", () => {
     expect(html).not.toContain("data-court-legend");
   });
 
+  test("placing a let serve: the title ends with 'let'; other shots unchanged", () => {
+    const withLet: LabelPoint = {
+      ...P1,
+      shots: P1.shots.map((s) =>
+        s.id === "s-return" ? { ...s, result: "let" as const } : s,
+      ),
+    };
+    const html = render({
+      point: withLet,
+      placement: startPlacement("s-return", "far"),
+    });
+    expect(title(html)).toBe("Shot 2 · contact · let");
+    const other = render({
+      point: withLet,
+      placement: startPlacement(withLet.shots[0].id, "near"),
+    });
+    expect(title(other)).not.toMatch(/let/);
+  });
+
+  test("a let serve playing: the title ends with 'let'; another stroke playing, unchanged", () => {
+    const withLet: LabelPoint = {
+      ...P1,
+      shots: P1.shots.map((s) =>
+        s.id === "s-return" ? { ...s, result: "let" as const } : s,
+      ),
+    };
+    const html = render({ point: withLet, playingShotId: "s-return" });
+    expect(title(html)).toBe("Point 1 · let");
+    expect(subtitle(html)).toBe("Shot 2 of 3 · Vargas");
+    const other = render({ point: withLet, playingShotId: "s-serve" });
+    expect(title(other)).toBe("Point 1");
+  });
+
   test("placing a landing: the other half; flipped, back on the hitter's for a net ball", () => {
     const landing = setPlacementTarget(
       startPlacement("s-return", "far"),
