@@ -727,6 +727,65 @@ test.describe("a suggested point on the black rail", () => {
     expect(calls).toHaveLength(3);
   });
 
+  test("after a replayed serve: the slot names the let and leads with Combine, which joins the earlier point with the flagged one", () => {
+    const BlackSuggestedPoint = renderFunction<Record<string, unknown>>(
+      createLoader().load(ROW).BlackSuggestedPoint,
+    );
+    const calls: Array<[string, ...unknown[]]> = [];
+    const record =
+      (name: string) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+      };
+    const session = labelSessionFixture();
+    const edit = {
+      editable: true,
+      names: { p1: "Lee", p2: "Vargas" },
+      selectedShotId: null,
+      onPatchPoint: record("onPatchPoint"),
+      operations: {
+        onInsertPoint: record("onInsertPoint"),
+        onCombinePoints: record("onCombinePoints"),
+        onDismissSuggestion: record("onDismissSuggestion"),
+      },
+      points: session.points,
+      scores: new Map(),
+    };
+    const flagged = session.points.find((p) => p.id === P2)!;
+    const replay = { ...SUGGESTION, replayGap: 16 };
+    const html = renderToStaticMarkup(
+      React.createElement(
+        createLoader().load(ROW).BlackSuggestedPoint as React.FC<
+          Record<string, unknown>
+        >,
+        { suggestion: replay, point: flagged, edit },
+      ),
+    );
+    expect(inner(html, "data-point-suggestion-title")).toBe(
+      "Point 1 was probably a let, served again",
+    );
+    expect(inner(html, "data-point-suggestion-combine")).toBe(
+      "Combine 1 and 2",
+    );
+    expect(inner(html, "data-point-suggestion-add")).toBe("Add point");
+    // "{b} was a let" names the wrong point here, so it is not offered.
+    expect(html).not.toContain("data-point-suggestion-let");
+
+    const tree = BlackSuggestedPoint({
+      suggestion: replay,
+      point: flagged,
+      edit,
+    });
+    const button = findByProp(tree, "data-point-suggestion-combine");
+    expect(button).not.toBeNull();
+    (button!.props.onClick as (e: unknown) => void)({
+      stopPropagation: () => {},
+    });
+    expect(calls).toEqual([
+      ["onCombinePoints", SUGGESTION.beforePointId, "below"],
+    ]);
+  });
+
   test("with marks off, none built, a pair that is not two live rows, or no way to write — no slot, or no answers", () => {
     const session = labelSessionFixture();
     expect(black({ ...session, marksEnabled: false }, null)).not.toContain(

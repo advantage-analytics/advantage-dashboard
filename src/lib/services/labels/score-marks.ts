@@ -18,6 +18,12 @@
  *   through a point with no known side (an added point has none, which is how
  *   "Add point" answers it). A `not_a_point` row is neither a point nor a
  *   break.
+ * - Replayed serve: when the earlier point of a repeat was only a serve called
+ *   in (and at most a return), and the flagged point's serve came 8–30 s after
+ *   it, the earlier "point" was most likely a let the vendor scored — the
+ *   suggestion carries `replayGap` and the console offers to combine the two
+ *   (`replayedServeGap`). Measured over the 9 label sessions on 2026-10-09:
+ *   7 fired, 5 combined by the labeller, 0 wrong on reviewed points.
  *
  * `withLiveScoreMarks` also runs `liveRowMarks`, the one other `count` mark
  * read off the rows: "Ending can't be read" (`lastShotUnresolved`,
@@ -27,11 +33,13 @@
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { lastShotUnresolved } from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
-import type {
-  LabelGameType,
-  LabelPoint,
-  LabelServeSide,
-  LabelSide,
+import {
+  isServeStroke,
+  liveShotsInOrder,
+  type LabelGameType,
+  type LabelPoint,
+  type LabelServeSide,
+  type LabelSide,
 } from "./session";
 
 /** What the two marks read of a point. A `LabelPoint` satisfies it. */
@@ -48,6 +56,44 @@ export type ScoreMarkPoint = Pick<
   | "gameType"
 >;
 
+/** A score-mark point, with its strokes when the caller has them. */
+type ScoreMarkInput = ScoreMarkPoint & Partial<Pick<LabelPoint, "shots">>;
+
+/** At most this many live strokes for a point to read as a replayed serve. */
+const REPLAY_MAX_STROKES = 2;
+/** The gap, in seconds, between a let and the serve played again. */
+const REPLAY_MIN_GAP = 8;
+const REPLAY_MAX_GAP = 30;
+
+/**
+ * Whether `before` reads as a serve the vendor scored that was then played
+ * again in `after`: `before` is one serve called in and at most one more
+ * stroke, and `after` opens with a serve 8–30 s later. The gap in seconds, or
+ * null. Null whenever either point is handed without its strokes.
+ *
+ * A changeover is minutes, not seconds, so an ace before a game ends never
+ * fires; a point played out between them always has more strokes.
+ */
+export function replayedServeGap(
+  before: Partial<Pick<LabelPoint, "shots">>,
+  after: Partial<Pick<LabelPoint, "shots">>,
+): number | null {
+  if (!before.shots || !after.shots) return null;
+  const a = liveShotsInOrder({ shots: before.shots }, true);
+  const b = liveShotsInOrder({ shots: after.shots }, true);
+  if (a.length === 0 || a.length > REPLAY_MAX_STROKES || b.length === 0) {
+    return null;
+  }
+  if (!isServeStroke(a[0].stroke) || a[0].result !== "in") return null;
+  if (!isServeStroke(b[0].stroke)) return null;
+  const end = a[a.length - 1].videoTime;
+  const start = b[0].videoTime;
+  if (end === null || start === null) return null;
+  const gap = start - end;
+  if (gap < REPLAY_MIN_GAP || gap > REPLAY_MAX_GAP) return null;
+  return Math.round(gap);
+}
+
 /** The marks and suggestions the labelled score raises, by point id. */
 export interface LiveScoreMarks {
   points: Record<string, LabelMark[]>;
@@ -63,6 +109,7 @@ interface GameRun {
   /** The last live point of the game with a known side, for the repeat. */
   previous: {
     id: string;
+    point: ScoreMarkInput;
     side: LabelServeSide;
     number: number;
     let: boolean;
@@ -88,7 +135,7 @@ function decidingPoint(run: GameRun, adScoring: boolean): boolean {
 
 /** Read the two marks off the rows (rail order, tombstones included). */
 export function liveScoreMarks(
-  points: readonly ScoreMarkPoint[],
+  points: readonly ScoreMarkInput[],
   adScoring: boolean,
   serveSides: Readonly<Record<string, LabelServeSide>>,
   scores = labelScores(points, adScoring),
@@ -153,6 +200,7 @@ export function liveScoreMarks(
             scope: "point",
             params: { side: actual },
           });
+          const replayGap = replayedServeGap(before.point, point);
           out.suggestions.push({
             kind: "missing_point",
             key: "missing_point",
@@ -160,10 +208,12 @@ export function liveScoreMarks(
             beforePointId: before.id,
             side: actual,
             pointNumbers: [before.number, point.pointIndex + 1],
+            ...(replayGap === null ? {} : { replayGap }),
           });
         }
         run.previous = {
           id: point.id,
+          point,
           side: actual,
           number: point.pointIndex + 1,
           let: let_,

@@ -201,6 +201,12 @@ export type LabelSuggestion =
       side: LabelServeSide;
       /** The two points as the rail numbers them (position in `points` + 1). */
       pointNumbers: [number, number];
+      /**
+       * Set when the EARLIER point reads as a replayed serve rather than a
+       * point (`replayedServeGap`): the seconds between its last stroke and
+       * the flagged point's serve. The pair is then one point, to combine.
+       */
+      replayGap?: number;
     };
 
 export interface LabelMarks {
