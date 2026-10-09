@@ -57,7 +57,9 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
 
    Promotion to an autofix follows the bar set in `played.ts`: ≥95% correct over 30+
    firings across 2+ matches, scored with `scripts/splitstep-eval.ts`.
-6. **Measurement** on the three fully checked label sessions only:
+6. **Measurement** on the three label sessions where every non-deleted point is checked
+   (`label_points.checked_at` set). The `label_sessions.status` value is irrelevant.
+   The other six sessions have at most 8 checked points each and are not used.
 
    | Session | Match | Job |
    |---|---|---|
@@ -92,8 +94,8 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
   needs a deploy consideration, but no deploy happens without asking.
 - **Existing readers.** `derivation_quality->fold` is already read by
   `match-detail-server.ts` and the match report (`statistics-view.tsx`,
-  `match-report-context.tsx`). A new entry must not change what those readers show,
-  unless that is intended and stated.
+  `match-report-context.tsx`). The new entry uses its own key and leaves `fold` alone
+  (see Open questions).
 - **Privacy.** Scorecard output names players. It stays outside the repo, in the
   scratchpad or under `~/Desktop/advantage-match-labels-*`, and nothing from it is
   committed.
@@ -114,8 +116,14 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
    - Server accuracy against the labels is about 100%.
    - The 15-point game 6 and the 11-point game 8 each come out as one game.
    - In the frozen stretch (rallies 37–43), winners no longer reverse from a wrong server.
-2. **Rudy Quan v Aidan Kim**: the server and game-boundary errors at points 18, 83 and
-   102 are resolved or explained.
+2. **Rudy Quan v Aidan Kim**:
+   - Its fold already reconciles: it has no `fold` entry, and one is written only on
+     failure. So the score-count trigger never fires here, and this match is a
+     **no-regression** check.
+   - The server errors at points 18, 83 and 102 sit inside a correct game count.
+     Design should say whether the hitter fix or the serve-side constraint reaches
+     them without the trigger. If neither does, they are explained and left for a
+     follow-up.
 3. **Emon v Roger**: the server and game-boundary error at point 19 is resolved or
    explained.
 4. **No regression.** No scorecard or eval metric gets worse on any of the three
@@ -142,17 +150,19 @@ Answered in chat on 2026-10-09:
 - **Reach:** the whole match.
 - **Job IDs:** resolved from `label_sessions`.
 
-Still open, for stage 02:
+Also settled on 2026-10-09:
 
-1. **Session status.** All three sessions are still `status = labelling` in
-   `label_sessions`, not completed, but the seed calls them fully checked. Are they
-   good enough to use as ground truth now?
-2. **No-ad jobs.** `label_sessions.ad_scoring` is null on all three. The game-end rule
-   should read `processing_jobs.ad_scoring` (per 0.3.2). Confirm in design that each of
-   the three jobs carries a value.
-3. **Banner side effect.** The new `derivation_quality` entry could flip or interact
-   with the match report's existing unreconciled banner. Stage 02 should decide how the
-   entry keeps that banner unchanged while the feature is review-only.
+- **Sessions.** Measure only the sessions where every non-deleted point is checked:
+  Sage v Hunter Cheng 56 checked + 7 deleted, Rudy Quan v Aidan Kim 108 + 1, Emon v
+  Roger 102 + 2.
+- **Ad scoring.** It is stored per match, from the score and context wizard:
+  `processing_jobs.ad_scoring` and `matches.format.ad_scoring`. Sage v Hunter Cheng is
+  `true`; Rudy Quan v Aidan Kim and Emon v Roger are `false` (no-ad).
+- **Banner.** The match report's grey "points may sit in the wrong game" note reads
+  `derivation_quality->fold.reconciled === false`. The review-only proposal must live
+  under its **own** key and never write to `fold`. Otherwise a proposal that reaches
+  the entered score would hide the note while the published points are still wrong.
+  `fold` changes only when the re-segmentation is promoted.
 
 ## Also consulted
 
@@ -163,4 +173,6 @@ Still open, for stage 02:
   `FROZEN_MIN_RALLIES`
 - `src/lib/services/splitstep/derivation/quality.ts`: what `derivation_quality` feeds
 - Results of `grep derivation_quality` over `src/`, to find the existing readers
-- Live `label_sessions` rows for the three sessions: job IDs, status and `ad_scoring`
+- Live `label_sessions`, `label_points` (`checked_at` counts), `processing_jobs` (`ad_scoring`, `derivation_quality->fold`) and `matches.format` for the three sessions
+- `src/lib/services/splitstep/derive-and-publish.ts`: `fold` is written only when unreconciled
+- `src/lib/data/match-detail-server.ts`, `statistics-view.tsx`, `match-report-context.tsx`: the banner's read of `fold`
