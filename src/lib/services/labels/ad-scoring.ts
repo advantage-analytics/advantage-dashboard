@@ -81,10 +81,9 @@ export async function readMatchAdScoring(
   if (session.ad_scoring !== null || !session.match_id) {
     return { data: null, error: null };
   }
-  const matchId = session.match_id;
   return db
     .from("matches")
     .select("format")
-    .eq("id", matchId)
+    .eq("id", session.match_id)
     .maybeSingle<MatchScoringRow>();
 }

@@ -128,7 +128,6 @@ export function combineServeRetypes(
       })),
   );
   const patches = new Map<string, CombineRetype["patch"]>();
-  const lets = new Set<string>();
   live.forEach((shot, i) => {
     const next = live[i + 1];
     if (
@@ -138,13 +137,14 @@ export function combineServeRetypes(
       isServeStroke(next.stroke) &&
       next.hitter === shot.hitter
     ) {
-      lets.add(shot.id);
       patches.set(shot.id, { result: "let" });
     }
   });
   const serves = live.filter(
     (shot) =>
-      isServeStroke(shot.stroke) && shot.result !== "let" && !lets.has(shot.id),
+      isServeStroke(shot.stroke) &&
+      shot.result !== "let" &&
+      !patches.has(shot.id),
   );
   if (serves.length === 2) {
     const order = ["first_serve", "second_serve"] as const;

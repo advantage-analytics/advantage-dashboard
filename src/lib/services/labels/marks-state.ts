@@ -98,14 +98,17 @@ function missingShotStates(
   point: MarkStatePoint,
   suggestions?: readonly LabelSuggestion[],
 ): ReturnType<typeof suggestionState>[] {
-  if (!suggestions) return [];
+  const mine = suggestions?.filter(
+    (s) => s.kind === "missing_shot" && s.pointId === point.id,
+  );
+  if (!mine?.length) return [];
   const shots = point.shots.map((shot) => ({
     ...shot,
     afterEventId: shot.afterEventId ?? null,
   }));
-  return suggestions
-    .filter((s) => s.kind === "missing_shot" && s.pointId === point.id)
-    .map((s) => suggestionState(s, { dismissed: point.dismissed, shots }));
+  return mine.map((s) =>
+    suggestionState(s, { dismissed: point.dismissed, shots }),
+  );
 }
 
 /**
@@ -263,9 +266,6 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
   return !!marks;
 }
 
-/** In, out or net, coordinates first (`effectiveShotResult`). */
-const shotResult = effectiveShotResult;
-
 /**
  * "Point ended here": the last live stroke that is not a first serve and
  * whose ball was out or in the net — a rally ball, or a second serve's double
@@ -282,7 +282,7 @@ export function pointEndedEarly(
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
     if (!endsPointWhenMissed(shot.stroke)) continue;
-    if (!isMissedResult(shotResult(shot))) continue;
+    if (!isMissedResult(effectiveShotResult(shot))) continue;
     return {
       code: "shot_after_point_end",
       tier: "hint",
