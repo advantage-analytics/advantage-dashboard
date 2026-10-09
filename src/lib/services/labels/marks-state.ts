@@ -417,8 +417,10 @@ export function endingStale(
 /**
  * "Second serve?": a live serve typed `first_serve` that follows an earlier
  * live serve of the point whose ball missed — by structure the second serve,
- * however the vendor typed it. The first such serve in video order; the
- * action retypes it (`{ stroke: "second_serve" }`).
+ * however the vendor typed it. A let between them is replayed and changes
+ * nothing: it neither faults nor clears an earlier fault, and a first serve
+ * after a let alone is a first serve. The first such serve in video order;
+ * the action retypes it (`{ stroke: "second_serve" }`).
  */
 export function secondServeAsFirst(
   point: Pick<LabelPoint, "shots">,
@@ -427,7 +429,7 @@ export function secondServeAsFirst(
   const live = liveShotsInOrder(point, ghosts);
   let faulted = false;
   for (const shot of live) {
-    if (!isServeStroke(shot.stroke)) continue;
+    if (!isServeStroke(shot.stroke) || shot.result === "let") continue;
     if (faulted && shot.stroke === "first_serve") {
       return {
         code: "second_serve_as_first",

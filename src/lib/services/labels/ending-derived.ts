@@ -43,7 +43,9 @@ type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
 /**
  * The ending the point's live strokes (`isLiveShot`: no tombstone, and no
  * ghost while `ghosts` is on) describe, read in video order off the LAST of
- * them:
+ * them. A let serve (`result: "let"`) is replayed, not played: it is skipped
+ * as if absent, so it never ends a point and never makes the serve after it a
+ * second one.
  *
  * - no live stroke → `null`
  * - a serve that missed → `double_fault` when it is a second serve or an
@@ -59,7 +61,9 @@ export function deriveEnding(
   point: EndingPoint,
   ghosts: boolean,
 ): DerivedEnding | null {
-  const live = liveShotsInOrder(point, ghosts);
+  const live = liveShotsInOrder(point, ghosts).filter(
+    (shot) => shot.result !== "let",
+  );
   const last = live.at(-1);
   if (!last) return null;
   const endedBy = last.hitter;

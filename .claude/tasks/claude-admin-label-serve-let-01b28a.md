@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Let serve · derivation and scoring semantics
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/labels/ending-derived.ts, src/components/admin/labels/label-format.ts, src/lib/services/labels/marks-state.ts, src/lib/services/labels/scorecard.ts, tests/label-ending-derived.spec.ts, tests/label-black-rows.spec.ts or tests/label-console.spec.ts, tests/label-marks.spec.ts (guess)

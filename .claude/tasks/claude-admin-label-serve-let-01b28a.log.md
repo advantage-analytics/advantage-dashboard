@@ -14,3 +14,14 @@ is the runner's. Newest entries at the bottom.
 1. Retyping a let serve's stroke to a rally stroke leaves a let on a non-serve; `writeLabelShotEdit` could judge `{ ...row, ...patch }`.
 2. The console's optimistic `applyLabelShotPatch` does not call `letResultError`; only the server refuses.
 3. The `playOnLets` doc comment in session.ts reads confusingly next to the field name — tidy when the menu lands (T3).
+
+## T2 · Let serve · derivation and scoring semantics — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `deriveEnding` drops let serves before reading the point (lone let → null; let + missed first serve → null, not double fault). `pointSummary().rally` counts from the last non-let serve over non-let strokes (time and lastShot still include the let). `secondServeAsFirst` skips lets, so a first serve after a let raises no mark while a let between a fault and a first serve does not clear the fault. `isFault` unchanged (doc only); scorecard needed nothing. Specs in label-ending-derived, label-black-rows, label-after-point-hint.
+
+**follow-ups:**
+
+1. scorecard.ts per-result breakdowns (`resultChanges` keys) will show let as its own value — unchecked how it reads.
+2. `serveAfterServeIn` in marks-state.ts does not skip lets; looks right but is untested.

@@ -168,7 +168,10 @@ export function sideOptions(
 export const STROKE_OPTIONS: { value: LabelStroke; label: string }[] =
   LABEL_STROKES.map((value) => ({ value, label: STROKE_LABEL[value] }));
 
-/** A serve that did not go in: part of the point, not of the rally. */
+/**
+ * A serve that did not go in: part of the point, not of the rally. A let is
+ * not a fault — it is replayed, and the next serve keeps its number.
+ */
 export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
   return isServeStroke(shot.stroke) && isMissedResult(shot.result);
 }
@@ -180,7 +183,9 @@ export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
  *   · `lastShot` — the last live stroke's name;
  *   · `rally` — the live strokes from the LAST serve on, that serve included,
  *     so a fault, a second serve and two groundstrokes is a rally of 3. A
- *     point with no serve labelled counts every live stroke.
+ *     let serve (replayed) never counts, so a let, a first serve and two
+ *     groundstrokes is a rally of 3 too. A point with no serve labelled
+ *     counts every live stroke.
  */
 export function pointSummary(point: Pick<LabelPoint, "shots">): {
   time: string | null;
@@ -190,13 +195,14 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
   const live = point.shots.filter((shot) => shot.status !== "deleted");
   const timed = live.find((shot) => shot.videoTime !== null);
   const last = live.at(-1);
-  const serve = live.findLastIndex((shot) => isServeStroke(shot.stroke));
+  const played = live.filter((shot) => shot.result !== "let");
+  const serve = played.findLastIndex((shot) => isServeStroke(shot.stroke));
   return {
     time:
       timed && timed.videoTime !== null
         ? formatVideoTime(timed.videoTime)
         : null,
     lastShot: last?.stroke ? STROKE_LABEL[last.stroke] : null,
-    rally: live.length - Math.max(serve, 0),
+    rally: played.length - Math.max(serve, 0),
   };
 }

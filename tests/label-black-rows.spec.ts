@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { isFault, pointSummary } from "@/components/admin/labels/label-format";
 import { RAIL_MIN_PX } from "@/components/admin/labels/label-layout";
 import { labelScores } from "@/lib/services/labels/score";
 import type {
@@ -1137,4 +1138,28 @@ test("no labels component builds an arbitrary-value class from an interpolation"
       ).toBe(false);
     });
   }
+});
+
+test.describe("a let serve in the row's summary", () => {
+  const at = (id: string, over: Partial<LabelShot>) =>
+    labelShot(id, "p-let", { result: "in", ...over });
+  const letServe = at("let", { stroke: "first_serve", result: "let" });
+  const firstServe = at("first", { stroke: "first_serve" });
+
+  test("a let is not a fault", () => {
+    expect(isFault(letServe)).toBe(false);
+    expect(isFault({ stroke: "second_serve", result: "let" })).toBe(false);
+    expect(isFault({ stroke: "first_serve", result: "out" })).toBe(true);
+  });
+
+  test("the rally leaves the let out", () => {
+    const rally = [
+      letServe,
+      firstServe,
+      at("fh", { stroke: "forehand" }),
+      at("bh", { stroke: "backhand" }),
+    ];
+    expect(pointSummary({ shots: rally }).rally).toBe(3);
+    expect(pointSummary({ shots: [letServe, firstServe] }).rally).toBe(1);
+  });
 });
