@@ -107,7 +107,7 @@ const ENDING_SUSPECT_MARGIN_M = 1;
  * echoes the call. An out call at 0.9 near the end of a point was right 12 of
  * 12 on the labelled match; at 0.5–0.7 it was noise mid-rally.
  */
-const CONFIDENT_OUT_CALL = 0.85;
+export const CONFIDENT_OUT_CALL = 0.85;
 
 /**
  * Servers stand close to the centre mark, so a stance this near x = 0 says

@@ -29,6 +29,7 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { buildJobMarks, readLabelSessionRows } from "@/lib/data/labels-server";
 import {
   buildScorecard,
+  openingMarkRows,
   openingMarks,
   renderScorecard,
   vendorStrokeFacts,
@@ -69,7 +70,9 @@ async function main() {
       "Could not read the vendor strokes",
     ),
   ]);
-  const fileMarks = markFor(built.points, { hidden: true });
+  // Joined on the rows as the session opened (`openingMarkRows`), so a mark
+  // on a point the labeller combined away is measured on its tombstone.
+  const fileMarks = markFor(openingMarkRows(built.points), { hidden: true });
   const marks = openingMarks(fileMarks, built.points, built.adScoring);
 
   const vendor = new Map<string, VendorStrokeFacts>();
