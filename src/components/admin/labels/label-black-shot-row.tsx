@@ -610,16 +610,18 @@ export function BlackShotRow({
 }
 
 /**
- * Where the rally's trailing run of `dead_ball_after_point` tombstones
- * starts: the index of its first row, or `shots.length` when the last row
- * is anything else. A tombstone with another reason, or a live row, ends it.
+ * Where the rally's trailing run of dead-ball tombstones (`dead_ball_after_point`,
+ * or `dead_ball_after_fault` behind a double fault) starts: the index of its
+ * first row, or `shots.length` when the last row is anything else. A
+ * tombstone with another reason, or a live row, ends it.
  */
 export function deadBallRunStart(shots: readonly LabelShot[]): number {
   let start = shots.length;
   while (
     start > 0 &&
     shots[start - 1].status === "deleted" &&
-    shots[start - 1].deleteReason === "dead_ball_after_point"
+    (shots[start - 1].deleteReason === "dead_ball_after_point" ||
+      shots[start - 1].deleteReason === "dead_ball_after_fault")
   ) {
     start -= 1;
   }

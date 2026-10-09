@@ -61,6 +61,7 @@ import {
   applyShotDelete,
   applyShotRestore,
   applyShotsRemoved,
+  deadBallReason,
   applyShotsRestored,
   destinationServerIn,
   liveShotsAfter,
@@ -681,6 +682,7 @@ export function LabelConsole({
         return null;
       }
       const removed = result.removedAfter;
+      const reason = deadBallReason(applyLabelShotPatch(before, patch).stroke);
       setPoints((current) => {
         const saved = updateShot(current, shotId, false, (shot) => ({
           ...shot,
@@ -694,7 +696,7 @@ export function LabelConsole({
           ? replacePoint(saved, owner.id, (p) =>
               applyEndingSync(
                 removed
-                  ? { ...p, shots: applyShotsRemoved(p.shots, removed) }
+                  ? { ...p, shots: applyShotsRemoved(p.shots, removed, reason) }
                   : p,
                 result.point,
               ),
@@ -720,7 +722,7 @@ export function LabelConsole({
       if (!owner) return null;
       const saved = change([owner])[0] ?? null;
       return saved && removed
-        ? { ...saved, shots: applyShotsRemoved(saved.shots, removed) }
+        ? { ...saved, shots: applyShotsRemoved(saved.shots, removed, reason) }
         : saved;
     },
     [onSaveShot],
@@ -859,8 +861,9 @@ export function LabelConsole({
     };
 
   /**
-   * The hint line's answers under a rally ball marked out: every live stroke
-   * after it removed as hit after the point ended (`dead_ball_after_point`),
+   * The hint line's answers under a rally ball (or second serve) marked out:
+   * every live stroke after it removed as hit after the point ended
+   * (`deadBallReason` — after a double fault, or after the point),
    * and a removal's tombstones put back — one call each, the point's ending
    * settled in it. The server's rows are the last word over the optimistic
    * ones (`applyShotsRemoved` / `applyShotsRestored`).
@@ -874,6 +877,9 @@ export function LabelConsole({
     const after = liveShotsAfter(point.shots, shotId, drawsGhosts(marks));
     if (after.length === 0) return;
     const ids = new Set(after.map((shot) => shot.id));
+    const reason = deadBallReason(
+      point.shots.find((shot) => shot.id === shotId)?.stroke,
+    );
     if (placement.shotId !== null && ids.has(placement.shotId)) {
       setPlacement(NO_PLACEMENT);
     }
@@ -882,14 +888,14 @@ export function LabelConsole({
         replacePoint(rows, pointId, (p) => ({
           ...p,
           shots: p.shots.map((s) =>
-            ids.has(s.id) ? applyShotDelete(s, "dead_ball_after_point") : s,
+            ids.has(s.id) ? applyShotDelete(s, reason) : s,
           ),
         })),
       () => operations.removeShotsAfter(shotId),
       (rows, result) =>
         replacePoint(rows, pointId, (p) =>
           applyEndingSync(
-            { ...p, shots: applyShotsRemoved(p.shots, result.removed) },
+            { ...p, shots: applyShotsRemoved(p.shots, result.removed, reason) },
             result.point,
           ),
         ),

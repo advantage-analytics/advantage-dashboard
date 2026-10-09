@@ -18,6 +18,7 @@ import { deriveEnding } from "./ending-derived";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
+  endsPointWhenMissed,
   isLiveShot,
   isMissedResult,
   isNonPointEnding,
@@ -265,8 +266,9 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
 const shotResult = effectiveShotResult;
 
 /**
- * "Point ended here": the last live stroke that is not a serve and whose ball
- * was out or in the net, with one or more live strokes after it. Those were
+ * "Point ended here": the last live stroke that is not a first serve and
+ * whose ball was out or in the net — a rally ball, or a second serve's double
+ * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
  * hit after the point ended — or are a second point the vendor ran into this
  * one — so the hint offers to remove them or to split there. Live means not
  * deleted and, with `ghosts` on, not a ghost.
@@ -278,7 +280,7 @@ export function pointEndedEarly(
   const live = liveShotsInOrder(point, ghosts);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
-    if (isServeStroke(shot.stroke)) continue;
+    if (!endsPointWhenMissed(shot.stroke)) continue;
     if (!isMissedResult(shotResult(shot))) continue;
     return {
       code: "shot_after_point_end",

@@ -76,6 +76,16 @@ export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
 }
 
 /**
+ * Whether a stroke out or in the net ends the point: any rally ball, and a
+ * second serve (a double fault). A first serve's fault ends nothing.
+ */
+export function endsPointWhenMissed(
+  stroke: LabelStroke | null | undefined,
+): boolean {
+  return !isServeStroke(stroke) || stroke === "second_serve";
+}
+
+/**
  * Whether an ending says the point was not played out — a replayed let or a
  * non-point: the score stands, the server's turn does not move, and no stroke
  * rewrites it.

@@ -53,6 +53,7 @@ import {
 } from "./ending-session";
 import {
   applyShotsRemoved,
+  deadBallReason,
   deadBallsAfterMiss,
   planShotDelete,
   type LabelDeleteReason,
@@ -252,15 +253,16 @@ async function removeDeadBalls(
 > {
   const dead = deadBallsAfterMiss(after, shotId, row, patch, ghosts);
   if (dead.length === 0) return { after };
+  const reason = deadBallReason(after.find((s) => s.id === shotId)?.stroke);
   const written = await writeShotTombstones(
     supabase,
     dead,
-    "dead_ball_after_point",
+    reason,
     "remove the shots after it",
   );
   if ("error" in written) return { error: endingSyncFailed(written.error) };
   return {
-    after: applyShotsRemoved(after, written.removed),
+    after: applyShotsRemoved(after, written.removed, reason),
     removedAfter: written.removed,
   };
 }

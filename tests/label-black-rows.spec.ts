@@ -1007,6 +1007,16 @@ test.describe("the black shots well", () => {
     // another reason, is not in it.
     expect(deadBallRunStart(point.shots)).toBe(base.shots.length);
     expect(deadBallRunStart(base.shots)).toBe(base.shots.length);
+    // A double fault's tail, hit after the fault, is a run the same way.
+    const afterFault = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id.startsWith("w-d")
+          ? { ...s, deleteReason: "dead_ball_after_fault" as const }
+          : s,
+      ),
+    };
+    expect(deadBallRunStart(afterFault.shots)).toBe(base.shots.length);
 
     const restored: unknown[][] = [];
     const single: string[] = [];
