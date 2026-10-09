@@ -41,8 +41,10 @@ import {
   type LabelMarkCode,
   type LabelMarks,
   type LabelMarkTier,
+  type MarkablePoint,
 } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
+import { isCombinedTombstone } from "./point-combine";
 import { serveAfterServeIn } from "./marks-state";
 import { gameKey, labelScores, ordinaryGameScore } from "./score";
 import { withLiveScoreMarks, type ScoreMarkPoint } from "./score-marks";
@@ -123,6 +125,30 @@ export function seededScorePoints(
     });
   }
   return seeded;
+}
+
+/**
+ * The rows as the session opened, for joining the derivation's marks: a
+ * seeded point on the one rally it was seeded from, an added point on none.
+ *
+ * The console's rows have moved on. A combine gives the kept point both
+ * rallies, so the phantom's marks — and the serve side "Same side twice" is
+ * read from — would land on the kept point and the tombstone would carry
+ * nothing to be measured. A seeded point's own rally is the first of its ids:
+ * a combine lists the earlier point's ids first, a tombstone keeps its own,
+ * and a split leaves the original with its rally.
+ */
+export function openingMarkRows(
+  points: readonly LabelPoint[],
+): MarkablePoint[] {
+  return points.map((point) => ({
+    id: point.id,
+    vendorRallyIds:
+      point.seed === null || point.vendorRallyIds.length === 0
+        ? []
+        : [point.vendorRallyIds[0]],
+    shots: point.shots,
+  }));
 }
 
 /**
@@ -502,6 +528,27 @@ function isVendorServe(
  * carry the session's scoring and the vendor's strokes; without them the
  * games read ad scoring and the vendor sections read nothing.
  */
+/**
+ * Each combine's tombstone, by id, to the live point it was combined into:
+ * the live point holding the tombstone's own rally (`openingMarkRows`). The
+ * two were one point all along, so a mark raised on the phantom is measured
+ * against what the labeller made of the whole, and the kept point carries it
+ * when the scorecard asks whether a change went unmarked.
+ */
+function combinedInto(points: readonly LabelPoint[]): Map<string, LabelPoint> {
+  const into = new Map<string, LabelPoint>();
+  for (const point of points) {
+    if (!isCombinedTombstone(point) || point.seed === null) continue;
+    const rally = point.vendorRallyIds[0];
+    if (rally === undefined) continue;
+    const kept = points.find(
+      (p) => p.status !== "deleted" && p.vendorRallyIds.includes(rally),
+    );
+    if (kept) into.set(point.id, kept);
+  }
+  return into;
+}
+
 export function buildScorecard(
   points: readonly LabelPoint[],
   marks: LabelMarks,
@@ -527,21 +574,34 @@ export function buildScorecard(
   const outCallTails: OutCallTailRow[] = [];
   const serves: ServeFindings = { threeOrMore: [], serveAfterIn: [] };
 
+  const into = combinedInto(points);
+  const absorbed = new Map<string, LabelPoint[]>();
+  for (const [id, kept] of into) {
+    const tombstone = points.find((p) => p.id === id)!;
+    absorbed.set(kept.id, [...(absorbed.get(kept.id) ?? []), tombstone]);
+  }
+  const marksOn = (point: LabelPoint): LabelMark[] => [
+    ...(marks.points[point.id] ?? []),
+    ...point.shots.flatMap((shot) => marks.shots[shot.id] ?? []),
+  ];
+
   for (const point of points) {
-    const change = pointChange(point);
+    const own = pointChange(point);
+    const keptPoint = into.get(point.id);
+    // A combined phantom is measured as the point it became.
+    const change = keptPoint
+      ? { ...pointChange(keptPoint), anything: true }
+      : own;
     const number = point.pointIndex + 1;
     if (point.status === "deleted") summary.deleted += 1;
     else summary.live += 1;
     if (point.status === "added") summary.added += 1;
-    if (change.anything) summary.changed += 1;
+    if (own.anything) summary.changed += 1;
 
     // The point's marks, then its strokes'. A mark whose row is gone is in
     // neither: it has nothing to be measured against.
-    const own: LabelMark[] = [
-      ...(marks.points[point.id] ?? []),
-      ...point.shots.flatMap((shot) => marks.shots[shot.id] ?? []),
-    ];
-    for (const mark of own) {
+    const pointMarks = marksOn(point);
+    for (const mark of pointMarks) {
       const key = `${mark.code}:${mark.tier}`;
       const row = rows.get(key) ?? {
         code: mark.code,
@@ -559,9 +619,14 @@ export function buildScorecard(
       rows.set(key, row);
     }
     const fields = fieldChanges(point);
-    if (fields && !own.some((m) => m.tier === "count")) {
+    // A kept point answers for the phantoms combined into it, too.
+    const carried = [
+      ...pointMarks,
+      ...(absorbed.get(point.id) ?? []).flatMap(marksOn),
+    ];
+    if (fields && !carried.some((m) => m.tier === "count")) {
       const codes = (tier: LabelMarkTier) => [
-        ...new Set(own.filter((m) => m.tier === tier).map((m) => m.code)),
+        ...new Set(carried.filter((m) => m.tier === tier).map((m) => m.code)),
       ];
       unmarkedChanges.push({
         number,
@@ -570,7 +635,7 @@ export function buildScorecard(
         hidden: codes("hidden"),
       });
     }
-    if (change.winner && point.seed) {
+    if (own.winner && point.seed) {
       const key = direction(point.seed.winner, point.winner);
       const row = flips.get(key) ?? {
         from: point.seed.winner,

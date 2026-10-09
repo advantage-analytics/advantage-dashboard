@@ -14,6 +14,7 @@ import {
   AFTER_POINT_ENDED,
   buildScorecard,
   deleteReasonGroup,
+  openingMarkRows,
   openingMarks,
   pointChange,
   renderScorecard,
@@ -234,8 +235,8 @@ test.describe("the per-code table", () => {
       ]),
     ).toEqual([
       ["winner_disputed", "Check the ending", "count", 4, 1, 1, 3],
-      ["serve_fault", "Serve fault?", "hint", 1, 1, 0, 1],
-      ["winner_guessed", "Winner guessed", "hidden", 1, 0, 0, 0],
+      ["winner_guessed", "Winner guessed", "count", 1, 0, 0, 0],
+      ["serve_fault", "Serve fault?", "hidden", 1, 1, 0, 1],
     ]);
     expect(card.points).toEqual({ live: 4, added: 0, deleted: 0, changed: 3 });
   });
@@ -304,7 +305,7 @@ test.describe("a change with no count mark", () => {
       marksOf(
         {
           a: [DISPUTED],
-          b: [mark("ending_suspect_line", {}), mark("winner_guessed", {})],
+          b: [mark("ending_suspect_line", {}), mark("score_frozen", {})],
           d: [mark("serve_fault", {})],
         },
         { b1: [mark("out_ball_rally_continued", { nextHitter: null })] },
@@ -323,7 +324,7 @@ test.describe("a change with no count mark", () => {
         winner: { from: "p1", to: "p2" },
         ...none,
         hints: ["ending_suspect_line"],
-        hidden: ["winner_guessed", "out_ball_rally_continued"],
+        hidden: ["score_frozen", "out_ball_rally_continued"],
       },
       {
         number: 3,
@@ -1000,5 +1001,50 @@ test.describe("the script is a thin, read-only shell", () => {
         "matches",
       ]).toContain(table[1]);
     }
+  });
+});
+
+test.describe("a combine, measured as one point", () => {
+  // Rallies 1 + 2 were one point: the labeller combined them into "a" (both
+  // rallies, the winner flipped) and "b" is the tombstone, with no shots.
+  const combined = () => {
+    const a = point("a", 0, [shot("a1")], {
+      vendorRallyIds: [1, 2],
+      winner: "p2",
+      status: "edited",
+    });
+    const b = point("b", 1, [], { vendorRallyIds: [2], status: "deleted" });
+    return { a, b };
+  };
+
+  test("the opening rows put each seeded point back on its own rally, and an added one on none", () => {
+    const { a, b } = combined();
+    const added = point("c", 2, [], { vendorRallyIds: [2], seed: null });
+    expect(
+      openingMarkRows([a, b, added]).map((p) => [p.id, p.vendorRallyIds]),
+    ).toEqual([
+      ["a", [1]],
+      ["b", [2]],
+      ["c", []],
+    ]);
+  });
+
+  test("a mark on the tombstone counts the kept point's changes, and the kept point is not an unmarked change", () => {
+    const { a, b } = combined();
+    const card = buildScorecard(
+      [a, b],
+      marksOf({ b: [mark("service_court_repeat", { side: "deuce" })] }),
+    );
+    expect(
+      card.rows.map((r) => [
+        r.code,
+        r.marks,
+        r.winnerChanged,
+        r.anythingChanged,
+      ]),
+    ).toEqual([["service_court_repeat", 1, 1, 1]]);
+    expect(card.unmarkedChanges).toEqual([]);
+    // The flip is the kept point's alone, not counted twice.
+    expect(card.winnerFlips.reduce((n, f) => n + f.points, 0)).toBe(1);
   });
 });
