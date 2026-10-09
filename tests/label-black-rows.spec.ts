@@ -1163,3 +1163,217 @@ test.describe("a let serve in the row's summary", () => {
     expect(pointSummary({ shots: [letServe, firstServe] }).rally).toBe(1);
   });
 });
+
+test.describe("a serve's result menu, where lets are replayed", () => {
+  type MenuOption = {
+    value: string;
+    label: string;
+    description?: string;
+    group?: string;
+    divider?: boolean;
+  };
+  function row() {
+    return createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+      serveResultMenu: (
+        shot: LabelShot,
+        playOnLets: boolean | undefined,
+      ) => { derived: string | null; options: MenuOption[] } | null;
+      serveResultPatch: (value: string | null) => unknown;
+      SERVE_RESULT_LANDED: string;
+      SERVE_RESULT_LET: string;
+    };
+  }
+  const replayed = { playOnLets: false };
+  const shotOf = (id: string) => rally().shots.find((s) => s.id === id)!;
+
+  test("the menu: the landing's result, a hairline, then Let", () => {
+    const { serveResultMenu, SERVE_RESULT_LANDED, SERVE_RESULT_LET } = row();
+    expect(SERVE_RESULT_LANDED).toBe("From where it landed");
+    expect(SERVE_RESULT_LET).toBe(
+      "Replayed. Not a fault, so the next serve is still a first serve.",
+    );
+    // Landed on the server's own side: Net, from `deriveShotResult`.
+    const menu = serveResultMenu(shotOf("w-fault"), false);
+    expect(menu!.derived).toBe("net");
+    expect(menu!.options).toEqual([
+      {
+        value: "net",
+        label: "Net",
+        description: "From where it landed",
+        group: "Serve result",
+      },
+      {
+        value: "let",
+        label: "Let",
+        description:
+          "Replayed. Not a fault, so the next serve is still a first serve.",
+        group: "Serve result",
+        divider: true,
+      },
+    ]);
+    // No landing: nothing to calculate, so Let alone.
+    const bare = serveResultMenu(shotOf("w-serve"), false);
+    expect(bare!.derived).toBeNull();
+    expect(bare!.options.map((o) => o.value)).toEqual(["let"]);
+
+    // Not a serve, lets played on, or nothing said: no menu.
+    expect(serveResultMenu(shotOf("w-lit"), false)).toBeNull();
+    expect(serveResultMenu(shotOf("w-fault"), true)).toBeNull();
+    expect(serveResultMenu(shotOf("w-fault"), undefined)).toBeNull();
+  });
+
+  test("a selected serve row's result is a Serve result select; other rows keep the plain word", () => {
+    const html = renderWell({ ...replayed, selectedShotId: "w-fault" });
+    const serve = shotRow(html, "w-fault");
+    expect(serve).toContain("data-serve-result");
+    expect(serve).not.toContain('data-calculated="result"');
+    // Player, Stroke, Spin and now the result: four menus.
+    expect(serve.match(/data-select-editor/g)).toHaveLength(4);
+    const trigger = tag(serve, 'aria-label="Shot 1 result"');
+    expect(trigger).toMatch(/^<button/);
+    expect(trigger).toContain('aria-haspopup="menu"');
+    expect(text(serve.slice(serve.indexOf("data-serve-result")))).toContain(
+      "Net",
+    );
+
+    // Unselected, a serve's result is text a keyboard can open.
+    const other = shotRow(html, "w-serve");
+    expect(other).toContain("data-serve-result");
+    expect(other).toContain('aria-label="Shot 2 result: In"');
+
+    // Selected with no landing: Let is the only item, and the trigger still
+    // says the stored result.
+    const bare = shotRow(
+      renderWell({ ...replayed, selectedShotId: "w-serve" }),
+      "w-serve",
+    );
+    expect(text(bare.slice(bare.indexOf("data-serve-result")))).toContain("In");
+
+    // A rally stroke keeps the calculated word, with no trigger.
+    const lit = shotRow(
+      renderWell({ ...replayed, selectedShotId: "w-lit" }),
+      "w-lit",
+    );
+    expect(lit).toContain('data-calculated="result"');
+    expect(lit).not.toContain("data-serve-result");
+    expect(lit).not.toContain("Shot 4 result");
+    expect(lit.match(/data-select-editor/g)).toHaveLength(3);
+  });
+
+  test("lets played on (or not said): every row's result is the plain word", () => {
+    for (const overrides of [{ playOnLets: true }, {}]) {
+      const html = renderWell({ ...overrides, selectedShotId: "w-fault" });
+      expect(html).not.toContain("data-serve-result");
+      for (const id of ["w-fault", "w-serve", "w-return", "w-lit"]) {
+        const r = shotRow(html, id);
+        expect(r, id).toContain('data-calculated="result"');
+        expect(r, id).not.toMatch(/Shot \d result/);
+      }
+      expect(
+        shotRow(html, "w-fault").match(/data-select-editor/g),
+      ).toHaveLength(3);
+    }
+  });
+
+  test("picking Let or the calculated result patches the stroke's result", () => {
+    const patches: [string, unknown][] = [];
+    const { BlackShotsWell } = well();
+    const all = elements(
+      BlackShotsWell({
+        point: rally(),
+        edit: wellEdit({
+          ...replayed,
+          selectedShotId: "w-fault",
+          onPatchShot: (id: string, patch: unknown) =>
+            patches.push([id, patch]),
+        }),
+      }),
+    );
+    const cell = all.find(
+      (el) => el.props.label === "Shot 1 result" && "onChange" in el.props,
+    );
+    expect(cell).toBeDefined();
+    const onChange = cell!.props.onChange as (v: string) => void;
+    onChange("let");
+    onChange("net");
+    expect(patches).toEqual([
+      ["w-fault", { result: "let" }],
+      ["w-fault", { result: "net" }],
+    ]);
+    expect(row().serveResultPatch("let")).toEqual({ result: "let" });
+  });
+
+  test("a let reads in the rail's amber, with the pencil; any other serve keeps its ink", () => {
+    const letPoint = rally();
+    letPoint.shots[0] = {
+      ...letPoint.shots[0],
+      result: "let",
+      status: "edited",
+    };
+    const { BlackShotsWell } = well();
+    const html = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: letPoint,
+        edit: wellEdit(replayed),
+      }),
+    );
+    const letRow = shotRow(html, "w-fault");
+    expect(letRow).toMatch(
+      /<span class="[^"]*text-\[var\(--rail-amber\)\][^"]*">Let<\/span>/,
+    );
+    expect(letRow).toContain("data-shot-marks");
+    // A let is not a fault: the row's ink is the plain one.
+    expect(tag(letRow, "data-serve-result")).toContain("text-white/50");
+
+    // The untouched serve rows: no amber, today's ink.
+    const plain = renderWell(replayed);
+    const fault = shotRow(plain, "w-fault");
+    expect(fault).not.toContain("rail-amber");
+    expect(tag(fault, "data-serve-result")).toContain("text-white/35");
+    expect(fault).not.toContain("data-shot-marks");
+    const serve = shotRow(plain, "w-serve");
+    expect(serve).not.toContain("rail-amber");
+    expect(tag(serve, "data-serve-result")).toContain("text-white/50");
+
+    // Selected, the trigger carries the amber too.
+    const selected = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: letPoint,
+        edit: wellEdit({ ...replayed, selectedShotId: "w-fault" }),
+      }),
+    );
+    expect(tag(selected, 'aria-label="Shot 1 result"')).toContain(
+      "text-[color:var(--rail-amber)]",
+    );
+  });
+
+  test("while the menu is open, the row's actions step aside", () => {
+    const { BlackShotRow } = row();
+    const render = (resultMenuOpen: boolean) =>
+      renderToStaticMarkup(
+        React.createElement(BlackShotRow, {
+          shot: shotOf("w-fault"),
+          number: 1,
+          pointNumber: 7,
+          resultMenuOpen,
+          edit: wellEdit({ ...replayed, selectedShotId: "w-fault" }),
+        }),
+      );
+    const open = render(true);
+    expect(tag(open, "data-menu-open")).toContain("data-menu-open");
+    expect(tag(open, 'aria-label="Shot 1 result"')).toContain(
+      'aria-expanded="true"',
+    );
+    // The overlay hides whenever the row holds an open menu.
+    expect(tag(open, "data-shot-actions")).toContain(
+      "group-has-[[data-menu-open]]/row:hidden",
+    );
+
+    const closed = render(false);
+    expect(closed).not.toContain('data-menu-open=""');
+    expect(tag(closed, 'aria-label="Shot 1 result"')).toContain(
+      'aria-expanded="false"',
+    );
+  });
+});

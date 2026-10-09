@@ -85,6 +85,11 @@ export interface EditContext {
   scores: ReadonlyMap<string, LabelPointScore>;
   /** `session.adScoring`. Absent means ad scoring. */
   adScoring?: boolean;
+  /**
+   * `session.playOnLets`. False (and absent) means lets are replayed, so a
+   * serve row's result offers `Let`; true, the result is the landing's alone.
+   */
+  playOnLets?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: RailTone;
 }

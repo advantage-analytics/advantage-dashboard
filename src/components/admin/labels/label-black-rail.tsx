@@ -122,6 +122,7 @@ export function LabelBlackRail({
   points,
   scores,
   adScoring = true,
+  playOnLets,
   names,
   marks = null,
   expandedPointId,
@@ -174,6 +175,8 @@ export function LabelBlackRail({
   /** `labelScores(points, adScoring)`, computed once by the console. */
   scores: LabelScores;
   adScoring?: boolean;
+  /** `session.playOnLets`: false offers `Let` on a serve row's result. */
+  playOnLets?: boolean;
   names: SideNames;
   /** The session's marks. Null draws no chip, hover line or suggestion. */
   marks?: LabelMarks | null;
@@ -268,6 +271,7 @@ export function LabelBlackRail({
       points,
       scores: pointScores,
       adScoring,
+      playOnLets,
       tone,
     }),
     [
@@ -285,6 +289,7 @@ export function LabelBlackRail({
       points,
       pointScores,
       adScoring,
+      playOnLets,
       tone,
     ],
   );

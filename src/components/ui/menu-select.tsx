@@ -26,6 +26,12 @@ export interface MenuOption<T extends string> {
    * each belongs to is written over them. Ungrouped lists render as before.
    */
   group?: string;
+  /**
+   * A hairline above this row, inside its group and without a new heading:
+   * the label console's serve-result menu sets its "Let" apart from the
+   * result the landing gives.
+   */
+  divider?: boolean;
 }
 
 /**
@@ -55,6 +61,8 @@ export function MenuSelect<T extends string>({
   align,
   scroll = false,
   tone = "light",
+  open: openProp,
+  onOpenChange,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -98,8 +106,23 @@ export function MenuSelect<T extends string>({
    * `"light"`.
    */
   tone?: FloatMenuTone;
+  /**
+   * Controlled open state, for a caller that answers the menu being open
+   * (the label console's shot row steps its actions aside). Absent, the
+   * select keeps its own.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = openProp ?? ownOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOwnOpen(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const current = options.find((option) => option.value === value);
 
   // One handler for every row rather than a closure per option per render;
@@ -111,7 +134,7 @@ export function MenuSelect<T extends string>({
     },
     // `value` may be `undefined`; `next !== value` is still exactly the
     // "did this actually change" check.
-    [onChange, value],
+    [onChange, value, setOpen],
   );
 
   const trigger = (
@@ -183,7 +206,9 @@ export function MenuSelect<T extends string>({
           option.group !== undefined && option.group !== previous;
         return (
           <Fragment key={option.value}>
-            {opensGroup && index > 0 ? <FloatMenuDivider /> : null}
+            {(opensGroup || option.divider) && index > 0 ? (
+              <FloatMenuDivider />
+            ) : null}
             {opensGroup ? (
               <FloatMenuLabel>{option.group}</FloatMenuLabel>
             ) : null}

@@ -1736,6 +1736,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       adScoring={session.adScoring}
+      playOnLets={session.playOnLets}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}

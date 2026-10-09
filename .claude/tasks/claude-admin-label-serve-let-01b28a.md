@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Rail serve-result menu with Let
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/admin/labels/label-black-shot-row.tsx, src/components/admin/labels/label-cells.tsx, src/components/admin/labels/label-console.tsx (threading `playOnLets` into the row edit context only), tests/fixtures/label-session.ts, tests/label-black-rows.spec.ts (guess)

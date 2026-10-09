@@ -166,6 +166,12 @@ const SELECT_TRIGGER_DARK =
 export interface SelectOption {
   value: string;
   label: string;
+  /** A second line on what choosing it means (`FloatMenuItem description`). */
+  description?: string;
+  /** The heading the row sits under (`FloatMenuLabel`). */
+  group?: string;
+  /** A hairline above the row, inside its group. */
+  divider?: boolean;
 }
 
 /**
@@ -223,6 +229,10 @@ export function SelectEditor({
   options,
   onChange,
   menu = "dark",
+  open,
+  onOpenChange,
+  className,
+  placeholder = "—",
 }: {
   label: string;
   value: string | null;
@@ -230,6 +240,13 @@ export function SelectEditor({
   onChange: (value: string | null) => void;
   /** The menu's tone: portalled, so the rail's palette does not reach it. */
   menu?: FloatMenuTone;
+  /** Controlled open state; absent, the menu keeps its own. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Extra trigger classes: a let's amber ink. */
+  className?: string;
+  /** The trigger's words when `value` is none of the options. */
+  placeholder?: string;
 }) {
   return (
     <span
@@ -243,11 +260,13 @@ export function SelectEditor({
         value={value ?? undefined}
         options={options}
         onChange={onChange}
-        placeholder="—"
+        placeholder={placeholder}
         align="start"
         width="trigger"
         tone={menu}
-        className={SELECT_TRIGGER_DARK}
+        open={open}
+        onOpenChange={onOpenChange}
+        className={cn(SELECT_TRIGGER_DARK, className)}
       />
     </span>
   );

@@ -254,9 +254,9 @@ export interface LabelSession {
   marksEnabled: boolean;
   /**
    * Whether a let serve is played on in this match (`matches.format
-   * .play_on_lets`): true only when the column holds a literal `true`. A null
-   * or missing format means lets are replayed, the default — and the only
-   * case the result menu offers `Let`.
+   * .play_on_lets`): true only when the column holds a literal `true`, so a
+   * null or missing format reads as false — lets replayed, the default. Only
+   * when false does a serve's result menu offer `Let`.
    */
   playOnLets: boolean;
   /**

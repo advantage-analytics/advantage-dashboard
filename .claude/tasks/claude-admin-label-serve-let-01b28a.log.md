@@ -25,3 +25,15 @@ is the runner's. Newest entries at the bottom.
 
 1. scorecard.ts per-result breakdowns (`resultChanges` keys) will show let as its own value — unchecked how it reads.
 2. `serveAfterServeIn` in marks-state.ts does not skip lets; looks right but is untested.
+
+## T3 · Rail serve-result menu with Let — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Serve rows in a lets-replayed session get a `ServeResultCell` (SelectEditor trigger, "Serve result" heading, calculated Net/In/Out item "From where it landed", divider, "Let" with its description); pure `serveResultMenu`/`serveResultPatch` helpers; let ink `text-[var(--rail-amber)]`; the actions overlay hides via `group-has-[[data-menu-open]]/row:hidden`. `SelectOption` gains description/group/divider; shared `MenuSelect` gains `divider` and optional controlled open. `playOnLets` threads console → rail → `EditContext` (also covers T4's first criterion). Six specs in label-black-rows.
+
+**follow-ups:**
+
+1. With no landing placed, a let can't be switched back to In/Out from the menu (Reset still works).
+2. Eyes-on in a real browser not done: amber trigger, divider/description in the dark FloatMenu, Delete hiding while open.
+3. `menu-select.tsx` `setOpen` also sets own state when controlled — harmless, redundant.
