@@ -30,7 +30,12 @@ function render(rows: LabelJobRow[]): string {
       // A client component that reaches for the router and a server action;
       // a static render never clicks it.
       "@/components/admin/labels/start-labelling-button": {
-        StartLabellingButton: () => null,
+        StartLabellingButton: ({ hasSession }: { hasSession: boolean }) =>
+          React.createElement(
+            "span",
+            { "data-start-labelling": "" },
+            hasSession ? "Continue" : "Start labelling",
+          ),
       },
     },
   }).load("src/components/admin/labels/labels-table.tsx") as {
@@ -72,5 +77,31 @@ test.describe("LabelsTable Job column", () => {
     expect(html).toContain("No completion time");
     expect(html).toContain("—");
     expect(html).not.toContain("<time");
+  });
+});
+
+test.describe("LabelsTable action", () => {
+  const SESSION = "dddddddd-4444-4444-8444-444444444444";
+  test("a complete session is a View link to it, never Continue — which would seed a new session", () => {
+    const html = render([
+      job({
+        session: { id: SESSION, status: "complete", checked: 56, total: 56 },
+      }),
+    ]);
+    expect(html).toContain("data-view-session");
+    expect(html).toContain(`href="/admin/labels/${SESSION}"`);
+    expect(html).toContain(">View<");
+    expect(html).not.toContain("data-start-labelling");
+  });
+
+  test("an open session continues; no session starts", () => {
+    const open = render([
+      job({
+        session: { id: SESSION, status: "labelling", checked: 3, total: 56 },
+      }),
+    ]);
+    expect(open).toContain(">Continue<");
+    expect(open).not.toContain("data-view-session");
+    expect(render([job({})])).toContain(">Start labelling<");
   });
 });

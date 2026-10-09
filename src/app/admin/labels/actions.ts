@@ -75,6 +75,11 @@ import {
   updateLabelSessionFields,
   type LabelSessionFieldsResult,
 } from "@/lib/services/labels/session-fields-session";
+import {
+  completeLabelSession,
+  reopenLabelSession,
+  type LabelSessionStatusResult,
+} from "@/lib/services/labels/session-status-session";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -378,4 +383,25 @@ export async function updateLabelSessionFieldsAction(
   patch: LabelSessionFieldsPatch,
 ): Promise<LabelSessionFieldsResult> {
   return updateLabelSessionFields(sessionId, patch);
+}
+
+/**
+ * The console header's "Mark complete": `label_sessions.status` to
+ * `complete` with its `completed_at`, nothing else. Refused on a session that
+ * is not labelling.
+ */
+export async function completeLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSessionStatusResult> {
+  return completeLabelSession(sessionId);
+}
+
+/**
+ * The console header's "Reopen": a complete session back to `labelling`.
+ * Refused while another session of the same match is open.
+ */
+export async function reopenLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSessionStatusResult> {
+  return reopenLabelSession(sessionId);
 }

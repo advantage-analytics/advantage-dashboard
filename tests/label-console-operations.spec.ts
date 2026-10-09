@@ -750,6 +750,41 @@ test.describe("reset", () => {
   });
 });
 
+// ── Mark complete ──────────────────────────────────────────────────────────
+
+test("Mark complete: the confirm lists what is still open, and the session is completed only on its action", async () => {
+  const { calls, operations } = spies();
+  const completed: unknown[][] = [];
+  const warnings = ["2 points of 3 not checked", "Game 1 unfinished (15–15)"];
+  renderConsole({
+    ...SAVES,
+    operations: {
+      ...operations,
+      completeSession: async (...args: unknown[]) => {
+        completed.push(args);
+        return { ok: true, status: "complete" };
+      },
+    },
+    initialConfirm: { kind: "complete-session", warnings },
+  });
+  const dialog = dialogs.at(-1)!;
+  expect(dialog).toMatchObject({
+    open: true,
+    title: "Mark this session complete?",
+    confirmLabel: "Mark complete",
+    tone: "primary",
+  });
+  const list = renderToStaticMarkup(dialog.children as React.ReactElement);
+  expect(list).toContain("data-complete-warnings");
+  for (const warning of warnings) expect(list).toContain(`<li>${warning}</li>`);
+  expect(completed).toEqual([]);
+
+  (dialog.onConfirm as () => void)();
+  await Promise.resolve();
+  expect(completed).toEqual([[labelSessionFixture().id]]);
+  expect(calls).toEqual({});
+});
+
 // ── Game bands (T14) ───────────────────────────────────────────────────────
 
 type BandRow = {

@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { StartLabellingButton } from "@/components/admin/labels/start-labelling-button";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { LabelJobRow } from "@/lib/data/labels-server";
 import {
@@ -35,7 +37,9 @@ function formatCompletedAt(iso: string | null): string | null {
  * could hand-label. The Data Table shell of `requests-table.tsx`, but a row has
  * nowhere to navigate to: `/admin/labels/[sessionId]` only exists once a
  * session has been seeded, which is the click itself. So no `onClick` and no
- * chevron; the only control is `StartLabellingButton`.
+ * chevron; the only control is `StartLabellingButton` — or, on a complete
+ * session, a "View" link to it: "Continue" would seed a NEW session for a job
+ * whose only one is complete.
  */
 export function LabelsTable({ rows }: { rows: readonly LabelJobRow[] }) {
   return (
@@ -118,10 +122,20 @@ function LabelJobRowView({ row }: { row: LabelJobRow }) {
       </span>
 
       <span className={COL.action}>
-        <StartLabellingButton
-          jobId={row.jobId}
-          hasSession={row.session !== null}
-        />
+        {row.session?.status === "complete" ? (
+          <Link
+            href={`/admin/labels/${row.session.id}`}
+            data-view-session=""
+            className={cn(advButton("outline", "sm"), "whitespace-nowrap")}
+          >
+            View
+          </Link>
+        ) : (
+          <StartLabellingButton
+            jobId={row.jobId}
+            hasSession={row.session !== null}
+          />
+        )}
       </span>
     </div>
   );

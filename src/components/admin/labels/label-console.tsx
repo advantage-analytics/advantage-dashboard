@@ -126,6 +126,9 @@ import {
   type LabelSessionFieldsPatch,
 } from "@/lib/services/labels/session-fields";
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
+import { completeWarnings } from "@/lib/services/labels/session-status";
+import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
+import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
 import { applyDismiss } from "@/lib/services/labels/suggestions";
@@ -332,8 +335,11 @@ export function LabelConsole({
     () => sideNames(session.player1Name, session.player2Name),
     [session.player1Name, session.player2Name],
   );
+  // Client state, so "Mark complete" and "Reopen" flip the console read-only
+  // or editable without a reload.
+  const [status, setStatus] = useState(session.status);
   const editable =
-    session.status === "labelling" &&
+    status === "labelling" &&
     onSaveShot !== undefined &&
     onSavePoint !== undefined;
 
@@ -1173,6 +1179,43 @@ export function LabelConsole({
   }
 
   /**
+   * "Mark complete" (after its confirm) and "Reopen": `label_sessions.status`
+   * alone. Not optimistic — the console flips read-only or editable once the
+   * server has said so.
+   */
+  async function setSessionStatus(next: LabelSession["status"]) {
+    const write =
+      next === "complete"
+        ? operations?.completeSession
+        : operations?.reopenSession;
+    if (!write) return;
+    dispatchSave({ type: "start" });
+    const result = await settle(write(session.id));
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    if (result.status === "complete") setPlacement(NO_PLACEMENT);
+    setStatus(result.status);
+    dispatchSave({ type: "success", at: Date.now() });
+  }
+
+  /** "Mark complete": the confirm, listing what is still open. */
+  function askComplete() {
+    setConfirm({
+      kind: "complete-session",
+      warnings: completeWarnings({
+        points,
+        adScoring: session.adScoring,
+        marks: liveMarks,
+        finalScore: sessionFields.finalScore,
+        videoEndsEarly: sessionFields.videoEndsEarly,
+        matchScore: session.matchScore,
+      }),
+    });
+  }
+
+  /**
    * "Find the gap": navigation only. The mismatching set's first point (or,
    * with none, the last labelled point) is made current, the rail held and the
    * video seeks to it; the row is then brought to the rail's top
@@ -1530,6 +1573,9 @@ export function LabelConsole({
       case "reset-point":
         resetPoint(question.pointId);
         return;
+      case "complete-session":
+        void setSessionStatus("complete");
+        return;
     }
   }
 
@@ -1799,7 +1845,9 @@ export function LabelConsole({
               <span className="tabular">
                 {checked} of {total} points checked
               </span>
-              {session.status === "complete" ? <span>· Complete</span> : null}
+              {status === "complete" ? (
+                <span data-session-complete="">· Complete</span>
+              ) : null}
               <span aria-hidden="true">·</span>
               <span className="mono text-[11px] text-[var(--ink-500)]">
                 derivation {session.derivationVersion}
@@ -1808,6 +1856,26 @@ export function LabelConsole({
           </div>
           <div className="flex shrink-0 items-center gap-5">
             <LabelSaveStatus status={saveStatus} />
+            {operable && operations?.completeSession ? (
+              <button
+                type="button"
+                data-mark-complete=""
+                className={advButton("outline", "sm")}
+                onClick={askComplete}
+              >
+                Mark complete
+              </button>
+            ) : null}
+            {status === "complete" && operations?.reopenSession ? (
+              <button
+                type="button"
+                data-reopen-session=""
+                className={advButton("outline", "sm")}
+                onClick={() => void setSessionStatus("labelling")}
+              >
+                Reopen
+              </button>
+            ) : null}
             <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
             {headerAction}
           </div>
@@ -1953,6 +2021,10 @@ export interface LabelConsoleOperations {
     sessionId: string,
     patch: LabelSessionFieldsPatch,
   ) => Promise<LabelSessionFieldsResult>;
+  /** `label_sessions.status` to `complete`. Absent: no "Mark complete". */
+  completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
+  /** A complete session back to `labelling`. Absent: no "Reopen". */
+  reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {
