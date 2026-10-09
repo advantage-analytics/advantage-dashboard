@@ -30,9 +30,11 @@ import {
   type DerivedPoint,
   type DerivedShot,
   type SplitStepRally,
+  type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import {
+  CONFIDENT_OUT_CALL,
   MAX_DEAD_TAIL,
   SIDE_DEAD_ZONE_M,
 } from "@/lib/services/splitstep/derivation/flags";
@@ -462,11 +464,27 @@ export function isServeFault(rally: SplitStepRally): boolean {
  * no such tail — the out ball is its last stroke, the tail is long enough to
  * be a rally, or a serve in it says a new point started (`reserve_after_in`'s
  * business).
+ *
+ * When the out ball IS the last stroke, the swing at the dead ball may itself
+ * have been called out: the cut then falls after an earlier out call, but only
+ * a confident one (`CONFIDENT_OUT_CALL`). On the three fully checked sessions
+ * (2026-10-09) that shape changed the winner on 7 of 13 points, against a base
+ * rate of 19%; with the earlier call under 0.85 it was 3 of 29, so those stay
+ * uncut.
  */
 export function withoutDeadTail(rally: SplitStepRally): SplitStepRally | null {
   const { strokes } = rally;
-  const last = strokes.findLastIndex((s) => s.strokeType !== "serve" && !s.in);
+  const isOutBall = (s: SplitStepStroke) => s.strokeType !== "serve" && !s.in;
+  let last = strokes.findLastIndex(isOutBall);
   if (last === -1) return null;
+  if (last === strokes.length - 1) {
+    last = strokes
+      .slice(0, -1)
+      .findLastIndex(
+        (s) => isOutBall(s) && (s.lineConfidence ?? 0) >= CONFIDENT_OUT_CALL,
+      );
+    if (last === -1) return null;
+  }
   const tail = strokes.slice(last + 1);
   if (tail.length === 0 || tail.length > MAX_DEAD_TAIL) return null;
   if (tail.some((s) => s.strokeType === "serve")) return null;

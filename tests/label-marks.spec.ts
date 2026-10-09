@@ -769,6 +769,27 @@ test.describe("the labels-only flags", () => {
     expect(cut.rallyId).toBe(9);
   });
 
+  test("withoutDeadTail: a swing at a dead ball that was itself called out cuts after an earlier confident out call", () => {
+    const cutOf = (rally: SplitStepRally) =>
+      withoutDeadTail(rally)?.strokes.map((s) => s.strokeNumber) ?? null;
+    const rally = rallyOf(9, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke", false],
+      ["B", "groundstroke", false],
+    ]);
+    // A's ball out at 0.9 (the fixture's), then B's swing at it, called out too.
+    expect(cutOf(rally)).toEqual([1, 2, 3]);
+    // The earlier call under CONFIDENT_OUT_CALL is not enough to cut on.
+    rally.strokes[2].lineConfidence = 0.7;
+    expect(cutOf(rally)).toBeNull();
+    // With the cut, the last stroke says B won while the score says A: disputed.
+    rally.strokes[2].lineConfidence = 0.9;
+    expect(codesOf(marksFor([rally], ["A"]).points.p1)).toContain(
+      "winner_disputed",
+    );
+  });
+
   test("pick_winner: the fold settled no winner — and only then", () => {
     const rally = rallyOf(1, [
       ["A", "serve"],
