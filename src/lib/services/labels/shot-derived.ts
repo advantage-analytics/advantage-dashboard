@@ -19,7 +19,15 @@ import {
 } from "../splitstep/derivation/court";
 import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
-import { isServeStroke } from "./session";
+import { isServeStroke, type LabelShot } from "./session";
+
+/** What `effectiveShotResult` reads of a stroke; absent columns read as unset. */
+export type ResultReadableShot = Partial<
+  Pick<
+    LabelShot,
+    "stroke" | "result" | "contactX" | "contactY" | "landingX" | "landingY"
+  >
+>;
 
 /** The net's `y`, metres from the near baseline. */
 const NET_Y = BASELINE_M;
@@ -84,6 +92,27 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
   return insideSidelines && landing_y >= 0 && landing_y <= COURT_LENGTH
     ? "in"
     : "out";
+}
+
+/**
+ * In, out or net as the stroke's own coordinates say it, when all four are
+ * placed; the stored result until then. The one reading the marks and the
+ * suggestions share, so a placed landing outranks a stale stored call.
+ */
+export function effectiveShotResult(
+  shot: ResultReadableShot,
+): LabelShotResult | null {
+  return (
+    deriveShotResult({
+      stroke: shot.stroke ?? null,
+      contact_x: shot.contactX ?? null,
+      contact_y: shot.contactY ?? null,
+      landing_x: shot.landingX ?? null,
+      landing_y: shot.landingY ?? null,
+    }) ??
+    shot.result ??
+    null
+  );
 }
 
 /**

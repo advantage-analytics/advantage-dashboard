@@ -14,7 +14,6 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
-import { labelShotValues } from "./edit";
 import { deriveEnding } from "./ending-derived";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
@@ -27,7 +26,7 @@ import {
   type LabelPoint,
   type LabelShot,
 } from "./session";
-import { deriveShotResult } from "./shot-derived";
+import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 import {
   addedPointBetween,
   suggestionState,
@@ -45,7 +44,8 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId">>;
+  Partial<Pick<LabelShot, "afterEventId" | "eventId">> &
+  ResultReadableShot;
 
 export type MarkStatePoint = Pick<
   LabelPoint,
@@ -98,7 +98,7 @@ function missingShotStates(
 ): ReturnType<typeof suggestionState>[] {
   if (!suggestions) return [];
   const shots = point.shots.map((shot) => ({
-    status: shot.status,
+    ...shot,
     afterEventId: shot.afterEventId ?? null,
   }));
   return suggestions
@@ -261,13 +261,8 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
   return !!marks;
 }
 
-/**
- * In, out or net as the stroke's own coordinates say it, when all four are
- * placed; the stored result until then.
- */
-function shotResult(shot: LabelShot) {
-  return deriveShotResult(labelShotValues(shot)) ?? shot.result;
-}
+/** In, out or net, coordinates first (`effectiveShotResult`). */
+const shotResult = effectiveShotResult;
 
 /**
  * "Point ended here": the last live stroke that is not a serve and whose ball
