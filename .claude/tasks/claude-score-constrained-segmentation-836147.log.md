@@ -16,3 +16,15 @@ is the runner's. Newest entries at the bottom.
 
 **gate:** mechanical GATE PASS · completion VERDICT: pass
 **changed:** `POINT_FLAGS` gains `SERVER_POSITION_CONFLICT` and `SEGMENT_PROPOSAL_DIFFERS` (review-only doc comments); `marks.ts` registers both hidden/point with typed params and null-param switch cases (`TODO(T6)`); `marks-copy.ts` adds chips "Server by position" / "Game cut differs" plus hover lines (merged form for the second); `tests/label-marks-copy.spec.ts` exhaustive lists extended.
+
+## T3 · Block-and-flag hitter rule in frozen stretches — blocked
+
+**gate:** mechanical GATE FAIL (1 failed / 5580 passed) · completion not run
+**reason:** The pre-existing test `frozen score stretch › a frozen stretch keeps every point, in games, with the server alternating` (tests/splitstep-transcript.spec.ts:1263, assertion at 1330) fails under the new rule. It receives `[true, true, true]` where it expects the servers to alternate `[!last, last, !last]`. The task forbids editing this test. Per the subagent, the fixture serves its first frozen game from the end the changeover schedule gives to the _previous_ server, and later takes a same-end gap changeover that position cannot see. Position therefore blocks two of the three relabels the test expects, and no choice of top player makes it pass. The fixture encodes the old reading, "an end switch is a new game whatever the schedule says". An author decision is needed: make the fixture follow the schedule, or relax the rule.
+**implementation notes:**
+
+- Top and bottom players come from `geometryTopLabel`, which takes a majority vote in label space, because `player1Label` only exists after reconcile.
+- `vendorGamesBefore` counts the games from the stream's readings.
+- The positional count advances only when the serving end switches, to the next even game. So inside a frozen run, rallies after a same-end changeover stay flagged until the next end switch. On ac56ef8b, that could leave about every second frozen game with the vendor's labels.
+- The test `relabelled frozen points keep their line calls…` still passes, but no longer exercises a relabel.
+  **stash:** d1c3a5705111d30ca5e69fdae4db9ee8b940e25c

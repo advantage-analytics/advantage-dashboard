@@ -62,7 +62,7 @@ ready).
 
 ## T3 · Block-and-flag hitter rule in frozen stretches
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T1, T2
 - **files:** (guess)
