@@ -17,6 +17,7 @@ import type { LabelPointPatch } from "./edit";
 import {
   isMissedResult,
   isNonPointEnding,
+  isLetServe,
   isServeStroke,
   liveShotsInOrder,
   opponent,
@@ -62,7 +63,7 @@ export function deriveEnding(
   ghosts: boolean,
 ): DerivedEnding | null {
   const live = liveShotsInOrder(point, ghosts).filter(
-    (shot) => shot.result !== "let",
+    (shot) => !isLetServe(shot),
   );
   const last = live.at(-1);
   if (!last) return null;

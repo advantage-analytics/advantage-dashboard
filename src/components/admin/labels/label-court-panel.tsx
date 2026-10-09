@@ -3,6 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown } from "lucide-react";
 import {
+  isLetServe,
   opponent,
   type LabelPoint,
   type LabelShot,
@@ -76,7 +77,7 @@ function courtReadout(
     const other = hitter
       ? `${names[opponent(hitter)]}’s side`
       : "The other side";
-    const isLet = live[placing - 1].result === "let";
+    const isLet = isLetServe(live[placing - 1]);
     return {
       title: `Shot ${placing} · ${placement.target}${isLet ? " · let" : ""}`,
       subtitle:
@@ -93,7 +94,7 @@ function courtReadout(
   if (lit !== null) {
     const hitter = live[lit - 1].hitter;
     return {
-      title: live[lit - 1].result === "let" ? `${title} · let` : title,
+      title: isLetServe(live[lit - 1]) ? `${title} · let` : title,
       subtitle: [`Shot ${lit} of ${live.length}`, hitter ? names[hitter] : null]
         .filter((part) => part !== null)
         .join(" · "),

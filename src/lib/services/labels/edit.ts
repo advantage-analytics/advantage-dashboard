@@ -13,6 +13,7 @@
  */
 
 import {
+  isServeStroke,
   LABEL_SPINS,
   type LabelEnding,
   type LabelPoint,
@@ -51,22 +52,26 @@ export const LABEL_SHOT_RESULTS: readonly LabelShotResult[] = [
 ];
 
 /**
- * Why a patch may not set `result: "let"`, or null when it may. A let is a
- * serve's result and nothing else's: the stroke judged is the patch's own when
- * it carries one, else the stored row's. With neither in hand (a patch with no
- * `stroke`, parsed before the row is read) there is nothing to refuse yet —
- * the write re-asks with the row (edit-session.ts `writeLabelShotEdit`).
+ * Why a patch may not leave the row a let on a stroke that is not a serve, or
+ * null when it may. A let is a serve's result and nothing else's, so the row is
+ * judged as the patch would leave it: the patch's own `stroke` and `result`
+ * where it carries them, else the stored row's. That refuses both a let set on
+ * a forehand and a let serve retyped to a forehand without its result cleared
+ * (the rail sends the calculated result with such a retype,
+ * `strokeChangePatch`). With nothing in hand to judge (a patch parsed before
+ * the row is read) there is nothing to refuse yet — the write re-asks with the
+ * row (edit-session.ts `writeLabelShotEdit`).
  */
 export function letResultError(
   patch: LabelShotPatch,
-  stored?: Pick<LabelShotValues, "stroke">,
+  stored?: Pick<LabelShotValues, "stroke"> &
+    Partial<Pick<LabelShotValues, "result">>,
 ): string | null {
-  if (patch.result !== "let") return null;
+  const result = "result" in patch ? patch.result : stored?.result;
+  if (result !== "let") return null;
   const stroke = "stroke" in patch ? patch.stroke : stored?.stroke;
   if (stroke === undefined) return null;
-  return stroke === "first_serve" || stroke === "second_serve"
-    ? null
-    : "Only a serve can be a let.";
+  return isServeStroke(stroke) ? null : "Only a serve can be a let.";
 }
 
 export const LABEL_ENDINGS: readonly LabelEnding[] = [

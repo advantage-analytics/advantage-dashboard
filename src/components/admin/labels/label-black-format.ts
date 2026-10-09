@@ -1,6 +1,7 @@
 import { labelShotValues } from "@/lib/services/labels/edit";
 import {
   isGhostShot,
+  isLetServe,
   isServeStroke,
   type LabelPoint,
   type LabelShot,
@@ -129,9 +130,7 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
     rally === 0 || (rally === 1 && !!last && isServeStroke(last.stroke));
   parts.push(serveOnly ? "serve only" : `${rally} shot rally`);
 
-  const lets = live.filter(
-    (shot) => isServeStroke(shot.stroke) && shot.result === "let",
-  ).length;
+  const lets = live.filter((shot) => isLetServe(shot)).length;
   if (lets > 0) parts.push(lets === 1 ? "1 let" : `${lets} lets`);
 
   return parts.join(" · ");

@@ -112,33 +112,45 @@ test.describe("the court panel", () => {
     const withLet: LabelPoint = {
       ...P1,
       shots: P1.shots.map((s) =>
-        s.id === "s-return" ? { ...s, result: "let" as const } : s,
+        s.id === "s-serve" ? { ...s, result: "let" as const } : s,
       ),
     };
     const html = render({
       point: withLet,
-      placement: startPlacement("s-return", "far"),
+      placement: startPlacement("s-serve", "near"),
     });
-    expect(title(html)).toBe("Shot 2 · contact · let");
+    expect(title(html)).toBe("Shot 1 · contact · let");
     const other = render({
       point: withLet,
-      placement: startPlacement(withLet.shots[0].id, "near"),
+      placement: startPlacement("s-return", "far"),
     });
-    expect(title(other)).not.toMatch(/let/);
+    expect(title(other)).toBe("Shot 2 · contact");
   });
 
   test("a let serve playing: the title ends with 'let'; another stroke playing, unchanged", () => {
     const withLet: LabelPoint = {
       ...P1,
       shots: P1.shots.map((s) =>
+        s.id === "s-serve" ? { ...s, result: "let" as const } : s,
+      ),
+    };
+    const html = render({ point: withLet, playingShotId: "s-serve" });
+    expect(title(html)).toBe("Point 1 · let");
+    expect(subtitle(html)).toBe("Shot 1 of 3 · Lee");
+    const other = render({ point: withLet, playingShotId: "s-return" });
+    expect(title(other)).toBe("Point 1");
+  });
+
+  test("a stray let on a rally stroke is not a let: no suffix", () => {
+    const stray: LabelPoint = {
+      ...P1,
+      shots: P1.shots.map((s) =>
         s.id === "s-return" ? { ...s, result: "let" as const } : s,
       ),
     };
-    const html = render({ point: withLet, playingShotId: "s-return" });
-    expect(title(html)).toBe("Point 1 · let");
-    expect(subtitle(html)).toBe("Shot 2 of 3 · Vargas");
-    const other = render({ point: withLet, playingShotId: "s-serve" });
-    expect(title(other)).toBe("Point 1");
+    expect(title(render({ point: stray, playingShotId: "s-return" }))).toBe(
+      "Point 1",
+    );
   });
 
   test("placing a landing: the other half; flipped, back on the hitter's for a net ball", () => {

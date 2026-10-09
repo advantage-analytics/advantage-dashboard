@@ -22,6 +22,7 @@ import {
   isLiveShot,
   isMissedResult,
   isNonPointEnding,
+  isLetServe,
   isServeStroke,
   liveShotsInOrder,
   type LabelPoint,
@@ -429,7 +430,7 @@ export function secondServeAsFirst(
   const live = liveShotsInOrder(point, ghosts);
   let faulted = false;
   for (const shot of live) {
-    if (!isServeStroke(shot.stroke) || shot.result === "let") continue;
+    if (!isServeStroke(shot.stroke) || isLetServe(shot)) continue;
     if (faulted && shot.stroke === "first_serve") {
       return {
         code: "second_serve_as_first",

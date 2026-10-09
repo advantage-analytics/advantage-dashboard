@@ -3,6 +3,7 @@ import { LABEL_STROKES } from "@/lib/services/labels/edit";
 import {
   LABEL_SPINS,
   isMissedResult,
+  isLetServe,
   isServeStroke,
   type LabelEnding,
   type LabelPoint,
@@ -195,7 +196,7 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
   const live = point.shots.filter((shot) => shot.status !== "deleted");
   const timed = live.find((shot) => shot.videoTime !== null);
   const last = live.at(-1);
-  const played = live.filter((shot) => shot.result !== "let");
+  const played = live.filter((shot) => !isLetServe(shot));
   const serve = played.findLastIndex((shot) => isServeStroke(shot.stroke));
   return {
     time:

@@ -577,7 +577,7 @@ export function buildLabelSession(
     player2Name: match?.player2_name ?? "Player 2",
     adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
     marksEnabled: session.marks_enabled,
-    playOnLets: readPlayOnLets(match?.format ?? null),
+    playOnLets: readPlayOnLets(match?.format),
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,
     matchScore: parseMatchScore(match?.score ?? null),

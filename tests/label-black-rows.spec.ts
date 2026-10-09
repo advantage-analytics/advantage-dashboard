@@ -1205,6 +1205,15 @@ test.describe("a let serve in the row's summary", () => {
     expect(pointSummary({ shots: rally }).rally).toBe(3);
     expect(pointSummary({ shots: [letServe, firstServe] }).rally).toBe(1);
   });
+
+  test("a stray let on a rally stroke is not a let: the rally still counts it", () => {
+    const rally = [
+      firstServe,
+      at("fh", { stroke: "forehand", result: "let" }),
+      at("bh", { stroke: "backhand" }),
+    ];
+    expect(pointSummary({ shots: rally }).rally).toBe(3);
+  });
 });
 
 test.describe("a serve's result menu, where lets are replayed", () => {
@@ -1223,6 +1232,7 @@ test.describe("a serve's result menu, where lets are replayed", () => {
         playOnLets: boolean | undefined,
       ) => { derived: string | null; options: MenuOption[] } | null;
       serveResultPatch: (value: string | null) => unknown;
+      strokeChangePatch: (shot: LabelShot, stroke: string | null) => unknown;
       SERVE_RESULT_LANDED: string;
       SERVE_RESULT_LET: string;
     };
@@ -1264,6 +1274,39 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(serveResultMenu(shotOf("w-lit"), false)).toBeNull();
     expect(serveResultMenu(shotOf("w-fault"), true)).toBeNull();
     expect(serveResultMenu(shotOf("w-fault"), undefined)).toBeNull();
+  });
+
+  test("a let already stored keeps its menu where lets are played on, so it can be undone", () => {
+    const { serveResultMenu } = row();
+    const stored = { ...shotOf("w-fault"), result: "let" as const };
+    for (const playOnLets of [true, undefined]) {
+      const menu = serveResultMenu(stored, playOnLets);
+      expect(menu!.options.map((o) => o.value)).toEqual(["net", "let"]);
+    }
+  });
+
+  test("retyping a let serve to a rally stroke takes the calculated result with it", () => {
+    const { strokeChangePatch } = row();
+    const letFault = { ...shotOf("w-fault"), result: "let" as const };
+    // Off a serve: the let goes, the landing's result (Net) comes back.
+    expect(strokeChangePatch(letFault, "forehand")).toEqual({
+      stroke: "forehand",
+      result: "net",
+    });
+    // Still a serve: the let stays.
+    expect(strokeChangePatch(letFault, "second_serve")).toEqual({
+      stroke: "second_serve",
+    });
+    // No landing to read: the let is cleared to no result.
+    const bareLet = { ...shotOf("w-serve"), result: "let" as const };
+    expect(strokeChangePatch(bareLet, "forehand")).toEqual({
+      stroke: "forehand",
+      result: null,
+    });
+    // Not a let: the stroke alone, as before.
+    expect(strokeChangePatch(shotOf("w-fault"), "forehand")).toEqual({
+      stroke: "forehand",
+    });
   });
 
   test("a selected serve row's result is a Serve result select; other rows keep the plain word", () => {
@@ -1415,6 +1458,19 @@ test.describe("a serve's result menu, where lets are replayed", () => {
 
     const closed = render(false);
     expect(closed).not.toContain('data-menu-open=""');
+
+    // Not the selected row (its editor is unmounted): a menu flag left over
+    // never hides the actions.
+    const deselected = renderToStaticMarkup(
+      React.createElement(BlackShotRow, {
+        shot: shotOf("w-fault"),
+        number: 1,
+        pointNumber: 7,
+        resultMenuOpen: true,
+        edit: wellEdit({ ...replayed, selectedShotId: "w-lit" }),
+      }),
+    );
+    expect(deselected).not.toContain('data-menu-open=""');
     expect(tag(closed, 'aria-label="Shot 1 result"')).toContain(
       'aria-expanded="false"',
     );

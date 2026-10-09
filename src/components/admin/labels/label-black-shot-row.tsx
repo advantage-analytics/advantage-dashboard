@@ -478,7 +478,7 @@ export function BlackShotRow({
         className={cn("text-[11px] font-medium", lit && "text-white")}
         style={lit ? undefined : { color: fault ? QUIET_INK : VALUE_INK }}
         onChange={(value) =>
-          patch({ stroke: value as LabelShotPatch["stroke"] })
+          patch(strokeChangePatch(shot, value as LabelShotPatch["stroke"]))
         }
       />
       <BlackSelectCell
@@ -1135,7 +1135,10 @@ export function serveResultMenu(
   shot: LabelShot,
   playOnLets: boolean | undefined,
 ): { derived: LabelShotResult | null; options: SelectOption[] } | null {
-  if (playOnLets !== false || !isServeStroke(shot.stroke)) return null;
+  if (!isServeStroke(shot.stroke)) return null;
+  // Played on, a serve's result is the landing's alone — but a let already
+  // stored (marked before the rule changed) keeps its menu, so it can be undone.
+  if (playOnLets !== false && shot.result !== "let") return null;
   const derived = deriveShotResult(labelShotValues(shot));
   const options: SelectOption[] = [];
   if (derived && derived !== "let") {
@@ -1154,6 +1157,26 @@ export function serveResultMenu(
     divider: true,
   });
   return { derived, options };
+}
+
+/**
+ * What retyping a stroke writes. A let is a serve's alone, so a let serve
+ * retyped to a rally stroke takes the result its coordinates give (or none)
+ * with it — the server refuses a let left on a non-serve (edit.ts
+ * `letResultError`).
+ */
+export function strokeChangePatch(
+  shot: LabelShot,
+  stroke: LabelShotPatch["stroke"],
+): LabelShotPatch {
+  if (shot.result !== "let" || isServeStroke(stroke ?? null)) return { stroke };
+  return {
+    stroke,
+    result: deriveShotResult({
+      ...labelShotValues(shot),
+      stroke: stroke ?? null,
+    }),
+  };
 }
 
 /** What picking a serve-result item writes. */
@@ -1189,10 +1212,19 @@ function ServeResultCell({
   onChange: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(initialOpen);
+  // The editor mounts only on the selected row, and unmounting it never
+  // reports the menu closed: deselecting closes it here, so the row's actions
+  // are never left hidden behind a menu that is gone.
+  const [wasSelected, setWasSelected] = useState(rowSelected);
+  if (wasSelected !== rowSelected) {
+    setWasSelected(rowSelected);
+    if (!rowSelected) setOpen(false);
+  }
+  const shown = open && rowSelected;
   const isLet = value === "let";
   return (
     <span
-      data-menu-open={open ? "" : undefined}
+      data-menu-open={shown ? "" : undefined}
       className="flex min-w-0 items-center"
     >
       <EditableCell
@@ -1218,7 +1250,7 @@ function ServeResultCell({
             value={value}
             options={options}
             onChange={onChange}
-            open={open}
+            open={shown}
             onOpenChange={setOpen}
             className={isLet ? "text-[color:var(--rail-amber)]" : undefined}
             // A stored result with no landing to calculate from is not an

@@ -89,6 +89,17 @@ export function isMissedResult(result: unknown): result is "out" | "net" {
   return result === "out" || result === "net";
 }
 
+/**
+ * A let: a serve the labeller marked replayed. The one test every reader
+ * uses, so a stray `result: "let"` on a rally stroke is never skipped as one.
+ */
+export function isLetServe(shot: {
+  stroke: LabelStroke | null;
+  result: string | null;
+}): boolean {
+  return isServeStroke(shot.stroke) && shot.result === "let";
+}
+
 export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";
 }

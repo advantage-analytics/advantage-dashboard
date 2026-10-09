@@ -159,6 +159,26 @@ test.describe("shot values", () => {
     expect(letResultError({ result: "let" }, { stroke: null })).toBe(
       "Only a serve can be a let.",
     );
+    // A let serve retyped off a serve without its result cleared is refused;
+    // with the result sent along (the rail's `strokeChangePatch`) it passes.
+    expect(
+      letResultError(
+        { stroke: "forehand" },
+        { stroke: "first_serve", result: "let" },
+      ),
+    ).toBe("Only a serve can be a let.");
+    expect(
+      letResultError(
+        { stroke: "forehand", result: "net" },
+        { stroke: "first_serve", result: "let" },
+      ),
+    ).toBeNull();
+    expect(
+      letResultError(
+        { stroke: "forehand" },
+        { stroke: "first_serve", result: "in" },
+      ),
+    ).toBeNull();
     // The patch's stroke wins over the stored one, either way.
     expect(
       letResultError(
