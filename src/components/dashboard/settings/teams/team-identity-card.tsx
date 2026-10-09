@@ -108,7 +108,9 @@ export function TeamIdentityCard({
     );
   }
 
-  const lockedHint = `Ask ${ownerName ?? "the owner"}, the owner, to change it.`;
+  const lockedHint = ownerName
+    ? `Ask ${ownerName}, the owner, to change it.`
+    : "Ask the owner to change it.";
 
   return (
     <SettingsCard className="gap-[18px]">
