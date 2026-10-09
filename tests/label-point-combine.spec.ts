@@ -21,11 +21,14 @@ import {
   combineLabelPoints,
   writeLabelPointCombine,
 } from "@/lib/services/labels/point-combine-session";
+import { applyLabelShotPatch } from "@/lib/services/labels/edit";
+import { serveAfterServeIn } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShot,
   labelShotRow,
   noop,
   ROW_OPERATIONS,
@@ -88,7 +91,7 @@ test.describe("planPointCombine", () => {
       removed: { status: "deleted", status_before_delete: "unchanged" },
       // The fixture's two points each open on a first serve: joined, the
       // later one is the second.
-      retyped: [{ shotId: "s-ace", stroke: "second_serve" }],
+      retyped: [{ shotId: "s-ace", patch: { stroke: "second_serve" } }],
     };
     // From either side, the same plan.
     expect(planPointCombine(points(), P2, "above")).toEqual({
@@ -155,7 +158,7 @@ test.describe("combineServeRetypes", () => {
         serve("r", "forehand", 13),
         serve("a", "first_serve", 4),
       ]),
-    ).toEqual([{ shotId: "b", stroke: "second_serve" }]);
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
     // Both wrong way round: both named.
     expect(
       combineServeRetypes([
@@ -163,8 +166,8 @@ test.describe("combineServeRetypes", () => {
         serve("b", "first_serve", 12),
       ]),
     ).toEqual([
-      { shotId: "a", stroke: "first_serve" },
-      { shotId: "b", stroke: "second_serve" },
+      { shotId: "a", patch: { stroke: "first_serve" } },
+      { shotId: "b", patch: { stroke: "second_serve" } },
     ]);
   });
 
@@ -175,7 +178,8 @@ test.describe("combineServeRetypes", () => {
         serve("b", "second_serve", 12),
       ]),
     ).toEqual([]);
-    // Three — a let among them — waits for the let fix.
+    // Three, none of them called in before a replay: no let to read, so
+    // nothing is relabelled.
     expect(
       combineServeRetypes([
         serve("a", "first_serve", 4),
@@ -191,13 +195,210 @@ test.describe("combineServeRetypes", () => {
         serve("x", "first_serve", 6, "deleted"),
         serve("b", "first_serve", 12),
       ]),
-    ).toEqual([{ shotId: "b", stroke: "second_serve" }]);
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
     expect(
       combineServeRetypes([
         serve("a", "first_serve", 4),
         serve("x", "first_serve", 6, "deleted"),
       ]),
     ).toEqual([]);
+  });
+});
+
+test.describe("combineServeRetypes: a replayed serve is a let", () => {
+  const stroke = (
+    id: string,
+    fields: {
+      stroke: "first_serve" | "second_serve" | "forehand" | "backhand";
+      hitter: "p1" | "p2";
+      result?: "in" | "out" | "net" | "let" | null;
+      videoTime: number;
+      status?: "kept" | "deleted";
+    },
+  ) => ({
+    id,
+    eventId: null,
+    status: "kept" as const,
+    result: null,
+    ...fields,
+  });
+
+  test("a serve called in with the same server's serve right after it becomes a let; the replay keeps its stroke", () => {
+    expect(
+      combineServeRetypes([
+        stroke("let", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("replay", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+        stroke("ret", {
+          stroke: "forehand",
+          hitter: "p2",
+          result: "in",
+          videoTime: 10,
+        }),
+      ]),
+    ).toEqual([{ shotId: "let", patch: { result: "let" } }]);
+  });
+
+  test("a let, then a fault and its second serve: the let, then first and second", () => {
+    expect(
+      combineServeRetypes([
+        stroke("let", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("fault", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "out",
+          videoTime: 9,
+        }),
+        stroke("second", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 14,
+        }),
+      ]),
+    ).toEqual([
+      { shotId: "let", patch: { result: "let" } },
+      { shotId: "second", patch: { stroke: "second_serve" } },
+    ]);
+  });
+
+  test("not a let: a fault before the replay, the other player's serve, a stroke between, or one already a let", () => {
+    // A fault and its second serve: the two-serve rule, no let.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "out",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // The other player serving next is another point, not a replay.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p2",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // A return between them: the serve was played on.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("r", {
+          stroke: "backhand",
+          hitter: "p2",
+          result: "in",
+          videoTime: 2,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // Already a let: left alone, and not one of the two.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "let",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([]);
+    // A deleted serve between is not a stroke of the rally.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("x", {
+          stroke: "backhand",
+          hitter: "p2",
+          videoTime: 2,
+          status: "deleted",
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "a", patch: { result: "let" } }]);
+  });
+
+  test("the combined rows no longer raise Serve after a serve in play", () => {
+    const P = "p-0001";
+    const rows = [
+      labelShot("let", P, {
+        stroke: "first_serve",
+        hitter: "p1",
+        result: "in",
+        videoTime: 1,
+      }),
+      labelShot("replay", P, {
+        stroke: "first_serve",
+        hitter: "p1",
+        result: "in",
+        videoTime: 9,
+      }),
+    ];
+    expect(serveAfterServeIn({ shots: rows }, true)).not.toBeNull();
+    const [retype] = combineServeRetypes(rows);
+    const after = rows.map((s) =>
+      s.id === retype.shotId ? applyLabelShotPatch(s, retype.patch) : s,
+    );
+    expect(after[0]).toMatchObject({ result: "let", status: "edited" });
+    expect(serveAfterServeIn({ shots: after }, true)).toBeNull();
   });
 });
 
@@ -267,14 +468,23 @@ test.describe("the console's rows", () => {
         status: "edited",
       },
       removed: { id: P2, status: "deleted", status_before_delete: "unchanged" },
-      retyped: [{ id: "s-ace", stroke: "second_serve", status: "edited" }],
+      retyped: [
+        {
+          id: "s-ace",
+          stroke: "second_serve",
+          result: "in",
+          status: "edited",
+        },
+      ],
     });
     expect(settled).toEqual(after);
     // The server's word on a retype wins over the optimistic one.
     const kept = settlePointCombine(after, {
       kept: { id: P1, ...planned().kept },
       removed: { id: P2, ...planned().removed },
-      retyped: [{ id: "s-ace", stroke: "second_serve", status: "kept" }],
+      retyped: [
+        { id: "s-ace", stroke: "second_serve", result: "in", status: "kept" },
+      ],
     })[0];
     expect(kept.shots.find((s) => s.id === "s-ace")?.status).toBe("kept");
   });
@@ -575,7 +785,14 @@ test.describe("writeLabelPointCombine", () => {
     });
     expect(result).toMatchObject({
       ok: true,
-      retyped: [{ id: SHOT(2), stroke: "second_serve", status: "edited" }],
+      retyped: [
+        {
+          id: SHOT(2),
+          stroke: "second_serve",
+          result: "in",
+          status: "edited",
+        },
+      ],
     });
     expect(fake.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
       ["label_shots", "update"],
@@ -600,6 +817,7 @@ test.describe("writeLabelPointCombine", () => {
       shots: [
         labelShotRow(SHOT(1), UUID(1), {
           stroke: "first_serve",
+          result: "net",
           video_time: 1,
         }),
         labelShotRow(SHOT(2), UUID(2), {
@@ -618,6 +836,38 @@ test.describe("writeLabelPointCombine", () => {
     expect(raced.calls.at(-1)).toMatchObject({
       table: "label_shots",
       op: "update",
+    });
+  });
+
+  test("a replayed serve joined: the serve called in is written a let, compare-and-set, and answered with its result", async () => {
+    const fake = fakeClient({
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      retyped: [
+        { id: SHOT(1), stroke: "first_serve", result: "let", status: "edited" },
+      ],
+    });
+    expect(writes(fake)[3]).toEqual({
+      table: "label_shots",
+      op: "update",
+      values: { result: "let", status: "edited" },
+      filters: { id: SHOT(1), status: "kept" },
     });
   });
 

@@ -12,10 +12,14 @@
  * (`isCombinedTombstone`), and the way back is "Split point here" on the first
  * moved shot.
  *
- * A fault and its replay cut apart both read as a first serve. So when the
- * combined point's live strokes hold exactly two serves, the first in video
- * order becomes `first_serve` and the second `second_serve` (`retyped`).
- * Three or more (a let among them) are left as they are.
+ * The joined serves are then relabelled (`combineServeRetypes`, answered as
+ * `retyped`). A replayed serve cut apart leaves a serve called in with the
+ * same server's serve right after it: that earlier serve is a let
+ * (`result: "let"`, `isLetServe`), which clears "Serve after a serve in
+ * play". A fault and its replay cut apart both read as a first serve: when
+ * exactly two serves that are not lets remain, the first in video order
+ * becomes `first_serve` and the second `second_serve`. Any other count is
+ * left as it is.
  *
  * Pure: the console runs `applyPointCombine`, `point-combine-session.ts` runs
  * `planPointCombine`.
@@ -27,6 +31,7 @@ import {
   type PointDeleteWrite,
 } from "./operations";
 import { applyLabelShotPatch } from "./edit";
+import type { LabelShotResult } from "./seed";
 import {
   isServeStroke,
   orderLabelShots,
@@ -63,12 +68,20 @@ export type CombinablePoint = Pick<
  * status and place in video order. A `LabelShot` satisfies it.
  */
 export type CombinableShot = Pick<LabelShot, "id"> &
-  Partial<Pick<LabelShot, "stroke" | "status" | "videoTime" | "eventId">>;
+  Partial<
+    Pick<
+      LabelShot,
+      "stroke" | "status" | "videoTime" | "eventId" | "hitter" | "result"
+    >
+  >;
 
-/** A serve the combine relabels first or second. */
+/** A serve the combine relabels: first or second, or a let. */
 export interface CombineRetype {
   shotId: string;
-  stroke: Extract<LabelStroke, "first_serve" | "second_serve">;
+  patch: {
+    stroke?: Extract<LabelStroke, "first_serve" | "second_serve">;
+    result?: "let";
+  };
 }
 
 export interface CombineKeptWrite {
@@ -88,32 +101,61 @@ export interface PointCombinePlan {
   movedShotIds: string[];
   kept: CombineKeptWrite;
   removed: PointDeleteWrite;
-  /** Serves whose stroke changes; empty unless exactly two are live. */
+  /** Serves relabelled (`combineServeRetypes`), in video order. */
   retyped: CombineRetype[];
 }
 
 /**
- * The serves of the joined strokes to relabel: when exactly two live serves
- * remain, the first in video order is the first serve and the second the
- * second; only those whose stroke changes are named.
+ * The serves of the joined strokes to relabel, in video order, each named
+ * only when something changes:
+ *
+ * - a live serve called `in` whose next live stroke is a serve by the same
+ *   hitter was replayed: it becomes a let (`result: "let"`) — what "Serve
+ *   after a serve in play" reads;
+ * - then, when exactly two live serves that are not lets remain, the first
+ *   is the first serve and the second the second.
  */
 export function combineServeRetypes(
   shots: readonly CombinableShot[],
 ): CombineRetype[] {
-  const serves = orderLabelShots(
+  const live = orderLabelShots(
     shots
-      .filter((shot) => shot.status !== "deleted" && isServeStroke(shot.stroke))
+      .filter((shot) => shot.status !== "deleted")
       .map((shot) => ({
         ...shot,
         videoTime: shot.videoTime ?? null,
         eventId: shot.eventId ?? null,
       })),
   );
-  if (serves.length !== 2) return [];
-  const order = ["first_serve", "second_serve"] as const;
-  return serves.flatMap((shot, i) =>
-    shot.stroke === order[i] ? [] : [{ shotId: shot.id, stroke: order[i] }],
+  const patches = new Map<string, CombineRetype["patch"]>();
+  const lets = new Set<string>();
+  live.forEach((shot, i) => {
+    const next = live[i + 1];
+    if (
+      isServeStroke(shot.stroke) &&
+      shot.result === "in" &&
+      next &&
+      isServeStroke(next.stroke) &&
+      next.hitter === shot.hitter
+    ) {
+      lets.add(shot.id);
+      patches.set(shot.id, { result: "let" });
+    }
+  });
+  const serves = live.filter(
+    (shot) =>
+      isServeStroke(shot.stroke) && shot.result !== "let" && !lets.has(shot.id),
   );
+  if (serves.length === 2) {
+    const order = ["first_serve", "second_serve"] as const;
+    serves.forEach((shot, i) => {
+      if (shot.stroke !== order[i]) patches.set(shot.id, { stroke: order[i] });
+    });
+  }
+  return live.flatMap((shot) => {
+    const patch = patches.get(shot.id);
+    return patch ? [{ shotId: shot.id, patch }] : [];
+  });
 }
 
 /**
@@ -232,9 +274,7 @@ export function applyPointCombine(
         status: plan.kept.status,
         shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
           const retype = plan.retyped.find((r) => r.shotId === shot.id);
-          return retype
-            ? applyLabelShotPatch(shot, { stroke: retype.stroke })
-            : shot;
+          return retype ? applyLabelShotPatch(shot, retype.patch) : shot;
         }),
       };
     }
@@ -265,8 +305,13 @@ export function withdrawPointCombine(
 export interface PointCombineSaved {
   kept: { id: string } & CombineKeptWrite;
   removed: { id: string } & PointDeleteWrite;
-  /** Each retyped serve as written: its new stroke and the status it took. */
-  retyped: { id: string; stroke: LabelStroke; status: LabelShotStatus }[];
+  /** Each relabelled serve as written: its stroke, result and status. */
+  retyped: {
+    id: string;
+    stroke: LabelStroke | null;
+    result: LabelShotResult | null;
+    status: LabelShotStatus;
+  }[];
 }
 
 export function settlePointCombine(
@@ -285,7 +330,12 @@ export function settlePointCombine(
         shots: point.shots.map((shot) => {
           const written = saved.retyped.find((r) => r.id === shot.id);
           return written
-            ? { ...shot, stroke: written.stroke, status: written.status }
+            ? {
+                ...shot,
+                stroke: written.stroke,
+                result: written.result,
+                status: written.status,
+              }
             : shot;
         }),
       };

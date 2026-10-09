@@ -7,7 +7,7 @@
  * untouched; one compare-and-set UPDATE of the kept point's winner, ending,
  * ended by, rally ids and status, and one tombstoning the later point (both
  * `updateIfUnchanged` — the writes before a miss stand); one compare-and-set
- * UPDATE per serve the plan retypes (its stroke, and the status an edit would
+ * UPDATE per serve the plan relabels (its stroke or let, and the status an edit would
  * give it, `labelShotStatusAfterPatch`); then the kept
  * point's ending as its joined rows
  * derive it (`reconcileEnding`, ending-session.ts), where the later point's
@@ -164,23 +164,29 @@ export async function writeLabelPointCombine(params: {
   );
   if (failed) return { error: failed };
 
-  // The serves relabelled first and second, each compare-and-set on the
-  // status read; before the ending, which reads the strokes.
+  // The serves relabelled — a let, or first and second — each
+  // compare-and-set on the status read; before the ending, which reads the
+  // strokes.
   const retyped: PointCombineSaved["retyped"] = [];
-  for (const { shotId, stroke } of write.retyped) {
+  for (const { shotId, patch } of write.retyped) {
     const shot = read.shots.find((s) => s.id === shotId);
     if (!shot) continue;
-    const status = labelShotStatusAfterPatch(labelShotState(shot), { stroke });
+    const status = labelShotStatusAfterPatch(labelShotState(shot), patch);
     const retypeFailed = await updateIfUnchanged(
       supabase,
       "label_shots",
       shotId,
       shot.status,
-      { stroke, status },
+      { ...patch, status },
       "relabel the serve",
     );
     if (retypeFailed) return { error: retypeFailed };
-    retyped.push({ id: shotId, stroke, status });
+    retyped.push({
+      id: shotId,
+      stroke: patch.stroke ?? shot.stroke,
+      result: patch.result ?? shot.result,
+      status,
+    });
   }
 
   // The kept point's ending off the joined rows; its status stays `edited`
