@@ -75,7 +75,7 @@ ready).
 
 ## T5 · Let count in point subtitle and court title
 
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/components/admin/labels/label-black-format.ts, src/components/admin/labels/label-court-panel.tsx, tests/label-black-rows.spec.ts, tests/label-court-panel.spec.ts (guess)

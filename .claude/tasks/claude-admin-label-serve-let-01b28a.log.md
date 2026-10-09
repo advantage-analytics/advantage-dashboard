@@ -43,3 +43,11 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass · completion pass
 
 **changed:** The full-screen rail header gains a `data-match-format` span after the checked count: "· Ad scoring · Lets replayed", "· Ad scoring · Lets: play on", or "No-ad scoring" when ad scoring is off; hidden with the progress span in the "Points" header. Prop threading had already landed in T3 (`playOnLets?: boolean`, console always passes a boolean). Spec in label-console.
+
+## T5 · Let count in point subtitle and court title — blocked
+
+**gate:** mechanical pass · completion needs-work
+
+**reason:** `pointDetail` let count (incl. tombstones) met and pinned; the court title criterion was not: ` · let` was added only to the placing title ("Shot N · contact · let"), while the criterion names the lit/selected shot — when a let serve is lit during playback with no placement active the title stays "Point N". Either handle the lit branch too or amend the criterion (the implementer notes the title only names the shot while placing; otherwise the shot is in the subtitle "Shot 2 of 3 · Vargas").
+
+**stash:** 7a594cd47c49e571875e798eacba81a81480e5af
