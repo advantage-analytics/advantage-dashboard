@@ -11,3 +11,8 @@ is the runner's. Newest entries at the bottom.
 
 1. A tiebreak set carries only its 13-game total into the next set; swaps inside the tiebreak are dropped. Confirm the ends after a tiebreak against a real match before the segmenter relies on it.
 2. `frozen.ts` and `played.ts` headers already name players and jobs from earlier work; decide whether the no-names rule applies to existing headers (separate cleanup).
+
+## T2 · Add `server_position_conflict` and `segment_proposal_differs` flags and marks — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `POINT_FLAGS` gains `SERVER_POSITION_CONFLICT` and `SEGMENT_PROPOSAL_DIFFERS` (review-only doc comments); `marks.ts` registers both hidden/point with typed params and null-param switch cases (`TODO(T6)`); `marks-copy.ts` adds chips "Server by position" / "Game cut differs" plus hover lines (merged form for the second); `tests/label-marks-copy.spec.ts` exhaustive lists extended.

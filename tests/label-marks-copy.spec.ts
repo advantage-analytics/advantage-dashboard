@@ -65,6 +65,12 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
   winner_guessed: {},
   score_frozen: {},
+  server_position_conflict: { positionalServer: "p1" },
+  segment_proposal_differs: {
+    proposedGame: 4,
+    proposedServer: "p2",
+    mergedWith: null,
+  },
   out_ball_rally_continued: { nextHitter: "p1" },
   geometry_discarded: {},
 };
@@ -127,6 +133,8 @@ test.describe("mark copy", () => {
       out_ball_rally_continued: "Out call ignored",
       winner_guessed: "Winner guessed",
       score_frozen: "Score not read",
+      server_position_conflict: "Server by position",
+      segment_proposal_differs: "Game cut differs",
       geometry_discarded: "No position",
     });
   });

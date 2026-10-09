@@ -42,7 +42,7 @@ ready).
 
 ## T2 · Add `server_position_conflict` and `segment_proposal_differs` flags and marks
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess)
   - `src/lib/services/splitstep/derivation/flags.ts`: `POINT_FLAGS`, lines ~25–130
