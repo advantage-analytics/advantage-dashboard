@@ -134,6 +134,13 @@ export {
 } from "./frozen";
 
 export {
+  playerAtEnd,
+  serveEnd,
+  type CourtEnd,
+  type EndSchedule,
+} from "./position";
+
+export {
   serveBracket,
   serveShotType,
   serveSideCounts,

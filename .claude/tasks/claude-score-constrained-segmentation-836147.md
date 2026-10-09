@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add positional server module (`position.ts`)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess)
   - new `src/lib/services/splitstep/derivation/position.ts`
