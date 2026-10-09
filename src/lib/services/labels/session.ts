@@ -252,7 +252,8 @@ export interface LabelSession {
   /**
    * Whether the match was played with advantage scoring, for the scoreboard:
    * `label_sessions.ad_scoring` as the labeller set it, else the job's
-   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring`,
+   * `processing_jobs.ad_scoring`, else the match's `matches.format.ad_scoring`,
+   * else true (`resolveLabelAdScoring`,
    * ad-scoring.ts).
    */
   adScoring: boolean;

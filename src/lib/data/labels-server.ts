@@ -89,6 +89,8 @@ interface DbMatch {
   player2_name: string | null;
   /** `matches.score` (jsonb), parsed by `parseMatchScore`. */
   score?: unknown;
+  /** `matches.format` (jsonb): its `ad_scoring` is the scoring's last fallback. */
+  format?: { ad_scoring?: boolean | null } | null;
 }
 interface DbSession {
   id: string;
@@ -403,7 +405,7 @@ export async function readLabelSessionRows<T = undefined>(
       beside?.(session) as Promise<T>,
       db
         .from("matches")
-        .select("id, player1_name, player2_name, score")
+        .select("id, player1_name, player2_name, score, format")
         .eq("id", session.match_id)
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
@@ -563,7 +565,11 @@ export function buildLabelSession(
     derivationVersion: session.derivation_version,
     player1Name: match?.player1_name ?? "Player 1",
     player2Name: match?.player2_name ?? "Player 2",
-    adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
+    adScoring: resolveLabelAdScoring(
+      session.ad_scoring,
+      job?.ad_scoring,
+      match?.format?.ad_scoring,
+    ),
     marksEnabled: session.marks_enabled,
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,

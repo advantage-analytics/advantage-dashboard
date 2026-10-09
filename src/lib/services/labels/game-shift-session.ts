@@ -16,7 +16,11 @@
 
 import { readAllPages } from "@/lib/data/admin-range-read";
 import type { AdminClient } from "@/lib/supabase/admin";
-import { readJobAdScoring, resolveLabelAdScoring } from "./ad-scoring";
+import {
+  readJobAdScoring,
+  readMatchAdScoring,
+  resolveLabelAdScoring,
+} from "./ad-scoring";
 import {
   FROZEN,
   defaultLabelWriteDependencies,
@@ -85,6 +89,7 @@ interface ShiftSessionRow {
   status: string;
   ad_scoring: boolean | null;
   job_id: string | null;
+  match_id: string | null;
 }
 
 /** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
@@ -153,7 +158,7 @@ async function runGamePlan(
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id")
+    .select("status, ad_scoring, job_id, match_id")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -179,9 +184,21 @@ async function runGamePlan(
       error: `Could not read the session's points: ${points.error.message}`,
     };
   }
+  // The match's format only when neither the session nor its job says.
+  const match = await readMatchAdScoring(
+    supabase,
+    session.match_id,
+    session.ad_scoring ?? job.data?.ad_scoring,
+  );
+  if (match.error) {
+    return {
+      error: `Could not read the match's scoring: ${match.error.message}`,
+    };
+  }
   const adScoring = resolveLabelAdScoring(
     session.ad_scoring,
     job.data?.ad_scoring,
+    match.data?.format?.ad_scoring,
   );
 
   // The plan with no shots yet says whether any point moves under a new

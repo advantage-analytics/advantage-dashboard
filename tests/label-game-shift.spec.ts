@@ -46,6 +46,7 @@ const CONSOLE = "src/components/admin/labels/label-console.tsx";
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const JOB_ID = "22222222-2222-4222-8222-222222222222";
+const MATCH_ID = "33333333-3333-4333-8333-333333333333";
 const NAMES = { p1: "Lee", p2: "Vargas" };
 
 /** A point id the service accepts: a uuid carrying its ordinal. */
@@ -531,6 +532,7 @@ function rowsOf(points: readonly LabelPoint[]) {
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   job?: Record<string, unknown> | null;
+  match?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
   /** The moved points' shot rows, when the shift asks for them. */
   shots?: Record<string, unknown>[];
@@ -570,6 +572,9 @@ function fakeClient(rows: {
     }
     if (call.table === "processing_jobs") {
       return { data: rows.job ?? null, error: null };
+    }
+    if (call.table === "matches") {
+      return { data: rows.match ?? null, error: null };
     }
     if (call.table === "label_points") {
       return { data: rows.points ?? rowsOf(usersCase()), error: null };
@@ -888,7 +893,36 @@ test.describe("writeLabelGameShift", () => {
       fromJob.calls.find((c) => c.table === "processing_jobs")?.filters,
     ).toEqual({ id: JOB_ID });
 
-    // Neither: ad scoring, under which the eighth row decides the game.
+    // Neither: the match's format stands in — no-ad here, read by the
+    // session's match id.
+    const fromMatch = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: null,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      job: { ad_scoring: null },
+      match: { format: { ad_scoring: false } },
+      points: rowsOf(deuce),
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: fromMatch.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(8),
+      }),
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
+    expect(fromMatch.calls.find((c) => c.table === "matches")?.filters).toEqual(
+      { id: MATCH_ID },
+    );
+    // The job said: the match is not read.
+    expect(fromJob.calls.map((c) => c.table)).not.toContain("matches");
+
+    // None of them: ad scoring, under which the eighth row decides the game.
     expect(
       await writeLabelGameShift({
         supabase: fakeClient({
