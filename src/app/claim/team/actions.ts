@@ -265,8 +265,10 @@ export async function askToJoinExistingTeam(input: {
       }
     }
 
-    // Not gated on there being an owner: the request sits in the admin queue
-    // either way, and an admin working it needs to know it exists.
+    // A join request is the owner's decision. Admins are told only when there
+    // is no owner to make it — otherwise every admin got a "needs a decision"
+    // mail for a call that was never theirs.
+    if (owner) return;
     await notifyAdminsReviewNeeded(createAdminClient(), {
       kind: "request",
       id: requestId,
