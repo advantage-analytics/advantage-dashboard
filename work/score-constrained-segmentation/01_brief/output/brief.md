@@ -16,8 +16,11 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
 
 ## Scope
 
-1. **Trigger.** Re-segmentation runs only when the folded game count disagrees with
-   `matches.score`. Where the fold already reconciles, nothing changes.
+1. **Trigger and reach.** Re-segmentation runs when the folded game count disagrees
+   with `matches.score`, and re-cuts the **whole match**. It is not limited to
+   `frozen.ts`'s 8+-rally frozen runs, because drift outside a frozen run splits games
+   too, as with Sage v Hunter Cheng's deuce games. Where the fold already reconciles,
+   nothing changes.
 2. **Constraints.** A segmentation is admissible only if it satisfies all four:
    - strict server alternation, game by game;
    - the game-end rule for the job's `processing_jobs.ad_scoring`: win by 2 from deuce
@@ -26,29 +29,50 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
    - each rally's serve side (deuce or ad court, and the serving end).
 
    The kept segmentation is the one that reproduces the entered score.
-3. **Hitter reassignment.** A rebuild no longer reassigns a shot's hitter from an
-   assumed server unless the vendor's `pred_player_id` agrees.
-4. **Review-only first.** The result is recorded as a review mark: a point flag or a
-   `derivation_quality` entry. Published points (game numbers, servers, winners,
-   ended-by) are not rewritten. Promotion to an autofix follows the bar set in
-   `played.ts`: ≥95% correct over 30+ firings across 2+ matches, scored with
-   `scripts/splitstep-eval.ts`.
-5. **Measurement** on the three fully checked label sessions only:
+   - **Ties:** when several segmentations fit, keep the one that moves the fewest of the
+     vendor's game boundaries. Record that it was ambiguous and how many fits there
+     were.
+   - **No fit:** when no segmentation fits, record an explicit "no fit" marker with the
+     closest score reached. This helps spot wrongly entered scores or missing video.
+3. **Split points.** The vendor sometimes cuts one real point into two rallies at a
+   serve, for example a first-serve fault followed by the second serve starting a new
+   "rally". The rally pairs 22+23, 25+26, 47+48 and 52+53 on Sage v Hunter Cheng look
+   like this, rather than lets. Re-segmentation may merge such a pair back into one
+   point, but only on evidence that it is one point: same server, same serving court,
+   the first rally ending on a fault or very short, and a short gap before the next
+   serve. Every merge is flagged so it can be scored against labels. Like the
+   re-segmentation, merges are review-only.
+4. **Hitter reassignment ships live.** A rebuild no longer reassigns a shot's hitter
+   from an assumed server unless the vendor's `pred_player_id` agrees. Where they
+   disagree, the vendor's hitter stands. This removes an unsupported guess rather than
+   adding one, so it changes published shots in the version bump. It is the only live
+   behaviour change in this feature.
+5. **Review-only re-segmentation.** The re-segmentation and the split-point merges are
+   recorded in two places, and published points (game numbers, servers, winners,
+   ended-by) are not rewritten:
+   - a match-level summary in `processing_jobs.derivation_quality`: fits or not,
+     ambiguous or not, games moved, proposed score;
+   - a per-point flag carrying the proposed game number and server, so each firing can
+     be scored point by point.
+
+   Promotion to an autofix follows the bar set in `played.ts`: ≥95% correct over 30+
+   firings across 2+ matches, scored with `scripts/splitstep-eval.ts`.
+6. **Measurement** on the three fully checked label sessions only:
 
    | Session | Match | Job |
    |---|---|---|
    | `1b391e8b-88a7-4704-96ea-771420fcc23d` | Sage Nguyen v Hunter Cheng | `be930d79-6664-4710-8058-37476517e965` |
-   | `f8b9a283-d62c-4fed-b186-a93a72edf3dd` | Rudy Quan v Aidan Kim | to be resolved from the session |
-   | `2d209aca-0abe-4984-9598-1fbafc006c14` | Emon van Loben Sels v Roger Pascual Ferra | to be resolved from the session |
+   | `f8b9a283-d62c-4fed-b186-a93a72edf3dd` | Rudy Quan v Aidan Kim | `868a7696-d905-4327-b487-39449803a0e8` |
+   | `2d209aca-0abe-4984-9598-1fbafc006c14` | Emon van Loben Sels v Roger Pascual Ferra | `45ff4bd7-cec4-485b-ab79-616d42dd8fcb` |
 
    Each is measured with `npx tsx scripts/label-scorecard.ts --session <id>` and
    `npx tsx scripts/splitstep-eval.ts --job <id>`.
-6. **Deploy notes.** List the jobs that would need re-deriving and what changes for each.
+7. **Deploy notes.** List the jobs that would need re-deriving and what changes for each.
 
 ## Non-goals
 
 - Re-deriving any live job. Re-runs happen only when the user asks.
-- Promoting the re-segmentation to rewrite published points in this feature. That needs
+- Promoting the re-segmentation or split-point merges to rewrite published points in this feature. That needs
   the promotion bar, and three sessions cannot meet it.
 - Using the six mostly-unchecked label sessions as ground truth.
 - Restoring the score-reconciliation gate. `ACCEPT_UNRECONCILED_FOLD` and the
@@ -97,36 +121,38 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
 4. **No regression.** No scorecard or eval metric gets worse on any of the three
    sessions.
 5. **Hitters.** No shot's hitter is reassigned against the vendor's `pred_player_id`.
+   On Sage v Hunter Cheng, this alone should end the 7 of 9 wrong winners in rallies
+   37–43.
 6. **Recorded per firing.** Each firing records enough to score it later against labels:
-   which games moved, the old and new server, and whether the segmentation is unique.
+   which games moved, the old and new server, which rally pairs were merged, and whether
+   the segmentation is unique. Ambiguous and no-fit results are recorded explicitly.
 7. **Deploy section.** It names the jobs to re-derive and what changes for each. Nothing
    is re-derived live.
 
 ## Open questions
 
-1. **Is the hitter change review-only too?** The re-segmentation is review-only.
-   Stopping hitter reassignment when it disagrees with `pred_player_id` changes
-   published shots today. Should it ship as a live fix in the version bump, or be held
-   behind the same review gate? It reads as a live fix, because it removes an
-   unsupported assumption rather than adding one. This needs confirming.
-2. **Lets scored as points.** Rally pairs 22+23, 25+26, 47+48 and 52+53 on Sage v Hunter
-   Cheng are lets the vendor scored as points. Should segmentation be allowed to treat a
-   rally as a non-point to reach the entered score, and if so, on what evidence? Or are
-   lets out of scope, with the score constraint absorbing them some other way?
-3. **Several segmentations fit the score.** What happens when more than one
-   segmentation satisfies every constraint? Options: flag ambiguity and keep the vendor's
-   fold, or pick by a tie-break such as the fewest moved boundaries.
-4. **No segmentation fits the score.** For example, the entered score is wrong, or video
-   is missing. Is that a separate review mark, or silence?
-5. **Mark vs `derivation_quality` entry.** Should it be a per-point flag, a job-level
-   `derivation_quality` entry, or both? The success criterion on scoreability (6) may
-   decide this.
-6. **Job IDs** for the Rudy Quan v Aidan Kim and Emon v Roger sessions still need
-   resolving. Emon v Roger may be job `45ff4bd7…`, per earlier notes. Confirm from
-   `label_sessions`.
-7. **Scope of the trigger.** Does re-segmentation apply only inside a frozen run, or
-   across the whole match? A disagreeing game count can come from drift outside any
-   8-rally frozen run, like the split deuce games on Sage v Hunter Cheng.
+Answered in chat on 2026-10-09:
+
+- **Hitter fix:** ships live.
+- **Split points:** merged with evidence, review-only. The pairs are split points, not
+  lets.
+- **Ties:** keep the fewest-changes segmentation and flag it as ambiguous.
+- **No fit:** record an explicit marker.
+- **Where it is recorded:** both match level and per point.
+- **Reach:** the whole match.
+- **Job IDs:** resolved from `label_sessions`.
+
+Still open, for stage 02:
+
+1. **Session status.** All three sessions are still `status = labelling` in
+   `label_sessions`, not completed, but the seed calls them fully checked. Are they
+   good enough to use as ground truth now?
+2. **No-ad jobs.** `label_sessions.ad_scoring` is null on all three. The game-end rule
+   should read `processing_jobs.ad_scoring` (per 0.3.2). Confirm in design that each of
+   the three jobs carries a value.
+3. **Banner side effect.** The new `derivation_quality` entry could flip or interact
+   with the match report's existing unreconciled banner. Stage 02 should decide how the
+   entry keeps that banner unchanged while the feature is review-only.
 
 ## Also consulted
 
@@ -137,3 +163,4 @@ score. We also stop the rebuild from overriding the vendor's hitter on an assump
   `FROZEN_MIN_RALLIES`
 - `src/lib/services/splitstep/derivation/quality.ts`: what `derivation_quality` feeds
 - Results of `grep derivation_quality` over `src/`, to find the existing readers
+- Live `label_sessions` rows for the three sessions: job IDs, status and `ad_scoring`
