@@ -37,3 +37,9 @@ is the runner's. Newest entries at the bottom.
 1. With no landing placed, a let can't be switched back to In/Out from the menu (Reset still works).
 2. Eyes-on in a real browser not done: amber trigger, divider/description in the dark FloatMenu, Delete hiding while open.
 3. `menu-select.tsx` `setOpen` also sets own state when controlled — harmless, redundant.
+
+## T4 · Rail header scoring and lets rule — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The full-screen rail header gains a `data-match-format` span after the checked count: "· Ad scoring · Lets replayed", "· Ad scoring · Lets: play on", or "No-ad scoring" when ad scoring is off; hidden with the progress span in the "Points" header. Prop threading had already landed in T3 (`playOnLets?: boolean`, console always passes a boolean). Spec in label-console.

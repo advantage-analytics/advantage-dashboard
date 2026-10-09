@@ -351,6 +351,17 @@ export function LabelBlackRail({
               {checked} <span className="text-white/25">/</span> {total} checked
             </span>
           ) : null}
+          {showSession ? (
+            <span
+              data-match-format=""
+              className="shrink-0 text-[11px] whitespace-nowrap text-white/45"
+            >
+              <span className="text-white/25">·</span>{" "}
+              {adScoring ? "Ad scoring" : "No-ad scoring"}{" "}
+              <span className="text-white/25">·</span>{" "}
+              {playOnLets ? "Lets: play on" : "Lets replayed"}
+            </span>
+          ) : null}
           {summary ? (
             <RailTotal
               count={summary.open}

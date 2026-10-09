@@ -61,7 +61,7 @@ ready).
 
 ## T4 · Rail header scoring and lets rule
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-console.tsx (pass `playOnLets` beside `adScoring` at the rail call ~line 1738), tests/label-console.spec.ts or tests/label-black-rows.spec.ts (guess)
