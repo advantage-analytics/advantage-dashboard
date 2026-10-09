@@ -520,6 +520,29 @@ function isVendorServe(
 }
 
 /**
+ * Each combine's tombstone to the live point it was combined into:
+ * the live point holding the tombstone's own rally (`openingMarkRows`). The
+ * two were one point all along, so a mark raised on the phantom is measured
+ * against what the labeller made of the whole, and the kept point carries it
+ * when the scorecard asks whether a change went unmarked.
+ */
+function combinedInto(
+  points: readonly LabelPoint[],
+): Map<LabelPoint, LabelPoint> {
+  const into = new Map<LabelPoint, LabelPoint>();
+  for (const point of points) {
+    if (!isCombinedTombstone(point) || point.seed === null) continue;
+    const rally = point.vendorRallyIds[0];
+    if (rally === undefined) continue;
+    const kept = points.find(
+      (p) => p.status !== "deleted" && p.vendorRallyIds.includes(rally),
+    );
+    if (kept) into.set(point, kept);
+  }
+  return into;
+}
+
+/**
  * Build the scorecard.
  *
  * `points` are the session's rows as `getLabelSession` returns them
@@ -528,27 +551,6 @@ function isVendorServe(
  * carry the session's scoring and the vendor's strokes; without them the
  * games read ad scoring and the vendor sections read nothing.
  */
-/**
- * Each combine's tombstone, by id, to the live point it was combined into:
- * the live point holding the tombstone's own rally (`openingMarkRows`). The
- * two were one point all along, so a mark raised on the phantom is measured
- * against what the labeller made of the whole, and the kept point carries it
- * when the scorecard asks whether a change went unmarked.
- */
-function combinedInto(points: readonly LabelPoint[]): Map<string, LabelPoint> {
-  const into = new Map<string, LabelPoint>();
-  for (const point of points) {
-    if (!isCombinedTombstone(point) || point.seed === null) continue;
-    const rally = point.vendorRallyIds[0];
-    if (rally === undefined) continue;
-    const kept = points.find(
-      (p) => p.status !== "deleted" && p.vendorRallyIds.includes(rally),
-    );
-    if (kept) into.set(point.id, kept);
-  }
-  return into;
-}
-
 export function buildScorecard(
   points: readonly LabelPoint[],
   marks: LabelMarks,
@@ -576,8 +578,7 @@ export function buildScorecard(
 
   const into = combinedInto(points);
   const absorbed = new Map<string, LabelPoint[]>();
-  for (const [id, kept] of into) {
-    const tombstone = points.find((p) => p.id === id)!;
+  for (const [tombstone, kept] of into) {
     absorbed.set(kept.id, [...(absorbed.get(kept.id) ?? []), tombstone]);
   }
   const marksOn = (point: LabelPoint): LabelMark[] => [
@@ -587,7 +588,7 @@ export function buildScorecard(
 
   for (const point of points) {
     const own = pointChange(point);
-    const keptPoint = into.get(point.id);
+    const keptPoint = into.get(point);
     // A combined phantom is measured as the point it became.
     const change = keptPoint
       ? { ...pointChange(keptPoint), anything: true }
