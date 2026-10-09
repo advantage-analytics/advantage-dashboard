@@ -246,3 +246,21 @@ export function buildSplitStepJobRequest(
     },
   };
 }
+
+/** What `processing_jobs.vendor_request` holds: the body, minus the signed URL. */
+export type VendorRequestRecord = Omit<SplitStepJobRequest, "VideoUrl">;
+
+/**
+ * The submission body as it is recorded on the job row.
+ *
+ * `VideoUrl` is a signed Azure credential and must never be stored — the
+ * column's CHECK constraint refuses a body that still carries it. Everything
+ * else is kept exactly as sent, so the row can answer "what did we tell the
+ * vendor?" after `matches.score` or the players have since been edited.
+ */
+export function vendorRequestRecord(
+  request: SplitStepJobRequest,
+): VendorRequestRecord {
+  const { VideoUrl: _signedUrl, ...record } = request;
+  return record;
+}

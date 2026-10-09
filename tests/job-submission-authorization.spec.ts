@@ -483,6 +483,12 @@ test("an accepted submission records what was sent, then queued, and schedules a
   // Counted, not pinned.
   expect(h.claims[0].patch.attempt_count).toBe(3);
   expect(h.claims[0].patch.initial_top_player_is_player1).toBe(true);
+  // The body itself is recorded at the claim — exactly what the vendor got,
+  // minus the signed URL, which is a live credential and never stored.
+  const { VideoUrl, ...sentWithoutUrl } = h.sent[0];
+  expect(VideoUrl).toBeTruthy();
+  expect(h.claims[0].patch.vendor_request).toEqual(sentWithoutUrl);
+  expect(h.claims[0].patch.vendor_request).not.toHaveProperty("VideoUrl");
   expect(h.patches[0].patch.external_job_id).toBe("vendor-778912d7");
   expect(h.minted).toEqual(["videos/u-coach/m-1/original.mp4"]);
   expect(h.scheduled).toEqual([
@@ -701,7 +707,7 @@ test("a permission refusal from reserveQuota → 403 in its own words, nothing s
   expect(h.patches).toEqual([
     {
       jobId: "11111111-1111-4111-8111-111111111111",
-      patch: { status: "uploaded" },
+      patch: { status: "uploaded", vendor_request: null },
     },
   ]);
 });
@@ -722,7 +728,7 @@ test("an exhausted allowance → 429, nothing sent, the job handed back", async 
   expect(h.patches).toEqual([
     {
       jobId: "11111111-1111-4111-8111-111111111111",
-      patch: { status: "uploaded" },
+      patch: { status: "uploaded", vendor_request: null },
     },
   ]);
   expect(h.released).toEqual([]);
@@ -769,7 +775,7 @@ test("a reservation refused after a won claim ends with the row back at uploaded
   expect(h.reserved).toHaveLength(1);
   expect(h.patches.at(-1)).toEqual({
     jobId: "11111111-1111-4111-8111-111111111111",
-    patch: { status: "uploaded" },
+    patch: { status: "uploaded", vendor_request: null },
   });
   expect(h.minted).toEqual([]);
   expect(h.sent).toEqual([]);
@@ -801,7 +807,7 @@ test("a reservation RPC that throws → 503, the row handed back, vendor unreach
   expect(h.patches).toEqual([
     {
       jobId: "11111111-1111-4111-8111-111111111111",
-      patch: { status: "uploaded" },
+      patch: { status: "uploaded", vendor_request: null },
     },
   ]);
   expect(h.released).toEqual([]);
@@ -820,7 +826,7 @@ test("a reservation that throws 23505 (job already reserved) → 409, the row ha
   expect(h.patches).toEqual([
     {
       jobId: "11111111-1111-4111-8111-111111111111",
-      patch: { status: "uploaded" },
+      patch: { status: "uploaded", vendor_request: null },
     },
   ]);
   expect(h.released).toEqual([]);
@@ -867,6 +873,8 @@ test("a vendor rejection past the reservation hands quota back and marks the job
   // `submitting` was the claim; the only plain patch is the `failed` mark.
   expect(h.claims.map((c) => c.patch.status)).toEqual(["submitting"]);
   expect(h.patches.map((p) => p.patch.status)).toEqual(["failed"]);
+  // The vendor saw this body, so the failed row keeps it as the record.
+  expect(h.patches[0].patch).not.toHaveProperty("vendor_request");
   expect(h.scheduled).toEqual([]);
 });
 
@@ -885,6 +893,9 @@ test("a minter that throws past the reservation still releases and marks failed"
   expect(h.sent).toEqual([]);
   expect(h.released).toEqual(["11111111-1111-4111-8111-111111111111"]);
   expect(h.patches.at(-1)?.patch.status).toBe("failed");
+  // Recorded at the claim, never sent: the failed mark clears it.
+  expect(h.claims[0].patch.vendor_request).toBeTruthy();
+  expect(h.patches.at(-1)?.patch.vendor_request).toBeNull();
 });
 
 // Console authorization is discovered server-side even without console body fields.
@@ -986,7 +997,7 @@ test("admin quota refusal restores uploaded for retry without sending to vendor"
   expect(h.patches).toEqual([
     {
       jobId: "11111111-1111-4111-8111-111111111111",
-      patch: { status: "uploaded" },
+      patch: { status: "uploaded", vendor_request: null },
     },
   ]);
   expect(h.sent).toEqual([]);
@@ -1002,6 +1013,8 @@ test("an admin submission records the answers by plain update once the RPC holds
   ]);
   expect(h.patches[0].patch.attempt_count).toBe(1);
   expect(h.patches[0].patch.initial_top_player_is_player1).toBe(true);
+  const { VideoUrl: _url, ...sentWithoutUrl } = h.sent[0];
+  expect(h.patches[0].patch.vendor_request).toEqual(sentWithoutUrl);
 });
 
 test("accepted admin vendor POST with lost queued write retains quota for reconciliation", async () => {
