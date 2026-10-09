@@ -99,6 +99,17 @@ export function isMissedResult(result: unknown): result is "out" | "net" {
   return result === "out" || result === "net";
 }
 
+/**
+ * A let: a serve the labeller marked replayed. The one test every reader
+ * uses, so a stray `result: "let"` on a rally stroke is never skipped as one.
+ */
+export function isLetServe(shot: {
+  stroke: LabelStroke | null;
+  result: string | null;
+}): boolean {
+  return isServeStroke(shot.stroke) && shot.result === "let";
+}
+
 export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";
 }
@@ -263,6 +274,13 @@ export interface LabelSession {
    * whose labels were made blind to the derivation and must stay that way.
    */
   marksEnabled: boolean;
+  /**
+   * Whether a let serve is played on in this match (`matches.format
+   * .play_on_lets`): true only when the column holds a literal `true`, so a
+   * null or missing format reads as false — lets replayed, the default. Only
+   * when false does a serve's result menu offer `Let`.
+   */
+  playOnLets: boolean;
   /**
    * The match's final score as the labeller read it off the video
    * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null

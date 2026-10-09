@@ -414,3 +414,64 @@ test.describe("endingPatchForShotChange", () => {
     }
   });
 });
+
+test.describe("deriveEnding · a let serve is replayed, never played", () => {
+  test("a point whose last live stroke is a let derives nothing, not an ace", () => {
+    expect(deriveEnding(point([serve({ result: "let" })]), GHOSTS)).toBeNull();
+    // A let after a fault (the second serve clipped the net) is no double
+    // fault either: the rows end on the lone first-serve fault.
+    expect(
+      deriveEnding(
+        point([
+          serve({ result: "out" }),
+          serve({ stroke: "second_serve", result: "let" }),
+        ]),
+        GHOSTS,
+      ),
+    ).toBeNull();
+  });
+
+  test("a missed first serve after a let alone is one fault: nothing, not a double fault", () => {
+    expect(
+      deriveEnding(
+        point([serve({ result: "let" }), serve({ result: "out" })]),
+        GHOSTS,
+      ),
+    ).toBeNull();
+    expect(
+      deriveEnding(
+        point([serve({ result: "let" }), serve({ result: "net" })]),
+        GHOSTS,
+      ),
+    ).toBeNull();
+  });
+
+  test("the serve after a let reads as if the let were not there", () => {
+    expect(
+      deriveEnding(
+        point([serve({ result: "let" }), serve({ result: "in" })]),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "ace", endedBy: "p1", winner: "p1" });
+    expect(
+      deriveEnding(
+        point([
+          serve({ result: "let" }),
+          serve({ result: "in" }),
+          p2({ result: "out" }),
+        ]),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "service_winner", endedBy: "p2", winner: "p1" });
+    expect(
+      deriveEnding(
+        point([
+          serve({ result: "let" }),
+          serve({ result: "out" }),
+          serve({ stroke: "second_serve", result: "out" }),
+        ]),
+        GHOSTS,
+      ),
+    ).toEqual({ ending: "double_fault", endedBy: "p1", winner: "p2" });
+  });
+});

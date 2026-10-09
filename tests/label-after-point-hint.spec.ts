@@ -349,6 +349,35 @@ test.describe("secondServeAsFirst", () => {
     expect(secondServeAsFirst({ shots: [serve("a", "out")] }, true)).toBeNull();
   });
 
+  test("a let is replayed: the first serve after it stays a first serve", () => {
+    // A let alone before a first serve: nothing to retype.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A let between a fault and a serve typed first neither faults nor clears
+    // the fault: that serve is still the second.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "out", { videoTime: 1 }),
+            serve("b", "let", { videoTime: 2, stroke: "second_serve" }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
+  });
+
   test("the earlier serve must be live: not a tombstone, nor a ghost with marks on", () => {
     const faulted = serve("a", "out", { videoTime: 1 });
     const next = serve("b", "in", { videoTime: 2 });

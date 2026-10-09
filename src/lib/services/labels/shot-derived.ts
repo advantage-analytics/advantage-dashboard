@@ -19,7 +19,7 @@ import {
 } from "../splitstep/derivation/court";
 import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
-import { isServeStroke, type LabelShot } from "./session";
+import { isLetServe, isServeStroke, type LabelShot } from "./session";
 
 /** What `effectiveShotResult` reads of a stroke; absent columns read as unset. */
 export type ResultReadableShot = Partial<
@@ -39,6 +39,10 @@ export type ShotGeometry = Pick<
   LabelShotSeedValues,
   "stroke" | "contact_x" | "contact_y" | "landing_x" | "landing_y"
 >;
+
+/** What `positionPatch` reads: the geometry, plus the stored result it may keep. */
+export type ShotPosition = ShotGeometry &
+  Partial<Pick<LabelShotSeedValues, "result">>;
 
 /** A stroke's placement bucket — a `shots.zone` value. */
 export type ShotPlacement =
@@ -131,11 +135,14 @@ export function shotPlacement(shot: ShotGeometry): ShotPlacement | null {
  * the two coordinates of that end and the result the row's values derive once
  * they are in, in one write. With an end missing `deriveShotResult` answers
  * null, the patch carries no `result` key and the row keeps its stored value.
- * The volley link's follower writes (volley-link.ts) carry no result and do not
+ * A stored `"let"` is kept the same way: a let is the labeller's override, not
+ * something the coordinates can say, so moving an end never overwrites it —
+ * picking the calculated item in the result menu is the one way back to the
+ * derived result. The volley link's follower writes (volley-link.ts) carry no result and do not
  * come through here.
  */
 export function positionPatch(
-  shot: ShotGeometry,
+  shot: ShotPosition,
   end: "contact" | "landing",
   point: { x: number; y: number } | null,
 ): LabelShotPatch {
@@ -145,6 +152,9 @@ export function positionPatch(
     end === "contact"
       ? { contact_x: x, contact_y: y }
       : { landing_x: x, landing_y: y };
+  if (isLetServe({ stroke: shot.stroke, result: shot.result ?? null })) {
+    return placed;
+  }
   const result = deriveShotResult({ ...shot, ...placed });
   return result === null ? placed : { ...placed, result };
 }
