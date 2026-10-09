@@ -91,7 +91,7 @@ ready).
 
 ## T4 · Segmenter core: points, games, sets, end condition
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** (guess)

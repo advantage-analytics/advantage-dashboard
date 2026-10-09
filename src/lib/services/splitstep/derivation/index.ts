@@ -141,6 +141,17 @@ export {
 } from "./position";
 
 export {
+  proposeSegmentation,
+  SEGMENT_COSTS,
+  type CostRow,
+  type ProposedGame,
+  type RallyOutcome,
+  type SegmentationInput,
+  type SegmentationProposal,
+  type ServeSide,
+} from "./segmentation";
+
+export {
   serveBracket,
   serveShotType,
   serveSideCounts,

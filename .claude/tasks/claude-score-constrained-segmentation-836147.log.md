@@ -37,3 +37,21 @@ is the runner's. Newest entries at the bottom.
 - T9 drops the live-rule measurement and stop condition;
 - the T10 changelog says no published rows change;
 - T11 was added to remove the now-unused `server_position_conflict` flag.
+
+## T4 · Segmenter core: points, games, sets, end condition — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New pure `derivation/segmentation.ts` (`proposeSegmentation`, `SEGMENT_COSTS` 5/2/4/1/1/1, exported types).
+
+- The DP runs over the state {finished sets, g1, g2, server points, receiver points} with deuce equivalence; under no-ad, the point at 3–3 decides the game. It is run once per candidate first server.
+- End cost comes from `playerAtEnd`, and side cost from point parity.
+- `game` is numbered per set. `gamesMoved` counts the game-start indices that differ.
+- `closestScore` is the cheapest path's score once the end condition is dropped.
+- 6–6 is a dead state until T5.
+
+The diff also has 15 offline tests in `tests/splitstep-segmentation.spec.ts`, and `index.ts` exports. Timing: about 37 ms for 150 rallies.
+**follow-ups:**
+
+1. The gap to the previous rally is not in the input yet; T5 should read it from `strokes[].videoTime`.
+2. T5's under-50 ms assertion may be tight once merges double the branching. The exact lever is to prune states that can no longer reach the entered score with the rallies left.
+3. T6 must convert `game`, which is numbered per set, before comparing it with the match-cumulative `points.game_number`.
