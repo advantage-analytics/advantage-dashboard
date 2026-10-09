@@ -196,6 +196,15 @@ test.describe("positionPatch", () => {
     ).toEqual({ contact_x: 0.5, contact_y: -0.2 });
   });
 
+  test("a stray let on a rally stroke is not kept: the derived result replaces it", () => {
+    expect(
+      positionPatch(rally({ x: 1, y: 18 }, { result: "let" }), "landing", {
+        x: 1,
+        y: 25,
+      }),
+    ).toEqual({ landing_x: 1, landing_y: 25, result: "out" });
+  });
+
   test("a cleared end carries no result either way", () => {
     expect(
       positionPatch(serve({ x: -2, y: 16 }, { result: "in" }), "landing", null),

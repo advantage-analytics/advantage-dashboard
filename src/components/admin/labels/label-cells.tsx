@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
-import { MenuSelect } from "@/components/ui/menu-select";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -163,16 +163,7 @@ const FIELD_DARK =
 const SELECT_TRIGGER_DARK =
   "-ml-[5px] h-[26px] w-[calc(100%+7px)] min-w-0 shrink border-white/20 bg-white/[0.08] px-1 text-[11px] text-white hover:bg-white/[0.14] aria-expanded:border-[var(--blue)] [&>svg]:hidden";
 
-export interface SelectOption {
-  value: string;
-  label: string;
-  /** A second line on what choosing it means (`FloatMenuItem description`). */
-  description?: string;
-  /** The heading the row sits under (`FloatMenuLabel`). */
-  group?: string;
-  /** A hairline above the row, inside its group. */
-  divider?: boolean;
-}
+export type SelectOption = MenuOption<string>;
 
 /**
  * A menu's keys, from its trigger or its rows (the menu portals out of the

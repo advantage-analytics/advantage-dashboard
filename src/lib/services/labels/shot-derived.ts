@@ -19,7 +19,7 @@ import {
 } from "../splitstep/derivation/court";
 import type { LabelShotPatch } from "./edit";
 import type { LabelShotResult, LabelShotSeedValues } from "./seed";
-import { isServeStroke } from "./session";
+import { isLetServe, isServeStroke } from "./session";
 
 /** The net's `y`, metres from the near baseline. */
 const NET_Y = BASELINE_M;
@@ -123,7 +123,9 @@ export function positionPatch(
     end === "contact"
       ? { contact_x: x, contact_y: y }
       : { landing_x: x, landing_y: y };
-  if (shot.result === "let") return placed;
+  if (isLetServe({ stroke: shot.stroke, result: shot.result ?? null })) {
+    return placed;
+  }
   const result = deriveShotResult({ ...shot, ...placed });
   return result === null ? placed : { ...placed, result };
 }

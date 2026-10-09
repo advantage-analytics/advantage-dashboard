@@ -118,10 +118,10 @@ export function MenuSelect<T extends string>({
   const open = openProp ?? ownOpen;
   const setOpen = useCallback(
     (next: boolean) => {
-      setOwnOpen(next);
+      if (openProp === undefined) setOwnOpen(next);
       onOpenChange?.(next);
     },
-    [onOpenChange],
+    [openProp, onOpenChange],
   );
   const current = options.find((option) => option.value === value);
 
