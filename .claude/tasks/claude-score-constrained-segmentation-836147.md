@@ -86,6 +86,7 @@ ready).
   - Read `transcript.ts` only in the two line ranges above, plus the `Transcript` type (~107–127).
   - Never read `tests/splitstep-transcript.spec.ts` whole. Grep `frozen` and read 1182–1485.
   - Fixture (b) has the shape of the labelled frozen stretch, rallies 36–43. Name it for the shape (e.g. `sameEndNoChangeover`), never after a player.
+  - **Abandoned 2026-10-09 (author's decision, option 3).** It was blocked on an existing frozen-stretch test. Position cannot see a changeover where nobody switches ends, so on `ac56ef8b` it would have left about every second frozen game unrelabelled. No live relabelling change ships. Position is used only inside the review-only segmenter (T4/T5 end cost). The work is kept in stash `d1c3a570`. Do not re-run.
   - No dashboard UI.
 
 ## T4 · Segmenter core: points, games, sets, end condition
@@ -156,7 +157,7 @@ ready).
 
 - **status:** todo
 - **model:** fable
-- **needs:** T2, T3, T5
+- **needs:** T2, T5
 - **files:** (guess)
   - `src/lib/services/splitstep/derivation/transcript.ts`:
     - the `Transcript` type (lines ~107–127);
@@ -240,11 +241,11 @@ ready).
   - Never set `LIVE_DB_ALLOW_PROD`. This script is not a Playwright live spec and does not need it.
   - No dashboard UI.
 
-## T9 · Tune `SEGMENT_COSTS` and measure the live rule
+## T9 · Tune `SEGMENT_COSTS`
 
 - **status:** todo
 - **model:** fable
-- **needs:** T3, T6, T8
+- **needs:** T6, T8
 - **files:** (guess)
   - `src/lib/services/splitstep/derivation/segmentation.ts`: `SEGMENT_COSTS` and its comment only
   - `tests/splitstep-segmentation.spec.ts`: only if a synthetic expectation encoded an old weight
@@ -261,8 +262,7 @@ ready).
     - session `2d209aca…`: it fires at point 19, a hit;
     - all three: no published metric gets worse, and no proposed metric falls below published.
   - Write any shortfall up as a blocker with the numbers.
-  - Then measure the live hitter rule (T3) on the unlabelled frozen jobs `ac56ef8b`, `5c377b0a` and `467ccbdc`. Run the derivation read-only (no publish, no re-derive) and count `server_position_conflict` per frozen set.
-  - **Stop condition: if any frozen set conflicts on most of its rallies, that is the parity failure from design open question 2. Stop, report it, and do not ship T3 as is.**
+  - For information only (T3 was dropped, so nothing live depends on it): run the proposal read-only on the unlabelled frozen jobs `ac56ef8b`, `5c377b0a` and `467ccbdc`, and report its status and how many points per frozen set its server differs from the published one. Do not publish or re-derive.
   - All measurement output goes to the session scratchpad, never the repo.
   - Hand the final weights and per-session counts to T10 in the final message, so the run log carries them.
   - Never set `LIVE_DB_ALLOW_PROD`. No dashboard UI, no live re-derive.
@@ -278,17 +278,35 @@ ready).
 - **done when:**
   - [ ] `DERIVATION_VERSION === "0.8.0-unreconciled"`, and `grep -rn '0\.7\.0-unreconciled' src tests scripts supabase` returns only historical changelog text, with every spec that pinned the version updated
   - [ ] The 0.8.0 changelog entry, in the house style of the existing entries, covers:
-    - the live block-and-flag hitter rule, and why `pred_player_id` could not be the witness;
+    - that a live block-and-flag hitter rule was tried and dropped (T3). `pred_player_id` cannot be the witness, because it is the label being swapped. Position cannot see a changeover where nobody switches ends, so the rule would have left about every second frozen game on `ac56ef8b` unrelabelled. Position is used only inside the review-only segmenter;
     - the review-only segmenter and its `derivation_quality.segmentation` key, which never touches `fold`;
-    - the two new flags;
+    - the new `segment_proposal_differs` flag;
     - the tuned weights and the three-session result, as counts only;
     - the promotion bar: ≥95% of firings right on server and game, over 30+ firings across 2+ matches, re-scored with `splitstep-eval --session`;
-    - the jobs whose published rows change on re-derive: `be930d79`, `ac56ef8b`, `5c377b0a`, `467ccbdc`;
-    - that every other job gains only flags and the key.
+    - that no published row changes on re-derive: every job gains only the flag and the `segmentation` key.
   - [ ] No player names appear in the entry; job IDs and session counts only
   - [ ] `npm run typecheck`, `npm run lint` and `npm run format:check` pass
 - **notes:**
   - Plan step 10; design §4.
   - Take the final weights and per-session counts from T9's entry in `.claude/tasks/claude-score-constrained-segmentation-836147.log.md` (its final message). If T9 was blocked, this task cannot run; report instead.
   - No re-derive. The version bump only takes effect when the user re-derives on request.
+  - No dashboard UI.
+
+## T11 · Remove the unused `server_position_conflict` flag
+
+- **status:** todo
+- **model:** sonnet
+- **files:** (guess)
+  - `src/lib/services/splitstep/derivation/flags.ts`
+  - `src/lib/services/labels/marks.ts`
+  - `src/lib/services/labels/marks-copy.ts`
+  - `tests/label-marks-copy.spec.ts`
+- **done when:**
+  - [ ] `grep -rn "server_position_conflict\|SERVER_POSITION_CONFLICT" src tests` returns nothing
+  - [ ] `segment_proposal_differs` / `SEGMENT_PROPOSAL_DIFFERS` and its registry entry, params, switch case, chip, hover copy and spec samples are unchanged by the diff
+  - [ ] T2's doc comment on `SEGMENT_PROPOSAL_DIFFERS` and the `markHover` doc-comment count stay accurate after the removal (for example "Six lines have a second form" becomes "Five", if one of the six was the removed flag)
+  - [ ] `tests/label-marks.spec.ts`, `tests/label-marks-copy.spec.ts`, `tests/label-session-marks.spec.ts` and `npm run typecheck` pass
+- **notes:**
+  - T2 added this flag for T3's live rule. T3 was dropped (option 3, 2026-10-09), so nothing raises the flag any more.
+  - Remove only what T2 added for it. See commit `094424cf` for exactly what that was.
   - No dashboard UI.

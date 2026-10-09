@@ -28,3 +28,12 @@ is the runner's. Newest entries at the bottom.
 - The positional count advances only when the serving end switches, to the next even game. So inside a frozen run, rallies after a same-end changeover stay flagged until the next end switch. On ac56ef8b, that could leave about every second frozen game with the vendor's labels.
 - The test `relabelled frozen points keep their line calls…` still passes, but no longer exercises a relabel.
   **stash:** d1c3a5705111d30ca5e69fdae4db9ee8b940e25c
+
+## T3 · Block-and-flag hitter rule in frozen stretches — abandoned (author's decision)
+
+**decision:** On 2026-10-09 the author chose option 3: no live hitter-rule change ships, and position is used only inside the review-only segmenter. T3 stays `blocked`, and stash `d1c3a5705111d30ca5e69fdae4db9ee8b940e25c` is kept, not applied. The queue was edited by hand at the author's direction:
+
+- T6 no longer needs T3;
+- T9 drops the live-rule measurement and stop condition;
+- the T10 changelog says no published rows change;
+- T11 was added to remove the now-unused `server_position_conflict` flag.
