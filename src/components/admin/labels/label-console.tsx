@@ -43,6 +43,7 @@ import {
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
 import {
   applyGameShift,
+  GAME_PULL_ADD_POINT,
   planGamePull,
   planGameShift,
   type GameShiftWrite,
@@ -1051,14 +1052,14 @@ export function LabelConsole({
   /**
    * The mirror of `shiftGameOverflow`: a game left unfinished pulls the next
    * game's first rows in until it is decided (`planGamePull`). A plan that says
-   * the game is more likely missing a point writes nothing; the slot offers
-   * "Add point" for that.
+   * the game is more likely missing a point writes nothing and says so
+   * (`GAME_PULL_ADD_POINT`); the slot offers "Add point" for that.
    */
   function pullGamePoints(gameKey: string) {
     if (!operations) return;
     const plan = planGamePull(points, gameKey, session.adScoring);
     if ("error" in plan) return refuse(plan.error);
-    if ("kind" in plan) return;
+    if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
     runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
   }
 

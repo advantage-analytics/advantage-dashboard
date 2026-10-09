@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { INITIAL_SAVE_STATUS } from "@/components/admin/labels/save-status";
 import {
   applyGameShift,
+  GAME_PULL_ADD_POINT,
   gameOverflow,
   gameUnderflow,
   leftoverIds,
@@ -1733,5 +1734,100 @@ test.describe("the isn't-finished slot", () => {
 
     // Read-only: no slot.
     expect(render({ editable: false })).not.toContain("data-game-underflow");
+  });
+});
+
+// ── The reproduction: a labelled ad-scoring match ──────────────────────────
+
+/**
+ * Games 4–8 of a real ad-scoring session's seed (Sage v Hunter Cheng, session
+ * 1b391e8b…, anonymised to p1 and p2), each game's seeded winners in rally
+ * order. Where "Move to game" was reported doing nothing.
+ */
+function seededAdMatch(): LabelPoint[] {
+  return match([
+    {
+      game: 4,
+      server: "p2",
+      winners: ["p2", "p1", "p2", "p1", "p1", "p2", "p2"],
+    },
+    { game: 5, server: "p1", winners: ["p1", "p2", "p1", "p2", "p2", "p2"] },
+    {
+      game: 6,
+      server: "p2",
+      winners: ["p1", "p1", "p1", "p2", "p2", "p2", "p1"],
+    },
+    {
+      game: 7,
+      server: "p1",
+      winners: ["p1", "p1", "p2", "p2", "p1", "p1", "p1"],
+    },
+    { game: 8, server: "p2", winners: ["p2"] },
+  ]);
+}
+
+test.describe("an ad-scoring session's seeded games (the reproduction)", () => {
+  test("the seed reads as written: game 4 short at Ad–40, game 6 short at 40–Ad, game 7 over", () => {
+    const bands = labelScores(seededAdMatch(), true).games;
+    expect(bands.map((b) => [b.gameNumber, b.outcome])).toEqual([
+      [4, { kind: "unfinished", score: "Ad–40" }],
+      [5, { kind: "decided", winner: "p2", score: "4–2" }],
+      [6, { kind: "unfinished", score: "40–Ad" }],
+      [7, { kind: "overflow", winner: "p1", score: "4–2", extra: 1 }],
+      [8, { kind: "unfinished", score: "15–0" }],
+    ]);
+  });
+
+  test("game 6 pulls game 7's first point and settles; game 7's leftover moves on to game 8", () => {
+    const points = seededAdMatch();
+    const pull = planGamePull(points, "1·6", true);
+    expect(pull).toMatchObject({
+      ok: true,
+      writes: [{ id: UUID(21), game_number: 6, server: "p2" }],
+      summary: { points: 1, games: 1, fromGame: { set: 1, gameInSet: 4 } },
+    });
+    const shift = planGameShift(points, true, UUID(27));
+    expect(shift).toMatchObject({
+      ok: true,
+      writes: [{ id: UUID(27), game_number: 8, server: "p2" }],
+    });
+  });
+
+  test("game 4 answers add_point: deuce after deuce drains game 5 without settling it", () => {
+    expect(planGamePull(seededAdMatch(), "1·4", true)).toEqual({
+      kind: "add_point",
+    });
+    expect(GAME_PULL_ADD_POINT).toContain("add the missing point");
+  });
+
+  test("games 6 and 7 held as one game read a valid deuce game, 8–6: no slot, nothing to pull or move", () => {
+    // The live rows after labelling: game 7's rows (one deleted, one added)
+    // renumbered into game 6 under game 6's server.
+    const merged = match([
+      { game: 5, server: "p1", winners: ["p2", "p1", "p2", "p2", "p2"] },
+      {
+        game: 6,
+        server: "p2",
+        winners: [
+          ...["p1", "p1", "p1", "p2", "p2", "p2", "p2"],
+          ...["p1", "p2", "p1", "p1", "p2", "p2", "p2"],
+        ] as LabelSide[],
+      },
+      {
+        game: 8,
+        server: "p1",
+        winners: ["p1", "p2", "p1", "p1", "p2", "p2", "p1", "p1"],
+      },
+    ]);
+    const game6 = labelScores(merged, true).games.find(
+      (b) => b.gameNumber === 6,
+    );
+    expect(game6?.outcome).toEqual({
+      kind: "decided",
+      winner: "p2",
+      score: "8–6",
+    });
+    expect(gameOverflow(merged, true)).toEqual([]);
+    expect(gameUnderflow(merged, true)).toEqual([]);
   });
 });
