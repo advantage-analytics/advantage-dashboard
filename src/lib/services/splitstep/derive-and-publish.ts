@@ -83,8 +83,19 @@ export async function deriveAndPublish(params: {
    * with its email, because a rebuild its owner asked for was turned down.
    */
   rebuild?: boolean;
+  /**
+   * Replace a match whose rows were applied from hand labels. Off by default
+   * (see `persistTranscript`); the CLI's `--force-over-labels`.
+   */
+  allowOverwriteLabels?: boolean;
 }): Promise<DeriveOutcome> {
-  const { supabase, jobId, deadline, rebuild = false } = params;
+  const {
+    supabase,
+    jobId,
+    deadline,
+    rebuild = false,
+    allowOverwriteLabels = false,
+  } = params;
 
   try {
     // Never off `cancelled`. The user withdrew the job while it was queued
@@ -110,9 +121,16 @@ export async function deriveAndPublish(params: {
       supabase,
       jobId,
       keepPlayerMapping: rebuild,
+      allowOverwriteLabels,
     });
 
-    if (!written.ok && rebuild && written.failure === "refused") {
+    // A match carrying hand labels is a published match too: refusing to
+    // overwrite it must not fail the job or mail "analysis failed".
+    if (
+      !written.ok &&
+      written.failure === "refused" &&
+      (rebuild || written.labelsProtected)
+    ) {
       // Refusals are decided before the delete (see persistTranscript), so
       // the rows the job published are still there; so is its clean status.
       await supabase

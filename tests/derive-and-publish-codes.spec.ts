@@ -368,3 +368,54 @@ test.describe("deriveAndPublish on a cancelled job", () => {
     expect(mail).toEqual([]);
   });
 });
+
+test.describe("deriveAndPublish over hand labels", () => {
+  quietConsole();
+
+  test("a refusal to overwrite hand labels keeps the job completed and mails nothing", async () => {
+    const reason =
+      "hand labels applied — pass allowOverwriteLabels to replace them";
+    const { deriveAndPublish, mail } = load(async () => ({
+      ok: false,
+      reason,
+      transcript: null,
+      failure: "refused",
+      labelsProtected: true,
+    }));
+    const fake = fakeSupabase();
+
+    const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(out).toEqual({ ok: false, reason, kept: true });
+    expect(fake.updates).toEqual([
+      { status: "deriving" },
+      { status: "completed" },
+    ]);
+    expect(fake.rpcCalls).toEqual([]);
+    expect(mail).toEqual([]);
+  });
+
+  test("allowOverwriteLabels reaches persistTranscript, off by default", async () => {
+    const seen: unknown[] = [];
+    const { deriveAndPublish } = load(async (...args: unknown[]) => {
+      seen.push(
+        (args[0] as { allowOverwriteLabels?: boolean }).allowOverwriteLabels,
+      );
+      return written()();
+    });
+    const run = deriveAndPublish as (p: {
+      supabase: unknown;
+      jobId: string;
+      allowOverwriteLabels?: boolean;
+    }) => Promise<unknown>;
+
+    await run({ supabase: fakeSupabase().client, jobId: JOB });
+    await run({
+      supabase: fakeSupabase().client,
+      jobId: JOB,
+      allowOverwriteLabels: true,
+    });
+
+    expect(seen).toEqual([false, true]);
+  });
+});
