@@ -661,15 +661,15 @@ test.describe("the tiers on a point", () => {
       listPoint([listShot("s1")]),
       marksOf(
         [
-          sample("serve_fault"),
+          sample("second_serve_called_out"),
           sample("ending_suspect_line"),
-          sample("serve_fault"),
+          sample("second_serve_called_out"),
         ],
         { s1: [sample("net_hit_contradicts_height")] },
       ),
     );
     expect(codes(list.hints)).toEqual([
-      "serve_fault",
+      "second_serve_called_out",
       "ending_suspect_line",
       "net_hit_contradicts_height",
     ]);

@@ -80,6 +80,13 @@ export const LABEL_ONLY_FLAGS = {
  * chip only: the struck-through removed stroke is still drawn.
  * `same_player_consecutive` is counted AND keeps its missing-stroke slot; the
  * slot's "Dismiss" settles the chip (marks-state.ts `markState`).
+ *
+ * Retiered 2026-10-09 on the three fully checked sessions (259 points; base
+ * rates: winner changed 19%, ending 32%, anything 53%): `winner_guessed` is
+ * counted — the guess was wrong on 7 of 14, and a winner moves the score —
+ * while `score_frozen`, on the same points, stays hidden so a frozen stretch
+ * carries one chip, not two. `serve_fault` is hidden: 7 of 15 changed, under
+ * the base rate.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -90,9 +97,9 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
-  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
@@ -102,7 +109,7 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
-  [POINT_FLAGS.WINNER_GUESSED]: { tier: "hidden", scope: "point" },
+  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
   [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
   [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },

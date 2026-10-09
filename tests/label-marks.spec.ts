@@ -584,6 +584,15 @@ const marksFor = (
     labelRows(rallies),
   );
 
+/** `marksFor` with the hidden codes kept, as the scorecard reads them. */
+const allMarksFor = (
+  rallies: SplitStepRally[],
+  winners: Array<string | null>,
+): LabelMarks =>
+  buildLabelMarks(transcriptOf(rallies, winners), rallies, labelRows(rallies), {
+    hidden: true,
+  });
+
 test.describe("the labels-only flags", () => {
   test("serve_fault: one serve called out, one or two strokes after it", () => {
     const oneBack = rallyOf(1, [
@@ -595,13 +604,13 @@ test.describe("the labels-only flags", () => {
       ["B", "groundstroke"],
       ["A", "groundstroke"],
     ]);
-    const marks = marksFor([oneBack, twoBack], ["A", "B"]);
+    const marks = allMarksFor([oneBack, twoBack], ["A", "B"]);
     expect(codesOf(marks.points.p1)).toEqual(["serve_fault"]);
     expect(codesOf(marks.points.p2)).toEqual(["serve_fault"]);
     const m = marks.points.p1[0];
     expect(m).toEqual({
       code: "serve_fault",
-      tier: "hint",
+      tier: "hidden",
       scope: "point",
       params: {},
     });
@@ -626,7 +635,7 @@ test.describe("the labels-only flags", () => {
       ["B", "groundstroke"],
     ]);
     const unreturned = rallyOf(4, [["A", "serve", false]]);
-    const marks = marksFor(
+    const marks = allMarksFor(
       [threeBack, calledIn, secondServe, unreturned],
       ["A", "A", "B", "B"],
     );
@@ -782,7 +791,7 @@ test.describe("the labels-only flags", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("eight codes can change the score, and only they are counted", () => {
+  test("nine codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
@@ -795,6 +804,7 @@ test.describe("the three tiers", () => {
       "service_court_repeat",
       "tiebreak_score_off_six_all",
       "winner_disputed",
+      "winner_guessed",
     ]);
     // “Net or out?” is a hint on the point's last stroke only.
     expect(netHitTier(true)).toBe("hint");
