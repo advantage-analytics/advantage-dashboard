@@ -12,6 +12,11 @@
  * (`isCombinedTombstone`), and the way back is "Split point here" on the first
  * moved shot.
  *
+ * A fault and its replay cut apart both read as a first serve. So when the
+ * combined point's live strokes hold exactly two serves, the first in video
+ * order becomes `first_serve` and the second `second_serve` (`retyped`).
+ * Three or more (a let among them) are left as they are.
+ *
  * Pure: the console runs `applyPointCombine`, `point-combine-session.ts` runs
  * `planPointCombine`.
  */
@@ -21,11 +26,16 @@ import {
   type Planned,
   type PointDeleteWrite,
 } from "./operations";
+import { applyLabelShotPatch } from "./edit";
 import {
+  isServeStroke,
   orderLabelShots,
   type LabelEnding,
   type LabelPoint,
+  type LabelShot,
+  type LabelShotStatus,
   type LabelSide,
+  type LabelStroke,
 } from "./session";
 
 export type CombineDirection = "above" | "below";
@@ -46,7 +56,20 @@ export type CombinablePoint = Pick<
   | "ending"
   | "endedBy"
   | "vendorRallyIds"
-> & { shots: readonly Pick<LabelPoint["shots"][number], "id">[] };
+> & { shots: readonly CombinableShot[] };
+
+/**
+ * What the plan reads of a shot: its id, and for the serve retype its stroke,
+ * status and place in video order. A `LabelShot` satisfies it.
+ */
+export type CombinableShot = Pick<LabelShot, "id"> &
+  Partial<Pick<LabelShot, "stroke" | "status" | "videoTime" | "eventId">>;
+
+/** A serve the combine relabels first or second. */
+export interface CombineRetype {
+  shotId: string;
+  stroke: Extract<LabelStroke, "first_serve" | "second_serve">;
+}
 
 export interface CombineKeptWrite {
   winner: LabelSide | null;
@@ -65,6 +88,32 @@ export interface PointCombinePlan {
   movedShotIds: string[];
   kept: CombineKeptWrite;
   removed: PointDeleteWrite;
+  /** Serves whose stroke changes; empty unless exactly two are live. */
+  retyped: CombineRetype[];
+}
+
+/**
+ * The serves of the joined strokes to relabel: when exactly two live serves
+ * remain, the first in video order is the first serve and the second the
+ * second; only those whose stroke changes are named.
+ */
+export function combineServeRetypes(
+  shots: readonly CombinableShot[],
+): CombineRetype[] {
+  const serves = orderLabelShots(
+    shots
+      .filter((shot) => shot.status !== "deleted" && isServeStroke(shot.stroke))
+      .map((shot) => ({
+        ...shot,
+        videoTime: shot.videoTime ?? null,
+        eventId: shot.eventId ?? null,
+      })),
+  );
+  if (serves.length !== 2) return [];
+  const order = ["first_serve", "second_serve"] as const;
+  return serves.flatMap((shot, i) =>
+    shot.stroke === order[i] ? [] : [{ shotId: shot.id, stroke: order[i] }],
+  );
 }
 
 /**
@@ -143,6 +192,7 @@ export function planPointCombine(
         status: earlier.status === "added" ? "added" : "edited",
       },
       removed: removed.write,
+      retyped: combineServeRetypes([...earlier.shots, ...later.shots]),
     },
   };
 }
@@ -157,7 +207,8 @@ export function isCombinedTombstone(
 /**
  * The console's rows after the combine: the later point's shots join the
  * earlier one in video order (their `labelPointId` follows), the earlier
- * takes the plan's fields, and the later is a tombstone with no shots.
+ * takes the plan's fields and its retyped serves (status as an edit would set
+ * it), and the later is a tombstone with no shots.
  * `points` keep their order; nothing renumbers.
  */
 export function applyPointCombine(
@@ -179,7 +230,12 @@ export function applyPointCombine(
         endedBy: plan.kept.ended_by,
         vendorRallyIds: plan.kept.vendor_rally_ids,
         status: plan.kept.status,
-        shots: orderLabelShots([...point.shots, ...moved]),
+        shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
+          const retype = plan.retyped.find((r) => r.shotId === shot.id);
+          return retype
+            ? applyLabelShotPatch(shot, { stroke: retype.stroke })
+            : shot;
+        }),
       };
     }
     if (point.id === plan.removedId) {
@@ -209,6 +265,8 @@ export function withdrawPointCombine(
 export interface PointCombineSaved {
   kept: { id: string } & CombineKeptWrite;
   removed: { id: string } & PointDeleteWrite;
+  /** Each retyped serve as written: its new stroke and the status it took. */
+  retyped: { id: string; stroke: LabelStroke; status: LabelShotStatus }[];
 }
 
 export function settlePointCombine(
@@ -224,6 +282,12 @@ export function settlePointCombine(
         endedBy: saved.kept.ended_by,
         vendorRallyIds: saved.kept.vendor_rally_ids,
         status: saved.kept.status,
+        shots: point.shots.map((shot) => {
+          const written = saved.retyped.find((r) => r.id === shot.id);
+          return written
+            ? { ...shot, stroke: written.stroke, status: written.status }
+            : shot;
+        }),
       };
     }
     if (point.id === saved.removed.id) {

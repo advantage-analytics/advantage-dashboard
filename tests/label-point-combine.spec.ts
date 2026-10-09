@@ -11,6 +11,7 @@ import { writeLabelPointRestore } from "@/lib/services/labels/operations-session
 import {
   applyPointCombine,
   combineNeighbour,
+  combineServeRetypes,
   isCombinedTombstone,
   planPointCombine,
   settlePointCombine,
@@ -43,11 +44,16 @@ const NAMES = { p1: "Lee", p2: "Vargas" };
 const points = () => labelSessionFixture().points;
 const pointOf = (id: string) => points().find((p) => p.id === id)!;
 
-/** The fixture after point 2 is combined into point 1, as the console does it. */
-function combined(): LabelPoint[] {
+/** The plan to combine point 2 into point 1. */
+function planned() {
   const plan = planPointCombine(points(), P2, "above");
   if ("error" in plan) throw new Error(plan.error);
-  return applyPointCombine(points(), plan.write);
+  return plan.write;
+}
+
+/** The fixture after point 2 is combined into point 1, as the console does it. */
+function combined(): LabelPoint[] {
+  return applyPointCombine(points(), planned());
 }
 
 // ── The plan ───────────────────────────────────────────────────────────────
@@ -80,6 +86,9 @@ test.describe("planPointCombine", () => {
         status: "edited",
       },
       removed: { status: "deleted", status_before_delete: "unchanged" },
+      // The fixture's two points each open on a first serve: joined, the
+      // later one is the second.
+      retyped: [{ shotId: "s-ace", stroke: "second_serve" }],
     };
     // From either side, the same plan.
     expect(planPointCombine(points(), P2, "above")).toEqual({
@@ -130,6 +139,68 @@ test.describe("planPointCombine", () => {
   });
 });
 
+test.describe("combineServeRetypes", () => {
+  const serve = (
+    id: string,
+    stroke: "first_serve" | "second_serve" | "forehand",
+    videoTime: number,
+    status: "kept" | "deleted" = "kept",
+  ) => ({ id, stroke, videoTime, eventId: null, status });
+
+  test("exactly two live serves: the first in video order is the first serve, the second the second", () => {
+    // Listed out of order: video order decides, not the list.
+    expect(
+      combineServeRetypes([
+        serve("b", "first_serve", 12),
+        serve("r", "forehand", 13),
+        serve("a", "first_serve", 4),
+      ]),
+    ).toEqual([{ shotId: "b", stroke: "second_serve" }]);
+    // Both wrong way round: both named.
+    expect(
+      combineServeRetypes([
+        serve("a", "second_serve", 4),
+        serve("b", "first_serve", 12),
+      ]),
+    ).toEqual([
+      { shotId: "a", stroke: "first_serve" },
+      { shotId: "b", stroke: "second_serve" },
+    ]);
+  });
+
+  test("nothing when the pair is already right, or there are not exactly two live serves", () => {
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("b", "second_serve", 12),
+      ]),
+    ).toEqual([]);
+    // Three — a let among them — waits for the let fix.
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("b", "first_serve", 8),
+        serve("c", "first_serve", 12),
+      ]),
+    ).toEqual([]);
+    expect(combineServeRetypes([serve("a", "first_serve", 4)])).toEqual([]);
+    // A tombstoned serve is not one of the two.
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("x", "first_serve", 6, "deleted"),
+        serve("b", "first_serve", 12),
+      ]),
+    ).toEqual([{ shotId: "b", stroke: "second_serve" }]);
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("x", "first_serve", 6, "deleted"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
 // ── The console's rows ─────────────────────────────────────────────────────
 
 test.describe("the console's rows", () => {
@@ -151,8 +222,15 @@ test.describe("the console's rows", () => {
       "s-ace",
     ]);
     expect(kept.shots.every((s) => s.labelPointId === P1)).toBe(true);
-    // Statuses travel untouched; the moved ace is still kept.
-    expect(kept.shots.at(-1)?.status).toBe("kept");
+    // Statuses travel untouched, but for a retyped serve: the moved ace is
+    // the second serve now, an edit off its seed.
+    expect(kept.shots.map((s) => [s.stroke, s.status])).toEqual([
+      ["first_serve", "kept"],
+      ["backhand", "edited"],
+      ["forehand", "deleted"],
+      ["forehand", "added"],
+      ["second_serve", "edited"],
+    ]);
     expect(kept).toMatchObject({
       winner: "p1",
       ending: "ace",
@@ -189,8 +267,16 @@ test.describe("the console's rows", () => {
         status: "edited",
       },
       removed: { id: P2, status: "deleted", status_before_delete: "unchanged" },
+      retyped: [{ id: "s-ace", stroke: "second_serve", status: "edited" }],
     });
     expect(settled).toEqual(after);
+    // The server's word on a retype wins over the optimistic one.
+    const kept = settlePointCombine(after, {
+      kept: { id: P1, ...planned().kept },
+      removed: { id: P2, ...planned().removed },
+      retyped: [{ id: "s-ace", stroke: "second_serve", status: "kept" }],
+    })[0];
+    expect(kept.shots.find((s) => s.id === "s-ace")?.status).toBe("kept");
   });
 
   test("the emptied tombstone cannot be restored: the plan refuses, the row is left alone", () => {
@@ -330,8 +416,13 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_shots") {
-      return call.columns === "id"
-        ? { data: rows.shots ?? [{ id: SHOT(1) }], error: null }
+      // Both points' rows, read for the move and the serve retype (or a
+      // restore's ids); then the kept point's alone, for its ending.
+      return call.in?.label_point_id || call.columns === "id"
+        ? {
+            data: rows.shots ?? [labelShotRow(SHOT(1), UUID(2))],
+            error: null,
+          }
         : { data: rows.endingShots ?? [], error: null };
     }
     return undefined;
@@ -364,6 +455,7 @@ test.describe("writeLabelPointCombine", () => {
         status: "deleted",
         status_before_delete: "unchanged",
       },
+      retyped: [],
     });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_points", "select"],
@@ -378,8 +470,8 @@ test.describe("writeLabelPointCombine", () => {
       ["label_shots", "select"],
       ["label_points", "select"],
     ]);
-    // The later point's shots are the ones read; then the kept point's.
-    expect(fake.calls[3].filters).toEqual({ label_point_id: UUID(2) });
+    // Both points' shots are read; then the kept point's.
+    expect(fake.calls[3].in).toEqual({ label_point_id: [UUID(1), UUID(2)] });
     expect(fake.calls[7].filters).toEqual({ label_point_id: UUID(1) });
     const [move, kept, removed] = writes(fake);
     expect(move).toEqual({
@@ -453,6 +545,79 @@ test.describe("writeLabelPointCombine", () => {
       op: "update",
       values: { ending: "service_winner", ended_by: "p2", status: "edited" },
       filters: { id: UUID(1), updated_at: "2026-10-01T10:00:00+00:00" },
+    });
+  });
+
+  test("two serves joined: each retyped serve is written compare-and-set with its status, before the ending is read", async () => {
+    const fake = fakeClient({
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          result: "out",
+          video_time: 1,
+        }),
+        // Seeded a first serve: relabelled, it is an edit off its seed.
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+        labelShotRow(SHOT(3), UUID(2), {
+          hitter: "p2",
+          stroke: "forehand",
+          video_time: 6,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      retyped: [{ id: SHOT(2), stroke: "second_serve", status: "edited" }],
+    });
+    expect(fake.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
+      ["label_shots", "update"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "select"],
+      ["label_points", "select"],
+    ]);
+    const [move, , , retype] = writes(fake);
+    expect(move.in).toEqual({ id: [SHOT(2), SHOT(3)] });
+    expect(retype).toEqual({
+      table: "label_shots",
+      op: "update",
+      values: { stroke: "second_serve", status: "edited" },
+      filters: { id: SHOT(2), status: "kept" },
+    });
+
+    // The retype raced: reported, and the ending is not read.
+    const raced = fakeClient({
+      racedId: SHOT(2),
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+      ],
+    });
+    expect(
+      await writeLabelPointCombine({
+        supabase: raced.supabase,
+        pointId: UUID(2),
+        direction: "above",
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(raced.calls.at(-1)).toMatchObject({
+      table: "label_shots",
+      op: "update",
     });
   });
 
@@ -699,8 +864,9 @@ test("a render of the console with a combined point writes nothing and draws the
   expect(black).toContain("Combined into the point above");
   expect(black).toContain('aria-label="Undo delete point 3"');
   expect(black).not.toContain('aria-label="Undo delete point 2"');
-  // The kept point's well holds the moved ace as its fifth stroke.
-  expect(black).toContain('aria-label="Shot 4 stroke: First serve"');
+  // The kept point's well holds the moved ace as its fifth stroke, the
+  // second serve now.
+  expect(black).toContain('aria-label="Shot 4 stroke: Second serve"');
   const light = renderToStaticMarkup(
     React.createElement(LabelConsole, {
       session,
