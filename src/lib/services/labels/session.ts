@@ -253,6 +253,13 @@ export interface LabelSession {
    */
   marksEnabled: boolean;
   /**
+   * Whether a let serve is played on in this match (`matches.format
+   * .play_on_lets`): true only when the column holds a literal `true`. A null
+   * or missing format means lets are replayed, the default — and the only
+   * case the result menu offers `Let`.
+   */
+  playOnLets: boolean;
+  /**
    * The match's final score as the labeller read it off the video
    * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null
    * until the labeller sets it. What the "Score doesn't add up" chip holds

@@ -4,11 +4,13 @@ import {
   LABEL_POINT_EDIT_FIELDS,
   LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_EDIT_FIELDS,
+  LABEL_SHOT_RESULTS,
   LABEL_SPINS,
   applyLabelShotPatch,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
+  letResultError,
   parseLabelShotPatch,
   sameShotValue,
   labelPointStatusAfterChange,
@@ -120,10 +122,60 @@ test.describe("shot values", () => {
     expect(parseLabelShotPatch({ stroke: "volley" })).toHaveProperty("error");
     expect(parseLabelShotPatch({ result: "net" })).toHaveProperty("ok");
     expect(parseLabelShotPatch({ result: "In" })).toHaveProperty("error");
+    expect(LABEL_SHOT_RESULTS).toEqual(["in", "out", "net", "let"]);
     expect(parseLabelShotPatch({ result: null })).toEqual({
       ok: true,
       patch: { result: null },
     });
+  });
+
+  test("a let is a serve's result and nothing else's", () => {
+    // Judged on the patch's own stroke when it carries one.
+    expect(
+      parseLabelShotPatch({ result: "let", stroke: "first_serve" }),
+    ).toEqual({ ok: true, patch: { result: "let", stroke: "first_serve" } });
+    expect(
+      parseLabelShotPatch({ result: "let", stroke: "second_serve" }),
+    ).toHaveProperty("ok");
+    expect(parseLabelShotPatch({ result: "let", stroke: "forehand" })).toEqual({
+      error: "Only a serve can be a let.",
+    });
+    expect(parseLabelShotPatch({ result: "let", stroke: null })).toEqual({
+      error: "Only a serve can be a let.",
+    });
+    // With no stroke in the patch the parser cannot judge; the write does,
+    // against the stored row.
+    expect(parseLabelShotPatch({ result: "let" })).toEqual({
+      ok: true,
+      patch: { result: "let" },
+    });
+    expect(letResultError({ result: "let" })).toBeNull();
+    expect(
+      letResultError({ result: "let" }, { stroke: "second_serve" }),
+    ).toBeNull();
+    expect(letResultError({ result: "let" }, { stroke: "backhand" })).toBe(
+      "Only a serve can be a let.",
+    );
+    expect(letResultError({ result: "let" }, { stroke: null })).toBe(
+      "Only a serve can be a let.",
+    );
+    // The patch's stroke wins over the stored one, either way.
+    expect(
+      letResultError(
+        { result: "let", stroke: "first_serve" },
+        { stroke: "forehand" },
+      ),
+    ).toBeNull();
+    expect(
+      letResultError(
+        { result: "let", stroke: "forehand" },
+        { stroke: "first_serve" },
+      ),
+    ).toBe("Only a serve can be a let.");
+    // Any other result is never refused on the stroke.
+    expect(
+      letResultError({ result: "out" }, { stroke: "forehand" }),
+    ).toBeNull();
   });
 
   test("spin is one of the four, lower-case, or null", () => {
@@ -685,6 +737,34 @@ test.describe("updateLabelShot (editLabelShot)", () => {
     );
     expect(result).toHaveProperty("error");
     expect(fake.calls).toEqual([]);
+  });
+
+  test("refuses a let on a stored rally stroke, and writes one on a serve", async () => {
+    // The seeded row is a backhand: a let on it is refused before any write.
+    const rally = fakeClient({ shot: shotRow() });
+    expect(
+      await writeLabelShotEdit({
+        supabase: rally.supabase,
+        shotId: SHOT_ID,
+        patch: { result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+    expect(updates(rally)).toEqual([]);
+
+    const serve = fakeClient({
+      shot: shotRow({ stroke: "second_serve" }),
+      shots: [],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: serve.supabase,
+      shotId: SHOT_ID,
+      patch: { result: "let" },
+    });
+    expect(result).toMatchObject({ ok: true, status: "edited" });
+    expect(updates(serve)[0]).toMatchObject({
+      table: "label_shots",
+      values: { result: "let", status: "edited" },
+    });
   });
 
   test("writes the patch and the edited status to label_shots only", async () => {

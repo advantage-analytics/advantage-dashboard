@@ -45,6 +45,7 @@ export const RESULT_LABEL: Record<LabelShotResult, string> = {
   in: "In",
   out: "Out",
   net: "Net",
+  let: "Let",
 };
 
 /**

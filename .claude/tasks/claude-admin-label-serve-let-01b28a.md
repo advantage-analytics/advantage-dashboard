@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Let serve result · data model and session rule
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<new>_label_shots_result_let.sql, src/lib/services/labels/seed.ts, src/lib/services/labels/edit.ts, src/lib/services/labels/session.ts, src/lib/services/labels/shot-derived.ts, src/lib/data/labels-server.ts, src/components/admin/labels/label-format.ts, tests/fixtures/label-session.ts, tests/label-edit.spec.ts, tests/label-shot-derived.spec.ts, tests/label-session-order.spec.ts (guess)
 - **done when:**
