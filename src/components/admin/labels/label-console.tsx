@@ -338,6 +338,8 @@ export function LabelConsole({
   // Client state, so "Mark complete" and "Reopen" flip the console read-only
   // or editable without a reload.
   const [status, setStatus] = useState(session.status);
+  // A status write in flight: both buttons wait for it.
+  const [statusSaving, setStatusSaving] = useState(false);
   const editable =
     status === "labelling" &&
     onSaveShot !== undefined &&
@@ -1188,9 +1190,11 @@ export function LabelConsole({
       next === "complete"
         ? operations?.completeSession
         : operations?.reopenSession;
-    if (!write) return;
+    if (!write || statusSaving) return;
+    setStatusSaving(true);
     dispatchSave({ type: "start" });
     const result = await settle(write(session.id));
+    setStatusSaving(false);
     if ("error" in result) {
       dispatchSave({ type: "failure", message: result.error });
       return;
@@ -1211,6 +1215,7 @@ export function LabelConsole({
         finalScore: sessionFields.finalScore,
         videoEndsEarly: sessionFields.videoEndsEarly,
         matchScore: session.matchScore,
+        games: scores.games,
       }),
     });
   }
@@ -1574,6 +1579,12 @@ export function LabelConsole({
         resetPoint(question.pointId);
         return;
       case "complete-session":
+        // An edit made while the confirm was open would be refused.
+        if (saveStatus.pending > 0) {
+          return refuse(
+            "Wait for your changes to save, then mark it complete.",
+          );
+        }
         void setSessionStatus("complete");
         return;
     }
@@ -1862,6 +1873,10 @@ export function LabelConsole({
                 type="button"
                 data-mark-complete=""
                 className={advButton("outline", "sm")}
+                // Every edit must have landed first: one still in flight
+                // would be refused once the session is complete, and its
+                // value put back.
+                disabled={saveStatus.pending > 0 || statusSaving}
                 onClick={askComplete}
               >
                 Mark complete
@@ -1872,6 +1887,7 @@ export function LabelConsole({
                 type="button"
                 data-reopen-session=""
                 className={advButton("outline", "sm")}
+                disabled={statusSaving}
                 onClick={() => void setSessionStatus("labelling")}
               >
                 Reopen

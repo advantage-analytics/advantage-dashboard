@@ -18,6 +18,7 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   readJobAdScoring,
+  readFormatAdScoring,
   readMatchAdScoring,
   resolveLabelAdScoring,
 } from "./ad-scoring";
@@ -167,7 +168,7 @@ async function runGamePlan(
   if (!session) return { error: "Session not found." };
   if (session.status !== "labelling") return { error: FROZEN };
 
-  const [points, job] = await Promise.all([
+  const [points, job, match] = await Promise.all([
     supabase
       .from("label_points")
       .select(GAME_COLUMNS)
@@ -175,30 +176,26 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
+    // The match's format, the last fallback, beside the job's.
+    readMatchAdScoring(supabase, session),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
+  }
+  if (match.error) {
+    return {
+      error: `Could not read the match's scoring: ${match.error.message}`,
+    };
   }
   if (points.error) {
     return {
       error: `Could not read the session's points: ${points.error.message}`,
     };
   }
-  // The match's format only when neither the session nor its job says.
-  const match = await readMatchAdScoring(
-    supabase,
-    session.match_id,
-    session.ad_scoring ?? job.data?.ad_scoring,
-  );
-  if (match.error) {
-    return {
-      error: `Could not read the match's scoring: ${match.error.message}`,
-    };
-  }
   const adScoring = resolveLabelAdScoring(
     session.ad_scoring,
     job.data?.ad_scoring,
-    match.data?.format?.ad_scoring,
+    readFormatAdScoring(match.data?.format),
   );
 
   // The plan with no shots yet says whether any point moves under a new

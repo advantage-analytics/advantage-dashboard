@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { NET_Y } from "@/components/admin/labels/court-geometry";
 import {
+  effectiveShotResult,
   deriveShotResult,
   positionPatch,
   shotPlacement,
@@ -209,5 +210,28 @@ test.describe("positionPatch", () => {
     expect(
       positionPatch(serve({ x: -2, y: 16 }, { result: "in" }), "landing", null),
     ).toEqual({ landing_x: null, landing_y: null });
+  });
+});
+
+test.describe("effectiveShotResult", () => {
+  const placedLong = { contactX: 1, contactY: 2, landingX: 1, landingY: 26 };
+  test("placed coordinates outrank the stored call; unplaced, the stored call stands", () => {
+    expect(
+      effectiveShotResult({ stroke: "forehand", result: "in", ...placedLong }),
+    ).toBe("out");
+    expect(effectiveShotResult({ stroke: "forehand", result: "net" })).toBe(
+      "net",
+    );
+    expect(effectiveShotResult({})).toBeNull();
+  });
+
+  test("a let stays a let whatever its placed ends say", () => {
+    expect(
+      effectiveShotResult({
+        stroke: "second_serve",
+        result: "let",
+        ...placedLong,
+      }),
+    ).toBe("let");
   });
 });

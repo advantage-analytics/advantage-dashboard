@@ -318,6 +318,21 @@ test.describe("completeWarnings", () => {
     );
   });
 
+  test("the games the caller already scored are the ones read", () => {
+    const session = labelSessionFixture();
+    expect(
+      completeWarnings({
+        points: session.points,
+        adScoring: session.adScoring,
+        marks: EMPTY_MARKS,
+        finalScore: null,
+        videoEndsEarly: true,
+        matchScore: null,
+        games: [],
+      }),
+    ).toEqual(["2 points of 3 not checked"]);
+  });
+
   test("nothing at all on a session with nothing left", () => {
     const empty = {
       ...labelSessionFixture(),

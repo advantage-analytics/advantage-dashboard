@@ -30,6 +30,7 @@ import {
 } from "@/lib/services/labels/session";
 import {
   readJobAdScoring,
+  readFormatAdScoring,
   resolveLabelAdScoring,
   type JobScoringRow,
 } from "@/lib/services/labels/ad-scoring";
@@ -91,7 +92,7 @@ interface DbMatch {
   score?: unknown;
   /**
    * `matches.format` (jsonb): its `ad_scoring` is the scoring's last
-   * fallback (`readFormatAdScoring`), and `play_on_lets` is read by
+   * fallback (`readFormatAdScoring`, ad-scoring.ts), and `play_on_lets` is read by
    * `readPlayOnLets`.
    */
   format?: unknown;
@@ -538,13 +539,6 @@ export function parseMatchScore(value: unknown): MatchScore | null {
  * literally says so. A null format, a missing key, or anything but `true`
  * reads as lets replayed.
  */
-/** `matches.format.ad_scoring` when it is a boolean; null otherwise. */
-export function readFormatAdScoring(format: unknown): boolean | null {
-  if (!format || typeof format !== "object") return null;
-  const value = (format as Record<string, unknown>).ad_scoring;
-  return typeof value === "boolean" ? value : null;
-}
-
 export function readPlayOnLets(format: unknown): boolean {
   if (!format || typeof format !== "object") return false;
   return (format as Record<string, unknown>).play_on_lets === true;

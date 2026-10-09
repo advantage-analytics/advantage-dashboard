@@ -11,7 +11,7 @@
 
 import type { LabelMarks } from "./marks";
 import { markSummary } from "./marks-state";
-import { labelScores } from "./score";
+import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
 import type { MatchScore } from "@/lib/services/splitstep/derivation";
 import { labelProgress, type LabelPoint } from "./session";
@@ -24,6 +24,11 @@ export interface CompleteWarningInput {
   finalScore: readonly (readonly number[])[] | null;
   videoEndsEarly: boolean | null;
   matchScore: MatchScore | null;
+  /**
+   * `labelScores(points, adScoring).games`, when the caller has scored them
+   * already (the console's `scores`); scored here otherwise.
+   */
+  games?: readonly LabelGameBand[];
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>
@@ -50,7 +55,10 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     }
   }
 
-  const sets = labelSetScores(points, labelScores(points, adScoring).games);
+  const sets = labelSetScores(
+    points,
+    input.games ?? labelScores(points, adScoring).games,
+  );
   const several = sets.length > 1;
   for (const set of sets) {
     const where = (gameInSet: number) =>

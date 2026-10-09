@@ -920,8 +920,35 @@ test.describe("writeLabelGameShift", () => {
     expect(fromMatch.calls.find((c) => c.table === "matches")?.filters).toEqual(
       { id: MATCH_ID },
     );
-    // The job said: the match is not read.
+    // A session with no match id has no format to read.
     expect(fromJob.calls.map((c) => c.table)).not.toContain("matches");
+
+    // The job says no-ad and the match says ad: the format is read beside
+    // the job's, and the job wins (PR #297).
+    const jobWins = fakeClient({
+      session: {
+        status: "labelling",
+        ad_scoring: null,
+        job_id: JOB_ID,
+        match_id: MATCH_ID,
+      },
+      job: { ad_scoring: false },
+      match: { format: { ad_scoring: true } },
+      points: rowsOf(deuce),
+    });
+    expect(
+      await writeLabelGameShift({
+        supabase: jobWins.supabase,
+        sessionId: SESSION_ID,
+        fromPointId: UUID(8),
+      }),
+    ).toMatchObject({
+      ok: true,
+      writes: [expect.anything(), expect.anything()],
+    });
+    expect(jobWins.calls.map((c) => c.table)).toContain("matches");
+    // The session said: neither is read.
+    expect(noAd.calls.map((c) => c.table)).not.toContain("matches");
 
     // None of them: ad scoring, under which the eighth row decides the game.
     expect(

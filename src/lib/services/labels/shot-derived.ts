@@ -101,11 +101,17 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
 /**
  * In, out or net as the stroke's own coordinates say it, when all four are
  * placed; the stored result until then. The one reading the marks and the
- * suggestions share, so a placed landing outranks a stale stored call.
+ * suggestions share, so a placed landing outranks a stale stored call — but
+ * never a let: that is the labeller's override, as `positionPatch` keeps it.
  */
 export function effectiveShotResult(
   shot: ResultReadableShot,
 ): LabelShotResult | null {
+  if (
+    isLetServe({ stroke: shot.stroke ?? null, result: shot.result ?? null })
+  ) {
+    return "let";
+  }
   return (
     deriveShotResult({
       stroke: shot.stroke ?? null,

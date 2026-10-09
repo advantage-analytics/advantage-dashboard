@@ -27,7 +27,15 @@ export interface SessionScoringRow {
 
 /** The one column of the session's match the fallback reads. */
 export interface MatchScoringRow {
-  format: { ad_scoring?: boolean | null } | null;
+  /** `matches.format` (jsonb), read by `readFormatAdScoring`. */
+  format: unknown;
+}
+
+/** `matches.format.ad_scoring` when it is a boolean; null otherwise. */
+export function readFormatAdScoring(format: unknown): boolean | null {
+  if (!format || typeof format !== "object") return null;
+  const value = (format as Record<string, unknown>).ad_scoring;
+  return typeof value === "boolean" ? value : null;
 }
 
 export function resolveLabelAdScoring(
@@ -58,21 +66,22 @@ export async function readJobAdScoring(
 }
 
 /**
- * The match's `format.ad_scoring`, read only when it is the fallback: when
- * neither the session nor its job says. The caller decides what a read
- * error means to it.
+ * The match's `format`, read only when it may be the fallback: a session
+ * that has set its own scoring never reads it. Read beside the job's (not
+ * after it), so a job that turns out to say nothing costs no extra round
+ * trip. The caller decides what a read error means to it.
  */
 export async function readMatchAdScoring(
   db: AdminClient,
-  matchId: string | null,
-  before: boolean | null | undefined,
+  session: { ad_scoring: boolean | null; match_id: string | null },
 ): Promise<{
   data: MatchScoringRow | null;
   error: { message: string } | null;
 }> {
-  if ((before !== null && before !== undefined) || !matchId) {
+  if (session.ad_scoring !== null || !session.match_id) {
     return { data: null, error: null };
   }
+  const matchId = session.match_id;
   return db
     .from("matches")
     .select("format")

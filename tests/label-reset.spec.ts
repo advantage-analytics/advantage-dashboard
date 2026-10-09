@@ -19,7 +19,10 @@ import type {
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
 import { buildLabelSession } from "@/lib/data/labels-server";
-import { resolveLabelAdScoring } from "@/lib/services/labels/ad-scoring";
+import {
+  readFormatAdScoring,
+  resolveLabelAdScoring,
+} from "@/lib/services/labels/ad-scoring";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
@@ -390,6 +393,21 @@ test.describe("the session's ad scoring", () => {
     expect(resolveLabelAdScoring(true, null, false)).toBe(true);
     // The job wins over the match where they disagree (PR #297).
     expect(resolveLabelAdScoring(null, false, true)).toBe(false);
+  });
+
+  test("the match's format is read as a boolean or not at all", () => {
+    expect(readFormatAdScoring({ ad_scoring: false })).toBe(false);
+    expect(readFormatAdScoring({ ad_scoring: true, best_of: 3 })).toBe(true);
+    for (const format of [
+      null,
+      undefined,
+      "x",
+      {},
+      { ad_scoring: "false" },
+      { ad_scoring: 0 },
+    ]) {
+      expect(readFormatAdScoring(format), JSON.stringify(format)).toBeNull();
+    }
   });
 
   test("the loader applies that order over the session and job rows", () => {
