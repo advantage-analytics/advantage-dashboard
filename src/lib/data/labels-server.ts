@@ -89,6 +89,8 @@ interface DbMatch {
   player2_name: string | null;
   /** `matches.score` (jsonb), parsed by `parseMatchScore`. */
   score?: unknown;
+  /** `matches.format` (jsonb); only `play_on_lets` is read, by `readPlayOnLets`. */
+  format?: unknown;
 }
 interface DbSession {
   id: string;
@@ -403,7 +405,7 @@ export async function readLabelSessionRows<T = undefined>(
       beside?.(session) as Promise<T>,
       db
         .from("matches")
-        .select("id, player1_name, player2_name, score")
+        .select("id, player1_name, player2_name, score, format")
         .eq("id", session.match_id)
         .maybeSingle<DbMatch>(),
       // The job's scoring is only the fallback for a session that has not
@@ -528,6 +530,16 @@ export function parseMatchScore(value: unknown): MatchScore | null {
 }
 
 /**
+ * `matches.format.play_on_lets`, as a boolean: true only when the column
+ * literally says so. A null format, a missing key, or anything but `true`
+ * reads as lets replayed.
+ */
+export function readPlayOnLets(format: unknown): boolean {
+  if (!format || typeof format !== "object") return false;
+  return (format as Record<string, unknown>).play_on_lets === true;
+}
+
+/**
  * Rows → the console's session. Pure and exported for the spec: shots fold
  * under their point and are put in video order by `orderLabelShots`, never
  * by the order PostgREST returned them in.
@@ -565,6 +577,7 @@ export function buildLabelSession(
     player2Name: match?.player2_name ?? "Player 2",
     adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
     marksEnabled: session.marks_enabled,
+    playOnLets: readPlayOnLets(match?.format),
     finalScore: parseFinalScore(session.final_score ?? null),
     videoEndsEarly: session.video_ends_early ?? null,
     matchScore: parseMatchScore(match?.score ?? null),

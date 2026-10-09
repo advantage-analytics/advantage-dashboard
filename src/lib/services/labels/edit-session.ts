@@ -37,6 +37,7 @@ import {
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
   parseLabelPointSeed,
+  letResultError,
   parseLabelShotPatch,
   parseLabelShotSeed,
   type LabelPointFields,
@@ -321,6 +322,9 @@ export async function writeLabelShotEdit(params: {
       if (row.status === "deleted") {
         return { error: "Restore this shot before editing it." };
       }
+      // A let on a stroke the patch does not retype: judged by the stored one.
+      const letError = letResultError(patch, row);
+      if (letError) return { error: letError };
       // Independent reads, the gate's refusal first.
       const [gate, owned] = await Promise.all([
         attempt === 0 ? readSessionGate(supabase, row.session_id) : null,

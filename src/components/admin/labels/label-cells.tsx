@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
-import { MenuSelect } from "@/components/ui/menu-select";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -163,10 +163,7 @@ const FIELD_DARK =
 const SELECT_TRIGGER_DARK =
   "-ml-[5px] h-[26px] w-[calc(100%+7px)] min-w-0 shrink border-white/20 bg-white/[0.08] px-1 text-[11px] text-white hover:bg-white/[0.14] aria-expanded:border-[var(--blue)] [&>svg]:hidden";
 
-export interface SelectOption {
-  value: string;
-  label: string;
-}
+export type SelectOption = MenuOption<string>;
 
 /**
  * A menu's keys, from its trigger or its rows (the menu portals out of the
@@ -223,6 +220,10 @@ export function SelectEditor({
   options,
   onChange,
   menu = "dark",
+  open,
+  onOpenChange,
+  className,
+  placeholder = "—",
 }: {
   label: string;
   value: string | null;
@@ -230,6 +231,13 @@ export function SelectEditor({
   onChange: (value: string | null) => void;
   /** The menu's tone: portalled, so the rail's palette does not reach it. */
   menu?: FloatMenuTone;
+  /** Controlled open state; absent, the menu keeps its own. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Extra trigger classes: a let's amber ink. */
+  className?: string;
+  /** The trigger's words when `value` is none of the options. */
+  placeholder?: string;
 }) {
   return (
     <span
@@ -243,11 +251,13 @@ export function SelectEditor({
         value={value ?? undefined}
         options={options}
         onChange={onChange}
-        placeholder="—"
+        placeholder={placeholder}
         align="start"
         width="trigger"
         tone={menu}
-        className={SELECT_TRIGGER_DARK}
+        open={open}
+        onOpenChange={onOpenChange}
+        className={cn(SELECT_TRIGGER_DARK, className)}
       />
     </span>
   );
