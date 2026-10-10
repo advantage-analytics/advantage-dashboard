@@ -221,6 +221,13 @@ test.describe("the two lines", () => {
         FRAME,
       ),
     ).toBe("Service winner by Goodman");
+    // Ended by the receiver's miss, it is still the server's.
+    expect(
+      pointSentence(
+        point({ ending: "service_winner", endedBy: "p1", server: "p2" }),
+        FRAME,
+      ),
+    ).toBe("Service winner by Goodman");
     expect(pointSentence(point({ ending: "let_replayed" }), FRAME)).toBe(
       "Let, replayed",
     );

@@ -1,7 +1,7 @@
 /**
  * What a labelled point's strokes already say about how it ended. Pure; the
  * server runs it around every shot write (ending-session.ts) and the console
- * reads it for the "Ending looks stale" hint (marks-state.ts).
+ * reads it for the "Different ending?" hint (marks-state.ts).
  *
  * The last ball also settles who won: a ball that missed gives the point to the
  * other side, a ball marked in gives it to its hitter. A last ball with no

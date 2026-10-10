@@ -11,6 +11,7 @@ import {
   HINT_ACTION_LABEL,
   hintLabel,
   markHover,
+  staleEndingAction,
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
@@ -30,6 +31,10 @@ import {
   type MarkState,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import {
+  isSuggestionKey,
+  pointEndedKey,
+} from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
 import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
@@ -127,6 +132,8 @@ export interface PointHint {
    * under the stroke that ended the point, not at the top of the well.
    */
   afterShotId?: string;
+  /** The key Dismiss stores, for a hint the labeller can wave away. */
+  dismissKey?: string;
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -335,7 +342,7 @@ export type HintEdit = Pick<
 
 /**
  * The open point's hints: the marks' own, then the five read off the rows —
- * "Point ended here", "Ending looks stale", "Second serve?", "No landing on
+ * "Point ended here", "Different ending?", "Second serve?", "No landing on
  * the last shot" and "Serve after a serve in play". Each carries its answers
  * when `edit` can write them (`hintActions`). Nothing without marks: a
  * session labelled blind reads none of these, and its ghosts are strokes,
@@ -360,14 +367,25 @@ export function pointHints(
     ...pointRowMarkList(point, marks).hints,
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
-  return hints.map((mark) => ({
-    code: mark.code,
-    label: hintLabel(mark),
-    detail: markHover(mark, names),
-    actions: hintActions(mark, point, edit),
-    afterShotId:
-      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined,
-  }));
+  return hints.flatMap((mark) => {
+    // "Point ended here" is a suggestion: once dismissed it is not drawn.
+    const ended =
+      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
+    const key = ended ? pointEndedKey(ended) : undefined;
+    // A draft stroke has no id to store yet: no Dismiss until it lands.
+    const dismissKey = key && isSuggestionKey(key) ? key : undefined;
+    if (dismissKey && point.dismissed.includes(dismissKey)) return [];
+    return [
+      {
+        code: mark.code,
+        label: hintLabel(mark, names),
+        detail: markHover(mark, names),
+        actions: hintActions(mark, point, edit),
+        afterShotId: ended,
+        dismissKey,
+      },
+    ];
+  });
 }
 
 /**
@@ -393,7 +411,7 @@ function hintActions(
       const { ending, endedBy, winner } = mark.params;
       return [
         {
-          label: HINT_ACTION_LABEL.ending_stale,
+          label: staleEndingAction(ending),
           run: () =>
             onPatchPoint(point.id, {
               ending,
