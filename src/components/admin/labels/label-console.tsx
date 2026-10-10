@@ -151,6 +151,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/film/use-follow-scroll";
 import type { CourtPoint } from "./court-geometry";
 import {
+  tiebreakHitterHalf,
   NO_PLACEMENT,
   flipPlacement,
   hitterHalf,
@@ -177,6 +178,10 @@ import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
 import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
+import {
+  planTiebreakFold,
+  tiebreakFolds,
+} from "@/lib/services/labels/tiebreak-fold";
 import type { LabelRowOperations } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
@@ -1088,6 +1093,23 @@ export function LabelConsole({
   }
 
   /**
+   * The tiebreak at 6–6 (`tiebreak-fold.ts`): the game after it becomes a
+   * tiebreak, the vendor's split games fold into it, and its serve order is
+   * set — planned here on the rows as they stand, written by the server.
+   */
+  function foldTiebreak(setNumber: number) {
+    if (!operations?.foldTiebreak) return;
+    const fold = tiebreakFolds(points, session.adScoring).find(
+      (f) => f.setNumber === setNumber,
+    );
+    if (!fold) return refuse("That set is not at 6–6 before an ordinary game.");
+    const plan = planTiebreakFold(points, fold);
+    if ("error" in plan) return refuse(plan.error);
+    const fold_ = operations.foldTiebreak;
+    runGameShift(plan, () => fold_(session.id, setNumber));
+  }
+
+  /**
    * The mirror of `shiftGameOverflow`: a game left unfinished pulls the next
    * game's first rows in until it is decided (`planGamePull`). A plan that says
    * the game is more likely missing a point writes nothing and says so
@@ -1638,8 +1660,15 @@ export function LabelConsole({
   // identity for the console's life (`useLatestHandlers`) and runs whatever
   // this render defined.
   const rowOperations = useLatestHandlers<LabelRowOperations>({
-    onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
-      setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber }),
+    onAskDeleteShot: (shotId, shotNumber, pointNumber) => {
+      // A stroke the labeller added goes at once: it records nothing the
+      // scorer needs and leaves no row, so there is nothing to confirm.
+      if (findShot(points, shotId)?.status === "added") {
+        deleteShot(shotId, "other");
+        return;
+      }
+      setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber });
+    },
     onAskDeletePoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
       if (!point) return;
@@ -1657,6 +1686,7 @@ export function LabelConsole({
     onDismissSuggestion: dismissSuggestion,
     onInsertPoint: insertPoint,
     onShiftGameOverflow: shiftGameOverflow,
+    onFoldTiebreak: foldTiebreak,
     onSplitPoint: splitPoint,
     onCombinePoints: combinePoints,
     onSwitchPlayers: switchPlayers,
@@ -2083,6 +2113,11 @@ export interface LabelConsoleOperations {
     sessionId: string,
     gameKey: string,
   ) => Promise<LabelGameShiftResult>;
+  /** Makes set `setNumber`'s game after 6–6 a tiebreak. Same answer. */
+  foldTiebreak?: (
+    sessionId: string,
+    setNumber: number,
+  ) => Promise<LabelGameShiftResult>;
   /** Splits `pointId` at `shotId`. Returns the new row and the anchor. */
   splitPoint: (
     pointId: string,
@@ -2149,7 +2184,12 @@ function placementOf(
   const shot = owner.shots[index];
   const start = startPlacement(
     shotId,
-    hitterHalf(shot, owner.shots.slice(0, index)),
+    hitterHalf(
+      shot,
+      owner.shots.slice(0, index),
+      // In a tiebreak the earlier points say, ends changing every six.
+      tiebreakHitterHalf(points, owner.id, shot.hitter) ?? "near",
+    ),
   );
   const hasContact = shot.contactX !== null && shot.contactY !== null;
   const hasLanding = shot.landingX !== null && shot.landingY !== null;

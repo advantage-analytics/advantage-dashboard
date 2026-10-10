@@ -618,6 +618,26 @@ export function destinationServerIn(
 }
 
 /**
+ * A game's number within its set, as the bands name it: its rank among the
+ * set's games that still hold a live point. `game_number` counts across the
+ * match, so set 2's first game is not "Game 13".
+ */
+export function gameInSetOf(
+  points: readonly Pick<LabelPoint, "status" | "setNumber" | "gameNumber">[],
+  game: LabelGame,
+): number {
+  const numbers = new Set<number>();
+  for (const point of points) {
+    if (point.status === "deleted" || point.setNumber !== game.setNumber) {
+      continue;
+    }
+    if (point.gameNumber !== null) numbers.add(point.gameNumber);
+  }
+  numbers.add(game.gameNumber);
+  return [...numbers].sort((x, y) => x - y).indexOf(game.gameNumber) + 1;
+}
+
+/**
  * The games a point can move to from the console: the game of the nearest
  * live point before it and after it in `point_index` order, when that game
  * is not its own. Adjacent only, so a moved point never lands in a game

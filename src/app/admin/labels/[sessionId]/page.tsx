@@ -11,6 +11,7 @@ import {
   deleteLabelShotAction,
   moveLabelPointAction,
   pullLabelGamePointsAction,
+  foldLabelTiebreakAction,
   removeLabelShotsAfterAction,
   reopenLabelSessionAction,
   resetLabelPointAction,
@@ -58,6 +59,13 @@ import {
  * already gates the route.
  */
 export const dynamic = "force-dynamic";
+
+/**
+ * The page's server actions run under this too. "Mark complete" publishes:
+ * it rewrites a match's points and shots and recomputes its statistics, which
+ * takes longer than an ordinary label write.
+ */
+export const maxDuration = 120;
 
 export const metadata = { title: "Label match" };
 
@@ -108,6 +116,7 @@ export default async function AdminLabelSessionPage({
           insertPoint: insertLabelPointAction,
           shiftGameOverflow: shiftLabelGameOverflowAction,
           pullGamePoints: pullLabelGamePointsAction,
+          foldTiebreak: foldLabelTiebreakAction,
           splitPoint: splitLabelPointAction,
           combinePoints: combineLabelPointsAction,
           switchPlayers: switchLabelPointPlayersAction,

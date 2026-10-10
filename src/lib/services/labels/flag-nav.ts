@@ -49,13 +49,18 @@ const KINDS: readonly { name: string; codes: readonly LabelMarkCode[] }[] = [
       "pick_winner",
       "last_shot_unresolved",
       "winner_guessed",
+      "last_call_overruled",
     ],
   },
   { name: "Missing shot", codes: ["same_player_consecutive"] },
   { name: "Serve", codes: ["reserve_after_in", "service_court_repeat"] },
   {
     name: "Score",
-    codes: ["score_side_mismatch", "tiebreak_score_off_six_all"],
+    codes: [
+      "score_side_mismatch",
+      "tiebreak_score_off_six_all",
+      "segment_proposal_differs",
+    ],
   },
 ];
 

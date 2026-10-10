@@ -53,6 +53,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
   type LabelGameShiftResult,
@@ -326,6 +327,17 @@ export async function pullLabelGamePointsAction(
 }
 
 /**
+ * The tiebreak at 6–6: make set `setNumber`'s next game a tiebreak, fold the
+ * vendor's split games into it and set its 1-2-2 serve order.
+ */
+export async function foldLabelTiebreakAction(
+  sessionId: string,
+  setNumber: number,
+): Promise<LabelGameShiftResult> {
+  return foldLabelTiebreak(sessionId, setNumber);
+}
+
+/**
  * Split a point at `shotId`: that shot and every shot after it (in video
  * order, tombstones included) move to a new point right below `pointId`,
  * which takes the anchor's set, game, server and game type and the rallies
@@ -386,9 +398,10 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
- * The console header's "Mark complete": `label_sessions.status` to
- * `complete` with its `completed_at`, nothing else. Refused on a session that
- * is not labelling.
+ * The console header's "Mark complete": publishes the labels to the match
+ * (apply-session.ts, the replaced version backed up), then `label_sessions.status`
+ * to `complete`. Refused on a session that is not labelling, and left open
+ * when the publish refuses.
  */
 export async function completeLabelSessionAction(
   sessionId: string,

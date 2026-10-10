@@ -594,6 +594,74 @@ const allMarksFor = (
   });
 
 test.describe("the labels-only flags", () => {
+  test("last_call_overruled: the last stroke seeded In that the vendor called out or in the net", () => {
+    const out = rallyOf(1, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+      ["A", "groundstroke", false],
+    ]);
+    const net = rallyOf(2, [
+      ["B", "serve"],
+      ["A", "groundstroke"],
+    ]);
+    net.strokes[1].netHit = true;
+    const agreed = rallyOf(3, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]);
+    const seededOut = rallyOf(4, [
+      ["A", "serve"],
+      ["B", "groundstroke", false],
+    ]);
+    const rallies = [out, net, agreed, seededOut];
+    // The derivation's last result: In off the landing, but Out for rally 4.
+    const seeded = rallies.map((r, n) => ({
+      shots: r.strokes.map((stroke, i) => ({
+        ...shotOf(stroke, i),
+        result: i === r.strokes.length - 1 ? (n === 3 ? "Out" : "In") : "In",
+      })),
+    }));
+    const marks = marksFor(rallies, ["B", "A", "B", "A"], seeded);
+    const overruled = (id: string) =>
+      (marks.points[id] ?? []).filter((m) => m.code === "last_call_overruled");
+    expect(overruled("p1")).toEqual([
+      {
+        code: "last_call_overruled",
+        tier: "count",
+        scope: "point",
+        params: { vendorCall: "out", eventId: out.strokes[2].eventId },
+      },
+    ]);
+    expect(overruled("p2").map((m) => m.params)).toEqual([
+      { vendorCall: "net", eventId: net.strokes[1].eventId },
+    ]);
+    // The vendor called it in and the seed agrees, or both say out: nothing.
+    expect(overruled("p3")).toEqual([]);
+    expect(overruled("p4")).toEqual([]);
+    // The other way round: seeded Out where the vendor called it in.
+    const calledIn = rallyOf(5, [
+      ["A", "serve"],
+      ["B", "groundstroke"],
+    ]);
+    const reversed = marksFor(
+      [calledIn],
+      ["A"],
+      [
+        {
+          shots: calledIn.strokes.map((stroke, i) => ({
+            ...shotOf(stroke, i),
+            result: i === 1 ? "Out" : "In",
+          })),
+        },
+      ],
+    );
+    expect(
+      (reversed.points.p1 ?? [])
+        .filter((m) => m.code === "last_call_overruled")
+        .map((m) => m.params),
+    ).toEqual([{ vendorCall: "in", eventId: calledIn.strokes[1].eventId }]);
+  });
+
   test("serve_fault: one serve called out, one or two strokes after it", () => {
     const oneBack = rallyOf(1, [
       ["A", "serve", false],
@@ -812,16 +880,18 @@ test.describe("the labels-only flags", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("nine codes can change the score, and only they are counted", () => {
+  test("eleven codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
     expect(counted.sort()).toEqual([
+      "last_call_overruled",
       "last_shot_unresolved",
       "pick_winner",
       "reserve_after_in",
       "same_player_consecutive",
       "score_side_mismatch",
+      "segment_proposal_differs",
       "service_court_repeat",
       "tiebreak_score_off_six_all",
       "winner_disputed",

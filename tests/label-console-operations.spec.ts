@@ -775,8 +775,8 @@ test("Mark complete: the confirm lists what is still open, and the session is co
   const dialog = dialogs.at(-1)!;
   expect(dialog).toMatchObject({
     open: true,
-    title: "Mark this session complete?",
-    confirmLabel: "Mark complete",
+    title: "Mark complete and publish?",
+    confirmLabel: "Publish",
     tone: "primary",
   });
   const list = renderToStaticMarkup(dialog.children as React.ReactElement);

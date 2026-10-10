@@ -126,7 +126,7 @@ test.describe("an ordinary game", () => {
 });
 
 test.describe("tiebreaks", () => {
-  test("a 7-point tiebreak prints raw counts, server first", () => {
+  test("a 7-point tiebreak prints raw counts, player 1 first", () => {
     const tb = { gameNumber: 13, gameType: "tiebreak" as LabelGameType };
     const points = [
       pt("p1", { ...tb, server: "p1" }),
@@ -137,14 +137,15 @@ test.describe("tiebreaks", () => {
       pt("p1", { ...tb, server: "p2" }),
       pt("p1", { ...tb, server: "p2" }),
     ];
+    // The serve changes hands every two points; the count does not.
     expect(scoresBefore(points)).toEqual([
       "0–0",
-      "0–1",
+      "1–0",
       "1–1",
       "2–1",
       "3–1",
-      "2–3",
-      "2–4",
+      "3–2",
+      "4–2",
     ]);
   });
 

@@ -45,6 +45,7 @@ function mark<C extends LabelMarkCode>(
 /** One mark of every code, with the params the board's sample row implies. */
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
+  last_call_overruled: { vendorCall: "net", eventId: 7 },
   winner_to_error_by_bounce: { loser: "p1" },
   ending_suspect_line: {},
   second_serve_called_out: {},
@@ -129,6 +130,7 @@ test.describe("mark copy", () => {
       last_shot_unresolved: "Ending can’t be read",
       serve_after_serve_in: "Serve after a serve in play",
       pick_winner: "Pick the winner",
+      last_call_overruled: "Was the last ball in?",
       phantom_strokes_dropped: "1 shot removed",
       out_ball_rally_continued: "Out call ignored",
       winner_guessed: "Winner guessed",

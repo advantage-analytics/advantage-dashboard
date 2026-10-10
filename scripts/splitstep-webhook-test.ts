@@ -22,9 +22,10 @@
  * `trajectories_url` is sent as null, which the vendor's docs allow and which
  * must be tolerated.
  *
- * The trimmed video url must be RECORDED and NOT copied: the vendor's re-encode
- * is no longer kept (it arrived without audio), and the athlete's own upload —
- * cut before upload — is the video we play. The field names matter too:
+ * Everything a completion links to is kept (vendor-archive.ts): the players
+ * file gzipped — a long match's is over the bucket's 50 MB cap — and the
+ * trimmed video copied server-side into Azure, `trimmed_object_key` set. The
+ * athlete's own upload is still the video we play. The field names matter too:
  * `sas_url` became `strokes_url` in September 2026, and a rename the parser
  * misses leaves a completed job with no results and nothing on screen to say so.
  *
@@ -39,7 +40,13 @@ import {
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
+  trimmedObjectKey,
 } from "../src/lib/services/splitstep/object-keys";
+import {
+  GZIP_SUFFIX,
+  readVendorJson,
+} from "../src/lib/services/splitstep/vendor-archive";
+import { videoContainerClient } from "../src/lib/services/splitstep/video-url/azure-sas";
 
 /* ─── env ─── */
 
@@ -279,9 +286,20 @@ async function cleanup(): Promise<void> {
     return [
       resultsObjectKey(ids),
       playersObjectKey(ids),
+      `${playersObjectKey(ids)}${GZIP_SUFFIX}`,
       trajectoriesObjectKey(ids),
     ];
   });
+
+  // The trimmed copies the webhook started, in our Azure container.
+  for (const j of createdJobs) {
+    await videoContainerClient()
+      .getBlockBlobClient(
+        trimmedObjectKey({ userId: j.userId, matchId: j.matchId, jobId: j.id }),
+      )
+      .deleteIfExists()
+      .catch(() => undefined);
+  }
 
   await supabase.storage
     .from(RESULTS_BUCKET)
@@ -432,9 +450,7 @@ async function main(): Promise<void> {
     trimmed_video_url: trimmedVideoUrl,
   };
 
-  console.log(
-    "2. job_completed — strokes and players fetched and stored, trimmed video recorded, not copied",
-  );
+  console.log("2. job_completed — strokes, players and trimmed video all kept");
   {
     const r = await post(completionBody);
     check("returns 200", r.status === 200, r);
@@ -513,12 +529,17 @@ async function main(): Promise<void> {
     );
 
     if (playersKey) {
-      const dl = await supabase.storage
-        .from(RESULTS_BUCKET)
-        .download(playersKey);
-      const text = dl.data ? await dl.data.text() : "";
       check(
-        "stored players bytes match the fixture byte-for-byte",
+        "the players file is stored gzipped",
+        playersKey.endsWith(GZIP_SUFFIX),
+        playersKey,
+      );
+      const text = await readVendorJson(
+        supabase as Parameters<typeof readVendorJson>[0],
+        playersKey,
+      ).catch(() => "");
+      check(
+        "stored players bytes inflate to the fixture byte-for-byte",
         text === PLAYERS_FIXTURE,
         {
           got: text.slice(0, 120),
@@ -543,18 +564,19 @@ async function main(): Promise<void> {
       urls,
     );
 
-    // Checked after the players file landed, which is the last step of the
-    // after() block — so if a copy were still wired in, its key would be set by
-    // now.
+    // The copy is started first in after(), so its key is on the row by the
+    // time the players file has landed.
     const { data: afterRow } = await supabase
       .from("processing_jobs")
       .select("trimmed_object_key")
       .eq("id", completedJob.id)
       .maybeSingle();
     check(
-      "the vendor's trimmed video is NOT copied — no trimmed_object_key",
-      !(afterRow as { trimmed_object_key: string | null } | null)
-        ?.trimmed_object_key,
+      "the vendor's trimmed video copy is started — trimmed_object_key set",
+      Boolean(
+        (afterRow as { trimmed_object_key: string | null } | null)
+          ?.trimmed_object_key,
+      ),
       afterRow,
     );
   }

@@ -9,6 +9,7 @@ import {
   type LabelMarkParams,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
+import { pointEndedEarly } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -524,6 +525,99 @@ test.describe("the hints read off the rows, with their answers", () => {
     ]);
   });
 
+  test("Was the last ball in? answers with the vendor's call, until the result is changed", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const patched: unknown[][] = [];
+    const edit = {
+      onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
+    };
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    const call = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: ace.eventId!,
+    });
+    const [hint] = pointHints(point, marksOf(point, [call]), NAMES, edit);
+    expect([hint.code, hint.label]).toEqual([
+      "last_call_overruled",
+      "Was the last ball in?",
+    ]);
+    expect(hint.actions.map((a) => a.label)).toEqual(["Make it out"]);
+    hint.actions[0].run();
+    expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
+
+    // A net call reads as one.
+    const net = mark("last_call_overruled", {
+      vendorCall: "net",
+      eventId: ace.eventId!,
+    });
+    const [netHint] = pointHints(point, marksOf(point, [net]), NAMES, edit);
+    expect(netHint.actions.map((a) => a.label)).toEqual(["Make it a net"]);
+
+    // Once the labeller changed the result, the chip is settled: no answer.
+    const answered = {
+      ...point,
+      shots: [{ ...ace, result: "out" as const }],
+    };
+    expect(
+      pointHints(answered, marksOf(answered, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+
+    // Another stroke is now last — the called one deleted, or a stroke after
+    // it: nothing is offered, so the call is never written to the wrong ball.
+    const after = {
+      ...point,
+      shots: [ace, { ...ace, id: "s-after", eventId: (ace.eventId ?? 0) + 1 }],
+    };
+    expect(
+      pointHints(after, marksOf(after, [call]), NAMES, edit).map((h) => h.code),
+    ).not.toContain("last_call_overruled");
+    const deleted = {
+      ...point,
+      shots: [
+        { ...ace, status: "deleted" as const },
+        { ...ace, id: "s-before", eventId: (ace.eventId ?? 0) - 1 },
+      ],
+    };
+    expect(
+      pointHints(deleted, marksOf(deleted, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+    // A phantom swing after it, with no result, does not hide the answer.
+    const phantom = {
+      ...point,
+      shots: [
+        ace,
+        {
+          ...ace,
+          id: "s-phantom",
+          eventId: (ace.eventId ?? 0) + 1,
+          result: null,
+        },
+      ],
+    };
+    expect(
+      pointHints(phantom, marksOf(phantom, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).toContain("last_call_overruled");
+
+    // "Net or out?" on that last ball is one question too many beside it —
+    // and comes back once the answer is given.
+    const netOrOut = mark("net_hit_contradicts_height", {});
+    const both = (p: LabelPoint) =>
+      pointHints(p, marksOf(p, [call], { [ace.id]: [netOrOut] }), NAMES, edit)
+        .map((h) => h.code)
+        .filter((c) =>
+          ["last_call_overruled", "net_hit_contradicts_height"].includes(c),
+        );
+    expect(both(point)).toEqual(["last_call_overruled"]);
+    expect(both(answered)).toEqual(["net_hit_contradicts_height"]);
+  });
+
   /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */
   const endedEarly = () => {
     const point = fixturePoint();
@@ -629,6 +723,54 @@ test.describe("the hints read off the rows, with their answers", () => {
     ).not.toContain("data-suggestion-dismiss");
   });
 
+  test("once a later stroke is settled, the question does not move up to an earlier one", () => {
+    const point = endedEarly();
+    // A second ball out earlier in the rally: s-early, before s-long.
+    const [ace, ...rest] = point.shots;
+    const early = {
+      ...ace,
+      id: "s-early",
+      eventId: 150,
+      stroke: "forehand" as const,
+      result: "out" as const,
+      videoTime: 1.5,
+    };
+    const withEarly = { ...point, shots: [ace, early, ...rest] };
+    const asked = (p: LabelPoint) =>
+      pointEndedEarly(p, true)?.params.shotId ?? null;
+    expect(asked(withEarly)).toBe("s-long");
+    // Dismissed at s-long: nothing moves up to s-early.
+    expect(
+      asked({ ...withEarly, dismissed: ["point_ended:s-long"] }),
+    ).toBeNull();
+    // Resolved by removing what followed (tombstones after it): the same.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-dead-1" || s.id === "s-dead-2"
+            ? {
+                ...s,
+                status: "deleted" as const,
+                statusBeforeDelete: "kept" as const,
+              }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+    // Resolved by correcting s-long's call: edited, so s-early stays quiet.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-long"
+            ? { ...s, result: "in" as const, status: "edited" as const }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+  });
+
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const calls: unknown[][] = [];
@@ -638,6 +780,8 @@ test.describe("the hints read off the rows, with their answers", () => {
       operations: {
         ...ROW_OPERATIONS,
         onSplitPoint: (...args: unknown[]) => calls.push(["split", ...args]),
+        onDismissSuggestion: (...args: unknown[]) =>
+          calls.push(["dismiss", ...args]),
       },
     };
     const point = endedEarly();
@@ -652,6 +796,8 @@ test.describe("the hints read off the rows, with their answers", () => {
     ended.actions[1].run();
     expect(calls).toEqual([
       ["remove", point.id, "s-long"],
+      // Split answers the question for good, then splits.
+      ["dismiss", point.id, "point_ended:s-long"],
       ["split", point.id, "s-dead-1"],
     ]);
     // The last swing has no landing: that hint rides beside it, with no answer.

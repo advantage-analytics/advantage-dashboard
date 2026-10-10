@@ -44,6 +44,8 @@ export interface LabelRowOperations {
   onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
   /** Move a game's leftover points into the next game (`game-shift.ts`). */
   onShiftGameOverflow: (fromPointId: string) => void;
+  /** Make set `setNumber`'s game after 6–6 a tiebreak (`tiebreak-fold.ts`). */
+  onFoldTiebreak?: (setNumber: number) => void;
   /** Split a point at one of its shots (`point-split.ts`). */
   onSplitPoint: (pointId: string, shotId: string) => void;
   /**

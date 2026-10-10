@@ -24,13 +24,16 @@ import {
   isNonPointEnding,
   isLetServe,
   isServeStroke,
+  isWithdrawnAdd,
   liveShotsInOrder,
+  orderLabelShots,
   type LabelPoint,
   type LabelShot,
 } from "./session";
 import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 import {
   addedPointBetween,
+  pointEndedKey,
   suggestionState,
   type SuggestionNeighbour,
 } from "./suggestions";
@@ -46,7 +49,7 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId" | "eventId">> &
+  Partial<Pick<LabelShot, "afterEventId" | "eventId" | "statusBeforeDelete">> &
   ResultReadableShot;
 
 export type MarkStatePoint = Pick<
@@ -63,10 +66,11 @@ export function pointChanged(point: MarkStatePoint): boolean {
   if (point.status === "edited" || point.status === "added") return true;
   return point.shots.some(
     (shot) =>
-      shot.siteRemovalRestoredAt !== null ||
-      shot.status === "edited" ||
-      shot.status === "deleted" ||
-      shot.status === "added",
+      !isWithdrawnAdd(shot) &&
+      (shot.siteRemovalRestoredAt !== null ||
+        shot.status === "edited" ||
+        shot.status === "deleted" ||
+        shot.status === "added"),
   );
 }
 
@@ -272,17 +276,37 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
  * hit after the point ended — or are a second point the vendor ran into this
  * one — so the hint offers to remove them or to split there. Live means not
- * deleted and, with `ghosts` on, not a ghost.
+ * deleted and, with `ghosts` on, not a ghost. Only the latest such stroke is
+ * asked about, and not once the labeller has settled it or anything after it.
  */
 export function pointEndedEarly(
-  point: Pick<LabelPoint, "shots">,
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
+  const ordered = orderLabelShots(point.shots);
+  const dismissed = new Set(point.dismissed ?? []);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
     if (!endsPointWhenMissed(shot.stroke)) continue;
     if (!isMissedResult(effectiveShotResult(shot))) continue;
+    // Settled once the labeller has looked at this stroke or one after it:
+    // dismissed the question there, or edited, added or deleted a stroke
+    // after it. Play went on past a later stroke, so the rally was live
+    // through every one before it — the question does not move up the rally
+    // to a stroke the labeller has already watched go by.
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at.
+          (s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
+    if (settled) return null;
     return {
       code: "shot_after_point_end",
       tier: "hint",
@@ -410,6 +434,39 @@ export function endingStale(
       winner: derived.winner,
     },
   };
+}
+
+/**
+ * "Was the last ball in?"'s answer: the point's `last_call_overruled` count
+ * mark, and the stroke it was built for (`eventId`) to write the vendor's call
+ * onto — only while that stroke is still the point's last live stroke with a
+ * result, and still carries its seeded result. Null once the labeller has
+ * deleted it, added a stroke after it or changed its result, and with no such
+ * mark. Trailing strokes with no result (a phantom swing at a dead ball) do
+ * not count as after it. Offered on a click, never applied on load: across
+ * the checked points of three hand-labelled matches the vendor's call was
+ * right 41 times in 52, too few to overrule the landing unseen.
+ */
+export function lastCallAnswer(
+  point: Pick<LabelPoint, "shots">,
+  countMarks: readonly LabelMark[],
+  ghosts: boolean,
+): {
+  mark: Extract<LabelMark, { code: "last_call_overruled" }>;
+  shotId: string;
+} | null {
+  const mark = countMarks.find(
+    (m): m is Extract<LabelMark, { code: "last_call_overruled" }> =>
+      m.code === "last_call_overruled",
+  );
+  if (!mark) return null;
+  const last = liveShotsInOrder(point, ghosts).findLast(
+    (shot) => shot.result !== null,
+  );
+  if (!last || last.eventId !== mark.params.eventId || !last.seed) return null;
+  if (last.result !== last.seed.result) return null;
+  if (last.result === mark.params.vendorCall) return null;
+  return { mark, shotId: last.id };
 }
 
 /**

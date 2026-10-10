@@ -920,10 +920,14 @@ test("vercel.json schedules this endpoint daily at 05:00 UTC and keeps what was 
   expect(config.$schema).toBe("https://openapi.vercel.sh/vercel.json");
   expect(config.crons).toEqual([
     { path: CLEANUP_CRON_PATH, schedule: "0 5 * * *" },
+    // The vendor-file archive's second chance (vendor-archive.ts).
+    { path: "/api/cron/archive-vendor-files", schedule: "0 6 * * *" },
   ]);
-  // The scheduled path must be a route that exists.
+  // Every scheduled path must be a route that exists.
   const { existsSync } = await import("node:fs");
-  expect(existsSync(`src/app${CLEANUP_CRON_PATH}/route.ts`)).toBe(true);
+  for (const cron of config.crons as { path: string }[]) {
+    expect(existsSync(`src/app${cron.path}/route.ts`)).toBe(true);
+  }
 });
 
 test(".env.example documents CRON_SECRET once and embeds no value", async () => {

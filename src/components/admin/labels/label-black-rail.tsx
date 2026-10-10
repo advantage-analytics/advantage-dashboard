@@ -59,6 +59,7 @@ import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
+import { tiebreakFolds } from "@/lib/services/labels/tiebreak-fold";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -68,6 +69,7 @@ import {
 import {
   BlackDeletedPoint,
   BlackGameOverflow,
+  BlackTiebreakFold,
   BlackPointRow,
   BlackSuggestedPoint,
   openPointSuggestions,
@@ -314,6 +316,17 @@ export function LabelBlackRail({
     () => openPointSuggestions(points, marks),
     [points, marks],
   );
+  // The tiebreak at 6–6, by the first point it folds: on editable sessions.
+  const foldBefore = useMemo(
+    () =>
+      new Map(
+        (editable ? tiebreakFolds(points, adScoring) : []).map((fold) => [
+          fold.pointIds[0],
+          fold,
+        ]),
+      ),
+    [editable, points, adScoring],
+  );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
@@ -483,6 +496,7 @@ export function LabelBlackRail({
                 const band = bandBefore.get(point.id);
                 const slot = slotBefore.get(point.id);
                 const overflow = overflowBefore.get(point.id);
+                const fold = foldBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
@@ -500,6 +514,13 @@ export function LabelBlackRail({
                         onSetGameType={editable ? onSetGameType : undefined}
                         onSetGameServer={editable ? onSetGameServer : undefined}
                         menu={tone}
+                      />
+                    ) : null}
+                    {fold ? (
+                      <BlackTiebreakFold
+                        fold={fold}
+                        points={points}
+                        edit={edit}
                       />
                     ) : null}
                     {slot ? (

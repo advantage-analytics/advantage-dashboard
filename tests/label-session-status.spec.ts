@@ -4,6 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import type { AdminClient } from "@/lib/supabase/admin";
+import {
+  checkSessionOpen,
+  PUBLISH_LEASE_MS,
+  PUBLISHING,
+} from "@/lib/services/labels/edit-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import type { LabelSession } from "@/lib/services/labels/session";
@@ -36,10 +41,13 @@ const { P1, P2 } = FIXTURE_POINT_IDS;
 
 interface Call {
   table: string;
-  op: "select" | "update";
+  op: "select" | "update" | "rpc";
   values?: Record<string, unknown>;
   filters: Record<string, unknown>;
 }
+
+/** The lease's stamp, as the database's clock writes it. */
+const CLAIM_STAMP = "2026-10-10T21:00:00.123456+00:00";
 
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
@@ -47,14 +55,28 @@ function fakeClient(rows: {
   raced?: boolean;
   /** The update is refused with this Postgres code. */
   failCode?: string;
+  /** Updates from this one on (0-based) fail with a plain error. */
+  failFromUpdate?: number;
 }) {
   const calls: Call[] = [];
+  let updateCount = 0;
   const client = {
+    /** `claim_label_publish_lease`: the database's stamp, or none. */
+    async rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: fn, op: "rpc", values: args, filters: {} });
+      return { data: rows.raced ? null : CLAIM_STAMP, error: null };
+    },
     from(table: string) {
       const call: Call = { table, op: "select", filters: {} };
       calls.push(call);
       const answer = () => {
         if (call.op === "update") {
+          if (
+            rows.failFromUpdate !== undefined &&
+            updateCount++ >= rows.failFromUpdate
+          ) {
+            return { data: null, error: { message: "network down" } };
+          }
           if (rows.failCode) {
             return {
               data: null,
@@ -85,6 +107,10 @@ function fakeClient(rows: {
           call.filters[column] = value;
           return builder;
         },
+        or: (expression: string) => {
+          call.filters.or = expression;
+          return builder;
+        },
         maybeSingle: async () => answer(),
         then: (
           resolve: (v: unknown) => unknown,
@@ -100,30 +126,140 @@ function fakeClient(rows: {
 const updates = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op === "update");
 
+/** A publish that wrote: the writer's own tests are about the status. */
+const PUBLISHED = async () => ({
+  ok: true as const,
+  points: 10,
+  shots: 40,
+  insightsRequested: true,
+});
+
 test.describe("writeLabelSessionComplete", () => {
-  test("the gate, then ONE update of status and completed_at, matched on the id and an open status", async () => {
+  test("a lease, then the publish, then complete — all matched on that lease", async () => {
     const fake = fakeClient({});
-    const before = Date.now();
+    const order: string[] = [];
+    const now = Date.parse("2026-10-10T21:00:00.000Z");
     expect(
       await writeLabelSessionComplete({
         supabase: fake.supabase,
         sessionId: SESSION_ID,
+        now: () => now,
+        publish: async (_db, id) => {
+          order.push(`publish ${id} after ${fake.calls.at(-1)?.op}`);
+          return PUBLISHED();
+        },
       }),
-    ).toEqual({ ok: true, status: "complete" });
-    const [write] = updates(fake);
-    expect(write).toMatchObject({
-      table: "label_sessions",
-      values: { status: "complete" },
-      filters: { id: SESSION_ID, status: "labelling" },
+    ).toEqual({
+      ok: true,
+      status: "complete",
+      published: { points: 10, shots: 40, insightsRequested: true },
     });
-    expect(Object.keys(write.values ?? {}).sort()).toEqual([
-      "completed_at",
-      "status",
+    // The lease lands first, so a second tab finds it taken.
+    expect(order).toEqual([`publish ${SESSION_ID} after rpc`]);
+    expect(fake.calls.filter((c) => c.op === "rpc")).toEqual([
+      {
+        table: "claim_label_publish_lease",
+        op: "rpc",
+        values: { p_session_id: SESSION_ID },
+        filters: {},
+      },
     ]);
+    const [close] = updates(fake);
+    expect(close).toMatchObject({
+      values: {
+        status: "complete",
+        completed_at: "2026-10-10T21:00:00.000Z",
+        publishing_since: null,
+      },
+      filters: { id: SESSION_ID, publishing_since: CLAIM_STAMP },
+    });
+    for (const call of updates(fake)) expect(call.table).toBe("label_sessions");
+  });
+
+  test("a refused or failed publish releases only its own lease; the session stays open", async () => {
+    const released = (fake: ReturnType<typeof fakeClient>) =>
+      updates(fake).map((c) => c.values);
+
+    const refusedPublish = fakeClient({});
     expect(
-      Date.parse(write.values?.completed_at as string),
-    ).toBeGreaterThanOrEqual(before - 1000);
-    for (const call of fake.calls) expect(call.table).toBe("label_sessions");
+      await writeLabelSessionComplete({
+        supabase: refusedPublish.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => ({ ok: false, error: "Not published: no." }),
+      }),
+    ).toEqual({ error: "Not published: no." });
+    const [release] = updates(refusedPublish);
+    expect(released(refusedPublish)).toEqual([{ publishing_since: null }]);
+    expect(release.filters.publishing_since).toBe(CLAIM_STAMP);
+
+    const threw = fakeClient({});
+    expect(
+      await writeLabelSessionComplete({
+        supabase: threw.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => {
+          throw new Error("boom");
+        },
+      }),
+    ).toEqual({ error: "Could not publish the labels: boom" });
+    expect(released(threw)).toEqual([{ publishing_since: null }]);
+    // Never a status write: a failed publish leaves the session labelling.
+    expect(released(threw).some((v) => v && "status" in v)).toBe(false);
+  });
+
+  test("a release that fails says the session stays held, and for how long", async () => {
+    const fake = fakeClient({ failFromUpdate: 0 });
+    expect(
+      await writeLabelSessionComplete({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => ({ ok: false, error: "Not published: no." }),
+      }),
+    ).toEqual({
+      error:
+        "Not published: no. The session stays held for up to 5 minutes before it takes edits again (network down).",
+    });
+  });
+
+  test("a fresh lease refuses edits and a second Complete; a stale one does not", async () => {
+    const now = Date.now();
+    let ran = false;
+    const held = fakeClient({
+      session: {
+        status: "labelling",
+        marks_enabled: true,
+        publishing_since: new Date(now - 30_000).toISOString(),
+      },
+    });
+    expect(
+      await writeLabelSessionComplete({
+        supabase: held.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => {
+          ran = true;
+          return PUBLISHED();
+        },
+      }),
+    ).toEqual({ error: PUBLISHING });
+    expect(ran).toBe(false);
+    expect(updates(held)).toEqual([]);
+    expect(await checkSessionOpen(held.supabase, SESSION_ID)).toBe(PUBLISHING);
+
+    const stale = fakeClient({
+      session: {
+        status: "labelling",
+        marks_enabled: true,
+        publishing_since: new Date(now - PUBLISH_LEASE_MS - 1000).toISOString(),
+      },
+    });
+    expect(await checkSessionOpen(stale.supabase, SESSION_ID)).toBeNull();
+    expect(
+      await writeLabelSessionComplete({
+        supabase: stale.supabase,
+        sessionId: SESSION_ID,
+        publish: PUBLISHED,
+      }),
+    ).toMatchObject({ ok: true, status: "complete" });
   });
 
   test("a session labelled without marks completes like any other", async () => {
@@ -132,16 +268,22 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: blind.supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({ ok: true, status: "complete" });
+    ).toEqual({
+      ok: true,
+      status: "complete",
+      published: { points: 10, shots: 40, insightsRequested: true },
+    });
   });
 
   test("refused: a bad id, a missing or complete session, and a race", async () => {
     const none = fakeClient({});
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: none.supabase,
         sessionId: "nope",
       }),
@@ -150,6 +292,7 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: fakeClient({ session: null }).supabase,
         sessionId: SESSION_ID,
       }),
@@ -160,6 +303,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: frozen.supabase,
         sessionId: SESSION_ID,
       }),
@@ -170,12 +314,11 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: fakeClient({ raced: true }).supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({
-      error: "This session changed in another tab. Reload to see it.",
-    });
+    ).toEqual({ error: PUBLISHING });
   });
 });
 
@@ -347,11 +490,11 @@ test.describe("completeWarnings", () => {
     expect(
       labelConfirmCopy({ kind: "complete-session", warnings: [] }, NAMES),
     ).toEqual({
-      title: "Mark this session complete?",
+      title: "Mark complete and publish?",
       description:
-        "Every point is checked and the score adds up. The console becomes read-only; Reopen brings it back.",
-      confirmLabel: "Mark complete",
-      pendingLabel: "Completing…",
+        "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again.",
+      confirmLabel: "Publish",
+      pendingLabel: "Publishing…",
       tone: "primary",
     });
     expect(
@@ -361,8 +504,8 @@ test.describe("completeWarnings", () => {
       ),
     ).toMatchObject({
       description:
-        "Some things are still open. You can complete it anyway, and Reopen brings it back to fix them.",
-      confirmLabel: "Mark complete",
+        "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+      confirmLabel: "Publish",
     });
   });
 });
