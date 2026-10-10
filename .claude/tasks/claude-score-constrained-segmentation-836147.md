@@ -269,7 +269,7 @@ ready).
 
 ## T10 · Bump `DERIVATION_VERSION` to 0.8.0 and write the changelog entry
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T9
 - **files:** (guess)

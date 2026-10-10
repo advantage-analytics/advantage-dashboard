@@ -82,8 +82,35 @@
  * guess, flagged `winner_guessed` + `score_frozen`, with null score columns.
  * A shorter stall inside a game keeps the vendor's game and guesses the same
  * way. Job ac56ef8b (Quan v Balciunas) froze for all of set two.
+ * 0.8.0 (2026-10-09) adds a review-only score-constrained segmenter
+ * (segmentation.ts) and changes no published row. It finds the shortest path
+ * through the legal tennis scores that ends at `matches.score`, charging for
+ * the server's end under the changeover schedule (position.ts), the serve
+ * side, server-relative outcomes, moved or dropped vendor boundaries, gaps
+ * that disagree with a changeover, and split-point merges; it runs on every
+ * match and writes `derivation_quality.segmentation`, never `fold`, so the
+ * match report's unreconciled note is unchanged. Where its game, server or
+ * merge differs from the derived point, the point gets the hidden mark
+ * `segment_proposal_differs` carrying the proposal. Tuned weights: end 5,
+ * side 2, flipHigh 2, flipLow 1, vendorBoundaryMoved 1, vendorBoundaryDropped
+ * 1, changeoverShortGap 4, longGapNotChangeover 3, merge 1. Over three labelled
+ * sessions: be930d79 fit at 6-2 and proposed the server on 54 of 56 points
+ * (published 42), with 22 of 23 firings right and 4 of 4 labelled merges;
+ * 868a7696 fit, 105 of 106 (published 101), 5 of 5 firings; 45ff4bd7 stayed
+ * ambiguous with no firing, since the vendor's high-confidence winners make
+ * its cut self-consistent and its gap sits 1 s over the short-gap threshold.
+ * A live block-and-flag hitter rule was tried and dropped: `pred_player_id`
+ * cannot be the witness, being the label that is swapped, and position cannot
+ * see a changeover where nobody switches ends, so it would have left about
+ * every second frozen game on ac56ef8b unrelabelled; position is used only
+ * inside the segmenter. Promotion past review-only needs at least 95% of
+ * firings right on server and game over 30+ firings across 2+ matches,
+ * re-scored with `scripts/splitstep-eval.ts --session`; so far 27 of 28
+ * across 2 matches, short of 30. Re-deriving a job changes no published game,
+ * server, winner or score: each gains only the flag, the `segmentation` key
+ * and the new version stamp.
  */
-export const DERIVATION_VERSION = "0.7.0-unreconciled";
+export const DERIVATION_VERSION = "0.8.0-unreconciled";
 
 export type {
   RawSplitStepStroke,

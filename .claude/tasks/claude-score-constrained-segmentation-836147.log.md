@@ -191,3 +191,22 @@ Published winner misses agree with `label-scorecard`'s flip counts on 868a7696 a
 1. The `segmentation.ts` header still calls the weights "first guesses". That is a one-word edit outside T9's scope.
 2. The `SEGMENT_COSTS` comment carries some narrative counts, such as game numbers and gaps. Check they meet the "counts only" rule.
 3. Promotion tally so far: 27 of 28 firings hit across 2 matches. That is above 95%, but short of the 30+ firings the bar needs.
+
+## T10 · Bump `DERIVATION_VERSION` to 0.8.0 and write the changelog entry — done
+
+**gate:** mechanical GATE PASS on re-run · completion VERDICT: pass
+
+- The first gate run failed on one unrelated spec, `tests/film-playback-refresh.spec.ts:1498`, under full-suite load.
+- That spec passes alone (81/81), and the full gate passed on the re-run.
+  **changed:**
+- `DERIVATION_VERSION` is now `0.8.0-unreconciled`.
+- The 0.8.0 changelog entry covers:
+  - the review-only segmenter, its `derivation_quality.segmentation` key that never touches `fold`, and `segment_proposal_differs`;
+  - the tuned weights and the three-session counts;
+  - the dropped T3 rule;
+  - the promotion bar, with a 27/28 tally so far;
+  - that no published row changes on re-derive.
+- The `tests/label-session-marks.spec.ts` fixture now uses `DERIVATION_VERSION` instead of a literal.
+  **follow-ups:**
+
+1. Add `tests/film-playback-refresh.spec.ts:1498` ("the report player never dims a frame it has not shown yet") to the known list of specs that flake under full-suite load.
