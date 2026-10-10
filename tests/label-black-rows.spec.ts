@@ -1329,6 +1329,12 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     const trigger = tag(serve, 'aria-label="Shot 1 result"');
     expect(trigger).toMatch(/^<button/);
     expect(trigger).toContain('aria-haspopup="menu"');
+    // Inside its clipping column: no -5px nudge, no width past the column,
+    // or the trigger's left edge is cut off (a let read as "et").
+    expect(trigger).not.toContain("-ml-[5px]");
+    expect(trigger).not.toContain("w-[calc(100%+7px)]");
+    expect(trigger).toContain("ml-0");
+    expect(trigger).toContain("w-full");
     expect(text(serve.slice(serve.indexOf("data-serve-result")))).toContain(
       "Net",
     );

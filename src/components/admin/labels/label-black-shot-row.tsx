@@ -1194,6 +1194,9 @@ const LET_INK = "text-[var(--rail-amber)]";
  * It keeps the menu's open state so the cell can say so
  * (`data-menu-open`), which steps the row's actions aside.
  */
+/** The serve-result trigger, held inside its clipping column. */
+export const SERVE_RESULT_TRIGGER = "ml-0 w-full";
+
 function ServeResultCell({
   editable,
   rowSelected,
@@ -1254,7 +1257,13 @@ function ServeResultCell({
             onChange={onChange}
             open={shown}
             onOpenChange={setOpen}
-            className={isLet ? "text-[color:var(--rail-amber)]" : undefined}
+            // The result column clips (`overflow-hidden`, for the pencil), so
+            // the trigger's usual -5px nudge into the cell's left padding is
+            // cut off there: sit it inside the column instead.
+            className={cn(
+              SERVE_RESULT_TRIGGER,
+              isLet && "text-[color:var(--rail-amber)]",
+            )}
             // A stored result with no landing to calculate from is not an
             // item, but the trigger still says it.
             placeholder={value ? RESULT_LABEL[value] : undefined}
