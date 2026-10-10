@@ -79,7 +79,7 @@ ready).
 
 ## T6 · Scorecard: a let is its own value everywhere a result is bucketed
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/labels/scorecard.ts (`resultChanges`, `lastLandings.remaining`, `ServeFindings`, the "## Serves" and "## Last-stroke result changes" renderers), tests/label-scorecard.spec.ts, tests/label-marks.spec.ts — a guess
 - **done when:**

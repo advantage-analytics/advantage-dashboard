@@ -28,3 +28,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. apply.ts calls `liveShotsInOrder(point, true)` twice per point for the count; could reuse one result.
+
+## T6 · Scorecard: a let is its own value everywhere a result is bucketed — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Last landings gain a `remaining.let` bucket ("Left it empty, let"). `threeOrMore` skips let serves on both the live and vendor side; new `serves.lets` renders "Points with a let serve: …". The result-change table already kept a let as its own row and out of the in→out/net share — now commented and pinned. `serveAfterServeIn` pinned around lets (label-after-point-hint spec). Specs in label-scorecard.
+
+**follow-ups:**
+
+1. The three-or-more header now reads "(a let not counted)" — any consumer parsing scorecard text should be checked.
+2. The landing bucket tests raw `result === "let"` (not `isLetServe`); equivalent now that the DB refuses a let off a serve.
