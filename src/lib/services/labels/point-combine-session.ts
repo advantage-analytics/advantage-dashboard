@@ -127,6 +127,9 @@ export async function writeLabelPointCombine(params: {
     pointId,
     direction,
   );
+  // A refusal here — including a serve retype that would leave a let on a
+  // stroke that is not a serve (`combineRetypeError`, judged on the rows just
+  // read) — comes before any write, so nothing moves.
   if ("error" in plan) return plan;
   const { write } = plan;
 

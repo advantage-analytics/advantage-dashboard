@@ -52,6 +52,7 @@ import type { LabelEnding, LabelShotResult } from "./seed";
 import {
   compareNullsLast,
   isGhostShot,
+  isLetServe,
   isLiveShot,
   isMissedResult,
   isServeStroke,
@@ -229,7 +230,12 @@ export interface WinnerFlipRow {
   points: number;
 }
 
-/** Last live strokes whose result moved one way. */
+/**
+ * Last live strokes whose result moved one way. A let is its own value here,
+ * as everywhere the scorecard buckets a result: neither in nor missed, so an
+ * `in→let` row is never folded into the in→out-or-net share. Seeds never
+ * hold a let, so no row starts from one.
+ */
 export interface LastResultChangeRow {
   from: LabelShotResult | null;
   to: LabelShotResult | null;
@@ -248,7 +254,8 @@ export interface LastLandings {
   added: number;
   /** …and what the labeller did: placed the landing, or left it empty. */
   placed: number;
-  remaining: { in: number; outOrNet: number; noResult: number };
+  /** `let` is its own bucket: a let is neither in nor out-or-net. */
+  remaining: { in: number; outOrNet: number; let: number; noResult: number };
 }
 
 export type TailOutcome = "removed" | "partly" | "kept";
@@ -265,8 +272,14 @@ export interface OutCallTailRow {
 
 /** The serve counts that cannot be right. */
 export interface ServeFindings {
-  /** Points with three or more serves, in the live rows or the vendor's. */
+  /**
+   * Points with three or more serves, in the live rows or the vendor's. A
+   * let (`isLetServe`, as the row stands now) is replayed, not a serve of
+   * the count: a let, a first and a second serve are two.
+   */
   threeOrMore: number[];
+  /** Points with at least one live let serve. */
+  lets: number[];
   /** Points where a serve follows a serve the labeller called in. */
   serveAfterIn: number[];
 }
@@ -571,10 +584,14 @@ export function buildScorecard(
     netHits: 0,
     added: 0,
     placed: 0,
-    remaining: { in: 0, outOrNet: 0, noResult: 0 },
+    remaining: { in: 0, outOrNet: 0, let: 0, noResult: 0 },
   };
   const outCallTails: OutCallTailRow[] = [];
-  const serves: ServeFindings = { threeOrMore: [], serveAfterIn: [] };
+  const serves: ServeFindings = {
+    threeOrMore: [],
+    lets: [],
+    serveAfterIn: [],
+  };
 
   const into = combinedInto(points);
   const absorbed = new Map<string, LabelPoint[]>();
@@ -681,6 +698,8 @@ export function buildScorecard(
           lastLandings.remaining.in += 1;
         } else if (isMissedResult(last.result)) {
           lastLandings.remaining.outOrNet += 1;
+        } else if (last.result === "let") {
+          lastLandings.remaining.let += 1;
         } else {
           lastLandings.remaining.noResult += 1;
         }
@@ -695,13 +714,19 @@ export function buildScorecard(
 
     if (point.status !== "deleted") {
       const live = point.shots.filter((shot) => isLiveShot(shot, ghosts));
-      const liveServes = live.filter((shot) =>
-        isServeStroke(shot.stroke),
+      // A let is replayed: not one of the point's serves, in either count —
+      // a vendor serve the labeller called a let included.
+      const liveServes = live.filter(
+        (shot) => isServeStroke(shot.stroke) && !isLetServe(shot),
       ).length;
       const vendorServes = point.shots.filter(
-        (shot) => shot.eventId !== null && isVendorServe(shot, vendor),
+        (shot) =>
+          shot.eventId !== null &&
+          isVendorServe(shot, vendor) &&
+          !isLetServe(shot),
       ).length;
       if (liveServes >= 3 || vendorServes >= 3) serves.threeOrMore.push(number);
+      if (live.some(isLetServe)) serves.lets.push(number);
       if (serveAfterServeIn(point, ghosts)) serves.serveAfterIn.push(number);
     }
 
@@ -987,6 +1012,7 @@ export function renderScorecard(
   if (resultChanged === 0) {
     out.push("None: every last live stroke keeps its seeded result.");
   } else {
+    // A let is neither: an in→let row stands on its own, outside the share.
     const inToMissed = card.lastResultChanges.filter(
       (row) => row.from === "in" && isMissedResult(row.to),
     );
@@ -1042,6 +1068,7 @@ export function renderScorecard(
             "Left it empty, result out or net",
             share(landings.remaining.outOrNet, n),
           ],
+          ["Left it empty, let", share(landings.remaining.let, n)],
           ["Left it empty, no result", share(landings.remaining.noResult, n)],
         ],
       ),
@@ -1073,7 +1100,9 @@ export function renderScorecard(
     "",
     "## Serves",
     "",
-    `Points with three or more serves, in the live rows or the vendor's: ${pointList(card.serves.threeOrMore)}.`,
+    `Points with three or more serves, in the live rows or the vendor's (a let not counted): ${pointList(card.serves.threeOrMore)}.`,
+    "",
+    `Points with a let serve: ${pointList(card.serves.lets)}.`,
     "",
     `Points where a serve follows a serve the labeller called in: ${pointList(card.serves.serveAfterIn)}.`,
     "",

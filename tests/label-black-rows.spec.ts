@@ -1652,6 +1652,8 @@ test.describe("a serve's result menu, where lets are replayed", () => {
       strokeChangePatch: (shot: LabelShot, stroke: string | null) => unknown;
       SERVE_RESULT_LANDED: string;
       SERVE_RESULT_LET: string;
+      SERVE_RESULT_UNPLACED: string;
+      SERVE_RESULT_NONE: string;
     };
   }
   const replayed = { playOnLets: false };
@@ -1682,15 +1684,68 @@ test.describe("a serve's result menu, where lets are replayed", () => {
         divider: true,
       },
     ]);
-    // No landing: nothing to calculate, so Let alone.
-    const bare = serveResultMenu(shotOf("w-serve"), false);
-    expect(bare!.derived).toBeNull();
-    expect(bare!.options.map((o) => o.value)).toEqual(["let"]);
+    // A calculated item: No result is not offered.
+    expect(menu!.options.map((o) => o.label)).not.toContain("No result");
 
     // Not a serve, lets played on, or nothing said: no menu.
     expect(serveResultMenu(shotOf("w-lit"), false)).toBeNull();
     expect(serveResultMenu(shotOf("w-fault"), true)).toBeNull();
     expect(serveResultMenu(shotOf("w-fault"), undefined)).toBeNull();
+  });
+
+  test("no landing to read: No result takes the calculated item's slot, so a let is never alone", () => {
+    const { serveResultMenu, SERVE_RESULT_UNPLACED, SERVE_RESULT_NONE } = row();
+    expect(SERVE_RESULT_UNPLACED).toBe("Its landing is not placed yet");
+    for (const result of [null, "let" as const, "in" as const]) {
+      const bare = serveResultMenu({ ...shotOf("w-serve"), result }, false);
+      expect(bare!.derived).toBeNull();
+      expect(bare!.options).toEqual([
+        {
+          value: SERVE_RESULT_NONE,
+          label: "No result",
+          description: "Its landing is not placed yet",
+          group: "Serve result",
+        },
+        {
+          value: "let",
+          label: "Let",
+          description:
+            "Replayed. Not a fault, so the next serve is still a first serve.",
+          group: "Serve result",
+          divider: true,
+        },
+      ]);
+    }
+  });
+
+  test("picking No result writes a null result", () => {
+    const { serveResultPatch, SERVE_RESULT_NONE } = row();
+    expect(SERVE_RESULT_NONE).not.toBe("let");
+    expect(serveResultPatch(SERVE_RESULT_NONE)).toEqual({ result: null });
+  });
+
+  test("the trigger says which of No result and Let is stored", () => {
+    const { BlackShotsWell } = well();
+    const render = (result: "let" | null) => {
+      const point = rally();
+      point.shots = point.shots.map((s) =>
+        s.id === "w-serve" ? { ...s, result } : s,
+      );
+      const html = renderToStaticMarkup(
+        React.createElement(BlackShotsWell, {
+          point,
+          edit: wellEdit({ ...replayed, selectedShotId: "w-serve" }),
+          playingShotId: null,
+        }),
+      );
+      const r = shotRow(html, "w-serve");
+      return text(r.slice(r.indexOf("data-serve-result")));
+    };
+    // Null selects No result's sentinel, so the trigger reads its label
+    // rather than the select's empty placeholder.
+    expect(render(null)).toContain("No result");
+    expect(render("let")).toContain("Let");
+    expect(render("let")).not.toContain("No result");
   });
 
   test("a let already stored keeps its menu where lets are played on, so it can be undone", () => {
@@ -1757,8 +1812,8 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(other).toContain("data-serve-result");
     expect(other).toContain('aria-label="Shot 2 result: In"');
 
-    // Selected with no landing: Let is the only item, and the trigger still
-    // says the stored result.
+    // Selected with no landing: No result and Let are the items, and the
+    // trigger still says the stored result.
     const bare = shotRow(
       renderWell({ ...replayed, selectedShotId: "w-serve" }),
       "w-serve",

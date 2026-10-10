@@ -207,7 +207,11 @@ export function labelStroke(
   }
 }
 
-/** `shots.result` ('In' / 'Out' / 'Net') → `label_shots.result`. */
+/**
+ * `shots.result` ('In' / 'Out' / 'Net') → `label_shots.result`. Never `let`:
+ * a let is the labeller's call on a serve (edit.ts `letResultError`), so a
+ * vendor string that says one — or anything else — seeds as null.
+ */
 export function labelShotResult(result: string | null): LabelShotResult | null {
   if (result === "In") return "in";
   if (result === "Out") return "out";

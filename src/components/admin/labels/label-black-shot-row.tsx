@@ -1227,14 +1227,22 @@ export const SERVE_RESULT_LANDED = "From where it landed";
 /** The Let item's second line. */
 export const SERVE_RESULT_LET =
   "Replayed. Not a fault, so the next serve is still a first serve.";
+/** The No result item's second line, in the calculated item's slot. */
+export const SERVE_RESULT_UNPLACED = "Its landing is not placed yet";
+/**
+ * The No result item's value: a `MenuOption<string>` value cannot be null,
+ * so `serveResultPatch` maps this back to `{ result: null }`.
+ */
+export const SERVE_RESULT_NONE = "none";
 
 /**
  * A serve row's result menu, or null where the result is the landing's alone:
  * any stroke but a serve, and every row when lets are played on (or the
  * console has not said). Two items under "Serve result": the result
  * `deriveShotResult` reads off the coordinates, then — past a hairline —
- * Let. With no landing to read there is no calculated item, only Let: the
- * menu never offers a result the coordinates do not say.
+ * Let. With no landing to read, "No result" takes the calculated item's
+ * slot instead — the menu never offers a result the coordinates do not say,
+ * and a let is never its only item, so one can always be taken back off.
  */
 export function serveResultMenu(
   shot: LabelShot,
@@ -1251,6 +1259,13 @@ export function serveResultMenu(
       value: derived,
       label: RESULT_LABEL[derived],
       description: SERVE_RESULT_LANDED,
+      group: "Serve result",
+    });
+  } else {
+    options.push({
+      value: SERVE_RESULT_NONE,
+      label: "No result",
+      description: SERVE_RESULT_UNPLACED,
       group: "Serve result",
     });
   }
@@ -1284,8 +1299,9 @@ export function strokeChangePatch(
   };
 }
 
-/** What picking a serve-result item writes. */
+/** What picking a serve-result item writes: No result's sentinel is null. */
 export function serveResultPatch(value: string | null): LabelShotPatch {
+  if (value === SERVE_RESULT_NONE) return { result: null };
   return { result: value as LabelShotResult | null };
 }
 
@@ -1328,6 +1344,12 @@ function ServeResultCell({
     if (!rowSelected) setOpen(false);
   }
   const shown = open && rowSelected;
+  // No result is an item only where nothing can be calculated; there, a serve
+  // with no result selects it, so the menu shows which of it and Let is stored.
+  const selected =
+    value === null && options.some((o) => o.value === SERVE_RESULT_NONE)
+      ? SERVE_RESULT_NONE
+      : value;
   return (
     <span
       data-menu-open={shown ? "" : undefined}
@@ -1351,7 +1373,7 @@ function ServeResultCell({
           <SelectEditor
             menu={menu}
             label={label}
-            value={value}
+            value={selected}
             options={options}
             onChange={onChange}
             open={shown}
