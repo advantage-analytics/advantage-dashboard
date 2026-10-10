@@ -1660,14 +1660,15 @@ export function LabelConsole({
   // identity for the console's life (`useLatestHandlers`) and runs whatever
   // this render defined.
   const rowOperations = useLatestHandlers<LabelRowOperations>({
-    onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
-      setConfirm({
-        kind: "delete-shot",
-        shotId,
-        shotNumber,
-        pointNumber,
-        added: findShot(points, shotId)?.status === "added",
-      }),
+    onAskDeleteShot: (shotId, shotNumber, pointNumber) => {
+      // A stroke the labeller added goes at once: it records nothing the
+      // scorer needs and leaves no row, so there is nothing to confirm.
+      if (findShot(points, shotId)?.status === "added") {
+        deleteShot(shotId, "other");
+        return;
+      }
+      setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber });
+    },
     onAskDeletePoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
       if (!point) return;

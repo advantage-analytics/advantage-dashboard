@@ -11,8 +11,6 @@ import type { SideNames } from "./label-format";
 export type LabelConfirm =
   | {
       kind: "delete-shot";
-      /** A stroke the labeller added: it goes without a trace, and no Undo. */
-      added?: boolean;
       shotId: string;
       /** As the rail numbers it: live strokes, 1…n. */
       shotNumber: number;
@@ -90,9 +88,7 @@ export function labelConfirmCopy(
     case "delete-shot":
       return {
         title: `Delete shot ${confirm.shotNumber}?`,
-        description: confirm.added
-          ? `It comes off point ${confirm.pointNumber}. You added it, so it goes without a trace.`
-          : `It comes off point ${confirm.pointNumber} and stops counting in the rally. You can undo this from the point's shots.`,
+        description: `It comes off point ${confirm.pointNumber} and stops counting in the rally. You can undo this from the point's shots.`,
         confirmLabel: "Delete shot",
         pendingLabel: "Deleting…",
         tone: "danger",

@@ -1401,22 +1401,6 @@ test.describe("the black shots well", () => {
       }),
     );
     expect(html).not.toContain('data-tombstone-id="w-gone"');
-    // Its confirm says so: no trace, and no Undo promised.
-    const { labelConfirmCopy } = createLoader().load(
-      "src/components/admin/labels/label-confirm.ts",
-    ) as {
-      labelConfirmCopy: (c: Record<string, unknown>) => { description: string };
-    };
-    const copy = labelConfirmCopy({
-      kind: "delete-shot",
-      shotId: "w-x",
-      shotNumber: 3,
-      pointNumber: 12,
-      added: true,
-    });
-    expect(copy.description).toBe(
-      "It comes off point 12. You added it, so it goes without a trace.",
-    );
   });
 
   test("a deleted stroke is one line, with Undo", () => {
