@@ -93,18 +93,24 @@ export function flagGroups(flags: readonly OpenFlag[]): FlagGroup[] {
       const mine = flags.filter((f) => f.code === code);
       if (mine.length === 0) continue;
       count += mine.length;
-      const seen = new Set<string>();
       rows.push({
         code,
         label: MARK_LABEL[code],
-        points: mine
-          .filter((f) => !seen.has(f.pointId) && seen.add(f.pointId))
-          .map(({ pointId, pointNumber }) => ({ pointId, pointNumber })),
+        points: firstPerPoint(mine).map(({ pointId, pointNumber }) => ({
+          pointId,
+          pointNumber,
+        })),
       });
     }
     if (rows.length > 0) groups.push({ name: kind.name, count, rows });
   }
   return groups;
+}
+
+/** One mark per point, the first in the list: a jump goes to a point. */
+function firstPerPoint(flags: readonly OpenFlag[]): OpenFlag[] {
+  const seen = new Set<string>();
+  return flags.filter((f) => !seen.has(f.pointId) && seen.add(f.pointId));
 }
 
 /**
@@ -122,10 +128,7 @@ export function stepFlag(
   const order = new Map(points.map((point, i) => [point.id, i]));
   const at = fromPointId === null ? null : (order.get(fromPointId) ?? null);
   // One per point, the point's first open mark: a jump goes to a point.
-  const seen = new Set<string>();
-  const stops = flags.filter(
-    (f) => !seen.has(f.pointId) && seen.add(f.pointId),
-  );
+  const stops = firstPerPoint(flags);
   const pos = (f: OpenFlag) => order.get(f.pointId) ?? -1;
   if (direction === 1) {
     return (

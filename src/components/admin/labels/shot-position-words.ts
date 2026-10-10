@@ -1,3 +1,4 @@
+import { capitalize } from "@/lib/utils";
 import { isServeStroke, type LabelStroke } from "@/lib/services/labels/session";
 import type { ShotPlacement } from "@/lib/services/labels/shot-derived";
 import {
@@ -77,8 +78,8 @@ export function positionWords(
     label: `${verb} ${depthWords(y)}`,
     detail: [
       Math.abs(x) > SINGLES_HALF_WIDTH
-        ? `${capitalise(across)}, outside the singles line`
-        : capitalise(across),
+        ? `${capitalize(across)}, outside the singles line`
+        : capitalize(across),
       ...(editable ? ["Click to move it on the court"] : []),
     ],
   };
@@ -112,7 +113,7 @@ export function placementWords(
     return {
       label: "Middle",
       detail: [
-        `Bounced ${m(landingX)} from the centre line. Anything within ${MIDDLE_EDGE.toFixed(0)} m is middle`,
+        `Bounced ${m(landingX)} from the centre line. Anything within ${MIDDLE_EDGE} m is middle`,
       ],
     };
   }
@@ -129,8 +130,4 @@ export function placementWords(
         : "The ball stayed on the hitter's side",
     ],
   };
-}
-
-function capitalise(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

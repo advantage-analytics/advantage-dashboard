@@ -569,6 +569,15 @@ export function LabelConsole({
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
   function selectShot(shotId: string, target?: PlacementTarget) {
+    // Already selected: a position cell switches the court's end and nothing
+    // else — the film stays where the labeller scrubbed it.
+    if (target && shotId === placement.shotId) {
+      const shot = findShot(points, shotId);
+      setPlacement(
+        setPlacementTarget(placement, target, shot?.contactY ?? null),
+      );
+      return;
+    }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
@@ -1550,7 +1559,11 @@ export function LabelConsole({
       if ((await resetShot(shotId)) === null) return;
     }
     if (!scope.fields) return;
-    const shotsBefore = shotSwapsOf(before.shots);
+    // The rollback's hitters: the strokes just reset already sit on their
+    // seed, so only the others go back if the point's own write fails.
+    const shotsBefore = shotSwapsOf(
+      before.shots.filter((shot) => !scope.shotIds.includes(shot.id)),
+    );
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointReset),
       () => operations.resetPoint(pointId),
@@ -1736,8 +1749,8 @@ export function LabelConsole({
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
-        event.altKey ||
-        event.shiftKey
+        // [ and ] take Option or Shift on some layouts (German, Nordic).
+        ((event.altKey || event.shiftKey) && key !== "[" && key !== "]")
       ) {
         return;
       }
