@@ -170,6 +170,7 @@ import {
 import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
+import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
 import type { LabelRowOperations } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
@@ -1658,13 +1659,25 @@ export function LabelConsole({
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
 
-  // Enter marks the open point checked; Space and ← / → drive the video. Never
-  // from inside a control, where those keys already mean something.
+  // Enter marks the open point checked; Space and ← / → drive the video; ]
+  // and [ go to the next and previous open flag. Never from inside a control,
+  // where those keys already mean something.
   const checkOpenPoint = useRef<() => void>(() => {});
+  // `]` and `[`: the next and previous open flag, as the header's flag does.
+  const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
+  const openMarks = useMemo(
+    () => (liveMarks ? openFlags(points, liveMarks) : []),
+    [points, liveMarks],
+  );
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
       setChecked(expanded.id, true);
+    };
+    stepToFlag.current = (direction) => {
+      if (confirm) return;
+      const flag = stepFlag(openMarks, points, currentPointId, direction);
+      if (flag) findGap(flag.pointId);
     };
   });
   // Escape lets go of the selected stroke, from anywhere in its row: a text
@@ -1699,7 +1712,9 @@ export function LabelConsole({
         (key !== "Enter" &&
           key !== " " &&
           key !== "ArrowLeft" &&
-          key !== "ArrowRight") ||
+          key !== "ArrowRight" &&
+          key !== "[" &&
+          key !== "]") ||
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
@@ -1712,7 +1727,9 @@ export function LabelConsole({
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       if (key === "Enter") checkOpenPoint.current();
-      else if (key === " ") player.current?.togglePlay();
+      else if (key === "]" || key === "[") {
+        stepToFlag.current(key === "]" ? 1 : -1);
+      } else if (key === " ") player.current?.togglePlay();
       else player.current?.step(key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", onKeyDown);
@@ -1837,6 +1854,7 @@ export function LabelConsole({
       onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
+      onGoToPoint={railHandlers.findGap}
     />
   );
   const View = fullScreen ? LabelBlackView : LabelSideView;
