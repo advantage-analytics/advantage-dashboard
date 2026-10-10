@@ -363,10 +363,9 @@ test.describe("a stroke row's tail", () => {
     );
     // The cell holds the pencil — and no chip, whatever the marks say of
     // the stroke.
-    const cell = html.slice(
-      html.indexOf('data-calculated="result"'),
-      html.indexOf("data-shot-actions"),
-    );
+    const resultAt = html.indexOf('data-calculated="result"');
+    const nextRow = html.indexOf("data-row=", resultAt);
+    const cell = html.slice(resultAt, nextRow === -1 ? undefined : nextRow);
     expect(cell).toContain("data-shot-marks");
     expect(chips(html)).toHaveLength(0);
     expect(pencils(cell)).toBe(1);

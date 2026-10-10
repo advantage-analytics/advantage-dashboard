@@ -78,3 +78,21 @@ export function elements(
   }
   return elements(element.props.children, out);
 }
+
+/** One request in a stroke row's ⋯ menu (`ShotMenuItem`). */
+export type MenuItemProbe = {
+  key: string;
+  label: string;
+  description?: string;
+  run: () => void;
+};
+
+/**
+ * The requests a stroke row hands its ⋯ menu — `ShotNumberLane`'s `items`,
+ * in the menu's order — or none where the row has no menu. The menu draws
+ * them only open, in a portal, so a spec reads them off the tree instead.
+ */
+export function menuItems(tree: React.ReactNode): MenuItemProbe[] {
+  const lane = findWhere(tree, (props) => Array.isArray(props.items));
+  return (lane?.props.items as MenuItemProbe[] | undefined) ?? [];
+}

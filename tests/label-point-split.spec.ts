@@ -27,7 +27,7 @@ import {
   noop,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
-import { findByProp } from "./fixtures/react-tree";
+import { findByProp, menuItems } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 // Split a point at one of its shots: the pure plan and the console's rows, the
@@ -685,11 +685,14 @@ test.describe("Split point here", () => {
         edit: editContext(session, { selectedShotId: "s-return" }),
       }),
     );
-    expect(html).toContain('aria-label="Split point at shot 2"');
+    // The ⋯ menu holds Split first: its items, in order, on the trigger.
+    expect(tag(html, 'aria-label="Shot 2 actions"')).toContain(
+      'data-shot-menu="split',
+    );
     // The tombstone line carries none: its block ends before the next row.
     const tombAt = html.indexOf('data-tombstone-id="s-phantom"');
     const tomb = html.slice(tombAt, html.indexOf("data-row=", tombAt + 1));
-    expect(tomb).not.toContain("data-split-row");
+    expect(tomb).not.toContain('data-shot-menu="');
     // Read-only, or with nothing to ask: none.
     for (const frozen of [
       renderToStaticMarkup(
@@ -705,7 +708,7 @@ test.describe("Split point here", () => {
         }),
       ),
     ]) {
-      expect(frozen).not.toContain("data-split-row");
+      expect(frozen).not.toContain('data-shot-menu="');
     }
   });
 
@@ -729,14 +732,23 @@ test.describe("Split point here", () => {
         },
       }),
     });
-    const button = findByProp(tree, "data-split-row", ["RowAction"]);
-    expect(button).not.toBeNull();
+    // A click in the ⋯'s box stops at the lane.
+    const lane = findByProp(tree, "data-shot-lane", ["ShotNumberLane"]);
+    expect(lane).not.toBeNull();
     let stopped = 0;
-    (button!.props.onClick as (e: unknown) => void)({
+    (lane!.props.onClick as (e: unknown) => void)({
       stopPropagation: () => {
         stopped += 1;
       },
     });
+    const split = menuItems(tree).find(
+      (item) => item.label === "Split point here",
+    );
+    expect(split).toBeDefined();
+    expect(split!.description).toBe(
+      "Shot 2 and those after it become a new point",
+    );
+    split!.run();
     expect(asked).toEqual([[P1, "s-return"]]);
     expect(stopped).toBe(1);
     expect(selected).toEqual([]);
@@ -747,7 +759,9 @@ test.describe("Split point here", () => {
       pointNumber: 1,
       edit: editContext(labelSessionFixture()),
     });
-    expect(findByProp(bare, "data-split-row", ["RowAction"])).toBeNull();
+    expect(menuItems(bare).map((item) => item.label)).not.toContain(
+      "Split point here",
+    );
   });
 
   test("the menu holds Reset back on a point whose rally another live point shares", () => {
@@ -810,9 +824,13 @@ test("a render of the black console draws Split on the open point's later shots 
     }),
   );
   expect(called).toEqual([]);
-  expect(html).toContain('aria-label="Split point at shot 2"');
-  expect(html).toContain('aria-label="Split point at shot 3"');
-  expect(html).not.toContain('aria-label="Split point at shot 1"');
+  const offered = (n: number) =>
+    tag(html, `aria-label="Shot ${n} actions"`).includes(
+      'data-shot-menu="split',
+    );
+  expect(offered(2)).toBe(true);
+  expect(offered(3)).toBe(true);
+  expect(offered(1)).toBe(false);
   // The well sets the tail variable every row reads.
   expect(tag(html, "data-shots-well")).toContain("--shot-tail:33px");
 });

@@ -22,7 +22,7 @@ import {
   noop,
   ROW_OPERATIONS as OPERATIONS,
 } from "./fixtures/label-session";
-import { elements, findByProp } from "./fixtures/react-tree";
+import { elements, findByProp, menuItems } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /** The points rail's rows: a point's two lines, its row, the game band and the shots well. */
@@ -900,32 +900,29 @@ test.describe("the black shots well", () => {
     ]);
   });
 
-  test("Delete and Reset: Reset before Delete, each asking the console", () => {
+  test("Delete and Reset: in the ⋯ menu, Reset before Delete, each asking the console", () => {
     const html = renderWell({ selectedShotId: "w-return" });
     // The edited, seeded stroke, selected: both, Reset before Delete.
     const edited = shotRow(html, "w-return");
-    expect(tag(edited, "data-reset-row")).toContain(
-      'aria-label="Reset shot 3"',
-    );
-    const del = tag(edited, "data-delete-row");
-    expect(del).toContain('aria-label="Delete shot 3"');
-    expect(edited.indexOf("data-reset-row")).toBeLessThan(
-      edited.indexOf("data-delete-row"),
-    );
+    const trigger = tag(edited, 'data-shot-menu="');
+    expect(trigger).toContain('aria-label="Shot 3 actions"');
+    expect(trigger).toContain('data-shot-menu="split reset delete"');
 
-    // A kept stroke, not selected: Delete alone, hidden until reached.
+    // A kept stroke, not selected: no Reset, hidden until reached.
     const kept = shotRow(html, "w-lit");
-    expect(kept).toContain('aria-label="Delete shot 4"');
-    expect(kept).not.toContain("data-reset-row");
+    expect(tag(kept, 'data-shot-menu="')).toContain(
+      'data-shot-menu="split delete"',
+    );
+    expect(kept).toContain('aria-label="Shot 4 actions"');
 
-    // Read-only, or with nothing to ask: neither.
+    // Read-only, or with nothing to ask: neither, and no trigger at all.
     for (const frozen of [
       renderWell({ selectedShotId: "w-return" }, false),
       renderWell({ selectedShotId: "w-return", operations: undefined }),
     ]) {
       expect(frozen).not.toContain("data-shot-actions");
-      expect(frozen).not.toContain("data-delete-row");
-      expect(frozen).not.toContain("data-reset-row");
+      expect(frozen).not.toContain('data-shot-menu="');
+      expect(frozen).not.toMatch(/aria-label="Shot \d+ actions"/);
     }
 
     // Each only asks, and does not select the row.
@@ -950,25 +947,90 @@ test.describe("the black shots well", () => {
       }),
     });
     const event = { stopPropagation: () => asked.push(["stopped"]) };
-    // The pencil in the marks slot is the same ask as the overlay's Reset.
-    for (const attr of [
-      "data-reset-row",
-      "data-delete-row",
-      "data-reset-pencil",
-    ]) {
-      const button = findByProp(row, attr, ["RowAction", "PencilMark"]);
-      expect(button, attr).not.toBeNull();
-      (button!.props.onClick as (e: unknown) => void)(event);
-    }
+    // A click in the ⋯'s box stops at the lane.
+    const lane = findByProp(row, "data-shot-lane", ["ShotNumberLane"]);
+    expect(lane).not.toBeNull();
+    (lane!.props.onClick as (e: unknown) => void)(event);
+    // The menu's items, in order, each the same ask as before.
+    const items = menuItems(row);
+    expect(items.map((item) => item.label)).toEqual([
+      "Reset shot",
+      "Delete shot",
+    ]);
+    for (const item of items) item.run();
+    // The pencil in the marks slot is the same ask as the menu's Reset.
+    const pencil = findByProp(row, "data-reset-pencil", ["PencilMark"]);
+    expect(pencil).not.toBeNull();
+    (pencil!.props.onClick as (e: unknown) => void)(event);
     expect(asked).toEqual([
       ["stopped"],
       ["reset", "w-return", 3, 7],
-      ["stopped"],
       ["delete", "w-return", 3, 7],
       ["stopped"],
       ["reset", "w-return", 3, 7],
     ]);
     expect(selected).toEqual([]);
+  });
+
+  test("the row's actions are a ⋯ in the number lane, never an overlay", () => {
+    const html = renderWell({ selectedShotId: "w-return" });
+    // The old overlay is gone from every row.
+    expect(html).not.toContain("data-shot-actions");
+
+    // The number and the trigger share the first track's box: the trigger
+    // comes before any other cell, and the number stays in the DOM.
+    const edited = shotRow(html, "w-return");
+    const lane = edited.indexOf("data-shot-number");
+    expect(lane).toBeGreaterThan(-1);
+    const trigger = edited.indexOf('aria-label="Shot 3 actions"');
+    expect(trigger).toBeGreaterThan(lane);
+    expect(trigger).toBeLessThan(edited.indexOf('aria-label="Shot 3 time"'));
+    expect(edited.slice(lane)).toMatch(
+      /^data-shot-number=""[^>]*><span[^>]*>3</,
+    );
+    expect(tag(edited, 'data-shot-menu="')).toContain('aria-haspopup="menu"');
+    expect(tag(edited, 'data-shot-menu="')).toContain('aria-expanded="false"');
+    // Selected: the number steps aside and the trigger shows, at rest.
+    expect(tag(edited, "data-shot-lane")).toContain("opacity-100");
+    // Not selected: the trigger waits for hover or focus, by opacity alone.
+    const kept = shotRow(html, "w-lit");
+    const keptLane = tag(kept, "data-shot-lane");
+    expect(keptLane).toContain("opacity-0");
+    expect(keptLane).toContain("group-hover/row:opacity-100");
+    expect(keptLane).toContain("group-focus-within/row:opacity-100");
+    expect(keptLane).toContain("motion-reduce:transition-none");
+
+    // Items: Split · Reset · Delete, Delete last.
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = rally();
+    const shot = point.shots.find((s) => s.id === "w-return")!;
+    const full = BlackShotRow({
+      shot,
+      number: 3,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({}),
+    });
+    const items = menuItems(full);
+    expect(items.map((item) => item.label)).toEqual([
+      "Split point here",
+      "Reset shot",
+      "Delete shot",
+    ]);
+
+    // A row without operations: the number alone, no trigger.
+    const bare = BlackShotRow({
+      shot,
+      number: 3,
+      pointNumber: 7,
+      edit: wellEdit({ operations: undefined }),
+    });
+    expect(findByProp(bare, "data-shot-lane", ["ShotNumberLane"])).toBeNull();
+    const bareHtml = renderWell({ operations: undefined });
+    expect(bareHtml).not.toContain('data-shot-menu="');
+    expect(bareHtml).toContain("data-shot-number");
   });
 
   test("a deleted stroke is one line, with Undo", () => {
@@ -1456,7 +1518,7 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     );
   });
 
-  test("while the menu is open, the row's actions step aside", () => {
+  test("while the menu is open, it says so, and nothing covers it", () => {
     const { BlackShotRow } = row();
     const render = (resultMenuOpen: boolean) =>
       renderToStaticMarkup(
@@ -1473,16 +1535,18 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(tag(open, 'aria-label="Shot 1 result"')).toContain(
       'aria-expanded="true"',
     );
-    // The overlay hides whenever the row holds an open menu.
-    expect(tag(open, "data-shot-actions")).toContain(
-      "group-has-[[data-menu-open]]/row:hidden",
+    // No overlay over the result: the row's actions are the ⋯ in the
+    // number lane, ahead of every cell.
+    expect(open).not.toContain("data-shot-actions");
+    expect(open.indexOf('data-shot-menu="')).toBeLessThan(
+      open.indexOf("data-serve-result"),
     );
 
     const closed = render(false);
     expect(closed).not.toContain('data-menu-open=""');
 
     // Not the selected row (its editor is unmounted): a menu flag left over
-    // never hides the actions.
+    // does not say the menu is open.
     const deselected = renderToStaticMarkup(
       React.createElement(BlackShotRow, {
         shot: shotOf("w-fault"),

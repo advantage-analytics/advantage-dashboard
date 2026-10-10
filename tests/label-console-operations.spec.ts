@@ -700,12 +700,13 @@ test.describe("reset", () => {
       session: unseeded,
       initialExpandedPointId: P1,
     });
-    expect(html).not.toContain("data-reset-row");
+    expect(html).toContain('data-shot-menu="');
+    expect(html).not.toMatch(/data-shot-menu="[^"]*reset/);
     expect(html).not.toContain("data-reset-pencil");
     expect(html).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
 
     const readOnly = renderConsole({ initialExpandedPointId: P1 });
-    expect(readOnly).not.toContain("data-reset-row");
+    expect(readOnly).not.toContain('data-shot-menu="');
     expect(readOnly).not.toContain("data-reset-pencil");
     expect(readOnly).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
   });

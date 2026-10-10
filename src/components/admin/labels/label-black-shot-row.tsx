@@ -1,7 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, RotateCcw, Split, Undo2, WandSparkles, X } from "lucide-react";
+import { Fragment, useState } from "react";
+import {
+  MoreHorizontal,
+  Plus,
+  RotateCcw,
+  Split,
+  Undo2,
+  WandSparkles,
+  X,
+} from "lucide-react";
+import {
+  FloatMenu,
+  FloatMenuDivider,
+  FloatMenuItem,
+} from "@/components/ui/float-menu";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
@@ -59,7 +72,11 @@ import {
   spinOptions,
 } from "./label-format";
 import { railInk, type RailTone } from "./label-rail-tone";
-import { sideLabel, type EditContext } from "./label-row-parts";
+import {
+  sideLabel,
+  type EditContext,
+  type LabelRowOperations,
+} from "./label-row-parts";
 
 /**
  * The rail's strokes: the open point's shots in a recessed well, each edited in
@@ -81,7 +98,7 @@ import { sideLabel, type EditContext } from "./label-row-parts";
  * positions stay 88px so decimal points align.
  *
  * The result's floor leaves room for the pencil tail (`SHOT_TAIL_PX`, set once
- * on the well as `--shot-tail`); the actions overlay stops short of it.
+ * on the well as `--shot-tail`).
  */
 /** The result cell's tail, of which the pencil takes 11px. */
 export const SHOT_TAIL_PX = 33;
@@ -115,9 +132,6 @@ export const SHOT_TRACKS =
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its
 // text, so a value centres on the row instead of hanging from a 16px strut.
 const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
-
-/** The actions overlay's right edge: the padding, the tail and 4px of air. */
-const ACTIONS_RIGHT = "right-[calc(14px_+_var(--shot-tail,33px)_+_4px)]";
 
 const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
@@ -168,17 +182,6 @@ function settleWellOnArrival(event: React.AnimationEvent<HTMLDivElement>) {
 /** Reaching into the well ends the arrival: nothing holds a row from a click. */
 function settleWellOnReach(event: React.SyntheticEvent<HTMLDivElement>) {
   settleWell(event.currentTarget);
-}
-
-/**
- * The ground under the row's two requests: the rail's own (`--rail-ground`)
- * with the washes the row is wearing painted back over it, so the result text
- * it covers does not show through the buttons. Its left 16px fade in (a mask).
- */
-const WELL_WASH = railInk(0.035);
-function actionsGround(lit: boolean): string {
-  const wash = lit ? railInk(0.12) : railInk(0.06);
-  return `linear-gradient(${wash},${wash}),linear-gradient(${WELL_WASH},${WELL_WASH})`;
 }
 
 const EMPTY_INK = railInk(0.25);
@@ -350,9 +353,10 @@ export function BlackShotsWell({
  *
  * Time, Player, Stroke, Spin and both positions are `EditableCell`s. A typed
  * position sends its derived result in the same patch (`positionPatch`), as a
- * court click does. Requests (Split point here, Reset, Delete) overlay the
- * right edge on hover, focus and selection so no column moves. Reset and Delete
- * only ask the console to confirm; Split runs at once.
+ * court click does. Requests (Split point here, Reset, Delete) live in a ⋯
+ * menu that takes the number's place on hover, focus and selection
+ * (`ShotNumberLane`), so no column moves and nothing covers a cell. Reset and
+ * Delete only ask the console to confirm; Split runs at once.
  *
  * LIT (selected, or the stroke the film is on) washes the row; a FAULT is a
  * step quieter.
@@ -425,15 +429,18 @@ export function BlackShotRow({
           : editable && "cursor-pointer hover:bg-white/[0.06]",
       )}
     >
-      <span
-        className={cn(
-          "mono tabular text-[10px]",
-          lit ? "text-white/80" : "text-white/35",
-        )}
-      >
-        {number}
-        {playing ? <span className="sr-only">, playing</span> : null}
-      </span>
+      <ShotNumberLane
+        number={number}
+        playing={playing}
+        lit={lit}
+        selected={selected}
+        tone={tone}
+        items={
+          operations
+            ? shotMenuItems({ shot, number, point, pointNumber, operations })
+            : null
+        }
+      />
       <EditableCell
         {...cell}
         label={`Shot ${number} time`}
@@ -568,8 +575,7 @@ export function BlackShotRow({
             className="inline-flex shrink-0 items-center gap-1 justify-self-end"
           >
             {/* The pencil is the row's Reset too, when there is one to
-                offer — the same ask as the overlay's button, in the slot
-                the overlay stops short of. */}
+                offer — the same ask as the ⋯ menu's Reset shot. */}
             <PencilMark
               reset={
                 operations && canResetShot(shot)
@@ -584,61 +590,6 @@ export function BlackShotRow({
           </span>
         ) : null}
       </span>
-      {operations ? (
-        <span
-          data-shot-actions=""
-          className={cn(
-            "absolute inset-y-0 flex items-center gap-0.5 bg-[var(--rail-ground)] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-8px),transparent)] pr-2 pl-5 transition-opacity duration-200 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
-            ACTIONS_RIGHT,
-            // Hidden, it is not in the pointer's way either: a click on the
-            // result under it selects the row. A selected row waits for the
-            // pointer or the keyboard too, so its result stays readable.
-            "pointer-events-none opacity-0 group-focus-within/row:pointer-events-auto group-hover/row:pointer-events-auto",
-            // While the serve-result menu is open, Delete steps aside: the
-            // menu opens over the row's right edge.
-            "group-has-[[data-menu-open]]/row:hidden",
-          )}
-          style={{ backgroundImage: actionsGround(lit) }}
-        >
-          {point && canSplitAtShot(point, shot.id) ? (
-            <RowAction
-              attr="data-split-row"
-              label={`Split point at shot ${number}`}
-              tooltip="Split point here"
-              detail={`Shot ${number} and those after it become a new point`}
-              onClick={() => operations.onSplitPoint(point.id, shot.id)}
-            >
-              <Split className="size-3" strokeWidth={1.6} aria-hidden="true" />
-            </RowAction>
-          ) : null}
-          {canResetShot(shot) ? (
-            <RowAction
-              attr="data-reset-row"
-              label={`Reset shot ${number}`}
-              tooltip="Reset shot"
-              onClick={() =>
-                operations.onAskResetShot(shot.id, number, pointNumber)
-              }
-            >
-              <RotateCcw
-                className="size-3"
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
-            </RowAction>
-          ) : null}
-          <RowAction
-            attr="data-delete-row"
-            label={`Delete shot ${number}`}
-            tooltip="Delete shot"
-            onClick={() =>
-              operations.onAskDeleteShot(shot.id, number, pointNumber)
-            }
-          >
-            <X className="size-3" strokeWidth={1.6} aria-hidden="true" />
-          </RowAction>
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -1073,41 +1024,209 @@ function GhostPosition({
   );
 }
 
-/** One of the row's requests. It never selects the row it sits in. */
-function RowAction({
-  attr,
-  label,
-  tooltip,
-  detail,
-  onClick,
-  children,
-}: {
-  attr: "data-split-row" | "data-reset-row" | "data-delete-row";
+/** One request in a stroke's ⋯ menu, as plain data. */
+export type ShotMenuItem = {
+  key: "split" | "reset" | "delete";
   label: string;
-  tooltip: string;
-  /** A line under the tooltip's name, saying what the request does. */
-  detail?: string;
-  onClick: () => void;
-  children: React.ReactNode;
+  description?: string;
+  run: () => void;
+};
+
+/**
+ * What a stroke's ⋯ menu can ask for, in its order: Split point here (when
+ * the point can split at this stroke), Reset shot (when there is a seed to
+ * go back to), and Delete shot, always and last. Reset and Delete only ask
+ * the console to confirm; Split runs at once.
+ */
+export function shotMenuItems({
+  shot,
+  number,
+  point,
+  pointNumber,
+  operations,
+}: {
+  shot: LabelShot;
+  number: number;
+  point?: Pick<LabelPoint, "id" | "status" | "shots">;
+  pointNumber: number;
+  operations: LabelRowOperations;
+}): ShotMenuItem[] {
+  const items: ShotMenuItem[] = [];
+  if (point && canSplitAtShot(point, shot.id)) {
+    items.push({
+      key: "split",
+      label: "Split point here",
+      description: `Shot ${number} and those after it become a new point`,
+      run: () => operations.onSplitPoint(point.id, shot.id),
+    });
+  }
+  if (canResetShot(shot)) {
+    items.push({
+      key: "reset",
+      label: "Reset shot",
+      run: () => operations.onAskResetShot(shot.id, number, pointNumber),
+    });
+  }
+  items.push({
+    key: "delete",
+    label: "Delete shot",
+    run: () => operations.onAskDeleteShot(shot.id, number, pointNumber),
+  });
+  return items;
+}
+
+// Tailwind reads a class only when it is whole in the source, so the open
+// menu's variant is written out in each of the two lists below.
+/** At rest the number; reached for (hover, focus, an open menu), it fades. */
+const NUMBER_STEPS_ASIDE =
+  "group-hover/row:opacity-0 group-focus-within/row:opacity-0 group-has-[[data-shot-menu][aria-expanded=true]]/row:opacity-0";
+/** …and the ⋯ fades in, in the same box. */
+const TRIGGER_STEPS_IN =
+  "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-has-[[data-shot-menu][aria-expanded=true]]/row:opacity-100";
+const LANE_FADE =
+  "transition-opacity duration-200 motion-reduce:transition-none";
+
+/**
+ * The row's first track: the stroke's number, and — where the console can
+ * write — its actions. The ⋯ trigger sits in the number's own 22px box and
+ * the two trade places by opacity (a selected row shows the ⋯), so nothing
+ * in the row moves and no cell is covered. A click in the trigger's box
+ * never selects the row.
+ */
+function ShotNumberLane({
+  number,
+  playing,
+  lit,
+  selected,
+  tone,
+  items,
+}: {
+  number: number;
+  playing: boolean;
+  lit: boolean;
+  selected: boolean;
+  tone: RailTone;
+  /** The menu's requests; null where the console cannot write. */
+  items: readonly ShotMenuItem[] | null;
 }) {
   return (
-    <ChromeTooltip label={tooltip} detail={detail} side="top">
-      <button
-        type="button"
-        {...{ [attr]: "" }}
-        aria-label={label}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick();
-        }}
-        className="flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/[0.45] transition-[color,background-color,scale] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100"
+    <span data-shot-number="" className="relative flex h-[22px] items-center">
+      <span
+        className={cn(
+          "mono tabular text-[10px]",
+          lit ? "text-white/80" : "text-white/35",
+          items && LANE_FADE,
+          items && (selected ? "opacity-0" : NUMBER_STEPS_ASIDE),
+        )}
       >
-        {children}
-      </button>
-    </ChromeTooltip>
+        {number}
+        {playing ? <span className="sr-only">, playing</span> : null}
+      </span>
+      {items ? (
+        <span
+          data-cell=""
+          data-shot-lane=""
+          className={cn(
+            "absolute inset-0 flex items-center justify-center",
+            LANE_FADE,
+            selected ? "opacity-100" : TRIGGER_STEPS_IN,
+          )}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ShotMenu number={number} items={items} tone={tone} />
+        </span>
+      ) : null}
+    </span>
   );
 }
 
+const SHOT_MENU_ICON = {
+  split: Split,
+  reset: RotateCcw,
+  delete: X,
+} as const;
+
+/**
+ * A stroke's ⋯: a 22px trigger in the rail's ink, built as the point row's
+ * `PointMenu` is. Delete is last, behind a divider.
+ */
+function ShotMenu({
+  number,
+  items,
+  tone,
+}: {
+  number: number;
+  items: readonly ShotMenuItem[];
+  /** The menu's tone: portalled, so the rail's palette does not reach it. */
+  tone: RailTone;
+}) {
+  const [open, setOpen] = useState(false);
+  const iconClass = cn(
+    "size-3",
+    tone === "dark" ? "text-white/50" : "text-[var(--ink-500)]",
+  );
+  return (
+    // The tooltip hides while open: the menu already says its name.
+    <ChromeTooltip label="Shot actions" side="top" hidden={open}>
+      <span className="inline-flex">
+        <FloatMenu
+          open={open}
+          onOpenChange={setOpen}
+          width={232}
+          tone={tone}
+          label={`Shot ${number} actions`}
+          trigger={
+            <button
+              type="button"
+              aria-label={`Shot ${number} actions`}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              // What the closed menu holds, in order ("split reset delete"):
+              // the items are portalled and only drawn open.
+              data-shot-menu={items.map((item) => item.key).join(" ")}
+              className={cn(
+                "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-[color,background-color,scale] duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100",
+                open ? "bg-white/[0.08] text-white" : "text-white/55",
+              )}
+            >
+              <MoreHorizontal
+                className="size-3.5"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </button>
+          }
+        >
+          {items.map((item) => {
+            const Icon = SHOT_MENU_ICON[item.key];
+            return (
+              <Fragment key={item.key}>
+                {item.key === "delete" && items.length > 1 ? (
+                  <FloatMenuDivider />
+                ) : null}
+                <FloatMenuItem
+                  label={item.label}
+                  description={item.description}
+                  icon={
+                    <Icon
+                      className={iconClass}
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  }
+                  onSelect={() => {
+                    setOpen(false);
+                    item.run();
+                  }}
+                />
+              </Fragment>
+            );
+          })}
+        </FloatMenu>
+      </span>
+    </ChromeTooltip>
+  );
+}
 /** One em dash, and what is missing in words. */
 function Dash({ label }: { label: string }) {
   return (
@@ -1198,8 +1317,7 @@ const SERVE_RESULT_REACH = "-ml-[5px] pl-[5px]";
 
 /**
  * A serve's result: its word, and the "Serve result" select once reached for.
- * It keeps the menu's open state so the cell can say so
- * (`data-menu-open`), which steps the row's actions aside.
+ * It keeps the menu's open state so the cell can say so (`data-menu-open`).
  */
 function ServeResultCell({
   editable,
@@ -1222,8 +1340,8 @@ function ServeResultCell({
 }) {
   const [open, setOpen] = useState(initialOpen);
   // The editor mounts only on the selected row, and unmounting it never
-  // reports the menu closed: deselecting closes it here, so the row's actions
-  // are never left hidden behind a menu that is gone.
+  // reports the menu closed: deselecting closes it here, so a row selected
+  // again does not reopen a menu nobody asked for.
   const [wasSelected, setWasSelected] = useState(rowSelected);
   if (wasSelected !== rowSelected) {
     setWasSelected(rowSelected);

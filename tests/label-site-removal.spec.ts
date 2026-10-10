@@ -489,7 +489,7 @@ function numberOf(html: string, shotId: string): string {
   const at = html.indexOf(`data-shot-id="${shotId}"`);
   expect(at, shotId).toBeGreaterThan(-1);
   const row = html.slice(at);
-  const span = row.indexOf("<span");
+  const span = row.indexOf("<span", row.indexOf("data-shot-number"));
   const start = row.indexOf(">", span) + 1;
   return row.slice(start, row.indexOf("<", start));
 }
