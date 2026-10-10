@@ -68,7 +68,7 @@ ready).
 
 ## T5 · label-apply dry run says how many lets it left out
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/labels/apply.ts (the preview/stats builder near line 520–574), scripts/label-apply.ts (the dry-run printout), tests/label-apply.spec.ts — a guess
 - **done when:**

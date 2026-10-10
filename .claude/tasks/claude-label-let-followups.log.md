@@ -18,3 +18,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. No session-level spec shows combine leaves `label_shots` untouched on a refusal — today's retype planner can't produce one; the plan runs before the first write.
+
+## T5 · label-apply dry run says how many lets it left out — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AppliedRows.letsLeftOut` counts live let serves on applied points (live strokes minus `playedShots`, which drops only `isLetServe`). `letsLeftOutLine` prints "lets left out: N (replayed serves, not written as shots)" in both the dry run and the write summary, always, including 0. Spec in label-apply.
+
+**follow-ups:**
+
+1. apply.ts calls `liveShotsInOrder(point, true)` twice per point for the count; could reuse one result.

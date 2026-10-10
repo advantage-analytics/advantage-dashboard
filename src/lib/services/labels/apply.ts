@@ -119,6 +119,11 @@ export interface AppliedRows {
   problems: string[];
   /** Oddities worth reading before a write, that do not block it. */
   warnings: string[];
+  /**
+   * Live let serves across the applied points, left out of the written
+   * shots on purpose (a let is replayed, not played).
+   */
+  letsLeftOut: number;
 }
 
 export interface ApplyInput {
@@ -306,6 +311,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
   const setsBefore = setsWonBefore(points, scores.games);
 
   const rows: AppliedPointRow[] = [];
+  let letsLeftOut = 0;
   for (const point of points) {
     if (!isAppliedPoint(point)) continue;
     const at = `point ${point.pointIndex + 1}`;
@@ -327,6 +333,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     }
 
     const played = playedShots(point);
+    letsLeftOut += liveShotsInOrder(point, true).length - played.length;
     const window = liveShotsInOrder(point, true)
       .map((shot) => shot.videoTime)
       .filter((t): t is number => t !== null);
@@ -441,7 +448,12 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     });
   }
 
-  return { points: rows, problems, warnings };
+  return { points: rows, problems, warnings, letsLeftOut };
+}
+
+/** The dry-run / write-summary line naming the lets left out (always printed). */
+export function letsLeftOutLine(count: number): string {
+  return `lets left out: ${count} (replayed serves, not written as shots)`;
 }
 
 /** The `points` insert row for a built point: its columns only. */
