@@ -5,8 +5,9 @@
  * marks gate — a session labelled blind completes like any other.
  *
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
- * setting `publishing_since`, matched on `status = 'labelling'` and no fresh
- * lease. While it is held the session stays `labelling` but takes no edits
+ * (`claim_label_publish_lease`) stamping `publishing_since` with the
+ * database's clock, matched on `status = 'labelling'` and no fresh lease.
+ * While it is held the session stays `labelling` but takes no edits
  * (the gate refuses them, and so does the database: a label row's write
  * share-locks its session row, so the lease waits for an edit already under
  * way — `20261010212629_label_publish_guards.sql`), no second Complete and
@@ -86,20 +87,16 @@ export async function writeLabelSessionComplete(params: {
   const refused = await checkSessionOpen(supabase, sessionId);
   if (refused) return { error: refused };
 
-  // The lease: taken only on an open session with no fresh lease on it.
-  const claimedAt = new Date(now()).toISOString();
-  const staleBefore = new Date(now() - PUBLISH_LEASE_MS).toISOString();
-  const { data, error } = await supabase
-    .from("label_sessions")
-    .update({ publishing_since: claimedAt })
-    .eq("id", sessionId)
-    .eq("status", "labelling")
-    .or(`publishing_since.is.null,publishing_since.lt.${staleBefore}`)
-    .select("id");
+  // The lease: taken only on an open session with no fresh lease on it, and
+  // stamped by the database's clock — the one its guard checks it with.
+  const { data: claimedAt, error } = await supabase.rpc(
+    "claim_label_publish_lease",
+    { p_session_id: sessionId },
+  );
   if (error) {
     return { error: `Could not complete the session: ${error.message}` };
   }
-  if (!data || data.length === 0) return { error: PUBLISHING };
+  if (typeof claimedAt !== "string") return { error: PUBLISHING };
 
   let failure: string;
   try {

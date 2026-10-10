@@ -41,10 +41,13 @@ const { P1, P2 } = FIXTURE_POINT_IDS;
 
 interface Call {
   table: string;
-  op: "select" | "update";
+  op: "select" | "update" | "rpc";
   values?: Record<string, unknown>;
   filters: Record<string, unknown>;
 }
+
+/** The lease's stamp, as the database's clock writes it. */
+const CLAIM_STAMP = "2026-10-10T21:00:00.123456+00:00";
 
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
@@ -58,6 +61,11 @@ function fakeClient(rows: {
   const calls: Call[] = [];
   let updateCount = 0;
   const client = {
+    /** `claim_label_publish_lease`: the database's stamp, or none. */
+    async rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: fn, op: "rpc", values: args, filters: {} });
+      return { data: rows.raced ? null : CLAIM_STAMP, error: null };
+    },
     from(table: string) {
       const call: Call = { table, op: "select", filters: {} };
       calls.push(call);
@@ -137,7 +145,7 @@ test.describe("writeLabelSessionComplete", () => {
         sessionId: SESSION_ID,
         now: () => now,
         publish: async (_db, id) => {
-          order.push(`publish ${id} after ${updates(fake).length} update`);
+          order.push(`publish ${id} after ${fake.calls.at(-1)?.op}`);
           return PUBLISHED();
         },
       }),
@@ -147,26 +155,25 @@ test.describe("writeLabelSessionComplete", () => {
       published: { points: 10, shots: 40, insightsRequested: true },
     });
     // The lease lands first, so a second tab finds it taken.
-    expect(order).toEqual([`publish ${SESSION_ID} after 1 update`]);
-    const [lease, close] = updates(fake);
-    expect(lease).toMatchObject({
-      table: "label_sessions",
-      values: { publishing_since: "2026-10-10T21:00:00.000Z" },
-      filters: {
-        id: SESSION_ID,
-        status: "labelling",
-        or: "publishing_since.is.null,publishing_since.lt.2026-10-10T20:55:00.000Z",
+    expect(order).toEqual([`publish ${SESSION_ID} after rpc`]);
+    expect(fake.calls.filter((c) => c.op === "rpc")).toEqual([
+      {
+        table: "claim_label_publish_lease",
+        op: "rpc",
+        values: { p_session_id: SESSION_ID },
+        filters: {},
       },
-    });
+    ]);
+    const [close] = updates(fake);
     expect(close).toMatchObject({
       values: {
         status: "complete",
         completed_at: "2026-10-10T21:00:00.000Z",
         publishing_since: null,
       },
-      filters: { id: SESSION_ID, publishing_since: "2026-10-10T21:00:00.000Z" },
+      filters: { id: SESSION_ID, publishing_since: CLAIM_STAMP },
     });
-    for (const call of fake.calls) expect(call.table).toBe("label_sessions");
+    for (const call of updates(fake)) expect(call.table).toBe("label_sessions");
   });
 
   test("a refused or failed publish releases only its own lease; the session stays open", async () => {
@@ -181,11 +188,9 @@ test.describe("writeLabelSessionComplete", () => {
         publish: async () => ({ ok: false, error: "Not published: no." }),
       }),
     ).toEqual({ error: "Not published: no." });
-    const [lease, release] = updates(refusedPublish);
-    expect(released(refusedPublish)[1]).toEqual({ publishing_since: null });
-    expect(release.filters.publishing_since).toBe(
-      lease.values?.publishing_since,
-    );
+    const [release] = updates(refusedPublish);
+    expect(released(refusedPublish)).toEqual([{ publishing_since: null }]);
+    expect(release.filters.publishing_since).toBe(CLAIM_STAMP);
 
     const threw = fakeClient({});
     expect(
@@ -197,13 +202,13 @@ test.describe("writeLabelSessionComplete", () => {
         },
       }),
     ).toEqual({ error: "Could not publish the labels: boom" });
-    expect(released(threw)[1]).toEqual({ publishing_since: null });
+    expect(released(threw)).toEqual([{ publishing_since: null }]);
     // Never a status write: a failed publish leaves the session labelling.
     expect(released(threw).some((v) => v && "status" in v)).toBe(false);
   });
 
   test("a release that fails says the session stays held, and for how long", async () => {
-    const fake = fakeClient({ failFromUpdate: 1 });
+    const fake = fakeClient({ failFromUpdate: 0 });
     expect(
       await writeLabelSessionComplete({
         supabase: fake.supabase,
