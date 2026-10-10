@@ -1880,3 +1880,22 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     );
   });
 });
+
+test("a tray button lays its icon and label out in one line: its classes are separate tokens", () => {
+  // A missing space once read `min-w-0inline-flex`, so the button fell back to
+  // display:block and every icon sat on its own line above its label.
+  const html = renderWell({ selectedShotId: "w-lit" });
+  const buttons = [
+    ...html.matchAll(/<button[^>]*data-shot-action="[a-z]+"[^>]*>/g),
+  ].map((m) => m[0]);
+  expect(buttons.length).toBeGreaterThan(0);
+  for (const button of buttons) {
+    const classes = /class="([^"]*)"/.exec(button)![1].split(/\s+/);
+    expect(classes, button).toContain("inline-flex");
+    expect(classes, button).toContain("items-center");
+    expect(
+      classes.some((c) => c === "min-w-0" || c === "shrink-0"),
+      button,
+    ).toBe(true);
+  }
+});

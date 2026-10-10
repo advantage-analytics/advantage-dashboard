@@ -1155,7 +1155,9 @@ function ShotTray({
       role="group"
       aria-label={`Shot ${number} actions`}
       onClick={(event) => event.stopPropagation()}
-      className="flex h-[28px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[11px] leading-[14px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+      // 36px tall, a touch more than the 34px row above it, so the actions sit
+      // clear of the hairline and of the next row instead of hugging either.
+      className="flex h-[36px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[11px] leading-[14px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
       {actions.map((action) => (
         <Fragment key={action.key}>

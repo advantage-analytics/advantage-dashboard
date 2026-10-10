@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { cn } from "@/lib/utils";
 import { railAmber } from "./label-rail-tone";
 
 /**
@@ -60,7 +61,13 @@ export function BlackTextAction({
     <button
       type="button"
       {...props}
-      className={`${shrinks ? "min-w-0" : "shrink-0"}${Icon ? "inline-flex items-center gap-[5px]" : ""} cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap ${TEXT_ACTION_INK[ink]} ${RAIL_PRESS} hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
+      className={cn(
+        shrinks ? "min-w-0" : "shrink-0",
+        Icon && "inline-flex items-center gap-[5px]",
+        "cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        TEXT_ACTION_INK[ink],
+        RAIL_PRESS,
+      )}
     >
       {Icon ? (
         <>
