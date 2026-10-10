@@ -124,3 +124,17 @@ The rest of the change is as described in the blocked entry above:
 
 1. Flags are applied on `no_fit` closest paths as well as fits. Revisit in T9 if that proves noisy.
 2. The clean fixture gives `no_fit` (cost 115) against its own folded score. Look at it in T9.
+
+## T7 · Record the proposal on the job (`mergeDerivationQuality`) — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `recordUnreconciledFold` became `mergeDerivationQuality(supabase, jobId, patch)`: the same read, merge, write and swallow.
+
+- After a successful publish, one patch carries `fold` (only when the fold is unreconciled, built exactly as before) and `segmentation` (from `written.transcript.segmentation`, when non-null).
+- The segmentation path never writes `fold`.
+- A run refused over hand labels records no proposal. PR #410's guard is unchanged.
+- There are 6 new spec cases, and the existing test bodies are unedited.
+  **follow-ups:**
+
+1. A failed combined write now loses both `fold` and `segmentation`; before, only `fold` was at risk. It is logged and swallowed. Consider separate writes if that matters.
+2. The proposal is stored whole, so check the `derivation_quality` jsonb size on a real match.

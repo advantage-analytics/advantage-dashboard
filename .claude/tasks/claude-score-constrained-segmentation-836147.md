@@ -187,7 +187,7 @@ ready).
 
 ## T7 · Record the proposal on the job (`mergeDerivationQuality`)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess)
