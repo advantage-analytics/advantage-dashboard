@@ -378,11 +378,11 @@ export function serveAfterServeIn(
 }
 
 /**
- * "Ending looks stale": the point's stored ending is not what its strokes
+ * "Different ending?": the point's stored ending is not what its strokes
  * derive (`deriveEnding`) — the ending or the ended-by differ, or none is
  * stored at all. How a point whose ending was left behind (a stroke edited
  * before the server kept the two in step, a point added by hand) gets fixed:
- * on a click of "Use it", never on load. Nothing for a let or a non-point,
+ * on a click of "Make it …", never on load. Nothing for a let or a non-point,
  * whose ending says the rows do not decide it, and nothing while the rows
  * say nothing. `ghosts` is whether a site-removed stroke is still a ghost.
  */
