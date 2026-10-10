@@ -7,8 +7,10 @@
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
  * setting `publishing_since`, matched on `status = 'labelling'` and no fresh
  * lease. While it is held the session stays `labelling` but takes no edits
- * (the gate refuses them), no second Complete and no Reopen (which needs
- * `complete`). Then the publish — the labelled points replace the match's
+ * (the gate refuses them, and so does the database: a label row's write
+ * share-locks its session row, so the lease waits for an edit already under
+ * way — `20261010212629_label_publish_guards.sql`), no second Complete and
+ * no Reopen (which needs `complete`). Then the publish — the labelled points replace the match's
  * (apply-session.ts), backed up first — and, matched on the lease this call
  * took, either `complete` or the lease released with the reason. A publish
  * killed mid-way leaves the session open with a lease that lapses after
@@ -136,11 +138,16 @@ export async function writeLabelSessionComplete(params: {
 
   // Not published, or not fully: release the lease so it can be retried.
   // Matched on this call's lease, so a later Complete's is never released.
-  await supabase
+  const { error: releaseError } = await supabase
     .from("label_sessions")
     .update({ publishing_since: null })
     .eq("id", sessionId)
     .eq("publishing_since", claimedAt);
+  if (releaseError) {
+    return {
+      error: `${failure} The session stays held for up to ${PUBLISH_LEASE_MS / 60_000} minutes before it takes edits again (${releaseError.message}).`,
+    };
+  }
   return { error: failure };
 }
 

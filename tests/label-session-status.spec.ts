@@ -52,14 +52,23 @@ function fakeClient(rows: {
   raced?: boolean;
   /** The update is refused with this Postgres code. */
   failCode?: string;
+  /** Updates from this one on (0-based) fail with a plain error. */
+  failFromUpdate?: number;
 }) {
   const calls: Call[] = [];
+  let updateCount = 0;
   const client = {
     from(table: string) {
       const call: Call = { table, op: "select", filters: {} };
       calls.push(call);
       const answer = () => {
         if (call.op === "update") {
+          if (
+            rows.failFromUpdate !== undefined &&
+            updateCount++ >= rows.failFromUpdate
+          ) {
+            return { data: null, error: { message: "network down" } };
+          }
           if (rows.failCode) {
             return {
               data: null,
@@ -191,6 +200,20 @@ test.describe("writeLabelSessionComplete", () => {
     expect(released(threw)[1]).toEqual({ publishing_since: null });
     // Never a status write: a failed publish leaves the session labelling.
     expect(released(threw).some((v) => v && "status" in v)).toBe(false);
+  });
+
+  test("a release that fails says the session stays held, and for how long", async () => {
+    const fake = fakeClient({ failFromUpdate: 1 });
+    expect(
+      await writeLabelSessionComplete({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => ({ ok: false, error: "Not published: no." }),
+      }),
+    ).toEqual({
+      error:
+        "Not published: no. The session stays held for up to 5 minutes before it takes edits again (network down).",
+    });
   });
 
   test("a fresh lease refuses edits and a second Complete; a stale one does not", async () => {

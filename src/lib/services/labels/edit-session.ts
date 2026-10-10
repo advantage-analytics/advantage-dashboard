@@ -111,6 +111,7 @@ export const PUBLISHING =
  * How long a publish's lease (`label_sessions.publishing_since`) holds the
  * session: past the 120 s the console's server actions may run, with room.
  * An older lease is a publish that was killed, and the next Complete takes it.
+ * The database's own check (`label_publish_guards`) holds five minutes too.
  */
 export const PUBLISH_LEASE_MS = 5 * 60 * 1000;
 

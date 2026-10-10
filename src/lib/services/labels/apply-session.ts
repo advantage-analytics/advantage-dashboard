@@ -217,26 +217,17 @@ export async function storeBackup(
  * Note a backup's key on its job (`processing_jobs.label_backup_keys`), where
  * the match purge reads it: the purge removes a fixed list, never a listing.
  * Noted BEFORE the upload, so no stored backup goes unnamed; a key whose
- * upload then fails names nothing, and removing it is a no-op.
+ * upload then fails names nothing, and removing it is a no-op. One
+ * statement (`append_label_backup_key`), so two publishes on the job at once
+ * never drop each other's key.
  */
 async function recordBackupKey(db: AdminClient, jobId: string, key: string) {
-  const { data, error } = await db
-    .from("processing_jobs")
-    .select("label_backup_keys")
-    .eq("id", jobId)
-    .maybeSingle<{ label_backup_keys: string[] | null }>();
-  if (error || !data) {
-    throw new Error(
-      `Could not read the job to note the backup: ${error?.message ?? "no job"}`,
-    );
-  }
-  const { error: updateError } = await db
-    .from("processing_jobs")
-    .update({ label_backup_keys: [...(data.label_backup_keys ?? []), key] })
-    .eq("id", jobId);
-  if (updateError) {
-    throw new Error(`Could not note the backup: ${updateError.message}`);
-  }
+  const { data, error } = await db.rpc("append_label_backup_key", {
+    p_job_id: jobId,
+    p_key: key,
+  });
+  if (error) throw new Error(`Could not note the backup: ${error.message}`);
+  if (data !== true) throw new Error("Could not note the backup: no job");
 }
 
 export async function readStoredBackup(
