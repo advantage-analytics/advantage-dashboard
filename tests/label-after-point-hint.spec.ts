@@ -570,4 +570,38 @@ test.describe("serveAfterServeIn", () => {
       serveAfterServeIn({ shots: [ghosted, second] }, false)?.params,
     ).toEqual({ shotId: "b" });
   });
+  test("a let is not in: a serve after a let raises nothing, a serve after one called in still does", () => {
+    const afterLet = [
+      serve("a", "let", { videoTime: 1 }),
+      serve("b", "in", { videoTime: 2 }),
+      stroke("c", IN, { hitter: "p2", videoTime: 3 }),
+    ];
+    expect(serveAfterServeIn({ shots: afterLet }, true)).toBeNull();
+    // Let, then first serve out, then second serve in: nothing either.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "out", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3, stroke: "second_serve" }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A serve called in, then another: still the mark, let or no let before.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
+  });
 });

@@ -774,6 +774,29 @@ test.describe("last-stroke result changes", () => {
       buildScorecard(rows, marksOf({}), { ghosts: false }).lastResultChanges,
     ).toEqual([{ from: null, to: "net", points: 1, vendorOut: 0 }]);
   });
+
+  test("a last stroke made a let is its own row, rendered let, and outside the in→out-or-net share", () => {
+    const rows = [
+      point("a", 0, [shot("a1", { stroke: "first_serve" }, { result: "let" })]),
+      point("b", 1, [shot("b1", {}, { result: "out" })]),
+    ];
+    const card = buildScorecard(rows, marksOf({}), {
+      vendor: vendorOf({ a1: facts({ in: true }), b1: facts({ in: false }) }),
+    });
+    expect(card.lastResultChanges).toEqual([
+      { from: "in", to: "let", points: 1, vendorOut: 0 },
+      { from: "in", to: "out", points: 1, vendorOut: 1 },
+    ]);
+    const text = renderScorecard(card, {
+      title: "Scorecard",
+      names: { p1: "Lee", p2: "Vargas" },
+    });
+    expect(text).toContain("| in | let | 1 | 0 (0%) |");
+    expect(text).not.toContain("| in | no result |");
+    expect(text).toContain(
+      "2 points whose last live stroke has a result other than its seeded one; 1 (50%) went in→out or net",
+    );
+  });
 });
 
 test.describe("last landings", () => {
@@ -820,8 +843,38 @@ test.describe("last landings", () => {
       netHits: 1,
       added: 1,
       placed: 1,
-      remaining: { in: 1, outOrNet: 1, noResult: 1 },
+      remaining: { in: 1, outOrNet: 1, let: 0, noResult: 1 },
     });
+  });
+
+  test("a let left with no landing is its own bucket and its own row, not in, out-or-net or no result", () => {
+    const noLanding = { landing_x: null, landing_y: null };
+    const rows = [
+      point("a", 0, [
+        shot(
+          "a1",
+          { ...noLanding, stroke: "first_serve" },
+          { result: "let", landingX: null, landingY: null },
+        ),
+      ]),
+      point("b", 1, [
+        shot("b1", noLanding, { result: null, landingX: null, landingY: null }),
+      ]),
+    ];
+    const card = buildScorecard(rows, marksOf({}));
+    expect(card.lastLandings.remaining).toEqual({
+      in: 0,
+      outOrNet: 0,
+      let: 1,
+      noResult: 1,
+    });
+    const text = renderScorecard(card, {
+      title: "Scorecard",
+      names: { p1: "Lee", p2: "Vargas" },
+    });
+    expect(text).toContain("| Left it empty, let | 1 (50%) |");
+    expect(text).toContain("| Left it empty, no result | 1 (50%) |");
+    expect(text).toContain("| Left it empty, result in | 0 (0%) |");
   });
 });
 
@@ -949,7 +1002,58 @@ test.describe("serves", () => {
         b3: facts({ isServe: true }),
       }),
     });
-    expect(card.serves).toEqual({ threeOrMore: [1, 2], serveAfterIn: [3] });
+    expect(card.serves).toEqual({
+      threeOrMore: [1, 2],
+      lets: [],
+      serveAfterIn: [3],
+    });
+  });
+
+  test("a let is not one of the serves counted, and the points with a live let are listed", () => {
+    const serve = (id: string, t: number, now: Partial<LabelShot> = {}) =>
+      shot(id, { stroke: "first_serve", video_time: t }, now);
+    const rows = [
+      // Let, first serve out, second serve: two serves, in the live rows and
+      // the vendor's.
+      point("a", 0, [
+        serve("a1", 1, { result: "let" }),
+        serve("a2", 2, { result: "out" }),
+        serve("a3", 3, { stroke: "second_serve" }),
+      ]),
+      // Let, let, first serve: one serve, two lets, listed once.
+      point("b", 1, [
+        serve("b1", 1, { result: "let" }),
+        serve("b2", 2, { result: "let" }),
+        serve("b3", 3),
+      ]),
+      // Three serves that are not lets still count; a deleted let is not a
+      // live one.
+      point("c", 2, [
+        serve("c1", 1, { result: "let", status: "deleted" }),
+        serve("c2", 2, { result: "out" }),
+        serve("c3", 3, { result: "out" }),
+        serve("c4", 4),
+      ]),
+    ];
+    const vendor = vendorOf(
+      Object.fromEntries(
+        rows.flatMap((p) =>
+          p.shots.map((s) => [s.id, facts({ isServe: true })]),
+        ),
+      ),
+    );
+    const card = buildScorecard(rows, marksOf({}), { vendor });
+    expect(card.serves).toEqual({
+      threeOrMore: [3],
+      lets: [1, 2],
+      serveAfterIn: [],
+    });
+    const text = renderScorecard(card, {
+      title: "Scorecard",
+      names: { p1: "Lee", p2: "Vargas" },
+    });
+    expect(text).toContain("Points with a let serve: 1, 2.");
+    expect(text).toMatch(/three or more serves[^\n]*: 3\./);
   });
 });
 

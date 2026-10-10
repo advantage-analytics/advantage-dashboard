@@ -48,6 +48,7 @@ import { readLabelSessionRows } from "@/lib/data/labels-server";
 import {
   HAND_LABELLED_FLAG,
   buildAppliedRows,
+  letsLeftOutLine,
   expectedStats,
   pointInsertRow,
   vendorShotFacts,
@@ -493,6 +494,7 @@ async function main() {
   console.log(
     `vendor facts: speed on ${builtShots.filter((s) => s.speed_mph !== null).length} shots · bounce time on ${builtShots.filter((s) => s.bounce_video_time !== null).length} of ${builtShots.length}`,
   );
+  console.log(letsLeftOutLine(built.letsLeftOut));
   console.log(`labelled final score: ${formatSets(sets) || "(none)"}`);
   const entered = enteredScore(null, session.matchScore);
   console.log(
@@ -588,6 +590,7 @@ async function main() {
       built.points,
     );
     console.log(`wrote ${built.points.length} points and ${shots} shots`);
+    console.log(letsLeftOutLine(built.letsLeftOut));
     await relinkBookmarks(db, backup, built.points, idByNumber);
   } catch (err) {
     console.error(

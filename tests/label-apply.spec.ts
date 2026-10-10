@@ -4,6 +4,7 @@ import {
   HAND_LABELLED_FLAG,
   buildAppliedRows,
   expectedStats,
+  letsLeftOutLine,
   pointInsertRow,
   pointScoreOf,
   resultTypeOf,
@@ -360,6 +361,36 @@ test.describe("buildAppliedRows", () => {
     expect(stats.p2.serviceGames).toBe(1);
     expect(stats.p1.breakPointsFaced).toBe(1);
     expect(stats.p2.breakPointsWon).toBe(0);
+  });
+});
+
+test.describe("lets left out", () => {
+  test("the build counts live let serves on applied points only", () => {
+    expect(build().letsLeftOut).toBe(1);
+    expect(letsLeftOutLine(1)).toContain("lets left out: 1");
+    expect(letsLeftOutLine(0)).toContain("lets left out: 0");
+  });
+
+  test("a tombstoned let and a let on a deleted point are not counted", () => {
+    clock = 100;
+    id = 0;
+    const points = [
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "let", { status: "deleted" }),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+      pt(
+        1,
+        "p1",
+        "ace",
+        (p) => [
+          shot(p, "p1", "first_serve", "let"),
+          shot(p, "p1", "first_serve", "in"),
+        ],
+        { status: "deleted" },
+      ),
+    ];
+    expect(build(points).letsLeftOut).toBe(0);
   });
 });
 

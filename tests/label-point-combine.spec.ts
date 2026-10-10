@@ -11,6 +11,7 @@ import { writeLabelPointRestore } from "@/lib/services/labels/operations-session
 import {
   applyPointCombine,
   combineNeighbour,
+  combineRetypeError,
   combineServeRetypes,
   isCombinedTombstone,
   planPointCombine,
@@ -403,6 +404,73 @@ test.describe("combineServeRetypes: a replayed serve is a let", () => {
 });
 
 // ── The console's rows ─────────────────────────────────────────────────────
+
+test.describe("combineRetypeError: a let only on a serve", () => {
+  const LET = "Only a serve can be a let.";
+
+  test("refuses a crafted retype that would leave a let on a stroke that is not a serve", () => {
+    // A let set on a forehand.
+    expect(
+      combineRetypeError(
+        [{ shotId: "f", patch: { result: "let" } }],
+        [{ id: "f", stroke: "forehand", result: "in" }],
+      ),
+    ).toBe(LET);
+    // A let on a row with no stroke.
+    expect(
+      combineRetypeError(
+        [{ shotId: "n", patch: { result: "let" } }],
+        [{ id: "n", stroke: null, result: "in" }],
+      ),
+    ).toBe(LET);
+    // A stroke-only retype leaves the stored let judged by the new stroke:
+    // a serve, so it stands.
+    expect(
+      combineRetypeError(
+        [{ shotId: "s", patch: { stroke: "second_serve" } }],
+        [{ id: "s", stroke: "first_serve", result: "let" }],
+      ),
+    ).toBeNull();
+  });
+
+  test("passes every retype combineServeRetypes plans: the let, then first and second", () => {
+    const shots = [
+      {
+        id: "let",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "in" as const,
+        videoTime: 1,
+        eventId: null,
+        status: "kept" as const,
+      },
+      {
+        id: "fault",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "out" as const,
+        videoTime: 9,
+        eventId: null,
+        status: "kept" as const,
+      },
+      {
+        id: "second",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "in" as const,
+        videoTime: 14,
+        eventId: null,
+        status: "kept" as const,
+      },
+    ];
+    const retyped = combineServeRetypes(shots);
+    expect(retyped).toEqual([
+      { shotId: "let", patch: { result: "let" } },
+      { shotId: "second", patch: { stroke: "second_serve" } },
+    ]);
+    expect(combineRetypeError(retyped, shots)).toBeNull();
+  });
+});
 
 test.describe("the console's rows", () => {
   test("applyPointCombine merges the shots in video order, moves the fields, empties the later row; withdrawPointCombine puts both back", () => {
