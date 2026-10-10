@@ -10,11 +10,11 @@
  * (the gate refuses them, and so does the database: a label row's write
  * share-locks its session row, so the lease waits for an edit already under
  * way — `20261010212629_label_publish_guards.sql`), no second Complete and
- * no Reopen (which needs `complete`). Then the publish — the labelled points replace the match's
- * (apply-session.ts), backed up first — and, matched on the lease this call
- * took, either `complete` or the lease released with the reason. A publish
- * killed mid-way leaves the session open with a lease that lapses after
- * `PUBLISH_LEASE_MS`, so Complete again finishes it.
+ * no Reopen (which needs `complete`). Then the publish — the labelled points
+ * replace the match's (apply-session.ts), backed up first — and, matched on
+ * the lease this call took, either `complete` or the lease released with the
+ * reason. A publish killed mid-way leaves the session open with a lease that
+ * lapses after `PUBLISH_LEASE_MS`, so Complete again finishes it.
  *
  * Reopen leaves the published points as they are; completing again publishes
  * again. Reopen reads the status and writes the reverse, matched on
