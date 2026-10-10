@@ -345,7 +345,7 @@ const TIEBREAK_TARGET: Record<Exclude<LabelGameType, "game">, number> = {
  * Whether the points so far have settled a tiebreak: its target reached and
  * two clear.
  */
-function tiebreakDecided(
+export function tiebreakDecided(
   points: Record<LabelSide, number>,
   type: Exclude<LabelGameType, "game">,
 ): boolean {

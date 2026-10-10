@@ -30,11 +30,13 @@ import {
 import type { GameShiftWrite } from "./game-shift";
 import type { LabelGame } from "./operations";
 import { planPlayerSwap, type ShotSwapWrite } from "./player-swap";
-import { isCountedPoint, labelScores, type ScorablePoint } from "./score";
+import {
+  isCountedPoint,
+  labelScores,
+  tiebreakDecided,
+  type ScorablePoint,
+} from "./score";
 import type { LabelPointStatus, LabelSide } from "./session";
-
-/** A tiebreak's target: first to 7, two clear. */
-const TIEBREAK_TO = 7;
 
 export interface TiebreakFold {
   setNumber: number;
@@ -103,9 +105,8 @@ function foldFrom(
     folded.push(point);
     if (!isCountedPoint(point)) continue;
     count[point.winner] += 1;
-    const lead = count.p1 - count.p2;
-    if (Math.max(count.p1, count.p2) >= TIEBREAK_TO && Math.abs(lead) >= 2) {
-      winner = lead > 0 ? "p1" : "p2";
+    if (tiebreakDecided(count, "tiebreak")) {
+      winner = count.p1 > count.p2 ? "p1" : "p2";
       break;
     }
   }

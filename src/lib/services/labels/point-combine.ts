@@ -242,8 +242,8 @@ function liveStrokes(shots: readonly CombinableShot[]): CombinableShot[] {
 }
 
 /**
- * Whether the part's rally was in play when it was cut: its last serve was not
- * missed, at least one stroke that is not a serve follows it, and the last of
+ * Whether the part's rally was in play when it was cut: its last serve was
+ * called in, at least one stroke that is not a serve follows it, and the last of
  * them did not miss. A fault with dead-ball swings after it is not, nor is a
  * rally that ended on a ball out or in the net.
  */
@@ -252,7 +252,8 @@ export function rallyInPlay(shots: readonly CombinableShot[]): boolean {
   const lastServe = live.findLastIndex((shot) => isServeStroke(shot.stroke));
   if (lastServe === -1) return false;
   const serve = live[lastServe];
-  if (serve.result === "out" || serve.result === "net") return false;
+  // Only a serve called in starts a rally; one not called yet says nothing.
+  if (serve.result !== "in") return false;
   const after = live.slice(lastServe + 1);
   if (!after.some((shot) => !isServeStroke(shot.stroke))) return false;
   // A rally whose last ball missed was already over: what follows is a serve.

@@ -618,12 +618,6 @@ export function destinationServerIn(
 }
 
 /**
- * The games a point can move to from the console: the game of the nearest
- * live point before it and after it in `point_index` order, when that game
- * is not its own. Adjacent only, so a moved point never lands in a game
- * whose other points it does not sit beside.
- */
-/**
  * A game's number within its set, as the bands name it: its rank among the
  * set's games that still hold a live point. `game_number` counts across the
  * match, so set 2's first game is not "Game 13".
@@ -643,6 +637,12 @@ export function gameInSetOf(
   return [...numbers].sort((x, y) => x - y).indexOf(game.gameNumber) + 1;
 }
 
+/**
+ * The games a point can move to from the console: the game of the nearest
+ * live point before it and after it in `point_index` order, when that game
+ * is not its own. Adjacent only, so a moved point never lands in a game
+ * whose other points it does not sit beside.
+ */
 export function neighbourGames(
   points: readonly Pick<
     LabelPoint,

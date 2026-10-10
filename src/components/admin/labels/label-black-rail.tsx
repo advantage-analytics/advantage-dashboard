@@ -316,8 +316,6 @@ export function LabelBlackRail({
     () => openPointSuggestions(points, marks),
     [points, marks],
   );
-  // The games that run over, by their first leftover point. Read off the
-  // labeller's own rows, so on every editable session — marks on or off.
   // The tiebreak at 6–6, by the first point it folds: on editable sessions.
   const foldBefore = useMemo(
     () =>
@@ -329,6 +327,8 @@ export function LabelBlackRail({
       ),
     [editable, points, adScoring],
   );
+  // The games that run over, by their first leftover point. Read off the
+  // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
     () => (editable ? overflowBeforePoints(points, adScoring) : NO_OVERFLOW),
     [editable, points, adScoring],

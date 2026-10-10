@@ -298,15 +298,14 @@ export function pointEndedEarly(
     const at = ordered.findIndex((s) => s.id === shot.id);
     const settled =
       dismissed.has(pointEndedKey(shot.id)) ||
-      ordered
-        .slice(at + 1)
-        .some(
-          (s) =>
-            dismissed.has(pointEndedKey(s.id)) ||
-            s.status === "edited" ||
-            s.status === "added" ||
-            s.status === "deleted",
-        );
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at.
+          (s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
     if (settled) return null;
     return {
       code: "shot_after_point_end",
