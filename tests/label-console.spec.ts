@@ -116,7 +116,7 @@ test("an expanded point folds its shots out in video order", () => {
   );
 });
 
-test("a wide position is in the markup whole — as text, and in the editor", () => {
+test("a wide position is in the markup whole — as text, and on its court button", () => {
   // A copy: the fixture's rows are shared between calls.
   const session = structuredClone(labelSessionFixture());
   const serve = session.points
@@ -141,8 +141,8 @@ test("a wide position is in the markup whole — as text, and in the editor", ()
     }),
     'data-shot-id="s-serve"',
   );
-  expect(editing).toMatch(
-    /<input[^>]*aria-label="Shot 1 hit at, metres x, y"[^>]*value="-3\.21, 18\.40"/,
+  expect(editing).toContain(
+    'aria-label="Shot 1 hit at: -3.21, 18.40 — place on the court"',
   );
 });
 

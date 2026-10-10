@@ -78,3 +78,31 @@ export function elements(
   }
   return elements(element.props.children, out);
 }
+
+/** One button in a selected stroke's tray, as a spec presses it. */
+export type TrayButtonProbe = {
+  key: string;
+  label: string;
+  ariaLabel: string;
+  click: (event: { stopPropagation: () => void }) => void;
+};
+
+/**
+ * The buttons of a stroke row's tray (`ShotTray`), in order — none where the
+ * row draws no tray. Read off the tree: each is the `BlackTextAction` element
+ * carrying `data-shot-action`.
+ */
+export function trayButtons(tree: React.ReactNode): TrayButtonProbe[] {
+  return elements(tree)
+    .filter(
+      (element) =>
+        typeof element.type === "function" &&
+        "data-shot-action" in element.props,
+    )
+    .map((element) => ({
+      key: element.props["data-shot-action"] as string,
+      label: element.props.children as string,
+      ariaLabel: element.props["aria-label"] as string,
+      click: element.props.onClick as TrayButtonProbe["click"],
+    }));
+}

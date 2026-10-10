@@ -112,6 +112,34 @@ export function canResetPoint(
   return point.status === "edited" && point.seed !== null;
 }
 
+/** What a point's Reset puts back: its own fields, and its edited strokes. */
+export interface PointResetScope {
+  /** The point's own fields go back (`canResetPoint`, and not a split half). */
+  fields: boolean;
+  /** The edited strokes with a seed, each reset as a shot is (`canResetShot`). */
+  shotIds: string[];
+}
+
+/**
+ * The point's Reset: its own fields when they changed — held back on a point
+ * that shares a vendor rally (a split's halves, `sharesVendorRally`) — and
+ * every edited stroke with a seed. Strokes the labeller added or deleted stay
+ * as they are. Null when there is nothing to put back.
+ */
+export function pointResetScope(
+  point: Pick<LabelPoint, "status" | "seed"> & {
+    shots: readonly Pick<LabelShot, "id" | "status" | "seed">[];
+  },
+  sharesRally = false,
+): PointResetScope | null {
+  const fields = canResetPoint(point) && !sharesRally;
+  const shotIds =
+    point.status === "deleted"
+      ? []
+      : point.shots.filter(canResetShot).map((shot) => shot.id);
+  return fields || shotIds.length > 0 ? { fields, shotIds } : null;
+}
+
 // ── The console's camelCase rows ────────────────────────────────────────────
 
 /** `shot` reset to its seed, as the console shows it. Unchanged if refused. */

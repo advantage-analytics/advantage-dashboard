@@ -22,7 +22,7 @@ import {
   noop,
   ROW_OPERATIONS as OPERATIONS,
 } from "./fixtures/label-session";
-import { elements, findByProp } from "./fixtures/react-tree";
+import { elements, findByProp, trayButtons } from "./fixtures/react-tree";
 import { createLoader, renderFunction } from "./fixtures/vm-modules";
 
 /** The points rail's rows: a point's two lines, its row, the game band and the shots well. */
@@ -276,6 +276,7 @@ function components() {
   return createLoader().load(ROW) as {
     BlackPointRow: React.ComponentType<RowProps>;
     pointChangedByYou: (point: LabelPoint) => boolean;
+    pointRowSlide: (editable: boolean, playing: boolean) => string;
   };
 }
 
@@ -389,6 +390,44 @@ test.describe("the black point row", () => {
     );
   });
 
+  test("the tail (chip, pencil) slides with the score, never crowded by it", () => {
+    const { pointRowSlide } = components();
+    const classOf = (html: string, attr: string) =>
+      tag(html, attr)
+        .match(/class="([^"]*)"/)![1]
+        .split(" ");
+    const cases: [Partial<RowProps>, boolean][] = [
+      [{}, true],
+      [{ playing: true }, true],
+      [{}, false],
+    ];
+    for (const [props, editable] of cases) {
+      const html = renderRow(FIXTURE_POINT_IDS.P1, props, editable);
+      // One constant for both, so they can never drift.
+      const slide = pointRowSlide(editable, props.playing ?? false).split(" ");
+      expect(classOf(html, "data-row-tail")).toEqual(
+        expect.arrayContaining(slide),
+      );
+      expect(classOf(html, "data-point-score")).toEqual(
+        expect.arrayContaining(slide),
+      );
+    }
+    // On reach (hover, focus, the open ⋯) while editable; held when playing.
+    const reach = pointRowSlide(true, false);
+    expect(reach).toContain("group-hover/row:-translate-x-[26px]");
+    expect(reach).toContain(
+      "group-has-[[data-row-actions]_[aria-expanded=true]]/row:-translate-x-[26px]",
+    );
+    expect(reach).toContain(
+      "motion-reduce:group-hover/row:-translate-x-[26px]",
+    );
+    expect(reach).toContain("transition-transform");
+    expect(pointRowSlide(true, true)).toMatch(/(^| )-translate-x-\[26px\]/);
+    // Read-only: nothing to make room for, so nothing moves.
+    expect(pointRowSlide(false, false)).not.toContain("translate-x");
+    expect(pointRowSlide(false, true)).not.toContain("translate-x");
+  });
+
   test("read-only: the mark alone, no menu, a tick that cannot be pressed", () => {
     const html = renderRow(FIXTURE_POINT_IDS.P1, {}, false);
     expect(html).toContain('role="img" aria-label="Point 1 won by Vargas"');
@@ -424,10 +463,28 @@ test.describe("the black point row", () => {
     });
     expect(asked).toEqual([["stopped"], ["reset", FIXTURE_POINT_IDS.P1]]);
 
-    // Without a seed, or read-only: the pencil is the plain indicator.
+    // Only its strokes changed: the pencil still resets, for them.
+    const shotsOnly = findByProp(
+      renderFunction<unknown>(BlackPointRow)({
+        point: { ...first, seed: null },
+        open: false,
+        playing: false,
+        score: null,
+        edit,
+      }),
+      "data-reset-pencil",
+      ["PencilMark"],
+    );
+    expect(shotsOnly!.props["aria-label"]).toBe("Reset point 1");
+
+    // Nothing with a seed to go back to, or read-only: the plain indicator.
     const unseeded = renderToStaticMarkup(
       React.createElement(BlackPointRow, {
-        point: { ...first, seed: null },
+        point: {
+          ...first,
+          seed: null,
+          shots: first.shots.map((s) => ({ ...s, seed: null })),
+        },
         open: false,
         playing: false,
         score: null,
@@ -789,6 +846,51 @@ test.describe("the black shots well", () => {
     expect(serve).not.toContain("data-fault");
   });
 
+  test("a narrow well drops the placement track, and the result takes its place", () => {
+    const html = renderWell();
+    const {
+      SHOT_TRACKS,
+      SHOT_TRACKS_NARROW,
+      SHOT_FLOORS_PX,
+      SHOT_PLACEMENT_MIN_RAIL_PX,
+    } = createLoader().load(WELL) as {
+      SHOT_TRACKS: string;
+      SHOT_TRACKS_NARROW: string;
+      SHOT_FLOORS_PX: readonly number[];
+      SHOT_PLACEMENT_MIN_RAIL_PX: number;
+    };
+    const variant = `@max-[${SHOT_PLACEMENT_MIN_RAIL_PX}px]/shots:`;
+
+    // The well's column of rows is the container the rows ask.
+    const column = html.slice(html.indexOf("data-shots-well"));
+    expect(tag(column, "<div")).toContain("@container/shots");
+
+    // Under the breakpoint: the same tracks less placement, written whole.
+    expect(SHOT_TRACKS_NARROW.startsWith(`${variant}grid-cols-[`)).toBe(true);
+    const wide = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
+    const narrowFloors = SHOT_FLOORS_PX.filter((_, i) => i !== 7);
+    const narrow = shotTracks(SHOT_TRACKS_NARROW, narrowFloors);
+    expect(narrow).toHaveLength(8);
+    expect(narrow).toEqual(wide.filter((_, i) => i !== 7));
+    const inner = (spec: string) => /grid-cols-\[(.+)\]$/.exec(spec)![1];
+    expect(inner(SHOT_TRACKS_NARROW)).toBe(
+      inner(SHOT_TRACKS).replace("_minmax(30px,0.8fr)", ""),
+    );
+
+    // Every stroke row carries both; its placement cell leaves.
+    const ids = [...html.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      const row = shotRow(html, id);
+      expect(tag(row, 'data-row="shot"')).toContain(SHOT_TRACKS_NARROW);
+      expect(tag(row, 'data-calculated="placement"')).toContain(
+        `${variant}hidden`,
+      );
+    }
+    // Add shot spans to the last track either way (`col-[2/-1]`).
+    expect(tag(html, "data-add-shot")).toContain(SHOT_TRACKS_NARROW);
+  });
+
   test("a coordinate: x and y in slots of their own, so the columns align", () => {
     const html = renderWell();
     const lit = shotRow(html, "w-lit");
@@ -819,11 +921,14 @@ test.describe("the black shots well", () => {
     const lit = shotRow(html, "w-lit");
     const open = tag(lit, 'data-row="shot"');
     expect(open).toContain("data-selected");
-    // Player, Stroke, Spin are menus; Time and the two positions are inputs.
+    // Player, Stroke, Spin are menus; Time is an input. The two positions are
+    // never typed: each is a button that hands the court its end.
     expect(lit.match(/data-select-editor/g)).toHaveLength(3);
-    expect(lit.match(/<input/g)).toHaveLength(3);
-    expect(lit).toContain('value="-0.31, -1.82"');
-    expect(lit).toContain('aria-label="Shot 4 hit at, metres x, y"');
+    expect(lit.match(/<input/g)).toHaveLength(1);
+    expect(lit).toContain(
+      'aria-label="Shot 4 hit at: -0.31, -1.82 — place on the court"',
+    );
+    expect(lit.match(/data-position-pick="(hit|landed)"/g)).toHaveLength(2);
 
     for (const id of ["w-fault", "w-serve", "w-return"]) {
       const row = shotRow(html, id);
@@ -843,6 +948,142 @@ test.describe("the black shots well", () => {
     expect(frozen).not.toContain("data-select-editor");
     expect(frozen).not.toContain("<input");
     expect(frozen).not.toContain('role="button"');
+    expect(frozen).not.toContain("data-position-pick");
+  });
+
+  test("quiet selection: the selected row's fields read as text, a box only where reached for", () => {
+    const html = renderWell({ selectedShotId: "w-lit" });
+    const lit = shotRow(html, "w-lit");
+    const classes = (openTag: string) =>
+      /class="([^"]*)"/.exec(openTag)![1].split(" ");
+
+    // Player, Stroke, Spin: the trigger is transparent at rest, and the box
+    // comes back on hover, keyboard focus and an open menu — the boxed
+    // variant's exact border and ground, the open menu's blue.
+    for (const field of ["player", "stroke", "spin"]) {
+      const trigger = classes(tag(lit, `aria-label="Shot 4 ${field}"`));
+      for (const want of [
+        "border-transparent",
+        "bg-transparent",
+        "hover:border-white/20",
+        "hover:bg-white/[0.14]",
+        "focus-visible:border-white/20",
+        "focus-visible:bg-white/[0.08]",
+        "aria-expanded:border-[var(--blue)]",
+        "aria-expanded:bg-white/[0.08]",
+        "duration-150",
+        "motion-reduce:transition-none",
+        // Brighter than a resting row's words: these can be edited.
+        "text-white/90",
+        // The same geometry, so nothing shifts when the box shows.
+        "-ml-[5px]",
+        "w-[calc(100%+7px)]",
+        "h-[26px]",
+      ]) {
+        expect(trigger, `${field}: ${want}`).toContain(want);
+      }
+      // No box at rest.
+      expect(trigger, field).not.toContain("border-white/20");
+      expect(trigger, field).not.toContain("bg-white/[0.08]");
+      expect(trigger, field).not.toContain("text-white");
+    }
+
+    // Time: the field's box, transparent at rest; hover (unless focused, so it
+    // never covers the blue), focus-within (the input is focused for as long
+    // as a draft is typed) and an invalid draft bring it back.
+    for (const label of ["Shot 4 time"]) {
+      const at = lit.indexOf(`aria-label="${label}"`);
+      expect(at, label).toBeGreaterThan(-1);
+      const input = lit.slice(lit.lastIndexOf("<input", at));
+      const wrapperAt = lit.lastIndexOf("<span", lit.lastIndexOf("<input", at));
+      const wrapper = classes(
+        lit.slice(wrapperAt, lit.indexOf(">", wrapperAt)),
+      );
+      for (const want of [
+        "border-transparent",
+        "bg-transparent",
+        "not-focus-within:hover:border-white/20",
+        "hover:bg-white/[0.08]",
+        "focus-within:border-[var(--blue)]",
+        "focus-within:bg-white/[0.08]",
+        "data-[invalid]:focus-within:border-[var(--danger)]",
+        "data-[invalid]:bg-white/[0.08]",
+        "duration-150",
+        "motion-reduce:transition-none",
+        "-ml-[4px]",
+        "w-[calc(100%+9px)]",
+      ]) {
+        expect(wrapper, `${label}: ${want}`).toContain(want);
+      }
+      expect(wrapper, label).not.toContain("border-white/20");
+      expect(wrapper, label).not.toContain("bg-white/[0.08]");
+      const inputClasses = classes(input.slice(0, input.indexOf(">") + 1));
+      expect(inputClasses, label).toContain("text-white/90");
+      expect(inputClasses, label).not.toContain("text-white");
+    }
+
+    // Placement is derived, not an editor: it keeps the row's words ink.
+    expect(tag(lit, 'data-calculated="placement"')).toContain("text-white/50");
+    expect(tag(lit, 'data-calculated="placement"')).not.toContain(
+      "text-white/90",
+    );
+  });
+
+  test("the boxed field is unchanged for any editor not asked to be quiet", () => {
+    const { SelectEditor, TextEditor } = createLoader().load(
+      "src/components/admin/labels/label-cells.tsx",
+    ) as {
+      SelectEditor: (props: Record<string, unknown>) => React.ReactElement;
+      TextEditor: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const classes = (openTag: string) =>
+      /class="([^"]*)"/.exec(openTag)![1].split(" ");
+
+    const select = classes(
+      tag(
+        renderToStaticMarkup(
+          React.createElement(SelectEditor, {
+            label: "Game type",
+            value: "a",
+            options: [{ value: "a", label: "A" }],
+            onChange: noop,
+          }),
+        ),
+        'aria-label="Game type"',
+      ),
+    );
+    for (const want of [
+      "border-white/20",
+      "bg-white/[0.08]",
+      "text-white",
+      "hover:bg-white/[0.14]",
+      "aria-expanded:border-[var(--blue)]",
+    ]) {
+      expect(select, want).toContain(want);
+    }
+    expect(select).not.toContain("border-transparent");
+    expect(select).not.toContain("text-white/90");
+
+    const field = renderToStaticMarkup(
+      React.createElement(TextEditor, {
+        label: "Time",
+        text: "1:00.0",
+        parse: (t: string) => t,
+        onCommit: noop,
+      }),
+    );
+    const box = classes(tag(field, "<span"));
+    for (const want of [
+      "border-white/20",
+      "bg-white/[0.08]",
+      "focus-within:border-[var(--blue)]",
+    ]) {
+      expect(box, want).toContain(want);
+    }
+    expect(box).not.toContain("border-transparent");
+    const input = classes(tag(field, "<input"));
+    expect(input).toContain("text-white");
+    expect(input).not.toContain("text-white/90");
   });
 
   test("a click selects the stroke, and each editor sends its patch", () => {
@@ -855,7 +1096,8 @@ test.describe("the black shots well", () => {
         edit: wellEdit({
           onPatchShot: (id: string, patch: unknown) =>
             patches.push([id, patch]),
-          onSelectShot: (id: string) => selected.push(id),
+          onSelectShot: (id: string, target?: string) =>
+            selected.push(target ? `${id}:${target}` : id),
         }),
       }),
     );
@@ -863,6 +1105,23 @@ test.describe("the black shots well", () => {
     const row = all.find((el) => el.props["data-shot-id"] === "w-return");
     (row!.props.onClick as () => void)();
     expect(selected).toEqual(["w-return"]);
+
+    // A position cell selects the stroke with the court on its end; it never
+    // writes a position itself.
+    const position = (end: string) =>
+      all.find(
+        (el) =>
+          el.props["data-position-pick"] === end &&
+          String(el.props["aria-label"]).startsWith("Shot 3 "),
+      );
+    const stop = { stopPropagation() {} };
+    (position("landed")!.props.onClick as (e: unknown) => void)(stop);
+    (position("hit")!.props.onClick as (e: unknown) => void)(stop);
+    expect(selected).toEqual([
+      "w-return",
+      "w-return:landing",
+      "w-return:contact",
+    ]);
 
     const commit = (label: string, value: unknown) => {
       const input = all.find(
@@ -887,61 +1146,116 @@ test.describe("the black shots well", () => {
     pick("Shot 3 player", "p2");
     pick("Shot 3 stroke", "backhand");
     pick("Shot 3 spin", "topspin");
-    // Past the singles sideline: the result rides in the same patch.
-    commit("Shot 3 landed at, metres x, y", { x: -5, y: 3.9 });
-    commit("Shot 3 hit at, metres x, y", null);
     expect(patches).toEqual([
       ["w-return", { video_time: 959.4 }],
       ["w-return", { hitter: "p2" }],
       ["w-return", { stroke: "backhand" }],
       ["w-return", { spin: "topspin" }],
-      ["w-return", { landing_x: -5, landing_y: 3.9, result: "out" }],
-      ["w-return", { contact_x: null, contact_y: null }],
     ]);
   });
 
-  test("Delete and Reset: Reset before Delete, each asking the console", () => {
+  test("the tray: only under the selected row, and only where the console writes", () => {
     const html = renderWell({ selectedShotId: "w-return" });
-    // The edited, seeded stroke, selected: both, Reset before Delete.
+    // One tray in the well, under the selected stroke.
+    expect(count(html, /data-shot-tray=""/g)).toBe(1);
     const edited = shotRow(html, "w-return");
-    expect(tag(edited, "data-reset-row")).toContain(
-      'aria-label="Reset shot 3"',
+    const tray = tag(edited, "data-shot-tray");
+    expect(tray).toContain('role="group"');
+    expect(tray).toContain('aria-label="Shot 3 actions"');
+    // Below the row, after its every cell: it covers nothing.
+    expect(edited.indexOf("data-shot-tray")).toBeGreaterThan(
+      edited.indexOf("data-calculated"),
     );
-    const del = tag(edited, "data-delete-row");
-    expect(del).toContain('aria-label="Delete shot 3"');
-    expect(edited.indexOf("data-reset-row")).toBeLessThan(
-      edited.indexOf("data-delete-row"),
+    expect(edited.indexOf("data-shot-tray")).toBeGreaterThan(
+      edited.indexOf('aria-label="Shot 3 landed at'),
     );
+    // Split · Add · Reset, a spacer, then Delete last.
+    const keys = [...edited.matchAll(/data-shot-action="(\w+)"/g)].map(
+      (m) => m[1],
+    );
+    expect(keys).toEqual(["split", "add", "reset", "delete"]);
+    const spacer = edited.indexOf("data-shot-tray-spacer");
+    expect(spacer).toBeGreaterThan(edited.indexOf('data-shot-action="reset"'));
+    expect(spacer).toBeLessThan(edited.indexOf('data-shot-action="delete"'));
+    // Each a real button, named for the stroke.
+    for (const [key, label] of [
+      ["split", "Split point at shot 3"],
+      ["add", "Add shot after shot 3"],
+      ["reset", "Reset shot 3"],
+      ["delete", "Delete shot 3"],
+    ]) {
+      const button = tag(edited, `data-shot-action="${key}"`);
+      expect(button).toMatch(/^<button type="button"/);
+      expect(button).toContain(`aria-label="${label}"`);
+    }
+    // Delete a step quieter than the others, and the one that never gives way.
+    expect(tag(edited, 'data-shot-action="delete"')).toContain("text-white/55");
+    expect(tag(edited, 'data-shot-action="delete"')).toContain("shrink-0");
+    expect(tag(edited, 'data-shot-action="add"')).toContain("text-white/70");
+    expect(tag(edited, 'data-shot-action="add"')).toContain("min-w-0");
+    expect(
+      text(
+        edited.slice(
+          edited.lastIndexOf("<div", edited.indexOf("data-shot-tray")),
+        ),
+      ),
+    ).toBe("Split point here Add shot after Reset shot Delete shot");
 
-    // A kept stroke, not selected: Delete alone, hidden until reached.
+    // The selected row's number is the number, never swapped for a trigger.
+    const lane = edited.indexOf("data-shot-number");
+    expect(edited.slice(lane)).toMatch(
+      /^data-shot-number=""[^>]*><span[^>]*>3</,
+    );
+    expect(tag(edited, "data-shot-number")).not.toContain("opacity");
+    expect(html).not.toContain("data-shot-menu");
+    expect(html).not.toContain("data-shot-lane");
+    expect(html).not.toContain("data-shot-actions");
+
+    // A row at rest (or under the pointer): its number and its wash, no tray
+    // and nothing that waits for hover.
     const kept = shotRow(html, "w-lit");
-    expect(kept).toContain('aria-label="Delete shot 4"');
-    expect(kept).not.toContain("data-reset-row");
+    expect(kept).not.toContain("data-shot-tray");
+    expect(kept).not.toContain("data-shot-action");
+    expect(kept).not.toContain("group-hover/row:opacity");
+    expect(tag(kept, 'data-row="shot"')).toContain("hover:bg-white/[0.06]");
+    expect(renderWell({})).not.toContain("data-shot-tray");
 
-    // Read-only, or with nothing to ask: neither.
+    // Read-only, or with no operations: no tray, though the row is selected.
     for (const frozen of [
       renderWell({ selectedShotId: "w-return" }, false),
       renderWell({ selectedShotId: "w-return", operations: undefined }),
     ]) {
-      expect(frozen).not.toContain("data-shot-actions");
-      expect(frozen).not.toContain("data-delete-row");
-      expect(frozen).not.toContain("data-reset-row");
+      expect(frozen).toContain('data-selected=""');
+      expect(frozen).not.toContain("data-shot-tray");
+      expect(frozen).not.toContain("data-shot-action");
+      expect(frozen).not.toMatch(/aria-label="Shot \d+ actions"/);
     }
 
-    // Each only asks, and does not select the row.
+    // A tombstone selected: never a tray.
+    expect(renderWell({ selectedShotId: "w-gone" })).not.toContain(
+      "data-shot-tray",
+    );
+  });
+
+  test("each tray button asks the console, and none selects the row", () => {
     const asked: unknown[][] = [];
     const selected: string[] = [];
     const { BlackShotRow } = createLoader().load(WELL) as {
       BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
     };
+    const point = rally();
     const row = BlackShotRow({
-      shot: rally().shots.find((s) => s.id === "w-return"),
+      shot: point.shots.find((s) => s.id === "w-return"),
       number: 3,
+      point,
       pointNumber: 7,
       edit: wellEdit({
+        selectedShotId: "w-return",
         onSelectShot: (id: string) => selected.push(id),
         operations: {
           ...OPERATIONS,
+          onSplitPoint: (...args: unknown[]) => asked.push(["split", ...args]),
+          onAddShot: (...args: unknown[]) => asked.push(["add", ...args]),
           onAskDeleteShot: (...args: unknown[]) =>
             asked.push(["delete", ...args]),
           onAskResetShot: (...args: unknown[]) =>
@@ -950,17 +1264,30 @@ test.describe("the black shots well", () => {
       }),
     });
     const event = { stopPropagation: () => asked.push(["stopped"]) };
-    // The pencil in the marks slot is the same ask as the overlay's Reset.
-    for (const attr of [
-      "data-reset-row",
-      "data-delete-row",
-      "data-reset-pencil",
-    ]) {
-      const button = findByProp(row, attr, ["RowAction", "PencilMark"]);
-      expect(button, attr).not.toBeNull();
-      (button!.props.onClick as (e: unknown) => void)(event);
-    }
+    // A click anywhere in the tray stops there.
+    const tray = findByProp(row, "data-shot-tray", ["ShotTray"]);
+    expect(tray).not.toBeNull();
+    expect(tray!.props.role).toBe("group");
+    (tray!.props.onClick as (e: unknown) => void)(event);
+    // Its buttons, in order, each stopping the click and asking once.
+    const buttons = trayButtons(row);
+    expect(buttons.map((b) => b.key)).toEqual([
+      "split",
+      "add",
+      "reset",
+      "delete",
+    ]);
+    for (const button of buttons) button.click(event);
+    // The pencil in the marks slot is the same ask as the tray's Reset.
+    const pencil = findByProp(row, "data-reset-pencil", ["PencilMark"]);
+    expect(pencil).not.toBeNull();
+    (pencil!.props.onClick as (e: unknown) => void)(event);
     expect(asked).toEqual([
+      ["stopped"],
+      ["stopped"],
+      ["split", "p-well", "w-return"],
+      ["stopped"],
+      ["add", "p-well", "w-return"],
       ["stopped"],
       ["reset", "w-return", 3, 7],
       ["stopped"],
@@ -969,8 +1296,88 @@ test.describe("the black shots well", () => {
       ["reset", "w-return", 3, 7],
     ]);
     expect(selected).toEqual([]);
+
+    // Not selected: the same row has no tray at all.
+    const rest = BlackShotRow({
+      shot: point.shots.find((s) => s.id === "w-return"),
+      number: 3,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({}),
+    });
+    expect(findByProp(rest, "data-shot-tray", ["ShotTray"])).toBeNull();
+    expect(trayButtons(rest)).toEqual([]);
   });
 
+  test("the tray's actions come and go with their conditions", () => {
+    const added: [string, string | null][] = [];
+    const { BlackShotRow, shotTrayActions } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+      shotTrayActions: (args: Record<string, unknown>) => {
+        key: string;
+        label: string;
+        ariaLabel: string;
+        run: () => void;
+      }[];
+    };
+    const point = rally();
+    const lit = point.shots.find((s) => s.id === "w-lit")!;
+    const edited = point.shots.find((s) => s.id === "w-return")!;
+    const operations = {
+      ...OPERATIONS,
+      onAddShot: (pointId: string, after: string | null) =>
+        added.push([pointId, after]),
+    };
+    const keys = (shot: LabelShot, withPoint: boolean) =>
+      shotTrayActions({
+        shot,
+        number: 4,
+        point: withPoint ? point : undefined,
+        pointNumber: 7,
+        operations,
+      }).map((action) => action.key);
+    // Seeded and edited: all four.
+    expect(keys(edited, true)).toEqual(["split", "add", "reset", "delete"]);
+    // A kept stroke: no Reset, so Add sits between Split and Delete.
+    expect(keys(lit, true)).toEqual(["split", "add", "delete"]);
+    // No point to split or add to: Reset and Delete alone.
+    expect(keys(edited, false)).toEqual(["reset", "delete"]);
+    expect(keys(lit, false)).toEqual(["delete"]);
+
+    // The rendered tray follows the same list.
+    const litRow = BlackShotRow({
+      shot: lit,
+      number: 4,
+      point,
+      pointNumber: 7,
+      edit: wellEdit({ selectedShotId: "w-lit", operations }),
+    });
+    const buttons = trayButtons(litRow);
+    expect(buttons.map((b) => [b.key, b.label, b.ariaLabel])).toEqual([
+      ["split", "Split point here", "Split point at shot 4"],
+      ["add", "Add shot after", "Add shot after shot 4"],
+      ["delete", "Delete shot", "Delete shot 4"],
+    ]);
+    buttons.find((b) => b.key === "add")!.click({ stopPropagation: () => {} });
+    // The well's own Add shot, placed after this stroke rather than at the end.
+    expect(added).toEqual([["p-well", "w-lit"]]);
+    const noPoint = BlackShotRow({
+      shot: lit,
+      number: 4,
+      pointNumber: 7,
+      edit: wellEdit({ selectedShotId: "w-lit", operations }),
+    });
+    expect(trayButtons(noPoint).map((b) => b.key)).toEqual(["delete"]);
+
+    // Where the console cannot write, no tray and no Add shot row either.
+    for (const html of [
+      renderWell({ selectedShotId: "w-lit", operations: undefined }),
+      renderWell({ selectedShotId: "w-lit" }, false),
+    ]) {
+      expect(html).not.toContain("data-shot-tray");
+      expect(html).not.toContain("data-add-shot");
+    }
+  });
   test("a deleted stroke is one line, with Undo", () => {
     const restored: string[] = [];
     const operations = {
@@ -1329,6 +1736,18 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     const trigger = tag(serve, 'aria-label="Shot 1 result"');
     expect(trigger).toMatch(/^<button/);
     expect(trigger).toContain('aria-haspopup="menu"');
+    // The trigger keeps the shared -5px nudge (the word does not move on
+    // select), and the clipping cell reaches 5px into the gap to hold it, or
+    // the trigger's left edge is cut off (a let read as "et").
+    expect(trigger).toContain("-ml-[5px]");
+    const cell = tag(serve, "data-serve-result");
+    expect(cell).toContain("overflow-hidden");
+    expect(cell).toContain("-ml-[5px]");
+    expect(cell).toContain("pl-[5px]");
+    // A rally stroke's result cell is not widened.
+    expect(
+      tag(shotRow(html, "w-lit"), 'data-calculated="result"'),
+    ).not.toContain("pl-[5px]");
     expect(text(serve.slice(serve.indexOf("data-serve-result")))).toContain(
       "Net",
     );
@@ -1400,51 +1819,54 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(row().serveResultPatch("let")).toEqual({ result: "let" });
   });
 
-  test("a let reads in the rail's amber, with the pencil; any other serve keeps its ink", () => {
-    const letPoint = rally();
-    letPoint.shots[0] = {
-      ...letPoint.shots[0],
-      result: "let",
-      status: "edited",
-    };
+  test("a let reads in the same ink as any other result, with the pencil", () => {
     const { BlackShotsWell } = well();
-    const html = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point: letPoint,
-        edit: wellEdit(replayed),
-      }),
-    );
-    const letRow = shotRow(html, "w-fault");
-    expect(letRow).toMatch(
-      /<span class="[^"]*text-\[var\(--rail-amber\)\][^"]*">Let<\/span>/,
-    );
+    const withResult = (result: "let" | "in") => {
+      const point = rally();
+      point.shots[0] = { ...point.shots[0], result, status: "edited" };
+      return point;
+    };
+    const render = (result: "let" | "in", selected: boolean) =>
+      renderToStaticMarkup(
+        React.createElement(BlackShotsWell, {
+          point: withResult(result),
+          edit: wellEdit(
+            selected ? { ...replayed, selectedShotId: "w-fault" } : replayed,
+          ),
+        }),
+      );
+    // Only the word differs between a let and an in: same classes on the
+    // cell, the word and (selected) the trigger.
+    const cell = (html: string) =>
+      shotRow(html, "w-fault")
+        .replace(/\b(Let|In)\b/g, "")
+        .replace(/"(let|in)"/g, '""');
+
+    const letRow = shotRow(render("let", false), "w-fault");
+    expect(letRow).not.toContain("rail-amber");
+    expect(letRow).toMatch(/<span class="truncate">Let<\/span>/);
     expect(letRow).toContain("data-shot-marks");
     // A let is not a fault: the row's ink is the plain one.
     expect(tag(letRow, "data-serve-result")).toContain("text-white/50");
+    expect(cell(render("let", false))).toBe(cell(render("in", false)));
 
-    // The untouched serve rows: no amber, today's ink.
-    const plain = renderWell(replayed);
-    const fault = shotRow(plain, "w-fault");
-    expect(fault).not.toContain("rail-amber");
+    // A fault keeps its dimmed ink.
+    const fault = shotRow(renderWell(replayed), "w-fault");
     expect(tag(fault, "data-serve-result")).toContain("text-white/35");
     expect(fault).not.toContain("data-shot-marks");
-    const serve = shotRow(plain, "w-serve");
-    expect(serve).not.toContain("rail-amber");
-    expect(tag(serve, "data-serve-result")).toContain("text-white/50");
 
-    // Selected, the trigger carries the amber too.
-    const selected = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point: letPoint,
-        edit: wellEdit({ ...replayed, selectedShotId: "w-fault" }),
-      }),
-    );
-    expect(tag(selected, 'aria-label="Shot 1 result"')).toContain(
-      "text-[color:var(--rail-amber)]",
+    // Selected, the trigger takes quiet selection's white/90, as any value.
+    const selected = render("let", true);
+    const letTrigger = tag(selected, 'aria-label="Shot 1 result"');
+    expect(selected).not.toContain("rail-amber");
+    expect(letTrigger).toContain("text-white/90");
+    expect(letTrigger).toContain("border-transparent");
+    expect(tag(selected, 'aria-label="Shot 1 result"')).toBe(
+      tag(render("in", true), 'aria-label="Shot 1 result"'),
     );
   });
 
-  test("while the menu is open, the row's actions step aside", () => {
+  test("while the menu is open, it says so, and nothing covers it", () => {
     const { BlackShotRow } = row();
     const render = (resultMenuOpen: boolean) =>
       renderToStaticMarkup(
@@ -1461,16 +1883,18 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(tag(open, 'aria-label="Shot 1 result"')).toContain(
       'aria-expanded="true"',
     );
-    // The overlay hides whenever the row holds an open menu.
-    expect(tag(open, "data-shot-actions")).toContain(
-      "group-has-[[data-menu-open]]/row:hidden",
+    // No overlay over the result: the row's actions are in the tray under
+    // it, after every cell.
+    expect(open).not.toContain("data-shot-actions");
+    expect(open.indexOf("data-shot-tray")).toBeGreaterThan(
+      open.indexOf("data-serve-result"),
     );
 
     const closed = render(false);
     expect(closed).not.toContain('data-menu-open=""');
 
     // Not the selected row (its editor is unmounted): a menu flag left over
-    // never hides the actions.
+    // does not say the menu is open.
     const deselected = renderToStaticMarkup(
       React.createElement(BlackShotRow, {
         shot: shotOf("w-fault"),
@@ -1485,4 +1909,23 @@ test.describe("a serve's result menu, where lets are replayed", () => {
       'aria-expanded="false"',
     );
   });
+});
+
+test("a tray button lays its icon and label out in one line: its classes are separate tokens", () => {
+  // A missing space once read `min-w-0inline-flex`, so the button fell back to
+  // display:block and every icon sat on its own line above its label.
+  const html = renderWell({ selectedShotId: "w-lit" });
+  const buttons = [
+    ...html.matchAll(/<button[^>]*data-shot-action="[a-z]+"[^>]*>/g),
+  ].map((m) => m[0]);
+  expect(buttons.length).toBeGreaterThan(0);
+  for (const button of buttons) {
+    const classes = /class="([^"]*)"/.exec(button)![1].split(/\s+/);
+    expect(classes, button).toContain("inline-flex");
+    expect(classes, button).toContain("items-center");
+    expect(
+      classes.some((c) => c === "min-w-0" || c === "shrink-0"),
+      button,
+    ).toBe(true);
+  }
 });

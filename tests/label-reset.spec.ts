@@ -4,6 +4,7 @@ import {
   applyPointReset,
   applyShotReset,
   canResetPoint,
+  pointResetScope,
   canResetShot,
   planPointReset,
   planShotReset,
@@ -209,6 +210,38 @@ test.describe("the console's rows", () => {
     expect(canResetPoint(points.get(P2)!)).toBe(false);
     expect(canResetPoint(points.get(P3)!)).toBe(false);
     expect(canResetPoint({ status: "edited", seed: null })).toBe(false);
+  });
+
+  test("a point's Reset: its own fields when edited, and every edited stroke with a seed", () => {
+    const points = new Map(labelSessionFixture().points.map((p) => [p.id, p]));
+    const { P1, P2 } = FIXTURE_POINT_IDS;
+    const p1 = points.get(P1)!;
+    const edited = p1.shots.filter(canResetShot).map((s) => s.id);
+    expect(pointResetScope(p1)).toEqual({ fields: true, shotIds: edited });
+    // A split half keeps its own fields; its strokes still go back.
+    expect(pointResetScope(p1, true)).toEqual(
+      edited.length > 0 ? { fields: false, shotIds: edited } : null,
+    );
+    // Only its strokes changed: Reset is still offered, for them.
+    const shotsOnly = {
+      ...p1,
+      status: "unchanged" as const,
+      shots: p1.shots,
+    };
+    expect(pointResetScope(shotsOnly)).toEqual(
+      edited.length > 0 ? { fields: false, shotIds: edited } : null,
+    );
+    // Nothing edited anywhere: nothing to offer.
+    const p2 = points.get(P2)!;
+    expect(
+      pointResetScope({
+        ...p2,
+        status: "unchanged",
+        shots: p2.shots.filter((s) => !canResetShot(s)),
+      }),
+    ).toBeNull();
+    // A deleted point is restored first.
+    expect(pointResetScope({ ...p1, status: "deleted" })).toBeNull();
   });
 
   test("applyShotReset puts every value back and leaves the rest", () => {
