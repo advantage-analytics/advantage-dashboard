@@ -2,30 +2,33 @@
 
 Sign-off: pending
 
-**Range reviewed:** the branch range `a97f3551...b492e242`, from the merge base with
-`splitstep-integration` to the review-fix commit. The range is the build stage's
-commits (see `../../05_build/output/build.md`) plus one review-fix commit, `b492e242`.
+**Range reviewed:** the branch range `a97f3551...7a425276`, from the merge base with
+`splitstep-integration` to the last review-fix commit. The range is the build stage's
+commits (see `../../05_build/output/build.md`) plus two review-fix commits:
+- `b492e242`: S1 and F1;
+- `7a425276`: F2 and F3.
 
-**pr-check receipt:** `b492e24 not-ready 2026-10-10T05:31:04Z`, reviewed as the branch
-range.
+**pr-check receipts:**
+- `b492e24 not-ready 2026-10-10T05:31:04Z`, with F2 and F3 open;
+- then `7a42527 ready 2026-10-10T05:55:43Z`, after they were fixed.
+
+Both were reviewed as the branch range.
 
 ## pr-check stages
 
 | Stage | Result |
 |---|---|
-| 1 Mechanical | lint ✓ · tsc ✓ · full test suite ✓ · `format:check` ✓, re-run after the review fixes |
+| 1 Mechanical | lint ✓ · tsc ✓ · full test suite ✓ · `format:check` ✓, re-run after each round of review fixes |
 | 2 simplify (sonnet subagent) | 1 change, applied and committed in `b492e242` (below) |
 | 2 `vercel-react-best-practices` | skipped: no `.tsx` changed and no `"use client"` added |
-| 3 `code-review medium` | 6 findings: 1 fixed, 5 left (below) |
+| 3 `code-review medium` | 6 findings: 3 fixed, 3 left (below). The F2/F3 fix diff was then read by hand, since the review pass predates it |
 | 3 `pipeline-guardrails-reviewer` | skipped: `check.sh surfaces` reports no guardrail surface touched |
 | 3 `rls-boundary-reviewer` | skipped: same, no data, API or migration surface touched |
 | 3 `supabase-postgres-best-practices` | not triggered: no SQL, migration or schema change |
 | 3b eyes-on (`ui-verifier`) | skipped: no UI surface touched |
 
-**Verdict: not-ready.** Two correctness findings (F2 and F3 below) need a decision. Both
-are review-only in effect, since no published row changes. But F2 inflates the number
-the promotion bar is judged on, and that inflated number is already written into the
-0.8.0 changelog.
+**Verdict: ready.** F1–F3 are fixed. F4–F6 are left consciously, for the reasons given
+below.
 
 ## Success criteria, one by one
 
@@ -69,7 +72,8 @@ taken were: the segmenter runs on every match, the live hitter rule was dropped 
      ambiguity, runner-up, diff, merges and cost breakdown.
    - Each differing point carries `segment_proposal_differs`, with its proposed game,
      proposed server and merge partner.
-   - Caveat: see F2. A "firing" also counts renumbering.
+   - A firing is a rally whose game assignment, server or merge changes; renumbering
+     alone does not count (F2).
 7. **Deploy section: met.**
    - The 0.8.0 changelog states that no published row changes on re-derive; jobs gain
      only the flag, the key and the version stamp.
@@ -89,22 +93,37 @@ taken were: the segmenter runs on every match, the live hitter rule was dropped 
   case "a null proposal writes nothing" became "a null proposal clears a stale one from
   an earlier run".
 
-**Open, needing a decision** (the reason the verdict is not-ready):
+**Fixed in `7a425276`, at the author's request ("fix F2 and F3"):**
 
-- **F2: firings count game renumbering.**
-  - `segment_proposal_differs`, and so the promotion tally, compares the match-cumulative
-    game *number*. One moved boundary early in a match flags every later point whose
-    number shifted, even when its game partition is unchanged. On be930d79, 3 moved games
-    produced 23 firings.
-  - So the changelog's "27 of 28 firings across 2 matches" is not yet a sound promotion
-    measure.
-  - Fix: compare game partitions or the boundary set instead of numbers, as T8's hit test
-    already does. Then re-run T9's measurement and correct the changelog counts.
-- **F3: tiebreak-set end carry.** `playerAtEnd` carries only a tiebreak set's 13-game
-  total into the next set, and ignores the end swaps every 6 points inside the
-  tiebreak. If those swaps do carry, every rally of the following set pays the `end`
-  cost on the true cut. None of the three tuning sessions had a tiebreak set. Decide the
-  rule, add a fixture, and adjust if needed. This was first flagged at T1.
+- **F2: firings counted game renumbering.**
+  - The fix: a rally now fires only when the proposal moves it to another game, changes
+    its server, or merges it. Each proposed game is paired one-to-one with the published
+    game it shares the most rallies with.
+  - Renumbering alone never fires.
+  - `proposalDifferingRallies` is the single definition behind the flag and
+    `splitstep-eval`.
+  - **First attempt, superseded.** It compared whole game partitions. That fired every
+    member of both games around a moved rally: 29/30 and 35/35, which inflated the count
+    further, so it was replaced.
+  - **Re-measured:**
+    - be930d79: 14/15 firings right;
+    - 868a7696: 5/5;
+    - 45ff4bd7: no firings.
+
+    That gives **19 of 20 across 2 matches**: 95%, but short of 30 firings. The
+    changelog and the `SEGMENT_COSTS` comment were corrected from "27 of 28".
+- **F3: ends after a tiebreak set.**
+  - Implemented the ITF rule: during a tie-break, players change ends after every six
+    points, and at the end of the tie-break.
+  - A finished tiebreak set now records its point count. It adds `floor((N−1)/6)`
+    changes on top of `ceil(13/2)`, and the change at the end of the tiebreak is the
+    odd-set break, counted once. The segmenter keeps only the parity, in its set state.
+  - Checked values: 7–0 gives 8 changes, 7–5 gives 8, 8–6 gives 9.
+  - New position tests cover these, plus a segmentation fixture of a 7–5 tiebreak
+    followed by a set that fits at zero end cost.
+  - The rule wording is from memory of the ITF text; **verify it before sign-off**.
+  - This closes build follow-up 1. It is recorded here because `build.md` is an earlier
+    stage's output: an edit the fix agent made to it was reverted.
 
 ## Consciously left
 
@@ -128,6 +147,8 @@ These have reasons, and are recommended as follow-ups:
   - the `SEGMENT_COSTS` comment carries narrative counts;
   - older headers name players;
   - `film-playback-refresh.spec.ts:1498` is a known flake.
+- **The three tuning sessions are unchanged by F3:** none has a tiebreak set, so their
+  proposals and accuracy figures are the same as before.
 - **Peer request (not acted on):** another session asked for this branch to be pushed,
   opened as a PR and merged. Opening the PR is stage 07's job, after sign-off.
 
@@ -138,3 +159,6 @@ These have reasons, and are recommended as follow-ups:
 - `src/lib/services/splitstep/derivation/segmentation.ts`, `transcript.ts`, `position.ts`
   and `derive-and-publish.ts`, read in full for stage 3
 - `tests/derive-and-publish-codes.spec.ts`, edited for F1
+- The F2/F3 fix diff (`position.ts`, `transcript.ts`, `session-truth.ts`), read in full
+  before the second receipt
+- `splitstep-eval --session` re-runs for F2, with output kept outside the repo
