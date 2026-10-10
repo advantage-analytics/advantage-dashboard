@@ -11,6 +11,7 @@ import { writeLabelPointRestore } from "@/lib/services/labels/operations-session
 import {
   applyPointCombine,
   combineNeighbour,
+  rallyInPlay,
   combineRetypeError,
   combineServeRetypes,
   isCombinedTombstone,
@@ -63,14 +64,19 @@ function combined(): LabelPoint[] {
 // ── The plan ───────────────────────────────────────────────────────────────
 
 test.describe("combineNeighbour", () => {
-  test("the nearest live point that way, in the same game — a tombstone is skipped, another game is not a neighbour", () => {
+  test("the nearest live point that way, in the same set — a tombstone is skipped, the next game's point is a neighbour", () => {
     expect(combineNeighbour(points(), P2, "above")?.id).toBe(P1);
     expect(combineNeighbour(points(), P1, "below")?.id).toBe(P2);
     expect(combineNeighbour(points(), P1, "above")).toBeNull();
     // Below point 2: the tombstone is skipped, and point 4 is game 2.
-    expect(combineNeighbour(points(), P2, "below")).toBeNull();
-    expect(combineNeighbour(points(), P4, "above")).toBeNull();
+    expect(combineNeighbour(points(), P2, "below")?.id).toBe(P4);
+    expect(combineNeighbour(points(), P4, "above")?.id).toBe(P2);
     expect(combineNeighbour(points(), P4, "below")).toBeNull();
+    // Another set is not a neighbour.
+    const otherSet = points().map((p) =>
+      p.id === P4 ? { ...p, setNumber: 2 } : p,
+    );
+    expect(combineNeighbour(otherSet, P2, "below")).toBeNull();
     expect(combineNeighbour(points(), P3, "above")).toBeNull();
     expect(combineNeighbour(points(), "nope", "above")).toBeNull();
   });
@@ -124,7 +130,7 @@ test.describe("planPointCombine", () => {
     });
   });
 
-  test("refused: a missing or deleted point, and no live neighbour of the same game that way", () => {
+  test("refused: a missing or deleted point, and no live neighbour of the same set that way", () => {
     expect(planPointCombine(points(), "nope", "above")).toEqual({
       error: "The point to combine is not a point of this session.",
     });
@@ -132,14 +138,111 @@ test.describe("planPointCombine", () => {
       error: "Restore this point before combining it.",
     });
     expect(planPointCombine(points(), P1, "above")).toEqual({
-      error: "There is no point of this game above it to combine with.",
+      error: "There is no point of this set above it to combine with.",
     });
-    expect(planPointCombine(points(), P2, "below")).toEqual({
-      error: "There is no point of this game below it to combine with.",
+    expect(planPointCombine(points(), P4, "below")).toEqual({
+      error: "There is no point of this set below it to combine with.",
     });
-    expect(planPointCombine(points(), P4, "above")).toMatchObject({
-      error: expect.stringContaining("above"),
-    });
+  });
+});
+
+test.describe("across a game", () => {
+  type Shot = {
+    id: string;
+    stroke: "first_serve" | "second_serve" | "forehand" | "backhand";
+    hitter: "p1" | "p2";
+    result: "in" | "out" | null;
+  };
+  const part = (
+    id: string,
+    pointIndex: number,
+    gameNumber: number,
+    shots: Shot[],
+    endedBy: "p1" | "p2" | null = null,
+  ) => ({
+    id,
+    pointIndex,
+    status: "unchanged" as const,
+    setNumber: 1,
+    gameNumber,
+    winner: null,
+    ending: null,
+    endedBy,
+    vendorRallyIds: [],
+    shots: shots.map((shot, i) => ({
+      ...shot,
+      status: "kept" as const,
+      videoTime: pointIndex * 10 + i,
+      eventId: pointIndex * 10 + i,
+    })),
+  });
+
+  test("the later part's hitters and who ended it swap; a rally in play makes its serve an overhead by the player whose turn it was", () => {
+    const earlier = part("e", 0, 1, [
+      { id: "e1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "e2", stroke: "forehand", hitter: "p2", result: "in" },
+      { id: "e3", stroke: "backhand", hitter: "p1", result: "in" },
+    ]);
+    // Tagged as the next game's service game: Vargas (p2) serving.
+    const later = part(
+      "l",
+      1,
+      2,
+      [
+        { id: "l1", stroke: "first_serve", hitter: "p2", result: "in" },
+        { id: "l2", stroke: "forehand", hitter: "p2", result: "out" },
+      ],
+      "p2",
+    );
+    const plan = planPointCombine([earlier, later], "l", "above");
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.retyped).toEqual([
+      // Lee hit e3, so the overhead is Vargas's.
+      { shotId: "l1", patch: { hitter: "p2", stroke: "overhead" } },
+      { shotId: "l2", patch: { hitter: "p1" } },
+    ]);
+    expect(plan.write.kept.ended_by).toBe("p1");
+  });
+
+  test("a fault with one or two swings after it is no rally: the later serve is the second serve, by the server", () => {
+    for (const swings of [1, 2]) {
+      const earlier = part(
+        "e",
+        0,
+        1,
+        [
+          { id: "e1", stroke: "first_serve", hitter: "p1", result: "out" },
+          { id: "e2", stroke: "forehand", hitter: "p2", result: null },
+          { id: "e3", stroke: "backhand", hitter: "p1", result: null },
+        ].slice(0, 1 + swings) as Shot[],
+      );
+      const later = part("l", 1, 2, [
+        { id: "l1", stroke: "first_serve", hitter: "p2", result: "in" },
+      ]);
+      const plan = planPointCombine([earlier, later], "l", "above");
+      if ("error" in plan) throw new Error(plan.error);
+      expect(plan.write.retyped, String(swings)).toEqual([
+        { shotId: "l1", patch: { hitter: "p1", stroke: "second_serve" } },
+      ]);
+    }
+  });
+
+  test("a rally that ended on a miss is over: the later serve stays a serve", () => {
+    const earlier = part("e", 0, 1, [
+      { id: "e1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "e2", stroke: "forehand", hitter: "p2", result: "out" },
+    ]);
+    const later = part("l", 1, 1, [
+      { id: "l1", stroke: "first_serve", hitter: "p1", result: "in" },
+    ]);
+    expect(rallyInPlay(earlier.shots)).toBe(false);
+    const plan = planPointCombine([earlier, later], "l", "above");
+    if ("error" in plan) throw new Error(plan.error);
+    // Same game: nothing swaps, and no overhead.
+    expect(plan.write.retyped.some((r) => r.patch.stroke === "overhead")).toBe(
+      false,
+    );
+    expect(plan.write.retyped.some((r) => "hitter" in r.patch)).toBe(false);
   });
 });
 
@@ -526,6 +629,7 @@ test.describe("the console's rows", () => {
 
   test("settlePointCombine confirms both rows as written", () => {
     const after = combined();
+    const aceHitter = after[0].shots.find((s) => s.id === "s-ace")!.hitter;
     const settled = settlePointCombine(after, {
       kept: {
         id: P1,
@@ -541,6 +645,7 @@ test.describe("the console's rows", () => {
           id: "s-ace",
           stroke: "second_serve",
           result: "in",
+          hitter: aceHitter,
           status: "edited",
         },
       ],
@@ -551,7 +656,13 @@ test.describe("the console's rows", () => {
       kept: { id: P1, ...planned().kept },
       removed: { id: P2, ...planned().removed },
       retyped: [
-        { id: "s-ace", stroke: "second_serve", result: "in", status: "kept" },
+        {
+          id: "s-ace",
+          stroke: "second_serve",
+          result: "in",
+          hitter: aceHitter,
+          status: "kept",
+        },
       ],
     })[0];
     expect(kept.shots.find((s) => s.id === "s-ace")?.status).toBe("kept");
@@ -1019,7 +1130,12 @@ test.describe("writeLabelPointCombine", () => {
     expect("error" in frozen).toBe(true);
     expect(writes(complete)).toEqual([]);
 
-    const lonely = fakeClient({});
+    // Point 2's next live point is game 2's — in another set here.
+    const lonely = fakeClient({
+      points: POINT_ROWS.map((row) =>
+        row.game_number === 2 ? { ...row, set_number: 2 } : row,
+      ),
+    });
     expect(
       await writeLabelPointCombine({
         supabase: lonely.supabase,
@@ -1027,7 +1143,7 @@ test.describe("writeLabelPointCombine", () => {
         direction: "below",
       }),
     ).toEqual({
-      error: "There is no point of this game below it to combine with.",
+      error: "There is no point of this set below it to combine with.",
     });
     expect(writes(lonely)).toEqual([]);
   });
@@ -1109,15 +1225,15 @@ function menuActions(
 }
 
 test.describe("the ⋯ menu", () => {
-  test("Combine with point above / below: only towards a live neighbour of the same game, each naming the two numbers", () => {
+  test("Combine with point above / below: only towards a live neighbour of the same set, each naming the two numbers", () => {
     const two = menuActions(pointOf(P2), points());
     expect(two.combineAbove?.description).toBe("Point 2's shots join point 1");
-    expect(two.combineBelow).toBeNull();
+    expect(two.combineBelow?.description).toBe("Point 4's shots join point 2");
     const one = menuActions(pointOf(P1), points());
     expect(one.combineAbove).toBeNull();
     expect(one.combineBelow?.description).toBe("Point 2's shots join point 1");
     const four = menuActions(pointOf(P4), points());
-    expect(four.combineAbove).toBeNull();
+    expect(four.combineAbove?.description).toBe("Point 4's shots join point 2");
     expect(four.combineBelow).toBeNull();
   });
 

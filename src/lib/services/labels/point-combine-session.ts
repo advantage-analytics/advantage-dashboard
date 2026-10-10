@@ -167,7 +167,8 @@ export async function writeLabelPointCombine(params: {
   );
   if (failed) return { error: failed };
 
-  // The serves relabelled — a let, or first and second — each
+  // The strokes relabelled — a serve as a let, or first and second; a
+  // misread serve as an overhead; a moved stroke's hitter swapped — each
   // compare-and-set on the status read; before the ending, which reads the
   // strokes.
   const retyped: PointCombineSaved["retyped"] = [];
@@ -181,13 +182,14 @@ export async function writeLabelPointCombine(params: {
       shotId,
       shot.status,
       { ...patch, status },
-      "relabel the serve",
+      "relabel the joined strokes",
     );
     if (retypeFailed) return { error: retypeFailed };
     retyped.push({
       id: shotId,
       stroke: patch.stroke ?? shot.stroke,
       result: patch.result ?? shot.result,
+      hitter: "hitter" in patch ? (patch.hitter ?? null) : shot.hitter,
       status,
     });
   }
