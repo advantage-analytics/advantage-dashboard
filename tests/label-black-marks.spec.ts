@@ -577,6 +577,24 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
+  test("“Point ended here” sits under the stroke that ended the point; the other hints lead the well", () => {
+    const point = endedEarly();
+    const html = renderWell(point, marksOf(point, []));
+    const at = (needle: string) => {
+      const i = html.indexOf(needle);
+      expect(i, needle).toBeGreaterThan(-1);
+      return i;
+    };
+    const ended = at('data-point-hint="shot_after_point_end"');
+    expect(ended).toBeGreaterThan(at('data-shot-id="s-long"'));
+    expect(ended).toBeLessThan(at('data-shot-id="s-dead-1"'));
+    // "No landing on the last shot" is about the point: still the first row.
+    expect(at('data-point-hint="last_landing_missing"')).toBeLessThan(
+      at('data-row="shot"'),
+    );
+    expect(html.match(/data-point-hints=""/g)).toHaveLength(2);
+  });
+
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const calls: unknown[][] = [];
@@ -641,11 +659,12 @@ test.describe("the hints read off the rows, with their answers", () => {
       )!.actions,
     ).toEqual([]);
 
-    // Drawn: the words with the count, and a button for each answer.
+    // Drawn: the words with the count, and a button for each answer. The
+    // point's own hint leads the well; "Point ended here" follows its stroke.
     const html = renderWell(point, marksOf(point, []), edit);
     expect(hintLine(html).map((h) => [h.code, h.text])).toEqual([
-      ["shot_after_point_end", "Point ended here · 2 shots after it"],
       ["last_landing_missing", "No landing on the last shot"],
+      ["shot_after_point_end", "Point ended here · 2 shots after it"],
     ]);
     const buttons = [
       ...html.matchAll(

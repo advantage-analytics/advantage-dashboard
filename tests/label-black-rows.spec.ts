@@ -463,10 +463,28 @@ test.describe("the black point row", () => {
     });
     expect(asked).toEqual([["stopped"], ["reset", FIXTURE_POINT_IDS.P1]]);
 
-    // Without a seed, or read-only: the pencil is the plain indicator.
+    // Only its strokes changed: the pencil still resets, for them.
+    const shotsOnly = findByProp(
+      renderFunction<unknown>(BlackPointRow)({
+        point: { ...first, seed: null },
+        open: false,
+        playing: false,
+        score: null,
+        edit,
+      }),
+      "data-reset-pencil",
+      ["PencilMark"],
+    );
+    expect(shotsOnly!.props["aria-label"]).toBe("Reset point 1");
+
+    // Nothing with a seed to go back to, or read-only: the plain indicator.
     const unseeded = renderToStaticMarkup(
       React.createElement(BlackPointRow, {
-        point: { ...first, seed: null },
+        point: {
+          ...first,
+          seed: null,
+          shots: first.shots.map((s) => ({ ...s, seed: null })),
+        },
         open: false,
         playing: false,
         score: null,

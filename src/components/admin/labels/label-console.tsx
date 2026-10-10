@@ -118,7 +118,12 @@ import {
   type PointCombineSaved,
 } from "@/lib/services/labels/point-combine";
 import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
-import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
+import {
+  applyPointReset,
+  applyShotReset,
+  pointResetScope,
+} from "@/lib/services/labels/reset";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import type { LabelPointResetResult } from "@/lib/services/labels/reset-session";
 import {
   applyLabelSessionPatch,
@@ -1512,12 +1517,12 @@ export function LabelConsole({
   }
 
   /** Back to the seed. The dialog asked first; the write happens here. */
-  function resetShot(shotId: string) {
+  function resetShot(shotId: string): Promise<unknown> {
     const before = findShot(points, shotId);
-    if (!before || !operations) return;
+    if (!before || !operations) return Promise.resolve(null);
     // A reset can move the stroke's time, so it re-sorts like a time edit.
     const settlePoint = settlePointOf(shotId);
-    void runOperation(
+    return runOperation(
       (rows) => updateShot(rows, shotId, true, applyShotReset),
       () => operations.resetShot(shotId),
       (rows, result) =>
@@ -1534,9 +1539,17 @@ export function LabelConsole({
    * its seeded one (`reset.ts`): a point switched after a swap must not keep
    * contradicting its rows.
    */
-  function resetPoint(pointId: string) {
+  async function resetPoint(pointId: string) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
+    const scope = pointResetScope(before, sharesVendorRally(before, points));
+    if (!scope) return;
+    // The edited strokes one after another — each re-reads its point's ending
+    // — then the point's own fields, whose seed has the last word.
+    for (const shotId of scope.shotIds) {
+      if ((await resetShot(shotId)) === null) return;
+    }
+    if (!scope.fields) return;
     const shotsBefore = shotSwapsOf(before.shots);
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointReset),
@@ -1583,7 +1596,7 @@ export function LabelConsole({
         resetShot(question.shotId);
         return;
       case "reset-point":
-        resetPoint(question.pointId);
+        void resetPoint(question.pointId);
         return;
       case "complete-session":
         // An edit made while the confirm was open would be refused.
@@ -1632,11 +1645,16 @@ export function LabelConsole({
       setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
     onAskResetPoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
-      if (!point) return;
+      const scope = point
+        ? pointResetScope(point, sharesVendorRally(point, points))
+        : null;
+      if (!point || !scope) return;
       setConfirm({
         kind: "reset-point",
         pointId,
         pointNumber: point.pointIndex + 1,
+        fields: scope.fields,
+        shots: scope.shotIds.length,
       });
     },
   });

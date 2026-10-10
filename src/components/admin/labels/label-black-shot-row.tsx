@@ -205,7 +205,8 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * The open point's strokes, inside the point row's `data-shots-for` wrapper.
  * Strokes are numbered 1…n among the live ones: a tombstone takes no number,
  * nor does a ghost while it is drawn as one (`drawsGhosts`). The hint line
- * (`PointHintLine`) is the first row; a suggested stroke
+ * (`PointHintLine`) is the first row, but for a hint about one stroke
+ * ("Point ended here"), which sits under that stroke; a suggested stroke
  * (`openShotSuggestions`) is a dashed row after the stroke it would follow,
  * with no number.
  */
@@ -242,17 +243,37 @@ export function BlackShotsWell({
     edit.names,
     edit.editable ? edit : undefined,
   );
-  if (hints.length > 0) {
+  // A hint about one live stroke goes under it; the rest lead the well.
+  const live = new Set(
+    point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
+  );
+  const under = (hint: (typeof hints)[number]) =>
+    hint.afterShotId !== undefined && live.has(hint.afterShotId);
+  const top = hints.filter((hint) => !under(hint));
+  if (top.length > 0) {
     const arrival = rowArrival(arrive());
     rows.push(
       <PointHintLine
         key="hints"
-        hints={hints}
+        hints={top}
         className={arrival.className}
         style={arrival.style}
       />,
     );
   }
+  const hintLineAfter = (shotId: string) => {
+    const mine = hints.filter((hint) => hint.afterShotId === shotId);
+    if (mine.length === 0) return;
+    const arrival = rowArrival(arrive());
+    rows.push(
+      <PointHintLine
+        key={`hints-${shotId}`}
+        hints={mine}
+        className={arrival.className}
+        style={arrival.style}
+      />,
+    );
+  };
   // The strokes that went as dead balls after the point, at the end of the
   // rally: from each of them, Undo puts back every one to the end at once.
   const runStart = deadBallRunStart(point.shots);
@@ -297,6 +318,7 @@ export function BlackShotsWell({
         />,
       );
     }
+    if (live.has(shot.id)) hintLineAfter(shot.id);
     for (const suggestion of suggested) {
       if (suggestion.afterShotId !== shot.id) continue;
       rows.push(

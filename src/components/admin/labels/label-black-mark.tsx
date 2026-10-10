@@ -122,6 +122,11 @@ export interface PointHint {
   detail: string;
   /** The answers the hint offers, when the console can write them. */
   actions: readonly PointHintAction[];
+  /**
+   * The stroke the hint is about, when it is one: "Point ended here" sits
+   * under the stroke that ended the point, not at the top of the well.
+   */
+  afterShotId?: string;
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -360,6 +365,8 @@ export function pointHints(
     label: hintLabel(mark),
     detail: markHover(mark, names),
     actions: hintActions(mark, point, edit),
+    afterShotId:
+      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined,
   }));
 }
 

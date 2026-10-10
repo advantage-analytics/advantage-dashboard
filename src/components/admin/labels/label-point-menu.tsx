@@ -42,7 +42,7 @@ import {
 } from "@/lib/services/labels/player-swap";
 import { combineNeighbour } from "@/lib/services/labels/point-combine";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
-import { canResetPoint } from "@/lib/services/labels/reset";
+import { pointResetScope } from "@/lib/services/labels/reset";
 import type { EditContext, LabelRowOperations } from "./label-row-parts";
 
 /**
@@ -176,10 +176,9 @@ export function pointMenuActions(
         run: () => operations.onMovePoint(point.id, game),
       };
     }),
-    reset:
-      canResetPoint(point) && !sharesVendorRally(point, context.points)
-        ? () => operations.onAskResetPoint(point.id)
-        : null,
+    reset: pointResetScope(point, sharesVendorRally(point, context.points))
+      ? () => operations.onAskResetPoint(point.id)
+      : null,
     remove: () => operations.onAskDeletePoint(point.id),
   };
 }

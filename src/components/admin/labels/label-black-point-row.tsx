@@ -29,7 +29,8 @@ import {
   type LabelSide,
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
-import { canResetPoint } from "@/lib/services/labels/reset";
+import { pointResetScope } from "@/lib/services/labels/reset";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
   formatClockTime,
@@ -257,7 +258,8 @@ export const BlackPointRow = memo(function BlackPointRow({
           {changed ? (
             <PencilMark
               reset={
-                operations && canResetPoint(point)
+                operations &&
+                pointResetScope(point, sharesVendorRally(point, edit.points))
                   ? {
                       label: `Reset point ${number}`,
                       onClick: () => operations.onAskResetPoint(point.id),
