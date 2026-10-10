@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Check, CornerDownRight, Plus } from "lucide-react";
+import { Merge, Check, CornerDownRight, Plus } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -30,6 +30,8 @@ import {
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { pointResetScope } from "@/lib/services/labels/reset";
+import type { TiebreakFold } from "@/lib/services/labels/tiebreak-fold";
+import { gameInSetOf } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
@@ -644,6 +646,62 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
     reason,
     action: operations ? button : null,
     actionLabel: move,
+    details,
+  });
+});
+
+/**
+ * The tiebreak at 6–6 (tiebreak-fold.ts): a slot above the game after 6–6,
+ * saying which of the vendor's games the tiebreak spans and the count they
+ * make, player 1 first. "Make it a tiebreak" folds them into one tiebreak
+ * game with its 1-2-2 serve order.
+ */
+export const BlackTiebreakFold = memo(function BlackTiebreakFold({
+  fold,
+  points,
+  edit,
+}: {
+  fold: TiebreakFold;
+  points: readonly LabelPoint[];
+  edit: EditContext;
+}) {
+  const operations = edit.editable ? edit.operations : undefined;
+  const first = gameInSetOf(points, fold.game);
+  const last = gameInSetOf(points, fold.games.at(-1) ?? fold.game);
+  const games = first === last ? `Game ${first}` : `Games ${first}–${last}`;
+  const count = `${fold.points.p1}–${fold.points.p2}`;
+  const reason = fold.winner
+    ? `${games} make ${count}, ${edit.names[fold.winner]} first to 7`
+    : `${games} make ${count}, nobody to 7 yet`;
+  const details = [
+    "The first server serves one point, then two each in turn",
+    "Ends change after every six points",
+  ];
+  if (fold.games.length > 1) {
+    details.push(`Folds ${fold.games.length} games into one`);
+  }
+  const label = "Make it a tiebreak";
+  const button = (
+    <BlackTextAction
+      ink="amber"
+      data-tiebreak-fold-make=""
+      aria-label={`${label}: ${reason}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        operations?.onFoldTiebreak?.(fold.setNumber);
+      }}
+    >
+      {label}
+    </BlackTextAction>
+  );
+  return gameSlot({
+    icon: Merge,
+    row: "tiebreak-fold",
+    anchor: fold.pointIds[0] ?? "",
+    title: "Tiebreak at 6–6?",
+    reason,
+    action: operations?.onFoldTiebreak ? button : null,
+    actionLabel: label,
     details,
   });
 });

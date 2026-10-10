@@ -53,6 +53,7 @@ import {
   type LabelInsertPointResult,
 } from "@/lib/services/labels/point-insert-session";
 import {
+  foldLabelTiebreak,
   pullLabelGamePoints,
   shiftLabelGameOverflow,
   type LabelGameShiftResult,
@@ -323,6 +324,17 @@ export async function pullLabelGamePointsAction(
   gameKey: string,
 ): Promise<LabelGameShiftResult> {
   return pullLabelGamePoints(sessionId, gameKey);
+}
+
+/**
+ * The tiebreak at 6–6: make set `setNumber`'s next game a tiebreak, fold the
+ * vendor's split games into it and set its 1-2-2 serve order.
+ */
+export async function foldLabelTiebreakAction(
+  sessionId: string,
+  setNumber: number,
+): Promise<LabelGameShiftResult> {
+  return foldLabelTiebreak(sessionId, setNumber);
 }
 
 /**
