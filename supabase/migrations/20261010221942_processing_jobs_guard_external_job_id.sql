@@ -14,9 +14,9 @@
 --
 -- Body otherwise identical to 20261010215308_processing_jobs_guard_video_keys.
 --
--- NOT YET APPLIED to the live project. Apply via the Supabase MCP as
--- `processing_jobs_guard_external_job_id`, then rename this file to the
--- version the live project records.
+-- Applied to the live database via the Supabase MCP as
+-- `processing_jobs_guard_external_job_id`; this file carries the version the
+-- live project recorded on apply.
 
 create or replace function public.processing_jobs_guard_storage_keys()
 returns trigger
