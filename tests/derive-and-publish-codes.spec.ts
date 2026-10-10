@@ -408,13 +408,18 @@ test.describe("deriveAndPublish segmentation proposal", () => {
     ]);
   });
 
-  test("a null proposal writes nothing to derivation_quality", async () => {
+  test("a null proposal clears a stale one from an earlier run", async () => {
     const { deriveAndPublish } = load(written(true, null));
-    const fake = fakeSupabase({ derivationQuality: graded });
+    const fake = fakeSupabase({
+      derivationQuality: { ...graded, segmentation: { status: "fit" } },
+    });
 
     await deriveAndPublish({ supabase: fake.client, jobId: JOB });
 
-    expect(fake.updates.some((u) => "derivation_quality" in u)).toBe(false);
+    const write = fake.updates.find((u) => "derivation_quality" in u) as
+      { derivation_quality: Record<string, unknown> } | undefined;
+    expect(write?.derivation_quality.segmentation).toBeNull();
+    expect(write?.derivation_quality).not.toHaveProperty("fold");
   });
 
   test("a write error on the segmentation merge is swallowed", async () => {

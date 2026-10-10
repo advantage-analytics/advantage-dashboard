@@ -271,8 +271,11 @@ export async function deriveAndPublish(params: {
     if (!rec.ok) {
       quality.fold = { reconciled: false, reason: rec.reason ?? null };
     }
+    // Always overwritten after a publish — null included — so a re-derive
+    // that yields no proposal (no top player, a segmenter throw) cannot leave
+    // the previous run's proposal describing rows that were just rebuilt.
     const proposal = written.transcript.segmentation;
-    if (proposal) quality.segmentation = proposal;
+    if (proposal !== undefined) quality.segmentation = proposal;
     if (Object.keys(quality).length > 0) {
       await mergeDerivationQuality(supabase, jobId, quality);
     }

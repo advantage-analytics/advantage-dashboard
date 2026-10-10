@@ -256,6 +256,7 @@ export { ACCEPT_UNRECONCILED_FOLD } from "./reconcile";
 
 export {
   buildTranscript,
+  proposalDiffers,
   proposedPointsOf,
   type ProposedPoint,
   type Transcript,

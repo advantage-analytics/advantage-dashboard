@@ -24,8 +24,9 @@
  * comparable — who is in the game with whom is.
  */
 
-import type {
-  ProposedPoint,
+import {
+  proposalDiffers,
+  type ProposedPoint,
   SegmentationProposal,
 } from "@/lib/services/splitstep/derivation";
 import { labelEnding, type LabelEnding, type LabelSide } from "./seed";
@@ -182,12 +183,7 @@ export function joinSessionTruth(args: {
         mergedWith: p.mergedWith,
       },
       // The same test transcript.ts uses to raise segment_proposal_differs.
-      fired:
-        p !== null &&
-        (p.mergedWith !== null ||
-          p.set !== point.set_number ||
-          p.game !== point.game_number ||
-          (p.server === "player1") !== point.server_is_player1),
+      fired: p !== null && proposalDiffers(p, point),
     });
   }
   return { rows, unmatched, excluded };

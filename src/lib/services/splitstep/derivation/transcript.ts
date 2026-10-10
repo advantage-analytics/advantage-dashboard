@@ -234,6 +234,23 @@ export interface ProposedPoint {
 }
 
 /**
+ * Whether the proposal would cut this point differently from the published
+ * row: another set or game, another server, or a merge. The one test behind
+ * `segment_proposal_differs` and the label-session scoring's "fired".
+ */
+export function proposalDiffers(
+  p: ProposedPoint,
+  row: { set_number: number; game_number: number; server_is_player1: boolean },
+): boolean {
+  return (
+    p.mergedWith !== null ||
+    p.set !== row.set_number ||
+    p.game !== row.game_number ||
+    (p.server === "player1") !== row.server_is_player1
+  );
+}
+
+/**
  * `rallyIds` in play order — rally ids rise with play, and a proposed game is
  * an id range, so one forward walk places every rally. A rally outside every
  * proposed game (a no_fit path that died early) has no entry.
@@ -787,12 +804,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
     for (const point of points) {
       const p = proposed.get(point.rally_id);
       if (!p) continue;
-      const differs =
-        p.mergedWith !== null ||
-        p.set !== point.set_number ||
-        p.game !== point.game_number ||
-        (p.server === "player1") !== point.server_is_player1;
-      if (differs) point.flags.push(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS);
+      if (proposalDiffers(p, point))
+        point.flags.push(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS);
     }
   }
 
