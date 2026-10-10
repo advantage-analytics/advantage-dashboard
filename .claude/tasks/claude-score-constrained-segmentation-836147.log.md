@@ -103,3 +103,24 @@ Every other criterion was met:
 **follow-ups:**
 
 1. T6's stash `19367490` touches `marks.ts` around the same switch, and its `TODO(T6)` comment mentions the positional server. Expect a small conflict when it is reapplied.
+
+## T6 · Wire the segmenter into the transcript and marks — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass (re-review)
+**changed:** This is a re-run at the author's direction ("fix T6").
+
+- Before the re-run, the branch was synced with `splitstep-integration` (merge `8aeeeffb`), bringing in PR #410's hand-labelled guard.
+- Stash `19367490` was reapplied. The conflict in the `marks.ts` switch was resolved by dropping the obsolete `TODO(T6)` comment and the `server_position_conflict` case that T11 removed.
+- The forced-throw test now uses `initialTopIsPlayer1: false` on the clean fixture and asserts the segmenter was called once. That fixes the vacuous test that blocked the first run.
+
+The rest of the change is as described in the blocked entry above:
+
+- `Transcript.segmentation` via `segmentForReview`, with `try`/`catch`;
+- the `segmenter?` seam on `BuildOptions`;
+- `proposedPointsOf` and `ProposedPoint`, exported;
+- the `segment_proposal_differs` flag and its marks params;
+- 10 new offline tests, including the equivalence check that published fields are unchanged.
+  **follow-ups:**
+
+1. Flags are applied on `no_fit` closest paths as well as fits. Revisit in T9 if that proves noisy.
+2. The clean fixture gives `no_fit` (cost 115) against its own folded score. Look at it in T9.

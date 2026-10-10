@@ -31,7 +31,12 @@ import {
   type PointWinner,
   type SplitStepRally,
   type SplitStepStroke,
+  type Transcript,
 } from "@/lib/services/splitstep/derivation";
+import {
+  buildLabelMarks,
+  type MarkablePoint,
+} from "@/lib/services/labels/marks";
 
 /**
  * The transcript layer: point winners from the score fold, reconciliation
@@ -1554,4 +1559,327 @@ test.describe("score flags: tiebreak off 6-6, score vs serve side", () => {
       true,
     );
   });
+});
+
+test.describe("segmentation proposal (review-only)", () => {
+  const A = "A";
+  const B = "B";
+  type Point = "S" | "R";
+  const RUNGS = ["0", "15", "30", "40"];
+  const POINT_GAP_S = 20;
+  const CHANGEOVER_GAP_S = 60;
+
+  /** Server-first point score after `s` server and `r` receiver points. */
+  function pointScore(s: number, r: number): string {
+    if (s >= 3 && r >= 3) {
+      if (s === r) return "40-40";
+      return s > r ? "AD-40" : "40-AD";
+    }
+    return `${RUNGS[s]}-${RUNGS[r]}`;
+  }
+
+  /**
+   * A one-set match as the rules of tennis play it, with the vendor's score
+   * stream riding on every stroke: A serves game 1 from the top, ends swap
+   * after odd games, the serve side alternates with the point count, each
+   * rally is a serve plus a return that lands in when the receiver won.
+   *
+   * `split` opens a second vendor game at point index `at` of game `game`
+   * (0-based): the vendor's game count rises for the server, its point score
+   * restarts at 0-0, and every later game score carries the extra game — the
+   * stream cutting one deuce game in two, as it does on real payloads.
+   */
+  function syntheticMatch(
+    games: Point[][],
+    split: { game: number; at: number } | null,
+  ): SplitStepRally[] {
+    const rallies: SplitStepRally[] = [];
+    const vendorGames: Record<string, number> = { [A]: 0, [B]: 0 };
+    let time = 0;
+    games.forEach((points, g) => {
+      const server = g % 2 === 0 ? A : B;
+      const receiver = server === A ? B : A;
+      const top = Math.floor((g + 1) / 2) % 2 === 0 ? A : B;
+      if (g > 0)
+        time += (g % 2 === 1 ? CHANGEOVER_GAP_S : POINT_GAP_S) - POINT_GAP_S;
+      let s = 0;
+      let r = 0;
+      points.forEach((point, p) => {
+        if (split && split.game === g && split.at === p) {
+          vendorGames[server] += 1;
+          s = 0;
+          r = 0;
+        }
+        const rallyId = rallies.length + 1;
+        const scores = {
+          predPointScore: pointScore(s, r),
+          predGameScore: `${vendorGames[server]}-${vendorGames[receiver]}`,
+          predSetScore: "0-0",
+        };
+        const serverY = top === server ? 10 : -10;
+        const hittingToward = serverY < 0 ? 1 : -1;
+        const serve = stroke({
+          ...scores,
+          eventId: rallyId * 10,
+          rallyId,
+          strokeNumber: 1,
+          playerLabel: server,
+          strokeType: "serve",
+          videoTime: time,
+          playerX: p % 2 === 0 ? hittingToward : -hittingToward,
+          playerY: serverY,
+          bounceX: null,
+          bounceY: null,
+          in: true,
+        });
+        const ret = stroke({
+          ...scores,
+          eventId: rallyId * 10 + 1,
+          rallyId,
+          strokeNumber: 2,
+          playerLabel: receiver,
+          videoTime: time + 2,
+          playerX: 0,
+          playerY: -serverY,
+          bounceX: null,
+          bounceY: null,
+          in: point === "R",
+        });
+        rallies.push({
+          rallyId,
+          strokes: [serve, ret],
+          server,
+          serves: [serve],
+        });
+        if (point === "S") s += 1;
+        else r += 1;
+        time += POINT_GAP_S;
+      });
+      vendorGames[
+        points.filter((p) => p === "S").length > points.length / 2
+          ? server
+          : receiver
+      ] += 1;
+    });
+    return rallies;
+  }
+
+  const hold: Point[] = ["S", "S", "S", "S"];
+  const breakGame: Point[] = ["R", "R", "R", "R"];
+  /** Game 1 goes to deuce and the server takes it from there: 8 points. */
+  const deuceHold: Point[] = ["S", "S", "R", "R", "S", "R", "S", "S"];
+  /** A serves odd games; A wins 1–3, 5, 7, 8 and B breaks in 4 and 6: 6–2. */
+  const sixTwo: Point[][] = [A, A, A, B, A, B, A, A].map((winner, g) =>
+    (g % 2 === 0 ? A : B) === winner ? hold : breakGame,
+  );
+  const SIX_TWO = { player1: [6], player2: [2] };
+
+  function markable(points: Transcript["points"]): MarkablePoint[] {
+    return points.map((p) => ({
+      id: `p${p.rally_id}`,
+      vendorRallyIds: [p.rally_id],
+      shots: p.shots.map((s) => ({
+        id: `s${s.event_id}`,
+        eventId: s.event_id,
+      })),
+    }));
+  }
+
+  test("a split deuce game fits, and only the points it renumbers are flagged", () => {
+    // The vendor opened a second game after the fifth point of the deuce game.
+    const rallies = syntheticMatch([deuceHold, ...sixTwo.slice(1)], {
+      game: 0,
+      at: 5,
+    });
+    const t = buildTranscript({
+      rallies,
+      labels: [A, B],
+      score: SIX_TWO,
+      initialTopIsPlayer1: true,
+    });
+    expect(t.ok).toBe(true);
+    expect(t.reconciliation.player1Label).toBe(A);
+    // The published rows keep the vendor's nine games; the fold missed by one.
+    expect(t.reconciliation.ok).toBe(false);
+    expect(Math.max(...t.points.map((p) => p.game_number))).toBe(9);
+
+    const proposal = t.segmentation;
+    expect(proposal).not.toBeNull();
+    expect(proposal?.status).toBe("fit");
+    expect(proposal?.games).toHaveLength(8);
+    expect(proposal?.games[0]).toMatchObject({
+      set: 1,
+      game: 1,
+      server: "player1",
+      firstRallyId: 1,
+      lastRallyId: 8,
+    });
+    expect(proposal?.merges).toEqual([]);
+    expect(proposal?.diff.gamesMoved).toBe(1);
+
+    // Rallies 1–5 sit in game 1 either way. From rally 6 on, the published
+    // game is one ahead of the proposal, so every later point is flagged.
+    const flagged = t.points
+      .filter((p) => p.flags.includes(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS))
+      .map((p) => p.rally_id);
+    expect(flagged).toEqual(
+      rallies.map((r) => r.rallyId).filter((id) => id >= 6),
+    );
+    // The server never differs: the split kept the vendor's server.
+    const sixth = t.points.find((p) => p.rally_id === 6);
+    expect(sixth?.game_number).toBe(2);
+    expect(sixth?.server_is_player1).toBe(true);
+
+    // The console's mark carries the proposal in published numbering.
+    const marks = buildLabelMarks(t, rallies, markable(t.points), {
+      hidden: true,
+    });
+    const onSixth = marks.points.p6?.find(
+      (m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
+    );
+    expect(onSixth?.params).toEqual({
+      proposedGame: 1,
+      proposedServer: "p1",
+      mergedWith: null,
+    });
+    const onLast = marks.points[`p${rallies.length}`]?.find(
+      (m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
+    );
+    expect(onLast?.params).toEqual({
+      proposedGame: 8,
+      proposedServer: "p2",
+      mergedWith: null,
+    });
+    expect(marks.points.p1 ?? []).not.toContainEqual(
+      expect.objectContaining({ code: POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS }),
+    );
+  });
+
+  test("an unsplit match fits with nothing flagged", () => {
+    const rallies = syntheticMatch([deuceHold, ...sixTwo.slice(1)], null);
+    const t = buildTranscript({
+      rallies,
+      labels: [A, B],
+      score: SIX_TWO,
+      initialTopIsPlayer1: true,
+    });
+    expect(t.ok).toBe(true);
+    expect(t.reconciliation.ok).toBe(true);
+    expect(t.segmentation?.status).toBe("fit");
+    expect(t.segmentation?.cost).toBe(0);
+    expect(
+      t.points.some((p) =>
+        p.flags.includes(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS),
+      ),
+    ).toBe(false);
+  });
+
+  test("no top player means no proposal", () => {
+    const rallies = syntheticMatch([deuceHold, ...sixTwo.slice(1)], null);
+    const t = buildTranscript({
+      rallies,
+      labels: [A, B],
+      score: SIX_TWO,
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+    expect(t.segmentation).toBeNull();
+  });
+
+  test("a segmenter that throws leaves the transcript ok with no proposal", () => {
+    // top=false: the clean fixture's geometry agrees, so the transcript
+    // builds and the segmenter is actually reached (top=null would return
+    // before calling it and test nothing).
+    const a = analyzeResults(clean);
+    const score = scoreOf(a.rallies, a.players);
+    const quiet = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score,
+      initialTopIsPlayer1: false,
+      segmenter: null,
+    });
+    let calls = 0;
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score,
+      initialTopIsPlayer1: false,
+      segmenter: () => {
+        calls += 1;
+        throw new Error("forced by the test");
+      },
+    });
+    expect(calls).toBe(1);
+    expect(t.ok).toBe(true);
+    expect(t.segmentation).toBeNull();
+    expect(t.points).toEqual(quiet.points);
+  });
+
+  /** The entered score the fixture's own fold reproduces (see "transcript"). */
+  function scoreOf(rallies: SplitStepRally[], labels: string[]) {
+    const winners = resolvePointWinners(rallies, labels);
+    const key = keysFor(rallies);
+    const probe = reconcile({
+      winners,
+      labels,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
+    });
+    const [p1, p2] = labels;
+    return {
+      player1: probe.foldedSets.map((s) => s[p1] ?? 0),
+      player2: probe.foldedSets.map((s) => s[p2] ?? 0),
+    };
+  }
+
+  const withoutFlags = (points: Transcript["points"]) =>
+    points.map(({ flags: _flags, ...rest }) => rest);
+
+  for (const [name, fixture] of [
+    ["clean", clean],
+    ["degraded", degraded],
+  ] as const) {
+    for (const top of [true, false, null]) {
+      test(`${name} fixture, top=${top}: published rows are identical with and without the segmenter`, () => {
+        const a = analyzeResults(fixture);
+        const score = scoreOf(a.rallies, a.players);
+        const base = {
+          rallies: a.rallies,
+          labels: a.players,
+          score,
+          initialTopIsPlayer1: top,
+        };
+        const on = buildTranscript(base);
+        const off = buildTranscript({ ...base, segmenter: null });
+
+        expect(off.segmentation).toBeNull();
+        expect(on.ok).toBe(off.ok);
+        expect(on.reason).toBe(off.reason);
+        expect(on.reconciliation).toEqual(off.reconciliation);
+        expect(on.guessedRallies).toEqual(off.guessedRallies);
+        expect(on.frozenRallies).toEqual(off.frozenRallies);
+        // Game, server, winner, ended-by, pressure and score columns, and
+        // every shot: the proposal may only ever add a flag.
+        expect(withoutFlags(on.points)).toEqual(withoutFlags(off.points));
+        for (const [i, point] of on.points.entries()) {
+          const extra = point.flags.filter(
+            (f) => !off.points[i].flags.includes(f),
+          );
+          expect(new Set(extra).size).toBeLessThanOrEqual(1);
+          expect(
+            extra.every((f) => f === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS),
+          ).toBe(true);
+          expect(
+            point.flags.filter(
+              (f) => f !== POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
+            ),
+          ).toEqual(off.points[i].flags);
+        }
+        if (top === null || !on.ok) expect(on.segmentation).toBeNull();
+        else expect(on.segmentation).not.toBeNull();
+      });
+    }
+  }
 });

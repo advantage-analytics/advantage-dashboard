@@ -155,7 +155,7 @@ ready).
 
 ## T6 · Wire the segmenter into the transcript and marks
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T2, T5
 - **files:** (guess)
