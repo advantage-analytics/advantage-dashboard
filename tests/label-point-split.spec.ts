@@ -27,7 +27,7 @@ import {
   noop,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
-import { findByProp, menuItems } from "./fixtures/react-tree";
+import { findByProp, trayButtons } from "./fixtures/react-tree";
 import { createLoader } from "./fixtures/vm-modules";
 
 // Split a point at one of its shots: the pure plan and the console's rows, the
@@ -685,30 +685,48 @@ test.describe("Split point here", () => {
         edit: editContext(session, { selectedShotId: "s-return" }),
       }),
     );
-    // The ⋯ menu holds Split first: its items, in order, on the trigger.
+    // The selected stroke's tray holds Split first.
+    const tray = html.slice(html.indexOf('aria-label="Shot 2 actions"'));
     expect(tag(html, 'aria-label="Shot 2 actions"')).toContain(
-      'data-shot-menu="split',
+      "data-shot-tray",
+    );
+    expect(tray.match(/data-shot-action="(\w+)"/)?.[1]).toBe("split");
+    expect(tag(tray, 'data-shot-action="split"')).toContain(
+      'aria-label="Split point at shot 2"',
     );
     // The tombstone line carries none: its block ends before the next row.
     const tombAt = html.indexOf('data-tombstone-id="s-phantom"');
     const tomb = html.slice(tombAt, html.indexOf("data-row=", tombAt + 1));
-    expect(tomb).not.toContain('data-shot-menu="');
+    expect(tomb).not.toContain("data-shot-tray");
+    expect(tomb).not.toContain("data-shot-action");
+    // A tombstone selected: still no tray.
+    const tombSelected = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: pointOf(P1),
+        edit: editContext(session, { selectedShotId: "s-phantom" }),
+      }),
+    );
+    expect(tombSelected).not.toContain("data-shot-tray");
     // Read-only, or with nothing to ask: none.
     for (const frozen of [
       renderToStaticMarkup(
         React.createElement(BlackShotsWell, {
           point: pointOf(P1),
-          edit: editContext(session, {}, false),
+          edit: editContext(session, { selectedShotId: "s-return" }, false),
         }),
       ),
       renderToStaticMarkup(
         React.createElement(BlackShotsWell, {
           point: pointOf(P1),
-          edit: editContext(session, { operations: undefined }),
+          edit: editContext(session, {
+            selectedShotId: "s-return",
+            operations: undefined,
+          }),
         }),
       ),
     ]) {
-      expect(frozen).not.toContain('data-shot-menu="');
+      expect(frozen).not.toContain("data-shot-tray");
+      expect(frozen).not.toContain('data-shot-action="split"');
     }
   });
 
@@ -725,6 +743,7 @@ test.describe("Split point here", () => {
       point: p1,
       pointNumber: 1,
       edit: editContext(labelSessionFixture(), {
+        selectedShotId: "s-return",
         onSelectShot: (id: string) => selected.push(id),
         operations: {
           ...OPERATIONS,
@@ -732,35 +751,33 @@ test.describe("Split point here", () => {
         },
       }),
     });
-    // A click in the ⋯'s box stops at the lane.
-    const lane = findByProp(tree, "data-shot-lane", ["ShotNumberLane"]);
-    expect(lane).not.toBeNull();
+    // A click in the tray stops there.
+    const tray = findByProp(tree, "data-shot-tray", ["ShotTray"]);
+    expect(tray).not.toBeNull();
     let stopped = 0;
-    (lane!.props.onClick as (e: unknown) => void)({
+    const event = {
       stopPropagation: () => {
         stopped += 1;
       },
-    });
-    const split = menuItems(tree).find(
-      (item) => item.label === "Split point here",
-    );
+    };
+    (tray!.props.onClick as (e: unknown) => void)(event);
+    const split = trayButtons(tree).find((button) => button.key === "split");
     expect(split).toBeDefined();
-    expect(split!.description).toBe(
-      "Shot 2 and those after it become a new point",
-    );
-    split!.run();
+    expect(split!.label).toBe("Split point here");
+    expect(split!.ariaLabel).toBe("Split point at shot 2");
+    split!.click(event);
     expect(asked).toEqual([[P1, "s-return"]]);
-    expect(stopped).toBe(1);
+    expect(stopped).toBe(2);
     expect(selected).toEqual([]);
     // Without the point, no split is offered.
     const bare = BlackShotRow({
       shot: p1.shots.find((s) => s.id === "s-return"),
       number: 2,
       pointNumber: 1,
-      edit: editContext(labelSessionFixture()),
+      edit: editContext(labelSessionFixture(), { selectedShotId: "s-return" }),
     });
-    expect(menuItems(bare).map((item) => item.label)).not.toContain(
-      "Split point here",
+    expect(trayButtons(bare).map((button) => button.key)).not.toContain(
+      "split",
     );
   });
 
@@ -811,26 +828,36 @@ test("a render of the black console draws Split on the open point's later shots 
   const { LabelConsole } = createLoader().load(CONSOLE) as {
     LabelConsole: React.ComponentType<Record<string, unknown>>;
   };
-  const html = renderToStaticMarkup(
-    React.createElement(LabelConsole, {
-      session: labelSessionFixture(),
-      video: null,
-      marks: null,
-      initialLayoutMode: "black",
-      initialExpandedPointId: P1,
-      operations,
-      onSaveShot: async () => ({ ok: true, status: "edited" }),
-      onSavePoint: async () => ({ ok: true, status: "edited" }),
-    }),
-  );
-  expect(called).toEqual([]);
-  const offered = (n: number) =>
-    tag(html, `aria-label="Shot ${n} actions"`).includes(
-      'data-shot-menu="split',
+  const render = (initialSelectedShotId: string | null) =>
+    renderToStaticMarkup(
+      React.createElement(LabelConsole, {
+        session: labelSessionFixture(),
+        video: null,
+        marks: null,
+        initialLayoutMode: "black",
+        initialExpandedPointId: P1,
+        initialSelectedShotId,
+        operations,
+        onSaveShot: async () => ({ ok: true, status: "edited" }),
+        onSavePoint: async () => ({ ok: true, status: "edited" }),
+      }),
     );
+  // The open point's live strokes, numbered as the well numbers them.
+  const live = pointOf(P1).shots.filter((shot) => shot.status !== "deleted");
+  const offered = (n: number) => {
+    const html = render(live[n - 1].id);
+    expect(tag(html, "data-shot-tray")).toContain(
+      `aria-label="Shot ${n} actions"`,
+    );
+    return html.includes('data-shot-action="split"');
+  };
   expect(offered(2)).toBe(true);
   expect(offered(3)).toBe(true);
   expect(offered(1)).toBe(false);
+  expect(called).toEqual([]);
+  // Nothing selected: no tray at all.
+  const html = render(null);
+  expect(html).not.toContain("data-shot-tray");
   // The well sets the tail variable every row reads.
   expect(tag(html, "data-shots-well")).toContain("--shot-tail:33px");
 });

@@ -507,6 +507,19 @@ function block(html: string, marker: string): string {
 }
 
 test.describe("a ghost in the black well", () => {
+  test("a ghost never draws the stroke tray, even selected", () => {
+    const point = point4();
+    for (const openGhostIds of [new Set<string>(), new Set([GHOST])]) {
+      const html = renderWell(
+        point,
+        marksOf(point, [phantomMark()]),
+        editContext({ openGhostIds, selectedShotId: GHOST }),
+      );
+      expect(html).toContain(`data-shot-ghost="${GHOST}"`);
+      expect(html).not.toContain("data-shot-tray");
+    }
+  });
+
   test("shown: the struck-through row under the line, its reason and Restore", () => {
     const point = point4();
     const html = renderWell(

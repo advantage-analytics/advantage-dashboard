@@ -27,35 +27,54 @@ export const AMBER_SUGGESTION_INK = railAmber(0.75);
 
 /**
  * A text action's resting ink: amber for the slot's one answer, quiet for its
- * other answers, plain for Undo / Show / Hide. Every one goes to full strength
- * on hover.
+ * other answers, plain for Undo / Show / Hide, muted for a stroke's Delete in
+ * its tray. Every one goes to full strength on hover.
  */
-export type BlackTextActionInk = "amber" | "quiet" | "plain";
+export type BlackTextActionInk = "amber" | "quiet" | "plain" | "muted";
 
 const TEXT_ACTION_INK: Record<BlackTextActionInk, string> = {
   amber: "text-[var(--rail-amber)]",
   quiet: "text-white/50",
   plain: "text-white/70",
+  muted: "text-white/55",
 };
 
 /**
  * A text action in the rail. Its `onClick` is the caller's own, so a click that
  * must not reach the row under it stops propagation there, where a spec can see
- * it.
+ * it. With `icon`, an 11px glyph leads the words, 5px before them; with
+ * `shrinks`, the button gives way in a crowded row and its words truncate.
  */
 export function BlackTextAction({
   ink,
+  icon: Icon,
+  shrinks = false,
+  children,
   ...props
-}: { ink: BlackTextActionInk } & Omit<
-  ButtonHTMLAttributes<HTMLButtonElement>,
-  "type" | "className"
->) {
+}: {
+  ink: BlackTextActionInk;
+  icon?: LucideIcon;
+  shrinks?: boolean;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "className">) {
   return (
     <button
       type="button"
       {...props}
-      className={`shrink-0 cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap ${TEXT_ACTION_INK[ink]} ${RAIL_PRESS} hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
-    />
+      className={`${shrinks ? "min-w-0" : "shrink-0"}${Icon ? "inline-flex items-center gap-[5px]" : ""} cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap ${TEXT_ACTION_INK[ink]} ${RAIL_PRESS} hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
+    >
+      {Icon ? (
+        <>
+          <Icon
+            className="size-[11px] shrink-0"
+            strokeWidth={1.6}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 truncate">{children}</span>
+        </>
+      ) : (
+        children
+      )}
+    </button>
   );
 }
 
