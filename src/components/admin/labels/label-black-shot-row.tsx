@@ -540,9 +540,6 @@ export function BlackShotRow({
         data-serve-result={serveResult ? "" : undefined}
         className={cn(
           "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[3px] overflow-hidden text-[11px] whitespace-nowrap",
-          // The cell clips (for the pencil), and a select trigger sits 5px
-          // left of its text so the word does not move when the row is
-          // selected: reach the clip 5px into the column gap, content in place.
           serveResult && SERVE_RESULT_REACH,
           words,
         )}
@@ -1194,16 +1191,16 @@ export function serveResultPatch(value: string | null): LabelShotPatch {
 const LET_INK = "text-[var(--rail-amber)]";
 
 /**
+ * The serve-result cell's clip, reached 5px into the 8px column gap so the
+ * select trigger's shared -5px nudge (`SELECT_TRIGGER_DARK`) is not cut off.
+ */
+const SERVE_RESULT_REACH = "-ml-[5px] pl-[5px]";
+
+/**
  * A serve's result: its word, and the "Serve result" select once reached for.
  * It keeps the menu's open state so the cell can say so
  * (`data-menu-open`), which steps the row's actions aside.
  */
-/**
- * The serve-result cell's clip, reached 5px into the 8px column gap so the
- * select trigger's shared -5px nudge (`SELECT_TRIGGER_DARK`) is not cut off.
- */
-export const SERVE_RESULT_REACH = "-ml-[5px] pl-[5px]";
-
 function ServeResultCell({
   editable,
   rowSelected,
