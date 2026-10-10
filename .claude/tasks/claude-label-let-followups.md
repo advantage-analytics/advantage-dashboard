@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Serve-result menu offers "No result" when nothing can be derived
 
-- **status:** todo
+- **status:** later
 - **model:** opus
 - **files:** src/components/admin/labels/label-black-shot-row.tsx (`serveResultMenu`, `serveResultPatch`, `ServeResultCell`), tests/label-black-rows.spec.ts — a guess
 - **routes:** /admin/labels/[sessionId]
@@ -56,7 +56,7 @@ ready).
 
 ## T4 · Console refuses a let patch before the optimistic apply
 
-- **status:** todo
+- **status:** later
 - **model:** sonnet
 - **files:** src/components/admin/labels/label-console.tsx (the shot-patch handler around line 669, `applyLabelShotPatch`), tests/label-console-edit.spec.ts — a guess
 - **done when:**
