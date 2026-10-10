@@ -437,6 +437,35 @@ export function endingStale(
 }
 
 /**
+ * "Was the last ball in?"'s answer: the point's `last_call_overruled` count
+ * mark, and the last live stroke to write the vendor's call onto — while that
+ * stroke still carries its seeded result. Null once the labeller has changed
+ * the result (the chip is then settled), for an added stroke, and with no such
+ * mark. Offered on a click, never applied on load: across the checked points
+ * of three hand-labelled matches the vendor's call was right 41 times in 52,
+ * too few to overrule the landing unseen.
+ */
+export function lastCallAnswer(
+  point: Pick<LabelPoint, "shots">,
+  countMarks: readonly LabelMark[],
+  ghosts: boolean,
+): {
+  mark: Extract<LabelMark, { code: "last_call_overruled" }>;
+  shotId: string;
+} | null {
+  const mark = countMarks.find(
+    (m): m is Extract<LabelMark, { code: "last_call_overruled" }> =>
+      m.code === "last_call_overruled",
+  );
+  if (!mark) return null;
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || last.eventId === null || !last.seed) return null;
+  if (last.result !== last.seed.result) return null;
+  if (last.result === mark.params.vendorCall) return null;
+  return { mark, shotId: last.id };
+}
+
+/**
  * "Second serve?": a live serve typed `first_serve` that follows an earlier
  * live serve of the point whose ball missed — by structure the second serve,
  * however the vendor typed it. A let between them is replayed and changes

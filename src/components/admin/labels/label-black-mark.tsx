@@ -10,6 +10,7 @@ import type {
 import {
   HINT_ACTION_LABEL,
   hintLabel,
+  lastCallAction,
   markHover,
   staleEndingAction,
   removeAfterLabel,
@@ -18,6 +19,7 @@ import {
   drawsGhosts,
   endingStale,
   hoverLine,
+  lastCallAnswer,
   lastLandingMissing,
   markStates,
   missingPointAdded,
@@ -363,8 +365,13 @@ export function pointHints(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
   ];
+  const { hints: own, count } = pointRowMarkList(point, marks);
+  // "Was the last ball in?" is a chip; its answer is offered on this line
+  // until the labeller changes the last ball's result.
+  const lastCall = lastCallAnswer(point, count, ghosts);
   const hints = [
-    ...pointRowMarkList(point, marks).hints,
+    ...(lastCall ? [lastCall.mark] : []),
+    ...own,
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
   return hints.flatMap((mark) => {
@@ -380,7 +387,7 @@ export function pointHints(
         code: mark.code,
         label: hintLabel(mark, names),
         detail: markHover(mark, names),
-        actions: hintActions(mark, point, edit),
+        actions: hintActions(mark, point, edit, lastCall?.shotId),
         afterShotId: ended,
         dismissKey,
       },
@@ -398,6 +405,7 @@ function hintActions(
   mark: LabelMark,
   point: LabelPoint,
   edit: HintEdit | undefined,
+  lastCallShotId?: string,
 ): PointHintAction[] {
   if (!edit) return [];
   const { onPatchPoint, onPatchShot, onRemoveShotsAfter, operations } = edit;
@@ -418,6 +426,16 @@ function hintActions(
               ended_by: endedBy,
               ...(winner !== null ? { winner } : {}),
             }),
+        },
+      ];
+    }
+    case "last_call_overruled": {
+      if (!onPatchShot || !lastCallShotId) return [];
+      const { vendorCall } = mark.params;
+      return [
+        {
+          label: lastCallAction(vendorCall),
+          run: () => onPatchShot(lastCallShotId, { result: vendorCall }),
         },
       ];
     }

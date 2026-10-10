@@ -137,6 +137,11 @@ export const HINT_ACTION_LABEL = {
   serve_after_serve_in: "Split here",
 } as const;
 
+/** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
+export function lastCallAction(call: "in" | "out" | "net"): string {
+  return call === "net" ? "Make it a net" : `Make it ${call}`;
+}
+
 /** "Point ended here"'s other answer: drop the N strokes after the out ball. */
 export function removeAfterLabel(count: number): string {
   return `Remove ${count}`;

@@ -525,6 +525,41 @@ test.describe("the hints read off the rows, with their answers", () => {
     ]);
   });
 
+  test("Was the last ball in? answers with the vendor's call, until the result is changed", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const patched: unknown[][] = [];
+    const edit = {
+      onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
+    };
+    const call = mark("last_call_overruled", { vendorCall: "out" });
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    const [hint] = pointHints(point, marksOf(point, [call]), NAMES, edit);
+    expect([hint.code, hint.label]).toEqual([
+      "last_call_overruled",
+      "Was the last ball in?",
+    ]);
+    expect(hint.actions.map((a) => a.label)).toEqual(["Make it out"]);
+    hint.actions[0].run();
+    expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
+
+    // A net call reads as one.
+    const net = mark("last_call_overruled", { vendorCall: "net" });
+    const [netHint] = pointHints(point, marksOf(point, [net]), NAMES, edit);
+    expect(netHint.actions.map((a) => a.label)).toEqual(["Make it a net"]);
+
+    // Once the labeller changed the result, the chip is settled: no answer.
+    const answered = {
+      ...point,
+      shots: [{ ...ace, result: "out" as const }],
+    };
+    expect(
+      pointHints(answered, marksOf(answered, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+  });
+
   /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */
   const endedEarly = () => {
     const point = fixturePoint();
