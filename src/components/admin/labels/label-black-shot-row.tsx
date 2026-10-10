@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   isGhostShot,
   isServeStroke,
+  isWithdrawnAdd,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -293,6 +294,8 @@ export function BlackShotsWell({
   // rally: from each of them, Undo puts back every one to the end at once.
   const runStart = deadBallRunStart(point.shots);
   for (const [i, shot] of point.shots.entries()) {
+    // A stroke the labeller added and then deleted leaves no row.
+    if (isWithdrawnAdd(shot)) continue;
     if (shot.status === "deleted") {
       const run =
         i >= runStart && point.shots.length - i >= 2

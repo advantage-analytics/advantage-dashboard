@@ -24,6 +24,7 @@ import {
   isNonPointEnding,
   isLetServe,
   isServeStroke,
+  isWithdrawnAdd,
   liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
@@ -46,7 +47,7 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId" | "eventId">> &
+  Partial<Pick<LabelShot, "afterEventId" | "eventId" | "statusBeforeDelete">> &
   ResultReadableShot;
 
 export type MarkStatePoint = Pick<
@@ -63,10 +64,11 @@ export function pointChanged(point: MarkStatePoint): boolean {
   if (point.status === "edited" || point.status === "added") return true;
   return point.shots.some(
     (shot) =>
-      shot.siteRemovalRestoredAt !== null ||
-      shot.status === "edited" ||
-      shot.status === "deleted" ||
-      shot.status === "added",
+      !isWithdrawnAdd(shot) &&
+      (shot.siteRemovalRestoredAt !== null ||
+        shot.status === "edited" ||
+        shot.status === "deleted" ||
+        shot.status === "added"),
   );
 }
 

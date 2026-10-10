@@ -25,6 +25,7 @@ import type {
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
 import {
   isNonPointEnding,
+  isWithdrawnAdd,
   type LabelPoint,
   type LabelSide,
 } from "@/lib/services/labels/session";
@@ -122,9 +123,10 @@ export function pointChangedByYou(
     point.status === "added" ||
     point.shots.some(
       (shot) =>
-        shot.status === "edited" ||
-        shot.status === "added" ||
-        shot.status === "deleted",
+        !isWithdrawnAdd(shot) &&
+        (shot.status === "edited" ||
+          shot.status === "added" ||
+          shot.status === "deleted"),
     )
   );
 }

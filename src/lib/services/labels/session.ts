@@ -70,6 +70,18 @@ export function isLabelSpin(value: unknown): value is LabelSpin {
   );
 }
 
+/**
+ * A stroke the labeller added and then deleted: its tombstone records nothing
+ * the scorer needs (no vendor stroke was rejected), so the console draws no
+ * row for it and does not count it as a change.
+ */
+export function isWithdrawnAdd(
+  shot: Pick<LabelShot, "status"> &
+    Partial<Pick<LabelShot, "statusBeforeDelete">>,
+): boolean {
+  return shot.status === "deleted" && shot.statusBeforeDelete === "added";
+}
+
 /** Whether a stroke is a serve — a first or a second. */
 export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
   return stroke === "first_serve" || stroke === "second_serve";

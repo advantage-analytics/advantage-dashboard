@@ -1385,6 +1385,40 @@ test.describe("the black shots well", () => {
       expect(html).not.toContain("data-add-shot");
     }
   });
+  test("a stroke the labeller added and then deleted leaves no row", () => {
+    const { BlackShotsWell } = well();
+    const point = rally();
+    const withdrawn = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "w-gone" ? { ...s, statusBeforeDelete: "added" as const } : s,
+      ),
+    };
+    const html = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point: withdrawn,
+        edit: wellEdit({}),
+      }),
+    );
+    expect(html).not.toContain('data-tombstone-id="w-gone"');
+    // Its confirm says so: no trace, and no Undo promised.
+    const { labelConfirmCopy } = createLoader().load(
+      "src/components/admin/labels/label-confirm.ts",
+    ) as {
+      labelConfirmCopy: (c: Record<string, unknown>) => { description: string };
+    };
+    const copy = labelConfirmCopy({
+      kind: "delete-shot",
+      shotId: "w-x",
+      shotNumber: 3,
+      pointNumber: 12,
+      added: true,
+    });
+    expect(copy.description).toBe(
+      "It comes off point 12. You added it, so it goes without a trace.",
+    );
+  });
+
   test("a deleted stroke is one line, with Undo", () => {
     const restored: string[] = [];
     const operations = {

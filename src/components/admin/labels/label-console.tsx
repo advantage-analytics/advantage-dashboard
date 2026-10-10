@@ -1661,7 +1661,13 @@ export function LabelConsole({
   // this render defined.
   const rowOperations = useLatestHandlers<LabelRowOperations>({
     onAskDeleteShot: (shotId, shotNumber, pointNumber) =>
-      setConfirm({ kind: "delete-shot", shotId, shotNumber, pointNumber }),
+      setConfirm({
+        kind: "delete-shot",
+        shotId,
+        shotNumber,
+        pointNumber,
+        added: findShot(points, shotId)?.status === "added",
+      }),
     onAskDeletePoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
       if (!point) return;
