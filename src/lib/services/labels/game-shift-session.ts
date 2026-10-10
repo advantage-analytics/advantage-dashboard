@@ -14,9 +14,15 @@
  * or removed and no `point_index` moves.
  */
 
+import { planTiebreakFold, tiebreakFolds } from "./tiebreak-fold";
 import { readAllPages } from "@/lib/data/admin-range-read";
 import type { AdminClient } from "@/lib/supabase/admin";
-import { readJobAdScoring, resolveLabelAdScoring } from "./ad-scoring";
+import {
+  readJobAdScoring,
+  readFormatAdScoring,
+  readMatchAdScoring,
+  resolveLabelAdScoring,
+} from "./ad-scoring";
 import {
   FROZEN,
   defaultLabelWriteDependencies,
@@ -85,6 +91,7 @@ interface ShiftSessionRow {
   status: string;
   ad_scoring: boolean | null;
   job_id: string | null;
+  match_id: string | null;
 }
 
 /** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
@@ -153,7 +160,7 @@ async function runGamePlan(
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id")
+    .select("status, ad_scoring, job_id, match_id")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -162,7 +169,7 @@ async function runGamePlan(
   if (!session) return { error: "Session not found." };
   if (session.status !== "labelling") return { error: FROZEN };
 
-  const [points, job] = await Promise.all([
+  const [points, job, match] = await Promise.all([
     supabase
       .from("label_points")
       .select(GAME_COLUMNS)
@@ -170,9 +177,16 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
+    // The match's format, the last fallback, beside the job's.
+    readMatchAdScoring(supabase, session),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
+  }
+  if (match.error) {
+    return {
+      error: `Could not read the match's scoring: ${match.error.message}`,
+    };
   }
   if (points.error) {
     return {
@@ -182,6 +196,7 @@ async function runGamePlan(
   const adScoring = resolveLabelAdScoring(
     session.ad_scoring,
     job.data?.ad_scoring,
+    readFormatAdScoring(match.data?.format),
   );
 
   // The plan with no shots yet says whether any point moves under a new
@@ -259,6 +274,42 @@ export async function writeLabelGameShift(params: {
   );
 }
 
+/**
+ * Make the game after 6–6 in set `setNumber` a tiebreak and fold the vendor's
+ * split games into it (tiebreak-fold.ts), read and planned on the rows as
+ * they stand now. Never throws.
+ */
+export async function writeLabelTiebreakFold(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  setNumber: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const { setNumber } = params;
+  if (
+    typeof setNumber !== "number" ||
+    !Number.isInteger(setNumber) ||
+    setNumber < 1
+  ) {
+    return { error: "Invalid set." };
+  }
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points, adScoring) => {
+      const fold = tiebreakFolds(points, adScoring).find(
+        (f) => f.setNumber === setNumber,
+      );
+      if (!fold) {
+        return { error: "That set is not at 6–6 before an ordinary game." };
+      }
+      return planTiebreakFold(points, fold);
+    },
+    "Could not make the tiebreak",
+  );
+}
+
 /** `"{set}·{game}"` with two whole numbers, as `gameKey` spells it. */
 const GAME_KEY = /^\d+·\d+$/;
 
@@ -314,5 +365,17 @@ export function pullLabelGamePoints(
     deps,
     (supabase) => writeLabelGamePull({ supabase, sessionId, gameKey }),
     "pull the points into the game",
+  );
+}
+
+export function foldLabelTiebreak(
+  sessionId: unknown,
+  setNumber: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) => writeLabelTiebreakFold({ supabase, sessionId, setNumber }),
+    "make the tiebreak",
   );
 }

@@ -51,8 +51,13 @@ export type LabelStroke =
   | "backhand_volley"
   | "overhead";
 
-/** `label_shots.result`. */
-export type LabelShotResult = "in" | "out" | "net";
+/**
+ * `label_shots.result`. `let` is a serve only — the ball clipped the net and
+ * the serve is replayed — and is never derived from coordinates: the labeller
+ * stores it (edit.ts `letResultError`), and a position edit leaves it alone
+ * (shot-derived.ts `positionPatch`).
+ */
+export type LabelShotResult = "in" | "out" | "net" | "let";
 
 /** `label_points.serve_side`. Never seeded — the labeller sets it. */
 export type LabelServeSide = "deuce" | "ad";
@@ -202,7 +207,11 @@ export function labelStroke(
   }
 }
 
-/** `shots.result` ('In' / 'Out' / 'Net') → `label_shots.result`. */
+/**
+ * `shots.result` ('In' / 'Out' / 'Net') → `label_shots.result`. Never `let`:
+ * a let is the labeller's call on a serve (edit.ts `letResultError`), so a
+ * vendor string that says one — or anything else — seeds as null.
+ */
 export function labelShotResult(result: string | null): LabelShotResult | null {
   if (result === "In") return "in";
   if (result === "Out") return "out";

@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 import {
   analyzeResults,
   buildTranscript,
+  DERIVATION_VERSION,
   type MatchScore,
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
@@ -33,7 +34,7 @@ const SESSION_ROW = {
   job_id: JOB_ID,
   match_id: MATCH_ID,
   status: "labelling",
-  derivation_version: "0.7.0-unreconciled",
+  derivation_version: DERIVATION_VERSION,
   ad_scoring: null,
   marks_enabled: true,
   final_score: [

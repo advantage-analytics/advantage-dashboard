@@ -392,3 +392,29 @@ test.describe("a typed position and a picked spin", () => {
     });
   });
 });
+
+test.describe("let patch guard", () => {
+  const { planShotWrite } = createLoader().load(
+    "src/components/admin/labels/shot-write-plan.ts",
+  ) as {
+    planShotWrite: (
+      before: LabelShot,
+      patch: LabelShotPatch,
+    ) => { error: string } | { row: LabelShot };
+  };
+  const shots = labelSessionFixture().points.flatMap((p) => p.shots);
+
+  test("a let on a non-serve is refused and yields no row", () => {
+    const back = shots.find((shot) => shot.id === "s-return")!;
+    const plan = planShotWrite(back, { result: "let" });
+    expect(plan).toEqual({ error: "Only a serve can be a let." });
+    expect("row" in plan).toBe(false);
+  });
+
+  test("a let on a serve returns the patched row", () => {
+    const serve = shots.find((shot) => shot.id === "s-serve")!;
+    const plan = planShotWrite(serve, { result: "let" });
+    expect("error" in plan).toBe(false);
+    expect((plan as { row: LabelShot }).row.result).toBe("let");
+  });
+});

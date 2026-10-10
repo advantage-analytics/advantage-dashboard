@@ -14,22 +14,26 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
-import { labelShotValues } from "./edit";
 import { deriveEnding } from "./ending-derived";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
+  endsPointWhenMissed,
   isLiveShot,
   isMissedResult,
   isNonPointEnding,
+  isLetServe,
   isServeStroke,
+  isWithdrawnAdd,
   liveShotsInOrder,
+  orderLabelShots,
   type LabelPoint,
   type LabelShot,
 } from "./session";
-import { deriveShotResult } from "./shot-derived";
+import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 import {
   addedPointBetween,
+  pointEndedKey,
   suggestionState,
   type SuggestionNeighbour,
 } from "./suggestions";
@@ -45,7 +49,8 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId">>;
+  Partial<Pick<LabelShot, "afterEventId" | "eventId" | "statusBeforeDelete">> &
+  ResultReadableShot;
 
 export type MarkStatePoint = Pick<
   LabelPoint,
@@ -61,10 +66,11 @@ export function pointChanged(point: MarkStatePoint): boolean {
   if (point.status === "edited" || point.status === "added") return true;
   return point.shots.some(
     (shot) =>
-      shot.siteRemovalRestoredAt !== null ||
-      shot.status === "edited" ||
-      shot.status === "deleted" ||
-      shot.status === "added",
+      !isWithdrawnAdd(shot) &&
+      (shot.siteRemovalRestoredAt !== null ||
+        shot.status === "edited" ||
+        shot.status === "deleted" ||
+        shot.status === "added"),
   );
 }
 
@@ -96,14 +102,17 @@ function missingShotStates(
   point: MarkStatePoint,
   suggestions?: readonly LabelSuggestion[],
 ): ReturnType<typeof suggestionState>[] {
-  if (!suggestions) return [];
+  const mine = suggestions?.filter(
+    (s) => s.kind === "missing_shot" && s.pointId === point.id,
+  );
+  if (!mine?.length) return [];
   const shots = point.shots.map((shot) => ({
-    status: shot.status,
+    ...shot,
     afterEventId: shot.afterEventId ?? null,
   }));
-  return suggestions
-    .filter((s) => s.kind === "missing_shot" && s.pointId === point.id)
-    .map((s) => suggestionState(s, { dismissed: point.dismissed, shots }));
+  return mine.map((s) =>
+    suggestionState(s, { dismissed: point.dismissed, shots }),
+  );
 }
 
 /**
@@ -262,29 +271,42 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
 }
 
 /**
- * In, out or net as the stroke's own coordinates say it, when all four are
- * placed; the stored result until then.
- */
-function shotResult(shot: LabelShot) {
-  return deriveShotResult(labelShotValues(shot)) ?? shot.result;
-}
-
-/**
- * "Point ended here": the last live stroke that is not a serve and whose ball
- * was out or in the net, with one or more live strokes after it. Those were
+ * "Point ended here": the last live stroke that is not a first serve and
+ * whose ball was out or in the net — a rally ball, or a second serve's double
+ * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
  * hit after the point ended — or are a second point the vendor ran into this
  * one — so the hint offers to remove them or to split there. Live means not
- * deleted and, with `ghosts` on, not a ghost.
+ * deleted and, with `ghosts` on, not a ghost. Only the latest such stroke is
+ * asked about, and not once the labeller has settled it or anything after it.
  */
 export function pointEndedEarly(
-  point: Pick<LabelPoint, "shots">,
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
+  const ordered = orderLabelShots(point.shots);
+  const dismissed = new Set(point.dismissed ?? []);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
-    if (isServeStroke(shot.stroke)) continue;
-    if (!isMissedResult(shotResult(shot))) continue;
+    if (!endsPointWhenMissed(shot.stroke)) continue;
+    if (!isMissedResult(effectiveShotResult(shot))) continue;
+    // Settled once the labeller has looked at this stroke or one after it:
+    // dismissed the question there, or edited, added or deleted a stroke
+    // after it. Play went on past a later stroke, so the rally was live
+    // through every one before it — the question does not move up the rally
+    // to a stroke the labeller has already watched go by.
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at.
+          (s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
+    if (settled) return null;
     return {
       code: "shot_after_point_end",
       tier: "hint",
@@ -380,11 +402,11 @@ export function serveAfterServeIn(
 }
 
 /**
- * "Ending looks stale": the point's stored ending is not what its strokes
+ * "Different ending?": the point's stored ending is not what its strokes
  * derive (`deriveEnding`) — the ending or the ended-by differ, or none is
  * stored at all. How a point whose ending was left behind (a stroke edited
  * before the server kept the two in step, a point added by hand) gets fixed:
- * on a click of "Use it", never on load. Nothing for a let or a non-point,
+ * on a click of "Make it …", never on load. Nothing for a let or a non-point,
  * whose ending says the rows do not decide it, and nothing while the rows
  * say nothing. `ghosts` is whether a site-removed stroke is still a ghost.
  */
@@ -415,10 +437,45 @@ export function endingStale(
 }
 
 /**
+ * "Was the last ball in?"'s answer: the point's `last_call_overruled` count
+ * mark, and the stroke it was built for (`eventId`) to write the vendor's call
+ * onto — only while that stroke is still the point's last live stroke with a
+ * result, and still carries its seeded result. Null once the labeller has
+ * deleted it, added a stroke after it or changed its result, and with no such
+ * mark. Trailing strokes with no result (a phantom swing at a dead ball) do
+ * not count as after it. Offered on a click, never applied on load: across
+ * the checked points of three hand-labelled matches the vendor's call was
+ * right 41 times in 52, too few to overrule the landing unseen.
+ */
+export function lastCallAnswer(
+  point: Pick<LabelPoint, "shots">,
+  countMarks: readonly LabelMark[],
+  ghosts: boolean,
+): {
+  mark: Extract<LabelMark, { code: "last_call_overruled" }>;
+  shotId: string;
+} | null {
+  const mark = countMarks.find(
+    (m): m is Extract<LabelMark, { code: "last_call_overruled" }> =>
+      m.code === "last_call_overruled",
+  );
+  if (!mark) return null;
+  const last = liveShotsInOrder(point, ghosts).findLast(
+    (shot) => shot.result !== null,
+  );
+  if (!last || last.eventId !== mark.params.eventId || !last.seed) return null;
+  if (last.result !== last.seed.result) return null;
+  if (last.result === mark.params.vendorCall) return null;
+  return { mark, shotId: last.id };
+}
+
+/**
  * "Second serve?": a live serve typed `first_serve` that follows an earlier
  * live serve of the point whose ball missed — by structure the second serve,
- * however the vendor typed it. The first such serve in video order; the
- * action retypes it (`{ stroke: "second_serve" }`).
+ * however the vendor typed it. A let between them is replayed and changes
+ * nothing: it neither faults nor clears an earlier fault, and a first serve
+ * after a let alone is a first serve. The first such serve in video order;
+ * the action retypes it (`{ stroke: "second_serve" }`).
  */
 export function secondServeAsFirst(
   point: Pick<LabelPoint, "shots">,
@@ -427,7 +484,7 @@ export function secondServeAsFirst(
   const live = liveShotsInOrder(point, ghosts);
   let faulted = false;
   for (const shot of live) {
-    if (!isServeStroke(shot.stroke)) continue;
+    if (!isServeStroke(shot.stroke) || isLetServe(shot)) continue;
     if (faulted && shot.stroke === "first_serve") {
       return {
         code: "second_serve_as_first",

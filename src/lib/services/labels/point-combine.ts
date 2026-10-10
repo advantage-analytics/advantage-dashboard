@@ -1,7 +1,15 @@
 /**
- * Combine two neighbouring points of a game into one: the vendor cut one real
- * point into two rallies. Joins a point with its nearest live neighbour in the
- * same game.
+ * Combine two neighbouring points into one: the vendor cut one real point into
+ * two rallies. Joins a point with its nearest live neighbour in the same set —
+ * in its own game, or the neighbouring one where the cut also opened a game.
+ *
+ * Across a game the later part was tagged as the other player's service game,
+ * so every moved stroke's hitter is swapped, and so is who ended it. When the
+ * earlier part's rally was in play — a serve in with strokes after it — the
+ * later part's leading "serve" was a stroke of that rally the vendor read as a
+ * serve: it becomes an overhead, by whoever's turn it was. A fault with one or
+ * two swings at the dead ball after it is not a rally in play: the later serve
+ * stays a serve (and becomes the second serve, below).
  *
  * The earlier point is kept. Every shot row of the later one (tombstones
  * included) takes its id in one update, statuses untouched. It takes the later
@@ -12,6 +20,15 @@
  * (`isCombinedTombstone`), and the way back is "Split point here" on the first
  * moved shot.
  *
+ * The joined serves are then relabelled (`combineServeRetypes`, answered as
+ * `retyped`). A replayed serve cut apart leaves a serve called in with the
+ * same server's serve right after it: that earlier serve is a let
+ * (`result: "let"`, `isLetServe`), which clears "Serve after a serve in
+ * play". A fault and its replay cut apart both read as a first serve: when
+ * exactly two serves that are not lets remain, the first in video order
+ * becomes `first_serve` and the second `second_serve`. Any other count is
+ * left as it is.
+ *
  * Pure: the console runs `applyPointCombine`, `point-combine-session.ts` runs
  * `planPointCombine`.
  */
@@ -21,11 +38,17 @@ import {
   type Planned,
   type PointDeleteWrite,
 } from "./operations";
+import { applyLabelShotPatch, letResultError } from "./edit";
+import type { LabelShotResult } from "./seed";
 import {
+  isServeStroke,
   orderLabelShots,
   type LabelEnding,
   type LabelPoint,
+  type LabelShot,
+  type LabelShotStatus,
   type LabelSide,
+  type LabelStroke,
 } from "./session";
 
 export type CombineDirection = "above" | "below";
@@ -46,7 +69,32 @@ export type CombinablePoint = Pick<
   | "ending"
   | "endedBy"
   | "vendorRallyIds"
-> & { shots: readonly Pick<LabelPoint["shots"][number], "id">[] };
+> & { shots: readonly CombinableShot[] };
+
+/**
+ * What the plan reads of a shot: its id, and for the serve retype its stroke,
+ * status and place in video order. A `LabelShot` satisfies it.
+ */
+export type CombinableShot = Pick<LabelShot, "id"> &
+  Partial<
+    Pick<
+      LabelShot,
+      "stroke" | "status" | "videoTime" | "eventId" | "hitter" | "result"
+    >
+  >;
+
+/**
+ * A stroke the combine relabels: a serve as first or second, or a let; a
+ * misread serve as an overhead; a moved stroke's hitter, swapped.
+ */
+export interface CombineRetype {
+  shotId: string;
+  patch: {
+    stroke?: Extract<LabelStroke, "first_serve" | "second_serve" | "overhead">;
+    result?: "let";
+    hitter?: LabelSide | null;
+  };
+}
 
 export interface CombineKeptWrite {
   winner: LabelSide | null;
@@ -65,13 +113,92 @@ export interface PointCombinePlan {
   movedShotIds: string[];
   kept: CombineKeptWrite;
   removed: PointDeleteWrite;
+  /** Serves relabelled (`combineServeRetypes`), in video order. */
+  retyped: CombineRetype[];
+}
+
+/**
+ * The serves of the joined strokes to relabel, in video order, each named
+ * only when something changes:
+ *
+ * - a live serve called `in` whose next live stroke is a serve by the same
+ *   hitter was replayed: it becomes a let (`result: "let"`) — what "Serve
+ *   after a serve in play" reads;
+ * - then, when exactly two live serves that are not lets remain, the first
+ *   is the first serve and the second the second.
+ */
+export function combineServeRetypes(
+  shots: readonly CombinableShot[],
+): CombineRetype[] {
+  const live = orderLabelShots(
+    shots
+      .filter((shot) => shot.status !== "deleted")
+      .map((shot) => ({
+        ...shot,
+        videoTime: shot.videoTime ?? null,
+        eventId: shot.eventId ?? null,
+      })),
+  );
+  const patches = new Map<string, CombineRetype["patch"]>();
+  live.forEach((shot, i) => {
+    const next = live[i + 1];
+    if (
+      isServeStroke(shot.stroke) &&
+      shot.result === "in" &&
+      next &&
+      isServeStroke(next.stroke) &&
+      next.hitter === shot.hitter
+    ) {
+      patches.set(shot.id, { result: "let" });
+    }
+  });
+  const serves = live.filter(
+    (shot) =>
+      isServeStroke(shot.stroke) &&
+      shot.result !== "let" &&
+      !patches.has(shot.id),
+  );
+  if (serves.length === 2) {
+    const order = ["first_serve", "second_serve"] as const;
+    serves.forEach((shot, i) => {
+      if (shot.stroke !== order[i]) patches.set(shot.id, { stroke: order[i] });
+    });
+  }
+  return live.flatMap((shot) => {
+    const patch = patches.get(shot.id);
+    return patch ? [{ shotId: shot.id, patch }] : [];
+  });
+}
+
+/**
+ * Why the combine may not write `retyped`, or null when it may: each retype
+ * judged with `letResultError` as it would leave its row (`shots`, the rows
+ * as read). `combineServeRetypes` only ever sets a let on a serve, so this
+ * never refuses today; it keeps that true however the retypes change, ahead
+ * of the `label_shots_let_serve_only` check that would otherwise refuse the
+ * write after the shots had moved.
+ */
+export function combineRetypeError(
+  retyped: readonly CombineRetype[],
+  shots: readonly CombinableShot[],
+): string | null {
+  for (const { shotId, patch } of retyped) {
+    const shot = shots.find((s) => s.id === shotId);
+    const error = letResultError(patch, {
+      stroke: shot?.stroke ?? null,
+      result: shot?.result ?? null,
+    });
+    if (error) return error;
+  }
+  return null;
 }
 
 /**
  * The live neighbour `direction` of `pointId` — the nearest live point
- * before or after it in `point_index` order — when it is in the same game.
- * Null otherwise: a tombstone is not a neighbour, and a point of another
- * game is not one to combine with.
+ * before or after it in `point_index` order — when it is in the same set: in
+ * the same game, or the neighbouring one (`crossesGame`). Null otherwise: a
+ * tombstone is not a neighbour, and a point of another set is not one to
+ * combine with.
  */
 export function combineNeighbour<
   T extends Pick<LabelPoint, "id" | "status" | "setNumber" | "gameNumber">,
@@ -86,19 +213,89 @@ export function combineNeighbour<
   const neighbour = live[direction === "above" ? at - 1 : at + 1];
   if (!neighbour) return null;
   const self = live[at];
-  if (
-    neighbour.setNumber !== self.setNumber ||
-    neighbour.gameNumber !== self.gameNumber
-  ) {
-    return null;
-  }
+  if (neighbour.setNumber !== self.setNumber) return null;
   return neighbour;
+}
+
+/** Whether the two points sit in different games: the later part's frame flips. */
+export function crossesGame(
+  a: Pick<LabelPoint, "setNumber" | "gameNumber">,
+  b: Pick<LabelPoint, "setNumber" | "gameNumber">,
+): boolean {
+  return a.setNumber !== b.setNumber || a.gameNumber !== b.gameNumber;
+}
+
+const other = (side: LabelSide | null | undefined): LabelSide | null =>
+  side === "p1" ? "p2" : side === "p2" ? "p1" : null;
+
+/** The live strokes of a part, lets set aside, in video order. */
+function liveStrokes(shots: readonly CombinableShot[]): CombinableShot[] {
+  return orderLabelShots(
+    shots
+      .filter((shot) => shot.status !== "deleted" && shot.result !== "let")
+      .map((shot) => ({
+        ...shot,
+        videoTime: shot.videoTime ?? null,
+        eventId: shot.eventId ?? null,
+      })),
+  );
+}
+
+/**
+ * Whether the part's rally was in play when it was cut: its last serve was
+ * called in, at least one stroke that is not a serve follows it, and the last of
+ * them did not miss. A fault with dead-ball swings after it is not, nor is a
+ * rally that ended on a ball out or in the net.
+ */
+export function rallyInPlay(shots: readonly CombinableShot[]): boolean {
+  const live = liveStrokes(shots);
+  const lastServe = live.findLastIndex((shot) => isServeStroke(shot.stroke));
+  if (lastServe === -1) return false;
+  const serve = live[lastServe];
+  // Only a serve called in starts a rally; one not called yet says nothing.
+  if (serve.result !== "in") return false;
+  const after = live.slice(lastServe + 1);
+  if (!after.some((shot) => !isServeStroke(shot.stroke))) return false;
+  // A rally whose last ball missed was already over: what follows is a serve.
+  const last = after.at(-1);
+  return last?.result !== "out" && last?.result !== "net";
+}
+
+/**
+ * The later part's strokes as they join the earlier: across a game each
+ * hitter swapped; after a rally in play, its leading serve an overhead by the
+ * player whose turn it was. Each change keyed by stroke id.
+ */
+export function combineCarryOver(
+  earlier: readonly CombinableShot[],
+  later: readonly CombinableShot[],
+  acrossGame: boolean,
+): Map<string, CombineRetype["patch"]> {
+  const patches = new Map<string, CombineRetype["patch"]>();
+  if (acrossGame) {
+    for (const shot of later) {
+      if (shot.hitter === undefined || shot.hitter === null) continue;
+      patches.set(shot.id, { hitter: other(shot.hitter) });
+    }
+  }
+  const lead = liveStrokes(later)[0];
+  if (lead && isServeStroke(lead.stroke) && rallyInPlay(earlier)) {
+    const last = liveStrokes(earlier).at(-1);
+    const turn = other(last?.hitter);
+    patches.set(lead.id, {
+      ...patches.get(lead.id),
+      stroke: "overhead",
+      ...(turn ? { hitter: turn } : {}),
+    });
+  }
+  return patches;
 }
 
 /**
  * Plan the combine of `pointId` with its neighbour `direction`. Refused when
- * the point is not a live point of `points`, and when it has no live
- * neighbour that way in its own game.
+ * the point is not a live point of `points`, when it has no live neighbour
+ * that way in its own game, and when a serve retype would leave a let on a
+ * stroke that is not a serve (`combineRetypeError`).
  */
 export function planPointCombine(
   points: readonly CombinablePoint[],
@@ -117,8 +314,8 @@ export function planPointCombine(
     return {
       error:
         direction === "above"
-          ? "There is no point of this game above it to combine with."
-          : "There is no point of this game below it to combine with.",
+          ? "There is no point of this set above it to combine with."
+          : "There is no point of this set below it to combine with.",
     };
   }
   const [earlier, later] =
@@ -127,6 +324,30 @@ export function planPointCombine(
       : [point, neighbour];
   const removed = planPointDelete(later);
   if ("error" in removed) return removed;
+  const acrossGame = crossesGame(earlier, later);
+  const carried = combineCarryOver(earlier.shots, later.shots, acrossGame);
+  const asCarried = (shot: CombinableShot): CombinableShot => {
+    const patch = carried.get(shot.id);
+    return patch ? { ...shot, ...patch } : shot;
+  };
+  const joined = [...earlier.shots, ...later.shots.map(asCarried)];
+  const serves = new Map(
+    combineServeRetypes(joined).map((r) => [r.shotId, r.patch]),
+  );
+  // One patch per stroke, in video order: what the carry-over set, then the
+  // serve's own relabel on top.
+  const retyped: CombineRetype[] = orderLabelShots(
+    joined.map((shot) => ({
+      ...shot,
+      videoTime: shot.videoTime ?? null,
+      eventId: shot.eventId ?? null,
+    })),
+  ).flatMap((shot) => {
+    const patch = { ...carried.get(shot.id), ...serves.get(shot.id) };
+    return Object.keys(patch).length > 0 ? [{ shotId: shot.id, patch }] : [];
+  });
+  const retypeError = combineRetypeError(retyped, joined);
+  if (retypeError) return { error: retypeError };
   return {
     ok: true,
     write: {
@@ -136,13 +357,15 @@ export function planPointCombine(
       kept: {
         winner: later.winner,
         ending: later.ending,
-        ended_by: later.endedBy,
+        // Who ended it is read off the hitters, which a game boundary swaps.
+        ended_by: acrossGame ? other(later.endedBy) : later.endedBy,
         vendor_rally_ids: [
           ...new Set([...earlier.vendorRallyIds, ...later.vendorRallyIds]),
         ],
         status: earlier.status === "added" ? "added" : "edited",
       },
       removed: removed.write,
+      retyped,
     },
   };
 }
@@ -157,7 +380,8 @@ export function isCombinedTombstone(
 /**
  * The console's rows after the combine: the later point's shots join the
  * earlier one in video order (their `labelPointId` follows), the earlier
- * takes the plan's fields, and the later is a tombstone with no shots.
+ * takes the plan's fields and its retyped serves (status as an edit would set
+ * it), and the later is a tombstone with no shots.
  * `points` keep their order; nothing renumbers.
  */
 export function applyPointCombine(
@@ -179,7 +403,10 @@ export function applyPointCombine(
         endedBy: plan.kept.ended_by,
         vendorRallyIds: plan.kept.vendor_rally_ids,
         status: plan.kept.status,
-        shots: orderLabelShots([...point.shots, ...moved]),
+        shots: orderLabelShots([...point.shots, ...moved]).map((shot) => {
+          const retype = plan.retyped.find((r) => r.shotId === shot.id);
+          return retype ? applyLabelShotPatch(shot, retype.patch) : shot;
+        }),
       };
     }
     if (point.id === plan.removedId) {
@@ -209,6 +436,14 @@ export function withdrawPointCombine(
 export interface PointCombineSaved {
   kept: { id: string } & CombineKeptWrite;
   removed: { id: string } & PointDeleteWrite;
+  /** Each relabelled stroke as written: its stroke, result, hitter and status. */
+  retyped: {
+    id: string;
+    stroke: LabelStroke | null;
+    result: LabelShotResult | null;
+    hitter: LabelSide | null;
+    status: LabelShotStatus;
+  }[];
 }
 
 export function settlePointCombine(
@@ -224,6 +459,18 @@ export function settlePointCombine(
         endedBy: saved.kept.ended_by,
         vendorRallyIds: saved.kept.vendor_rally_ids,
         status: saved.kept.status,
+        shots: point.shots.map((shot) => {
+          const written = saved.retyped.find((r) => r.id === shot.id);
+          return written
+            ? {
+                ...shot,
+                stroke: written.stroke,
+                result: written.result,
+                hitter: written.hitter,
+                status: written.status,
+              }
+            : shot;
+        }),
       };
     }
     if (point.id === saved.removed.id) {

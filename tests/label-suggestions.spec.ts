@@ -9,6 +9,7 @@ import {
   type LabelMarks,
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
+import { markState } from "@/lib/services/labels/marks-state";
 import { planAddedShot } from "@/lib/services/labels/operations";
 import type {
   LabelPoint,
@@ -161,6 +162,62 @@ test.describe("suggestionState", () => {
     expect(suggestionState(SUGGESTION, undone)).toBe("open");
   });
 
+  test("done once the pair's first stroke is out or in the net", () => {
+    const ruled = (fields: Partial<LabelShot>): LabelPoint => {
+      const point = pairPoint();
+      return {
+        ...point,
+        shots: point.shots.map((s) =>
+          s.eventId === 502 ? { ...s, ...fields } : s,
+        ),
+      };
+    };
+    expect(suggestionState(SUGGESTION, ruled({ result: "out" }))).toBe("done");
+    expect(suggestionState(SUGGESTION, ruled({ result: "net" }))).toBe("done");
+    expect(suggestionState(SUGGESTION, ruled({ result: "in" }))).toBe("open");
+
+    // Placed coordinates outrank a stale stored call: long past the far
+    // baseline is out whatever `result` still says, and a landing inside the
+    // court keeps it open whatever it says.
+    const placedLong = {
+      contactX: 1,
+      contactY: 2,
+      landingX: 1,
+      landingY: 26,
+    };
+    expect(
+      suggestionState(SUGGESTION, ruled({ ...placedLong, result: "in" })),
+    ).toBe("done");
+    expect(
+      suggestionState(
+        SUGGESTION,
+        ruled({ ...placedLong, landingY: 20, result: "out" }),
+      ),
+    ).toBe("open");
+
+    // A deleted stroke answers nothing, nor does another stroke going out.
+    expect(
+      suggestionState(
+        SUGGESTION,
+        ruled({ result: "out", status: "deleted", statusBeforeDelete: "kept" }),
+      ),
+    ).toBe("open");
+    const point = pairPoint();
+    const laterOut: LabelPoint = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.eventId === 504 ? { ...s, result: "out" } : s,
+      ),
+    };
+    expect(suggestionState(SUGGESTION, laterOut)).toBe("open");
+
+    // The "Same side twice" mark settles with its slot.
+    expect(markState(pairMark(), pairPoint(), [SUGGESTION])).toBe("open");
+    expect(markState(pairMark(), ruled({ result: "out" }), [SUGGESTION])).toBe(
+      "settled",
+    );
+  });
+
   test("dismissed by its own key only, and done outranks dismissed", () => {
     const point = pairPoint();
     expect(suggestionState(SUGGESTION, { ...point, dismissed: [KEY] })).toBe(
@@ -188,6 +245,19 @@ test.describe("suggestionState", () => {
 });
 
 test.describe("planDismiss", () => {
+  test("“Did the point end here?” is dismissed by its stroke's id — not a draft's", () => {
+    const key = "point_ended:3f1c2a9e-7b1d-4c2e-9a51-0b6f7d2e8c40";
+    expect(planDismiss({ dismissed: [] }, key)).toEqual({
+      ok: true,
+      write: { dismissed: [key] },
+    });
+    for (const refused of ["point_ended:", "point_ended:pending-shot-3"]) {
+      expect(planDismiss({ dismissed: [] }, refused), refused).toEqual({
+        error: "That is not a suggestion this point can dismiss.",
+      });
+    }
+  });
+
   test("appends the key to the array read", () => {
     expect(planDismiss({ dismissed: [] }, KEY)).toEqual({
       ok: true,

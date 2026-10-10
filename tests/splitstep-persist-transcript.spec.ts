@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/splitstep/derivation";
 import {
   buildTranscriptForJob,
+  persistTranscript,
   playerMappingFlipped,
   resolveAdScoring,
 } from "@/lib/services/splitstep/persist-transcript";
@@ -228,5 +229,138 @@ test.describe("playerMappingFlipped: a rebuild may not swap the players", () => 
       server_is_player1: !p.server_is_player1,
     }));
     expect(playerMappingFlipped(stored, elsewhere)).toBe(false);
+  });
+});
+
+/**
+ * A stand-in for the whole persist path: the job and match reads, the stored
+ * results, the two `points` counts (imported rows, then hand-labelled rows)
+ * and the delete. The delete answers with an error, so a run that gets past
+ * the guards stops there without needing the inserts stubbed.
+ */
+function persistClient(counts: { imported: number; labelled: number }) {
+  const calls: { table: string; op: string; contains?: unknown }[] = [];
+  const client = {
+    from(table: string) {
+      const call: { table: string; op: string; contains?: unknown } = {
+        table,
+        op: "select",
+      };
+      calls.push(call);
+      const answer = async () => {
+        if (call.op === "delete") {
+          return { error: { message: "stop after the guards" } };
+        }
+        if (table === "points") {
+          return {
+            count: call.contains ? counts.labelled : counts.imported,
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      };
+      const builder = {
+        select: () => builder,
+        delete: () => {
+          call.op = "delete";
+          return builder;
+        },
+        eq: () => builder,
+        contains: (_column: string, value: unknown) => {
+          call.contains = value;
+          return builder;
+        },
+        single: async () => ({
+          data:
+            table === "processing_jobs"
+              ? { ...JOB, ad_scoring: true }
+              : { ...MATCH, format: { ad_scoring: true, best_of: 3 } },
+          error: null,
+        }),
+        then: (
+          resolve: (v: unknown) => unknown,
+          reject?: (e: unknown) => unknown,
+        ) => answer().then(resolve, reject),
+      };
+      return builder;
+    },
+    storage: {
+      from: () => ({
+        download: async () => ({
+          data: { text: async () => JSON.stringify(clean) },
+          error: null,
+        }),
+      }),
+    },
+  };
+  return {
+    calls,
+    supabase: client as unknown as ReturnType<typeof createAdminClient>,
+  };
+}
+
+test.describe("persistTranscript: hand labels are not overwritten", () => {
+  test("refuses, before the delete, when a point is flagged hand_labelled", async () => {
+    const { calls, supabase } = persistClient({ imported: 0, labelled: 56 });
+    const out = await persistTranscript({ supabase, jobId: "job" });
+
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.failure).toBe("refused");
+    expect(out.labelsProtected).toBe(true);
+    expect(out.reason).toContain("allowOverwriteLabels");
+    expect(calls.find((c) => c.op === "delete")).toBeUndefined();
+    expect(calls.find((c) => c.contains)?.contains).toEqual(["hand_labelled"]);
+  });
+
+  test("allowOverwriteLabels skips the check and reaches the delete", async () => {
+    const { calls, supabase } = persistClient({ imported: 0, labelled: 56 });
+    const out = await persistTranscript({
+      supabase,
+      jobId: "job",
+      allowOverwriteLabels: true,
+    });
+
+    expect(calls.find((c) => c.contains)).toBeUndefined();
+    expect(calls.find((c) => c.op === "delete")).toBeDefined();
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.labelsProtected).toBeUndefined();
+    expect(out.reason).toContain("stop after the guards");
+  });
+
+  test("a match with no hand labels passes the check", async () => {
+    const { calls, supabase } = persistClient({ imported: 0, labelled: 0 });
+    const out = await persistTranscript({ supabase, jobId: "job" });
+
+    expect(calls.find((c) => c.op === "delete")).toBeDefined();
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.labelsProtected).toBeUndefined();
+  });
+
+  test("a dry run says up front that the write would be refused, and deletes nothing", async () => {
+    const { calls, supabase } = persistClient({ imported: 0, labelled: 56 });
+    const out = await persistTranscript({
+      supabase,
+      jobId: "job",
+      dryRun: true,
+    });
+
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.labelsProtected).toBe(true);
+    expect(calls.find((c) => c.op === "delete")).toBeUndefined();
+  });
+
+  test("a dry run on a match with no hand labels still succeeds", async () => {
+    const { supabase } = persistClient({ imported: 0, labelled: 0 });
+    const out = await persistTranscript({
+      supabase,
+      jobId: "job",
+      dryRun: true,
+    });
+
+    expect(out.ok).toBe(true);
   });
 });

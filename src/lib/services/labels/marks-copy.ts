@@ -29,17 +29,19 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   result_type_unknown: "Ending unknown",
   net_hit_contradicts_height: "Net or out?",
   serve_fault: "Serve fault?",
-  shot_after_point_end: "Point ended here",
-  ending_stale: "Ending looks stale",
+  shot_after_point_end: "Did the point end here?",
+  ending_stale: "Different ending?",
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
   last_shot_unresolved: "Ending can’t be read",
   serve_after_serve_in: "Serve after a serve in play",
   pick_winner: "Pick the winner",
+  last_call_overruled: "Was the last ball in?",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
   score_frozen: "Score not read",
+  segment_proposal_differs: "Game cut differs",
   geometry_discarded: "No position",
 };
 
@@ -67,24 +69,78 @@ function endingPhrase(
   return `${ENDING_PHRASE[ending]}${by}`;
 }
 
+/** An ending as the start of a question: "Ace", "Double fault". */
+const ENDING_NOUN: Record<LabelEnding, string> = {
+  ace: "Ace",
+  service_winner: "Service winner",
+  double_fault: "Double fault",
+  winner: "Winner",
+  error: "Error",
+  let_replayed: "Let, replayed",
+  not_a_point: "Not a point",
+};
+
+/** Whose ending it reads as: a service winner is the server's, though the receiver's miss ends it. */
+function endingOwner(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  winner: LabelSide | null,
+): LabelSide | null {
+  return ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+}
+
 /**
- * The hint's words on the quiet line: its label, and for "Point ended here"
- * how many strokes came after the ball was out.
+ * "Different ending?" as the question it is: the ending the strokes add up to,
+ * asked — "Ace by Stephenson?". A question, as the other hints are: the
+ * strokes can be the thing that is wrong.
  */
-export function hintLabel(mark: LabelMark): string {
+export function staleEndingQuestion(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  names: MarkNames,
+  winner: LabelSide | null = null,
+): string {
+  const who = endingOwner(ending, endedBy, winner);
+  const by = who ? ` by ${names[who]}` : "";
+  return `${ENDING_NOUN[ending]}${by}?`;
+}
+
+/** Its answer, naming the change: "Make it an ace". */
+export function staleEndingAction(ending: LabelEnding): string {
+  return `Make it ${ENDING_PHRASE[ending]}`;
+}
+
+/**
+ * The hint's words on the quiet line: its label, and for "Did the point end
+ * here?" how many strokes followed the ball called out. A question: the call
+ * can be wrong by a few centimetres.
+ */
+export function hintLabel(mark: LabelMark, names?: MarkNames): string {
+  if (mark.code === "ending_stale" && names) {
+    return staleEndingQuestion(
+      mark.params.ending,
+      mark.params.endedBy,
+      names,
+      mark.params.winner,
+    );
+  }
   const label = MARK_LABEL[mark.code];
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
-  return `${label} · ${n} ${n === 1 ? "shot" : "shots"} after it`;
+  return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;
 }
 
 /** The action a live hint offers, by code; the rest offer none. */
 export const HINT_ACTION_LABEL = {
-  ending_stale: "Use it",
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
 } as const;
+
+/** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
+export function lastCallAction(call: "in" | "out" | "net"): string {
+  return call === "net" ? "Make it a net" : `Make it ${call}`;
+}
 
 /** "Point ended here"'s other answer: drop the N strokes after the out ball. */
 export function removeAfterLabel(count: number): string {
@@ -150,9 +206,9 @@ export function findGapDescription(
 }
 
 /**
- * The hover line for the mark's code, with the players' names. Four lines have
- * a second form: a mark whose side or score the derivation could not read, and
- * a removal of more than one shot.
+ * The hover line for the mark's code, with the players' names. Five lines have
+ * a second form: a mark whose side, score or proposal the derivation could not
+ * read (or a proposed merge), and a removal of more than one shot.
  */
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {
@@ -186,12 +242,20 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
-      return "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.";
+      return "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.";
+    case "last_call_overruled": {
+      if (mark.params.vendorCall === "in") {
+        return "The last ball is out by its landing, but the vendor called it in. Watch the bounce: if it was in, change the result.";
+      }
+      const call = mark.params.vendorCall === "net" ? "in the net" : "out";
+      return `The last ball is in by its landing, but the vendor called it ${call}. Watch the bounce: if it was ${call}, change the result.`;
+    }
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {
-      const { ending, endedBy } = mark.params;
-      return `The strokes say ${endingPhrase(ending, endedBy, names)}.`;
+      const { ending, endedBy, winner } = mark.params;
+      const who = endingOwner(ending, endedBy, winner);
+      return `The shots add up to ${endingPhrase(ending, who, names)}, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.`;
     }
     case "second_serve_as_first":
       return "Follows a faulted serve, so it is the second serve.";
@@ -213,9 +277,19 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         ? "The vendor called this ball out, but the rally went on, so it’s stored as in."
         : `The vendor called this ball out, but ${names[mark.params.nextHitter]} played the next shot, so it’s stored as in.`;
     case "winner_guessed":
-      return "The score couldn’t be read here, so the winner comes from the last shot. That guess is right about 4 times in 5.";
+      return "The score couldn’t be read here, so the winner comes from the last shot. That guess has been wrong about half the time, so check who won.";
     case "score_frozen":
       return "The vendor’s score stopped updating. The game and server come from where the serve was hit. The score is left blank.";
+    case "segment_proposal_differs": {
+      const { proposedGame, proposedServer, mergedWith } = mark.params;
+      if (mergedWith !== null) {
+        return "Re-cutting the games from the score would join this rally to the one beside it. Nothing was changed.";
+      }
+      if (proposedGame === null || proposedServer === null) {
+        return "Re-cutting the games from the score puts this point somewhere else. Nothing was changed.";
+      }
+      return `Re-cutting the games from the score puts this point in game ${proposedGame}, served by ${names[proposedServer]}. Nothing was changed.`;
+    }
     case "geometry_discarded":
       return "The vendor placed this shot outside the court enclosure, so its position was dropped.";
   }

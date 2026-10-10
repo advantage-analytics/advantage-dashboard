@@ -11,6 +11,9 @@ import { writeLabelPointRestore } from "@/lib/services/labels/operations-session
 import {
   applyPointCombine,
   combineNeighbour,
+  rallyInPlay,
+  combineRetypeError,
+  combineServeRetypes,
   isCombinedTombstone,
   planPointCombine,
   settlePointCombine,
@@ -20,11 +23,14 @@ import {
   combineLabelPoints,
   writeLabelPointCombine,
 } from "@/lib/services/labels/point-combine-session";
+import { applyLabelShotPatch } from "@/lib/services/labels/edit";
+import { serveAfterServeIn } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
   fakeLabelClient,
   labelSessionFixture,
+  labelShot,
   labelShotRow,
   noop,
   ROW_OPERATIONS,
@@ -43,24 +49,34 @@ const NAMES = { p1: "Lee", p2: "Vargas" };
 const points = () => labelSessionFixture().points;
 const pointOf = (id: string) => points().find((p) => p.id === id)!;
 
-/** The fixture after point 2 is combined into point 1, as the console does it. */
-function combined(): LabelPoint[] {
+/** The plan to combine point 2 into point 1. */
+function planned() {
   const plan = planPointCombine(points(), P2, "above");
   if ("error" in plan) throw new Error(plan.error);
-  return applyPointCombine(points(), plan.write);
+  return plan.write;
+}
+
+/** The fixture after point 2 is combined into point 1, as the console does it. */
+function combined(): LabelPoint[] {
+  return applyPointCombine(points(), planned());
 }
 
 // ── The plan ───────────────────────────────────────────────────────────────
 
 test.describe("combineNeighbour", () => {
-  test("the nearest live point that way, in the same game — a tombstone is skipped, another game is not a neighbour", () => {
+  test("the nearest live point that way, in the same set — a tombstone is skipped, the next game's point is a neighbour", () => {
     expect(combineNeighbour(points(), P2, "above")?.id).toBe(P1);
     expect(combineNeighbour(points(), P1, "below")?.id).toBe(P2);
     expect(combineNeighbour(points(), P1, "above")).toBeNull();
     // Below point 2: the tombstone is skipped, and point 4 is game 2.
-    expect(combineNeighbour(points(), P2, "below")).toBeNull();
-    expect(combineNeighbour(points(), P4, "above")).toBeNull();
+    expect(combineNeighbour(points(), P2, "below")?.id).toBe(P4);
+    expect(combineNeighbour(points(), P4, "above")?.id).toBe(P2);
     expect(combineNeighbour(points(), P4, "below")).toBeNull();
+    // Another set is not a neighbour.
+    const otherSet = points().map((p) =>
+      p.id === P4 ? { ...p, setNumber: 2 } : p,
+    );
+    expect(combineNeighbour(otherSet, P2, "below")).toBeNull();
     expect(combineNeighbour(points(), P3, "above")).toBeNull();
     expect(combineNeighbour(points(), "nope", "above")).toBeNull();
   });
@@ -80,6 +96,9 @@ test.describe("planPointCombine", () => {
         status: "edited",
       },
       removed: { status: "deleted", status_before_delete: "unchanged" },
+      // The fixture's two points each open on a first serve: joined, the
+      // later one is the second.
+      retyped: [{ shotId: "s-ace", patch: { stroke: "second_serve" } }],
     };
     // From either side, the same plan.
     expect(planPointCombine(points(), P2, "above")).toEqual({
@@ -111,7 +130,7 @@ test.describe("planPointCombine", () => {
     });
   });
 
-  test("refused: a missing or deleted point, and no live neighbour of the same game that way", () => {
+  test("refused: a missing or deleted point, and no live neighbour of the same set that way", () => {
     expect(planPointCombine(points(), "nope", "above")).toEqual({
       error: "The point to combine is not a point of this session.",
     });
@@ -119,18 +138,442 @@ test.describe("planPointCombine", () => {
       error: "Restore this point before combining it.",
     });
     expect(planPointCombine(points(), P1, "above")).toEqual({
-      error: "There is no point of this game above it to combine with.",
+      error: "There is no point of this set above it to combine with.",
     });
-    expect(planPointCombine(points(), P2, "below")).toEqual({
-      error: "There is no point of this game below it to combine with.",
-    });
-    expect(planPointCombine(points(), P4, "above")).toMatchObject({
-      error: expect.stringContaining("above"),
+    expect(planPointCombine(points(), P4, "below")).toEqual({
+      error: "There is no point of this set below it to combine with.",
     });
   });
 });
 
+test.describe("across a game", () => {
+  type Shot = {
+    id: string;
+    stroke: "first_serve" | "second_serve" | "forehand" | "backhand";
+    hitter: "p1" | "p2";
+    result: "in" | "out" | null;
+  };
+  const part = (
+    id: string,
+    pointIndex: number,
+    gameNumber: number,
+    shots: Shot[],
+    endedBy: "p1" | "p2" | null = null,
+  ) => ({
+    id,
+    pointIndex,
+    status: "unchanged" as const,
+    setNumber: 1,
+    gameNumber,
+    winner: null,
+    ending: null,
+    endedBy,
+    vendorRallyIds: [],
+    shots: shots.map((shot, i) => ({
+      ...shot,
+      status: "kept" as const,
+      videoTime: pointIndex * 10 + i,
+      eventId: pointIndex * 10 + i,
+    })),
+  });
+
+  test("the later part's hitters and who ended it swap; a rally in play makes its serve an overhead by the player whose turn it was", () => {
+    const earlier = part("e", 0, 1, [
+      { id: "e1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "e2", stroke: "forehand", hitter: "p2", result: "in" },
+      { id: "e3", stroke: "backhand", hitter: "p1", result: "in" },
+    ]);
+    // Tagged as the next game's service game: Vargas (p2) serving.
+    const later = part(
+      "l",
+      1,
+      2,
+      [
+        { id: "l1", stroke: "first_serve", hitter: "p2", result: "in" },
+        { id: "l2", stroke: "forehand", hitter: "p2", result: "out" },
+      ],
+      "p2",
+    );
+    const plan = planPointCombine([earlier, later], "l", "above");
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.retyped).toEqual([
+      // Lee hit e3, so the overhead is Vargas's.
+      { shotId: "l1", patch: { hitter: "p2", stroke: "overhead" } },
+      { shotId: "l2", patch: { hitter: "p1" } },
+    ]);
+    expect(plan.write.kept.ended_by).toBe("p1");
+  });
+
+  test("a fault with one or two swings after it is no rally: the later serve is the second serve, by the server", () => {
+    for (const swings of [1, 2]) {
+      const earlier = part(
+        "e",
+        0,
+        1,
+        [
+          { id: "e1", stroke: "first_serve", hitter: "p1", result: "out" },
+          { id: "e2", stroke: "forehand", hitter: "p2", result: null },
+          { id: "e3", stroke: "backhand", hitter: "p1", result: null },
+        ].slice(0, 1 + swings) as Shot[],
+      );
+      const later = part("l", 1, 2, [
+        { id: "l1", stroke: "first_serve", hitter: "p2", result: "in" },
+      ]);
+      const plan = planPointCombine([earlier, later], "l", "above");
+      if ("error" in plan) throw new Error(plan.error);
+      expect(plan.write.retyped, String(swings)).toEqual([
+        { shotId: "l1", patch: { hitter: "p1", stroke: "second_serve" } },
+      ]);
+    }
+  });
+
+  test("a rally that ended on a miss is over: the later serve stays a serve", () => {
+    const earlier = part("e", 0, 1, [
+      { id: "e1", stroke: "first_serve", hitter: "p1", result: "in" },
+      { id: "e2", stroke: "forehand", hitter: "p2", result: "out" },
+    ]);
+    const later = part("l", 1, 1, [
+      { id: "l1", stroke: "first_serve", hitter: "p1", result: "in" },
+    ]);
+    expect(rallyInPlay(earlier.shots)).toBe(false);
+    const plan = planPointCombine([earlier, later], "l", "above");
+    if ("error" in plan) throw new Error(plan.error);
+    // Same game: nothing swaps, and no overhead.
+    expect(plan.write.retyped.some((r) => r.patch.stroke === "overhead")).toBe(
+      false,
+    );
+    expect(plan.write.retyped.some((r) => "hitter" in r.patch)).toBe(false);
+  });
+});
+
+test.describe("combineServeRetypes", () => {
+  const serve = (
+    id: string,
+    stroke: "first_serve" | "second_serve" | "forehand",
+    videoTime: number,
+    status: "kept" | "deleted" = "kept",
+  ) => ({ id, stroke, videoTime, eventId: null, status });
+
+  test("exactly two live serves: the first in video order is the first serve, the second the second", () => {
+    // Listed out of order: video order decides, not the list.
+    expect(
+      combineServeRetypes([
+        serve("b", "first_serve", 12),
+        serve("r", "forehand", 13),
+        serve("a", "first_serve", 4),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // Both wrong way round: both named.
+    expect(
+      combineServeRetypes([
+        serve("a", "second_serve", 4),
+        serve("b", "first_serve", 12),
+      ]),
+    ).toEqual([
+      { shotId: "a", patch: { stroke: "first_serve" } },
+      { shotId: "b", patch: { stroke: "second_serve" } },
+    ]);
+  });
+
+  test("nothing when the pair is already right, or there are not exactly two live serves", () => {
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("b", "second_serve", 12),
+      ]),
+    ).toEqual([]);
+    // Three, none of them called in before a replay: no let to read, so
+    // nothing is relabelled.
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("b", "first_serve", 8),
+        serve("c", "first_serve", 12),
+      ]),
+    ).toEqual([]);
+    expect(combineServeRetypes([serve("a", "first_serve", 4)])).toEqual([]);
+    // A tombstoned serve is not one of the two.
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("x", "first_serve", 6, "deleted"),
+        serve("b", "first_serve", 12),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    expect(
+      combineServeRetypes([
+        serve("a", "first_serve", 4),
+        serve("x", "first_serve", 6, "deleted"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+test.describe("combineServeRetypes: a replayed serve is a let", () => {
+  const stroke = (
+    id: string,
+    fields: {
+      stroke: "first_serve" | "second_serve" | "forehand" | "backhand";
+      hitter: "p1" | "p2";
+      result?: "in" | "out" | "net" | "let" | null;
+      videoTime: number;
+      status?: "kept" | "deleted";
+    },
+  ) => ({
+    id,
+    eventId: null,
+    status: "kept" as const,
+    result: null,
+    ...fields,
+  });
+
+  test("a serve called in with the same server's serve right after it becomes a let; the replay keeps its stroke", () => {
+    expect(
+      combineServeRetypes([
+        stroke("let", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("replay", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+        stroke("ret", {
+          stroke: "forehand",
+          hitter: "p2",
+          result: "in",
+          videoTime: 10,
+        }),
+      ]),
+    ).toEqual([{ shotId: "let", patch: { result: "let" } }]);
+  });
+
+  test("a let, then a fault and its second serve: the let, then first and second", () => {
+    expect(
+      combineServeRetypes([
+        stroke("let", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("fault", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "out",
+          videoTime: 9,
+        }),
+        stroke("second", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 14,
+        }),
+      ]),
+    ).toEqual([
+      { shotId: "let", patch: { result: "let" } },
+      { shotId: "second", patch: { stroke: "second_serve" } },
+    ]);
+  });
+
+  test("not a let: a fault before the replay, the other player's serve, a stroke between, or one already a let", () => {
+    // A fault and its second serve: the two-serve rule, no let.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "out",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // The other player serving next is another point, not a replay.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p2",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // A return between them: the serve was played on.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("r", {
+          stroke: "backhand",
+          hitter: "p2",
+          result: "in",
+          videoTime: 2,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "b", patch: { stroke: "second_serve" } }]);
+    // Already a let: left alone, and not one of the two.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "let",
+          videoTime: 1,
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([]);
+    // A deleted serve between is not a stroke of the rally.
+    expect(
+      combineServeRetypes([
+        stroke("a", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 1,
+        }),
+        stroke("x", {
+          stroke: "backhand",
+          hitter: "p2",
+          videoTime: 2,
+          status: "deleted",
+        }),
+        stroke("b", {
+          stroke: "first_serve",
+          hitter: "p1",
+          result: "in",
+          videoTime: 9,
+        }),
+      ]),
+    ).toEqual([{ shotId: "a", patch: { result: "let" } }]);
+  });
+
+  test("the combined rows no longer raise Serve after a serve in play", () => {
+    const P = "p-0001";
+    const rows = [
+      labelShot("let", P, {
+        stroke: "first_serve",
+        hitter: "p1",
+        result: "in",
+        videoTime: 1,
+      }),
+      labelShot("replay", P, {
+        stroke: "first_serve",
+        hitter: "p1",
+        result: "in",
+        videoTime: 9,
+      }),
+    ];
+    expect(serveAfterServeIn({ shots: rows }, true)).not.toBeNull();
+    const [retype] = combineServeRetypes(rows);
+    const after = rows.map((s) =>
+      s.id === retype.shotId ? applyLabelShotPatch(s, retype.patch) : s,
+    );
+    expect(after[0]).toMatchObject({ result: "let", status: "edited" });
+    expect(serveAfterServeIn({ shots: after }, true)).toBeNull();
+  });
+});
+
 // ── The console's rows ─────────────────────────────────────────────────────
+
+test.describe("combineRetypeError: a let only on a serve", () => {
+  const LET = "Only a serve can be a let.";
+
+  test("refuses a crafted retype that would leave a let on a stroke that is not a serve", () => {
+    // A let set on a forehand.
+    expect(
+      combineRetypeError(
+        [{ shotId: "f", patch: { result: "let" } }],
+        [{ id: "f", stroke: "forehand", result: "in" }],
+      ),
+    ).toBe(LET);
+    // A let on a row with no stroke.
+    expect(
+      combineRetypeError(
+        [{ shotId: "n", patch: { result: "let" } }],
+        [{ id: "n", stroke: null, result: "in" }],
+      ),
+    ).toBe(LET);
+    // A stroke-only retype leaves the stored let judged by the new stroke:
+    // a serve, so it stands.
+    expect(
+      combineRetypeError(
+        [{ shotId: "s", patch: { stroke: "second_serve" } }],
+        [{ id: "s", stroke: "first_serve", result: "let" }],
+      ),
+    ).toBeNull();
+  });
+
+  test("passes every retype combineServeRetypes plans: the let, then first and second", () => {
+    const shots = [
+      {
+        id: "let",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "in" as const,
+        videoTime: 1,
+        eventId: null,
+        status: "kept" as const,
+      },
+      {
+        id: "fault",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "out" as const,
+        videoTime: 9,
+        eventId: null,
+        status: "kept" as const,
+      },
+      {
+        id: "second",
+        stroke: "first_serve" as const,
+        hitter: "p1" as const,
+        result: "in" as const,
+        videoTime: 14,
+        eventId: null,
+        status: "kept" as const,
+      },
+    ];
+    const retyped = combineServeRetypes(shots);
+    expect(retyped).toEqual([
+      { shotId: "let", patch: { result: "let" } },
+      { shotId: "second", patch: { stroke: "second_serve" } },
+    ]);
+    expect(combineRetypeError(retyped, shots)).toBeNull();
+  });
+});
 
 test.describe("the console's rows", () => {
   test("applyPointCombine merges the shots in video order, moves the fields, empties the later row; withdrawPointCombine puts both back", () => {
@@ -151,8 +594,15 @@ test.describe("the console's rows", () => {
       "s-ace",
     ]);
     expect(kept.shots.every((s) => s.labelPointId === P1)).toBe(true);
-    // Statuses travel untouched; the moved ace is still kept.
-    expect(kept.shots.at(-1)?.status).toBe("kept");
+    // Statuses travel untouched, but for a retyped serve: the moved ace is
+    // the second serve now, an edit off its seed.
+    expect(kept.shots.map((s) => [s.stroke, s.status])).toEqual([
+      ["first_serve", "kept"],
+      ["backhand", "edited"],
+      ["forehand", "deleted"],
+      ["forehand", "added"],
+      ["second_serve", "edited"],
+    ]);
     expect(kept).toMatchObject({
       winner: "p1",
       ending: "ace",
@@ -179,6 +629,7 @@ test.describe("the console's rows", () => {
 
   test("settlePointCombine confirms both rows as written", () => {
     const after = combined();
+    const aceHitter = after[0].shots.find((s) => s.id === "s-ace")!.hitter;
     const settled = settlePointCombine(after, {
       kept: {
         id: P1,
@@ -189,8 +640,32 @@ test.describe("the console's rows", () => {
         status: "edited",
       },
       removed: { id: P2, status: "deleted", status_before_delete: "unchanged" },
+      retyped: [
+        {
+          id: "s-ace",
+          stroke: "second_serve",
+          result: "in",
+          hitter: aceHitter,
+          status: "edited",
+        },
+      ],
     });
     expect(settled).toEqual(after);
+    // The server's word on a retype wins over the optimistic one.
+    const kept = settlePointCombine(after, {
+      kept: { id: P1, ...planned().kept },
+      removed: { id: P2, ...planned().removed },
+      retyped: [
+        {
+          id: "s-ace",
+          stroke: "second_serve",
+          result: "in",
+          hitter: aceHitter,
+          status: "kept",
+        },
+      ],
+    })[0];
+    expect(kept.shots.find((s) => s.id === "s-ace")?.status).toBe("kept");
   });
 
   test("the emptied tombstone cannot be restored: the plan refuses, the row is left alone", () => {
@@ -330,8 +805,13 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_shots") {
-      return call.columns === "id"
-        ? { data: rows.shots ?? [{ id: SHOT(1) }], error: null }
+      // Both points' rows, read for the move and the serve retype (or a
+      // restore's ids); then the kept point's alone, for its ending.
+      return call.in?.label_point_id || call.columns === "id"
+        ? {
+            data: rows.shots ?? [labelShotRow(SHOT(1), UUID(2))],
+            error: null,
+          }
         : { data: rows.endingShots ?? [], error: null };
     }
     return undefined;
@@ -364,6 +844,7 @@ test.describe("writeLabelPointCombine", () => {
         status: "deleted",
         status_before_delete: "unchanged",
       },
+      retyped: [],
     });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_points", "select"],
@@ -378,8 +859,8 @@ test.describe("writeLabelPointCombine", () => {
       ["label_shots", "select"],
       ["label_points", "select"],
     ]);
-    // The later point's shots are the ones read; then the kept point's.
-    expect(fake.calls[3].filters).toEqual({ label_point_id: UUID(2) });
+    // Both points' shots are read; then the kept point's.
+    expect(fake.calls[3].in).toEqual({ label_point_id: [UUID(1), UUID(2)] });
     expect(fake.calls[7].filters).toEqual({ label_point_id: UUID(1) });
     const [move, kept, removed] = writes(fake);
     expect(move).toEqual({
@@ -453,6 +934,119 @@ test.describe("writeLabelPointCombine", () => {
       op: "update",
       values: { ending: "service_winner", ended_by: "p2", status: "edited" },
       filters: { id: UUID(1), updated_at: "2026-10-01T10:00:00+00:00" },
+    });
+  });
+
+  test("two serves joined: each retyped serve is written compare-and-set with its status, before the ending is read", async () => {
+    const fake = fakeClient({
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          result: "out",
+          video_time: 1,
+        }),
+        // Seeded a first serve: relabelled, it is an edit off its seed.
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+        labelShotRow(SHOT(3), UUID(2), {
+          hitter: "p2",
+          stroke: "forehand",
+          video_time: 6,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      retyped: [
+        {
+          id: SHOT(2),
+          stroke: "second_serve",
+          result: "in",
+          status: "edited",
+        },
+      ],
+    });
+    expect(fake.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
+      ["label_shots", "update"],
+      ["label_points", "update"],
+      ["label_points", "update"],
+      ["label_shots", "update"],
+      ["label_shots", "select"],
+      ["label_points", "select"],
+    ]);
+    const [move, , , retype] = writes(fake);
+    expect(move.in).toEqual({ id: [SHOT(2), SHOT(3)] });
+    expect(retype).toEqual({
+      table: "label_shots",
+      op: "update",
+      values: { stroke: "second_serve", status: "edited" },
+      filters: { id: SHOT(2), status: "kept" },
+    });
+
+    // The retype raced: reported, and the ending is not read.
+    const raced = fakeClient({
+      racedId: SHOT(2),
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          result: "net",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+      ],
+    });
+    expect(
+      await writeLabelPointCombine({
+        supabase: raced.supabase,
+        pointId: UUID(2),
+        direction: "above",
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    expect(raced.calls.at(-1)).toMatchObject({
+      table: "label_shots",
+      op: "update",
+    });
+  });
+
+  test("a replayed serve joined: the serve called in is written a let, compare-and-set, and answered with its result", async () => {
+    const fake = fakeClient({
+      shots: [
+        labelShotRow(SHOT(1), UUID(1), {
+          stroke: "first_serve",
+          video_time: 1,
+        }),
+        labelShotRow(SHOT(2), UUID(2), {
+          stroke: "first_serve",
+          video_time: 5,
+        }),
+      ],
+    });
+    const result = await writeLabelPointCombine({
+      supabase: fake.supabase,
+      pointId: UUID(2),
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      retyped: [
+        { id: SHOT(1), stroke: "first_serve", result: "let", status: "edited" },
+      ],
+    });
+    expect(writes(fake)[3]).toEqual({
+      table: "label_shots",
+      op: "update",
+      values: { result: "let", status: "edited" },
+      filters: { id: SHOT(1), status: "kept" },
     });
   });
 
@@ -536,7 +1130,12 @@ test.describe("writeLabelPointCombine", () => {
     expect("error" in frozen).toBe(true);
     expect(writes(complete)).toEqual([]);
 
-    const lonely = fakeClient({});
+    // Point 2's next live point is game 2's — in another set here.
+    const lonely = fakeClient({
+      points: POINT_ROWS.map((row) =>
+        row.game_number === 2 ? { ...row, set_number: 2 } : row,
+      ),
+    });
     expect(
       await writeLabelPointCombine({
         supabase: lonely.supabase,
@@ -544,7 +1143,7 @@ test.describe("writeLabelPointCombine", () => {
         direction: "below",
       }),
     ).toEqual({
-      error: "There is no point of this game below it to combine with.",
+      error: "There is no point of this set below it to combine with.",
     });
     expect(writes(lonely)).toEqual([]);
   });
@@ -626,15 +1225,15 @@ function menuActions(
 }
 
 test.describe("the ⋯ menu", () => {
-  test("Combine with point above / below: only towards a live neighbour of the same game, each naming the two numbers", () => {
+  test("Combine with point above / below: only towards a live neighbour of the same set, each naming the two numbers", () => {
     const two = menuActions(pointOf(P2), points());
     expect(two.combineAbove?.description).toBe("Point 2's shots join point 1");
-    expect(two.combineBelow).toBeNull();
+    expect(two.combineBelow?.description).toBe("Point 4's shots join point 2");
     const one = menuActions(pointOf(P1), points());
     expect(one.combineAbove).toBeNull();
     expect(one.combineBelow?.description).toBe("Point 2's shots join point 1");
     const four = menuActions(pointOf(P4), points());
-    expect(four.combineAbove).toBeNull();
+    expect(four.combineAbove?.description).toBe("Point 4's shots join point 2");
     expect(four.combineBelow).toBeNull();
   });
 
@@ -699,8 +1298,9 @@ test("a render of the console with a combined point writes nothing and draws the
   expect(black).toContain("Combined into the point above");
   expect(black).toContain('aria-label="Undo delete point 3"');
   expect(black).not.toContain('aria-label="Undo delete point 2"');
-  // The kept point's well holds the moved ace as its fifth stroke.
-  expect(black).toContain('aria-label="Shot 4 stroke: First serve"');
+  // The kept point's well holds the moved ace as its fifth stroke, the
+  // second serve now.
+  expect(black).toContain('aria-label="Shot 4 stroke: Second serve"');
   const light = renderToStaticMarkup(
     React.createElement(LabelConsole, {
       session,

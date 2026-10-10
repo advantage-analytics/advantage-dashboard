@@ -90,7 +90,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildSplitStepJobRequest } from "./job-request";
+import { buildSplitStepJobRequest, vendorRequestRecord } from "./job-request";
 import type { SplitStepJobRequest } from "./job-request";
 import { parseWebhookPayload } from "./webhook-payload";
 import { resolveSplitstepDeploymentConfig } from "./deployment-config";
@@ -767,21 +767,32 @@ export async function resubmitJob(params: {
   }
 
   // 8. Submit. Mirrors api/splitstep/jobs steps 7–8 — annotated there too.
+  let posted = false;
   try {
-    await supabase
+    // Checked: a write that fails here would otherwise leave the child at
+    // `uploaded` with no billable seconds and no recorded body while the
+    // vendor still got the job. Throwing hands the reservation back instead.
+    const { error: submittingError } = await supabase
       .from("processing_jobs")
       .update({
         status: "submitting",
         billable_seconds: billableSeconds,
         attempt_count: 1,
+        vendor_request: vendorRequestRecord(vendorRequest),
       })
       .eq("id", childId);
+    if (submittingError) {
+      throw new Error(
+        `Could not record the submission: ${submittingError.message}`,
+      );
+    }
 
     const vendorUrl = await io.mintVendorUrl({
       jobId: childId,
       objectKey: parent.video_object_key,
     });
 
+    posted = true;
     const response = await io.submitToVendor({
       apiUrl: config.apiUrl,
       apiKey: config.apiKey,
@@ -893,7 +904,12 @@ export async function resubmitJob(params: {
     }
     await supabase
       .from("processing_jobs")
-      .update({ status: "failed", error_message: message })
+      .update({
+        status: "failed",
+        error_message: message,
+        // Never sent, so not a record of anything — see the submit route.
+        ...(posted ? {} : { vendor_request: null }),
+      })
       .eq("id", childId);
 
     return {

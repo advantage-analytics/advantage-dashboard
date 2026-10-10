@@ -135,6 +135,10 @@ export interface GamePullSummary {
   swapped: number;
 }
 
+/** What the console says when a pull answers `add_point` instead of a plan. */
+export const GAME_PULL_ADD_POINT =
+  "This game looks short of a point, not holding the next game's — add the missing point.";
+
 export type PlannedGamePull =
   | {
       ok: true;

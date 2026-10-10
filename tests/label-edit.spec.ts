@@ -4,11 +4,13 @@ import {
   LABEL_POINT_EDIT_FIELDS,
   LABEL_POINT_SEED_FIELDS,
   LABEL_SHOT_EDIT_FIELDS,
+  LABEL_SHOT_RESULTS,
   LABEL_SPINS,
   applyLabelShotPatch,
   labelPointStatusAfterPatch,
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
+  letResultError,
   parseLabelShotPatch,
   sameShotValue,
   labelPointStatusAfterChange,
@@ -120,10 +122,80 @@ test.describe("shot values", () => {
     expect(parseLabelShotPatch({ stroke: "volley" })).toHaveProperty("error");
     expect(parseLabelShotPatch({ result: "net" })).toHaveProperty("ok");
     expect(parseLabelShotPatch({ result: "In" })).toHaveProperty("error");
+    expect(LABEL_SHOT_RESULTS).toEqual(["in", "out", "net", "let"]);
     expect(parseLabelShotPatch({ result: null })).toEqual({
       ok: true,
       patch: { result: null },
     });
+  });
+
+  test("a let is a serve's result and nothing else's", () => {
+    // Judged on the patch's own stroke when it carries one.
+    expect(
+      parseLabelShotPatch({ result: "let", stroke: "first_serve" }),
+    ).toEqual({ ok: true, patch: { result: "let", stroke: "first_serve" } });
+    expect(
+      parseLabelShotPatch({ result: "let", stroke: "second_serve" }),
+    ).toHaveProperty("ok");
+    expect(parseLabelShotPatch({ result: "let", stroke: "forehand" })).toEqual({
+      error: "Only a serve can be a let.",
+    });
+    expect(parseLabelShotPatch({ result: "let", stroke: null })).toEqual({
+      error: "Only a serve can be a let.",
+    });
+    // With no stroke in the patch the parser cannot judge; the write does,
+    // against the stored row.
+    expect(parseLabelShotPatch({ result: "let" })).toEqual({
+      ok: true,
+      patch: { result: "let" },
+    });
+    expect(letResultError({ result: "let" })).toBeNull();
+    expect(
+      letResultError({ result: "let" }, { stroke: "second_serve" }),
+    ).toBeNull();
+    expect(letResultError({ result: "let" }, { stroke: "backhand" })).toBe(
+      "Only a serve can be a let.",
+    );
+    expect(letResultError({ result: "let" }, { stroke: null })).toBe(
+      "Only a serve can be a let.",
+    );
+    // A let serve retyped off a serve without its result cleared is refused;
+    // with the result sent along (the rail's `strokeChangePatch`) it passes.
+    expect(
+      letResultError(
+        { stroke: "forehand" },
+        { stroke: "first_serve", result: "let" },
+      ),
+    ).toBe("Only a serve can be a let.");
+    expect(
+      letResultError(
+        { stroke: "forehand", result: "net" },
+        { stroke: "first_serve", result: "let" },
+      ),
+    ).toBeNull();
+    expect(
+      letResultError(
+        { stroke: "forehand" },
+        { stroke: "first_serve", result: "in" },
+      ),
+    ).toBeNull();
+    // The patch's stroke wins over the stored one, either way.
+    expect(
+      letResultError(
+        { result: "let", stroke: "first_serve" },
+        { stroke: "forehand" },
+      ),
+    ).toBeNull();
+    expect(
+      letResultError(
+        { result: "let", stroke: "forehand" },
+        { stroke: "first_serve" },
+      ),
+    ).toBe("Only a serve can be a let.");
+    // Any other result is never refused on the stroke.
+    expect(
+      letResultError({ result: "out" }, { stroke: "forehand" }),
+    ).toBeNull();
   });
 
   test("spin is one of the four, lower-case, or null", () => {
@@ -687,6 +759,34 @@ test.describe("updateLabelShot (editLabelShot)", () => {
     expect(fake.calls).toEqual([]);
   });
 
+  test("refuses a let on a stored rally stroke, and writes one on a serve", async () => {
+    // The seeded row is a backhand: a let on it is refused before any write.
+    const rally = fakeClient({ shot: shotRow() });
+    expect(
+      await writeLabelShotEdit({
+        supabase: rally.supabase,
+        shotId: SHOT_ID,
+        patch: { result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+    expect(updates(rally)).toEqual([]);
+
+    const serve = fakeClient({
+      shot: shotRow({ stroke: "second_serve" }),
+      shots: [],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: serve.supabase,
+      shotId: SHOT_ID,
+      patch: { result: "let" },
+    });
+    expect(result).toMatchObject({ ok: true, status: "edited" });
+    expect(updates(serve)[0]).toMatchObject({
+      table: "label_shots",
+      values: { result: "let", status: "edited" },
+    });
+  });
+
   test("writes the patch and the edited status to label_shots only", async () => {
     const fake = fakeClient({ shot: shotRow() });
     const result = await writeLabelShotEdit({
@@ -1237,6 +1337,54 @@ test.describe("a rally ball marked out takes the one or two strokes after it", (
         table: "label_points",
         op: "update",
         values: { ending: "service_winner", ended_by: "p2", status: "edited" },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+  });
+
+  test("a second serve marked out is a double fault: the return goes as hit after the fault, and the receiver wins", async () => {
+    // Lee's first serve out, his second serve, Vargas's return. The second
+    // serve placed long: the return was a swing at a dead ball.
+    const fake = fakeClient({
+      shot: shotRow({ hitter: "p1", stroke: "second_serve", result: "in" }),
+      shots: [
+        pointShot(SERVE_ID, {
+          stroke: "first_serve",
+          result: "out",
+          video_time: 1,
+        }),
+        pointShot(SHOT_ID, { stroke: "second_serve", video_time: 2 }),
+        pointShot(AFTER_1, { hitter: "p2", stroke: "forehand", video_time: 3 }),
+      ],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.5, landing_y: 22, result: "out" },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      removedAfter: [{ id: AFTER_1, statusBeforeDelete: "kept" }],
+      point: { ending: "double_fault", endedBy: "p1", winner: "p2" },
+    });
+    expect(updates(fake).slice(1)).toEqual([
+      {
+        ...tombstone(AFTER_1),
+        values: {
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "dead_ball_after_fault",
+        },
+      },
+      {
+        table: "label_points",
+        op: "update",
+        values: {
+          ending: "double_fault",
+          ended_by: "p1",
+          winner: "p2",
+          status: "edited",
+        },
         filters: { id: POINT_ID, updated_at: UPDATED_AT },
       },
     ]);

@@ -38,7 +38,17 @@ import {
   shotResult,
   type ResultType,
 } from "./result-type";
-import { lastStrokeWinner, resolvePointWinners } from "./winners";
+import {
+  lastStrokeWinner,
+  resolvePointWinners,
+  type PointWinner,
+} from "./winners";
+import {
+  proposeSegmentation,
+  type RallyOutcome,
+  type SegmentationInput,
+  type SegmentationProposal,
+} from "./segmentation";
 import { collapsedTailStart, opponentOf } from "./rallies";
 import { frozenGameStarts, frozenStretches, withServer } from "./frozen";
 import { playedRally } from "./played";
@@ -124,6 +134,14 @@ export interface Transcript {
   guessedRallies: number[];
   /** Rallies inside a frozen stretch, games read from the serve. */
   frozenRallies: number[];
+  /**
+   * The score-constrained segmenter's proposal (segmentation.ts). Review-only:
+   * it never changes a published row, it only adds
+   * `segment_proposal_differs` to the points it disagrees with. Null when the
+   * segmenter had no score or top player to work from, when the transcript
+   * was refused, or when the segmenter threw.
+   */
+  segmentation: SegmentationProposal | null;
 }
 
 /**
@@ -198,6 +216,223 @@ function geometryTopLabel(
   return best;
 }
 
+/**
+ * The segmenter's proposal for one rally, in the published rows' terms.
+ *
+ * `ProposedGame.game` is numbered per set; `points.game_number` is
+ * match-cumulative, so the two cannot be compared as they are. This converts
+ * once, for both the transcript's flagging and the labelling console's marks,
+ * so the two never disagree about which points differ.
+ */
+export interface ProposedPoint {
+  set: number;
+  /** Match-cumulative, like `points.game_number`. */
+  game: number;
+  server: "player1" | "player2";
+  /** The rally this one would be consumed with as a single point, if any. */
+  mergedWith: number | null;
+}
+
+/** The fields of a published row the proposal is compared against. */
+export interface ProposalComparableRow {
+  rally_id: number;
+  set_number: number;
+  game_number: number;
+  server_is_player1: boolean;
+}
+
+/**
+ * The rallies the proposal would cut differently from the published rows: half
+ * of a proposed merge, another server, or a rally the proposal moves to
+ * another game. The one test behind `segment_proposal_differs` and the
+ * label-session scoring's "fired".
+ *
+ * "Moves to another game" is judged against counterparts, not numbers: game
+ * numbers are match-cumulative, so one boundary moved early renumbers every
+ * later game without moving a rally. Each proposed game is paired with the
+ * published game it shares the most rallies with, and a rally differs when its
+ * published game is not its proposed game's counterpart — so a boundary moved
+ * by one rally flags that rally alone, and two published games joined into one
+ * flag only the smaller one's rallies.
+ *
+ * The pairing is one-to-one, greedy by overlap (largest first; ties to the
+ * earliest published game, then the earliest proposed game). Without it, a
+ * published game the proposal splits in two would be both halves'
+ * counterpart and the split would flag nothing; with it, the larger half keeps
+ * the counterpart and the smaller half's rallies are flagged. A proposed game
+ * left with no counterpart flags all its rallies.
+ *
+ * Only rows the proposal covers take part, on either side.
+ */
+export function proposalDifferingRallies(
+  proposed: ReadonlyMap<number, ProposedPoint>,
+  rows: readonly ProposalComparableRow[],
+): Set<number> {
+  const publishedKey = (row: ProposalComparableRow) =>
+    `${row.set_number}|${row.game_number}`;
+  const proposedKey = (p: ProposedPoint) => `${p.set}|${p.game}`;
+
+  // Play order of each game's first covered rally, for tie-breaks.
+  const publishedOrder = new Map<string, number>();
+  const proposedOrder = new Map<string, number>();
+  // proposed key -> published key -> shared covered rallies.
+  const overlap = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const p = proposed.get(row.rally_id);
+    if (!p) continue;
+    const pub = publishedKey(row);
+    const pro = proposedKey(p);
+    if (!publishedOrder.has(pub)) publishedOrder.set(pub, publishedOrder.size);
+    if (!proposedOrder.has(pro)) proposedOrder.set(pro, proposedOrder.size);
+    const counts = overlap.get(pro) ?? new Map<string, number>();
+    counts.set(pub, (counts.get(pub) ?? 0) + 1);
+    overlap.set(pro, counts);
+  }
+
+  const pairs: Array<{ pro: string; pub: string; n: number }> = [];
+  for (const [pro, counts] of overlap) {
+    for (const [pub, n] of counts) pairs.push({ pro, pub, n });
+  }
+  pairs.sort(
+    (a, b) =>
+      b.n - a.n ||
+      publishedOrder.get(a.pub)! - publishedOrder.get(b.pub)! ||
+      proposedOrder.get(a.pro)! - proposedOrder.get(b.pro)!,
+  );
+  const counterpart = new Map<string, string>();
+  const claimed = new Set<string>();
+  for (const { pro, pub } of pairs) {
+    if (counterpart.has(pro) || claimed.has(pub)) continue;
+    counterpart.set(pro, pub);
+    claimed.add(pub);
+  }
+
+  const differing = new Set<number>();
+  for (const row of rows) {
+    const p = proposed.get(row.rally_id);
+    if (!p) continue;
+    if (
+      p.mergedWith !== null ||
+      (p.server === "player1") !== row.server_is_player1 ||
+      counterpart.get(proposedKey(p)) !== publishedKey(row)
+    ) {
+      differing.add(row.rally_id);
+    }
+  }
+  return differing;
+}
+
+/**
+ * `rallyIds` in play order — rally ids rise with play, and a proposed game is
+ * an id range, so one forward walk places every rally. A rally outside every
+ * proposed game (a no_fit path that died early) has no entry.
+ */
+export function proposedPointsOf(
+  proposal: SegmentationProposal,
+  rallyIds: readonly number[],
+): Map<number, ProposedPoint> {
+  const gamesInSet = new Map<number, number>();
+  for (const game of proposal.games) {
+    gamesInSet.set(game.set, (gamesInSet.get(game.set) ?? 0) + 1);
+  }
+  const gamesBefore = (set: number) => {
+    let n = 0;
+    for (const [s, count] of gamesInSet) if (s < set) n += count;
+    return n;
+  };
+  const mergedWith = new Map<number, number>();
+  for (const [a, b] of proposal.merges) {
+    mergedWith.set(a, b);
+    mergedWith.set(b, a);
+  }
+
+  const out = new Map<number, ProposedPoint>();
+  const games = proposal.games;
+  let g = 0;
+  for (const rallyId of rallyIds) {
+    while (g < games.length && rallyId > games[g].lastRallyId) g += 1;
+    const game = games[g];
+    if (!game || rallyId < game.firstRallyId) continue;
+    out.set(rallyId, {
+      set: game.set,
+      game: gamesBefore(game.set) + game.game,
+      server: game.server,
+      mergedWith: mergedWith.get(rallyId) ?? null,
+    });
+  }
+  return out;
+}
+
+/**
+ * The segmenter's input, from what the transcript already holds, and its
+ * proposal. Review-only: a throw is logged and dropped, never a refusal.
+ *
+ * The rallies are the ones the rows were built from — frozen relabelling
+ * applied, phantom strokes removed — so the proposal's `diff` is against the
+ * PUBLISHED server, not the vendor's raw label. Who won relative to the server
+ * does not change under a label swap, so the outcomes read off the settled
+ * winners stay valid. A guessed or frozen winner is low confidence; a winner
+ * the stream or the fold named is high.
+ */
+function segmentForReview(args: {
+  rallies: readonly SplitStepRally[];
+  settled: readonly PointWinner[];
+  frozenRallies: ReadonlySet<number>;
+  gameKeyOf: ReadonlyMap<number, string>;
+  score: MatchScore;
+  adScoring: boolean;
+  bestOf: number;
+  labels: readonly string[];
+  player1: string;
+  initialTopIsPlayer1: boolean | null;
+  segmenter: (input: SegmentationInput) => SegmentationProposal;
+}): SegmentationProposal | null {
+  const { rallies, settled, frozenRallies, gameKeyOf, player1 } = args;
+  const player2 = args.labels.find((label) => label !== player1);
+  if (args.initialTopIsPlayer1 === null || player2 === undefined) return null;
+
+  const outcomes: RallyOutcome[] = rallies.map((rally, i) => {
+    const winner = settled[i]?.winner ?? null;
+    return {
+      won:
+        winner === null
+          ? null
+          : winner === rally.server
+            ? "server"
+            : "receiver",
+      confidence:
+        settled[i]?.via === "guess" || frozenRallies.has(rally.rallyId)
+          ? "low"
+          : "high",
+    };
+  });
+  const vendorGameStarts = rallies.map(
+    (rally, i) =>
+      i === 0 ||
+      gameKeyOf.get(rally.rallyId) !== gameKeyOf.get(rallies[i - 1].rallyId),
+  );
+  const input: SegmentationInput = {
+    rallies,
+    outcomes,
+    vendorGameStarts,
+    adScoring: args.adScoring,
+    bestOf: args.bestOf,
+    score: args.score,
+    topAtStart: args.initialTopIsPlayer1 ? player1 : player2,
+    player1Label: player1,
+    player2Label: player2,
+  };
+  try {
+    return args.segmenter(input);
+  } catch (error) {
+    console.error(
+      "[splitstep] segmentation threw; the proposal is dropped and the rows stand",
+      error,
+    );
+    return null;
+  }
+}
+
 export interface BuildOptions {
   rallies: SplitStepRally[];
   labels: string[];
@@ -216,6 +451,13 @@ export interface BuildOptions {
    * to what the strokes file alone can say.
    */
   lineCalls?: LineCalls;
+  /**
+   * Test seam for the review-only segmenter. Omit in production:
+   * `proposeSegmentation` runs. `null` skips it, so a test can check that the
+   * published rows are identical with and without it; a function stands in
+   * for it, so a test can force a throw.
+   */
+  segmenter?: ((input: SegmentationInput) => SegmentationProposal) | null;
 }
 
 export function buildTranscript(options: BuildOptions): Transcript {
@@ -227,6 +469,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     adScoring = true,
     bestOf = 3,
     lineCalls: streamLineCalls,
+    segmenter = proposeSegmentation,
   } = options;
 
   const gameKeyOf = new Map<number, string>();
@@ -364,6 +607,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: 0,
     guessedRallies,
     frozenRallies: frozenList,
+    segmentation: null,
   };
 
   if (!score) {
@@ -445,6 +689,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
   let servesSeen = 0;
   let servesKept = 0;
   let unreturned = 0;
+  /** The rallies as the rows read them, for the segmenter. */
+  const keptRallies: SplitStepRally[] = [];
 
   rallies.forEach((rally, i) => {
     const key = gameKeyOf.get(rally.rallyId) ?? "";
@@ -478,6 +724,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     // the score columns read the raw rally: they come from the score stream.
     const played = playedRally(rally, { winner, lineCalls });
     const kept = played.rally;
+    keptRallies.push(kept);
     const serveIndex = lastServeIndex(kept);
     const pressure = pressureFor({
       rally,
@@ -602,6 +849,37 @@ export function buildTranscript(options: BuildOptions): Transcript {
     previousRally = rally;
   });
 
+  // Review-only. The rows above are final; the proposal only marks the points
+  // it would move to another game or give another server, and both halves of
+  // every point it would merge.
+  const segmentation =
+    segmenter === null
+      ? null
+      : segmentForReview({
+          rallies: keptRallies,
+          settled: rec.settledWinners,
+          frozenRallies,
+          gameKeyOf,
+          score,
+          adScoring,
+          bestOf,
+          labels,
+          player1,
+          initialTopIsPlayer1,
+          segmenter,
+        });
+  if (segmentation) {
+    const proposed = proposedPointsOf(
+      segmentation,
+      points.map((point) => point.rally_id),
+    );
+    const differing = proposalDifferingRallies(proposed, points);
+    for (const point of points) {
+      if (differing.has(point.rally_id))
+        point.flags.push(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS);
+    }
+  }
+
   return {
     ok: true,
     // Carries the unreconciled reason on the bypass path, so the CLI and the
@@ -614,6 +892,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
     guessedRallies,
     frozenRallies: frozenList,
+    segmentation,
   };
 }
 

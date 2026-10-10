@@ -7,6 +7,7 @@ import { markSummary } from "@/lib/services/labels/marks-state";
 import {
   liveRowMarks,
   liveScoreMarks,
+  replayedServeGap,
   withLiveScoreMarks,
   type ScoreMarkPoint,
 } from "@/lib/services/labels/score-marks";
@@ -21,6 +22,7 @@ import type {
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  labelShot,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -513,5 +515,96 @@ test.describe("the console reads them live", () => {
     expect(agreed).not.toContain("data-mark-chip");
     expect(agreed).not.toContain('data-row="suggested-point"');
     expect(agreed).toContain('aria-label="Nothing left to check"');
+  });
+});
+
+test.describe("Same side twice after a replayed serve", () => {
+  /** Strokes for point `pid`: [stroke, result, videoTime] in order. */
+  function strokes(
+    pid: string,
+    list: readonly [LabelShot["stroke"], LabelShot["result"], number][],
+  ): LabelShot[] {
+    return list.map(([stroke, result, videoTime], i) =>
+      labelShot(`${pid}-s${i}`, pid, {
+        eventId: Math.round(videoTime * 10),
+        stroke,
+        result,
+        videoTime,
+      }),
+    );
+  }
+
+  // Sage Nguyen v Hunter Cheng, rallies 25 + 26: a serve called in and a
+  // return, then the same server again from the same side 16 s later.
+  const let_ = strokes("a", [
+    ["first_serve", "in", 713.3],
+    ["backhand", "in", 714.2],
+  ]);
+  const replayed = strokes("b", [
+    ["first_serve", "in", 730.1],
+    ["backhand", "net", 730.7],
+  ]);
+
+  test("a serve called in, at most one more stroke, then a serve 8–30 s later reads as a replay", () => {
+    expect(replayedServeGap({ shots: let_ }, { shots: replayed })).toBe(16);
+  });
+
+  test("a changeover-length gap, a rally played out, a fault, or missing strokes do not", () => {
+    const later = strokes("b", [["first_serve", "in", 830]]);
+    expect(replayedServeGap({ shots: let_ }, { shots: later })).toBeNull();
+    const rally = strokes("a", [
+      ["first_serve", "in", 700],
+      ["forehand", "in", 701],
+      ["backhand", "out", 702],
+    ]);
+    expect(replayedServeGap({ shots: rally }, { shots: replayed })).toBeNull();
+    const fault = strokes("a", [["first_serve", "out", 714]]);
+    expect(replayedServeGap({ shots: fault }, { shots: replayed })).toBeNull();
+    expect(replayedServeGap({}, { shots: replayed })).toBeNull();
+  });
+
+  test("deleted strokes do not count toward the two", () => {
+    const withDead = [
+      ...let_,
+      labelShot("a-dead", "a", {
+        eventId: 7150,
+        stroke: "forehand",
+        result: "in",
+        videoTime: 715,
+        status: "deleted",
+      }),
+    ];
+    expect(replayedServeGap({ shots: withDead }, { shots: replayed })).toBe(16);
+  });
+
+  test("the missing-point suggestion carries the gap when the repeat follows a replay", () => {
+    n = 0;
+    const points = [
+      { ...point("a"), shots: let_ },
+      { ...point("b", { winner: "p2" }), shots: replayed },
+    ];
+    const marks = liveScoreMarks(points, true, { a: "deuce", b: "deuce" });
+    expect(codes(marks, "b")).toContain("service_court_repeat");
+    expect(marks.suggestions).toEqual([
+      {
+        kind: "missing_point",
+        key: "missing_point",
+        pointId: "b",
+        beforePointId: "a",
+        side: "deuce",
+        pointNumbers: [1, 2],
+        replayGap: 16,
+      },
+    ]);
+  });
+
+  test("without strokes the suggestion stays a missing point", () => {
+    n = 0;
+    const marks = liveScoreMarks(
+      [point("a"), point("b", { winner: "p2" })],
+      true,
+      { a: "deuce", b: "deuce" },
+    );
+    expect(marks.suggestions[0]).not.toHaveProperty("replayGap");
   });
 });

@@ -318,6 +318,14 @@ test.describe("label vocabulary", () => {
     expect(labelShotResult(null)).toBeNull();
   });
 
+  test("shot result never seeds a let: only In / Out / Net map", () => {
+    expect(labelShotResult("Let")).toBeNull();
+    expect(labelShotResult("let")).toBeNull();
+    expect(labelShotResult("LET")).toBeNull();
+    expect(labelShotResult("in")).toBeNull();
+    expect(labelShotResult("")).toBeNull();
+  });
+
   test("spin_type maps to the four spins, lower-cased, else null", () => {
     expect(labelSpin("topspin")).toBe("topspin");
     expect(labelSpin("Flat")).toBe("flat");

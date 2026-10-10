@@ -27,6 +27,7 @@ import {
   type Transcript,
 } from "./derivation";
 import { RESULTS_BUCKET } from "./config";
+import { HAND_LABELLED_FLAG } from "./derivation/flags";
 
 const LOG = "[splitstep:persist]";
 
@@ -43,6 +44,12 @@ export type PersistOutcome =
       reason: string;
       transcript: Transcript | null;
       failure: PersistFailure;
+      /**
+       * Refused because the match's rows were applied from hand labels
+       * (`scripts/label-apply.ts`) and `allowOverwriteLabels` was not passed.
+       * Decided before the delete, so the labelled rows are untouched.
+       */
+      labelsProtected?: true;
     };
 
 /**
@@ -269,8 +276,22 @@ export async function persistTranscript(params: {
    * The check runs before the delete, so a refusal leaves the match as it was.
    */
   keepPlayerMapping?: boolean;
+  /**
+   * Replace rows that were applied from a hand-labelling session (points
+   * flagged `hand_labelled`). Off by default: those rows are what the
+   * labeller saw on the video, and a re-derive from the vendor's file would
+   * silently put the vendor's version back. Pass it only on purpose
+   * (`scripts/splitstep-derive.ts --force-over-labels`).
+   */
+  allowOverwriteLabels?: boolean;
 }): Promise<PersistOutcome> {
-  const { supabase, jobId, dryRun = false, keepPlayerMapping = false } = params;
+  const {
+    supabase,
+    jobId,
+    dryRun = false,
+    keepPlayerMapping = false,
+    allowOverwriteLabels = false,
+  } = params;
 
   try {
     const { transcript, reason, failure, job } = await buildTranscriptForJob({
@@ -286,6 +307,35 @@ export async function persistTranscript(params: {
         transcript,
         failure: failure ?? "refused",
       };
+    }
+
+    // Refuse to overwrite hand labels. Checked before the delete, so a refusal
+    // leaves the labelled rows exactly as they were, and before the dry-run
+    // return, so a dry run says up front that --write would be refused.
+    if (!allowOverwriteLabels) {
+      const { count: labelledCount, error: labelledError } = await supabase
+        .from("points")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", job.match_id)
+        .contains("flags", [HAND_LABELLED_FLAG]);
+      if (labelledError) {
+        return {
+          ok: false,
+          reason: `could not check for hand-labelled points: ${labelledError.message}`,
+          transcript,
+          failure: "refused",
+        };
+      }
+      if ((labelledCount ?? 0) > 0) {
+        return {
+          ok: false,
+          reason:
+            "hand labels applied — pass allowOverwriteLabels to replace them",
+          transcript,
+          failure: "refused",
+          labelsProtected: true,
+        };
+      }
     }
 
     if (dryRun) {

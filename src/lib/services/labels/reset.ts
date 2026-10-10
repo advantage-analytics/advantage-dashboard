@@ -16,6 +16,7 @@
  * strokes' other values are not touched.
  */
 
+import { letResultError } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyShotSwaps,
@@ -45,7 +46,9 @@ export type PlannedPointReset =
 
 /**
  * Reset a shot to its seed. Refused for a tombstone (Undo it first), an added
- * stroke (nothing was seeded) and a vendor stroke with no stored seed.
+ * stroke (nothing was seeded), a vendor stroke with no stored seed, and a
+ * seed whose `result`/`stroke` would leave a let on a stroke that is not a
+ * serve (`letResultError`).
  */
 export function planShotReset(current: {
   status: LabelShotStatus;
@@ -63,6 +66,11 @@ export function planShotReset(current: {
         "This shot's original values were not stored, so it cannot be reset.",
     };
   }
+  // A seed never holds a let (`labelShotResult` cannot produce one), but the
+  // write puts back its stroke and result together: refused rather than
+  // leaving a let on a stroke that is not a serve.
+  const letError = letResultError(current.seed);
+  if (letError) return { error: letError };
   return { ok: true, write: { ...current.seed, status: "kept" } };
 }
 
@@ -110,6 +118,34 @@ export function canResetPoint(
   point: Pick<LabelPoint, "status" | "seed">,
 ): boolean {
   return point.status === "edited" && point.seed !== null;
+}
+
+/** What a point's Reset puts back: its own fields, and its edited strokes. */
+export interface PointResetScope {
+  /** The point's own fields go back (`canResetPoint`, and not a split half). */
+  fields: boolean;
+  /** The edited strokes with a seed, each reset as a shot is (`canResetShot`). */
+  shotIds: string[];
+}
+
+/**
+ * The point's Reset: its own fields when they changed — held back on a point
+ * that shares a vendor rally (a split's halves, `sharesVendorRally`) — and
+ * every edited stroke with a seed. Strokes the labeller added or deleted stay
+ * as they are. Null when there is nothing to put back.
+ */
+export function pointResetScope(
+  point: Pick<LabelPoint, "status" | "seed"> & {
+    shots: readonly Pick<LabelShot, "id" | "status" | "seed">[];
+  },
+  sharesRally = false,
+): PointResetScope | null {
+  const fields = canResetPoint(point) && !sharesRally;
+  const shotIds =
+    point.status === "deleted"
+      ? []
+      : point.shots.filter(canResetShot).map((shot) => shot.id);
+  return fields || shotIds.length > 0 ? { fields, shotIds } : null;
 }
 
 // ── The console's camelCase rows ────────────────────────────────────────────

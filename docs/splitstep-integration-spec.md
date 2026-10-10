@@ -172,6 +172,7 @@ Write migrations under `supabase/migrations/`. Migration-first: no code that rea
 | `submitted_at`, `queued_ack_at`, `completed_at` | timestamptz       |                                                                                                                |
 | `attempt_count`                                 | integer           | default 0                                                                                                      |
 | `error_message`                                 | text              |                                                                                                                |
+| `vendor_request`                                | jsonb             | the job body POSTed for this attempt, minus `VideoUrl`; written at `submitting`, server-only (trigger-guarded) |
 | `raw_webhook_payload`                           | jsonb             | every webhook received, appended                                                                               |
 | `derivation_version`                            | text              | version tag of the engine that produced the rows                                                               |
 | `derivation_confidence`                         | text              | `high` / `medium` / `low` — see §4.4                                                                           |

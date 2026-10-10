@@ -1,6 +1,7 @@
 import { labelShotValues } from "@/lib/services/labels/edit";
 import {
   isGhostShot,
+  isLetServe,
   isServeStroke,
   type LabelPoint,
   type LabelShot,
@@ -65,9 +66,11 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
     case null:
       return `Point ${point.pointIndex + 1}`;
     case "ace":
-    case "service_winner":
     case "double_fault":
       return `${ENDING_LABEL[ending]}${by(point.endedBy ?? point.server, names)}`;
+    // The server's, though the receiver's miss is what ended it.
+    case "service_winner":
+      return `${ENDING_LABEL[ending]}${by(point.server ?? point.endedBy, names)}`;
     case "let_replayed":
     case "not_a_point":
       return ENDING_LABEL[ending];
@@ -100,6 +103,7 @@ function titleCase(text: string): string {
  *   · the rally is `pointSummary`'s count, which includes the serve — so a
  *     point of the serve alone (an ace, a double fault) says "serve only", as
  *     does one with no stroke in its rally at all.
+ *   · live let serves close the line: "1 let", "2 lets"; none, nothing.
  * A part with nothing to say is left out, with its middot.
  */
 export function pointDetail(point: Pick<LabelPoint, "shots">): string {
@@ -127,6 +131,9 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
   const serveOnly =
     rally === 0 || (rally === 1 && !!last && isServeStroke(last.stroke));
   parts.push(serveOnly ? "serve only" : `${rally} shot rally`);
+
+  const lets = live.filter((shot) => isLetServe(shot)).length;
+  if (lets > 0) parts.push(lets === 1 ? "1 let" : `${lets} lets`);
 
   return parts.join(" · ");
 }

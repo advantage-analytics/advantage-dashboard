@@ -12,12 +12,14 @@ import {
   applyShotRestore,
   applyShotsRemoved,
   applyShotsRestored,
+  deadBallReason,
   deadBallsAfterMiss,
   destinationServerIn,
   gameServer,
   applyPointMove,
   liveShotsAfter,
   moveNeedsServerSwitch,
+  gameInSetOf,
   neighbourGames,
   planAddedShot,
   planPointChecked,
@@ -27,6 +29,7 @@ import {
   planShotDelete,
   planShotRestore,
 } from "@/lib/services/labels/operations";
+import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
 import {
   addLabelShot,
   deleteLabelPoint,
@@ -250,6 +253,94 @@ test.describe("dead balls after a ball marked out", () => {
     expect(deadBallsAfterMiss(more(2), "s-return", back, out, true)).toEqual(
       [],
     );
+  });
+
+  test("a second serve newly out or in the net is a double fault: the strokes after it go and the ending follows; a first serve's fault takes nothing", () => {
+    const P = "p-0001";
+    const rally = [
+      labelShot("df-1", P, {
+        hitter: "p1",
+        stroke: "first_serve",
+        result: "out",
+        videoTime: 10,
+      }),
+      labelShot("df-2", P, {
+        hitter: "p1",
+        stroke: "second_serve",
+        result: "in",
+        videoTime: 14,
+      }),
+      labelShot("df-3", P, {
+        hitter: "p2",
+        stroke: "forehand",
+        result: "in",
+        videoTime: 15,
+      }),
+    ];
+    const marked = (result: "out" | "net") =>
+      rally.map((s) => (s.id === "df-2" ? { ...s, result } : s));
+    const was = { result: "in" as const };
+    for (const result of ["out", "net"] as const) {
+      expect(
+        deadBallsAfterMiss(marked(result), "df-2", was, { result }, true).map(
+          (s) => s.id,
+        ),
+      ).toEqual(["df-3"]);
+    }
+    // They go as hit after the fault; a rally ball's as hit after the point.
+    expect(deadBallReason("second_serve")).toBe("dead_ball_after_fault");
+    expect(deadBallReason("forehand")).toBe("dead_ball_after_point");
+    expect(deadBallReason(undefined)).toBe("dead_ball_after_point");
+    expect(
+      applyShotsRemoved(
+        marked("out"),
+        [{ id: "df-3", statusBeforeDelete: "kept" }],
+        deadBallReason("second_serve"),
+      ).at(-1)?.deleteReason,
+    ).toBe("dead_ball_after_fault");
+    // A first serve's fault: the second serve follows it, nothing goes.
+    expect(
+      deadBallsAfterMiss(rally, "df-1", was, { result: "out" }, true),
+    ).toEqual([]);
+    // Two after a double fault go; three stay, as for a rally ball.
+    const tail = (n: number) => [
+      ...marked("out"),
+      ...Array.from({ length: n }, (_, i) =>
+        labelShot(`df-more-${i}`, P, { videoTime: 16 + i }),
+      ),
+    ];
+    expect(
+      deadBallsAfterMiss(tail(1), "df-2", was, { result: "out" }, true),
+    ).toHaveLength(2);
+    expect(
+      deadBallsAfterMiss(tail(2), "df-2", was, { result: "out" }, true),
+    ).toEqual([]);
+
+    // With the return gone, the rows read a double fault and the receiver
+    // wins: the patch the server's ending sync writes, so the score moves.
+    const after = marked("out").map((s) =>
+      s.id === "df-3"
+        ? {
+            ...s,
+            status: "deleted" as const,
+            statusBeforeDelete: "kept" as const,
+          }
+        : s,
+    );
+    expect(
+      endingPatchForShotChange(
+        { winner: "p2", shots: rally },
+        { winner: "p2", ending: "error", endedBy: "p2", shots: after },
+        true,
+      ),
+    ).toEqual({ ending: "double_fault", ended_by: "p1" });
+    expect(
+      endingPatchForShotChange(
+        { winner: "p1", shots: rally },
+        { winner: "p1", ending: "winner", endedBy: "p2", shots: after },
+        true,
+      ),
+    ).toEqual({ ending: "double_fault", ended_by: "p1", winner: "p2" });
   });
 
   test("the console's rows take the server's tombstones and restores as written", () => {
@@ -1533,4 +1624,23 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     const source = readFileSync(path.resolve(file), "utf8");
     expect(source, file).not.toMatch(/\.delete\s*\(/);
   }
+});
+
+test("a game is named by its place in its set, not the match's count", () => {
+  const at = (setNumber: number, gameNumber: number) => ({
+    status: "unchanged" as const,
+    setNumber,
+    gameNumber,
+  });
+  const points = [at(1, 1), at(1, 12), at(2, 13), at(2, 14), at(2, 23)];
+  expect(gameInSetOf(points, { setNumber: 1, gameNumber: 12 })).toBe(2);
+  expect(gameInSetOf(points, { setNumber: 2, gameNumber: 13 })).toBe(1);
+  expect(gameInSetOf(points, { setNumber: 2, gameNumber: 23 })).toBe(3);
+  // A deleted point holds no game.
+  expect(
+    gameInSetOf([...points, { ...at(2, 20), status: "deleted" as const }], {
+      setNumber: 2,
+      gameNumber: 23,
+    }),
+  ).toBe(3);
 });

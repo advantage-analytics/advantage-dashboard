@@ -13,7 +13,7 @@
  * and "Same side twice" describe the vendor's score, which the labeller is
  * correcting, so they are raised live from `serveSides` against the labelled
  * score (score-marks.ts, with "Ending can't be read"); "Point ended here",
- * "Ending looks stale", "Second serve?", "No landing on the last shot" and
+ * "Different ending?", "Second serve?", "No landing on the last shot" and
  * "Serve after a serve in play" are read off the labelled rows themselves
  * (marks-state.ts).
  *
@@ -27,12 +27,16 @@ import {
   POINT_FLAGS,
   serveCourtSide,
   SHOT_FLAGS,
+  proposedPointsOf,
   type DerivedPoint,
   type DerivedShot,
+  type ProposedPoint,
   type SplitStepRally,
+  type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import {
+  CONFIDENT_OUT_CALL,
   MAX_DEAD_TAIL,
   SIDE_DEAD_ZONE_M,
 } from "@/lib/services/splitstep/derivation/flags";
@@ -68,6 +72,12 @@ export const LABEL_ONLY_FLAGS = {
   LAST_SHOT_UNRESOLVED: "last_shot_unresolved",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /**
+   * The point's last stroke is seeded off its landing against the vendor's own
+   * call on it — In where the vendor said out or net, or Out or Net where it
+   * said in: the call that decides the point was overruled by geometry alone.
+   */
+  LAST_CALL_OVERRULED: "last_call_overruled",
 } as const;
 
 /**
@@ -80,6 +90,23 @@ export const LABEL_ONLY_FLAGS = {
  * chip only: the struck-through removed stroke is still drawn.
  * `same_player_consecutive` is counted AND keeps its missing-stroke slot; the
  * slot's "Dismiss" settles the chip (marks-state.ts `markState`).
+ *
+ * Retiered 2026-10-09 on the three fully checked sessions (259 points; base
+ * rates: winner changed 19%, ending 32%, anything 53%): `winner_guessed` is
+ * counted — the guess was wrong on 7 of 14, and a winner moves the score —
+ * while `score_frozen`, on the same points, stays hidden so a frozen stretch
+ * carries one chip, not two. `serve_fault` is hidden: 7 of 15 changed, under
+ * the base rate.
+ *
+ * Retiered 2026-10-10 on Emon van Loben Sels v Eli Stephenson (188 points):
+ * `segment_proposal_differs` is counted — 24 of its 28 points changed, most of
+ * them the set-2 tiebreak the vendor had cut into games, and none of those
+ * carried a chip before. `last_call_overruled` is new and counted: across the
+ * checked points of every session, a last rally stroke seeded In that the
+ * vendor called in the net was labelled out or net 25 times in 33, one it
+ * called out 31 in 51, and a last serve it called out 5 in 5; the other
+ * way round, a last stroke seeded Out that the vendor called in was labelled
+ * in 8 times in 11.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -90,9 +117,11 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
-  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
@@ -102,7 +131,7 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
-  [POINT_FLAGS.WINNER_GUESSED]: { tier: "hidden", scope: "point" },
+  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
   [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
   [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },
@@ -137,6 +166,11 @@ export interface LabelMarkParams {
   tiebreak_score_off_six_all: NoParams;
   result_type_unknown: NoParams;
   serve_fault: NoParams;
+  /**
+   * What the vendor called the last ball, against the seed's reading, and
+   * which stroke that ball was — the answer is written to that stroke only.
+   */
+  last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -144,7 +178,7 @@ export interface LabelMarkParams {
     after: string[];
   };
   pick_winner: NoParams;
-  /** What the strokes derive (ending-derived.ts) — the "Use it" patch. */
+  /** What the strokes derive (ending-derived.ts) — the "Make it …" patch. */
   ending_stale: {
     ending: LabelEnding;
     endedBy: LabelSide | null;
@@ -165,6 +199,18 @@ export interface LabelMarkParams {
   };
   winner_guessed: NoParams;
   score_frozen: NoParams;
+  /**
+   * The segmentation's proposal for the point (`transcript.segmentation`).
+   * `proposedGame` is match-cumulative like `points.game_number`, not the
+   * proposal's per-set number; `mergedWith` is the rally id of the neighbour
+   * it would be merged with, when it would be. All null when the transcript
+   * carries no proposal for the rally.
+   */
+  segment_proposal_differs: {
+    proposedGame: number | null;
+    proposedServer: LabelSide | null;
+    mergedWith: number | null;
+  };
   out_ball_rally_continued: { nextHitter: LabelSide | null };
   geometry_discarded: NoParams;
 }
@@ -201,6 +247,12 @@ export type LabelSuggestion =
       side: LabelServeSide;
       /** The two points as the rail numbers them (position in `points` + 1). */
       pointNumbers: [number, number];
+      /**
+       * Set when the EARLIER point reads as a replayed serve rather than a
+       * point (`replayedServeGap`): the seconds between its last stroke and
+       * the flagged point's serve. The pair is then one point, to combine.
+       */
+      replayGap?: number;
     };
 
 export interface LabelMarks {
@@ -288,6 +340,7 @@ function pointMarks(
   rally: SplitStepRally | undefined,
   settledWinner: string | null | undefined,
   sideOf: (label: string) => LabelSide,
+  proposed: ProposedPoint | null,
 ): LabelMark[] {
   const marks: LabelMark[] = [];
   const winner: LabelSide | null =
@@ -339,6 +392,17 @@ function pointMarks(
       case POINT_FLAGS.SCORE_FROZEN:
         marks.push(mark(code, {}));
         break;
+      case POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS:
+        marks.push(
+          mark(code, {
+            proposedGame: proposed?.game ?? null,
+            proposedServer: proposed
+              ? labelSideOf(proposed.server === "player1")
+              : null,
+            mergedWith: proposed?.mergedWith ?? null,
+          }),
+        );
+        break;
       default:
         // A shot-scoped or labels-only code in a point's flags is not a mark
         // on the point — nor are the two score flags, which the console
@@ -364,6 +428,28 @@ function pointMarks(
   }
   if (rally && isServeFault(rally)) {
     marks.push(mark(LABEL_ONLY_FLAGS.SERVE_FAULT, {}));
+  }
+  // The stroke that decides the point, seeded off its landing against the
+  // vendor's own call: In where it said out or net, Out or Net where it said in.
+  const last = point.shots.at(-1);
+  const called = last
+    ? rally?.strokes.find((stroke) => stroke.eventId === last.event_id)
+    : undefined;
+  if (last && called) {
+    const vendorCall = called.netHit ? "net" : called.in ? "in" : "out";
+    const seededIn = last.result === "In";
+    const seededMissed = last.result === "Out" || last.result === "Net";
+    if (
+      (seededIn && vendorCall !== "in") ||
+      (seededMissed && vendorCall === "in")
+    ) {
+      marks.push(
+        mark(LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED, {
+          vendorCall,
+          eventId: last.event_id,
+        }),
+      );
+    }
   }
   if (settledWinner === null) {
     marks.push(mark(LABEL_ONLY_FLAGS.PICK_WINNER, {}));
@@ -449,11 +535,27 @@ export function isServeFault(rally: SplitStepRally): boolean {
  * no such tail — the out ball is its last stroke, the tail is long enough to
  * be a rally, or a serve in it says a new point started (`reserve_after_in`'s
  * business).
+ *
+ * When the out ball IS the last stroke, the swing at the dead ball may itself
+ * have been called out: the cut then falls after an earlier out call, but only
+ * a confident one (`CONFIDENT_OUT_CALL`). On the three fully checked sessions
+ * (2026-10-09) that shape changed the winner on 7 of 13 points, against a base
+ * rate of 19%; with the earlier call under 0.85 it was 3 of 29, so those stay
+ * uncut.
  */
 export function withoutDeadTail(rally: SplitStepRally): SplitStepRally | null {
   const { strokes } = rally;
-  const last = strokes.findLastIndex((s) => s.strokeType !== "serve" && !s.in);
+  const isOutBall = (s: SplitStepStroke) => s.strokeType !== "serve" && !s.in;
+  let last = strokes.findLastIndex(isOutBall);
   if (last === -1) return null;
+  if (last === strokes.length - 1) {
+    last = strokes
+      .slice(0, -1)
+      .findLastIndex(
+        (s) => isOutBall(s) && (s.lineConfidence ?? 0) >= CONFIDENT_OUT_CALL,
+      );
+    if (last === -1) return null;
+  }
   const tail = strokes.slice(last + 1);
   if (tail.length === 0 || tail.length > MAX_DEAD_TAIL) return null;
   if (tail.some((s) => s.strokeType === "serve")) return null;
@@ -510,6 +612,12 @@ export function buildLabelMarks(
     for (const shot of point.shots) shotByEvent.set(shot.event_id, shot);
   }
   const player1Label = transcript.reconciliation.player1Label;
+  const proposed = transcript.segmentation
+    ? proposedPointsOf(
+        transcript.segmentation,
+        transcript.points.map((point) => point.rally_id),
+      )
+    : new Map<number, ProposedPoint>();
 
   const marks: LabelMarks = {
     points: {},
@@ -545,7 +653,13 @@ export function buildLabelMarks(
     push(
       marks.points,
       pointId,
-      pointMarks(point, rally, settledById.get(point.rally_id), sideOf),
+      pointMarks(
+        point,
+        rally,
+        settledById.get(point.rally_id),
+        sideOf,
+        proposed.get(point.rally_id) ?? null,
+      ),
     );
 
     point.shots.forEach((shot, index) => {

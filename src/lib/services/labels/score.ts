@@ -50,7 +50,7 @@ export interface LabelPointScore {
   gameInSet: number | null;
   /**
    * The score before the point, the point's server first: "30–15",
-   * "40–Ad"; raw counts in a tiebreak ("3–2"). "Game–30" once the game is
+   * "40–Ad"; in a tiebreak the raw count, player 1's first ("3–2"). "Game–30" once the game is
    * already decided by the points before it — the tell that a game boundary
    * is in the wrong place. Null when the point has no game.
    */
@@ -59,7 +59,8 @@ export interface LabelPointScore {
 
 /**
  * How a game's points leave it. `decided`: the points settle it, the score
- * the winner's points first ("4–2"; raw counts in a tiebreak, "7–5").
+ * the winner's points first ("4–2"; in a tiebreak the raw count, player 1's
+ * first, "5–7").
  * `unfinished`: they stop short of settling it, the score the server's
  * points first as the call reads ("30–40", "5–4") — or no counted point at
  * all ("0–0"). `overflow`: settled, with `extra` live rows still sitting
@@ -274,11 +275,15 @@ function decidedBy(game: GameAccumulator): LabelSide | null {
 }
 
 function formatScore(game: GameAccumulator, server: LabelSide): string {
-  const receiver = opponent(server);
-  const s = game.points[server];
-  const r = game.points[receiver];
-  if (game.gameType !== "game") return `${s}–${r}`;
+  // A tiebreak's serve changes every two points, so its count is read the one
+  // way that holds still: player 1's points first.
+  if (game.gameType !== "game") return tiebreakScore(game.points);
   return ordinaryGameScore(game.points, decidedBy(game), server);
+}
+
+/** A tiebreak's count, player 1's points first: "5–3". */
+function tiebreakScore(points: Record<LabelSide, number>): string {
+  return `${points.p1}–${points.p2}`;
 }
 
 /**
@@ -340,7 +345,7 @@ const TIEBREAK_TARGET: Record<Exclude<LabelGameType, "game">, number> = {
  * Whether the points so far have settled a tiebreak: its target reached and
  * two clear.
  */
-function tiebreakDecided(
+export function tiebreakDecided(
   points: Record<LabelSide, number>,
   type: Exclude<LabelGameType, "game">,
 ): boolean {
@@ -369,7 +374,10 @@ function gameOutcome(game: GameAccumulator): LabelGameOutcome {
     };
   }
   const { by, points } = game.won;
-  const score = `${points[by]}–${points[opponent(by)]}`;
+  const score =
+    game.gameType === "game"
+      ? `${points[by]}–${points[opponent(by)]}`
+      : tiebreakScore(points);
   if (game.extra > 0) {
     return { kind: "overflow", winner: by, score, extra: game.extra };
   }

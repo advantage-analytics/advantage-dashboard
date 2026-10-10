@@ -18,7 +18,8 @@ import { createLoader } from "./fixtures/vm-modules";
  *  - an RPC error and a throw write `DERIVATION_ERROR`;
  *  - success clears `error_code` alongside `error_message`;
  *  - an unreconciled fold merges `fold` into `derivation_quality` and keeps
- *    every key grading wrote — and a failed merge never fails the derivation.
+ *    every key grading wrote — and a failed merge never fails the derivation;
+ *  - the segmenter's proposal merges as `segmentation` without touching `fold`.
  */
 
 const JOB = "job-1";
@@ -30,6 +31,8 @@ interface FakeOptions {
   rpcError?: { fn: string; message: string };
   derivationQuality?: Record<string, unknown> | null;
   qualityReadError?: string;
+  /** Fail any update that writes `derivation_quality`. */
+  qualityWriteError?: string;
   /** The row's status — `cancelled` makes the guarded `deriving` write miss. */
   status?: string;
 }
@@ -53,6 +56,8 @@ function fakeSupabase(opts: FakeOptions = {}) {
           const hits = () =>
             neqs.every(([col, v]) => col !== "status" || status !== v);
           const settle = () => {
+            if (opts.qualityWriteError && "derivation_quality" in payload)
+              return { data: null, error: { message: opts.qualityWriteError } };
             const hit = hits();
             if (hit) updates.push(payload);
             return { data: hit ? [{ id: JOB }] : [], error: null };
@@ -103,9 +108,10 @@ function fakeSupabase(opts: FakeOptions = {}) {
   return { client, updates, rpcCalls, guards };
 }
 
-function transcript(reconciled: boolean) {
+function transcript(reconciled: boolean, segmentation?: unknown) {
   return {
     ok: true,
+    ...(segmentation === undefined ? {} : { segmentation }),
     reason: reconciled ? null : undefined,
     points: [],
     reconciliation: reconciled
@@ -157,13 +163,13 @@ function quietConsole() {
 }
 
 const written =
-  (reconciled = true) =>
+  (reconciled = true, segmentation?: unknown) =>
   async () => ({
     ok: true,
     matchId: MATCH,
     pointsWritten: 10,
     shotsWritten: 40,
-    transcript: transcript(reconciled),
+    transcript: transcript(reconciled, segmentation),
   });
 
 test.describe("deriveAndPublish error codes", () => {
@@ -339,6 +345,116 @@ test.describe("deriveAndPublish unreconciled fold", () => {
   });
 });
 
+test.describe("deriveAndPublish segmentation proposal", () => {
+  quietConsole();
+
+  const graded = { grade: "pass", checks: { rallies: true }, failures: [] };
+  const proposal = {
+    status: "fit",
+    version: 1,
+    cost: 3,
+    runnerUpCost: null,
+    games: [],
+    merges: [],
+    closestScore: null,
+    diff: { gamesMoved: 0 },
+  };
+
+  test("merges segmentation and keeps the other derivation_quality keys", async () => {
+    const { deriveAndPublish } = load(written(true, proposal));
+    const fake = fakeSupabase({ derivationQuality: graded });
+
+    const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(out.ok).toBe(true);
+    expect(fake.updates).toEqual([
+      { status: "deriving" },
+      { status: "completed", error_message: null, error_code: null },
+      { derivation_quality: { ...graded, segmentation: proposal } },
+    ]);
+  });
+
+  test("a reconciled fold with a proposal writes no fold key", async () => {
+    const { deriveAndPublish } = load(written(true, proposal));
+    const fake = fakeSupabase({ derivationQuality: graded });
+
+    await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    const quality = fake.updates
+      .filter((u) => "derivation_quality" in u)
+      .map((u) => u.derivation_quality as Record<string, unknown>);
+    expect(quality).toHaveLength(1);
+    expect("fold" in quality[0]).toBe(false);
+  });
+
+  test("a fitting proposal leaves an unreconciled fold untouched", async () => {
+    const { deriveAndPublish } = load(written(false, proposal));
+    const fake = fakeSupabase({ derivationQuality: graded });
+
+    await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    const quality = fake.updates.filter((u) => "derivation_quality" in u);
+    expect(quality).toEqual([
+      {
+        derivation_quality: {
+          ...graded,
+          fold: {
+            reconciled: false,
+            reason: "folded score does not match the entered score",
+          },
+          segmentation: proposal,
+        },
+      },
+    ]);
+  });
+
+  test("a null proposal clears a stale one from an earlier run", async () => {
+    const { deriveAndPublish } = load(written(true, null));
+    const fake = fakeSupabase({
+      derivationQuality: { ...graded, segmentation: { status: "fit" } },
+    });
+
+    await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    const write = fake.updates.find((u) => "derivation_quality" in u) as
+      { derivation_quality: Record<string, unknown> } | undefined;
+    expect(write?.derivation_quality.segmentation).toBeNull();
+    expect(write?.derivation_quality).not.toHaveProperty("fold");
+  });
+
+  test("a write error on the segmentation merge is swallowed", async () => {
+    const { deriveAndPublish, mail } = load(written(true, proposal));
+    const fake = fakeSupabase({
+      derivationQuality: graded,
+      qualityWriteError: "permission denied",
+    });
+
+    const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(out.ok).toBe(true);
+    expect(fake.updates).toEqual([
+      { status: "deriving" },
+      { status: "completed", error_message: null, error_code: null },
+    ]);
+    expect(mail).toEqual(["ready"]);
+  });
+
+  test("a refusal over hand labels records no proposal", async () => {
+    const { deriveAndPublish } = load(async () => ({
+      ok: false,
+      reason: "hand labels applied",
+      transcript: transcript(true, proposal),
+      failure: "refused",
+      labelsProtected: true,
+    }));
+    const fake = fakeSupabase({ derivationQuality: graded });
+
+    await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(fake.updates.some((u) => "derivation_quality" in u)).toBe(false);
+  });
+});
+
 test.describe("deriveAndPublish on a cancelled job", () => {
   quietConsole();
 
@@ -366,5 +482,56 @@ test.describe("deriveAndPublish on a cancelled job", () => {
     expect(persisted).toBe(false);
     expect(fake.rpcCalls).toEqual([]);
     expect(mail).toEqual([]);
+  });
+});
+
+test.describe("deriveAndPublish over hand labels", () => {
+  quietConsole();
+
+  test("a refusal to overwrite hand labels keeps the job completed and mails nothing", async () => {
+    const reason =
+      "hand labels applied — pass allowOverwriteLabels to replace them";
+    const { deriveAndPublish, mail } = load(async () => ({
+      ok: false,
+      reason,
+      transcript: null,
+      failure: "refused",
+      labelsProtected: true,
+    }));
+    const fake = fakeSupabase();
+
+    const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
+
+    expect(out).toEqual({ ok: false, reason, kept: true });
+    expect(fake.updates).toEqual([
+      { status: "deriving" },
+      { status: "completed" },
+    ]);
+    expect(fake.rpcCalls).toEqual([]);
+    expect(mail).toEqual([]);
+  });
+
+  test("allowOverwriteLabels reaches persistTranscript, off by default", async () => {
+    const seen: unknown[] = [];
+    const { deriveAndPublish } = load(async (...args: unknown[]) => {
+      seen.push(
+        (args[0] as { allowOverwriteLabels?: boolean }).allowOverwriteLabels,
+      );
+      return written()();
+    });
+    const run = deriveAndPublish as (p: {
+      supabase: unknown;
+      jobId: string;
+      allowOverwriteLabels?: boolean;
+    }) => Promise<unknown>;
+
+    await run({ supabase: fakeSupabase().client, jobId: JOB });
+    await run({
+      supabase: fakeSupabase().client,
+      jobId: JOB,
+      allowOverwriteLabels: true,
+    });
+
+    expect(seen).toEqual([false, true]);
   });
 });

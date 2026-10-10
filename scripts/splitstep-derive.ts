@@ -3,6 +3,11 @@
  *
  *   npx tsx scripts/splitstep-derive.ts --job <uuid>            # dry run, writes nothing
  *   npx tsx scripts/splitstep-derive.ts --job <uuid> --write    # persist
+ *   ... --write --force-over-labels   # replace rows applied from hand labels
+ *
+ * A match whose rows came from `scripts/label-apply.ts` (points flagged
+ * `hand_labelled`) refuses --write unless --force-over-labels is passed: a
+ * re-derive from the vendor's file would put the vendor's version back.
  *
  * Dry run is the default deliberately. This is the first thing in the pipeline
  * that mutates match data, and the two failure modes that matter — a mirrored
@@ -33,11 +38,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function main() {
   const argv = process.argv;
   const write = argv.includes("--write");
+  const allowOverwriteLabels = argv.includes("--force-over-labels");
   const at = argv.indexOf("--job");
   const jobId = at === -1 ? null : argv[at + 1];
 
   if (!jobId || !UUID.test(jobId)) {
-    console.error("usage: splitstep-derive.ts --job <uuid> [--write]");
+    console.error(
+      "usage: splitstep-derive.ts --job <uuid> [--write [--force-over-labels]]",
+    );
     process.exit(1);
   }
 
@@ -51,6 +59,7 @@ async function main() {
     const published = await deriveAndPublish({
       supabase: supabaseClient,
       jobId,
+      allowOverwriteLabels,
     });
     if (!published.ok) {
       console.error(`REFUSED: ${published.reason}`);

@@ -41,8 +41,10 @@ import {
   type LabelMarkCode,
   type LabelMarks,
   type LabelMarkTier,
+  type MarkablePoint,
 } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
+import { isCombinedTombstone } from "./point-combine";
 import { serveAfterServeIn } from "./marks-state";
 import { gameKey, labelScores, ordinaryGameScore } from "./score";
 import { withLiveScoreMarks, type ScoreMarkPoint } from "./score-marks";
@@ -50,6 +52,7 @@ import type { LabelEnding, LabelShotResult } from "./seed";
 import {
   compareNullsLast,
   isGhostShot,
+  isLetServe,
   isLiveShot,
   isMissedResult,
   isServeStroke,
@@ -123,6 +126,30 @@ export function seededScorePoints(
     });
   }
   return seeded;
+}
+
+/**
+ * The rows as the session opened, for joining the derivation's marks: a
+ * seeded point on the one rally it was seeded from, an added point on none.
+ *
+ * The console's rows have moved on. A combine gives the kept point both
+ * rallies, so the phantom's marks — and the serve side "Same side twice" is
+ * read from — would land on the kept point and the tombstone would carry
+ * nothing to be measured. A seeded point's own rally is the first of its ids:
+ * a combine lists the earlier point's ids first, a tombstone keeps its own,
+ * and a split leaves the original with its rally.
+ */
+export function openingMarkRows(
+  points: readonly LabelPoint[],
+): MarkablePoint[] {
+  return points.map((point) => ({
+    id: point.id,
+    vendorRallyIds:
+      point.seed === null || point.vendorRallyIds.length === 0
+        ? []
+        : [point.vendorRallyIds[0]],
+    shots: point.shots,
+  }));
 }
 
 /**
@@ -203,7 +230,12 @@ export interface WinnerFlipRow {
   points: number;
 }
 
-/** Last live strokes whose result moved one way. */
+/**
+ * Last live strokes whose result moved one way. A let is its own value here,
+ * as everywhere the scorecard buckets a result: neither in nor missed, so an
+ * `in→let` row is never folded into the in→out-or-net share. Seeds never
+ * hold a let, so no row starts from one.
+ */
 export interface LastResultChangeRow {
   from: LabelShotResult | null;
   to: LabelShotResult | null;
@@ -222,7 +254,8 @@ export interface LastLandings {
   added: number;
   /** …and what the labeller did: placed the landing, or left it empty. */
   placed: number;
-  remaining: { in: number; outOrNet: number; noResult: number };
+  /** `let` is its own bucket: a let is neither in nor out-or-net. */
+  remaining: { in: number; outOrNet: number; let: number; noResult: number };
 }
 
 export type TailOutcome = "removed" | "partly" | "kept";
@@ -239,8 +272,14 @@ export interface OutCallTailRow {
 
 /** The serve counts that cannot be right. */
 export interface ServeFindings {
-  /** Points with three or more serves, in the live rows or the vendor's. */
+  /**
+   * Points with three or more serves, in the live rows or the vendor's. A
+   * let (`isLetServe`, as the row stands now) is replayed, not a serve of
+   * the count: a let, a first and a second serve are two.
+   */
   threeOrMore: number[];
+  /** Points with at least one live let serve. */
+  lets: number[];
   /** Points where a serve follows a serve the labeller called in. */
   serveAfterIn: number[];
 }
@@ -494,6 +533,29 @@ function isVendorServe(
 }
 
 /**
+ * Each combine's tombstone to the live point it was combined into:
+ * the live point holding the tombstone's own rally (`openingMarkRows`). The
+ * two were one point all along, so a mark raised on the phantom is measured
+ * against what the labeller made of the whole, and the kept point carries it
+ * when the scorecard asks whether a change went unmarked.
+ */
+function combinedInto(
+  points: readonly LabelPoint[],
+): Map<LabelPoint, LabelPoint> {
+  const into = new Map<LabelPoint, LabelPoint>();
+  for (const point of points) {
+    if (!isCombinedTombstone(point) || point.seed === null) continue;
+    const rally = point.vendorRallyIds[0];
+    if (rally === undefined) continue;
+    const kept = points.find(
+      (p) => p.status !== "deleted" && p.vendorRallyIds.includes(rally),
+    );
+    if (kept) into.set(point, kept);
+  }
+  return into;
+}
+
+/**
  * Build the scorecard.
  *
  * `points` are the session's rows as `getLabelSession` returns them
@@ -522,26 +584,42 @@ export function buildScorecard(
     netHits: 0,
     added: 0,
     placed: 0,
-    remaining: { in: 0, outOrNet: 0, noResult: 0 },
+    remaining: { in: 0, outOrNet: 0, let: 0, noResult: 0 },
   };
   const outCallTails: OutCallTailRow[] = [];
-  const serves: ServeFindings = { threeOrMore: [], serveAfterIn: [] };
+  const serves: ServeFindings = {
+    threeOrMore: [],
+    lets: [],
+    serveAfterIn: [],
+  };
+
+  const into = combinedInto(points);
+  const absorbed = new Map<string, LabelPoint[]>();
+  for (const [tombstone, kept] of into) {
+    absorbed.set(kept.id, [...(absorbed.get(kept.id) ?? []), tombstone]);
+  }
+  const marksOn = (point: LabelPoint): LabelMark[] => [
+    ...(marks.points[point.id] ?? []),
+    ...point.shots.flatMap((shot) => marks.shots[shot.id] ?? []),
+  ];
 
   for (const point of points) {
-    const change = pointChange(point);
+    const own = pointChange(point);
+    const keptPoint = into.get(point);
+    // A combined phantom is measured as the point it became.
+    const change = keptPoint
+      ? { ...pointChange(keptPoint), anything: true }
+      : own;
     const number = point.pointIndex + 1;
     if (point.status === "deleted") summary.deleted += 1;
     else summary.live += 1;
     if (point.status === "added") summary.added += 1;
-    if (change.anything) summary.changed += 1;
+    if (own.anything) summary.changed += 1;
 
     // The point's marks, then its strokes'. A mark whose row is gone is in
     // neither: it has nothing to be measured against.
-    const own: LabelMark[] = [
-      ...(marks.points[point.id] ?? []),
-      ...point.shots.flatMap((shot) => marks.shots[shot.id] ?? []),
-    ];
-    for (const mark of own) {
+    const pointMarks = marksOn(point);
+    for (const mark of pointMarks) {
       const key = `${mark.code}:${mark.tier}`;
       const row = rows.get(key) ?? {
         code: mark.code,
@@ -559,9 +637,14 @@ export function buildScorecard(
       rows.set(key, row);
     }
     const fields = fieldChanges(point);
-    if (fields && !own.some((m) => m.tier === "count")) {
+    // A kept point answers for the phantoms combined into it, too.
+    const carried = [
+      ...pointMarks,
+      ...(absorbed.get(point.id) ?? []).flatMap(marksOn),
+    ];
+    if (fields && !carried.some((m) => m.tier === "count")) {
       const codes = (tier: LabelMarkTier) => [
-        ...new Set(own.filter((m) => m.tier === tier).map((m) => m.code)),
+        ...new Set(carried.filter((m) => m.tier === tier).map((m) => m.code)),
       ];
       unmarkedChanges.push({
         number,
@@ -570,7 +653,7 @@ export function buildScorecard(
         hidden: codes("hidden"),
       });
     }
-    if (change.winner && point.seed) {
+    if (own.winner && point.seed) {
       const key = direction(point.seed.winner, point.winner);
       const row = flips.get(key) ?? {
         from: point.seed.winner,
@@ -615,6 +698,8 @@ export function buildScorecard(
           lastLandings.remaining.in += 1;
         } else if (isMissedResult(last.result)) {
           lastLandings.remaining.outOrNet += 1;
+        } else if (last.result === "let") {
+          lastLandings.remaining.let += 1;
         } else {
           lastLandings.remaining.noResult += 1;
         }
@@ -629,13 +714,19 @@ export function buildScorecard(
 
     if (point.status !== "deleted") {
       const live = point.shots.filter((shot) => isLiveShot(shot, ghosts));
-      const liveServes = live.filter((shot) =>
-        isServeStroke(shot.stroke),
+      // A let is replayed: not one of the point's serves, in either count —
+      // a vendor serve the labeller called a let included.
+      const liveServes = live.filter(
+        (shot) => isServeStroke(shot.stroke) && !isLetServe(shot),
       ).length;
       const vendorServes = point.shots.filter(
-        (shot) => shot.eventId !== null && isVendorServe(shot, vendor),
+        (shot) =>
+          shot.eventId !== null &&
+          isVendorServe(shot, vendor) &&
+          !isLetServe(shot),
       ).length;
       if (liveServes >= 3 || vendorServes >= 3) serves.threeOrMore.push(number);
+      if (live.some(isLetServe)) serves.lets.push(number);
       if (serveAfterServeIn(point, ghosts)) serves.serveAfterIn.push(number);
     }
 
@@ -921,6 +1012,7 @@ export function renderScorecard(
   if (resultChanged === 0) {
     out.push("None: every last live stroke keeps its seeded result.");
   } else {
+    // A let is neither: an in→let row stands on its own, outside the share.
     const inToMissed = card.lastResultChanges.filter(
       (row) => row.from === "in" && isMissedResult(row.to),
     );
@@ -976,6 +1068,7 @@ export function renderScorecard(
             "Left it empty, result out or net",
             share(landings.remaining.outOrNet, n),
           ],
+          ["Left it empty, let", share(landings.remaining.let, n)],
           ["Left it empty, no result", share(landings.remaining.noResult, n)],
         ],
       ),
@@ -1007,7 +1100,9 @@ export function renderScorecard(
     "",
     "## Serves",
     "",
-    `Points with three or more serves, in the live rows or the vendor's: ${pointList(card.serves.threeOrMore)}.`,
+    `Points with three or more serves, in the live rows or the vendor's (a let not counted): ${pointList(card.serves.threeOrMore)}.`,
+    "",
+    `Points with a let serve: ${pointList(card.serves.lets)}.`,
     "",
     `Points where a serve follows a serve the labeller called in: ${pointList(card.serves.serveAfterIn)}.`,
     "",
