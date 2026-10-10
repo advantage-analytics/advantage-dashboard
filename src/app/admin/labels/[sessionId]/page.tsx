@@ -60,6 +60,13 @@ import {
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * The page's server actions run under this too. "Mark complete" publishes:
+ * it rewrites a match's points and shots and recomputes its statistics, which
+ * takes longer than an ordinary label write.
+ */
+export const maxDuration = 120;
+
 export const metadata = { title: "Label match" };
 
 export default async function AdminLabelSessionPage({

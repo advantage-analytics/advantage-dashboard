@@ -100,16 +100,71 @@ function fakeClient(rows: {
 const updates = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op === "update");
 
+/** A publish that wrote: the writer's own tests are about the status. */
+const PUBLISHED = async () => ({
+  ok: true as const,
+  points: 10,
+  shots: 40,
+  insightsRequested: true,
+});
+
 test.describe("writeLabelSessionComplete", () => {
+  test("publishes before it closes, and a refused publish leaves the session open", async () => {
+    const fake = fakeClient({});
+    const order: string[] = [];
+    expect(
+      await writeLabelSessionComplete({
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: async (_db, id) => {
+          order.push(`publish ${id}`);
+          return PUBLISHED();
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      status: "complete",
+      published: { points: 10, shots: 40, insightsRequested: true },
+    });
+    expect(order).toEqual([`publish ${SESSION_ID}`]);
+
+    const refusedPublish = fakeClient({});
+    expect(
+      await writeLabelSessionComplete({
+        supabase: refusedPublish.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => ({ ok: false, error: "Not published: no." }),
+      }),
+    ).toEqual({ error: "Not published: no." });
+    expect(updates(refusedPublish)).toEqual([]);
+
+    const threw = fakeClient({});
+    expect(
+      await writeLabelSessionComplete({
+        supabase: threw.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => {
+          throw new Error("boom");
+        },
+      }),
+    ).toEqual({ error: "Could not publish the labels: boom" });
+    expect(updates(threw)).toEqual([]);
+  });
+
   test("the gate, then ONE update of status and completed_at, matched on the id and an open status", async () => {
     const fake = fakeClient({});
     const before = Date.now();
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: fake.supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({ ok: true, status: "complete" });
+    ).toEqual({
+      ok: true,
+      status: "complete",
+      published: { points: 10, shots: 40, insightsRequested: true },
+    });
     const [write] = updates(fake);
     expect(write).toMatchObject({
       table: "label_sessions",
@@ -132,16 +187,22 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: blind.supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({ ok: true, status: "complete" });
+    ).toEqual({
+      ok: true,
+      status: "complete",
+      published: { points: 10, shots: 40, insightsRequested: true },
+    });
   });
 
   test("refused: a bad id, a missing or complete session, and a race", async () => {
     const none = fakeClient({});
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: none.supabase,
         sessionId: "nope",
       }),
@@ -150,6 +211,7 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: fakeClient({ session: null }).supabase,
         sessionId: SESSION_ID,
       }),
@@ -160,6 +222,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: frozen.supabase,
         sessionId: SESSION_ID,
       }),
@@ -170,6 +233,7 @@ test.describe("writeLabelSessionComplete", () => {
 
     expect(
       await writeLabelSessionComplete({
+        publish: PUBLISHED,
         supabase: fakeClient({ raced: true }).supabase,
         sessionId: SESSION_ID,
       }),
@@ -347,11 +411,11 @@ test.describe("completeWarnings", () => {
     expect(
       labelConfirmCopy({ kind: "complete-session", warnings: [] }, NAMES),
     ).toEqual({
-      title: "Mark this session complete?",
+      title: "Mark complete and publish?",
       description:
-        "Every point is checked and the score adds up. The console becomes read-only; Reopen brings it back.",
-      confirmLabel: "Mark complete",
-      pendingLabel: "Completing…",
+        "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again.",
+      confirmLabel: "Publish",
+      pendingLabel: "Publishing…",
       tone: "primary",
     });
     expect(
@@ -361,8 +425,8 @@ test.describe("completeWarnings", () => {
       ),
     ).toMatchObject({
       description:
-        "Some things are still open. You can complete it anyway, and Reopen brings it back to fix them.",
-      confirmLabel: "Mark complete",
+        "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+      confirmLabel: "Publish",
     });
   });
 });

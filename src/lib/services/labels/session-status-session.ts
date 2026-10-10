@@ -4,13 +4,15 @@
  * (a CHECK holds them together). Admin-gated like edit-session.ts; not the
  * marks gate — a session labelled blind completes like any other.
  *
- * Complete is the ordinary gate (`checkSessionOpen`) and ONE update matched
- * on the id and on `status = 'labelling'`, so a session another tab already
- * completed is not written twice. Reopen reads the status and writes the
+ * Complete is the ordinary gate (`checkSessionOpen`), then the publish — the
+ * labelled points replace the match's (apply-session.ts), backed up first —
+ * and only then ONE update matched on the id and on `status = 'labelling'`,
+ * so a session another tab already completed is not written twice. A publish
+ * that refuses leaves the session open, with the reason. Reopen leaves the
+ * published points as they are; completing again publishes again. Reopen reads the status and writes the
  * reverse, matched on `status = 'complete'`; the partial unique index that
  * allows one open session per job (`label_sessions_one_open_per_job`)
- * refuses it while another session of the match is open. Nothing else is
- * ever written.
+ * refuses it while another session of the match is open.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
@@ -23,9 +25,35 @@ import {
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelSession } from "./session";
 
+/** What a publish wrote, for the console's confirmation line. */
+export interface LabelPublishSummary {
+  points: number;
+  shots: number;
+  insightsRequested: boolean;
+}
+
 export type LabelSessionStatusResult = LabelOpResult<{
   status: LabelSession["status"];
+  published?: LabelPublishSummary;
 }>;
+
+/** The publish step, injectable so the writer is tested without a database. */
+export type LabelPublish = (
+  supabase: AdminClient,
+  sessionId: string,
+) => Promise<
+  ({ ok: true } & LabelPublishSummary) | { ok: false; error: string }
+>;
+
+/**
+ * Publish with the labelled score taken as it is: the confirm before "Mark
+ * complete" already listed any difference from the entered score.
+ */
+const publishAcceptingScore: LabelPublish = async (supabase, sessionId) => {
+  // Loaded on use: it reads through labels-server.ts.
+  const { publishLabelSession } = await import("./apply-session");
+  return publishLabelSession({ db: supabase, sessionId, acceptScore: true });
+};
 
 const RACED = racedMessage("session");
 /** The unique index's refusal, as `seed-session.ts` reads it. */
@@ -34,17 +62,33 @@ export const ANOTHER_SESSION_OPEN =
   "Another labelling session is open for this match. Complete or remove it before reopening this one.";
 const ALREADY_OPEN = "This session is already open for labelling.";
 
-/** Close a labelling session. Never throws. */
+/** Publish a labelling session to its match, then close it. Never throws. */
 export async function writeLabelSessionComplete(params: {
   supabase: AdminClient;
   sessionId: unknown;
+  publish?: LabelPublish;
 }): Promise<LabelSessionStatusResult> {
-  const { supabase } = params;
+  const { supabase, publish = publishAcceptingScore } = params;
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 
   const refused = await checkSessionOpen(supabase, sessionId);
   if (refused) return { error: refused };
+
+  let published: LabelPublishSummary;
+  try {
+    const result = await publish(supabase, sessionId);
+    if (!result.ok) return { error: result.error };
+    published = {
+      points: result.points,
+      shots: result.shots,
+      insightsRequested: result.insightsRequested,
+    };
+  } catch (err) {
+    return {
+      error: `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   const { data, error } = await supabase
     .from("label_sessions")
@@ -53,10 +97,12 @@ export async function writeLabelSessionComplete(params: {
     .eq("status", "labelling")
     .select("id");
   if (error) {
-    return { error: `Could not complete the session: ${error.message}` };
+    return {
+      error: `The labels are published, but the session could not be marked complete: ${error.message}`,
+    };
   }
   if (!data || data.length === 0) return { error: RACED };
-  return { ok: true, status: "complete" };
+  return { ok: true, status: "complete", published };
 }
 
 /** Open a complete session for labelling again. Never throws. */

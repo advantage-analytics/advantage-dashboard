@@ -398,9 +398,10 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
- * The console header's "Mark complete": `label_sessions.status` to
- * `complete` with its `completed_at`, nothing else. Refused on a session that
- * is not labelling.
+ * The console header's "Mark complete": publishes the labels to the match
+ * (apply-session.ts, the replaced version backed up), then `label_sessions.status`
+ * to `complete`. Refused on a session that is not labelling, and left open
+ * when the publish refuses.
  */
 export async function completeLabelSessionAction(
   sessionId: string,

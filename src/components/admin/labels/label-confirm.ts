@@ -131,13 +131,13 @@ export function labelConfirmCopy(
       };
     case "complete-session":
       return {
-        title: "Mark this session complete?",
+        title: "Mark complete and publish?",
         description:
           confirm.warnings.length === 0
-            ? "Every point is checked and the score adds up. The console becomes read-only; Reopen brings it back."
-            : "Some things are still open. You can complete it anyway, and Reopen brings it back to fix them.",
-        confirmLabel: "Mark complete",
-        pendingLabel: "Completing…",
+            ? "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary. The version it replaces is backed up, and Reopen lets you edit and publish again."
+            : "Some things are still open. Publishing anyway rebuilds the athlete's match from these labels as they are. The version it replaces is backed up, and Reopen lets you fix them and publish again.",
+        confirmLabel: "Publish",
+        pendingLabel: "Publishing…",
         tone: "primary",
       };
     case "reset-point":
