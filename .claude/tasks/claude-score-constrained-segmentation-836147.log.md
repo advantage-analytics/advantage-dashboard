@@ -75,3 +75,23 @@ The `build()` helper in the spec now inserts realistic pauses. There are 8 new t
 2. Vendor pseudo-games inside a tiebreak are charged as dropped boundaries, so review will fire on every vendor tiebreak. Decide whether that is wanted.
 3. Should `changeoverShortGap` also apply at the set break after an even set?
 4. The proposal signature is a 32-bit hash. A collision could in theory hide a runner-up.
+
+## T6 · Wire the segmenter into the transcript and marks — blocked
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work
+**reason:** One criterion is not met: the forced-throw test. "a segmenter that throws…" passes `initialTopIsPlayer1: null`, and `segmentForReview` returns null on that condition before calling the injected segmenter. The throwing function never runs, so the test would pass even with the `try`/`catch` deleted.
+
+The fix is in the test only: use top = true or false on a fixture that reaches the segmenter (the clean fixture with top=false does), and assert that the throwing function was called.
+
+Every other criterion was met:
+
+- the split-deuce fit flags exactly the differing points;
+- the published-fields equivalence table is not vacuous: clean with top=false runs the segmenter and flags 11 points while the rows stay identical;
+- the marks params are filled;
+- no existing test body was edited.
+  **implementation notes:**
+- The `segmenter?` seam on `BuildOptions` defaults to production behaviour.
+- `proposedPointsOf` and `ProposedPoint` are exported via `index.ts`. They convert per-set game numbers to match-cumulative ones.
+- Flags are applied for any proposal status, including no_fit's closest path.
+- The clean fixture gives `no_fit` (cost 115) against its own folded score. That is worth a look in T9.
+  **stash:** 19367490c6ffb6e32809a3869a40ab5a9680e045
