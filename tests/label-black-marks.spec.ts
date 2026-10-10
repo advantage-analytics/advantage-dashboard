@@ -9,6 +9,7 @@ import {
   type LabelMarkParams,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
+import { pointEndedEarly } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -629,6 +630,54 @@ test.describe("the hints read off the rows, with their answers", () => {
     ).not.toContain("data-suggestion-dismiss");
   });
 
+  test("once a later stroke is settled, the question does not move up to an earlier one", () => {
+    const point = endedEarly();
+    // A second ball out earlier in the rally: s-early, before s-long.
+    const [ace, ...rest] = point.shots;
+    const early = {
+      ...ace,
+      id: "s-early",
+      eventId: 150,
+      stroke: "forehand" as const,
+      result: "out" as const,
+      videoTime: 1.5,
+    };
+    const withEarly = { ...point, shots: [ace, early, ...rest] };
+    const asked = (p: LabelPoint) =>
+      pointEndedEarly(p, true)?.params.shotId ?? null;
+    expect(asked(withEarly)).toBe("s-long");
+    // Dismissed at s-long: nothing moves up to s-early.
+    expect(
+      asked({ ...withEarly, dismissed: ["point_ended:s-long"] }),
+    ).toBeNull();
+    // Resolved by removing what followed (tombstones after it): the same.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-dead-1" || s.id === "s-dead-2"
+            ? {
+                ...s,
+                status: "deleted" as const,
+                statusBeforeDelete: "kept" as const,
+              }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+    // Resolved by correcting s-long's call: edited, so s-early stays quiet.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-long"
+            ? { ...s, result: "in" as const, status: "edited" as const }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+  });
+
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const calls: unknown[][] = [];
@@ -638,6 +687,8 @@ test.describe("the hints read off the rows, with their answers", () => {
       operations: {
         ...ROW_OPERATIONS,
         onSplitPoint: (...args: unknown[]) => calls.push(["split", ...args]),
+        onDismissSuggestion: (...args: unknown[]) =>
+          calls.push(["dismiss", ...args]),
       },
     };
     const point = endedEarly();
@@ -652,6 +703,8 @@ test.describe("the hints read off the rows, with their answers", () => {
     ended.actions[1].run();
     expect(calls).toEqual([
       ["remove", point.id, "s-long"],
+      // Split answers the question for good, then splits.
+      ["dismiss", point.id, "point_ended:s-long"],
       ["split", point.id, "s-dead-1"],
     ]);
     // The last swing has no landing: that hint rides beside it, with no answer.

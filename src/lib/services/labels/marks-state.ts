@@ -26,12 +26,14 @@ import {
   isServeStroke,
   isWithdrawnAdd,
   liveShotsInOrder,
+  orderLabelShots,
   type LabelPoint,
   type LabelShot,
 } from "./session";
 import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 import {
   addedPointBetween,
+  pointEndedKey,
   suggestionState,
   type SuggestionNeighbour,
 } from "./suggestions";
@@ -274,17 +276,38 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
  * hit after the point ended — or are a second point the vendor ran into this
  * one — so the hint offers to remove them or to split there. Live means not
- * deleted and, with `ghosts` on, not a ghost.
+ * deleted and, with `ghosts` on, not a ghost. Only the latest such stroke is
+ * asked about, and not once the labeller has settled it or anything after it.
  */
 export function pointEndedEarly(
-  point: Pick<LabelPoint, "shots">,
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
+  const ordered = orderLabelShots(point.shots);
+  const dismissed = new Set(point.dismissed ?? []);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
     if (!endsPointWhenMissed(shot.stroke)) continue;
     if (!isMissedResult(effectiveShotResult(shot))) continue;
+    // Settled once the labeller has looked at this stroke or one after it:
+    // dismissed the question there, or edited, added or deleted a stroke
+    // after it. Play went on past a later stroke, so the rally was live
+    // through every one before it — the question does not move up the rally
+    // to a stroke the labeller has already watched go by.
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered
+        .slice(at + 1)
+        .some(
+          (s) =>
+            dismissed.has(pointEndedKey(s.id)) ||
+            s.status === "edited" ||
+            s.status === "added" ||
+            s.status === "deleted",
+        );
+    if (settled) return null;
     return {
       code: "shot_after_point_end",
       tier: "hint",

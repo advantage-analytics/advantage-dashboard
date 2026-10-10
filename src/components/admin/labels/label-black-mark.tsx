@@ -442,7 +442,22 @@ function hintActions(
               },
             ]
           : []),
-        ...splitAt(HINT_ACTION_LABEL.shot_after_point_end, after[0]),
+        // Split also answers the question for good: the strokes after go to
+        // a new point, so nothing after this one is left to say it was seen.
+        ...(operations
+          ? [
+              {
+                label: HINT_ACTION_LABEL.shot_after_point_end,
+                run: () => {
+                  const key = pointEndedKey(shotId);
+                  if (isSuggestionKey(key)) {
+                    operations.onDismissSuggestion(point.id, key);
+                  }
+                  operations.onSplitPoint(point.id, after[0]);
+                },
+              },
+            ]
+          : []),
       ];
     }
     case "serve_after_serve_in":
