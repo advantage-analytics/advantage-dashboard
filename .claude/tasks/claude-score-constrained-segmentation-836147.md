@@ -209,7 +209,7 @@ ready).
 
 ## T8 · `splitstep-eval --session` and proposal scoring
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess)

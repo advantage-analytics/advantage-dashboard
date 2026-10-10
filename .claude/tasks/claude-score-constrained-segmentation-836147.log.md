@@ -138,3 +138,24 @@ The rest of the change is as described in the blocked entry above:
 
 1. A failed combined write now loses both `fold` and `segmentation`; before, only `fold` was at risk. It is logged and swallowed. Consider separate writes if that matters.
 2. The proposal is stored whole, so check the `derivation_quality` jsonb size on a real match.
+
+## T8 · `splitstep-eval --session` and proposal scoring — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `scripts/splitstep-eval.ts` gains `--session <uuid>`. It reads through `readLabelSessionRows`, SELECTs only, and adds a `reportSession()` that prints published-vs-proposed accuracy, the proposal's status and diff, game counts, firings as hit or miss, and merges. There is a new pure `src/lib/services/labels/session-truth.ts`: games are compared by partition, and the proposed ending is the published ending. `tests/label-session-truth.spec.ts` adds 6 offline specs.
+
+**Read-only baseline before tuning (counts only):**
+
+| Job      | Server (published → proposed) | Status    | Games                              | Firings hit |
+| -------- | ----------------------------- | --------- | ---------------------------------- | ----------- |
+| be930d79 | 42 → 52 / 56                  | fit       | 8 proposed vs 11 folded, entered 8 | 8 / 23      |
+| 868a7696 | 101 → 103 / 106               | ambiguous | —                                  | 2 / 2       |
+| 45ff4bd7 | 99 / 101, unchanged           | ambiguous | —                                  | no firings  |
+
+On be930d79 the proposal makes all 4 merges the labeller made.
+
+Published winner misses agree with `label-scorecard`'s flip counts on 868a7696 and 45ff4bd7. be930d79 has 2 extra misses, both on points with no seed.
+**follow-ups:**
+
+1. A firing counts any difference in game number, including the renumbering a moved boundary causes. Many of the 15 misses on be930d79 may be that knock-on effect rather than wrong cuts. Consider scoring firings by partition only.
+2. Across the two matches, 10 of 25 firings hit. That is far below the promotion bar, and is input for T9.
