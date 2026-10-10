@@ -276,6 +276,7 @@ function components() {
   return createLoader().load(ROW) as {
     BlackPointRow: React.ComponentType<RowProps>;
     pointChangedByYou: (point: LabelPoint) => boolean;
+    pointRowSlide: (editable: boolean, playing: boolean) => string;
   };
 }
 
@@ -387,6 +388,44 @@ test.describe("the black point row", () => {
     expect(renderRow(FIXTURE_POINT_IDS.P4, { playing: true })).not.toContain(
       "data-playing-rule",
     );
+  });
+
+  test("the tail (chip, pencil) slides with the score, never crowded by it", () => {
+    const { pointRowSlide } = components();
+    const classOf = (html: string, attr: string) =>
+      tag(html, attr)
+        .match(/class="([^"]*)"/)![1]
+        .split(" ");
+    const cases: [Partial<RowProps>, boolean][] = [
+      [{}, true],
+      [{ playing: true }, true],
+      [{}, false],
+    ];
+    for (const [props, editable] of cases) {
+      const html = renderRow(FIXTURE_POINT_IDS.P1, props, editable);
+      // One constant for both, so they can never drift.
+      const slide = pointRowSlide(editable, props.playing ?? false).split(" ");
+      expect(classOf(html, "data-row-tail")).toEqual(
+        expect.arrayContaining(slide),
+      );
+      expect(classOf(html, "data-point-score")).toEqual(
+        expect.arrayContaining(slide),
+      );
+    }
+    // On reach (hover, focus, the open ⋯) while editable; held when playing.
+    const reach = pointRowSlide(true, false);
+    expect(reach).toContain("group-hover/row:-translate-x-[26px]");
+    expect(reach).toContain(
+      "group-has-[[data-row-actions]_[aria-expanded=true]]/row:-translate-x-[26px]",
+    );
+    expect(reach).toContain(
+      "motion-reduce:group-hover/row:-translate-x-[26px]",
+    );
+    expect(reach).toContain("transition-transform");
+    expect(pointRowSlide(true, true)).toMatch(/(^| )-translate-x-\[26px\]/);
+    // Read-only: nothing to make room for, so nothing moves.
+    expect(pointRowSlide(false, false)).not.toContain("translate-x");
+    expect(pointRowSlide(false, true)).not.toContain("translate-x");
   });
 
   test("read-only: the mark alone, no menu, a tick that cannot be pressed", () => {
