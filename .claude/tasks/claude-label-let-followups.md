@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Serve-result menu offers "No result" when nothing can be derived
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/admin/labels/label-black-shot-row.tsx (`serveResultMenu`, `serveResultPatch`, `ServeResultCell`), tests/label-black-rows.spec.ts — a guess
 - **routes:** /admin/labels/[sessionId]

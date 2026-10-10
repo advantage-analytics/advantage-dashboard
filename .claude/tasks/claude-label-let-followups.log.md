@@ -39,3 +39,9 @@ is the runner's. Newest entries at the bottom.
 
 1. The three-or-more header now reads "(a let not counted)" — any consumer parsing scorecard text should be checked.
 2. The landing bucket tests raw `result === "let"` (not `isLetServe`); equivalent now that the DB refuses a let off a serve.
+
+## T1 · Serve-result menu offers "No result" when nothing can be derived — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Built on #412's shot row. With no landing to read, the serve-result menu's calculated slot holds "No result" ("Its landing is not placed yet"; sentinel `SERVE_RESULT_NONE`), then the hairline and Let. `serveResultPatch` maps the sentinel to `{ result: null }`; `ServeResultCell` selects the sentinel for a null result so the stored choice shows. Specs in label-black-rows.
