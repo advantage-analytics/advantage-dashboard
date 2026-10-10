@@ -45,3 +45,11 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass · completion pass
 
 **changed:** Built on #412's shot row. With no landing to read, the serve-result menu's calculated slot holds "No result" ("Its landing is not placed yet"; sentinel `SERVE_RESULT_NONE`), then the hairline and Let. `serveResultPatch` maps the sentinel to `{ result: null }`; `ServeResultCell` selects the sentinel for a null result so the stored choice shows. Specs in label-black-rows.
+
+## T4 · Console refuses a let patch before the optimistic apply — blocked
+
+**gate:** mechanical pass · completion needs-work
+
+**reason:** Guard in `writeShot` is correct (before `setPoints`/`onSaveShot`, failure via `dispatchSave`), but the spec re-implements the gate in a local helper instead of testing a seam the handler calls — deleting the guard would not fail it.
+
+**stash:** ea4b37b7a9ea4dd03aee8b726cbc7fface63ac86
