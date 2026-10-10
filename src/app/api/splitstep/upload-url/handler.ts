@@ -369,7 +369,13 @@ export async function handleUploadUrl(
   // a blob whose extension disagreed with its bytes.
   let blobName: string;
   try {
-    blobName = videoObjectKey({ userId, matchId, fileName });
+    // Lowercased as the database prints the uuid: the job's guard
+    // (processing_jobs_guard_storage_keys) accepts this key only verbatim.
+    blobName = videoObjectKey({
+      userId,
+      matchId: matchId.toLowerCase(),
+      fileName,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unsupported video file" },
