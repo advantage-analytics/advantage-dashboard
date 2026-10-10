@@ -233,21 +233,93 @@ export interface ProposedPoint {
   mergedWith: number | null;
 }
 
+/** The fields of a published row the proposal is compared against. */
+export interface ProposalComparableRow {
+  rally_id: number;
+  set_number: number;
+  game_number: number;
+  server_is_player1: boolean;
+}
+
 /**
- * Whether the proposal would cut this point differently from the published
- * row: another set or game, another server, or a merge. The one test behind
- * `segment_proposal_differs` and the label-session scoring's "fired".
+ * The rallies the proposal would cut differently from the published rows: half
+ * of a proposed merge, another server, or a rally the proposal moves to
+ * another game. The one test behind `segment_proposal_differs` and the
+ * label-session scoring's "fired".
+ *
+ * "Moves to another game" is judged against counterparts, not numbers: game
+ * numbers are match-cumulative, so one boundary moved early renumbers every
+ * later game without moving a rally. Each proposed game is paired with the
+ * published game it shares the most rallies with, and a rally differs when its
+ * published game is not its proposed game's counterpart — so a boundary moved
+ * by one rally flags that rally alone, and two published games joined into one
+ * flag only the smaller one's rallies.
+ *
+ * The pairing is one-to-one, greedy by overlap (largest first; ties to the
+ * earliest published game, then the earliest proposed game). Without it, a
+ * published game the proposal splits in two would be both halves'
+ * counterpart and the split would flag nothing; with it, the larger half keeps
+ * the counterpart and the smaller half's rallies are flagged. A proposed game
+ * left with no counterpart flags all its rallies.
+ *
+ * Only rows the proposal covers take part, on either side.
  */
-export function proposalDiffers(
-  p: ProposedPoint,
-  row: { set_number: number; game_number: number; server_is_player1: boolean },
-): boolean {
-  return (
-    p.mergedWith !== null ||
-    p.set !== row.set_number ||
-    p.game !== row.game_number ||
-    (p.server === "player1") !== row.server_is_player1
+export function proposalDifferingRallies(
+  proposed: ReadonlyMap<number, ProposedPoint>,
+  rows: readonly ProposalComparableRow[],
+): Set<number> {
+  const publishedKey = (row: ProposalComparableRow) =>
+    `${row.set_number}|${row.game_number}`;
+  const proposedKey = (p: ProposedPoint) => `${p.set}|${p.game}`;
+
+  // Play order of each game's first covered rally, for tie-breaks.
+  const publishedOrder = new Map<string, number>();
+  const proposedOrder = new Map<string, number>();
+  // proposed key -> published key -> shared covered rallies.
+  const overlap = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const p = proposed.get(row.rally_id);
+    if (!p) continue;
+    const pub = publishedKey(row);
+    const pro = proposedKey(p);
+    if (!publishedOrder.has(pub)) publishedOrder.set(pub, publishedOrder.size);
+    if (!proposedOrder.has(pro)) proposedOrder.set(pro, proposedOrder.size);
+    const counts = overlap.get(pro) ?? new Map<string, number>();
+    counts.set(pub, (counts.get(pub) ?? 0) + 1);
+    overlap.set(pro, counts);
+  }
+
+  const pairs: Array<{ pro: string; pub: string; n: number }> = [];
+  for (const [pro, counts] of overlap) {
+    for (const [pub, n] of counts) pairs.push({ pro, pub, n });
+  }
+  pairs.sort(
+    (a, b) =>
+      b.n - a.n ||
+      publishedOrder.get(a.pub)! - publishedOrder.get(b.pub)! ||
+      proposedOrder.get(a.pro)! - proposedOrder.get(b.pro)!,
   );
+  const counterpart = new Map<string, string>();
+  const claimed = new Set<string>();
+  for (const { pro, pub } of pairs) {
+    if (counterpart.has(pro) || claimed.has(pub)) continue;
+    counterpart.set(pro, pub);
+    claimed.add(pub);
+  }
+
+  const differing = new Set<number>();
+  for (const row of rows) {
+    const p = proposed.get(row.rally_id);
+    if (!p) continue;
+    if (
+      p.mergedWith !== null ||
+      (p.server === "player1") !== row.server_is_player1 ||
+      counterpart.get(proposedKey(p)) !== publishedKey(row)
+    ) {
+      differing.add(row.rally_id);
+    }
+  }
+  return differing;
 }
 
 /**
@@ -778,7 +850,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
   });
 
   // Review-only. The rows above are final; the proposal only marks the points
-  // whose game or server it would have cut differently, and both halves of
+  // it would move to another game or give another server, and both halves of
   // every point it would merge.
   const segmentation =
     segmenter === null
@@ -801,10 +873,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
       segmentation,
       points.map((point) => point.rally_id),
     );
+    const differing = proposalDifferingRallies(proposed, points);
     for (const point of points) {
-      const p = proposed.get(point.rally_id);
-      if (!p) continue;
-      if (proposalDiffers(p, point))
+      if (differing.has(point.rally_id))
         point.flags.push(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS);
     }
   }

@@ -99,6 +99,51 @@ test.describe("playerAtEnd", () => {
     expect(topAt({ completedSets: [13], gamesBeforeInSet: 0 })).toBe("P2");
   });
 
+  test("a 7-0 tiebreak (7 points) carries the swap after point 6: 8 in all", () => {
+    // Games 1–11 swap six times; at 6-0 the players change ends and point 7
+    // is still played, so that change carries; the end-of-tiebreak change is
+    // the odd set's break. 6 + 1 + 1 = even: set 2 opens on the match's
+    // starting ends — the opposite of what a bare 13-game total says.
+    const sets = [{ games: 13, tiebreakPoints: 7 }];
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 0 })).toBe("P1");
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 1 })).toBe("P2");
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 2 })).toBe("P2");
+  });
+
+  test("a 7-5 tiebreak (12 points) carries the swap after point 6: 8 in all", () => {
+    // 6 + 1 (after point 6, play went on) + 1 (end of the tiebreak) = even.
+    // The change after point 12 IS the end-of-tiebreak change, not a second
+    // internal one — play did not continue.
+    const sets = [{ games: 13, tiebreakPoints: 12 }];
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 0 })).toBe("P1");
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 1 })).toBe("P2");
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 2 })).toBe("P2");
+  });
+
+  test("an 8-6 tiebreak (14 points) carries the swaps after points 6 and 12: 9 in all", () => {
+    // Point 12 was followed by points 13 and 14, so it carries; 6 + 2 + 1 = odd.
+    const sets = [{ games: 13, tiebreakPoints: 14 }];
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 0 })).toBe("P2");
+    expect(topAt({ completedSets: sets, gamesBeforeInSet: 1 })).toBe("P1");
+  });
+
+  test("a tiebreak set's carry adds to the sets around it", () => {
+    // 6-4 (5 swaps) then 7-6 via a 7-5 tiebreak (8 swaps): 13, odd.
+    expect(
+      topAt({
+        completedSets: [10, { games: 13, tiebreakPoints: 12 }],
+        gamesBeforeInSet: 0,
+      }),
+    ).toBe("P2");
+    // 6-4 (5) then 7-6 via an 8-6 tiebreak (9): 14, even.
+    expect(
+      topAt({
+        completedSets: [10, { games: 13, tiebreakPoints: 14 }],
+        gamesBeforeInSet: 0,
+      }),
+    ).toBe("P1");
+  });
+
   test("a match tiebreak in place of a set swaps every 6 points", () => {
     // After 6-4, 4-6: 5 + 5 swaps, even.
     const at = (points: number) =>

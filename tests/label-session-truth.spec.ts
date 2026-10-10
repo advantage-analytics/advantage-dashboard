@@ -230,3 +230,29 @@ test("a firing that cuts the game in the wrong place is a miss", () => {
   expect(score.proposed.game).toEqual({ right: 0, of: 4 });
   expect(score.published.game).toEqual({ right: 4, of: 4 });
 });
+
+test("a renumbered game with the same rallies and server does not fire", () => {
+  // 10–12 game 1 and 13 game 2 in the rows; the proposal keeps both groups
+  // and servers but numbers them 4 and 5 in set 2.
+  const labels = [10, 11, 12, 13].map((id, i) =>
+    label({
+      pointIndex: i + 1,
+      vendorRallyIds: [id],
+      gameNumber: id === 13 ? 2 : 1,
+    }),
+  );
+  const proposed = new Map<number, ProposedPoint>(
+    [10, 11, 12, 13].map((id) => [
+      id,
+      { set: 2, game: id === 13 ? 5 : 4, server: "player1", mergedWith: null },
+    ]),
+  );
+  const { rows } = joinSessionTruth({
+    labels,
+    points: POINTS,
+    proposed,
+    names: NAMES,
+  });
+  expect(rows.map((r) => r.fired)).toEqual([false, false, false, false]);
+  expect(scoreSessionTruth(rows).firings).toEqual([]);
+});

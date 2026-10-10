@@ -15,6 +15,7 @@ import {
   pointsPlayed,
   reconcile,
   pressureFor,
+  proposalDifferingRallies,
   resolvePointWinners,
   resolveWinner,
   scoreIsSelfMirroring,
@@ -29,6 +30,7 @@ import {
   SHOT_FLAGS,
   type LineCall,
   type PointWinner,
+  type ProposedPoint,
   type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
@@ -1685,7 +1687,7 @@ test.describe("segmentation proposal (review-only)", () => {
     }));
   }
 
-  test("a split deuce game fits, and only the points it renumbers are flagged", () => {
+  test("a split deuce game fits, and only the points it moves are flagged", () => {
     // The vendor opened a second game after the fifth point of the deuce game.
     const rallies = syntheticMatch([deuceHold, ...sixTwo.slice(1)], {
       game: 0,
@@ -1717,14 +1719,15 @@ test.describe("segmentation proposal (review-only)", () => {
     expect(proposal?.merges).toEqual([]);
     expect(proposal?.diff.gamesMoved).toBe(1);
 
-    // Rallies 1–5 sit in game 1 either way. From rally 6 on, the published
-    // game is one ahead of the proposal, so every later point is flagged.
+    // Published game 1 is rallies 1–5 and game 2 is 6–8; the proposal joins
+    // them into one game of 1–8, whose counterpart is published game 1 (five
+    // shared rallies to three). So 6–8 move and are flagged; from rally 9 on
+    // the published game is one number ahead but holds the same rallies, so
+    // nothing later is flagged.
     const flagged = t.points
       .filter((p) => p.flags.includes(POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS))
       .map((p) => p.rally_id);
-    expect(flagged).toEqual(
-      rallies.map((r) => r.rallyId).filter((id) => id >= 6),
-    );
+    expect(flagged).toEqual([6, 7, 8]);
     // The server never differs: the split kept the vendor's server.
     const sixth = t.points.find((p) => p.rally_id === 6);
     expect(sixth?.game_number).toBe(2);
@@ -1742,17 +1745,17 @@ test.describe("segmentation proposal (review-only)", () => {
       proposedServer: "p1",
       mergedWith: null,
     });
-    const onLast = marks.points[`p${rallies.length}`]?.find(
-      (m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
-    );
-    expect(onLast?.params).toEqual({
-      proposedGame: 8,
-      proposedServer: "p2",
-      mergedWith: null,
-    });
     expect(marks.points.p1 ?? []).not.toContainEqual(
       expect.objectContaining({ code: POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS }),
     );
+    // Renumbered, not moved: no mark.
+    for (const id of [9, rallies.length]) {
+      expect(marks.points[`p${id}`] ?? []).not.toContainEqual(
+        expect.objectContaining({
+          code: POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS,
+        }),
+      );
+    }
   });
 
   test("an unsplit match fits with nothing flagged", () => {
@@ -1882,4 +1885,101 @@ test.describe("segmentation proposal (review-only)", () => {
       });
     }
   }
+
+  test("proposalDifferingRallies: a boundary moved one rally early flags only that rally", () => {
+    // Published: games of four rallies each, 1–4, 5–8, 9–12, 13–16, 17–20.
+    // The proposal moves rally 5 back into the first game (1–5, 6–8, then the
+    // same 9–12, 13–16, 17–20) and numbers every game differently. Only
+    // rally 5 moves; the rest are renumbered only.
+    const rows = Array.from({ length: 20 }, (_, i) => ({
+      rally_id: i + 1,
+      set_number: 1,
+      game_number: Math.floor(i / 4) + 1,
+      server_is_player1: Math.floor(i / 4) % 2 === 0,
+    }));
+    const bounds = [
+      [1, 5],
+      [6, 8],
+      [9, 12],
+      [13, 16],
+      [17, 20],
+    ];
+    const proposed = new Map<number, ProposedPoint>();
+    bounds.forEach(([first, last], g) => {
+      for (let id = first; id <= last; id += 1) {
+        // Number the proposal's games from 3 so every one is "renumbered".
+        proposed.set(id, {
+          set: 1,
+          game: g + 3,
+          server: g % 2 === 0 ? "player1" : "player2",
+          mergedWith: null,
+        });
+      }
+    });
+    expect([...proposalDifferingRallies(proposed, rows)]).toEqual([5]);
+  });
+
+  test("proposalDifferingRallies: a published game split in two flags the smaller half", () => {
+    // Published: one game 1–8, then 9–12. Proposed: 1–5, 6–8, 9–12. Both of
+    // the first two proposed games overlap published game 1 most; one-to-one
+    // pairing gives it to 1–5, so 6–8 have no counterpart and are flagged.
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      rally_id: i + 1,
+      set_number: 1,
+      game_number: i < 8 ? 1 : 2,
+      server_is_player1: i < 8,
+    }));
+    const proposed = new Map<number, ProposedPoint>(
+      rows.map((r) => [
+        r.rally_id,
+        {
+          set: 1,
+          game: r.rally_id <= 5 ? 1 : r.rally_id <= 8 ? 2 : 3,
+          server: r.server_is_player1 ? "player1" : "player2",
+          mergedWith: null,
+        },
+      ]),
+    );
+    expect([...proposalDifferingRallies(proposed, rows)]).toEqual([6, 7, 8]);
+  });
+
+  test("proposalDifferingRallies: renumbered sets alone never fire; server and merges do", () => {
+    const rows = [1, 2, 3, 4].map((id) => ({
+      rally_id: id,
+      set_number: 1,
+      game_number: id <= 2 ? 1 : 2,
+      server_is_player1: id <= 2,
+    }));
+    const same = (id: number): ProposedPoint => ({
+      set: 2,
+      game: id <= 2 ? 7 : 8,
+      server: id <= 2 ? "player1" : "player2",
+      mergedWith: null,
+    });
+    const proposed = new Map(rows.map((r) => [r.rally_id, same(r.rally_id)]));
+    expect(proposalDifferingRallies(proposed, rows).size).toBe(0);
+
+    proposed.set(3, { ...same(3), server: "player1" });
+    proposed.set(1, { ...same(1), mergedWith: 2 });
+    proposed.set(2, { ...same(2), mergedWith: 1 });
+    expect([...proposalDifferingRallies(proposed, rows)].sort()).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  test("proposalDifferingRallies: a rally the proposal does not cover neither fires nor changes its game-mates", () => {
+    const rows = [1, 2, 3].map((id) => ({
+      rally_id: id,
+      set_number: 1,
+      game_number: 1,
+      server_is_player1: true,
+    }));
+    const proposed = new Map<number, ProposedPoint>(
+      [1, 2].map((id) => [
+        id,
+        { set: 1, game: 1, server: "player1", mergedWith: null },
+      ]),
+    );
+    expect(proposalDifferingRallies(proposed, rows).size).toBe(0);
+  });
 });

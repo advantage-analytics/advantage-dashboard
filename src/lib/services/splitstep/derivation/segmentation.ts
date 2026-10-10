@@ -52,7 +52,12 @@
  */
 
 import { serveCourtSide } from "./court";
-import { playerAtEnd, serveEnd, type CourtEnd } from "./position";
+import {
+  playerAtEnd,
+  serveEnd,
+  type CompletedSet,
+  type CourtEnd,
+} from "./position";
 import type { MatchScore } from "./reconcile";
 import { lastServeIndex } from "./result-type";
 import type { SplitStepRally } from "./types";
@@ -164,8 +169,9 @@ export interface SegmentationProposal {
  *
  * Result (published → proposed server, firings hit/total), each session
  * fitting the entered score where it did before:
- *   be930d79 (ad): fit, 42/56 → 54/56, 22/23 hit, 4 of 4 labelled merges
- *     proposed (was 52/56, 8/23). The two remaining server misses sit on a
+ *   be930d79 (ad): fit, 42/56 → 54/56, 14/15 hit, 4 of 4 labelled merges
+ *     proposed (was 52/56). Firings count rallies whose game assignment,
+ *     server or merge changes; renumbering alone does not fire. The two remaining server misses sit on a
  *     rally the labeller split into two points with different servers.
  *   868a7696 (no-ad): fit, 101/106 → 105/106, 5/5 hit, the one labelled
  *     merge proposed (was ambiguous, 103/106, 2/2).
@@ -232,9 +238,22 @@ interface SetsEntry {
   id: number;
   /** Finished sets as [player1 games, player2 games]. */
   sets: ReadonlyArray<readonly [number, number]>;
-  /** Each finished set's game total — `playerAtEnd`'s `completedSets`. */
+  /** Each finished set's game total (`pauseBefore` reads the last one's parity). */
   totals: readonly number[];
+  /**
+   * `playerAtEnd`'s `completedSets`: the totals, with a tiebreak set carried
+   * as `{ games, tiebreakPoints }` so its in-tiebreak end changes count.
+   * Only the parity of those changes matters, so sets whose tiebreaks ran to
+   * point counts of the same parity share one entry (`internSets`) and the
+   * point count recorded is the first one seen.
+   */
+  ends: readonly CompletedSet[];
   gamesTotal: number;
+}
+
+/** The in-tiebreak end changes (after points 6, 12, … that more play followed) a tiebreak of `points` made, mod 2. */
+function tiebreakSwapParity(points: number): 0 | 1 {
+  return (Math.floor((points - 1) / 6) % 2) as 0 | 1;
 }
 
 /** A legal score, the DP's state. Immutable; transitions return a new one. */
@@ -371,7 +390,13 @@ interface Run {
 }
 
 function startRun(rules: Rules): Run {
-  const empty: SetsEntry = { id: 0, sets: [], totals: [], gamesTotal: 0 };
+  const empty: SetsEntry = {
+    id: 0,
+    sets: [],
+    totals: [],
+    ends: [],
+    gamesTotal: 0,
+  };
   return {
     rules,
     start: stateOf(empty, 0, 0, 0, 0),
@@ -380,15 +405,35 @@ function startRun(rules: Rules): Run {
   };
 }
 
-function internSets(run: Run, sets: SetsEntry, g1: number, g2: number) {
-  const key = sets.sets.map(([a, b]) => `${a}-${b}|`).join("") + `${g1}-${g2}|`;
+/**
+ * The entry for `sets` plus one more finished set. `tiebreakPoints` is the
+ * point count of the tiebreak that closed it, or null when it closed on
+ * games; two tiebreaks whose in-tiebreak end changes have the same parity
+ * share one entry, since that parity is all `playerAtEnd` reads.
+ */
+function internSets(
+  run: Run,
+  sets: SetsEntry,
+  g1: number,
+  g2: number,
+  tiebreakPoints: number | null,
+) {
+  const tb =
+    tiebreakPoints === null ? "" : `t${tiebreakSwapParity(tiebreakPoints)}`;
+  const key =
+    sets.sets.map(([a, b]) => `${a}-${b}|`).join("") + `${g1}-${g2}${tb}|`;
   const seen = run.setsTable.get(key);
   if (seen) return seen;
+  const games = g1 + g2;
   const entry: SetsEntry = {
     id: run.setsTable.size,
     sets: [...sets.sets, [g1, g2]],
-    totals: [...sets.totals, g1 + g2],
-    gamesTotal: sets.gamesTotal + g1 + g2,
+    totals: [...sets.totals, games],
+    ends: [
+      ...sets.ends,
+      tiebreakPoints === null ? games : { games, tiebreakPoints },
+    ],
+    gamesTotal: sets.gamesTotal + games,
   };
   run.setsTable.set(key, entry);
   return entry;
@@ -420,8 +465,9 @@ function serverOf(s: State, rules: Rules): string {
 
 /**
  * The end the schedule puts this point's server at, or null when unknown.
- * Memoised: it depends only on the finished sets, the games played in this
- * set, which player serves and (in a tiebreak) how many six-point swaps have
+ * Memoised: it depends only on the finished sets (whose entry id already
+ * encodes any tiebreak's end-change parity), the games played in this set,
+ * which player serves and (in a tiebreak) how many six-point swaps have
  * passed, and every layer asks the same questions.
  */
 function expectedEnd(s: State, run: Run, server: string): CourtEnd | null {
@@ -437,7 +483,7 @@ function expectedEnd(s: State, run: Run, server: string): CourtEnd | null {
   if (hit) return hit;
   const top = playerAtEnd({
     ...rules.ends,
-    completedSets: s.sets.totals,
+    completedSets: s.sets.ends,
     gamesBeforeInSet: before,
     end: "top",
     tiebreakPointsBefore,
@@ -565,8 +611,18 @@ function setsWon(sets: SetsEntry, who: 1 | 2): number {
   return sets.sets.filter(([a, b]) => (who === 1 ? a > b : b > a)).length;
 }
 
-/** The set after the games `g1`/`g2` closed it; null when the entered score forbids it. */
-function closeSet(s: State, run: Run, g1: number, g2: number): State | null {
+/**
+ * The set after the games `g1`/`g2` closed it; null when the entered score
+ * forbids it. `tiebreakPoints` is the closing tiebreak's point count, or null
+ * when the set closed on games.
+ */
+function closeSet(
+  s: State,
+  run: Run,
+  g1: number,
+  g2: number,
+  tiebreakPoints: number | null,
+): State | null {
   const { rules } = run;
   const k = s.sets.sets.length;
   if (
@@ -576,7 +632,7 @@ function closeSet(s: State, run: Run, g1: number, g2: number): State | null {
   ) {
     return null;
   }
-  return stateOf(internSets(run, s.sets, g1, g2), 0, 0, 0, 0);
+  return stateOf(internSets(run, s.sets, g1, g2, tiebreakPoints), 0, 0, 0, 0);
 }
 
 /**
@@ -609,7 +665,7 @@ function advance(s: State, run: Run, outcome: Outcome): State | null {
     const p2 = s.pr + (toPlayer1 ? 0 : 1);
     if (p1 >= TIEBREAK_POINT_CAP || p2 >= TIEBREAK_POINT_CAP) return null;
     if ((p1 >= 7 || p2 >= 7) && Math.abs(p1 - p2) >= 2) {
-      return closeSet(s, run, p1 > p2 ? 7 : 6, p1 > p2 ? 6 : 7);
+      return closeSet(s, run, p1 > p2 ? 7 : 6, p1 > p2 ? 6 : 7, p1 + p2);
     }
     return stateOf(s.sets, 6, 6, p1, p2, true);
   }
@@ -638,7 +694,7 @@ function advance(s: State, run: Run, outcome: Outcome): State | null {
   const t2 = rules.score.player2[k] ?? 0;
   if (rules.constrained && (g1 > t1 || g2 > t2)) return null;
 
-  if (setOver(g1, g2)) return closeSet(s, run, g1, g2);
+  if (setOver(g1, g2)) return closeSet(s, run, g1, g2, null);
   if (g1 === 6 && g2 === 6) return stateOf(s.sets, 6, 6, 0, 0, true);
   return stateOf(s.sets, g1, g2, 0, 0);
 }

@@ -4,6 +4,7 @@ import {
   playerAtEnd,
   proposeSegmentation,
   SEGMENT_COSTS,
+  type CompletedSet,
   type RallyOutcome,
   type SegmentationInput,
   type SplitStepRally,
@@ -110,17 +111,21 @@ function build(
   const outcomes: RallyOutcome[] = [];
   const vendorGameStarts: boolean[] = [];
   const gameStarts: number[] = [];
-  const completedSets: number[] = [];
+  // A tiebreak set is carried as { games, tiebreakPoints } so the end changes
+  // inside the tiebreak place the next set's ends (position.ts).
+  const completedSets: CompletedSet[] = [];
   let gamesPlayed = 0;
   let time = 0;
 
   for (const games of sets) {
     let gamesInSet = 0;
+    let tiebreakPoints: number | null = null;
     for (const game of games) {
       const gameServer = gamesPlayed % 2 === 0 ? A : B;
       if (rallies.length > 0) {
         // The pause before this game, on top of the between-point gap.
-        const lastSet = completedSets.at(-1) ?? 0;
+        const last = completedSets.at(-1) ?? 0;
+        const lastSet = typeof last === "number" ? last : last.games;
         const changeover =
           gamesInSet === 0 ? lastSet % 2 === 1 : gamesInSet % 2 === 1;
         if (gamesInSet === 0) time += SET_BREAK_GAP_S - POINT_GAP_S;
@@ -163,10 +168,15 @@ function build(
         });
         vendorGameStarts.push(p === 0);
       });
+      if (game.tiebreak) tiebreakPoints = game.points.length;
       gamesPlayed += 1;
       gamesInSet += 1;
     }
-    completedSets.push(gamesInSet);
+    completedSets.push(
+      tiebreakPoints === null
+        ? gamesInSet
+        : { games: gamesInSet, tiebreakPoints },
+    );
   }
 
   return {
@@ -729,6 +739,57 @@ test.describe("proposeSegmentation", () => {
       game: 1,
       server: "player2",
       winner: "player1",
+    });
+  });
+
+  test("a 7–5 tiebreak's end change after point 6 carries into the next set", () => {
+    // A serves point 1 of the tiebreak; the serve then rotates B, B, A, A, …
+    // A takes points 1, 2, 4, 5, 8, 9 and 12 (7–5, 12 points), so the ends
+    // changed once inside the tiebreak (after point 6) and once at its end:
+    // set 2 opens on the match's starting ends, A at the top, B serving.
+    // Without the in-tiebreak carry every set-2 rally would pay the end cost.
+    const sevenFive: GameSpec = {
+      points: ["S", "R", "S", "S", "S", "S", "S", "S", "S", "S", "S", "S"],
+      tiebreak: true,
+    };
+    const set1 = [...Array.from({ length: 12 }, () => hold), sevenFive];
+    const set2 = [
+      breakGame,
+      hold,
+      breakGame,
+      breakGame,
+      breakGame,
+      breakGame,
+      breakGame,
+      hold,
+    ];
+    const { input, gameStarts } = build([set1, set2], {
+      score: { player1: [7, 6], player2: [6, 2] },
+    });
+    expect(input.rallies).toHaveLength(60 + 32);
+    // The builder placed set 2's opening serve from the top (A's starting end).
+    const opener = input.rallies[gameStarts[13]].strokes[0];
+    expect(opener.playerLabel).toBe(B);
+    expect(opener.playerY).toBeLessThan(0);
+
+    const proposal = proposeSegmentation(input);
+
+    expect(proposal.status).toBe("fit");
+    expect(proposal.cost).toBe(0);
+    expect(proposal.costBreakdown.end).toBe(0);
+    expect(proposal.games).toHaveLength(21);
+    expect(proposal.games[12]).toMatchObject({
+      set: 1,
+      game: 13,
+      winner: "player1",
+      firstRallyId: 49,
+      lastRallyId: 60,
+    });
+    expect(proposal.games[13]).toMatchObject({
+      set: 2,
+      game: 1,
+      server: "player2",
+      firstRallyId: 61,
     });
   });
 

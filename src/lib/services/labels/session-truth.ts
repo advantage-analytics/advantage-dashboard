@@ -25,7 +25,7 @@
  */
 
 import {
-  proposalDiffers,
+  proposalDifferingRallies,
   type ProposedPoint,
   SegmentationProposal,
 } from "@/lib/services/splitstep/derivation";
@@ -86,7 +86,10 @@ export interface SessionTruthRow {
    * server.
    */
   proposed: (TruthValues & { mergedWith: number | null }) | null;
-  /** The proposal's game or server for this rally differs from the rows. */
+  /**
+   * The proposal merges this rally, gives it another server, or moves it to
+   * another game (`proposalDifferingRallies`).
+   */
   fired: boolean;
 }
 
@@ -132,6 +135,11 @@ export function joinSessionTruth(args: {
   const rows: SessionTruthRow[] = [];
   const unmatched: TruthLabelPoint[] = [];
   let excluded = 0;
+  // The same set transcript.ts raises segment_proposal_differs on, over the
+  // same rows (every transcript point), so "fired" and the flag agree.
+  const differing = args.proposed
+    ? proposalDifferingRallies(args.proposed, args.points)
+    : new Set<number>();
 
   for (const label of args.labels) {
     if (!isTruthPoint(label)) {
@@ -182,8 +190,7 @@ export function joinSessionTruth(args: {
         gameKey: `${p.set}|${p.game}`,
         mergedWith: p.mergedWith,
       },
-      // The same test transcript.ts uses to raise segment_proposal_differs.
-      fired: p !== null && proposalDiffers(p, point),
+      fired: differing.has(rallyId),
     });
   }
   return { rows, unmatched, excluded };

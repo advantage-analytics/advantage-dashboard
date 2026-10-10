@@ -89,13 +89,16 @@
  * side, server-relative outcomes, moved or dropped vendor boundaries, gaps
  * that disagree with a changeover, and split-point merges; it runs on every
  * match and writes `derivation_quality.segmentation`, never `fold`, so the
- * match report's unreconciled note is unchanged. Where its game, server or
- * merge differs from the derived point, the point gets the hidden mark
- * `segment_proposal_differs` carrying the proposal. Tuned weights: end 5,
+ * match report's unreconciled note is unchanged. Where it moves a point to
+ * another game (each proposed game paired one-to-one with the published game
+ * it shares most rallies with — renumbering alone never counts), gives it
+ * another server or merges it, the point gets the hidden mark
+ * `segment_proposal_differs` carrying the proposal. Ends follow the ITF
+ * changeover rule, a tiebreak's six-point changes included. Tuned weights: end 5,
  * side 2, flipHigh 2, flipLow 1, vendorBoundaryMoved 1, vendorBoundaryDropped
  * 1, changeoverShortGap 4, longGapNotChangeover 3, merge 1. Over three labelled
  * sessions: be930d79 fit at 6-2 and proposed the server on 54 of 56 points
- * (published 42), with 22 of 23 firings right and 4 of 4 labelled merges;
+ * (published 42), with 14 of 15 firings right and 4 of 4 labelled merges;
  * 868a7696 fit, 105 of 106 (published 101), 5 of 5 firings; 45ff4bd7 stayed
  * ambiguous with no firing, since the vendor's high-confidence winners make
  * its cut self-consistent and its gap sits 1 s over the short-gap threshold.
@@ -105,7 +108,7 @@
  * every second frozen game on ac56ef8b unrelabelled; position is used only
  * inside the segmenter. Promotion past review-only needs at least 95% of
  * firings right on server and game over 30+ firings across 2+ matches,
- * re-scored with `scripts/splitstep-eval.ts --session`; so far 27 of 28
+ * re-scored with `scripts/splitstep-eval.ts --session`; so far 19 of 20
  * across 2 matches, short of 30. Re-deriving a job changes no published game,
  * server, winner or score: each gains only the flag, the `segmentation` key
  * and the new version stamp.
@@ -163,8 +166,10 @@ export {
 export {
   playerAtEnd,
   serveEnd,
+  type CompletedSet,
   type CourtEnd,
   type EndSchedule,
+  type TiebreakSet,
 } from "./position";
 
 export {
@@ -256,7 +261,8 @@ export { ACCEPT_UNRECONCILED_FOLD } from "./reconcile";
 
 export {
   buildTranscript,
-  proposalDiffers,
+  proposalDifferingRallies,
+  type ProposalComparableRow,
   proposedPointsOf,
   type ProposedPoint,
   type Transcript,
