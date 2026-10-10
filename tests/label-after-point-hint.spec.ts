@@ -124,6 +124,31 @@ test.describe("pointEndedEarly", () => {
     ).toBeNull();
   });
 
+  test("a second serve out or in the net is a double fault: the strokes after it were hit after the point ended", () => {
+    const serves = (second: { x: number; y: number }) => [
+      stroke("a", LONG, { stroke: "first_serve" }),
+      stroke("b", second, { stroke: "second_serve" }),
+    ];
+    expect(
+      pointEndedEarly({ shots: [...serves(LONG), stroke("c", IN)] }, true)
+        ?.params,
+    ).toEqual({ shotId: "b", after: ["c"] });
+    // Three after it: too many to take with the edit, so the hint offers it.
+    const three = pointEndedEarly(
+      {
+        shots: [
+          ...serves(NETTED),
+          stroke("c", IN),
+          stroke("d", IN),
+          stroke("e", IN),
+        ],
+      },
+      true,
+    );
+    expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
+    expect(hintLabel(three!)).toBe("Point ended here · 3 shots after it");
+  });
+
   test("nothing when the out ball is the last stroke, is a serve, or there is none", () => {
     expect(
       pointEndedEarly({ shots: [stroke("a", IN), stroke("b", LONG)] }, true),
