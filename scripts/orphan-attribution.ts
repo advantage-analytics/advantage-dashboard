@@ -178,7 +178,7 @@ export const RESULTS_LAYOUTS: KeyLayout[] = [
   ),
   // The version a hand-labelled publish replaced. Not under `results/`, and
   // the match id is second, not third — `layoutFrom` reads where it sits. The
-  // match purge removes these by prefix; this catches any it missed.
+  // match purge removes the ones recorded on its jobs; this catches the rest.
   layoutFrom(
     "label-backups/{match}/{session}/{stamp}.json",
     labelBackupObjectKey({
