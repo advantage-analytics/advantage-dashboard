@@ -294,7 +294,7 @@ ready).
 
 ## T11 · Remove the unused `server_position_conflict` flag
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess)
   - `src/lib/services/splitstep/derivation/flags.ts`

@@ -95,3 +95,11 @@ Every other criterion was met:
 - Flags are applied for any proposal status, including no_fit's closest path.
 - The clean fixture gives `no_fit` (cost 115) against its own folded score. That is worth a look in T9.
   **stash:** 19367490c6ffb6e32809a3869a40ab5a9680e045
+
+## T11 · Remove the unused `server_position_conflict` flag — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Removed everything T2 added for `server_position_conflict`: the `POINT_FLAGS` entry and its doc, the `marks.ts` registry entry, params type and switch case, and the `marks-copy.ts` chip and hover case. The copy spec's sample and label are gone too. The `markHover` doc comment now reads "Five lines have a second form". The shared `TODO(T6)` comment was trimmed to cover only `segment_proposal_differs`. Nothing about `segment_proposal_differs` changed.
+**follow-ups:**
+
+1. T6's stash `19367490` touches `marks.ts` around the same switch, and its `TODO(T6)` comment mentions the positional server. Expect a small conflict when it is reapplied.

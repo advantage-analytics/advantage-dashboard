@@ -40,7 +40,6 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
   score_frozen: "Score not read",
-  server_position_conflict: "Server by position",
   segment_proposal_differs: "Game cut differs",
   geometry_discarded: "No position",
 };
@@ -152,7 +151,7 @@ export function findGapDescription(
 }
 
 /**
- * The hover line for the mark's code, with the players' names. Six lines have
+ * The hover line for the mark's code, with the players' names. Five lines have
  * a second form: a mark whose side, score or proposal the derivation could not
  * read (or a proposed merge), and a removal of more than one shot.
  */
@@ -218,13 +217,6 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "The score couldn’t be read here, so the winner comes from the last shot. That guess is right about 4 times in 5.";
     case "score_frozen":
       return "The vendor’s score stopped updating. The game and server come from where the serve was hit. The score is left blank.";
-    case "server_position_conflict": {
-      const { positionalServer } = mark.params;
-      if (positionalServer === null) {
-        return "The score couldn’t be read here and the serve has no position, so the server wasn’t changed. Check who served.";
-      }
-      return `The score couldn’t be read here, and the serve’s end says ${names[positionalServer]} served. The server wasn’t changed. Check who served.`;
-    }
     case "segment_proposal_differs": {
       const { proposedGame, proposedServer, mergedWith } = mark.params;
       if (mergedWith !== null) {

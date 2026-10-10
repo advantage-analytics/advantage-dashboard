@@ -98,14 +98,6 @@ export const POINT_FLAGS = {
    */
   SCORE_SIDE_MISMATCH: "score_side_mismatch",
   /**
-   * Review-only. Inside a frozen score stretch, the server by game alternation
-   * is not the player the changeover schedule puts at the serve's end
-   * (position.ts), or the serve has no position to check. The rally's labels
-   * are left as the vendor gave them instead of being relabelled to the
-   * alternation server. Raised by transcript.ts's frozen loop.
-   */
-  SERVER_POSITION_CONFLICT: "server_position_conflict",
-  /**
    * Review-only. The score-constrained segmentation (segmentation.ts, run from
    * transcript.ts) puts this point in a different game, gives it a different
    * server, or merges it with a neighbouring rally. Published rows are
