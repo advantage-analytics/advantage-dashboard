@@ -49,6 +49,11 @@ export type LabelConfirm =
       kind: "reset-point";
       pointId: string;
       pointNumber: number;
+    }
+  | {
+      kind: "complete-session";
+      /** What is still open (`completeWarnings`); empty when nothing is. */
+      warnings: readonly string[];
     };
 
 export interface LabelConfirmCopy {
@@ -106,6 +111,17 @@ export function labelConfirmCopy(
         description: `Your changes to this shot in point ${confirm.pointNumber} are replaced by the values it was seeded with. Any field marked unclear stays marked.`,
         confirmLabel: "Reset",
         pendingLabel: "Resetting…",
+        tone: "primary",
+      };
+    case "complete-session":
+      return {
+        title: "Mark this session complete?",
+        description:
+          confirm.warnings.length === 0
+            ? "Every point is checked and the score adds up. The console becomes read-only; Reopen brings it back."
+            : "Some things are still open. You can complete it anyway, and Reopen brings it back to fix them.",
+        confirmLabel: "Mark complete",
+        pendingLabel: "Completing…",
         tone: "primary",
       };
     case "reset-point":

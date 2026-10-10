@@ -1342,6 +1342,54 @@ test.describe("a rally ball marked out takes the one or two strokes after it", (
     ]);
   });
 
+  test("a second serve marked out is a double fault: the return goes as hit after the fault, and the receiver wins", async () => {
+    // Lee's first serve out, his second serve, Vargas's return. The second
+    // serve placed long: the return was a swing at a dead ball.
+    const fake = fakeClient({
+      shot: shotRow({ hitter: "p1", stroke: "second_serve", result: "in" }),
+      shots: [
+        pointShot(SERVE_ID, {
+          stroke: "first_serve",
+          result: "out",
+          video_time: 1,
+        }),
+        pointShot(SHOT_ID, { stroke: "second_serve", video_time: 2 }),
+        pointShot(AFTER_1, { hitter: "p2", stroke: "forehand", video_time: 3 }),
+      ],
+    });
+    const result = await writeLabelShotEdit({
+      supabase: fake.supabase,
+      shotId: SHOT_ID,
+      patch: { landing_x: 0.5, landing_y: 22, result: "out" },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      removedAfter: [{ id: AFTER_1, statusBeforeDelete: "kept" }],
+      point: { ending: "double_fault", endedBy: "p1", winner: "p2" },
+    });
+    expect(updates(fake).slice(1)).toEqual([
+      {
+        ...tombstone(AFTER_1),
+        values: {
+          status: "deleted",
+          status_before_delete: "kept",
+          delete_reason: "dead_ball_after_fault",
+        },
+      },
+      {
+        table: "label_points",
+        op: "update",
+        values: {
+          ending: "double_fault",
+          ended_by: "p1",
+          winner: "p2",
+          status: "edited",
+        },
+        filters: { id: POINT_ID, updated_at: UPDATED_AT },
+      },
+    ]);
+  });
+
   test("two strokes after: both go, each remembering its status, and the winner follows", async () => {
     // Serve, return, Lee's forehand placed out, then a swing each.
     const fake = fakeClient({

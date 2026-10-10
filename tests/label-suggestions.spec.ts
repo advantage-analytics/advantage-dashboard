@@ -9,6 +9,7 @@ import {
   type LabelMarks,
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
+import { markState } from "@/lib/services/labels/marks-state";
 import { planAddedShot } from "@/lib/services/labels/operations";
 import type {
   LabelPoint,
@@ -159,6 +160,62 @@ test.describe("suggestionState", () => {
       ),
     };
     expect(suggestionState(SUGGESTION, undone)).toBe("open");
+  });
+
+  test("done once the pair's first stroke is out or in the net", () => {
+    const ruled = (fields: Partial<LabelShot>): LabelPoint => {
+      const point = pairPoint();
+      return {
+        ...point,
+        shots: point.shots.map((s) =>
+          s.eventId === 502 ? { ...s, ...fields } : s,
+        ),
+      };
+    };
+    expect(suggestionState(SUGGESTION, ruled({ result: "out" }))).toBe("done");
+    expect(suggestionState(SUGGESTION, ruled({ result: "net" }))).toBe("done");
+    expect(suggestionState(SUGGESTION, ruled({ result: "in" }))).toBe("open");
+
+    // Placed coordinates outrank a stale stored call: long past the far
+    // baseline is out whatever `result` still says, and a landing inside the
+    // court keeps it open whatever it says.
+    const placedLong = {
+      contactX: 1,
+      contactY: 2,
+      landingX: 1,
+      landingY: 26,
+    };
+    expect(
+      suggestionState(SUGGESTION, ruled({ ...placedLong, result: "in" })),
+    ).toBe("done");
+    expect(
+      suggestionState(
+        SUGGESTION,
+        ruled({ ...placedLong, landingY: 20, result: "out" }),
+      ),
+    ).toBe("open");
+
+    // A deleted stroke answers nothing, nor does another stroke going out.
+    expect(
+      suggestionState(
+        SUGGESTION,
+        ruled({ result: "out", status: "deleted", statusBeforeDelete: "kept" }),
+      ),
+    ).toBe("open");
+    const point = pairPoint();
+    const laterOut: LabelPoint = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.eventId === 504 ? { ...s, result: "out" } : s,
+      ),
+    };
+    expect(suggestionState(SUGGESTION, laterOut)).toBe("open");
+
+    // The "Same side twice" mark settles with its slot.
+    expect(markState(pairMark(), pairPoint(), [SUGGESTION])).toBe("open");
+    expect(markState(pairMark(), ruled({ result: "out" }), [SUGGESTION])).toBe(
+      "settled",
+    );
   });
 
   test("dismissed by its own key only, and done outranks dismissed", () => {

@@ -40,6 +40,7 @@ import {
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   applyShotsRemoved,
+  deadBallReason,
   applyShotsRestored,
   gameServer,
   isLabelGame,
@@ -316,7 +317,8 @@ export async function writeLabelShotRestore(params: {
 
 /**
  * Tombstone every live stroke after `shotId` in its point, as hit after the
- * point ended (`dead_ball_after_point`) — any number of them, the hint line's
+ * point ended (`deadBallReason`: `dead_ball_after_fault` after a second
+ * serve's double fault, else `dead_ball_after_point`) — any number of them, the hint line's
  * "Remove N" where an edit left three or more alone. One tombstone per
  * stroke, compare-and-set (`writeShotTombstones`), then the point's ending
  * once. Refused on a tombstone and with no live stroke after. Never throws.
@@ -337,10 +339,13 @@ export async function writeLabelShotsRemoveAfter(params: {
   if (after.length === 0) {
     return { error: "There is no live shot after this one to remove." };
   }
+  const reason = deadBallReason(
+    read.shots.find((s) => s.id === shotId)?.stroke,
+  );
   const written = await writeShotTombstones(
     supabase,
     after,
-    "dead_ball_after_point",
+    reason,
     "remove the shots after it",
   );
   if ("error" in written) return written;
@@ -349,7 +354,7 @@ export async function writeLabelShotsRemoveAfter(params: {
     pointId: read.row.label_point_id,
     ghosts: read.ghosts,
     before: read.shots,
-    after: applyShotsRemoved(read.shots, written.removed),
+    after: applyShotsRemoved(read.shots, written.removed, reason),
   });
   if ("error" in synced) {
     return {

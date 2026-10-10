@@ -30,6 +30,7 @@ import {
 } from "@/lib/services/labels/session";
 import {
   readJobAdScoring,
+  readFormatAdScoring,
   resolveLabelAdScoring,
   type JobScoringRow,
 } from "@/lib/services/labels/ad-scoring";
@@ -89,7 +90,11 @@ interface DbMatch {
   player2_name: string | null;
   /** `matches.score` (jsonb), parsed by `parseMatchScore`. */
   score?: unknown;
-  /** `matches.format` (jsonb); only `play_on_lets` is read, by `readPlayOnLets`. */
+  /**
+   * `matches.format` (jsonb): its `ad_scoring` is the scoring's last
+   * fallback (`readFormatAdScoring`, ad-scoring.ts), and `play_on_lets` is read by
+   * `readPlayOnLets`.
+   */
   format?: unknown;
 }
 interface DbSession {
@@ -575,7 +580,11 @@ export function buildLabelSession(
     derivationVersion: session.derivation_version,
     player1Name: match?.player1_name ?? "Player 1",
     player2Name: match?.player2_name ?? "Player 2",
-    adScoring: resolveLabelAdScoring(session.ad_scoring, job?.ad_scoring),
+    adScoring: resolveLabelAdScoring(
+      session.ad_scoring,
+      job?.ad_scoring,
+      readFormatAdScoring(match?.format),
+    ),
     marksEnabled: session.marks_enabled,
     playOnLets: readPlayOnLets(match?.format),
     finalScore: parseFinalScore(session.final_score ?? null),

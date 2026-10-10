@@ -12,6 +12,7 @@
 
 import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import {
+  endsPointWhenMissed,
   isLiveShot,
   isMissedResult,
   isServeStroke,
@@ -258,9 +259,11 @@ export function liveShotsAfter(
  * The strokes an edit that marks a rally ball out or into the net takes with
  * it: the live strokes after it, when there are one or two of them. `shots`
  * are the point's rows with the edit applied, `before` the stroke's result as
- * read. Nothing when the patch carries no `result` (a court click with one
- * end still missing), when the ball was a miss already, when the stroke is a
- * serve (a fault ends nothing), or with three or more strokes after.
+ * read. A second serve counts: out or in the net it is a double fault, and
+ * the return after it was a swing at a dead ball. Nothing when the patch
+ * carries no `result` (a court click with one end still missing), when the
+ * ball was a miss already, when the stroke is a first serve (the second
+ * serve follows that fault), or with three or more strokes after.
  */
 export function deadBallsAfterMiss(
   shots: readonly LabelShot[],
@@ -273,11 +276,26 @@ export function deadBallsAfterMiss(
     return [];
   }
   const shot = shots.find((s) => s.id === shotId);
-  if (!shot || isServeStroke(shot.stroke)) return [];
+  if (!shot || !endsPointWhenMissed(shot.stroke)) return [];
   const after = liveShotsAfter(shots, shotId, ghosts);
   return after.length > 0 && after.length <= DEAD_BALLS_REMOVED_WITH_MISS
     ? after
     : [];
+}
+
+/**
+ * Why the strokes after a missed ball go: hit after a double fault when the
+ * miss was a second serve, else hit after the point ended.
+ */
+export function deadBallReason(
+  stroke: LabelShot["stroke"] | undefined,
+): Extract<
+  LabelDeleteReason,
+  "dead_ball_after_fault" | "dead_ball_after_point"
+> {
+  return stroke === "second_serve"
+    ? "dead_ball_after_fault"
+    : "dead_ball_after_point";
 }
 
 /** What a batched remove answers about each stroke it tombstoned. */
@@ -295,6 +313,7 @@ export interface LabelShotRestored {
 export function applyShotsRemoved(
   shots: readonly LabelShot[],
   removed: readonly LabelShotRemoved[],
+  reason: LabelDeleteReason = "dead_ball_after_point",
 ): LabelShot[] {
   const by = new Map(removed.map((r) => [r.id, r]));
   return shots.map((shot) => {
@@ -304,7 +323,7 @@ export function applyShotsRemoved(
           ...shot,
           status: "deleted",
           statusBeforeDelete: r.statusBeforeDelete,
-          deleteReason: "dead_ball_after_point",
+          deleteReason: reason,
         }
       : shot;
   });

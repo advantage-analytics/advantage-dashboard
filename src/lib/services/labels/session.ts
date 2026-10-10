@@ -76,6 +76,16 @@ export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
 }
 
 /**
+ * Whether a stroke out or in the net ends the point: any rally ball, and a
+ * second serve (a double fault). A first serve's fault ends nothing.
+ */
+export function endsPointWhenMissed(
+  stroke: LabelStroke | null | undefined,
+): boolean {
+  return !isServeStroke(stroke) || stroke === "second_serve";
+}
+
+/**
  * Whether an ending says the point was not played out — a replayed let or a
  * non-point: the score stands, the server's turn does not move, and no stroke
  * rewrites it.
@@ -253,7 +263,8 @@ export interface LabelSession {
   /**
    * Whether the match was played with advantage scoring, for the scoreboard:
    * `label_sessions.ad_scoring` as the labeller set it, else the job's
-   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring`,
+   * `processing_jobs.ad_scoring`, else the match's `matches.format.ad_scoring`,
+   * else true (`resolveLabelAdScoring`,
    * ad-scoring.ts).
    */
   adScoring: boolean;

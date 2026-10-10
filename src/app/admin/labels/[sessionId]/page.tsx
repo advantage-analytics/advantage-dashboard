@@ -6,11 +6,13 @@ import { getLabelSession } from "@/lib/data/labels-server";
 import {
   addLabelShotAction,
   combineLabelPointsAction,
+  completeLabelSessionAction,
   deleteLabelPointAction,
   deleteLabelShotAction,
   moveLabelPointAction,
   pullLabelGamePointsAction,
   removeLabelShotsAfterAction,
+  reopenLabelSessionAction,
   resetLabelPointAction,
   resetLabelShotAction,
   restoreLabelPointAction,
@@ -38,7 +40,8 @@ import {
  * reset an edited row to its seed, set a game's server or type, put back a
  * stroke the site removed, dismiss a suggestion, add a suggested point, move
  * a game's leftover points into the next game, store the score the labeller
- * read or that the video ends early) through the rest
+ * read or that the video ends early, mark the session complete or reopen it)
+ * through the rest
  * of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
@@ -109,6 +112,8 @@ export default async function AdminLabelSessionPage({
           combinePoints: combineLabelPointsAction,
           switchPlayers: switchLabelPointPlayersAction,
           updateSessionFields: updateLabelSessionFieldsAction,
+          completeSession: completeLabelSessionAction,
+          reopenSession: reopenLabelSessionAction,
         }}
         headerAction={
           <Link
