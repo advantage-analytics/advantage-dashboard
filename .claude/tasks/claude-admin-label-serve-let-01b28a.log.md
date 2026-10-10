@@ -1,0 +1,59 @@
+# Run log — claude/admin-label-serve-let-01b28a
+
+Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
+is the runner's. Newest entries at the bottom.
+
+## T1 · Let serve result · data model and session rule — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `label_shots.result` check now allows `let` (live migration 20261009182159 on `label_shots_result_check`, repo file matches). `LabelShotResult`/`LABEL_SHOT_RESULTS`/`RESULT_LABEL` gain let; `letResultError` refuses a let on a non-serve at parse time and against the stored row in `writeLabelShotEdit`. `LabelSession.playOnLets` read from `matches.format.play_on_lets` (literal true only). `positionPatch` keeps a stored let on position edits. Specs in label-edit, label-shot-derived, label-session-order.
+
+**follow-ups:**
+
+1. Retyping a let serve's stroke to a rally stroke leaves a let on a non-serve; `writeLabelShotEdit` could judge `{ ...row, ...patch }`.
+2. The console's optimistic `applyLabelShotPatch` does not call `letResultError`; only the server refuses.
+3. The `playOnLets` doc comment in session.ts reads confusingly next to the field name — tidy when the menu lands (T3).
+
+## T2 · Let serve · derivation and scoring semantics — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `deriveEnding` drops let serves before reading the point (lone let → null; let + missed first serve → null, not double fault). `pointSummary().rally` counts from the last non-let serve over non-let strokes (time and lastShot still include the let). `secondServeAsFirst` skips lets, so a first serve after a let raises no mark while a let between a fault and a first serve does not clear the fault. `isFault` unchanged (doc only); scorecard needed nothing. Specs in label-ending-derived, label-black-rows, label-after-point-hint.
+
+**follow-ups:**
+
+1. scorecard.ts per-result breakdowns (`resultChanges` keys) will show let as its own value — unchecked how it reads.
+2. `serveAfterServeIn` in marks-state.ts does not skip lets; looks right but is untested.
+
+## T3 · Rail serve-result menu with Let — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Serve rows in a lets-replayed session get a `ServeResultCell` (SelectEditor trigger, "Serve result" heading, calculated Net/In/Out item "From where it landed", divider, "Let" with its description); pure `serveResultMenu`/`serveResultPatch` helpers; let ink `text-[var(--rail-amber)]`; the actions overlay hides via `group-has-[[data-menu-open]]/row:hidden`. `SelectOption` gains description/group/divider; shared `MenuSelect` gains `divider` and optional controlled open. `playOnLets` threads console → rail → `EditContext` (also covers T4's first criterion). Six specs in label-black-rows.
+
+**follow-ups:**
+
+1. With no landing placed, a let can't be switched back to In/Out from the menu (Reset still works).
+2. Eyes-on in a real browser not done: amber trigger, divider/description in the dark FloatMenu, Delete hiding while open.
+3. `menu-select.tsx` `setOpen` also sets own state when controlled — harmless, redundant.
+
+## T4 · Rail header scoring and lets rule — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** The full-screen rail header gains a `data-match-format` span after the checked count: "· Ad scoring · Lets replayed", "· Ad scoring · Lets: play on", or "No-ad scoring" when ad scoring is off; hidden with the progress span in the "Points" header. Prop threading had already landed in T3 (`playOnLets?: boolean`, console always passes a boolean). Spec in label-console.
+
+## T5 · Let count in point subtitle and court title — blocked
+
+**gate:** mechanical pass · completion needs-work
+
+**reason:** `pointDetail` let count (incl. tombstones) met and pinned; the court title criterion was not: ` · let` was added only to the placing title ("Shot N · contact · let"), while the criterion names the lit/selected shot — when a let serve is lit during playback with no placement active the title stays "Point N". Either handle the lit branch too or amend the criterion (the implementer notes the title only names the shot while placing; otherwise the shot is in the subtitle "Shot 2 of 3 · Vargas").
+
+**stash:** 7a594cd47c49e571875e798eacba81a81480e5af
+
+## T5 · Let count in point subtitle and court title — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Re-run from stash 7a594cd4 with the lit branch added. `pointDetail` appends "· 1 let" / "· N lets" after the rally (live lets only). `courtReadout` ends the title with " · let" both while placing a let ("Shot 2 · contact · let") and while one plays ("Point 1 · let"). Specs in label-black-rows and label-court-panel.

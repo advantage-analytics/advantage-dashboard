@@ -188,8 +188,8 @@ function hintLine(
 /** One mark of every code, on the fixture's point and its one stroke. */
 const EVERY_HIDDEN: LabelMark[] = [
   mark("phantom_strokes_dropped", { eventIds: [41], hitter: "p2" }),
-  mark("winner_guessed", {}),
   mark("score_frozen", {}),
+  mark("serve_fault", {}),
 ];
 const HIDDEN_ON_SHOT: LabelMark[] = [
   mark("out_ball_rally_continued", { nextHitter: "p2" }),
@@ -198,7 +198,6 @@ const HIDDEN_ON_SHOT: LabelMark[] = [
 const EVERY_HINT: LabelMark[] = [
   mark("ending_suspect_line", {}),
   mark("winner_to_error_by_bounce", { loser: "p1" }),
-  mark("serve_fault", {}),
   mark("second_serve_called_out", {}),
   mark("result_type_unknown", {}),
 ];
@@ -299,8 +298,8 @@ test.describe("a closed row draws only what can change the score", () => {
       expect(html).not.toContain("data-point-hint");
       for (const words of [
         "shot removed",
-        "Winner guessed",
         "Score not read",
+        "Serve fault?",
         "Out call ignored",
         "No position",
       ]) {
@@ -318,7 +317,7 @@ test.describe("the open point's quiet line", () => {
       point,
       marksOf(
         point,
-        [mark("ending_suspect_line", {}), mark("serve_fault", {})],
+        [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
         {
           [shot.id]: [NET_HIT],
         },
@@ -332,25 +331,19 @@ test.describe("the open point's quiet line", () => {
           "Close to the line. The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
       },
       {
-        code: "serve_fault",
-        text: "Serve fault?",
-        label:
-          "Serve fault? The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
-      },
-      {
         code: "net_hit_contradicts_height",
         text: "Net or out?",
         label:
           "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
       },
     ]);
-    // One line, with a middle dot between two hints and none at either end.
+    // One line, with a middle dot between the two hints and none at either end.
     expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
     const line = html.slice(
       html.indexOf("data-point-hints"),
       html.indexOf('data-row="shot"'),
     );
-    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(2);
+    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(1);
     expect(chips(html)).toHaveLength(0);
   });
 });

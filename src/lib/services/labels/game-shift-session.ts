@@ -16,7 +16,12 @@
 
 import { readAllPages } from "@/lib/data/admin-range-read";
 import type { AdminClient } from "@/lib/supabase/admin";
-import { readJobAdScoring, resolveLabelAdScoring } from "./ad-scoring";
+import {
+  readJobAdScoring,
+  readFormatAdScoring,
+  readMatchAdScoring,
+  resolveLabelAdScoring,
+} from "./ad-scoring";
 import {
   FROZEN,
   defaultLabelWriteDependencies,
@@ -85,6 +90,7 @@ interface ShiftSessionRow {
   status: string;
   ad_scoring: boolean | null;
   job_id: string | null;
+  match_id: string | null;
 }
 
 /** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
@@ -153,7 +159,7 @@ async function runGamePlan(
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id")
+    .select("status, ad_scoring, job_id, match_id")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -162,7 +168,7 @@ async function runGamePlan(
   if (!session) return { error: "Session not found." };
   if (session.status !== "labelling") return { error: FROZEN };
 
-  const [points, job] = await Promise.all([
+  const [points, job, match] = await Promise.all([
     supabase
       .from("label_points")
       .select(GAME_COLUMNS)
@@ -170,9 +176,16 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
+    // The match's format, the last fallback, beside the job's.
+    readMatchAdScoring(supabase, session),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
+  }
+  if (match.error) {
+    return {
+      error: `Could not read the match's scoring: ${match.error.message}`,
+    };
   }
   if (points.error) {
     return {
@@ -182,6 +195,7 @@ async function runGamePlan(
   const adScoring = resolveLabelAdScoring(
     session.ad_scoring,
     job.data?.ad_scoring,
+    readFormatAdScoring(match.data?.format),
   );
 
   // The plan with no shots yet says whether any point moves under a new

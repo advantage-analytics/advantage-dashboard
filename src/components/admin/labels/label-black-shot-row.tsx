@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { Plus, RotateCcw, Split, Undo2, WandSparkles, X } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
 import {
   isGhostShot,
+  isServeStroke,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -21,7 +23,11 @@ import {
 } from "@/lib/services/labels/operations";
 import { canSplitAtShot } from "@/lib/services/labels/point-split";
 import { canResetShot } from "@/lib/services/labels/reset";
-import { shotPlacement } from "@/lib/services/labels/shot-derived";
+import {
+  deriveShotResult,
+  shotPlacement,
+} from "@/lib/services/labels/shot-derived";
+import type { LabelShotResult } from "@/lib/services/labels/seed";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import { courtPair } from "./label-black-format";
 import {
@@ -359,10 +365,16 @@ export function BlackShotRow({
   edit,
   playing = false,
   arrive,
+  resultMenuOpen = false,
 }: {
   shot: LabelShot;
   number: number;
   arrive?: number;
+  /**
+   * The serve-result menu's state when the row first draws: false but for a
+   * spec, which cannot reach a menu's open state any other way.
+   */
+  resultMenuOpen?: boolean;
   /**
    * The stroke's point, for "Split point here". Absent, no split is offered.
    */
@@ -387,6 +399,7 @@ export function BlackShotRow({
   const selectCell = { ...cell, menu: tone };
   const time = shot.videoTime !== null ? formatVideoTime(shot.videoTime) : null;
   const placement = shotPlacement(labelShotValues(shot));
+  const serveResult = serveResultMenu(shot, edit.playOnLets);
   /** The words' ink, a step down on a fault. */
   const words = fault ? "text-white/35" : "text-white/50";
   const arrival = rowArrival(arrive);
@@ -465,7 +478,7 @@ export function BlackShotRow({
         className={cn("text-[11px] font-medium", lit && "text-white")}
         style={lit ? undefined : { color: fault ? QUIET_INK : VALUE_INK }}
         onChange={(value) =>
-          patch({ stroke: value as LabelShotPatch["stroke"] })
+          patch(strokeChangePatch(shot, value as LabelShotPatch["stroke"]))
         }
       />
       <BlackSelectCell
@@ -520,17 +533,34 @@ export function BlackShotRow({
       )}
       {/* The word, then a fixed right-aligned slot for the pencil: the word
           truncates before the pencil is touched. The gap between them is
-          3px; at 4 the pencil's last pixel was clipped. */}
+          3px; at 4 the pencil's last pixel was clipped. A serve, where lets
+          are replayed, is a "Serve result" select in that first slot. */}
       <span
-        data-calculated="result"
+        data-calculated={serveResult ? undefined : "result"}
+        data-serve-result={serveResult ? "" : undefined}
         className={cn(
           "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[3px] overflow-hidden text-[11px] whitespace-nowrap",
           words,
         )}
       >
-        <span className="min-w-0 truncate">
-          {shot.result ? RESULT_LABEL[shot.result] : <Dash label="No result" />}
-        </span>
+        {serveResult ? (
+          <ServeResultCell
+            {...selectCell}
+            label={`Shot ${number} result`}
+            value={shot.result}
+            options={serveResult.options}
+            initialOpen={resultMenuOpen}
+            onChange={(value) => patch(serveResultPatch(value))}
+          />
+        ) : (
+          <span className="min-w-0 truncate">
+            {shot.result ? (
+              RESULT_LABEL[shot.result]
+            ) : (
+              <Dash label="No result" />
+            )}
+          </span>
+        )}
         {changed ? (
           <span
             data-shot-marks=""
@@ -563,6 +593,9 @@ export function BlackShotRow({
             // result under it selects the row. A selected row waits for the
             // pointer or the keyboard too, so its result stays readable.
             "pointer-events-none opacity-0 group-focus-within/row:pointer-events-auto group-hover/row:pointer-events-auto",
+            // While the serve-result menu is open, Delete steps aside: the
+            // menu opens over the row's right edge.
+            "group-has-[[data-menu-open]]/row:hidden",
           )}
           style={{ backgroundImage: actionsGround(lit) }}
         >
@@ -610,16 +643,18 @@ export function BlackShotRow({
 }
 
 /**
- * Where the rally's trailing run of `dead_ball_after_point` tombstones
- * starts: the index of its first row, or `shots.length` when the last row
- * is anything else. A tombstone with another reason, or a live row, ends it.
+ * Where the rally's trailing run of dead-ball tombstones (`dead_ball_after_point`,
+ * or `dead_ball_after_fault` behind a double fault) starts: the index of its
+ * first row, or `shots.length` when the last row is anything else. A
+ * tombstone with another reason, or a live row, ends it.
  */
 export function deadBallRunStart(shots: readonly LabelShot[]): number {
   let start = shots.length;
   while (
     start > 0 &&
     shots[start - 1].status === "deleted" &&
-    shots[start - 1].deleteReason === "dead_ball_after_point"
+    (shots[start - 1].deleteReason === "dead_ball_after_point" ||
+      shots[start - 1].deleteReason === "dead_ball_after_fault")
   ) {
     start -= 1;
   }
@@ -1081,6 +1116,152 @@ function Dash({ label }: { label: string }) {
       </span>
       <span className="sr-only">{label}</span>
     </>
+  );
+}
+
+/** The calculated item's second line in the serve-result menu. */
+export const SERVE_RESULT_LANDED = "From where it landed";
+/** The Let item's second line. */
+export const SERVE_RESULT_LET =
+  "Replayed. Not a fault, so the next serve is still a first serve.";
+
+/**
+ * A serve row's result menu, or null where the result is the landing's alone:
+ * any stroke but a serve, and every row when lets are played on (or the
+ * console has not said). Two items under "Serve result": the result
+ * `deriveShotResult` reads off the coordinates, then — past a hairline —
+ * Let. With no landing to read there is no calculated item, only Let: the
+ * menu never offers a result the coordinates do not say.
+ */
+export function serveResultMenu(
+  shot: LabelShot,
+  playOnLets: boolean | undefined,
+): { derived: LabelShotResult | null; options: SelectOption[] } | null {
+  if (!isServeStroke(shot.stroke)) return null;
+  // Played on, a serve's result is the landing's alone — but a let already
+  // stored (marked before the rule changed) keeps its menu, so it can be undone.
+  if (playOnLets !== false && shot.result !== "let") return null;
+  const derived = deriveShotResult(labelShotValues(shot));
+  const options: SelectOption[] = [];
+  if (derived && derived !== "let") {
+    options.push({
+      value: derived,
+      label: RESULT_LABEL[derived],
+      description: SERVE_RESULT_LANDED,
+      group: "Serve result",
+    });
+  }
+  options.push({
+    value: "let",
+    label: RESULT_LABEL.let,
+    description: SERVE_RESULT_LET,
+    group: "Serve result",
+    divider: true,
+  });
+  return { derived, options };
+}
+
+/**
+ * What retyping a stroke writes. A let is a serve's alone, so a let serve
+ * retyped to a rally stroke takes the result its coordinates give (or none)
+ * with it — the server refuses a let left on a non-serve (edit.ts
+ * `letResultError`).
+ */
+export function strokeChangePatch(
+  shot: LabelShot,
+  stroke: LabelShotPatch["stroke"],
+): LabelShotPatch {
+  if (shot.result !== "let" || isServeStroke(stroke ?? null)) return { stroke };
+  return {
+    stroke,
+    result: deriveShotResult({
+      ...labelShotValues(shot),
+      stroke: stroke ?? null,
+    }),
+  };
+}
+
+/** What picking a serve-result item writes. */
+export function serveResultPatch(value: string | null): LabelShotPatch {
+  return { result: value as LabelShotResult | null };
+}
+
+/** A let's word, in the rail's amber; any other result in the row's ink. */
+const LET_INK = "text-[var(--rail-amber)]";
+
+/**
+ * A serve's result: its word, and the "Serve result" select once reached for.
+ * It keeps the menu's open state so the cell can say so
+ * (`data-menu-open`), which steps the row's actions aside.
+ */
+function ServeResultCell({
+  editable,
+  rowSelected,
+  menu,
+  label,
+  value,
+  options,
+  initialOpen,
+  onChange,
+}: {
+  editable: boolean;
+  rowSelected: boolean;
+  menu: RailTone;
+  label: string;
+  value: LabelShotResult | null;
+  options: readonly SelectOption[];
+  initialOpen: boolean;
+  onChange: (value: string | null) => void;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+  // The editor mounts only on the selected row, and unmounting it never
+  // reports the menu closed: deselecting closes it here, so the row's actions
+  // are never left hidden behind a menu that is gone.
+  const [wasSelected, setWasSelected] = useState(rowSelected);
+  if (wasSelected !== rowSelected) {
+    setWasSelected(rowSelected);
+    if (!rowSelected) setOpen(false);
+  }
+  const shown = open && rowSelected;
+  const isLet = value === "let";
+  return (
+    <span
+      data-menu-open={shown ? "" : undefined}
+      className="flex min-w-0 items-center"
+    >
+      <EditableCell
+        editable={editable}
+        rowSelected={rowSelected}
+        label={label}
+        valueText={value ? RESULT_LABEL[value] : "No result"}
+        textClassName={TEXT_AFFORDANCE}
+        className="w-full"
+        display={
+          value ? (
+            <span className={cn("truncate", isLet && LET_INK)}>
+              {RESULT_LABEL[value]}
+            </span>
+          ) : (
+            <Dash label="No result" />
+          )
+        }
+        editor={
+          <SelectEditor
+            menu={menu}
+            label={label}
+            value={value}
+            options={options}
+            onChange={onChange}
+            open={shown}
+            onOpenChange={setOpen}
+            className={isLet ? "text-[color:var(--rail-amber)]" : undefined}
+            // A stored result with no landing to calculate from is not an
+            // item, but the trigger still says it.
+            placeholder={value ? RESULT_LABEL[value] : undefined}
+          />
+        }
+      />
+    </span>
   );
 }
 

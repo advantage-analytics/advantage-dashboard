@@ -214,7 +214,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         ? "The vendor called this ball out, but the rally went on, so it’s stored as in."
         : `The vendor called this ball out, but ${names[mark.params.nextHitter]} played the next shot, so it’s stored as in.`;
     case "winner_guessed":
-      return "The score couldn’t be read here, so the winner comes from the last shot. That guess is right about 4 times in 5.";
+      return "The score couldn’t be read here, so the winner comes from the last shot. That guess has been wrong about half the time, so check who won.";
     case "score_frozen":
       return "The vendor’s score stopped updating. The game and server come from where the serve was hit. The score is left blank.";
     case "segment_proposal_differs": {

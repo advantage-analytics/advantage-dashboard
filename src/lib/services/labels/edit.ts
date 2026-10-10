@@ -13,6 +13,7 @@
  */
 
 import {
+  isServeStroke,
   LABEL_SPINS,
   type LabelEnding,
   type LabelPoint,
@@ -47,7 +48,31 @@ export const LABEL_SHOT_RESULTS: readonly LabelShotResult[] = [
   "in",
   "out",
   "net",
+  "let",
 ];
+
+/**
+ * Why a patch may not leave the row a let on a stroke that is not a serve, or
+ * null when it may. A let is a serve's result and nothing else's, so the row is
+ * judged as the patch would leave it: the patch's own `stroke` and `result`
+ * where it carries them, else the stored row's. That refuses both a let set on
+ * a forehand and a let serve retyped to a forehand without its result cleared
+ * (the rail sends the calculated result with such a retype,
+ * `strokeChangePatch`). With nothing in hand to judge (a patch parsed before
+ * the row is read) there is nothing to refuse yet — the write re-asks with the
+ * row (edit-session.ts `writeLabelShotEdit`).
+ */
+export function letResultError(
+  patch: LabelShotPatch,
+  stored?: Pick<LabelShotValues, "stroke"> &
+    Partial<Pick<LabelShotValues, "result">>,
+): string | null {
+  const result = "result" in patch ? patch.result : stored?.result;
+  if (result !== "let") return null;
+  const stroke = "stroke" in patch ? patch.stroke : stored?.stroke;
+  if (stroke === undefined) return null;
+  return isServeStroke(stroke) ? null : "Only a serve can be a let.";
+}
 
 export const LABEL_ENDINGS: readonly LabelEnding[] = [
   "ace",
@@ -228,7 +253,9 @@ export function parseLabelShotPatch(
   }
   if ("result" in input) {
     const v = vocab(input.result, LABEL_SHOT_RESULTS);
-    if (v === undefined) return { error: "Result must be in, out or net." };
+    if (v === undefined) {
+      return { error: "Result must be in, out, net or let." };
+    }
     patch.result = v;
   }
   if ("spin" in input) {
@@ -285,6 +312,9 @@ export function parseLabelShotPatch(
     }
     patch.unclear = [...new Set(list as LabelShotValueField[])];
   }
+
+  const letError = letResultError(patch);
+  if (letError) return { error: letError };
 
   return { ok: true, patch };
 }

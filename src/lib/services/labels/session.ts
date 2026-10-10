@@ -76,6 +76,16 @@ export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
 }
 
 /**
+ * Whether a stroke out or in the net ends the point: any rally ball, and a
+ * second serve (a double fault). A first serve's fault ends nothing.
+ */
+export function endsPointWhenMissed(
+  stroke: LabelStroke | null | undefined,
+): boolean {
+  return !isServeStroke(stroke) || stroke === "second_serve";
+}
+
+/**
  * Whether an ending says the point was not played out — a replayed let or a
  * non-point: the score stands, the server's turn does not move, and no stroke
  * rewrites it.
@@ -87,6 +97,17 @@ export function isNonPointEnding(ending: LabelEnding | null): boolean {
 /** Whether a result is a missed ball: out, or in the net. */
 export function isMissedResult(result: unknown): result is "out" | "net" {
   return result === "out" || result === "net";
+}
+
+/**
+ * A let: a serve the labeller marked replayed. The one test every reader
+ * uses, so a stray `result: "let"` on a rally stroke is never skipped as one.
+ */
+export function isLetServe(shot: {
+  stroke: LabelStroke | null;
+  result: string | null;
+}): boolean {
+  return isServeStroke(shot.stroke) && shot.result === "let";
 }
 
 export function opponent(side: LabelSide): LabelSide {
@@ -242,7 +263,8 @@ export interface LabelSession {
   /**
    * Whether the match was played with advantage scoring, for the scoreboard:
    * `label_sessions.ad_scoring` as the labeller set it, else the job's
-   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring`,
+   * `processing_jobs.ad_scoring`, else the match's `matches.format.ad_scoring`,
+   * else true (`resolveLabelAdScoring`,
    * ad-scoring.ts).
    */
   adScoring: boolean;
@@ -252,6 +274,13 @@ export interface LabelSession {
    * whose labels were made blind to the derivation and must stay that way.
    */
   marksEnabled: boolean;
+  /**
+   * Whether a let serve is played on in this match (`matches.format
+   * .play_on_lets`): true only when the column holds a literal `true`, so a
+   * null or missing format reads as false — lets replayed, the default. Only
+   * when false does a serve's result menu offer `Let`.
+   */
+  playOnLets: boolean;
   /**
    * The match's final score as the labeller read it off the video
    * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null
