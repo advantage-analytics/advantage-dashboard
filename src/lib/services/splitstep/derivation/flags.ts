@@ -29,6 +29,13 @@ import type { SplitStepRally, SplitStepStroke } from "./types";
  */
 export const HAND_LABELLED_FLAG = "hand_labelled";
 
+/**
+ * Beside `hand_labelled`: a point the labeller knows was played — the score
+ * says so — but that is not on the video, so it carries a winner and server
+ * and nothing else (no strokes, no result type, no rally length or clip).
+ */
+export const OFF_VIDEO_FLAG = "off_video";
+
 export const POINT_FLAGS = {
   /**
    * Score fold and the last stroke's `in` flag name different winners.

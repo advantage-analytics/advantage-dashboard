@@ -40,6 +40,7 @@ import {
   type RawSplitStepStroke,
   type SplitStepRally,
 } from "@/lib/services/splitstep/derivation";
+import { publishEnding } from "./ending-derived";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
@@ -58,8 +59,14 @@ import {
 } from "./session";
 
 /** The flag every applied point carries; persist-transcript.ts guards on it. */
-export { HAND_LABELLED_FLAG } from "@/lib/services/splitstep/derivation/flags";
-import { HAND_LABELLED_FLAG } from "@/lib/services/splitstep/derivation/flags";
+export {
+  HAND_LABELLED_FLAG,
+  OFF_VIDEO_FLAG,
+} from "@/lib/services/splitstep/derivation/flags";
+import {
+  HAND_LABELLED_FLAG,
+  OFF_VIDEO_FLAG,
+} from "@/lib/services/splitstep/derivation/flags";
 
 /** What the vendor stroke says that the label row does not carry. */
 export interface VendorShotFacts {
@@ -94,7 +101,7 @@ export interface AppliedPointRow {
   game_number: number;
   server_is_player1: boolean;
   won_by_player1: boolean;
-  rally_length: number;
+  rally_length: number | null;
   result_type: string | null;
   is_break_point: boolean;
   is_set_point: boolean;
@@ -322,7 +329,29 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     if (setNumber === null || gameNumber === null) {
       problems.push(`${at}: no set or game number`);
     }
-    if (point.ending === null) problems.push(`${at}: no ending`);
+    const resolved = publishEnding(point);
+    if (resolved.kind === "unresolved") {
+      problems.push(`${at}: no ending, and its strokes don't settle one`);
+    } else if (resolved.kind === "derived") {
+      if (resolved.winner !== null && resolved.winner !== winner) {
+        problems.push(
+          `${at}: no ending, and the strokes say ${resolved.winner} won`,
+        );
+      } else {
+        warnings.push(
+          `${at}: ending taken from its strokes (${resolved.ending}${resolved.endedBy ? ` by ${resolved.endedBy}` : ""})`,
+        );
+      }
+    } else if (resolved.kind === "off_video") {
+      warnings.push(`${at}: not on the video — published as score only`);
+    }
+    const offVideo = resolved.kind === "off_video";
+    const settled =
+      resolved.kind === "stored" || resolved.kind === "derived"
+        ? resolved
+        : null;
+    const ending = settled?.ending ?? null;
+    const endedBy = settled?.endedBy ?? null;
     if (
       server === null ||
       winner === null ||
@@ -343,8 +372,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     played.forEach((shot, i) => {
       if (isServeStroke(shot.stroke)) serveIndex = i;
     });
-    if (played.length === 0) warnings.push(`${at}: no strokes`);
-    else if (serveIndex === -1) warnings.push(`${at}: no serve`);
+    if (played.length > 0 && serveIndex === -1) {
+      warnings.push(`${at}: no serve`);
+    }
     // With no serve the first stroke stands in for it, rather than the
     // derivation's numbering starting at 2.
     const from = Math.max(serveIndex, 0);
@@ -382,17 +412,16 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     });
 
     const last = played.at(-1) ?? null;
-    if (last && point.endedBy !== null && last.hitter !== point.endedBy) {
+    if (last && endedBy !== null && last.hitter !== endedBy) {
       warnings.push(
-        `${at}: ended by ${point.endedBy}, but the last stroke is ${last.hitter}'s`,
+        `${at}: ended by ${endedBy}, but the last stroke is ${last.hitter}'s`,
       );
     }
-    const serverWins =
-      point.ending === "ace" || point.ending === "service_winner";
+    const serverWins = ending === "ace" || ending === "service_winner";
     if (serverWins && winner !== server) {
-      warnings.push(`${at}: ${point.ending} won by the receiver`);
+      warnings.push(`${at}: ${ending} won by the receiver`);
     }
-    if (point.ending === "double_fault" && winner === server) {
+    if (ending === "double_fault" && winner === server) {
       warnings.push(`${at}: double fault won by the server`);
     }
 
@@ -430,8 +459,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       game_number: gameNumber,
       server_is_player1: server === "p1",
       won_by_player1: winner === "p1",
-      rally_length: Math.max(0, played.length - from),
-      result_type: resultTypeOf(point.ending, last?.stroke ?? null),
+      // Null, not 0, off the video: AVG(rally_length) skips it.
+      rally_length: offVideo ? null : Math.max(0, played.length - from),
+      result_type: resultTypeOf(ending, last?.stroke ?? null),
       is_break_point: pressure.isBreakPoint,
       is_set_point: pressure.isSetPoint,
       is_match_point: pressure.isMatchPoint,
@@ -441,7 +471,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       video_time: first,
       duration:
         first !== null && end !== null ? Math.max(0, end - first) : null,
-      flags: [HAND_LABELLED_FLAG],
+      flags: offVideo
+        ? [HAND_LABELLED_FLAG, OFF_VIDEO_FLAG]
+        : [HAND_LABELLED_FLAG],
       derived: true,
       labelPointId: point.id,
       pointIndex: point.pointIndex,

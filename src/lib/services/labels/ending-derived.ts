@@ -164,3 +164,37 @@ export function endingPatchTo(
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
+
+/**
+ * The ending a point publishes with. A stored ending is the labeller's, as
+ * is. With none stored, the strokes decide it by the rule the console's
+ * "Make it …" hint offers (`deriveEnding`, ghosts on, as `endingStale`); a
+ * point with no played stroke at all is one the score says happened off the
+ * video — written with its winner and server and nothing else; and strokes
+ * that settle nothing leave it `unresolved`, which the publish refuses.
+ * The Mark complete confirm reads the same answer (`completeWarnings`).
+ */
+export type PublishEnding =
+  | { kind: "stored"; ending: LabelEnding; endedBy: LabelSide | null }
+  | {
+      kind: "derived";
+      ending: LabelEnding;
+      endedBy: LabelSide | null;
+      winner: LabelSide | null;
+    }
+  | { kind: "off_video" }
+  | { kind: "unresolved" };
+
+export function publishEnding(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "shots">,
+): PublishEnding {
+  if (point.ending !== null) {
+    return { kind: "stored", ending: point.ending, endedBy: point.endedBy };
+  }
+  const played = liveShotsInOrder(point, true).filter(
+    (shot) => !isLetServe(shot),
+  );
+  if (played.length === 0) return { kind: "off_video" };
+  const derived = deriveEnding(point, true);
+  return derived ? { kind: "derived", ...derived } : { kind: "unresolved" };
+}

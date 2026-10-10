@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   HAND_LABELLED_FLAG,
+  OFF_VIDEO_FLAG,
   buildAppliedRows,
   expectedStats,
   letsLeftOutLine,
@@ -361,6 +362,63 @@ test.describe("buildAppliedRows", () => {
     expect(stats.p2.serviceGames).toBe(1);
     expect(stats.p1.breakPointsFaced).toBe(1);
     expect(stats.p2.breakPointsWon).toBe(0);
+  });
+});
+
+test.describe("a point with no ending stored", () => {
+  const withPoint = (index: number, patch: Partial<LabelPoint>) =>
+    session().map((p) => (p.pointIndex === index ? { ...p, ...patch } : p));
+
+  test("the strokes decide it, as the console's Make it … would", () => {
+    const built = build(withPoint(9, { ending: null, endedBy: null }));
+    expect(built.problems).toEqual([]);
+    expect(built.warnings).toEqual([
+      "point 10: ending taken from its strokes (winner by p1)",
+    ]);
+    const point = built.points.find((p) => p.pointIndex === 9)!;
+    expect(point.result_type).toBe("Overhead Winner");
+    expect(point.flags).toEqual([HAND_LABELLED_FLAG]);
+  });
+
+  test("strokes that name the other winner are refused, never flipped", () => {
+    const built = build(withPoint(9, { ending: null, winner: "p2" }));
+    expect(built.problems).toContain(
+      "point 10: no ending, and the strokes say p1 won",
+    );
+  });
+
+  test("no stroke at all: off the video, written as score only", () => {
+    const built = build(withPoint(0, { ending: null, shots: [] }));
+    expect(built.problems).toEqual([]);
+    expect(built.warnings).toEqual([
+      "point 1: not on the video — published as score only",
+    ]);
+    const point = built.points[0];
+    expect(point.won_by_player1).toBe(true);
+    expect(point.server_is_player1).toBe(true);
+    expect(point.point_score).toBe("0-0");
+    expect(point.result_type).toBeNull();
+    // Null, not 0: AVG(rally_length) in calculate_match_stats skips it.
+    expect(point.rally_length).toBeNull();
+    expect(point.video_time).toBeNull();
+    expect(point.duration).toBeNull();
+    expect(point.shots).toEqual([]);
+    expect(point.flags).toEqual([HAND_LABELLED_FLAG, OFF_VIDEO_FLAG]);
+    // It still counts in the score: the next point is 15–0.
+    expect(built.points[1].point_score).toBe("15-0");
+  });
+
+  test("strokes that settle nothing are refused", () => {
+    clock = 500;
+    const built = build(
+      withPoint(0, {
+        ending: null,
+        shots: [shot("p-0", "p1", "first_serve", "out")],
+      }),
+    );
+    expect(built.problems).toEqual([
+      "point 1: no ending, and its strokes don't settle one",
+    ]);
   });
 });
 
