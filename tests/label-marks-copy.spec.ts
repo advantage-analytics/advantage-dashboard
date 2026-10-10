@@ -45,7 +45,7 @@ function mark<C extends LabelMarkCode>(
 /** One mark of every code, with the params the board's sample row implies. */
 const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   winner_disputed: { scoreWinner: "p2", lastStrokeWinner: "p1" },
-  last_call_overruled: { vendorCall: "net" },
+  last_call_overruled: { vendorCall: "net", eventId: 7 },
   winner_to_error_by_bounce: { loser: "p1" },
   ending_suspect_line: {},
   second_serve_called_out: {},

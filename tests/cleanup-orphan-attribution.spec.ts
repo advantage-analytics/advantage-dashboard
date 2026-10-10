@@ -61,6 +61,20 @@ test.describe("layouts each store writes are attributed to their match", () => {
         RESULTS_LAYOUTS,
       ),
     ).toBe(MATCH);
+    // Gzipped players files keep the shape.
+    expect(
+      attributeKey(
+        `results/${USER}/${MATCH}/${JOB}.players.json.gz`,
+        RESULTS_LAYOUTS,
+      ),
+    ).toBe(MATCH);
+    // A hand-labelled publish's backup of the version it replaced.
+    expect(
+      attributeKey(
+        `label-backups/${JOB}/${MATCH}/2026-10-10T19-00-00-000Z.json`,
+        RESULTS_LAYOUTS,
+      ),
+    ).toBe(MATCH);
   });
 
   test("all four result file types still attribute when the uploader has left", () => {

@@ -109,7 +109,7 @@ const PUBLISHED = async () => ({
 });
 
 test.describe("writeLabelSessionComplete", () => {
-  test("publishes before it closes, and a refused publish leaves the session open", async () => {
+  test("claims the session, then publishes; a refused or failed publish opens it again", async () => {
     const fake = fakeClient({});
     const order: string[] = [];
     expect(
@@ -117,7 +117,7 @@ test.describe("writeLabelSessionComplete", () => {
         supabase: fake.supabase,
         sessionId: SESSION_ID,
         publish: async (_db, id) => {
-          order.push(`publish ${id}`);
+          order.push(`publish ${id} after ${updates(fake).length} update`);
           return PUBLISHED();
         },
       }),
@@ -126,7 +126,11 @@ test.describe("writeLabelSessionComplete", () => {
       status: "complete",
       published: { points: 10, shots: 40, insightsRequested: true },
     });
-    expect(order).toEqual([`publish ${SESSION_ID}`]);
+    // The claim lands first, so a second tab finds it taken.
+    expect(order).toEqual([`publish ${SESSION_ID} after 1 update`]);
+
+    const reopened = (fake: ReturnType<typeof fakeClient>) =>
+      updates(fake).map((c) => [c.values?.status, c.filters.status]);
 
     const refusedPublish = fakeClient({});
     expect(
@@ -136,7 +140,10 @@ test.describe("writeLabelSessionComplete", () => {
         publish: async () => ({ ok: false, error: "Not published: no." }),
       }),
     ).toEqual({ error: "Not published: no." });
-    expect(updates(refusedPublish)).toEqual([]);
+    expect(reopened(refusedPublish)).toEqual([
+      ["complete", "labelling"],
+      ["labelling", "complete"],
+    ]);
 
     const threw = fakeClient({});
     expect(
@@ -148,7 +155,24 @@ test.describe("writeLabelSessionComplete", () => {
         },
       }),
     ).toEqual({ error: "Could not publish the labels: boom" });
-    expect(updates(threw)).toEqual([]);
+    expect(reopened(threw)).toEqual([
+      ["complete", "labelling"],
+      ["labelling", "complete"],
+    ]);
+
+    // Raced: another tab claimed it — nothing is published.
+    let ran = false;
+    expect(
+      await writeLabelSessionComplete({
+        supabase: fakeClient({ raced: true }).supabase,
+        sessionId: SESSION_ID,
+        publish: async () => {
+          ran = true;
+          return PUBLISHED();
+        },
+      }),
+    ).toHaveProperty("error");
+    expect(ran).toBe(false);
   });
 
   test("the gate, then ONE update of status and completed_at, matched on the id and an open status", async () => {

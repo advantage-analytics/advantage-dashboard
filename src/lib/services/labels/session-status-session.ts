@@ -4,11 +4,12 @@
  * (a CHECK holds them together). Admin-gated like edit-session.ts; not the
  * marks gate — a session labelled blind completes like any other.
  *
- * Complete is the ordinary gate (`checkSessionOpen`), then the publish — the
- * labelled points replace the match's (apply-session.ts), backed up first —
- * and only then ONE update matched on the id and on `status = 'labelling'`,
- * so a session another tab already completed is not written twice. A publish
- * that refuses leaves the session open, with the reason. Reopen leaves the
+ * Complete is the ordinary gate (`checkSessionOpen`), then ONE update matched
+ * on the id and on `status = 'labelling'` that claims the session — so a
+ * second tab's click finds it taken and publishes nothing — then the publish:
+ * the labelled points replace the match's (apply-session.ts), backed up
+ * first. A publish that refuses or fails puts the session back to labelling,
+ * with the reason. Reopen leaves the
  * published points as they are; completing again publishes again. Reopen reads the status and writes the
  * reverse, matched on `status = 'complete'`; the partial unique index that
  * allows one open session per job (`label_sessions_one_open_per_job`)
@@ -75,21 +76,6 @@ export async function writeLabelSessionComplete(params: {
   const refused = await checkSessionOpen(supabase, sessionId);
   if (refused) return { error: refused };
 
-  let published: LabelPublishSummary;
-  try {
-    const result = await publish(supabase, sessionId);
-    if (!result.ok) return { error: result.error };
-    published = {
-      points: result.points,
-      shots: result.shots,
-      insightsRequested: result.insightsRequested,
-    };
-  } catch (err) {
-    return {
-      error: `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
   const { data, error } = await supabase
     .from("label_sessions")
     .update({ status: "complete", completed_at: new Date().toISOString() })
@@ -97,12 +83,41 @@ export async function writeLabelSessionComplete(params: {
     .eq("status", "labelling")
     .select("id");
   if (error) {
-    return {
-      error: `The labels are published, but the session could not be marked complete: ${error.message}`,
-    };
+    return { error: `Could not complete the session: ${error.message}` };
   }
   if (!data || data.length === 0) return { error: RACED };
-  return { ok: true, status: "complete", published };
+
+  let failure: string;
+  try {
+    const result = await publish(supabase, sessionId);
+    if (result.ok) {
+      return {
+        ok: true,
+        status: "complete",
+        published: {
+          points: result.points,
+          shots: result.shots,
+          insightsRequested: result.insightsRequested,
+        },
+      };
+    }
+    failure = result.error;
+  } catch (err) {
+    failure = `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  // Not published, or not fully: open again so it can be fixed and retried.
+  const { error: reopenError } = await supabase
+    .from("label_sessions")
+    .update({ status: "labelling", completed_at: null })
+    .eq("id", sessionId)
+    .eq("status", "complete");
+  if (reopenError) {
+    return {
+      error: `${failure} The session stayed complete; Reopen it to retry.`,
+    };
+  }
+  return { error: failure };
 }
 
 /** Open a complete session for labelling again. Never throws. */

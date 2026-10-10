@@ -129,6 +129,9 @@ export function sasExpiry(url: string): Date | null {
   }
 }
 
+/** How far back the sweep looks: a SAS url's 7 days, and a day's slack. */
+const SWEEP_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
+
 /** One vendor file the sweep looked at, for the caller to log. Never a url. */
 export interface SweepLine {
   jobId: string;
@@ -165,6 +168,8 @@ export async function archiveMissingVendorFiles(params: {
       "id, created_by, match_id, external_job_id, players_url, players_object_key, trajectories_url, trajectories_object_key, trimmed_video_url, trimmed_object_key",
     )
     .eq("status", "completed")
+    // A SAS url lives 7 days: older jobs have nothing left to fetch.
+    .gte("completed_at", new Date(now - SWEEP_WINDOW_MS).toISOString())
     .or(
       "and(players_url.not.is.null,players_object_key.is.null)," +
         "and(trajectories_url.not.is.null,trajectories_object_key.is.null)," +
@@ -223,15 +228,13 @@ export async function archiveMissingVendorFiles(params: {
       line("missing", `live until ${file.expiry?.toISOString() ?? "unknown"}`);
       continue;
     }
-    if (deadline !== undefined && Date.now() + timeoutMs > deadline) {
-      line("skipped", "out of time — next run");
-      continue;
-    }
     if (!file.key) {
       line("skipped", "no key: the match cannot be named");
       continue;
     }
 
+    // A copy is one Start Copy request — Azure moves the bytes — so only the
+    // JSON downloads are charged against the deadline.
     if (file.kind === "trimmed_video") {
       const copied = await archiveTrimmedVideo({
         supabase,
@@ -244,6 +247,10 @@ export async function archiveMissingVendorFiles(params: {
       continue;
     }
 
+    if (deadline !== undefined && Date.now() + timeoutMs > deadline) {
+      line("skipped", "out of time — next run");
+      continue;
+    }
     const players = file.kind === "players";
     const stored = await archiveVendorJson({
       supabase,
@@ -316,31 +323,27 @@ export async function archiveTrimmedVideo(params: {
   { ok: true; copyStatus: BlobCopyStatus } | { ok: false; error: string }
 > {
   const { supabase, jobId, sourceUrl, blobName } = params;
-  try {
-    const { copyStatus } = await startTrimmedVideoCopy({ blobName, sourceUrl });
+  const record = async (copyStatus: BlobCopyStatus) => {
     const { error } = await supabase.rpc("record_splitstep_trimmed_copy", {
       p_job_id: jobId,
       p_trimmed_object_key: blobName,
     });
-    if (error) {
-      return {
-        ok: false,
-        error: `copy started but the key was NOT recorded: ${error.message}`,
-      };
-    }
-    return { ok: true, copyStatus };
+    return error
+      ? {
+          ok: false as const,
+          error: `copy started but the key was NOT recorded: ${error.message}`,
+        }
+      : { ok: true as const, copyStatus };
+  };
+  try {
+    const { copyStatus } = await startTrimmedVideoCopy({ blobName, sourceUrl });
+    return await record(copyStatus);
   } catch (err) {
-    // A blob already at the key answers 409: an earlier copy got there.
+    // A blob already at the key: an earlier copy got there, and only its key
+    // went unrecorded. Azure refuses `ifNoneMatch: "*"` with 409
+    // BlobAlreadyExists or 412 ConditionNotMet depending on the operation.
     const status = (err as { statusCode?: number }).statusCode;
-    if (status === 409) {
-      const { error } = await supabase.rpc("record_splitstep_trimmed_copy", {
-        p_job_id: jobId,
-        p_trimmed_object_key: blobName,
-      });
-      return error
-        ? { ok: false, error: error.message }
-        : { ok: true, copyStatus: "success" };
-    }
+    if (status === 409 || status === 412) return record("success");
     return {
       ok: false,
       error: err instanceof Error ? err.message : String(err),

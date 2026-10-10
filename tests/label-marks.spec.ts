@@ -629,11 +629,11 @@ test.describe("the labels-only flags", () => {
         code: "last_call_overruled",
         tier: "count",
         scope: "point",
-        params: { vendorCall: "out" },
+        params: { vendorCall: "out", eventId: out.strokes[2].eventId },
       },
     ]);
     expect(overruled("p2").map((m) => m.params)).toEqual([
-      { vendorCall: "net" },
+      { vendorCall: "net", eventId: net.strokes[1].eventId },
     ]);
     // The vendor called it in and the seed agrees, or both say out: nothing.
     expect(overruled("p3")).toEqual([]);
@@ -659,7 +659,7 @@ test.describe("the labels-only flags", () => {
       (reversed.points.p1 ?? [])
         .filter((m) => m.code === "last_call_overruled")
         .map((m) => m.params),
-    ).toEqual([{ vendorCall: "in" }]);
+    ).toEqual([{ vendorCall: "in", eventId: calledIn.strokes[1].eventId }]);
   });
 
   test("serve_fault: one serve called out, one or two strokes after it", () => {

@@ -166,8 +166,11 @@ export interface LabelMarkParams {
   tiebreak_score_off_six_all: NoParams;
   result_type_unknown: NoParams;
   serve_fault: NoParams;
-  /** What the vendor called the last ball, against the seed's reading. */
-  last_call_overruled: { vendorCall: "in" | "out" | "net" };
+  /**
+   * What the vendor called the last ball, against the seed's reading, and
+   * which stroke that ball was — the answer is written to that stroke only.
+   */
+  last_call_overruled: { vendorCall: "in" | "out" | "net"; eventId: number };
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -440,7 +443,12 @@ function pointMarks(
       (seededIn && vendorCall !== "in") ||
       (seededMissed && vendorCall === "in")
     ) {
-      marks.push(mark(LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED, { vendorCall }));
+      marks.push(
+        mark(LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED, {
+          vendorCall,
+          eventId: last.event_id,
+        }),
+      );
     }
   }
   if (settledWinner === null) {

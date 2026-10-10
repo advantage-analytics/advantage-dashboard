@@ -531,9 +531,12 @@ test.describe("the hints read off the rows, with their answers", () => {
     const edit = {
       onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
     };
-    const call = mark("last_call_overruled", { vendorCall: "out" });
     const point = fixturePoint();
     const [ace] = point.shots;
+    const call = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: ace.eventId!,
+    });
     const [hint] = pointHints(point, marksOf(point, [call]), NAMES, edit);
     expect([hint.code, hint.label]).toEqual([
       "last_call_overruled",
@@ -544,7 +547,10 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
 
     // A net call reads as one.
-    const net = mark("last_call_overruled", { vendorCall: "net" });
+    const net = mark("last_call_overruled", {
+      vendorCall: "net",
+      eventId: ace.eventId!,
+    });
     const [netHint] = pointHints(point, marksOf(point, [net]), NAMES, edit);
     expect(netHint.actions.map((a) => a.label)).toEqual(["Make it a net"]);
 
@@ -558,6 +564,46 @@ test.describe("the hints read off the rows, with their answers", () => {
         (h) => h.code,
       ),
     ).not.toContain("last_call_overruled");
+
+    // Another stroke is now last — the called one deleted, or a stroke after
+    // it: nothing is offered, so the call is never written to the wrong ball.
+    const after = {
+      ...point,
+      shots: [ace, { ...ace, id: "s-after", eventId: (ace.eventId ?? 0) + 1 }],
+    };
+    expect(
+      pointHints(after, marksOf(after, [call]), NAMES, edit).map((h) => h.code),
+    ).not.toContain("last_call_overruled");
+    const deleted = {
+      ...point,
+      shots: [
+        { ...ace, status: "deleted" as const },
+        { ...ace, id: "s-before", eventId: (ace.eventId ?? 0) - 1 },
+      ],
+    };
+    expect(
+      pointHints(deleted, marksOf(deleted, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+    // A phantom swing after it, with no result, does not hide the answer.
+    const phantom = {
+      ...point,
+      shots: [
+        ace,
+        {
+          ...ace,
+          id: "s-phantom",
+          eventId: (ace.eventId ?? 0) + 1,
+          result: null,
+        },
+      ],
+    };
+    expect(
+      pointHints(phantom, marksOf(phantom, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).toContain("last_call_overruled");
   });
 
   /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */

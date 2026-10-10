@@ -26,6 +26,7 @@ import { readAllPages } from "@/lib/data/admin-range-read";
 import { readLabelSessionRows } from "@/lib/data/labels-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import { labelBackupObjectKey } from "@/lib/services/splitstep/object-keys";
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
 import {
   buildAppliedRows,
@@ -192,13 +193,9 @@ export async function countImported(db: AdminClient, matchId: string) {
 
 // ── Backups ──────────────────────────────────────────────────────────────────
 
-/**
- * `label-backups/{sessionId}/{matchId}/{stamp}.json` — the match id third,
- * where scripts/cleanup-orphan-storage.ts attributes an object to a match.
- */
+/** Where a backup is stored (`labelBackupObjectKey`, object-keys.ts). */
 export function backupObjectKey(backup: LabelApplyBackup): string {
-  const stamp = backup.createdAt.replace(/[:.]/g, "-");
-  return `label-backups/${backup.sessionId ?? "none"}/${backup.matchId}/${stamp}.json`;
+  return labelBackupObjectKey(backup);
 }
 
 export async function storeBackup(
@@ -427,7 +424,17 @@ export async function publishPlanned(params: {
     };
   }
 
-  const { insightsRequested } = await recompute(db, matchId);
+  // The rows are in; a failed recompute leaves match_stats behind them. Said
+  // as that, never as "not published" — the athlete already has the points.
+  let insightsRequested: boolean;
+  try {
+    ({ insightsRequested } = await recompute(db, matchId));
+  } catch (err) {
+    return {
+      ok: false,
+      error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Mark complete again to retry; the previous version is backed up at ${backupKey}.`,
+    };
+  }
   return {
     ok: true,
     points: plan.built.points.length,

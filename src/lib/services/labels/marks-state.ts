@@ -438,10 +438,12 @@ export function endingStale(
 
 /**
  * "Was the last ball in?"'s answer: the point's `last_call_overruled` count
- * mark, and the last live stroke to write the vendor's call onto — while that
- * stroke still carries its seeded result. Null once the labeller has changed
- * the result (the chip is then settled), for an added stroke, and with no such
- * mark. Offered on a click, never applied on load: across the checked points
+ * mark, and the stroke it was built for (`eventId`) to write the vendor's call
+ * onto — only while that stroke is still the point's last live stroke with a
+ * result, and still carries its seeded result. Null once the labeller has
+ * deleted it, added a stroke after it or changed its result, and with no such
+ * mark. Trailing strokes with no result (a phantom swing at a dead ball) do
+ * not count as after it. Offered on a click, never applied on load: across the checked points
  * of three hand-labelled matches the vendor's call was right 41 times in 52,
  * too few to overrule the landing unseen.
  */
@@ -458,8 +460,10 @@ export function lastCallAnswer(
       m.code === "last_call_overruled",
   );
   if (!mark) return null;
-  const last = liveShotsInOrder(point, ghosts).at(-1);
-  if (!last || last.eventId === null || !last.seed) return null;
+  const last = liveShotsInOrder(point, ghosts).findLast(
+    (shot) => shot.result !== null,
+  );
+  if (!last || last.eventId !== mark.params.eventId || !last.seed) return null;
   if (last.result !== last.seed.result) return null;
   if (last.result === mark.params.vendorCall) return null;
   return { mark, shotId: last.id };

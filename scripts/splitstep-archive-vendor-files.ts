@@ -13,20 +13,11 @@
  * Never prints a url: they carry their own credential.
  */
 
-import { readFileSync } from "node:fs";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadEnvLocal } from "./lib/env";
 import { archiveMissingVendorFiles } from "@/lib/services/splitstep/vendor-archive";
 
-try {
-  for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (!match) continue;
-    const [, k, v] = match;
-    if (!process.env[k]) process.env[k] = v.replace(/^["']|["']$/g, "").trim();
-  }
-} catch {
-  // Fine when the variables are already exported in the environment.
-}
+loadEnvLocal();
 
 async function main() {
   const jobFlag = process.argv.indexOf("--job");

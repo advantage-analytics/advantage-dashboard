@@ -36,6 +36,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   ballPathsObjectKey,
+  labelBackupObjectKey,
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
@@ -173,6 +174,19 @@ export const RESULTS_LAYOUTS: KeyLayout[] = [
       userId: PROBE_USER,
       matchId: PROBE_MATCH,
       jobId: PROBE_JOB,
+    }),
+  ),
+  // The version a hand-labelled publish replaced. Not under `results/`, and
+  // the segment before the match is a session id, not a user — the match id
+  // is still third, which is all attribution reads. The user-facing purge
+  // refuses hand-labelled matches, so this sweep is what removes these once
+  // their match is gone.
+  layoutFrom(
+    "label-backups/{session}/{match}/{stamp}.json",
+    labelBackupObjectKey({
+      sessionId: PROBE_JOB,
+      matchId: PROBE_MATCH,
+      createdAt: "2026-10-10T00:00:00.000Z",
     }),
   ),
 ];
