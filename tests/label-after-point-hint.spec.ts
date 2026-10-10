@@ -124,6 +124,31 @@ test.describe("pointEndedEarly", () => {
     ).toBeNull();
   });
 
+  test("a second serve out or in the net is a double fault: the strokes after it were hit after the point ended", () => {
+    const serves = (second: { x: number; y: number }) => [
+      stroke("a", LONG, { stroke: "first_serve" }),
+      stroke("b", second, { stroke: "second_serve" }),
+    ];
+    expect(
+      pointEndedEarly({ shots: [...serves(LONG), stroke("c", IN)] }, true)
+        ?.params,
+    ).toEqual({ shotId: "b", after: ["c"] });
+    // Three after it: too many to take with the edit, so the hint offers it.
+    const three = pointEndedEarly(
+      {
+        shots: [
+          ...serves(NETTED),
+          stroke("c", IN),
+          stroke("d", IN),
+          stroke("e", IN),
+        ],
+      },
+      true,
+    );
+    expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
+    expect(hintLabel(three!)).toBe("Point ended here · 3 shots after it");
+  });
+
   test("nothing when the out ball is the last stroke, is a serve, or there is none", () => {
     expect(
       pointEndedEarly({ shots: [stroke("a", IN), stroke("b", LONG)] }, true),
@@ -324,6 +349,35 @@ test.describe("secondServeAsFirst", () => {
     expect(secondServeAsFirst({ shots: [serve("a", "out")] }, true)).toBeNull();
   });
 
+  test("a let is replayed: the first serve after it stays a first serve", () => {
+    // A let alone before a first serve: nothing to retype.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A let between a fault and a serve typed first neither faults nor clears
+    // the fault: that serve is still the second.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "out", { videoTime: 1 }),
+            serve("b", "let", { videoTime: 2, stroke: "second_serve" }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
+  });
+
   test("the earlier serve must be live: not a tombstone, nor a ghost with marks on", () => {
     const faulted = serve("a", "out", { videoTime: 1 });
     const next = serve("b", "in", { videoTime: 2 });
@@ -513,5 +567,39 @@ test.describe("serveAfterServeIn", () => {
     expect(
       serveAfterServeIn({ shots: [ghosted, second] }, false)?.params,
     ).toEqual({ shotId: "b" });
+  });
+  test("a let is not in: a serve after a let raises nothing, a serve after one called in still does", () => {
+    const afterLet = [
+      serve("a", "let", { videoTime: 1 }),
+      serve("b", "in", { videoTime: 2 }),
+      stroke("c", IN, { hitter: "p2", videoTime: 3 }),
+    ];
+    expect(serveAfterServeIn({ shots: afterLet }, true)).toBeNull();
+    // Let, then first serve out, then second serve in: nothing either.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "out", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3, stroke: "second_serve" }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A serve called in, then another: still the mark, let or no let before.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
   });
 });

@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import { NET_Y } from "@/components/admin/labels/court-geometry";
 import {
+  effectiveShotResult,
   deriveShotResult,
+  positionPatch,
   shotPlacement,
-  type ShotGeometry,
+  type ShotPosition,
 } from "@/lib/services/labels/shot-derived";
 import {
   BASELINE_M,
@@ -15,8 +17,8 @@ import {
 /** A forehand struck near the near baseline, landing where `landing` says. */
 function rally(
   landing: { x: number; y: number },
-  overrides: Partial<ShotGeometry> = {},
-): ShotGeometry {
+  overrides: Partial<ShotPosition> = {},
+): ShotPosition {
   return {
     stroke: "forehand",
     contact_x: 2,
@@ -30,8 +32,8 @@ function rally(
 /** A first serve from the near deuce side (right of the centre mark). */
 function serve(
   landing: { x: number; y: number },
-  overrides: Partial<ShotGeometry> = {},
-): ShotGeometry {
+  overrides: Partial<ShotPosition> = {},
+): ShotPosition {
   return rally(landing, {
     stroke: "first_serve",
     contact_x: 1,
@@ -160,5 +162,76 @@ test.describe("shotPlacement", () => {
     expect(
       shotPlacement(rally({ x: -3, y: 20 }, { contact_x: null })),
     ).toBeNull();
+  });
+});
+
+test.describe("positionPatch", () => {
+  test("a moved end carries the derived result with the coordinates", () => {
+    expect(
+      positionPatch(serve({ x: -2, y: 16 }, { result: "out" }), "landing", {
+        x: -2,
+        y: 16,
+      }),
+    ).toEqual({ landing_x: -2, landing_y: 16, result: "in" });
+    expect(
+      positionPatch(rally({ x: 1, y: 18 }, { result: "in" }), "landing", {
+        x: 1,
+        y: 25,
+      }),
+    ).toEqual({ landing_x: 1, landing_y: 25, result: "out" });
+  });
+
+  test("a stored let is left alone: coordinates only, no result key", () => {
+    const patch = positionPatch(
+      serve({ x: -2, y: 16 }, { result: "let" }),
+      "landing",
+      { x: -2, y: 16 },
+    );
+    expect(patch).toEqual({ landing_x: -2, landing_y: 16 });
+    expect("result" in patch).toBe(false);
+    expect(
+      positionPatch(serve({ x: -2, y: 16 }, { result: "let" }), "contact", {
+        x: 0.5,
+        y: -0.2,
+      }),
+    ).toEqual({ contact_x: 0.5, contact_y: -0.2 });
+  });
+
+  test("a stray let on a rally stroke is not kept: the derived result replaces it", () => {
+    expect(
+      positionPatch(rally({ x: 1, y: 18 }, { result: "let" }), "landing", {
+        x: 1,
+        y: 25,
+      }),
+    ).toEqual({ landing_x: 1, landing_y: 25, result: "out" });
+  });
+
+  test("a cleared end carries no result either way", () => {
+    expect(
+      positionPatch(serve({ x: -2, y: 16 }, { result: "in" }), "landing", null),
+    ).toEqual({ landing_x: null, landing_y: null });
+  });
+});
+
+test.describe("effectiveShotResult", () => {
+  const placedLong = { contactX: 1, contactY: 2, landingX: 1, landingY: 26 };
+  test("placed coordinates outrank the stored call; unplaced, the stored call stands", () => {
+    expect(
+      effectiveShotResult({ stroke: "forehand", result: "in", ...placedLong }),
+    ).toBe("out");
+    expect(effectiveShotResult({ stroke: "forehand", result: "net" })).toBe(
+      "net",
+    );
+    expect(effectiveShotResult({})).toBeNull();
+  });
+
+  test("a let stays a let whatever its placed ends say", () => {
+    expect(
+      effectiveShotResult({
+        stroke: "second_serve",
+        result: "let",
+        ...placedLong,
+      }),
+    ).toBe("let");
   });
 });

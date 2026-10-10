@@ -576,6 +576,13 @@ test("an eligible manual retry inserts the child, reserves for it, then submits"
   ]);
   expect(h.minted).toEqual([VIDEO_KEY]);
 
+  // The child's `submitting` write records the body, minus the signed URL.
+  const submitting = h.db.updates.find(
+    (u) => u.ids.includes(child.id) && u.patch.status === "submitting",
+  );
+  const { VideoUrl: _url, ...sentWithoutUrl } = h.sent[0];
+  expect(submitting?.patch.vendor_request).toEqual(sentWithoutUrl);
+
   // The child went submitting → queued; the parent never moved.
   expect(h.db.row("processing_jobs", child.id)?.status).toBe("queued");
   expect(h.db.row("processing_jobs", child.id)?.external_job_id).toBe(
@@ -706,6 +713,37 @@ test("only a failure PAST the reservation marks the child failed — never the c
   expect(h.retired).toEqual([child.id]);
   expect(h.db.row("processing_jobs", child.id)?.status).toBe("failed");
   expect(h.db.row("processing_jobs", "j-parent")?.status).toBe("failed");
+  // The vendor saw this body, so the failed child keeps it as the record.
+  expect(h.db.row("processing_jobs", child.id)?.vendor_request).toBeTruthy();
+});
+
+test("a minter that throws clears the body the child never sent", async () => {
+  const h = harness({});
+  h.io.mintVendorUrl = async () => {
+    throw new Error("AZURE_STORAGE_ACCOUNT is unset");
+  };
+  const r = await manual(h);
+  expect(r.ok).toBe(false);
+  const child = h.db.inserts[0].row;
+  expect(h.sent).toEqual([]);
+  expect(h.released).toEqual([child.id]);
+  expect(h.db.row("processing_jobs", child.id)?.status).toBe("failed");
+  expect(h.db.row("processing_jobs", child.id)?.vendor_request).toBeNull();
+});
+
+test("a submitting write that fails never reaches the vendor and hands quota back", async () => {
+  const h = harness({});
+  h.db.failures["processing_jobs.update"] = {
+    message: "column does not exist",
+  };
+  const r = await manual(h);
+  expect(r.ok).toBe(false);
+  if (r.ok) return;
+  expect(r.reason).toBe("submit_failed");
+  const child = h.db.inserts[0].row;
+  expect(h.minted).toEqual([]);
+  expect(h.sent).toEqual([]);
+  expect(h.released).toEqual([child.id]);
 });
 
 // ── The guards that already stood, still standing ─────────────────────────

@@ -49,8 +49,14 @@
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
-import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
-import type { SplitStepJobRequest } from "@/lib/services/splitstep/job-request";
+import {
+  buildSplitStepJobRequest,
+  vendorRequestRecord,
+} from "@/lib/services/splitstep/job-request";
+import type {
+  SplitStepJobRequest,
+  VendorRequestRecord,
+} from "@/lib/services/splitstep/job-request";
 import { isUuid } from "@/lib/services/match-video/access";
 import { athleteOnRow } from "@/lib/services/splitstep/match-athlete";
 import type { QuotaReservation } from "@/lib/services/splitstep/quota";
@@ -114,6 +120,8 @@ export interface SubmitJobPatch {
   initial_top_player_is_player1?: boolean;
   ad_scoring?: boolean;
   fixed_camera?: boolean;
+  /** Null clears a body recorded at the claim that never reached the vendor. */
+  vendor_request?: VendorRequestRecord | null;
   external_job_id?: string;
   submitted_at?: string;
   video_url_expires_at?: string | null;
@@ -559,6 +567,9 @@ export async function handleSubmitJob(
     initial_top_player_is_player1: effectiveTopPlayer,
     ad_scoring: vendorRequest.Ad,
     fixed_camera: vendorRequest.FixedCamera,
+    // The body itself, written before the POST so a crash mid-submit still
+    // leaves a record of what we were about to send.
+    vendor_request: vendorRequestRecord(vendorRequest),
   };
 
   // A compare-and-set claim serializes concurrent submits BEFORE quota or
@@ -605,9 +616,13 @@ export async function handleSubmitJob(
 
   // The claim is held and nothing was spent: hand the row back to `uploaded`,
   // the state "Try again" picks up from. Best effort — a failed revert is
-  // logged, and `isSubmitStalled()` still surfaces the row.
+  // logged, and `isSubmitStalled()` still surfaces the row. The body the claim
+  // recorded goes with it: nothing was sent, so it is not evidence of anything.
   const handClaimBack = async () => {
-    const reverted = await deps.updateJob(job.id, { status: "uploaded" });
+    const reverted = await deps.updateJob(job.id, {
+      status: "uploaded",
+      vendor_request: null,
+    });
     if (reverted.error) {
       pipelineLog.error(`${LOG} could not hand the claim back`, {
         jobId: job.id,
@@ -674,6 +689,12 @@ export async function handleSubmitJob(
     );
   }
 
+  // Set the moment the POST is attempted. From then on the vendor may have
+  // seen the body, so a failure keeps `vendor_request` as the record of it;
+  // before then (a minter that threw, the console's answers failing to save)
+  // nothing left this system, and the catch clears it.
+  let posted = false;
+
   // Everything past here must hand the reservation back on failure.
   try {
     // The console's claim set `submitting` without the answers; record them
@@ -691,6 +712,7 @@ export async function handleSubmitJob(
     });
 
     // 8. Submit.
+    posted = true;
     const response = await deps.submitToVendor({
       ...vendorRequest,
       VideoUrl: vendorUrl.url,
@@ -808,6 +830,7 @@ export async function handleSubmitJob(
     const { error: markError } = await deps.updateJob(job.id, {
       status: "failed",
       error_message: message,
+      ...(posted ? {} : { vendor_request: null }),
     });
 
     if (markError) {

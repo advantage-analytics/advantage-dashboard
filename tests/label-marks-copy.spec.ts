@@ -65,6 +65,11 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
   winner_guessed: {},
   score_frozen: {},
+  segment_proposal_differs: {
+    proposedGame: 4,
+    proposedServer: "p2",
+    mergedWith: null,
+  },
   out_ball_rally_continued: { nextHitter: "p1" },
   geometry_discarded: {},
 };
@@ -127,6 +132,7 @@ test.describe("mark copy", () => {
       out_ball_rally_continued: "Out call ignored",
       winner_guessed: "Winner guessed",
       score_frozen: "Score not read",
+      segment_proposal_differs: "Game cut differs",
       geometry_discarded: "No position",
     });
   });
@@ -661,15 +667,15 @@ test.describe("the tiers on a point", () => {
       listPoint([listShot("s1")]),
       marksOf(
         [
-          sample("serve_fault"),
+          sample("second_serve_called_out"),
           sample("ending_suspect_line"),
-          sample("serve_fault"),
+          sample("second_serve_called_out"),
         ],
         { s1: [sample("net_hit_contradicts_height")] },
       ),
     );
     expect(codes(list.hints)).toEqual([
-      "serve_fault",
+      "second_serve_called_out",
       "ending_suspect_line",
       "net_hit_contradicts_height",
     ]);

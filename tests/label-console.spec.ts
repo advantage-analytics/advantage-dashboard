@@ -116,7 +116,7 @@ test("an expanded point folds its shots out in video order", () => {
   );
 });
 
-test("a wide position is in the markup whole — as text, and in the editor", () => {
+test("a wide position is in the markup whole — as text, and on its court button", () => {
   // A copy: the fixture's rows are shared between calls.
   const session = structuredClone(labelSessionFixture());
   const serve = session.points
@@ -141,8 +141,8 @@ test("a wide position is in the markup whole — as text, and in the editor", ()
     }),
     'data-shot-id="s-serve"',
   );
-  expect(editing).toMatch(
-    /<input[^>]*aria-label="Shot 1 hit at, metres x, y"[^>]*value="-3\.21, 18\.40"/,
+  expect(editing).toContain(
+    'aria-label="Shot 1 hit at: -3.21, 18.40 — place on the court"',
   );
 });
 
@@ -635,6 +635,21 @@ test.describe("the two layouts", () => {
       }
     });
 
+    test("the rail header's format tail follows adScoring and playOnLets", () => {
+      const tail = (adScoring: boolean, playOnLets: boolean) => {
+        const html = render({
+          session: { ...labelSessionFixture(), adScoring, playOnLets },
+          video: VIDEO,
+          initialLayoutMode: "black",
+        });
+        const tag = from(html, "data-match-format", "data-save-status");
+        return text(tag);
+      };
+      expect(tail(true, false)).toContain("· Ad scoring · Lets replayed");
+      expect(tail(true, true)).toContain("· Ad scoring · Lets: play on");
+      expect(tail(false, false)).toContain("· No-ad scoring · Lets replayed");
+    });
+
     test("the rail is in its light tone: “Points”, a way into the full screen, and no way out", () => {
       const html = render({
         session: labelSessionFixture(),
@@ -650,6 +665,7 @@ test.describe("the two layouts", () => {
       // and whether it saved: the rail's says only what it is.
       expect(text(header)).toBe("Points");
       expect(header).not.toContain("data-label-rail-progress");
+      expect(header).not.toContain("data-match-format");
       expect(header).not.toContain("data-save-status");
       expect(count(html, /data-save-status=/g)).toBe(1);
       expect(html.indexOf("data-save-status=")).toBeLessThan(
@@ -791,6 +807,7 @@ test.describe("the two layouts", () => {
       expect(text(header)).toMatch(/\d+ \/ \d+ checked/);
       expect(header).toContain("data-save-status");
       expect(count(html, /data-save-status=/g)).toBe(1);
+      expect(text(header)).toMatch(/checked\s*· Ad scoring · Lets replayed/);
       expect(header).toContain('aria-label="Exit full screen"');
       expect(tagOf(header, "data-label-black-exit")).toContain(
         '<button type="button"',

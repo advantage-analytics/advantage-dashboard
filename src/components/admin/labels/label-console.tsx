@@ -23,6 +23,7 @@ import {
   type LabelSide,
   type LabelVideo,
 } from "@/lib/services/labels/session";
+import { planShotWrite } from "./shot-write-plan";
 import {
   applyLabelPointPatch,
   applyLabelShotPatch,
@@ -43,6 +44,7 @@ import {
 import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations-session";
 import {
   applyGameShift,
+  GAME_PULL_ADD_POINT,
   planGamePull,
   planGameShift,
   type GameShiftWrite,
@@ -61,6 +63,7 @@ import {
   applyShotDelete,
   applyShotRestore,
   applyShotsRemoved,
+  deadBallReason,
   applyShotsRestored,
   destinationServerIn,
   liveShotsAfter,
@@ -116,7 +119,12 @@ import {
   type PointCombineSaved,
 } from "@/lib/services/labels/point-combine";
 import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
-import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
+import {
+  applyPointReset,
+  applyShotReset,
+  pointResetScope,
+} from "@/lib/services/labels/reset";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import type { LabelPointResetResult } from "@/lib/services/labels/reset-session";
 import {
   applyLabelSessionPatch,
@@ -124,6 +132,9 @@ import {
   type LabelSessionFieldsPatch,
 } from "@/lib/services/labels/session-fields";
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
+import { completeWarnings } from "@/lib/services/labels/session-status";
+import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
+import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
 import { applyDismiss } from "@/lib/services/labels/suggestions";
@@ -165,6 +176,7 @@ import {
 import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
+import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
 import type { LabelRowOperations } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
@@ -330,8 +342,13 @@ export function LabelConsole({
     () => sideNames(session.player1Name, session.player2Name),
     [session.player1Name, session.player2Name],
   );
+  // Client state, so "Mark complete" and "Reopen" flip the console read-only
+  // or editable without a reload.
+  const [status, setStatus] = useState(session.status);
+  // A status write in flight: both buttons wait for it.
+  const [statusSaving, setStatusSaving] = useState(false);
   const editable =
-    session.status === "labelling" &&
+    status === "labelling" &&
     onSaveShot !== undefined &&
     onSavePoint !== undefined;
 
@@ -552,14 +569,29 @@ export function LabelConsole({
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
-  function selectShot(shotId: string) {
+  function selectShot(shotId: string, target?: PlacementTarget) {
+    // Already selected: a position cell switches the court's end and nothing
+    // else — the film stays where the labeller scrubbed it.
+    if (target && shotId === placement.shotId) {
+      const shot = findShot(points, shotId);
+      setPlacement(
+        setPlacementTarget(placement, target, shot?.contactY ?? null),
+      );
+      return;
+    }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement(placementOf(points, shotId));
     const shot = findShot(points, shotId);
+    // A position cell names its end: the court opens on that end's half.
+    const start = placementOf(points, shotId);
+    setPlacement(
+      target
+        ? setPlacementTarget(start, target, shot?.contactY ?? null)
+        : start,
+    );
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
 
@@ -653,6 +685,14 @@ export function LabelConsole({
       // A draft row has no id the server knows yet; its add is still in
       // flight, and the saved row replaces it when that lands.
       if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
+      // A let on a stroke that is not a serve: refused before any optimistic
+      // change or request, on the same save line a server `{ error }` uses.
+      const plan = planShotWrite(before, patch);
+      if ("error" in plan) {
+        dispatchSave({ type: "start" });
+        dispatchSave({ type: "failure", message: plan.error });
+        return null;
+      }
       const retime = "video_time" in patch;
       const change = (current: readonly LabelPoint[]) =>
         updateShot(current, shotId, retime, (shot) =>
@@ -681,6 +721,7 @@ export function LabelConsole({
         return null;
       }
       const removed = result.removedAfter;
+      const reason = deadBallReason(plan.row.stroke);
       setPoints((current) => {
         const saved = updateShot(current, shotId, false, (shot) => ({
           ...shot,
@@ -694,7 +735,7 @@ export function LabelConsole({
           ? replacePoint(saved, owner.id, (p) =>
               applyEndingSync(
                 removed
-                  ? { ...p, shots: applyShotsRemoved(p.shots, removed) }
+                  ? { ...p, shots: applyShotsRemoved(p.shots, removed, reason) }
                   : p,
                 result.point,
               ),
@@ -720,7 +761,7 @@ export function LabelConsole({
       if (!owner) return null;
       const saved = change([owner])[0] ?? null;
       return saved && removed
-        ? { ...saved, shots: applyShotsRemoved(saved.shots, removed) }
+        ? { ...saved, shots: applyShotsRemoved(saved.shots, removed, reason) }
         : saved;
     },
     [onSaveShot],
@@ -859,8 +900,9 @@ export function LabelConsole({
     };
 
   /**
-   * The hint line's answers under a rally ball marked out: every live stroke
-   * after it removed as hit after the point ended (`dead_ball_after_point`),
+   * The hint line's answers under a rally ball (or second serve) marked out:
+   * every live stroke after it removed as hit after the point ended
+   * (`deadBallReason` — after a double fault, or after the point),
    * and a removal's tombstones put back — one call each, the point's ending
    * settled in it. The server's rows are the last word over the optimistic
    * ones (`applyShotsRemoved` / `applyShotsRestored`).
@@ -874,6 +916,9 @@ export function LabelConsole({
     const after = liveShotsAfter(point.shots, shotId, drawsGhosts(marks));
     if (after.length === 0) return;
     const ids = new Set(after.map((shot) => shot.id));
+    const reason = deadBallReason(
+      point.shots.find((shot) => shot.id === shotId)?.stroke,
+    );
     if (placement.shotId !== null && ids.has(placement.shotId)) {
       setPlacement(NO_PLACEMENT);
     }
@@ -882,14 +927,14 @@ export function LabelConsole({
         replacePoint(rows, pointId, (p) => ({
           ...p,
           shots: p.shots.map((s) =>
-            ids.has(s.id) ? applyShotDelete(s, "dead_ball_after_point") : s,
+            ids.has(s.id) ? applyShotDelete(s, reason) : s,
           ),
         })),
       () => operations.removeShotsAfter(shotId),
       (rows, result) =>
         replacePoint(rows, pointId, (p) =>
           applyEndingSync(
-            { ...p, shots: applyShotsRemoved(p.shots, result.removed) },
+            { ...p, shots: applyShotsRemoved(p.shots, result.removed, reason) },
             result.point,
           ),
         ),
@@ -1045,14 +1090,14 @@ export function LabelConsole({
   /**
    * The mirror of `shiftGameOverflow`: a game left unfinished pulls the next
    * game's first rows in until it is decided (`planGamePull`). A plan that says
-   * the game is more likely missing a point writes nothing; the slot offers
-   * "Add point" for that.
+   * the game is more likely missing a point writes nothing and says so
+   * (`GAME_PULL_ADD_POINT`); the slot offers "Add point" for that.
    */
   function pullGamePoints(gameKey: string) {
     if (!operations) return;
     const plan = planGamePull(points, gameKey, session.adScoring);
     if ("error" in plan) return refuse(plan.error);
-    if ("kind" in plan) return;
+    if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
     runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
   }
 
@@ -1163,6 +1208,46 @@ export function LabelConsole({
     }
     setSessionFields((fields) => applyLabelSessionPatch(fields, result.fields));
     dispatchSave({ type: "success", at: Date.now() });
+  }
+
+  /**
+   * "Mark complete" (after its confirm) and "Reopen": `label_sessions.status`
+   * alone. Not optimistic — the console flips read-only or editable once the
+   * server has said so.
+   */
+  async function setSessionStatus(next: LabelSession["status"]) {
+    const write =
+      next === "complete"
+        ? operations?.completeSession
+        : operations?.reopenSession;
+    if (!write || statusSaving) return;
+    setStatusSaving(true);
+    dispatchSave({ type: "start" });
+    const result = await settle(write(session.id));
+    setStatusSaving(false);
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    if (result.status === "complete") setPlacement(NO_PLACEMENT);
+    setStatus(result.status);
+    dispatchSave({ type: "success", at: Date.now() });
+  }
+
+  /** "Mark complete": the confirm, listing what is still open. */
+  function askComplete() {
+    setConfirm({
+      kind: "complete-session",
+      warnings: completeWarnings({
+        points,
+        adScoring: session.adScoring,
+        marks: liveMarks,
+        finalScore: sessionFields.finalScore,
+        videoEndsEarly: sessionFields.videoEndsEarly,
+        matchScore: session.matchScore,
+        games: scores.games,
+      }),
+    });
   }
 
   /**
@@ -1450,12 +1535,12 @@ export function LabelConsole({
   }
 
   /** Back to the seed. The dialog asked first; the write happens here. */
-  function resetShot(shotId: string) {
+  function resetShot(shotId: string): Promise<unknown> {
     const before = findShot(points, shotId);
-    if (!before || !operations) return;
+    if (!before || !operations) return Promise.resolve(null);
     // A reset can move the stroke's time, so it re-sorts like a time edit.
     const settlePoint = settlePointOf(shotId);
-    void runOperation(
+    return runOperation(
       (rows) => updateShot(rows, shotId, true, applyShotReset),
       () => operations.resetShot(shotId),
       (rows, result) =>
@@ -1472,10 +1557,22 @@ export function LabelConsole({
    * its seeded one (`reset.ts`): a point switched after a swap must not keep
    * contradicting its rows.
    */
-  function resetPoint(pointId: string) {
+  async function resetPoint(pointId: string) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
-    const shotsBefore = shotSwapsOf(before.shots);
+    const scope = pointResetScope(before, sharesVendorRally(before, points));
+    if (!scope) return;
+    // The edited strokes one after another — each re-reads its point's ending
+    // — then the point's own fields, whose seed has the last word.
+    for (const shotId of scope.shotIds) {
+      if ((await resetShot(shotId)) === null) return;
+    }
+    if (!scope.fields) return;
+    // The rollback's hitters: the strokes just reset already sit on their
+    // seed, so only the others go back if the point's own write fails.
+    const shotsBefore = shotSwapsOf(
+      before.shots.filter((shot) => !scope.shotIds.includes(shot.id)),
+    );
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointReset),
       () => operations.resetPoint(pointId),
@@ -1521,7 +1618,16 @@ export function LabelConsole({
         resetShot(question.shotId);
         return;
       case "reset-point":
-        resetPoint(question.pointId);
+        void resetPoint(question.pointId);
+        return;
+      case "complete-session":
+        // An edit made while the confirm was open would be refused.
+        if (saveStatus.pending > 0) {
+          return refuse(
+            "Wait for your changes to save, then mark it complete.",
+          );
+        }
+        void setSessionStatus("complete");
         return;
     }
   }
@@ -1561,11 +1667,16 @@ export function LabelConsole({
       setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
     onAskResetPoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
-      if (!point) return;
+      const scope = point
+        ? pointResetScope(point, sharesVendorRally(point, points))
+        : null;
+      if (!point || !scope) return;
       setConfirm({
         kind: "reset-point",
         pointId,
         pointNumber: point.pointIndex + 1,
+        fields: scope.fields,
+        shots: scope.shotIds.length,
       });
     },
   });
@@ -1588,13 +1699,25 @@ export function LabelConsole({
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
 
-  // Enter marks the open point checked; Space and ← / → drive the video. Never
-  // from inside a control, where those keys already mean something.
+  // Enter marks the open point checked; Space and ← / → drive the video; ]
+  // and [ go to the next and previous open flag. Never from inside a control,
+  // where those keys already mean something.
   const checkOpenPoint = useRef<() => void>(() => {});
+  // `]` and `[`: the next and previous open flag, as the header's flag does.
+  const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
+  const openMarks = useMemo(
+    () => (liveMarks ? openFlags(points, liveMarks) : []),
+    [points, liveMarks],
+  );
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
       setChecked(expanded.id, true);
+    };
+    stepToFlag.current = (direction) => {
+      if (confirm) return;
+      const flag = stepFlag(openMarks, points, currentPointId, direction);
+      if (flag) findGap(flag.pointId);
     };
   });
   // Escape lets go of the selected stroke, from anywhere in its row: a text
@@ -1629,12 +1752,14 @@ export function LabelConsole({
         (key !== "Enter" &&
           key !== " " &&
           key !== "ArrowLeft" &&
-          key !== "ArrowRight") ||
+          key !== "ArrowRight" &&
+          key !== "[" &&
+          key !== "]") ||
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
-        event.altKey ||
-        event.shiftKey
+        // [ and ] take Option or Shift on some layouts (German, Nordic).
+        ((event.altKey || event.shiftKey) && key !== "[" && key !== "]")
       ) {
         return;
       }
@@ -1642,7 +1767,9 @@ export function LabelConsole({
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       if (key === "Enter") checkOpenPoint.current();
-      else if (key === " ") player.current?.togglePlay();
+      else if (key === "]" || key === "[") {
+        stepToFlag.current(key === "]" ? 1 : -1);
+      } else if (key === " ") player.current?.togglePlay();
       else player.current?.step(key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", onKeyDown);
@@ -1736,6 +1863,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       adScoring={session.adScoring}
+      playOnLets={session.playOnLets}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}
@@ -1766,6 +1894,7 @@ export function LabelConsole({
       onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
+      onGoToPoint={railHandlers.findGap}
     />
   );
   const View = fullScreen ? LabelBlackView : LabelSideView;
@@ -1792,7 +1921,9 @@ export function LabelConsole({
               <span className="tabular">
                 {checked} of {total} points checked
               </span>
-              {session.status === "complete" ? <span>· Complete</span> : null}
+              {status === "complete" ? (
+                <span data-session-complete="">· Complete</span>
+              ) : null}
               <span aria-hidden="true">·</span>
               <span className="mono text-[11px] text-[var(--ink-500)]">
                 derivation {session.derivationVersion}
@@ -1801,6 +1932,31 @@ export function LabelConsole({
           </div>
           <div className="flex shrink-0 items-center gap-5">
             <LabelSaveStatus status={saveStatus} />
+            {operable && operations?.completeSession ? (
+              <button
+                type="button"
+                data-mark-complete=""
+                className={advButton("outline", "sm")}
+                // Every edit must have landed first: one still in flight
+                // would be refused once the session is complete, and its
+                // value put back.
+                disabled={saveStatus.pending > 0 || statusSaving}
+                onClick={askComplete}
+              >
+                Mark complete
+              </button>
+            ) : null}
+            {status === "complete" && operations?.reopenSession ? (
+              <button
+                type="button"
+                data-reopen-session=""
+                className={advButton("outline", "sm")}
+                disabled={statusSaving}
+                onClick={() => void setSessionStatus("labelling")}
+              >
+                Reopen
+              </button>
+            ) : null}
             <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
             {headerAction}
           </div>
@@ -1946,6 +2102,10 @@ export interface LabelConsoleOperations {
     sessionId: string,
     patch: LabelSessionFieldsPatch,
   ) => Promise<LabelSessionFieldsResult>;
+  /** `label_sessions.status` to `complete`. Absent: no "Mark complete". */
+  completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
+  /** A complete session back to `labelling`. Absent: no "Reopen". */
+  reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

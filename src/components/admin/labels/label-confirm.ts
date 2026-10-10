@@ -49,7 +49,28 @@ export type LabelConfirm =
       kind: "reset-point";
       pointId: string;
       pointNumber: number;
+      /** The point's own fields go back. */
+      fields: boolean;
+      /** Edited strokes that go back with it. */
+      shots: number;
+    }
+  | {
+      kind: "complete-session";
+      /** What is still open (`completeWarnings`); empty when nothing is. */
+      warnings: readonly string[];
     };
+
+/** What a point's Reset replaces, and what it leaves. */
+function resetPointDescription(fields: boolean, shots: number): string {
+  const edited = `${shots} edited ${shots === 1 ? "shot" : "shots"}`;
+  if (fields && shots > 0) {
+    return `Your changes to this point — its game, server, serve side, winner, ending and who ended it — and to its ${edited} are replaced by the values they were seeded with. Shots you added or deleted, its note and checked mark stay as they are.`;
+  }
+  if (fields) {
+    return "Your changes to this point — its game, server, serve side, winner, ending and who ended it — are replaced by the values it was seeded with. Its shots, note and checked mark stay as they are.";
+  }
+  return `Your changes to its ${edited} are replaced by the values they were seeded with. Shots you added or deleted, its note and checked mark stay as they are.`;
+}
 
 export interface LabelConfirmCopy {
   title: string;
@@ -108,11 +129,21 @@ export function labelConfirmCopy(
         pendingLabel: "Resetting…",
         tone: "primary",
       };
+    case "complete-session":
+      return {
+        title: "Mark this session complete?",
+        description:
+          confirm.warnings.length === 0
+            ? "Every point is checked and the score adds up. The console becomes read-only; Reopen brings it back."
+            : "Some things are still open. You can complete it anyway, and Reopen brings it back to fix them.",
+        confirmLabel: "Mark complete",
+        pendingLabel: "Completing…",
+        tone: "primary",
+      };
     case "reset-point":
       return {
         title: `Reset point ${confirm.pointNumber} to its original values?`,
-        description:
-          "Your changes to this point — its game, server, serve side, winner, ending and who ended it — are replaced by the values it was seeded with. Its shots, note and checked mark stay as they are.",
+        description: resetPointDescription(confirm.fields, confirm.shots),
         confirmLabel: "Reset",
         pendingLabel: "Resetting…",
         tone: "primary",

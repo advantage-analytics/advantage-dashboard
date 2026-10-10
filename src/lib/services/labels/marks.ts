@@ -27,12 +27,16 @@ import {
   POINT_FLAGS,
   serveCourtSide,
   SHOT_FLAGS,
+  proposedPointsOf,
   type DerivedPoint,
   type DerivedShot,
+  type ProposedPoint,
   type SplitStepRally,
+  type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import {
+  CONFIDENT_OUT_CALL,
   MAX_DEAD_TAIL,
   SIDE_DEAD_ZONE_M,
 } from "@/lib/services/splitstep/derivation/flags";
@@ -80,6 +84,13 @@ export const LABEL_ONLY_FLAGS = {
  * chip only: the struck-through removed stroke is still drawn.
  * `same_player_consecutive` is counted AND keeps its missing-stroke slot; the
  * slot's "Dismiss" settles the chip (marks-state.ts `markState`).
+ *
+ * Retiered 2026-10-09 on the three fully checked sessions (259 points; base
+ * rates: winner changed 19%, ending 32%, anything 53%): `winner_guessed` is
+ * counted — the guess was wrong on 7 of 14, and a winner moves the score —
+ * while `score_frozen`, on the same points, stays hidden so a frozen stretch
+ * carries one chip, not two. `serve_fault` is hidden: 7 of 15 changed, under
+ * the base rate.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -90,9 +101,9 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
-  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.ENDING_STALE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
@@ -102,8 +113,9 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
-  [POINT_FLAGS.WINNER_GUESSED]: { tier: "hidden", scope: "point" },
+  [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
+  [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "hidden", scope: "point" },
   [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
   [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },
 } as const satisfies Record<
@@ -165,6 +177,18 @@ export interface LabelMarkParams {
   };
   winner_guessed: NoParams;
   score_frozen: NoParams;
+  /**
+   * The segmentation's proposal for the point (`transcript.segmentation`).
+   * `proposedGame` is match-cumulative like `points.game_number`, not the
+   * proposal's per-set number; `mergedWith` is the rally id of the neighbour
+   * it would be merged with, when it would be. All null when the transcript
+   * carries no proposal for the rally.
+   */
+  segment_proposal_differs: {
+    proposedGame: number | null;
+    proposedServer: LabelSide | null;
+    mergedWith: number | null;
+  };
   out_ball_rally_continued: { nextHitter: LabelSide | null };
   geometry_discarded: NoParams;
 }
@@ -201,6 +225,12 @@ export type LabelSuggestion =
       side: LabelServeSide;
       /** The two points as the rail numbers them (position in `points` + 1). */
       pointNumbers: [number, number];
+      /**
+       * Set when the EARLIER point reads as a replayed serve rather than a
+       * point (`replayedServeGap`): the seconds between its last stroke and
+       * the flagged point's serve. The pair is then one point, to combine.
+       */
+      replayGap?: number;
     };
 
 export interface LabelMarks {
@@ -288,6 +318,7 @@ function pointMarks(
   rally: SplitStepRally | undefined,
   settledWinner: string | null | undefined,
   sideOf: (label: string) => LabelSide,
+  proposed: ProposedPoint | null,
 ): LabelMark[] {
   const marks: LabelMark[] = [];
   const winner: LabelSide | null =
@@ -338,6 +369,17 @@ function pointMarks(
       case POINT_FLAGS.WINNER_GUESSED:
       case POINT_FLAGS.SCORE_FROZEN:
         marks.push(mark(code, {}));
+        break;
+      case POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS:
+        marks.push(
+          mark(code, {
+            proposedGame: proposed?.game ?? null,
+            proposedServer: proposed
+              ? labelSideOf(proposed.server === "player1")
+              : null,
+            mergedWith: proposed?.mergedWith ?? null,
+          }),
+        );
         break;
       default:
         // A shot-scoped or labels-only code in a point's flags is not a mark
@@ -449,11 +491,27 @@ export function isServeFault(rally: SplitStepRally): boolean {
  * no such tail — the out ball is its last stroke, the tail is long enough to
  * be a rally, or a serve in it says a new point started (`reserve_after_in`'s
  * business).
+ *
+ * When the out ball IS the last stroke, the swing at the dead ball may itself
+ * have been called out: the cut then falls after an earlier out call, but only
+ * a confident one (`CONFIDENT_OUT_CALL`). On the three fully checked sessions
+ * (2026-10-09) that shape changed the winner on 7 of 13 points, against a base
+ * rate of 19%; with the earlier call under 0.85 it was 3 of 29, so those stay
+ * uncut.
  */
 export function withoutDeadTail(rally: SplitStepRally): SplitStepRally | null {
   const { strokes } = rally;
-  const last = strokes.findLastIndex((s) => s.strokeType !== "serve" && !s.in);
+  const isOutBall = (s: SplitStepStroke) => s.strokeType !== "serve" && !s.in;
+  let last = strokes.findLastIndex(isOutBall);
   if (last === -1) return null;
+  if (last === strokes.length - 1) {
+    last = strokes
+      .slice(0, -1)
+      .findLastIndex(
+        (s) => isOutBall(s) && (s.lineConfidence ?? 0) >= CONFIDENT_OUT_CALL,
+      );
+    if (last === -1) return null;
+  }
   const tail = strokes.slice(last + 1);
   if (tail.length === 0 || tail.length > MAX_DEAD_TAIL) return null;
   if (tail.some((s) => s.strokeType === "serve")) return null;
@@ -510,6 +568,12 @@ export function buildLabelMarks(
     for (const shot of point.shots) shotByEvent.set(shot.event_id, shot);
   }
   const player1Label = transcript.reconciliation.player1Label;
+  const proposed = transcript.segmentation
+    ? proposedPointsOf(
+        transcript.segmentation,
+        transcript.points.map((point) => point.rally_id),
+      )
+    : new Map<number, ProposedPoint>();
 
   const marks: LabelMarks = {
     points: {},
@@ -545,7 +609,13 @@ export function buildLabelMarks(
     push(
       marks.points,
       pointId,
-      pointMarks(point, rally, settledById.get(point.rally_id), sideOf),
+      pointMarks(
+        point,
+        rally,
+        settledById.get(point.rally_id),
+        sideOf,
+        proposed.get(point.rally_id) ?? null,
+      ),
     );
 
     point.shots.forEach((shot, index) => {

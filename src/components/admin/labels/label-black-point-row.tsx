@@ -29,7 +29,8 @@ import {
   type LabelSide,
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
-import { canResetPoint } from "@/lib/services/labels/reset";
+import { pointResetScope } from "@/lib/services/labels/reset";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
   formatClockTime,
@@ -89,6 +90,26 @@ const SCORE_ASIDE_FOR_MENU =
   "group-has-[[data-row-actions]_[aria-expanded=true]]/row:-translate-x-[26px]";
 const SCORE_ASIDE_REDUCED =
   "motion-reduce:transition-none motion-reduce:group-focus-within/row:-translate-x-[26px] motion-reduce:group-hover/row:-translate-x-[26px]";
+
+/**
+ * The slide the score and the tail before it (mark chip, pencil) share, so the
+ * tail moves aside with the score instead of being crowded by it: held on the
+ * playing row, on reach (hover, focus, the open menu) otherwise. Only an
+ * editable rail slides; read-only there is no ⋯ to make room for.
+ */
+export function pointRowSlide(editable: boolean, playing: boolean): string {
+  return cn(
+    FILM_ROW_SLIDE_TRANSITION,
+    editable &&
+      (playing
+        ? FILM_ROW_SLIDE_HELD
+        : cn(
+            FILM_ROW_SLIDE_ON_REACH,
+            SCORE_ASIDE_FOR_MENU,
+            SCORE_ASIDE_REDUCED,
+          )),
+  );
+}
 
 /** A point the labeller has changed: itself, or any of its strokes. */
 export function pointChangedByYou(
@@ -162,6 +183,7 @@ export const BlackPointRow = memo(function BlackPointRow({
   // ONE pencil: with marks it also counts a removed stroke the labeller put
   // back, the row's own rule when not.
   const changed = marks ? pointChanged(point) : pointChangedByYou(point);
+  const slide = pointRowSlide(Boolean(operations), playing);
 
   return (
     <>
@@ -226,13 +248,18 @@ export const BlackPointRow = memo(function BlackPointRow({
         {/* The tail: the one chip, then the pencil, which is also the
             point's Reset when its own fields have changed and it has a
             seed. A chip's words go before the two lines do (see
-            `MarkChip`), so the tail never takes the score's room. */}
-        <span data-row-tail="" className="inline-flex items-center gap-2">
+            `MarkChip`), so the tail never takes the score's room. It slides
+            with the score (`pointRowSlide`), so the ⋯ never crowds it. */}
+        <span
+          data-row-tail=""
+          className={cn("inline-flex items-center gap-2", slide)}
+        >
           {rowMarks?.flag ? <MarkChip {...rowMarks.flag} /> : null}
           {changed ? (
             <PencilMark
               reset={
-                operations && canResetPoint(point)
+                operations &&
+                pointResetScope(point, sharesVendorRally(point, edit.points))
                   ? {
                       label: `Reset point ${number}`,
                       onClick: () => operations.onAskResetPoint(point.id),
@@ -246,18 +273,7 @@ export const BlackPointRow = memo(function BlackPointRow({
         {/* A new point has no score of its own until its winner is set. */}
         <span
           data-point-score=""
-          className={cn(
-            "mono tabular truncate text-right text-[11px]",
-            FILM_ROW_SLIDE_TRANSITION,
-            operations &&
-              (playing
-                ? FILM_ROW_SLIDE_HELD
-                : cn(
-                    FILM_ROW_SLIDE_ON_REACH,
-                    SCORE_ASIDE_FOR_MENU,
-                    SCORE_ASIDE_REDUCED,
-                  )),
-          )}
+          className={cn("mono tabular truncate text-right text-[11px]", slide)}
           style={{ color: SCORE_INK }}
         >
           {(fresh ? null : score) ?? (
@@ -443,6 +459,11 @@ export function openPointSuggestions(
  * with three answers: "Add point" (`onInsertPoint` before the flagged point),
  * "{b} was a let" (`ending: let_replayed`; the score stands) and "Dismiss". The
  * two lines truncate; the answers never shrink or wrap.
+ *
+ * When the earlier point reads as a replayed serve (`replayGap`), the pair is
+ * one point rather than two with one missing: the slot says so and leads with
+ * "Combine {a} and {b}" (`onCombinePoints` on the earlier, below), then "Add
+ * point" and "Dismiss".
  */
 export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
   suggestion,
@@ -460,7 +481,11 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
   const before = edit.points.find((p) => p.id === suggestion.beforePointId);
   const a = before ? before.pointIndex + 1 : suggestion.pointNumbers[0];
   const b = point.pointIndex + 1;
-  const reason = `Points ${a} and ${b} were both served from the ${suggestion.side} side`;
+  const replayGap = before ? suggestion.replayGap : undefined;
+  const replay = replayGap !== undefined;
+  const reason = replay
+    ? `Point ${a} is a serve called in, then ${b} was served again from the ${suggestion.side} side ${replayGap} s later`
+    : `Points ${a} and ${b} were both served from the ${suggestion.side} side`;
   return (
     <div
       data-row="suggested-point"
@@ -478,7 +503,9 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
           data-point-suggestion-title=""
           className="truncate text-[12px] font-medium text-white"
         >
-          A point is probably missing here
+          {replay
+            ? `Point ${a} was probably a let, served again`
+            : "A point is probably missing here"}
         </span>
         <ChromeTooltip label={reason} side="top" wrap>
           <span
@@ -494,8 +521,21 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
           data-point-suggestion-actions=""
           className="flex shrink-0 items-center justify-end gap-[14px]"
         >
+          {replay && before ? (
+            <BlackTextAction
+              ink="amber"
+              data-point-suggestion-combine=""
+              aria-label={`Combine points ${a} and ${b} into one point`}
+              onClick={(event) => {
+                event.stopPropagation();
+                operations.onCombinePoints(before.id, "below");
+              }}
+            >
+              Combine {a} and {b}
+            </BlackTextAction>
+          ) : null}
           <BlackTextAction
-            ink="amber"
+            ink={replay ? "quiet" : "amber"}
             data-point-suggestion-add=""
             aria-label={`Add a point between points ${a} and ${b}`}
             onClick={(event) => {
@@ -505,17 +545,19 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
           >
             Add point
           </BlackTextAction>
-          <BlackTextAction
-            ink="quiet"
-            data-point-suggestion-let=""
-            aria-label={`Point ${b} was a let, replayed`}
-            onClick={(event) => {
-              event.stopPropagation();
-              edit.onPatchPoint?.(point.id, { ending: "let_replayed" });
-            }}
-          >
-            {b} was a let
-          </BlackTextAction>
+          {replay ? null : (
+            <BlackTextAction
+              ink="quiet"
+              data-point-suggestion-let=""
+              aria-label={`Point ${b} was a let, replayed`}
+              onClick={(event) => {
+                event.stopPropagation();
+                edit.onPatchPoint?.(point.id, { ending: "let_replayed" });
+              }}
+            >
+              {b} was a let
+            </BlackTextAction>
+          )}
           <BlackTextAction
             ink="quiet"
             data-point-suggestion-dismiss=""

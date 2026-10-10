@@ -14,20 +14,21 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
-import { labelShotValues } from "./edit";
 import { deriveEnding } from "./ending-derived";
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
+  endsPointWhenMissed,
   isLiveShot,
   isMissedResult,
   isNonPointEnding,
+  isLetServe,
   isServeStroke,
   liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
 } from "./session";
-import { deriveShotResult } from "./shot-derived";
+import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 import {
   addedPointBetween,
   suggestionState,
@@ -45,7 +46,8 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId">>;
+  Partial<Pick<LabelShot, "afterEventId" | "eventId">> &
+  ResultReadableShot;
 
 export type MarkStatePoint = Pick<
   LabelPoint,
@@ -96,14 +98,17 @@ function missingShotStates(
   point: MarkStatePoint,
   suggestions?: readonly LabelSuggestion[],
 ): ReturnType<typeof suggestionState>[] {
-  if (!suggestions) return [];
+  const mine = suggestions?.filter(
+    (s) => s.kind === "missing_shot" && s.pointId === point.id,
+  );
+  if (!mine?.length) return [];
   const shots = point.shots.map((shot) => ({
-    status: shot.status,
+    ...shot,
     afterEventId: shot.afterEventId ?? null,
   }));
-  return suggestions
-    .filter((s) => s.kind === "missing_shot" && s.pointId === point.id)
-    .map((s) => suggestionState(s, { dismissed: point.dismissed, shots }));
+  return mine.map((s) =>
+    suggestionState(s, { dismissed: point.dismissed, shots }),
+  );
 }
 
 /**
@@ -262,16 +267,9 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
 }
 
 /**
- * In, out or net as the stroke's own coordinates say it, when all four are
- * placed; the stored result until then.
- */
-function shotResult(shot: LabelShot) {
-  return deriveShotResult(labelShotValues(shot)) ?? shot.result;
-}
-
-/**
- * "Point ended here": the last live stroke that is not a serve and whose ball
- * was out or in the net, with one or more live strokes after it. Those were
+ * "Point ended here": the last live stroke that is not a first serve and
+ * whose ball was out or in the net — a rally ball, or a second serve's double
+ * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
  * hit after the point ended — or are a second point the vendor ran into this
  * one — so the hint offers to remove them or to split there. Live means not
  * deleted and, with `ghosts` on, not a ghost.
@@ -283,8 +281,8 @@ export function pointEndedEarly(
   const live = liveShotsInOrder(point, ghosts);
   for (let i = live.length - 2; i >= 0; i -= 1) {
     const shot = live[i];
-    if (isServeStroke(shot.stroke)) continue;
-    if (!isMissedResult(shotResult(shot))) continue;
+    if (!endsPointWhenMissed(shot.stroke)) continue;
+    if (!isMissedResult(effectiveShotResult(shot))) continue;
     return {
       code: "shot_after_point_end",
       tier: "hint",
@@ -417,8 +415,10 @@ export function endingStale(
 /**
  * "Second serve?": a live serve typed `first_serve` that follows an earlier
  * live serve of the point whose ball missed — by structure the second serve,
- * however the vendor typed it. The first such serve in video order; the
- * action retypes it (`{ stroke: "second_serve" }`).
+ * however the vendor typed it. A let between them is replayed and changes
+ * nothing: it neither faults nor clears an earlier fault, and a first serve
+ * after a let alone is a first serve. The first such serve in video order;
+ * the action retypes it (`{ stroke: "second_serve" }`).
  */
 export function secondServeAsFirst(
   point: Pick<LabelPoint, "shots">,
@@ -427,7 +427,7 @@ export function secondServeAsFirst(
   const live = liveShotsInOrder(point, ghosts);
   let faulted = false;
   for (const shot of live) {
-    if (!isServeStroke(shot.stroke)) continue;
+    if (!isServeStroke(shot.stroke) || isLetServe(shot)) continue;
     if (faulted && shot.stroke === "first_serve") {
       return {
         code: "second_serve_as_first",

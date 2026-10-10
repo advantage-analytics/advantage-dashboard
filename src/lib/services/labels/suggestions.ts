@@ -14,7 +14,8 @@
 
 import type { LabelSuggestion } from "./marks";
 import type { Planned } from "./operations";
-import type { LabelPoint, LabelShot } from "./session";
+import { isMissedResult, type LabelPoint, type LabelShot } from "./session";
+import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 
 export type SuggestionState = "open" | "dismissed" | "done";
 
@@ -29,7 +30,13 @@ export function isSuggestionKey(value: unknown): value is string {
 export type SuggestionPoint = Pick<LabelPoint, "dismissed"> & {
   /** Read for a `missing_point`: a replayed let answers it. Optional for a shot's. */
   ending?: LabelPoint["ending"];
-  shots: readonly Pick<LabelShot, "status" | "afterEventId">[];
+  /**
+   * `eventId` and the result columns are read for a `missing_shot` alone: the
+   * pair's first stroke ruled out or in the net answers it.
+   */
+  shots: readonly (Pick<LabelShot, "status" | "afterEventId"> &
+    Partial<Pick<LabelShot, "eventId">> &
+    ResultReadableShot)[];
 };
 
 /** What `addedPointBetween` reads of the session's rows, in rail order. */
@@ -77,7 +84,9 @@ export function addedPointBetween(
  * A `missing_shot` is `done` once a LIVE stroke the labeller added follows
  * the pair's first vendor stroke (`afterEventId` — what `planAddedShot`
  * writes for a stroke added after it). Deleting that added stroke opens the
- * suggestion again. Done outranks dismissed: the stroke is there either way.
+ * suggestion again. It is `done` too once the pair's first stroke reads out
+ * or net (`effectiveShotResult`, so placed coordinates win): the point ended
+ * on it. Done outranks dismissed: the stroke is there either way.
  *
  * A `missing_point` is `done` once the flagged point's ending is
  * `let_replayed` — the second serve from that side was the same point played
@@ -96,6 +105,19 @@ export function suggestionState(
       after !== null &&
       point.shots.some(
         (shot) => shot.status === "added" && shot.afterEventId === after,
+      )
+    ) {
+      return "done";
+    }
+    // The pair's first ball out or in the net: the point ended on it, the
+    // second stroke was a swing at a dead ball, and nothing is missing.
+    if (
+      after !== null &&
+      point.shots.some(
+        (shot) =>
+          shot.status !== "deleted" &&
+          shot.eventId === after &&
+          isMissedResult(effectiveShotResult(shot)),
       )
     ) {
       return "done";

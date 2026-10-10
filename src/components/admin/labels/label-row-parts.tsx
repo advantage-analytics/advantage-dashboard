@@ -65,7 +65,8 @@ export interface EditContext {
   editable: boolean;
   names: SideNames;
   selectedShotId: string | null;
-  onSelectShot?: (shotId: string) => void;
+  /** `target` opens the court on that end: a position cell was clicked. */
+  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;
@@ -85,6 +86,11 @@ export interface EditContext {
   scores: ReadonlyMap<string, LabelPointScore>;
   /** `session.adScoring`. Absent means ad scoring. */
   adScoring?: boolean;
+  /**
+   * `session.playOnLets`. False (and absent) means lets are replayed, so a
+   * serve row's result offers `Let`; true, the result is the landing's alone.
+   */
+  playOnLets?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: RailTone;
 }

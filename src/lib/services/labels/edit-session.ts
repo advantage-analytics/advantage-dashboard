@@ -37,6 +37,7 @@ import {
   labelShotStatusAfterPatch,
   parseLabelPointPatch,
   parseLabelPointSeed,
+  letResultError,
   parseLabelShotPatch,
   parseLabelShotSeed,
   type LabelPointFields,
@@ -53,6 +54,7 @@ import {
 } from "./ending-session";
 import {
   applyShotsRemoved,
+  deadBallReason,
   deadBallsAfterMiss,
   planShotDelete,
   type LabelDeleteReason,
@@ -252,15 +254,16 @@ async function removeDeadBalls(
 > {
   const dead = deadBallsAfterMiss(after, shotId, row, patch, ghosts);
   if (dead.length === 0) return { after };
+  const reason = deadBallReason(after.find((s) => s.id === shotId)?.stroke);
   const written = await writeShotTombstones(
     supabase,
     dead,
-    "dead_ball_after_point",
+    reason,
     "remove the shots after it",
   );
   if ("error" in written) return { error: endingSyncFailed(written.error) };
   return {
-    after: applyShotsRemoved(after, written.removed),
+    after: applyShotsRemoved(after, written.removed, reason),
     removedAfter: written.removed,
   };
 }
@@ -321,6 +324,9 @@ export async function writeLabelShotEdit(params: {
       if (row.status === "deleted") {
         return { error: "Restore this shot before editing it." };
       }
+      // A let on a stroke the patch does not retype: judged by the stored one.
+      const letError = letResultError(patch, row);
+      if (letError) return { error: letError };
       // Independent reads, the gate's refusal first.
       const [gate, owned] = await Promise.all([
         attempt === 0 ? readSessionGate(supabase, row.session_id) : null,

@@ -699,13 +699,18 @@ test.describe("reset", () => {
       operations,
       session: unseeded,
       initialExpandedPointId: P1,
+      initialSelectedShotId: "s-return",
     });
-    expect(html).not.toContain("data-reset-row");
+    expect(html).toContain("data-shot-tray");
+    expect(html).not.toContain('data-shot-action="reset"');
     expect(html).not.toContain("data-reset-pencil");
     expect(html).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
 
-    const readOnly = renderConsole({ initialExpandedPointId: P1 });
-    expect(readOnly).not.toContain("data-reset-row");
+    const readOnly = renderConsole({
+      initialExpandedPointId: P1,
+      initialSelectedShotId: "s-return",
+    });
+    expect(readOnly).not.toContain("data-shot-tray");
     expect(readOnly).not.toContain("data-reset-pencil");
     expect(readOnly).not.toMatch(/aria-label="Reset (shot|point) \d+"/);
   });
@@ -748,6 +753,41 @@ test.describe("reset", () => {
     await Promise.resolve();
     expect(calls).toEqual({ resetShot: [["s-return"]] });
   });
+});
+
+// ── Mark complete ──────────────────────────────────────────────────────────
+
+test("Mark complete: the confirm lists what is still open, and the session is completed only on its action", async () => {
+  const { calls, operations } = spies();
+  const completed: unknown[][] = [];
+  const warnings = ["2 points of 3 not checked", "Game 1 unfinished (15–15)"];
+  renderConsole({
+    ...SAVES,
+    operations: {
+      ...operations,
+      completeSession: async (...args: unknown[]) => {
+        completed.push(args);
+        return { ok: true, status: "complete" };
+      },
+    },
+    initialConfirm: { kind: "complete-session", warnings },
+  });
+  const dialog = dialogs.at(-1)!;
+  expect(dialog).toMatchObject({
+    open: true,
+    title: "Mark this session complete?",
+    confirmLabel: "Mark complete",
+    tone: "primary",
+  });
+  const list = renderToStaticMarkup(dialog.children as React.ReactElement);
+  expect(list).toContain("data-complete-warnings");
+  for (const warning of warnings) expect(list).toContain(`<li>${warning}</li>`);
+  expect(completed).toEqual([]);
+
+  (dialog.onConfirm as () => void)();
+  await Promise.resolve();
+  expect(completed).toEqual([[labelSessionFixture().id]]);
+  expect(calls).toEqual({});
 });
 
 // ── Game bands (T14) ───────────────────────────────────────────────────────
@@ -1096,17 +1136,25 @@ test.describe("how it ended follows the shot rows", () => {
     expect(point).toEqual([]);
   });
 
-  test("a point reset is not a shot change: no ending patch follows it", async () => {
+  test("a point reset puts its edited strokes back first, then the point — and no ending patch follows", async () => {
     const { point, saves } = saveSpies();
     const { calls, operations } = spies();
     consoleTable({
       ...saves,
       operations,
-      initialConfirm: { kind: "reset-point", pointId: P1, pointNumber: 1 },
+      initialConfirm: {
+        kind: "reset-point",
+        pointId: P1,
+        pointNumber: 1,
+        fields: true,
+        shots: 1,
+      },
     });
     (dialogs.at(-1)!.onConfirm as () => void)();
     await settled();
-    expect(calls).toEqual({ resetPoint: [[P1]] });
+    // Each shot reset re-reads the point's ending on the server; the point's
+    // seed then has the last word.
+    expect(calls).toEqual({ resetShot: [["s-return"]], resetPoint: [[P1]] });
     expect(point).toEqual([]);
   });
 

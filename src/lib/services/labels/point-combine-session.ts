@@ -6,7 +6,9 @@
  * moving the later point's shots (`label_point_id`, by id list), their statuses
  * untouched; one compare-and-set UPDATE of the kept point's winner, ending,
  * ended by, rally ids and status, and one tombstoning the later point (both
- * `updateIfUnchanged` — the writes before a miss stand); then the kept
+ * `updateIfUnchanged` — the writes before a miss stand); one compare-and-set
+ * UPDATE per serve the plan relabels (its stroke or let, and the status an edit would
+ * give it, `labelShotStatusAfterPatch`); then the kept
  * point's ending as its joined rows
  * derive it (`reconcileEnding`, ending-session.ts), where the later point's
  * stored ending did not already say so. No row is ever removed.
@@ -19,7 +21,12 @@ import {
   updateIfUnchanged,
   type LabelWriteDependencies,
 } from "./edit-session";
-import { endingColumns, reconcileEnding } from "./ending-session";
+import { labelShotState, labelShotStatusAfterPatch } from "./edit";
+import {
+  endingColumns,
+  readShotsOfPoints,
+  reconcileEnding,
+} from "./ending-session";
 import { gated, normaliseId, type LabelOpResult } from "./operations-session";
 import {
   isCombineDirection,
@@ -87,7 +94,8 @@ export async function writeLabelPointCombine(params: {
   }
 
   // The plan with no shots yet: which point is the later one is decided
-  // first, then only that point's shot ids are read.
+  // first, then both points' shots are read — the later one's to move, and
+  // both for the serves the combine retypes.
   const points: CombinablePoint[] = (rows ?? []).map((row) => ({
     id: row.id,
     pointIndex: row.point_index,
@@ -103,21 +111,25 @@ export async function writeLabelPointCombine(params: {
   const dry = planPointCombine(points, pointId, direction);
   if ("error" in dry) return dry;
 
-  const { data: shotRows, error: shotsError } = await supabase
-    .from("label_shots")
-    .select("id")
-    .eq("label_point_id", dry.write.removedId)
-    .returns<{ id: string }[]>();
-  if (shotsError) {
-    return { error: `Could not read the point's shots: ${shotsError.message}` };
-  }
+  const read = await readShotsOfPoints(supabase, [
+    dry.write.keptId,
+    dry.write.removedId,
+  ]);
+  if ("error" in read) return read;
+  const shotsOf = (id: string) =>
+    read.shots.filter((shot) => shot.labelPointId === id);
   const plan = planPointCombine(
     points.map((p) =>
-      p.id === dry.write.removedId ? { ...p, shots: shotRows ?? [] } : p,
+      p.id === dry.write.keptId || p.id === dry.write.removedId
+        ? { ...p, shots: shotsOf(p.id) }
+        : p,
     ),
     pointId,
     direction,
   );
+  // A refusal here — including a serve retype that would leave a let on a
+  // stroke that is not a serve (`combineRetypeError`, judged on the rows just
+  // read) — comes before any write, so nothing moves.
   if ("error" in plan) return plan;
   const { write } = plan;
 
@@ -155,6 +167,31 @@ export async function writeLabelPointCombine(params: {
   );
   if (failed) return { error: failed };
 
+  // The serves relabelled — a let, or first and second — each
+  // compare-and-set on the status read; before the ending, which reads the
+  // strokes.
+  const retyped: PointCombineSaved["retyped"] = [];
+  for (const { shotId, patch } of write.retyped) {
+    const shot = read.shots.find((s) => s.id === shotId);
+    if (!shot) continue;
+    const status = labelShotStatusAfterPatch(labelShotState(shot), patch);
+    const retypeFailed = await updateIfUnchanged(
+      supabase,
+      "label_shots",
+      shotId,
+      shot.status,
+      { ...patch, status },
+      "relabel the serve",
+    );
+    if (retypeFailed) return { error: retypeFailed };
+    retyped.push({
+      id: shotId,
+      stroke: patch.stroke ?? shot.stroke,
+      result: patch.result ?? shot.result,
+      status,
+    });
+  }
+
   // The kept point's ending off the joined rows; its status stays `edited`
   // (or `added`) as the plan wrote it.
   const synced = await reconcileEnding({
@@ -173,6 +210,7 @@ export async function writeLabelPointCombine(params: {
       ...endingColumns(synced.point),
     },
     removed: { id: write.removedId, ...write.removed },
+    retyped,
   };
 }
 

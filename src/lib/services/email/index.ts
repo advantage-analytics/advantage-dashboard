@@ -35,7 +35,7 @@
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
  * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
- * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row (a join request only when the program has no owner to decide it) — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
  * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
  *
  * The claim and invite-request rows fire from

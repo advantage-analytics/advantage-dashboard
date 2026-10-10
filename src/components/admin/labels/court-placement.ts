@@ -20,7 +20,7 @@
 import type { LabelShotPatch } from "@/lib/services/labels/edit";
 import {
   positionPatch,
-  type ShotGeometry,
+  type ShotPosition,
 } from "@/lib/services/labels/shot-derived";
 import {
   halfOf,
@@ -130,7 +130,7 @@ const toCm = (n: number) => Math.round(n * 100) / 100;
 export function nextPlacement(
   state: PlacementState,
   point: CourtPoint,
-  shot: ShotGeometry,
+  shot: ShotPosition,
 ): { state: PlacementState; patch: LabelShotPatch } | null {
   if (state.shotId === null) return null;
   const x = toCm(point.x);

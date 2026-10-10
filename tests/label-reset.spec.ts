@@ -4,6 +4,7 @@ import {
   applyPointReset,
   applyShotReset,
   canResetPoint,
+  pointResetScope,
   canResetShot,
   planPointReset,
   planShotReset,
@@ -19,7 +20,10 @@ import type {
   LabelShotSeedValues,
 } from "@/lib/services/labels/session";
 import { buildLabelSession } from "@/lib/data/labels-server";
-import { resolveLabelAdScoring } from "@/lib/services/labels/ad-scoring";
+import {
+  readFormatAdScoring,
+  resolveLabelAdScoring,
+} from "@/lib/services/labels/ad-scoring";
 import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
@@ -89,6 +93,35 @@ test.describe("planShotReset", () => {
     expect(planShotReset({ status: "added", seed: SHOT_SEED })).toHaveProperty(
       "error",
     );
+  });
+});
+
+test.describe("planShotReset: a let only on a serve", () => {
+  test("refuses a seed that would leave a let on a stroke that is not a serve", () => {
+    expect(
+      planShotReset({
+        status: "edited",
+        seed: { ...SHOT_SEED, stroke: "backhand", result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+    expect(
+      planShotReset({
+        status: "edited",
+        seed: { ...SHOT_SEED, stroke: null, result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+  });
+
+  test("writes back a let on a serve", () => {
+    const seed = {
+      ...SHOT_SEED,
+      stroke: "first_serve" as const,
+      result: "let" as const,
+    };
+    expect(planShotReset({ status: "edited", seed })).toEqual({
+      ok: true,
+      write: { ...seed, status: "kept" },
+    });
   });
 });
 
@@ -206,6 +239,38 @@ test.describe("the console's rows", () => {
     expect(canResetPoint(points.get(P2)!)).toBe(false);
     expect(canResetPoint(points.get(P3)!)).toBe(false);
     expect(canResetPoint({ status: "edited", seed: null })).toBe(false);
+  });
+
+  test("a point's Reset: its own fields when edited, and every edited stroke with a seed", () => {
+    const points = new Map(labelSessionFixture().points.map((p) => [p.id, p]));
+    const { P1, P2 } = FIXTURE_POINT_IDS;
+    const p1 = points.get(P1)!;
+    const edited = p1.shots.filter(canResetShot).map((s) => s.id);
+    expect(pointResetScope(p1)).toEqual({ fields: true, shotIds: edited });
+    // A split half keeps its own fields; its strokes still go back.
+    expect(pointResetScope(p1, true)).toEqual(
+      edited.length > 0 ? { fields: false, shotIds: edited } : null,
+    );
+    // Only its strokes changed: Reset is still offered, for them.
+    const shotsOnly = {
+      ...p1,
+      status: "unchanged" as const,
+      shots: p1.shots,
+    };
+    expect(pointResetScope(shotsOnly)).toEqual(
+      edited.length > 0 ? { fields: false, shotIds: edited } : null,
+    );
+    // Nothing edited anywhere: nothing to offer.
+    const p2 = points.get(P2)!;
+    expect(
+      pointResetScope({
+        ...p2,
+        status: "unchanged",
+        shots: p2.shots.filter((s) => !canResetShot(s)),
+      }),
+    ).toBeNull();
+    // A deleted point is restored first.
+    expect(pointResetScope({ ...p1, status: "deleted" })).toBeNull();
   });
 
   test("applyShotReset puts every value back and leaves the rest", () => {
@@ -375,23 +440,47 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
 });
 
 test.describe("the session's ad scoring", () => {
-  test("the labeller's answer wins, then the job's, then ad scoring", () => {
+  test("the labeller's answer wins, then the job's, then the match's format, then ad scoring", () => {
     expect(resolveLabelAdScoring(false, true)).toBe(false);
     expect(resolveLabelAdScoring(true, false)).toBe(true);
     expect(resolveLabelAdScoring(null, false)).toBe(false);
     expect(resolveLabelAdScoring(null, true)).toBe(true);
     expect(resolveLabelAdScoring(null, null)).toBe(true);
     expect(resolveLabelAdScoring(null, undefined)).toBe(true);
+    // The match's format only when neither the session nor the job says.
+    expect(resolveLabelAdScoring(null, null, false)).toBe(false);
+    expect(resolveLabelAdScoring(null, undefined, false)).toBe(false);
+    expect(resolveLabelAdScoring(null, null, null)).toBe(true);
+    expect(resolveLabelAdScoring(null, true, false)).toBe(true);
+    expect(resolveLabelAdScoring(true, null, false)).toBe(true);
+    // The job wins over the match where they disagree (PR #297).
+    expect(resolveLabelAdScoring(null, false, true)).toBe(false);
+  });
+
+  test("the match's format is read as a boolean or not at all", () => {
+    expect(readFormatAdScoring({ ad_scoring: false })).toBe(false);
+    expect(readFormatAdScoring({ ad_scoring: true, best_of: 3 })).toBe(true);
+    for (const format of [
+      null,
+      undefined,
+      "x",
+      {},
+      { ad_scoring: "false" },
+      { ad_scoring: 0 },
+    ]) {
+      expect(readFormatAdScoring(format), JSON.stringify(format)).toBeNull();
+    }
   });
 
   test("the loader applies that order over the session and job rows", () => {
     const build = (
       sessionAdScoring: boolean | null,
       job: { ad_scoring: boolean | null } | null,
+      format: { ad_scoring?: boolean | null } | null = null,
     ) =>
       buildLabelSession(
         { ...SESSION_ROW, ad_scoring: sessionAdScoring },
-        null,
+        { id: "m", player1_name: null, player2_name: null, format },
         [],
         [],
         job,
@@ -413,6 +502,13 @@ test.describe("the session's ad scoring", () => {
     // Job gone, or submitted without saying: ad scoring.
     expect(build(null, null)).toBe(true);
     expect(build(null, { ad_scoring: null })).toBe(true);
+    // Then the match's format.
+    expect(build(null, null, { ad_scoring: false })).toBe(false);
+    expect(build(null, { ad_scoring: null }, { ad_scoring: false })).toBe(
+      false,
+    );
+    expect(build(null, { ad_scoring: true }, { ad_scoring: false })).toBe(true);
+    expect(build(null, null, {})).toBe(true);
   });
 });
 

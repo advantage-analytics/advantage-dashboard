@@ -40,6 +40,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
   score_frozen: "Score not read",
+  segment_proposal_differs: "Game cut differs",
   geometry_discarded: "No position",
 };
 
@@ -150,9 +151,9 @@ export function findGapDescription(
 }
 
 /**
- * The hover line for the mark's code, with the players' names. Four lines have
- * a second form: a mark whose side or score the derivation could not read, and
- * a removal of more than one shot.
+ * The hover line for the mark's code, with the players' names. Five lines have
+ * a second form: a mark whose side, score or proposal the derivation could not
+ * read (or a proposed merge), and a removal of more than one shot.
  */
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {
@@ -213,9 +214,19 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         ? "The vendor called this ball out, but the rally went on, so it’s stored as in."
         : `The vendor called this ball out, but ${names[mark.params.nextHitter]} played the next shot, so it’s stored as in.`;
     case "winner_guessed":
-      return "The score couldn’t be read here, so the winner comes from the last shot. That guess is right about 4 times in 5.";
+      return "The score couldn’t be read here, so the winner comes from the last shot. That guess has been wrong about half the time, so check who won.";
     case "score_frozen":
       return "The vendor’s score stopped updating. The game and server come from where the serve was hit. The score is left blank.";
+    case "segment_proposal_differs": {
+      const { proposedGame, proposedServer, mergedWith } = mark.params;
+      if (mergedWith !== null) {
+        return "Re-cutting the games from the score would join this rally to the one beside it. Nothing was changed.";
+      }
+      if (proposedGame === null || proposedServer === null) {
+        return "Re-cutting the games from the score puts this point somewhere else. Nothing was changed.";
+      }
+      return `Re-cutting the games from the score puts this point in game ${proposedGame}, served by ${names[proposedServer]}. Nothing was changed.`;
+    }
     case "geometry_discarded":
       return "The vendor placed this shot outside the court enclosure, so its position was dropped.";
   }

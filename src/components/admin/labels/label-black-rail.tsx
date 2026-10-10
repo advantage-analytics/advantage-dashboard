@@ -11,7 +11,7 @@ import { Flag, Maximize2, Minimize2 } from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
+import { FloatMenuItem, FloatMenuNote } from "@/components/ui/float-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   LabelPointPatch,
@@ -32,7 +32,7 @@ import {
   scoreMismatchDetail,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
-import { markSummary } from "@/lib/services/labels/marks-state";
+import { openFlags } from "@/lib/services/labels/flag-nav";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   bandsBeforePoints,
@@ -57,6 +57,8 @@ import {
 } from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
+import { useRowInView } from "./use-row-in-view";
+import { LabelFlagSummary } from "./label-flag-summary";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -122,6 +124,7 @@ export function LabelBlackRail({
   points,
   scores,
   adScoring = true,
+  playOnLets,
   names,
   marks = null,
   expandedPointId,
@@ -147,6 +150,7 @@ export function LabelBlackRail({
   onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
+  onGoToPoint,
   onClearEnteredScore,
   onPullGame,
   onAddPoint,
@@ -174,6 +178,8 @@ export function LabelBlackRail({
   /** `labelScores(points, adScoring)`, computed once by the console. */
   scores: LabelScores;
   adScoring?: boolean;
+  /** `session.playOnLets`: false offers `Let` on a serve row's result. */
+  playOnLets?: boolean;
   names: SideNames;
   /** The session's marks. Null draws no chip, hover line or suggestion. */
   marks?: LabelMarks | null;
@@ -181,7 +187,8 @@ export function LabelBlackRail({
   onTogglePoint?: (pointId: string) => void;
   editable?: boolean;
   selectedShotId?: string | null;
-  onSelectShot?: (shotId: string) => void;
+  /** `target` opens the court on that end: a position cell was clicked. */
+  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   /** Absent: no ⋯ menu, no tick, no Add shot — the rows are read-only. */
@@ -212,6 +219,8 @@ export function LabelBlackRail({
   onFixEnteredScore?: (finalScore: number[][]) => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
+  /** Make a point current, hold the rail and bring the row up: the flag jumps. */
+  onGoToPoint?: (pointId: string) => void;
   /**
    * Forget the entered score (`final_score: null`), so the match record's is
    * held against the rows again. Offered only while one is stored.
@@ -231,6 +240,12 @@ export function LabelBlackRail({
   const [openAtMount] = useState(expandedPointId);
   const [openMoved, setOpenMoved] = useState(false);
   if (!openMoved && expandedPointId !== openAtMount) setOpenMoved(true);
+  // The "Now playing" pill is the way back to a row out of sight; with the
+  // playing point's row on screen it has nothing to point at.
+  const playingRowInView = useRowInView(
+    scrollerRef,
+    affordance?.inCut ? playingPointId : null,
+  );
   // The chip's arithmetic, over the same rows as the scoreboard: only with
   // marks built, not once the labeller has said the video ends early, and only
   // on a disagreement.
@@ -242,10 +257,10 @@ export function LabelBlackRail({
     marks !== null && videoEndsEarly !== true
       ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
       : null;
-  // The header's total, over every live row — marks, not points, as the
-  // rows roll them up. Nothing on the marks-off session.
-  const summary = useMemo(
-    () => (marks ? markSummary(points, marks) : null),
+  // The header's open marks, over every live row — marks, not points, as the rows
+  // roll them up. None on the marks-off session.
+  const openMarks = useMemo(
+    () => (marks ? openFlags(points, marks) : []),
     [points, marks],
   );
   // One object for every row, the same one until an input moves: the rows
@@ -268,6 +283,7 @@ export function LabelBlackRail({
       points,
       scores: pointScores,
       adScoring,
+      playOnLets,
       tone,
     }),
     [
@@ -285,6 +301,7 @@ export function LabelBlackRail({
       points,
       pointScores,
       adScoring,
+      playOnLets,
       tone,
     ],
   );
@@ -346,36 +363,55 @@ export function LabelBlackRail({
               {checked} <span className="text-white/25">/</span> {total} checked
             </span>
           ) : null}
-          {summary ? (
-            <RailTotal
-              count={summary.open}
-              label={toCheckLabel(summary.open)}
-              detail={onPointsDetail(summary.openPoints)}
-              className={
-                summary.open > 0 ? "text-[var(--rail-amber)]" : "text-white/45"
-              }
-            />
+          {showSession ? (
+            <span
+              data-match-format=""
+              className="shrink-0 text-[11px] whitespace-nowrap text-white/45"
+            >
+              <span className="text-white/25">·</span>{" "}
+              {adScoring ? "Ad scoring" : "No-ad scoring"}{" "}
+              <span className="text-white/25">·</span>{" "}
+              {playOnLets ? "Lets: play on" : "Lets replayed"}
+            </span>
           ) : null}
-          {mismatch ? (
-            <ScoreChip
-              mismatch={mismatch}
+          {marks !== null || mismatch ? (
+            <LabelFlagSummary
+              openMarks={openMarks}
+              points={points}
+              fromPointId={expandedPointId ?? playingPointId}
+              onGoToPoint={onGoToPoint}
               tone={tone}
-              stored={formatSets(labelledSets)}
-              onGoToGame={goToGame}
-              onFixEnteredScore={
-                onFixEnteredScore && editable
-                  ? () =>
-                      onFixEnteredScore(
-                        labelledSets.map((set) => [set.games[0], set.games[1]]),
-                      )
-                  : undefined
-              }
-              onVideoEndsEarly={editable ? onVideoEndsEarly : undefined}
-              onFindGap={editable ? onFindGap : undefined}
-              onClearEnteredScore={
-                editable && finalScore !== null
-                  ? onClearEnteredScore
-                  : undefined
+              score={
+                mismatch
+                  ? (close) => (
+                      <ScoreRows
+                        mismatch={mismatch}
+                        stored={formatSets(labelledSets)}
+                        close={close}
+                        onGoToGame={goToGame}
+                        onFixEnteredScore={
+                          onFixEnteredScore && editable
+                            ? () =>
+                                onFixEnteredScore(
+                                  labelledSets.map((set) => [
+                                    set.games[0],
+                                    set.games[1],
+                                  ]),
+                                )
+                            : undefined
+                        }
+                        onVideoEndsEarly={
+                          editable ? onVideoEndsEarly : undefined
+                        }
+                        onFindGap={editable ? onFindGap : undefined}
+                        onClearEnteredScore={
+                          editable && finalScore !== null
+                            ? onClearEnteredScore
+                            : undefined
+                        }
+                      />
+                    )
+                  : null
               }
             />
           ) : null}
@@ -516,7 +552,7 @@ export function LabelBlackRail({
             </div>
           </div>
 
-          {affordance ? (
+          {affordance && !playingRowInView ? (
             <LabelFollowPill
               affordance={affordance}
               onFollow={onFollow}
@@ -529,54 +565,16 @@ export function LabelBlackRail({
   );
 }
 
-/** The header's total: a flag glyph and a count. Not a control. */
-function RailTotal({
-  count,
-  label,
-  detail,
-  className,
-}: {
-  count: number;
-  label: string;
-  detail: string | undefined;
-  className: string;
-}) {
-  return (
-    <ChromeTooltip label={label} detail={detail} side="bottom">
-      <span
-        role="img"
-        aria-label={label}
-        data-label-rail-to-check=""
-        className={cn(
-          "mono tabular inline-flex shrink-0 items-center gap-1 text-[10px] whitespace-nowrap",
-          className,
-        )}
-      >
-        <Flag className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
-        {count}
-      </span>
-    </ChromeTooltip>
-  );
-}
-
 /**
- * The score that doesn't add up, as a chip in the header: the sentence that
- * says which set, the labelled pair against the entered one and why ("Set 2:
- * labelled 4–5, entered 4–6 · game 5 unfinished (30–40)") in amber. Under
- * 600px of header the words give way and the dot stands alone.
- *
- * With the three answers it is a `FloatMenu` trigger in the rail's tone, led
- * by "Go to game N" when the sentence names one; they write only
- * `label_sessions` (`final_score`, `video_ends_early`), never `matches`.
- * "Fix the entered score" says what it will store; "Use the match score
- * again" (`onClearEnteredScore`) is offered only while a score is stored.
- * Without the answers the chip is a button that goes to the named game, or
- * words alone when none is named.
+ * The score that doesn't add up, as rows in the flag list: with the answers,
+ * `ScoreChipMenu`'s rows; without, "Go to game N" when a game is named, else
+ * the sentence alone. They write only `label_sessions` (`final_score`,
+ * `video_ends_early`), never `matches`.
  */
-function ScoreChip({
+export function ScoreRows({
   mismatch,
-  tone,
   stored,
+  close,
   onGoToGame,
   onFixEnteredScore,
   onVideoEndsEarly,
@@ -584,114 +582,46 @@ function ScoreChip({
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
-  tone: RailTone;
   /** The labelled sets as "Fix the entered score" will store them: "6–3, 4–5". */
   stored: string;
-  /** Scroll the rail to the band carrying the game's key. */
+  close: () => void;
   onGoToGame: (gameKey: string) => void;
-  /** Store the labelled sets as `final_score`. Absent: no answers at all. */
   onFixEnteredScore?: () => void;
   onVideoEndsEarly?: () => void;
-  /** Hold and scroll to the set's first point (null: the rows end before it). */
   onFindGap?: (pointId: string | null) => void;
-  /** Forget the stored score; given only while one is stored. */
   onClearEnteredScore?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const { setNumber, labelled, entered, firstPointId } = mismatch;
-  const answers = onFixEnteredScore && onVideoEndsEarly && onFindGap;
-  const text = scoreMismatchSentence(mismatch);
+  const { setNumber, labelled, entered } = mismatch;
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
+  if (onFixEnteredScore && onVideoEndsEarly && onFindGap) {
+    return (
+      <ScoreChipMenu
+        mismatch={mismatch}
+        stored={stored}
+        close={close}
+        onGoToGame={onGoToGame}
+        onFixEnteredScore={onFixEnteredScore}
+        onVideoEndsEarly={onVideoEndsEarly}
+        onFindGap={onFindGap}
+        onClearEnteredScore={onClearEnteredScore}
+      />
+    );
+  }
   const game = mismatchGameKey(mismatch);
   const gameInSet = mismatch.reasons[0]?.gameInSet ?? null;
-  const control = Boolean(answers) || game !== null;
-  const chip = cn(
-    "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full bg-[var(--rail-amber-wash)] px-1.5 text-[10px] font-medium whitespace-nowrap text-[var(--rail-amber)]",
-    control &&
-      "cursor-pointer transition-[color,background-color,scale] duration-200 hover:bg-[var(--rail-amber-wash-strong)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none active:scale-[0.96] active:duration-100 motion-reduce:active:scale-100",
-  );
-  const inside = (
-    <>
-      <span
-        aria-hidden="true"
-        className="size-1.5 shrink-0 rounded-full bg-current"
+  if (game !== null && gameInSet !== null) {
+    return (
+      <FloatMenuItem
+        label={`Go to game ${gameInSet}`}
+        description={scoreMismatchSentence(mismatch)}
+        onSelect={() => {
+          close();
+          onGoToGame(game);
+        }}
       />
-      <span
-        data-label-score-chip-text=""
-        className="mono tabular hidden @min-[600px]:inline"
-      >
-        {text}
-      </span>
-    </>
-  );
-
-  return (
-    <ChromeTooltip
-      label={SCORE_MISMATCH_LABEL}
-      detail={detail}
-      side="bottom"
-      hidden={open}
-      wrap
-    >
-      {answers ? (
-        <span className="inline-flex shrink-0">
-          <FloatMenu
-            open={open}
-            onOpenChange={setOpen}
-            align="end"
-            width={272}
-            tone={tone}
-            label={SCORE_MISMATCH_LABEL}
-            trigger={
-              <button
-                type="button"
-                data-label-score-chip=""
-                aria-label={SCORE_MISMATCH_LABEL}
-                aria-haspopup="menu"
-                aria-expanded={open}
-                className={cn(
-                  chip,
-                  open && "bg-[var(--rail-amber-wash-strong)]",
-                )}
-              >
-                {inside}
-              </button>
-            }
-          >
-            <ScoreChipMenu
-              mismatch={mismatch}
-              stored={stored}
-              close={() => setOpen(false)}
-              onGoToGame={onGoToGame}
-              onFixEnteredScore={onFixEnteredScore}
-              onVideoEndsEarly={onVideoEndsEarly}
-              onFindGap={onFindGap}
-              onClearEnteredScore={onClearEnteredScore}
-            />
-          </FloatMenu>
-        </span>
-      ) : game !== null ? (
-        <button
-          type="button"
-          data-label-score-chip=""
-          aria-label={`${SCORE_MISMATCH_LABEL}. ${detail} Go to game ${gameInSet}.`}
-          onClick={() => onGoToGame(game)}
-          className={chip}
-        >
-          {inside}
-        </button>
-      ) : (
-        <span
-          role="img"
-          data-label-score-chip=""
-          aria-label={`${SCORE_MISMATCH_LABEL}. ${detail}`}
-          className={chip}
-        >
-          {inside}
-        </span>
-      )}
-    </ChromeTooltip>
-  );
+    );
+  }
+  return <FloatMenuNote>{detail}</FloatMenuNote>;
 }
 
 /**

@@ -22,6 +22,13 @@ import { LADDER, lastStrokeWinner } from "./winners";
 import type { LineCalls } from "./line-calls";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
+/**
+ * Marks a point written by `scripts/label-apply.ts` from a hand-labelling
+ * session. Not a derivation flag: `persistTranscript` refuses to replace a
+ * match carrying it unless told to.
+ */
+export const HAND_LABELLED_FLAG = "hand_labelled";
+
 export const POINT_FLAGS = {
   /**
    * Score fold and the last stroke's `in` flag name different winners.
@@ -97,6 +104,14 @@ export const POINT_FLAGS = {
    * score or the serve position is wrong. Skipped on a no-ad deciding point.
    */
   SCORE_SIDE_MISMATCH: "score_side_mismatch",
+  /**
+   * Review-only. The score-constrained segmentation (segmentation.ts, run from
+   * transcript.ts) puts this point in a different game, gives it a different
+   * server, or merges it with a neighbouring rally. Published rows are
+   * unchanged; the proposal is recorded so it can be measured before anything
+   * is promoted.
+   */
+  SEGMENT_PROPOSAL_DIFFERS: "segment_proposal_differs",
 } as const;
 
 /** How close to a line the ball before a winner must land to be suspect. */
@@ -107,7 +122,7 @@ const ENDING_SUSPECT_MARGIN_M = 1;
  * echoes the call. An out call at 0.9 near the end of a point was right 12 of
  * 12 on the labelled match; at 0.5–0.7 it was noise mid-rally.
  */
-const CONFIDENT_OUT_CALL = 0.85;
+export const CONFIDENT_OUT_CALL = 0.85;
 
 /**
  * Servers stand close to the centre mark, so a stance this near x = 0 says
