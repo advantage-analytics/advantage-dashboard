@@ -890,6 +890,146 @@ test.describe("the black shots well", () => {
     expect(frozen).not.toContain('role="button"');
   });
 
+  test("quiet selection: the selected row's fields read as text, a box only where reached for", () => {
+    const html = renderWell({ selectedShotId: "w-lit" });
+    const lit = shotRow(html, "w-lit");
+    const classes = (openTag: string) =>
+      /class="([^"]*)"/.exec(openTag)![1].split(" ");
+
+    // Player, Stroke, Spin: the trigger is transparent at rest, and the box
+    // comes back on hover, keyboard focus and an open menu — the boxed
+    // variant's exact border and ground, the open menu's blue.
+    for (const field of ["player", "stroke", "spin"]) {
+      const trigger = classes(tag(lit, `aria-label="Shot 4 ${field}"`));
+      for (const want of [
+        "border-transparent",
+        "bg-transparent",
+        "hover:border-white/20",
+        "hover:bg-white/[0.14]",
+        "focus-visible:border-white/20",
+        "focus-visible:bg-white/[0.08]",
+        "aria-expanded:border-[var(--blue)]",
+        "aria-expanded:bg-white/[0.08]",
+        "duration-150",
+        "motion-reduce:transition-none",
+        // Brighter than a resting row's words: these can be edited.
+        "text-white/90",
+        // The same geometry, so nothing shifts when the box shows.
+        "-ml-[5px]",
+        "w-[calc(100%+7px)]",
+        "h-[26px]",
+      ]) {
+        expect(trigger, `${field}: ${want}`).toContain(want);
+      }
+      // No box at rest.
+      expect(trigger, field).not.toContain("border-white/20");
+      expect(trigger, field).not.toContain("bg-white/[0.08]");
+      expect(trigger, field).not.toContain("text-white");
+    }
+
+    // Time and the two positions: the field's box, transparent at rest; hover
+    // (unless focused, so it never covers the blue), focus-within (the input
+    // is focused for as long as a draft is typed) and an invalid draft bring
+    // it back.
+    for (const label of [
+      "Shot 4 time",
+      "Shot 4 hit at, metres x, y",
+      "Shot 4 landed at, metres x, y",
+    ]) {
+      const at = lit.indexOf(`aria-label="${label}"`);
+      expect(at, label).toBeGreaterThan(-1);
+      const input = lit.slice(lit.lastIndexOf("<input", at));
+      const wrapperAt = lit.lastIndexOf("<span", lit.lastIndexOf("<input", at));
+      const wrapper = classes(
+        lit.slice(wrapperAt, lit.indexOf(">", wrapperAt)),
+      );
+      for (const want of [
+        "border-transparent",
+        "bg-transparent",
+        "not-focus-within:hover:border-white/20",
+        "hover:bg-white/[0.08]",
+        "focus-within:border-[var(--blue)]",
+        "focus-within:bg-white/[0.08]",
+        "data-[invalid]:focus-within:border-[var(--danger)]",
+        "data-[invalid]:bg-white/[0.08]",
+        "duration-150",
+        "motion-reduce:transition-none",
+        "-ml-[4px]",
+        "w-[calc(100%+9px)]",
+      ]) {
+        expect(wrapper, `${label}: ${want}`).toContain(want);
+      }
+      expect(wrapper, label).not.toContain("border-white/20");
+      expect(wrapper, label).not.toContain("bg-white/[0.08]");
+      const inputClasses = classes(input.slice(0, input.indexOf(">") + 1));
+      expect(inputClasses, label).toContain("text-white/90");
+      expect(inputClasses, label).not.toContain("text-white");
+    }
+
+    // Placement is derived, not an editor: it keeps the row's words ink.
+    expect(tag(lit, 'data-calculated="placement"')).toContain("text-white/50");
+    expect(tag(lit, 'data-calculated="placement"')).not.toContain(
+      "text-white/90",
+    );
+  });
+
+  test("the boxed field is unchanged for any editor not asked to be quiet", () => {
+    const { SelectEditor, TextEditor } = createLoader().load(
+      "src/components/admin/labels/label-cells.tsx",
+    ) as {
+      SelectEditor: (props: Record<string, unknown>) => React.ReactElement;
+      TextEditor: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const classes = (openTag: string) =>
+      /class="([^"]*)"/.exec(openTag)![1].split(" ");
+
+    const select = classes(
+      tag(
+        renderToStaticMarkup(
+          React.createElement(SelectEditor, {
+            label: "Game type",
+            value: "a",
+            options: [{ value: "a", label: "A" }],
+            onChange: noop,
+          }),
+        ),
+        'aria-label="Game type"',
+      ),
+    );
+    for (const want of [
+      "border-white/20",
+      "bg-white/[0.08]",
+      "text-white",
+      "hover:bg-white/[0.14]",
+      "aria-expanded:border-[var(--blue)]",
+    ]) {
+      expect(select, want).toContain(want);
+    }
+    expect(select).not.toContain("border-transparent");
+    expect(select).not.toContain("text-white/90");
+
+    const field = renderToStaticMarkup(
+      React.createElement(TextEditor, {
+        label: "Time",
+        text: "1:00.0",
+        parse: (t: string) => t,
+        onCommit: noop,
+      }),
+    );
+    const box = classes(tag(field, "<span"));
+    for (const want of [
+      "border-white/20",
+      "bg-white/[0.08]",
+      "focus-within:border-[var(--blue)]",
+    ]) {
+      expect(box, want).toContain(want);
+    }
+    expect(box).not.toContain("border-transparent");
+    const input = classes(tag(field, "<input"));
+    expect(input).toContain("text-white");
+    expect(input).not.toContain("text-white/90");
+  });
+
   test("a click selects the stroke, and each editor sends its patch", () => {
     const patches: [string, unknown][] = [];
     const selected: string[] = [];
@@ -1558,9 +1698,11 @@ test.describe("a serve's result menu, where lets are replayed", () => {
         edit: wellEdit({ ...replayed, selectedShotId: "w-fault" }),
       }),
     );
-    expect(tag(selected, 'aria-label="Shot 1 result"')).toContain(
-      "text-[color:var(--rail-amber)]",
-    );
+    const letTrigger = tag(selected, 'aria-label="Shot 1 result"');
+    expect(letTrigger).toContain("text-[color:var(--rail-amber)]");
+    // Quiet selection's white/90 does not wash the amber out.
+    expect(letTrigger).not.toContain("text-white/90");
+    expect(letTrigger).toContain("border-transparent");
   });
 
   test("while the menu is open, it says so, and nothing covers it", () => {

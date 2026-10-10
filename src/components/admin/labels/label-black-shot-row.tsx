@@ -481,6 +481,7 @@ export function BlackShotRow({
             text={time ?? ""}
             parse={parseVideoTime}
             onCommit={(value) => patch({ video_time: value as number | null })}
+            quiet
           />
         }
       />
@@ -1412,6 +1413,7 @@ function ServeResultCell({
             // A stored result with no landing to calculate from is not an
             // item, but the trigger still says it.
             placeholder={value ? RESULT_LABEL[value] : undefined}
+            quiet
           />
         }
       />
@@ -1466,6 +1468,7 @@ function BlackSelectCell({
           value={value}
           options={options}
           onChange={onChange}
+          quiet
         />
       }
     />
@@ -1560,6 +1563,7 @@ function BlackPositionCell({
             onCommit={(value) =>
               onCommit(value as { x: number; y: number } | null)
             }
+            quiet
           />
         }
       />

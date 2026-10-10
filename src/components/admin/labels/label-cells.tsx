@@ -163,6 +163,30 @@ const FIELD_DARK =
 const SELECT_TRIGGER_DARK =
   "-ml-[5px] h-[26px] w-[calc(100%+7px)] min-w-0 shrink border-white/20 bg-white/[0.08] px-1 text-[11px] text-white hover:bg-white/[0.14] aria-expanded:border-[var(--blue)] [&>svg]:hidden";
 
+/**
+ * The quiet variant (a selected shot row): the same field, drawn only where
+ * it is reached for. At rest its border and ground are transparent, so the
+ * row's values read as text; the box — exactly the boxed variant's — comes
+ * back on the one field hovered, focused from the keyboard, or open. Only
+ * colours change, so nothing shifts when it appears. The values are a step
+ * brighter than a resting row's (white/90): they are editable.
+ *
+ * Tailwind orders these hover → focus-visible → aria-expanded, so an open
+ * menu's blue outranks a hover's white.
+ */
+export const SELECT_TRIGGER_QUIET =
+  "border-transparent bg-transparent text-white/90 duration-150 motion-reduce:transition-none hover:border-white/20 hover:bg-white/[0.14] focus-visible:border-white/20 focus-visible:bg-white/[0.08] aria-expanded:border-[var(--blue)] aria-expanded:bg-white/[0.08]";
+
+/**
+ * The text field's quiet variant. Focus is `focus-within` on the box — the
+ * input is focused for as long as a draft is typed, so the box stays while
+ * the pointer wanders off. `focus-within` sorts before `hover`, so the hover
+ * border is `not-focus-within:` and never paints over the blue; `--danger`
+ * (`data-[invalid]`) sorts after both.
+ */
+export const FIELD_QUIET =
+  "border-transparent bg-transparent duration-150 motion-reduce:transition-none not-focus-within:hover:border-white/20 hover:bg-white/[0.08] focus-within:bg-white/[0.08] data-[invalid]:bg-white/[0.08]";
+
 export type SelectOption = MenuOption<string>;
 
 /**
@@ -224,6 +248,7 @@ export function SelectEditor({
   onOpenChange,
   className,
   placeholder = "—",
+  quiet = false,
 }: {
   label: string;
   value: string | null;
@@ -238,6 +263,8 @@ export function SelectEditor({
   className?: string;
   /** The trigger's words when `value` is none of the options. */
   placeholder?: string;
+  /** The box only where reached for (`SELECT_TRIGGER_QUIET`). */
+  quiet?: boolean;
 }) {
   return (
     <span
@@ -257,7 +284,11 @@ export function SelectEditor({
         tone={menu}
         open={open}
         onOpenChange={onOpenChange}
-        className={cn(SELECT_TRIGGER_DARK, className)}
+        className={cn(
+          SELECT_TRIGGER_DARK,
+          quiet && SELECT_TRIGGER_QUIET,
+          className,
+        )}
       />
     </span>
   );
@@ -273,12 +304,15 @@ export function TextEditor({
   text,
   parse,
   onCommit,
+  quiet = false,
 }: {
   label: string;
   text: string;
   /** The typed text → a value; `undefined` when it does not parse. */
   parse: (text: string) => unknown;
   onCommit: (value: unknown) => void;
+  /** The box only where reached for (`FIELD_QUIET`). */
+  quiet?: boolean;
 }) {
   // Null until something is typed, and again once it is written or thrown away,
   // so the stored value shows through, including one that changes underneath.
@@ -296,7 +330,11 @@ export function TextEditor({
 
   return (
     <span
-      className={cn(FIELD_DARK, invalid && "border-[var(--danger)]")}
+      className={cn(
+        FIELD_DARK,
+        quiet && FIELD_QUIET,
+        invalid && "border-[var(--danger)]",
+      )}
       data-invalid={invalid ? "" : undefined}
     >
       <input
@@ -320,7 +358,10 @@ export function TextEditor({
             setDraft(null);
           }
         }}
-        className="mono tabular h-full w-full min-w-0 bg-transparent px-[3px] text-[10px] tracking-[-0.05em] text-white outline-none"
+        className={cn(
+          "mono tabular h-full w-full min-w-0 bg-transparent px-[3px] text-[10px] tracking-[-0.05em] text-white outline-none",
+          quiet && "text-white/90",
+        )}
       />
     </span>
   );
