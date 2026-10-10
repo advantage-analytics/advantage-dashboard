@@ -1,6 +1,6 @@
 # Review: score-constrained game segmentation
 
-Sign-off: pending
+Sign-off: approved — by the author in chat, 2026-10-10 ("approve the sign-off and land it")
 
 **Range reviewed:** the branch range `a97f3551...7a425276`, from the merge base with
 `splitstep-integration` to the last review-fix commit. The range is the build stage's
