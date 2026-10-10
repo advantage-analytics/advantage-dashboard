@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Database check: a let is a serve's only
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_label_shots_let_serve_only.sql (new), src/lib/services/labels/edit.ts (`letResultError` doc comment) — a guess
 - **done when:**

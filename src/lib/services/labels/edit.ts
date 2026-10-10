@@ -60,7 +60,9 @@ export const LABEL_SHOT_RESULTS: readonly LabelShotResult[] = [
  * (the rail sends the calculated result with such a retype,
  * `strokeChangePatch`). With nothing in hand to judge (a patch parsed before
  * the row is read) there is nothing to refuse yet — the write re-asks with the
- * row (edit-session.ts `writeLabelShotEdit`).
+ * row (edit-session.ts `writeLabelShotEdit`). Behind every writer, the
+ * `label_shots_let_serve_only` check constraint is the database's backstop:
+ * it refuses a let on any row whose stroke is null or not a serve.
  */
 export function letResultError(
   patch: LabelShotPatch,
