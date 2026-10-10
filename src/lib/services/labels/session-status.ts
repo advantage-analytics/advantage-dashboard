@@ -110,7 +110,11 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
         `${at}'s ending will be taken from its strokes (${ownedEndingPhrase(resolved.ending, resolved.endedBy, resolved.winner, names)})`,
       );
     } else if (resolved.kind === "off_video") {
-      warnings.push(`${at} isn't on the video and will publish as score only`);
+      warnings.push(
+        point.winner !== null && point.server !== null
+          ? `${at} isn't on the video and will publish as score only`
+          : `${at} has no strokes and no ${point.winner === null ? "winner" : "server"}, so publishing will refuse`,
+      );
     } else if (resolved.kind === "unresolved") {
       warnings.push(
         `${at} has no ending its strokes can settle, so publishing will refuse`,
