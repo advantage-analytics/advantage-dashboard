@@ -346,14 +346,12 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       warnings.push(`${at}: not on the video — published as score only`);
     }
     const offVideo = resolved.kind === "off_video";
-    const ending =
+    const settled =
       resolved.kind === "stored" || resolved.kind === "derived"
-        ? resolved.ending
+        ? resolved
         : null;
-    const endedBy =
-      resolved.kind === "stored" || resolved.kind === "derived"
-        ? resolved.endedBy
-        : null;
+    const ending = settled?.ending ?? null;
+    const endedBy = settled?.endedBy ?? null;
     if (
       server === null ||
       winner === null ||
