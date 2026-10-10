@@ -130,8 +130,8 @@ function resultsBucketPaths(
       continue;
     }
 
-    // Recorded too, but every column on this row is writable by its creator,
-    // so a backup key is taken only from under this row's own match.
+    // Recorded too, server-side only (processing_jobs_guard_storage_keys),
+    // and still taken only from under this row's own match.
     if (Array.isArray(job.label_backup_keys)) {
       for (const key of job.label_backup_keys) {
         if (
@@ -167,6 +167,45 @@ function resultsBucketPaths(
   }
 
   return [...paths];
+}
+
+/**
+ * Of `keys`, those a job on a match OUTSIDE this purge still records in one of
+ * `columns`, which must survive it. A copied match carries its source's job
+ * keys verbatim — the same results file, the same trimmed video — so deleting
+ * one copy must not take the other's files. Null when a read fails: the lane
+ * then removes nothing, since a leak is recoverable and a lost file is not.
+ */
+async function keysKeptElsewhere(
+  supabase: SupabaseClient,
+  columns: readonly string[],
+  keys: readonly string[],
+  matchIds: readonly string[],
+): Promise<Set<string> | null> {
+  const kept = new Set<string>();
+  if (keys.length === 0) return kept;
+  const reads = await Promise.all(
+    columns.map((column) =>
+      supabase
+        .from("processing_jobs")
+        .select(`match_id, ${column}`)
+        .in(column, [...keys]),
+    ),
+  );
+  for (const [i, { data, error }] of reads.entries()) {
+    if (error) return null;
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const key = row[columns[i]];
+      if (
+        typeof key === "string" &&
+        isKeyId(row.match_id) &&
+        !matchIds.includes(row.match_id)
+      ) {
+        kept.add(key);
+      }
+    }
+  }
+  return kept;
 }
 
 /**
@@ -280,7 +319,7 @@ export async function purgeMatchStorage(
         //
         //    Deduped: every job for one match points at the same source blob, so
         //    a re-submitted match would otherwise delete the same blob twice.
-        const blobNames = [
+        const candidates = [
           ...new Set(
             (jobs ?? [])
               .flatMap((j) => [
@@ -290,6 +329,19 @@ export async function purgeMatchStorage(
               .filter((k): k is string => Boolean(k)),
           ),
         ];
+        const kept = await keysKeptElsewhere(
+          supabase,
+          ["video_object_key", "trimmed_object_key"],
+          candidates,
+          matchIds,
+        );
+        if (!kept) {
+          console.error(
+            `[${label}] could not check which videos other matches share — none removed`,
+          );
+          return;
+        }
+        const blobNames = candidates.filter((k) => !kept.has(k));
 
         const removed = await Promise.all(
           blobNames.map((blobName) => deleteVideoBlob({ blobName })),
@@ -310,10 +362,27 @@ export async function purgeMatchStorage(
         //    strokes, players and trajectories files and our derived ball
         //    paths. Same bucket the webhook writes to, so this client can
         //    remove them directly. One `remove`, of a fixed de-duplicated list.
-        const resultKeys = resultsBucketPaths(
+        const candidates = resultsBucketPaths(
           (jobs ?? []) as ResultsKeyRow[],
           matchIds,
         );
+        const kept = await keysKeptElsewhere(
+          supabase,
+          [
+            "results_object_key",
+            "players_object_key",
+            "trajectories_object_key",
+          ],
+          candidates,
+          matchIds,
+        );
+        if (!kept) {
+          console.error(
+            `[${label}] could not check which results files other matches share — none removed`,
+          );
+          return;
+        }
+        const resultKeys = candidates.filter((k) => !kept.has(k));
 
         if (resultKeys.length > 0) {
           const { error: resultsError } = await supabase.storage

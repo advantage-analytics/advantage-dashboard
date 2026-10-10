@@ -183,6 +183,47 @@ test("recorded label backups go too, but only those under the row's own match", 
   expect(paths.filter((p) => p.startsWith("label-backups/"))).toEqual([own]);
 });
 
+test("a file a copied match still records survives the purge of its source", async () => {
+  const own = job();
+  const copy = job({
+    id: OTHER_JOB,
+    match_id: OTHER_MATCH,
+    players_object_key: null,
+    trajectories_object_key: null,
+  });
+  const paths = resultsPaths((await purge([own, copy])).removed);
+  expect(paths).not.toContain(own.results_object_key);
+  expect(paths).toContain(own.players_object_key);
+  expect(paths).toContain(own.trajectories_object_key);
+});
+
+test("when the shared-file check cannot read, nothing is removed", async () => {
+  const caller = fakeCaller([job()]);
+  const client = caller.client as unknown as {
+    from: (table: string) => unknown;
+  };
+  const from = client.from.bind(client);
+  client.from = (table: string) => ({
+    select: (columns: string) =>
+      columns.startsWith("match_id, ")
+        ? { in: async () => ({ data: null, error: { message: "down" } }) }
+        : (from(table) as { select: (c: string) => unknown }).select(columns),
+  });
+  const originalError = console.error;
+  const errors: unknown[][] = [];
+  console.error = (...args: unknown[]) => errors.push(args);
+  try {
+    await purgeMatchStorage(caller.client, [MATCH], "match delete", {
+      attachments,
+      claimPurge,
+    });
+  } finally {
+    console.error = originalError;
+  }
+  expect(caller.removed.filter((r) => r.bucket === RESULTS_BUCKET)).toEqual([]);
+  expect(errors.length).toBeGreaterThan(0);
+});
+
 test("two jobs sharing keys still produce one de-duplicated remove", async () => {
   const { removed } = await purge([job(), job()]);
   expect(resultsPaths(removed)).toHaveLength(4);
