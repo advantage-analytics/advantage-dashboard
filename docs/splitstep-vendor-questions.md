@@ -95,9 +95,11 @@ keeps a few other header names as a hedge. Rotation policy was not covered.
 
 ### Q5 — Status/polling endpoint, or any way to re-request results after the 7-day SAS expiry **Answered: `GET {BASE_URL}/jobs/{job_id}`.**
 
-`src/lib/services/splitstep/reconcile.ts` polls it. Note `JOB_STALE` is reported
-only there, never by webhook. Whether results can be re-requested after the
-7-day SAS expiry is still unconfirmed.
+`src/lib/services/splitstep/reconcile.ts` polls it. `JOB_STALE` used to be
+reported only there; the vendor's page (read 2026-10-10) now also delivers it by
+webhook as a `job_failed`. Whether results can be re-requested after the 7-day
+SAS expiry is still unconfirmed — which is why every file is archived on arrival
+(`vendor-archive.ts`).
 
 ### Q6 — Queue-priority parameter
 
@@ -195,6 +197,10 @@ Format is also not stable between the two payloads:
   (28/33 valid; the clean fixture is 26/26)
 
 Is the float formatting deliberate? Is there a tiebreak flag we are missing?
+
+The vendor's page (2026-10-10) documents `point_score` as "server's perspective",
+which matches what we see for points; it says nothing about game and set scores or
+a tiebreak flag, so those remain open.
 
 ### Q11 — Per-job quality or calibration signal
 

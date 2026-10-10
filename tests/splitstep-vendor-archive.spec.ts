@@ -29,7 +29,7 @@ test("readVendorJson inflates a .gz key and passes a plain one through", async (
     storage: {
       from: () => ({
         download: async (key: string) => ({
-          data: new Blob([stored[key]]),
+          data: new Blob([new Uint8Array(stored[key])]),
           error: null,
         }),
       }),
