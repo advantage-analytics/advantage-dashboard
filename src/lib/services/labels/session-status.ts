@@ -6,15 +6,19 @@
  * rows leave unfinished or run past its end (`labelSetScores`, which takes in
  * the session's last game too), and the entered score the labelled sets
  * disagree with (`scoreMismatch`) — not once the labeller has said the video
- * ends early, as the rail's chip.
+ * ends early, as the rail's chip. Last, how the publish will read each point
+ * with no ending stored (`publishEnding`, the rule apply.ts writes by): taken
+ * from its strokes, written as score only off the video, or refused.
  */
 
+import { publishEnding } from "./ending-derived";
 import type { LabelMarks } from "./marks";
+import { ownedEndingPhrase, type MarkNames } from "./marks-copy";
 import { markSummary } from "./marks-state";
 import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
 import type { MatchScore } from "@/lib/services/splitstep/derivation";
-import { labelProgress, type LabelPoint } from "./session";
+import { isNonPointEnding, labelProgress, type LabelPoint } from "./session";
 
 export interface CompleteWarningInput {
   points: readonly LabelPoint[];
@@ -29,6 +33,8 @@ export interface CompleteWarningInput {
    * already (the console's `scores`); scored here otherwise.
    */
   games?: readonly LabelGameBand[];
+  /** Who an ending is by, in the publish lines: "an error by Quan". */
+  names?: MarkNames;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>
@@ -82,6 +88,32 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     if (mismatch) {
       warnings.push(
         `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, entered ${mismatch.entered}`,
+      );
+    }
+  }
+
+  const names = input.names ?? { p1: "player 1", p2: "player 2" };
+  for (const point of points) {
+    if (point.status === "deleted" || isNonPointEnding(point.ending)) continue;
+    const at = `Point ${point.pointIndex + 1}`;
+    const resolved = publishEnding(point);
+    if (
+      resolved.kind === "derived" &&
+      resolved.winner !== null &&
+      resolved.winner !== point.winner
+    ) {
+      warnings.push(
+        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner, so publishing will refuse`,
+      );
+    } else if (resolved.kind === "derived") {
+      warnings.push(
+        `${at}'s ending will be taken from its strokes (${ownedEndingPhrase(resolved.ending, resolved.endedBy, resolved.winner, names)})`,
+      );
+    } else if (resolved.kind === "off_video") {
+      warnings.push(`${at} isn't on the video and will publish as score only`);
+    } else if (resolved.kind === "unresolved") {
+      warnings.push(
+        `${at} has no ending its strokes can settle, so publishing will refuse`,
       );
     }
   }

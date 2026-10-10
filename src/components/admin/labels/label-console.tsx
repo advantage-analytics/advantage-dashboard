@@ -1268,6 +1268,7 @@ export function LabelConsole({
         videoEndsEarly: sessionFields.videoEndsEarly,
         matchScore: session.matchScore,
         games: scores.games,
+        names,
       }),
     });
   }
