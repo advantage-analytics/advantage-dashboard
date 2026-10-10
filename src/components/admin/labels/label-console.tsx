@@ -23,6 +23,7 @@ import {
   type LabelSide,
   type LabelVideo,
 } from "@/lib/services/labels/session";
+import { planShotWrite } from "./shot-write-plan";
 import {
   applyLabelPointPatch,
   applyLabelShotPatch,
@@ -684,6 +685,14 @@ export function LabelConsole({
       // A draft row has no id the server knows yet; its add is still in
       // flight, and the saved row replaces it when that lands.
       if (shotId.startsWith(PENDING_SHOT_PREFIX)) return null;
+      // A let on a stroke that is not a serve: refused before any optimistic
+      // change or request, on the same save line a server `{ error }` uses.
+      const plan = planShotWrite(before, patch);
+      if ("error" in plan) {
+        dispatchSave({ type: "start" });
+        dispatchSave({ type: "failure", message: plan.error });
+        return null;
+      }
       const retime = "video_time" in patch;
       const change = (current: readonly LabelPoint[]) =>
         updateShot(current, shotId, retime, (shot) =>
@@ -712,7 +721,7 @@ export function LabelConsole({
         return null;
       }
       const removed = result.removedAfter;
-      const reason = deadBallReason(applyLabelShotPatch(before, patch).stroke);
+      const reason = deadBallReason(plan.row.stroke);
       setPoints((current) => {
         const saved = updateShot(current, shotId, false, (shot) => ({
           ...shot,

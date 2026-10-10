@@ -56,7 +56,7 @@ ready).
 
 ## T4 · Console refuses a let patch before the optimistic apply
 
-- **status:** blocked
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/admin/labels/label-console.tsx (the shot-patch handler around line 669, `applyLabelShotPatch`), tests/label-console-edit.spec.ts — a guess
 - **done when:**
