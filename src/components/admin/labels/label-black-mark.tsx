@@ -31,7 +31,10 @@ import {
   type MarkState,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
-import { pointEndedKey } from "@/lib/services/labels/suggestions";
+import {
+  isSuggestionKey,
+  pointEndedKey,
+} from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
 import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
@@ -368,7 +371,9 @@ export function pointHints(
     // "Point ended here" is a suggestion: once dismissed it is not drawn.
     const ended =
       mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
-    const dismissKey = ended ? pointEndedKey(ended) : undefined;
+    const key = ended ? pointEndedKey(ended) : undefined;
+    // A draft stroke has no id to store yet: no Dismiss until it lands.
+    const dismissKey = key && isSuggestionKey(key) ? key : undefined;
     if (dismissKey && point.dismissed.includes(dismissKey)) return [];
     return [
       {

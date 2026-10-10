@@ -22,10 +22,11 @@ export type SuggestionState = "open" | "dismissed" | "done";
 /**
  * The keys `label_points.dismissed` may hold: a missing shot (by the pair's
  * first event), a missing point, and "Point ended here" (by the stroke the
- * point ended on, `pointEndedKey`).
+ * point ended on, `pointEndedKey`) — never a draft stroke's temporary id,
+ * which the stroke loses once its insert lands.
  */
 export const SUGGESTION_KEY_RE =
-  /^(missing_shot:\d+|missing_point|point_ended:[0-9A-Za-z-]+)$/;
+  /^(missing_shot:\d+|missing_point|point_ended:(?!pending-)[0-9A-Za-z-]+)$/;
 
 /** "Point ended here" on the stroke `shotId`, as `dismissed` stores it. */
 export function pointEndedKey(shotId: string): string {

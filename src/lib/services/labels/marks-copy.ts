@@ -79,6 +79,15 @@ const ENDING_NOUN: Record<LabelEnding, string> = {
   not_a_point: "Not a point",
 };
 
+/** Whose ending it reads as: a service winner is the server's, though the receiver's miss ends it. */
+function endingOwner(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  winner: LabelSide | null,
+): LabelSide | null {
+  return ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+}
+
 /**
  * "Different ending?" as the question it is: the ending the strokes add up to,
  * asked — "Ace by Stephenson?". A question, as the other hints are: the
@@ -90,8 +99,7 @@ export function staleEndingQuestion(
   names: MarkNames,
   winner: LabelSide | null = null,
 ): string {
-  // A service winner is the server's, though the receiver's miss ends it.
-  const who = ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+  const who = endingOwner(ending, endedBy, winner);
   const by = who ? ` by ${names[who]}` : "";
   return `${ENDING_NOUN[ending]}${by}?`;
 }
@@ -233,8 +241,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {
       const { ending, endedBy, winner } = mark.params;
-      // A service winner is the server's, as the question names it.
-      const who = ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+      const who = endingOwner(ending, endedBy, winner);
       return `The shots add up to ${endingPhrase(ending, who, names)}, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.`;
     }
     case "second_serve_as_first":
