@@ -333,8 +333,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     }
 
     const played = playedShots(point);
-    letsLeftOut += liveShotsInOrder(point, true).length - played.length;
-    const window = liveShotsInOrder(point, true)
+    const live = liveShotsInOrder(point, true);
+    letsLeftOut += live.length - played.length;
+    const window = live
       .map((shot) => shot.videoTime)
       .filter((t): t is number => t !== null);
 
