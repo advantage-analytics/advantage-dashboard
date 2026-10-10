@@ -11,6 +11,7 @@ import {
   HINT_ACTION_LABEL,
   hintLabel,
   markHover,
+  staleEndingAction,
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
@@ -338,7 +339,7 @@ export type HintEdit = Pick<
 
 /**
  * The open point's hints: the marks' own, then the five read off the rows —
- * "Point ended here", "Ending looks stale", "Second serve?", "No landing on
+ * "Point ended here", "Different ending?", "Second serve?", "No landing on
  * the last shot" and "Serve after a serve in play". Each carries its answers
  * when `edit` can write them (`hintActions`). Nothing without marks: a
  * session labelled blind reads none of these, and its ghosts are strokes,
@@ -372,7 +373,7 @@ export function pointHints(
     return [
       {
         code: mark.code,
-        label: hintLabel(mark),
+        label: hintLabel(mark, names),
         detail: markHover(mark, names),
         actions: hintActions(mark, point, edit),
         afterShotId: ended,
@@ -405,7 +406,7 @@ function hintActions(
       const { ending, endedBy, winner } = mark.params;
       return [
         {
-          label: HINT_ACTION_LABEL.ending_stale,
+          label: staleEndingAction(ending),
           run: () =>
             onPatchPoint(point.id, {
               ending,

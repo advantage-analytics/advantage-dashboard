@@ -30,7 +30,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   net_hit_contradicts_height: "Net or out?",
   serve_fault: "Serve fault?",
   shot_after_point_end: "Did the point end here?",
-  ending_stale: "Ending looks stale",
+  ending_stale: "Different ending?",
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
   last_shot_unresolved: "Ending can’t be read",
@@ -68,12 +68,53 @@ function endingPhrase(
   return `${ENDING_PHRASE[ending]}${by}`;
 }
 
+/** An ending as the start of a question: "Ace", "Double fault". */
+const ENDING_NOUN: Record<LabelEnding, string> = {
+  ace: "Ace",
+  service_winner: "Service winner",
+  double_fault: "Double fault",
+  winner: "Winner",
+  error: "Error",
+  let_replayed: "Let, replayed",
+  not_a_point: "Not a point",
+};
+
+/**
+ * "Different ending?" as the question it is: the ending the strokes add up to,
+ * asked — "Ace by Stephenson?". A question, as the other hints are: the
+ * strokes can be the thing that is wrong.
+ */
+export function staleEndingQuestion(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  names: MarkNames,
+  winner: LabelSide | null = null,
+): string {
+  // A service winner is the server's, though the receiver's miss ends it.
+  const who = ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+  const by = who ? ` by ${names[who]}` : "";
+  return `${ENDING_NOUN[ending]}${by}?`;
+}
+
+/** Its answer, naming the change: "Make it an ace". */
+export function staleEndingAction(ending: LabelEnding): string {
+  return `Make it ${ENDING_PHRASE[ending]}`;
+}
+
 /**
  * The hint's words on the quiet line: its label, and for "Did the point end
  * here?" how many strokes followed the ball called out. A question: the call
  * can be wrong by a few centimetres.
  */
-export function hintLabel(mark: LabelMark): string {
+export function hintLabel(mark: LabelMark, names?: MarkNames): string {
+  if (mark.code === "ending_stale" && names) {
+    return staleEndingQuestion(
+      mark.params.ending,
+      mark.params.endedBy,
+      names,
+      mark.params.winner,
+    );
+  }
   const label = MARK_LABEL[mark.code];
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
@@ -82,7 +123,6 @@ export function hintLabel(mark: LabelMark): string {
 
 /** The action a live hint offers, by code; the rest offer none. */
 export const HINT_ACTION_LABEL = {
-  ending_stale: "Use it",
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
@@ -192,8 +232,10 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {
-      const { ending, endedBy } = mark.params;
-      return `The strokes say ${endingPhrase(ending, endedBy, names)}.`;
+      const { ending, endedBy, winner } = mark.params;
+      // A service winner is the server's, as the question names it.
+      const who = ending === "service_winner" ? (winner ?? endedBy) : endedBy;
+      return `The shots add up to ${endingPhrase(ending, who, names)}, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.`;
     }
     case "second_serve_as_first":
       return "Follows a faulted serve, so it is the second serve.";

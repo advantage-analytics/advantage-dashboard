@@ -254,7 +254,9 @@ test.describe("endingStale", () => {
         )!,
         NAMES,
       ),
-    ).toBe("The strokes say a service winner by Vargas.");
+    ).toBe(
+      "The shots add up to a service winner by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
+    );
   });
 
   test("nothing for a let or a non-point, and nothing while the rows say nothing", () => {

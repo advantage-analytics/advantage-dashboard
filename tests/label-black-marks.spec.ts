@@ -452,15 +452,16 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(hintLine(html)).toEqual([
       {
         code: "ending_stale",
-        text: "Ending looks stale",
-        label: "Ending looks stale. The strokes say an ace by Lee.",
+        text: "Ace by Lee?",
+        label:
+          "Ace by Lee? The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
       },
     ]);
     const button =
       /<button[^>]*data-point-hint-action="ending_stale"[^>]*>([^<]*)</.exec(
         html,
       );
-    expect(button?.[1]).toBe("Use it");
+    expect(button?.[1]).toBe("Make it an ace");
     // The rail's pressed state, as every text action in it.
     expect(button?.[0]).toContain("active:scale-[0.96]");
     expect(chips(html)).toHaveLength(0);
@@ -487,7 +488,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
     const point = stale();
     const [ending] = pointHints(point, marksOf(point, []), NAMES, edit);
-    expect(ending.actions.map((a) => a.label)).toEqual(["Use it"]);
+    expect(ending.actions.map((a) => a.label)).toEqual(["Make it an ace"]);
     ending.actions[0].run();
     // The rows settle the winner too — Lee's ace — so the patch carries it.
     expect(patched).toEqual([
