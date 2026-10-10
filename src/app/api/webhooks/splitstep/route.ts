@@ -71,6 +71,10 @@ import { gradeResults } from "@/lib/services/splitstep/grade-results";
 import { secureResults } from "@/lib/services/splitstep/secure-results";
 import { deriveAndPublish } from "@/lib/services/splitstep/derive-and-publish";
 import { deriveAndStoreBallPaths } from "@/lib/services/splitstep/ball-paths-store";
+import {
+  archiveTrimmedVideo,
+  archiveVendorJson,
+} from "@/lib/services/splitstep/vendor-archive";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
 
 export const runtime = "nodejs";
@@ -108,6 +112,13 @@ const RESULTS_FETCH_TIMEOUT_MS = 25_000;
  * hand from `players_url` / `trajectories_url` on the job row.
  */
 const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * The players file's clock. It starts at the top of the after() block and
+ * runs beside derivation, so it may take most of the invocation; what does
+ * not land goes to the daily archive-vendor-files cron.
+ */
+const PLAYERS_FETCH_TIMEOUT_MS = 45_000;
 
 /**
  * Tighter clock for the trajectories file when it is fetched ahead of
@@ -291,26 +302,28 @@ export async function POST(request: NextRequest) {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
-    // Three independent assets with three independent guards. Gating them all
-    // on `already_stored` — which is only ever about the strokes JSON — would
-    // mean a per-frame download that failed once never got another chance, on
-    // a url that expires.
+    // Four independent assets with four independent guards — everything the
+    // completion links to is kept, for whatever is built on it later. Gating
+    // them all on `already_stored`, which is only ever about the strokes JSON,
+    // would mean a download that failed once never got another chance, on a
+    // url that expires. A miss here is retried daily by the
+    // archive-vendor-files cron while the url lives.
     //
-    // The vendor's trimmed video is NOT one of them any more. It is a
-    // lower-bitrate re-encode that arrived without an audio track; the file we
-    // keep and play is the athlete's own upload, which the wizard now cuts to
-    // the selected window before it leaves the browser (lib/video/trim.ts).
-    // `trimmed_video_url` is still recorded on the row above, for recovery by
-    // hand, and nothing downloads it.
+    // The trimmed video is a lower-bitrate re-encode without audio; playback
+    // prefers the athlete's own upload (match-video-choice.ts), so our copy is
+    // the archive and the fallback, never the first choice.
     const strokesUrl = record.already_stored ? null : payload.strokesUrl;
     const playersUrl = record.players_object_key ? null : payload.playersUrl;
     const trajectoriesUrl = record.trajectories_object_key
       ? null
       : payload.trajectoriesUrl;
+    const trimmedVideoUrl = record.trimmed_object_key
+      ? null
+      : payload.trimmedVideoUrl;
 
     // Pick this delivery's storage keys. The retain/orphan policy and its full
     // rationale live in selectDeliveryStorageKeys.
-    const { resultsKey, playersKey, trajectoriesKey } =
+    const { resultsKey, playersKey, trajectoriesKey, trimmedKey } =
       selectDeliveryStorageKeys({
         jobId,
         createdBy: record.created_by,
@@ -319,8 +332,40 @@ export async function POST(request: NextRequest) {
         deliveryId,
       });
 
-    if (strokesUrl || playersUrl || trajectoriesUrl) {
+    if (strokesUrl || playersUrl || trajectoriesUrl || trimmedVideoUrl) {
       after(async () => {
+        // The trimmed video first: one Start Copy request, and Azure moves the
+        // bytes on its own clock, so nothing below waits on it.
+        if (trimmedVideoUrl && trimmedKey && jobId) {
+          const copied = await archiveTrimmedVideo({
+            supabase,
+            jobId,
+            sourceUrl: trimmedVideoUrl,
+            blobName: trimmedKey,
+          });
+          if (copied.ok) {
+            pipelineLog.info(`${LOG} trimmed video copy ${copied.copyStatus}`, {
+              jobId,
+              blobName: trimmedKey,
+            });
+          } else {
+            pipelineLog.error(
+              `${LOG} trimmed video copy FAILED — the archive-vendor-files cron retries while the url lives`,
+              { jobId, error: copied.error },
+            );
+          }
+        }
+
+        // The players file, started now and awaited last. It is 30–80 MB, so
+        // it runs beside derivation on its own clock instead of in whatever
+        // is left after it — the old order lost it on 10 of 14 jobs.
+        const playersStored = storeFrameData({
+          supabase,
+          jobId,
+          timeoutMs: PLAYERS_FETCH_TIMEOUT_MS,
+          files: [{ kind: "players", url: playersUrl, objectKey: playersKey }],
+        });
+
         // Is the analysis durably ours? Either an earlier delivery stored it or
         // this one does. Tracked rather than assumed, because it is what gates
         // grading and derivation below.
@@ -409,17 +454,10 @@ export async function POST(request: NextRequest) {
           await deriveAndPublish({ supabase, jobId, deadline });
         }
 
-        // The players file, last of all. Nothing in derivation reads it yet —
-        // it is kept so metrics can be built on it without waiting another
-        // week for a vendor url — and at ~50 MB it must never delay the
-        // derivation the user is waiting on, so it runs in whatever budget is
-        // left. Best-effort with its own clock; a miss is logged with the
-        // recovery path and the url stays on the job row.
-        await storeFrameData({
-          supabase,
-          jobId,
-          files: [{ kind: "players", url: playersUrl, objectKey: playersKey }],
-        });
+        // The players file, started at the top of this block. Nothing in
+        // derivation reads it yet — it is kept so metrics can be built on it
+        // without waiting another week for a vendor url.
+        await playersStored;
 
         // Ball paths, after the trajectories file they are derived from is in
         // the bucket — the store function reads it back out by the key recorded
@@ -579,95 +617,6 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Fetch one of the vendor's JSON files and put it in Supabase Storage.
- *
- * Returns rather than throws: the caller decides the HTTP outcome, and the
- * failure reason has to reach `finalize_splitstep_results` either way.
- *
- * `returnBody` is for the strokes file only: it comes back as text so the
- * grading step can work from what is already in memory rather than reading it
- * straight back out of storage. The per-frame files are tens of megabytes and
- * nothing here reads them, so they go through as a Blob and are never decoded
- * into a string at all.
- *
- * The URL is checked against the result-host allowlist before anything is
- * fetched (result-url-policy.ts): the payload is untrusted input and this is
- * the server making a request it names. A refusal is an ordinary `ok: false`,
- * so the caller logs the same recovery path it does for any other miss; the
- * line here names the host only, never the signed URL.
- */
-async function storeVendorJson(params: {
-  supabase: ReturnType<typeof createAdminClient>;
-  url: string;
-  objectKey: string;
-  timeoutMs: number;
-  returnBody?: boolean;
-}): Promise<
-  | { ok: true; objectKey: string; bytes: number; body?: string }
-  | { ok: false; error: string }
-> {
-  const { supabase, url, objectKey, timeoutMs, returnBody = false } = params;
-
-  if (!isAllowedResultUrl(url)) {
-    const hostname = resultUrlHostname(url);
-    pipelineLog.error(`${LOG} result url host not allowed — not fetched`, {
-      objectKey,
-      hostname,
-    });
-    return { ok: false, error: `result url host not allowed: ${hostname}` };
-  }
-
-  let body: Blob;
-  let text: string | undefined;
-  try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(timeoutMs),
-      // No credentials — the URL carries its own. A redirect is refused rather
-      // than followed: the allowlist above was checked against THIS host.
-      redirect: "error",
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `Vendor returned ${response.status} ${response.statusText}`,
-      };
-    }
-
-    if (returnBody) {
-      text = await response.text();
-      body = new Blob([text], { type: "application/json" });
-    } else {
-      body = await response.blob();
-    }
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Unknown fetch error",
-    };
-  }
-
-  if (body.size === 0 || (text !== undefined && text.trim() === "")) {
-    return { ok: false, error: "Vendor returned an empty body" };
-  }
-
-  const { error } = await supabase.storage
-    .from(RESULTS_BUCKET)
-    .upload(objectKey, body, {
-      contentType: "application/json",
-      // Overwrite: a retry that got past the already-stored guard should land
-      // on the same key rather than accumulating near-identical copies.
-      upsert: true,
-    });
-
-  if (error) {
-    return { ok: false, error: `Storage upload failed: ${error.message}` };
-  }
-
-  return { ok: true, objectKey, bytes: body.size, body: text };
-}
-
-/**
  * The per-frame files (`players_url`, `trajectories_url`), fetched in parallel
  * and recorded on the job row as each one lands.
  *
@@ -703,17 +652,20 @@ async function storeFrameData(params: {
     files
       .filter((f) => f.url)
       .map(async ({ kind, url, objectKey }) => {
-        const stored = await storeVendorJson({
+        // The players file is gzipped: a long match's is 60–80 MB and the
+        // bucket caps an object at 50 MB (vendor-archive.ts).
+        const stored = await archiveVendorJson({
           supabase,
           url: url as string,
           objectKey,
           timeoutMs,
+          gzip: kind === "players",
         });
 
         if (!stored.ok) {
           pipelineLog.error(
-            `${LOG} ${kind} download FAILED — recover from processing_jobs.${kind}_url, ` +
-              `valid about a week`,
+            `${LOG} ${kind} download FAILED — the archive-vendor-files cron ` +
+              `retries daily while processing_jobs.${kind}_url lives`,
             { jobId, objectKey, error: stored.error },
           );
           return;
@@ -733,7 +685,7 @@ async function storeFrameData(params: {
           kind === "players" ? "players_object_key" : "trajectories_object_key";
         const { error } = await supabase
           .from("processing_jobs")
-          .update({ [column]: objectKey })
+          .update({ [column]: stored.objectKey })
           .eq("id", jobId);
 
         if (error) {
