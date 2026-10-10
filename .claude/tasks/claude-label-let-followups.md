@@ -44,7 +44,7 @@ ready).
 
 ## T3 · Guard the other label_shots result writers with the let rule
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/labels/point-combine.ts, src/lib/services/labels/point-combine-session.ts, src/lib/services/labels/reset.ts, src/lib/services/labels/seed.ts, tests/label-point-combine.spec.ts, tests/label-reset.spec.ts, tests/label-seed.spec.ts — a guess
 - **done when:**

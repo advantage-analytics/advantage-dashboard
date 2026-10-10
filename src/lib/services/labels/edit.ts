@@ -63,6 +63,23 @@ export const LABEL_SHOT_RESULTS: readonly LabelShotResult[] = [
  * row (edit-session.ts `writeLabelShotEdit`). Behind every writer, the
  * `label_shots_let_serve_only` check constraint is the database's backstop:
  * it refuses a let on any row whose stroke is null or not a serve.
+ *
+ * The `label_shots` writers that compose `result` or `stroke`, and where each
+ * is guarded:
+ * - the console's edit, `writeLabelShotEdit` (edit-session.ts) — here, once
+ *   at parse (`parseLabelShotPatch`) and again against the row read;
+ * - the combine's serve retypes, `writeLabelPointCombine`
+ *   (point-combine-session.ts) — `combineRetypeError` inside
+ *   `planPointCombine`, before any write;
+ * - a shot reset, `writeLabelShotReset` (reset-session.ts) — `planShotReset`
+ *   judges the seed it would write back;
+ * - the seed's insert (seed.ts `buildLabelSeed`, seed-session.ts) — by
+ *   construction: `labelShotResult` never yields `let`.
+ * The writers that set neither column: `planAddedShot` (hitter, time,
+ * status), the player swap and a point reset's hitters (`writeShotSwaps`),
+ * tombstone / restore (status), the site-removal restore
+ * (`site_removal_restored_at`), and the shot moves of a combine, split or
+ * game shift (`label_point_id`).
  */
 export function letResultError(
   patch: LabelShotPatch,

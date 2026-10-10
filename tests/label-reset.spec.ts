@@ -95,6 +95,35 @@ test.describe("planShotReset", () => {
   });
 });
 
+test.describe("planShotReset: a let only on a serve", () => {
+  test("refuses a seed that would leave a let on a stroke that is not a serve", () => {
+    expect(
+      planShotReset({
+        status: "edited",
+        seed: { ...SHOT_SEED, stroke: "backhand", result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+    expect(
+      planShotReset({
+        status: "edited",
+        seed: { ...SHOT_SEED, stroke: null, result: "let" },
+      }),
+    ).toEqual({ error: "Only a serve can be a let." });
+  });
+
+  test("writes back a let on a serve", () => {
+    const seed = {
+      ...SHOT_SEED,
+      stroke: "first_serve" as const,
+      result: "let" as const,
+    };
+    expect(planShotReset({ status: "edited", seed })).toEqual({
+      ok: true,
+      write: { ...seed, status: "kept" },
+    });
+  });
+});
+
 test.describe("planPointReset", () => {
   test("writes the point's own seeded fields, and unchanged", () => {
     const plan = planPointReset({

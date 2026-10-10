@@ -16,6 +16,7 @@
  * strokes' other values are not touched.
  */
 
+import { letResultError } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyShotSwaps,
@@ -45,7 +46,9 @@ export type PlannedPointReset =
 
 /**
  * Reset a shot to its seed. Refused for a tombstone (Undo it first), an added
- * stroke (nothing was seeded) and a vendor stroke with no stored seed.
+ * stroke (nothing was seeded), a vendor stroke with no stored seed, and a
+ * seed whose `result`/`stroke` would leave a let on a stroke that is not a
+ * serve (`letResultError`).
  */
 export function planShotReset(current: {
   status: LabelShotStatus;
@@ -63,6 +66,11 @@ export function planShotReset(current: {
         "This shot's original values were not stored, so it cannot be reset.",
     };
   }
+  // A seed never holds a let (`labelShotResult` cannot produce one), but the
+  // write puts back its stroke and result together: refused rather than
+  // leaving a let on a stroke that is not a serve.
+  const letError = letResultError(current.seed);
+  if (letError) return { error: letError };
   return { ok: true, write: { ...current.seed, status: "kept" } };
 }
 

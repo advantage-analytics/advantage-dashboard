@@ -30,7 +30,7 @@ import {
   type Planned,
   type PointDeleteWrite,
 } from "./operations";
-import { applyLabelShotPatch } from "./edit";
+import { applyLabelShotPatch, letResultError } from "./edit";
 import type { LabelShotResult } from "./seed";
 import {
   isServeStroke,
@@ -159,6 +159,29 @@ export function combineServeRetypes(
 }
 
 /**
+ * Why the combine may not write `retyped`, or null when it may: each retype
+ * judged with `letResultError` as it would leave its row (`shots`, the rows
+ * as read). `combineServeRetypes` only ever sets a let on a serve, so this
+ * never refuses today; it keeps that true however the retypes change, ahead
+ * of the `label_shots_let_serve_only` check that would otherwise refuse the
+ * write after the shots had moved.
+ */
+export function combineRetypeError(
+  retyped: readonly CombineRetype[],
+  shots: readonly CombinableShot[],
+): string | null {
+  for (const { shotId, patch } of retyped) {
+    const shot = shots.find((s) => s.id === shotId);
+    const error = letResultError(patch, {
+      stroke: shot?.stroke ?? null,
+      result: shot?.result ?? null,
+    });
+    if (error) return error;
+  }
+  return null;
+}
+
+/**
  * The live neighbour `direction` of `pointId` — the nearest live point
  * before or after it in `point_index` order — when it is in the same game.
  * Null otherwise: a tombstone is not a neighbour, and a point of another
@@ -188,8 +211,9 @@ export function combineNeighbour<
 
 /**
  * Plan the combine of `pointId` with its neighbour `direction`. Refused when
- * the point is not a live point of `points`, and when it has no live
- * neighbour that way in its own game.
+ * the point is not a live point of `points`, when it has no live neighbour
+ * that way in its own game, and when a serve retype would leave a let on a
+ * stroke that is not a serve (`combineRetypeError`).
  */
 export function planPointCombine(
   points: readonly CombinablePoint[],
@@ -218,6 +242,10 @@ export function planPointCombine(
       : [point, neighbour];
   const removed = planPointDelete(later);
   if ("error" in removed) return removed;
+  const joined = [...earlier.shots, ...later.shots];
+  const retyped = combineServeRetypes(joined);
+  const retypeError = combineRetypeError(retyped, joined);
+  if (retypeError) return { error: retypeError };
   return {
     ok: true,
     write: {
@@ -234,7 +262,7 @@ export function planPointCombine(
         status: earlier.status === "added" ? "added" : "edited",
       },
       removed: removed.write,
-      retyped: combineServeRetypes([...earlier.shots, ...later.shots]),
+      retyped,
     },
   };
 }
