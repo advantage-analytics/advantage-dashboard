@@ -1717,50 +1717,51 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     expect(row().serveResultPatch("let")).toEqual({ result: "let" });
   });
 
-  test("a let reads in the rail's amber, with the pencil; any other serve keeps its ink", () => {
-    const letPoint = rally();
-    letPoint.shots[0] = {
-      ...letPoint.shots[0],
-      result: "let",
-      status: "edited",
-    };
+  test("a let reads in the same ink as any other result, with the pencil", () => {
     const { BlackShotsWell } = well();
-    const html = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point: letPoint,
-        edit: wellEdit(replayed),
-      }),
-    );
-    const letRow = shotRow(html, "w-fault");
-    expect(letRow).toMatch(
-      /<span class="[^"]*text-\[var\(--rail-amber\)\][^"]*">Let<\/span>/,
-    );
+    const withResult = (result: "let" | "in") => {
+      const point = rally();
+      point.shots[0] = { ...point.shots[0], result, status: "edited" };
+      return point;
+    };
+    const render = (result: "let" | "in", selected: boolean) =>
+      renderToStaticMarkup(
+        React.createElement(BlackShotsWell, {
+          point: withResult(result),
+          edit: wellEdit(
+            selected ? { ...replayed, selectedShotId: "w-fault" } : replayed,
+          ),
+        }),
+      );
+    // Only the word differs between a let and an in: same classes on the
+    // cell, the word and (selected) the trigger.
+    const cell = (html: string) =>
+      shotRow(html, "w-fault")
+        .replace(/\b(Let|In)\b/g, "")
+        .replace(/"(let|in)"/g, '""');
+
+    const letRow = shotRow(render("let", false), "w-fault");
+    expect(letRow).not.toContain("rail-amber");
+    expect(letRow).toMatch(/<span class="truncate">Let<\/span>/);
     expect(letRow).toContain("data-shot-marks");
     // A let is not a fault: the row's ink is the plain one.
     expect(tag(letRow, "data-serve-result")).toContain("text-white/50");
+    expect(cell(render("let", false))).toBe(cell(render("in", false)));
 
-    // The untouched serve rows: no amber, today's ink.
-    const plain = renderWell(replayed);
-    const fault = shotRow(plain, "w-fault");
-    expect(fault).not.toContain("rail-amber");
+    // A fault keeps its dimmed ink.
+    const fault = shotRow(renderWell(replayed), "w-fault");
     expect(tag(fault, "data-serve-result")).toContain("text-white/35");
     expect(fault).not.toContain("data-shot-marks");
-    const serve = shotRow(plain, "w-serve");
-    expect(serve).not.toContain("rail-amber");
-    expect(tag(serve, "data-serve-result")).toContain("text-white/50");
 
-    // Selected, the trigger carries the amber too.
-    const selected = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point: letPoint,
-        edit: wellEdit({ ...replayed, selectedShotId: "w-fault" }),
-      }),
-    );
+    // Selected, the trigger takes quiet selection's white/90, as any value.
+    const selected = render("let", true);
     const letTrigger = tag(selected, 'aria-label="Shot 1 result"');
-    expect(letTrigger).toContain("text-[color:var(--rail-amber)]");
-    // Quiet selection's white/90 does not wash the amber out.
-    expect(letTrigger).not.toContain("text-white/90");
+    expect(selected).not.toContain("rail-amber");
+    expect(letTrigger).toContain("text-white/90");
     expect(letTrigger).toContain("border-transparent");
+    expect(tag(selected, 'aria-label="Shot 1 result"')).toBe(
+      tag(render("in", true), 'aria-label="Shot 1 result"'),
+    );
   });
 
   test("while the menu is open, it says so, and nothing covers it", () => {

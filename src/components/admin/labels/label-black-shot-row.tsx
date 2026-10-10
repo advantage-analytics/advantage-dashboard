@@ -1346,9 +1346,6 @@ export function serveResultPatch(value: string | null): LabelShotPatch {
   return { result: value as LabelShotResult | null };
 }
 
-/** A let's word, in the rail's amber; any other result in the row's ink. */
-const LET_INK = "text-[var(--rail-amber)]";
-
 /**
  * The serve-result cell's clip, reached 5px into the 8px column gap so the
  * select trigger's shared -5px nudge (`SELECT_TRIGGER_DARK`) is not cut off.
@@ -1388,7 +1385,6 @@ function ServeResultCell({
     if (!rowSelected) setOpen(false);
   }
   const shown = open && rowSelected;
-  const isLet = value === "let";
   return (
     <span
       data-menu-open={shown ? "" : undefined}
@@ -1403,9 +1399,7 @@ function ServeResultCell({
         className="w-full"
         display={
           value ? (
-            <span className={cn("truncate", isLet && LET_INK)}>
-              {RESULT_LABEL[value]}
-            </span>
+            <span className="truncate">{RESULT_LABEL[value]}</span>
           ) : (
             <Dash label="No result" />
           )
@@ -1419,7 +1413,6 @@ function ServeResultCell({
             onChange={onChange}
             open={shown}
             onOpenChange={setOpen}
-            className={isLet ? "text-[color:var(--rail-amber)]" : undefined}
             // A stored result with no landing to calculate from is not an
             // item, but the trigger still says it.
             placeholder={value ? RESULT_LABEL[value] : undefined}
