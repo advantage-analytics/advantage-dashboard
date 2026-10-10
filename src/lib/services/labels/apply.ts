@@ -216,10 +216,6 @@ export function pointScoreOf(scoreBefore: string | null): string | null {
   return scoreBefore.replace(/–/g, "-").replace(/\bAd\b/g, "AD");
 }
 
-function side(isP1: LabelSide): boolean {
-  return isP1 === "p1";
-}
-
 /** Server-first "a-b" from a p1/p2 tally. */
 function serverFirst(
   tally: Record<LabelSide, number>,
@@ -262,14 +258,12 @@ export function vendorShotFacts(
 // ── The build ────────────────────────────────────────────────────────────────
 
 /** Whether a label point becomes a `points` row at all. */
-export function isAppliedPoint(
-  point: Pick<LabelPoint, "status" | "ending">,
-): boolean {
+function isAppliedPoint(point: Pick<LabelPoint, "status" | "ending">): boolean {
   return point.status !== "deleted" && !isNonPointEnding(point.ending);
 }
 
 /** The strokes a point writes: live, in video order, lets left out. */
-export function playedShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
+function playedShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
   return liveShotsInOrder(point, true).filter((shot) => !isLetServe(shot));
 }
 
@@ -360,7 +354,7 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         shot.eventId !== null ? vendor?.get(shot.eventId) : undefined;
       shots.push({
         shot_number: shotNumber(i, from),
-        is_player1: side(shot.hitter),
+        is_player1: shot.hitter === "p1",
         shot_type: shotTypeOf(shot.stroke),
         spin_type: spinTypeOf(shot.spin),
         speed_mph: facts?.speedMph ?? null,
@@ -426,8 +420,8 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       point_number: rows.length + 1,
       set_number: setNumber,
       game_number: gameNumber,
-      server_is_player1: side(server),
-      won_by_player1: side(winner),
+      server_is_player1: server === "p1",
+      won_by_player1: winner === "p1",
       rally_length: Math.max(0, played.length - from),
       result_type: resultTypeOf(point.ending, last?.stroke ?? null),
       is_break_point: pressure.isBreakPoint,
