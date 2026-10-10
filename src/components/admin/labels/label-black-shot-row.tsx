@@ -1056,7 +1056,7 @@ function GhostPosition({
 
 /** One request in a stroke's ⋯ menu, as plain data. */
 export type ShotMenuItem = {
-  key: "split" | "reset" | "delete";
+  key: "split" | "add" | "reset" | "delete";
   label: string;
   description?: string;
   run: () => void;
@@ -1064,9 +1064,11 @@ export type ShotMenuItem = {
 
 /**
  * What a stroke's ⋯ menu can ask for, in its order: Split point here (when
- * the point can split at this stroke), Reset shot (when there is a seed to
- * go back to), and Delete shot, always and last. Reset and Delete only ask
- * the console to confirm; Split runs at once.
+ * the point can split at this stroke), Add shot after (whenever the row
+ * knows its point — the well's own Add shot row, placed right after this
+ * stroke), Reset shot (when there is a seed to go back to), and Delete shot,
+ * always and last. Reset and Delete only ask the console to confirm; Split
+ * and Add run at once.
  */
 export function shotMenuItems({
   shot,
@@ -1088,6 +1090,13 @@ export function shotMenuItems({
       label: "Split point here",
       description: `Shot ${number} and those after it become a new point`,
       run: () => operations.onSplitPoint(point.id, shot.id),
+    });
+  }
+  if (point) {
+    items.push({
+      key: "add",
+      label: "Add shot after",
+      run: () => operations.onAddShot(point.id, shot.id),
     });
   }
   if (canResetShot(shot)) {
@@ -1172,6 +1181,7 @@ function ShotNumberLane({
 
 const SHOT_MENU_ICON = {
   split: Split,
+  add: Plus,
   reset: RotateCcw,
   delete: X,
 } as const;
@@ -1211,7 +1221,7 @@ function ShotMenu({
               aria-label={`Shot ${number} actions`}
               aria-haspopup="menu"
               aria-expanded={open}
-              // What the closed menu holds, in order ("split reset delete"):
+              // What the closed menu holds, in order ("split add reset delete"):
               // the items are portalled and only drawn open.
               data-shot-menu={items.map((item) => item.key).join(" ")}
               className={cn(

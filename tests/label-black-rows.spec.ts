@@ -1091,12 +1091,12 @@ test.describe("the black shots well", () => {
     const edited = shotRow(html, "w-return");
     const trigger = tag(edited, 'data-shot-menu="');
     expect(trigger).toContain('aria-label="Shot 3 actions"');
-    expect(trigger).toContain('data-shot-menu="split reset delete"');
+    expect(trigger).toContain('data-shot-menu="split add reset delete"');
 
     // A kept stroke, not selected: no Reset, hidden until reached.
     const kept = shotRow(html, "w-lit");
     expect(tag(kept, 'data-shot-menu="')).toContain(
-      'data-shot-menu="split delete"',
+      'data-shot-menu="split add delete"',
     );
     expect(kept).toContain('aria-label="Shot 4 actions"');
 
@@ -1185,7 +1185,7 @@ test.describe("the black shots well", () => {
     expect(keptLane).toContain("group-focus-within/row:opacity-100");
     expect(keptLane).toContain("motion-reduce:transition-none");
 
-    // Items: Split · Reset · Delete, Delete last.
+    // Items: Split · Add shot after · Reset · Delete, Delete last.
     const { BlackShotRow } = createLoader().load(WELL) as {
       BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
     };
@@ -1201,8 +1201,15 @@ test.describe("the black shots well", () => {
     const items = menuItems(full);
     expect(items.map((item) => item.label)).toEqual([
       "Split point here",
+      "Add shot after",
       "Reset shot",
       "Delete shot",
+    ]);
+    expect(items.map((item) => item.key)).toEqual([
+      "split",
+      "add",
+      "reset",
+      "delete",
     ]);
 
     // A row without operations: the number alone, no trigger.
@@ -1216,6 +1223,57 @@ test.describe("the black shots well", () => {
     const bareHtml = renderWell({ operations: undefined });
     expect(bareHtml).not.toContain('data-shot-menu="');
     expect(bareHtml).toContain("data-shot-number");
+  });
+
+  test("Add shot after: in the ⋯ menu, after Split, adding right after this stroke", () => {
+    const added: [string, string | null][] = [];
+    const { BlackShotRow } = createLoader().load(WELL) as {
+      BlackShotRow: (props: Record<string, unknown>) => React.ReactElement;
+    };
+    const point = rally();
+    const shot = point.shots.find((s) => s.id === "w-lit")!;
+    const operations = {
+      ...OPERATIONS,
+      onAddShot: (pointId: string, after: string | null) =>
+        added.push([pointId, after]),
+    };
+    const items = menuItems(
+      BlackShotRow({
+        shot,
+        number: 4,
+        point,
+        pointNumber: 7,
+        edit: wellEdit({ operations }),
+      }),
+    );
+    // A kept stroke: no Reset, so Add sits between Split and Delete.
+    expect(items.map((item) => item.label)).toEqual([
+      "Split point here",
+      "Add shot after",
+      "Delete shot",
+    ]);
+    items.find((item) => item.label === "Add shot after")!.run();
+    // The well's own Add shot, placed after this stroke rather than at the end.
+    expect(added).toEqual([["p-well", "w-lit"]]);
+
+    // The same availability as the well's Add shot row: a writable session
+    // with operations, and a point to add to.
+    const noPoint = menuItems(
+      BlackShotRow({
+        shot,
+        number: 4,
+        pointNumber: 7,
+        edit: wellEdit({ operations }),
+      }),
+    );
+    expect(noPoint.map((item) => item.label)).not.toContain("Add shot after");
+    for (const html of [
+      renderWell({ operations: undefined }),
+      renderWell({}, false),
+    ]) {
+      expect(html).not.toContain('data-shot-menu="');
+      expect(html).not.toContain("data-add-shot");
+    }
   });
 
   test("a deleted stroke is one line, with Undo", () => {
