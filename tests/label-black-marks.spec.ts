@@ -16,6 +16,7 @@ import {
   editContext,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
+import { tag } from "./fixtures/html-probe";
 import { createLoader } from "./fixtures/vm-modules";
 
 /** What the rail's rows DRAW of the marks, by tier: a chip for the counted, one quiet line for hints, nothing for hidden. */
@@ -421,6 +422,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     label: string;
     detail: string;
     actions: { label: string; run: () => void }[];
+    dismissKey?: string;
   };
   type Hints = (
     point: LabelPoint,
@@ -577,7 +579,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("“Point ended here” sits under the stroke that ended the point; the other hints lead the well", () => {
+  test("“Point ended here” is a suggestion row under the stroke that ended the point; the other hints lead the well", () => {
     const point = endedEarly();
     const html = renderWell(point, marksOf(point, []));
     const at = (needle: string) => {
@@ -592,7 +594,38 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(at('data-point-hint="last_landing_missing"')).toBeLessThan(
       at('data-row="shot"'),
     );
-    expect(html.match(/data-point-hints=""/g)).toHaveLength(2);
+    // One hint line on top; the ending is its own dashed suggestion row.
+    expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
+    expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
+  });
+
+  test("“Point ended here” can be dismissed, and stays gone once it is", () => {
+    const calls: unknown[][] = [];
+    const point = endedEarly();
+    const edit = {
+      operations: {
+        ...ROW_OPERATIONS,
+        onDismissSuggestion: (...args: unknown[]) => calls.push(args),
+      },
+    };
+    const html = renderWell(point, marksOf(point, []), edit);
+    expect(tag(html, "data-suggestion-dismiss")).toContain(
+      'aria-label="Dismiss: Did the point end here? 2 shots follow"',
+    );
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const ended = pointHints(point, marksOf(point, []), NAMES).find(
+      (h) => h.code === "shot_after_point_end",
+    )!;
+    expect(ended.dismissKey).toBe("point_ended:s-long");
+    // Dismissed: no row, and the point's own hint is untouched.
+    const gone = { ...point, dismissed: ["point_ended:s-long"] };
+    const after = renderWell(gone, marksOf(gone, []), edit);
+    expect(after).not.toContain('data-point-hint="shot_after_point_end"');
+    expect(after).toContain('data-point-hint="last_landing_missing"');
+    // Read-only: nothing to dismiss with.
+    expect(
+      renderWell(point, marksOf(point, []), { editable: false }),
+    ).not.toContain("data-suggestion-dismiss");
   });
 
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
@@ -609,7 +642,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     const point = endedEarly();
     const hints = pointHints(point, marksOf(point, []), NAMES, edit);
     const ended = hints.find((h) => h.code === "shot_after_point_end")!;
-    expect(ended.label).toBe("Point ended here · 2 shots after it");
+    expect(ended.label).toBe("Did the point end here? 2 shots follow");
     expect(ended.actions.map((a) => a.label)).toEqual([
       "Remove 2",
       "Split here",
@@ -664,16 +697,19 @@ test.describe("the hints read off the rows, with their answers", () => {
     const html = renderWell(point, marksOf(point, []), edit);
     expect(hintLine(html).map((h) => [h.code, h.text])).toEqual([
       ["last_landing_missing", "No landing on the last shot"],
-      ["shot_after_point_end", "Point ended here · 2 shots after it"],
     ]);
+    expect(tag(html, "data-suggestion-text")).toContain(
+      "Did the point end here? 2 shots follow",
+    );
+    // Laid out as the tray lays out its own: Split first, each with its icon.
     const buttons = [
       ...html.matchAll(
-        /<button[^>]*data-point-hint-action="([^"]*)"[^>]*>([^<]*)</g,
+        /<button[^>]*data-point-hint-action="([^"]*)"[^>]*aria-label="([^":]*):/g,
       ),
     ].map((m) => [m[1], m[2]]);
     expect(buttons).toEqual([
-      ["shot_after_point_end", "Remove 2"],
       ["shot_after_point_end", "Split here"],
+      ["shot_after_point_end", "Remove 2"],
     ]);
   });
 

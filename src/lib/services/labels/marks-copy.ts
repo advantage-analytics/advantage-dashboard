@@ -29,7 +29,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   result_type_unknown: "Ending unknown",
   net_hit_contradicts_height: "Net or out?",
   serve_fault: "Serve fault?",
-  shot_after_point_end: "Point ended here",
+  shot_after_point_end: "Did the point end here?",
   ending_stale: "Ending looks stale",
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
@@ -69,14 +69,15 @@ function endingPhrase(
 }
 
 /**
- * The hint's words on the quiet line: its label, and for "Point ended here"
- * how many strokes came after the ball was out.
+ * The hint's words on the quiet line: its label, and for "Did the point end
+ * here?" how many strokes followed the ball called out. A question: the call
+ * can be wrong by a few centimetres.
  */
 export function hintLabel(mark: LabelMark): string {
   const label = MARK_LABEL[mark.code];
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
-  return `${label} · ${n} ${n === 1 ? "shot" : "shots"} after it`;
+  return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;
 }
 
 /** The action a live hint offers, by code; the rest offer none. */
@@ -187,7 +188,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
-      return "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.";
+      return "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.";
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {

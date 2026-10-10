@@ -121,7 +121,7 @@ test.describe("mark copy", () => {
       result_type_unknown: "Ending unknown",
       net_hit_contradicts_height: "Net or out?",
       serve_fault: "Serve fault?",
-      shot_after_point_end: "Point ended here",
+      shot_after_point_end: "Did the point end here?",
       ending_stale: "Ending looks stale",
       second_serve_as_first: "Second serve?",
       last_landing_missing: "No landing on the last shot",
@@ -184,7 +184,7 @@ test.describe("mark copy", () => {
       "Follows a faulted serve, so it is the second serve.",
     );
     expect(markHover(sample("shot_after_point_end"), names)).toBe(
-      "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.",
+      "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.",
     );
     expect(markHover(sample("last_landing_missing"), names)).toBe(
       "Place the last bounce to settle Out, Net or In.",
@@ -200,13 +200,13 @@ test.describe("mark copy", () => {
   test("a hint's words on the line: the label, and for “Point ended here” the count after it", () => {
     expect(hintLabel(sample("ending_stale"))).toBe("Ending looks stale");
     expect(hintLabel(sample("shot_after_point_end"))).toBe(
-      "Point ended here · 1 shot after it",
+      "Did the point end here? 1 shot follows",
     );
     expect(
       hintLabel(
         mark("shot_after_point_end", { shotId: "s-1", after: ["a", "b", "c"] }),
       ),
-    ).toBe("Point ended here · 3 shots after it");
+    ).toBe("Did the point end here? 3 shots follow");
     expect(HINT_ACTION_LABEL).toEqual({
       ending_stale: "Use it",
       second_serve_as_first: "Make it a second serve",

@@ -19,8 +19,18 @@ import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
 
 export type SuggestionState = "open" | "dismissed" | "done";
 
-/** The two keys `label_points.dismissed` may hold. */
-export const SUGGESTION_KEY_RE = /^(missing_shot:\d+|missing_point)$/;
+/**
+ * The keys `label_points.dismissed` may hold: a missing shot (by the pair's
+ * first event), a missing point, and "Point ended here" (by the stroke the
+ * point ended on, `pointEndedKey`).
+ */
+export const SUGGESTION_KEY_RE =
+  /^(missing_shot:\d+|missing_point|point_ended:[0-9A-Za-z-]+)$/;
+
+/** "Point ended here" on the stroke `shotId`, as `dismissed` stores it. */
+export function pointEndedKey(shotId: string): string {
+  return `point_ended:${shotId}`;
+}
 
 export function isSuggestionKey(value: unknown): value is string {
   return typeof value === "string" && SUGGESTION_KEY_RE.test(value);

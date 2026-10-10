@@ -30,6 +30,7 @@ import {
   type MarkState,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import { pointEndedKey } from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
 import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
@@ -127,6 +128,8 @@ export interface PointHint {
    * under the stroke that ended the point, not at the top of the well.
    */
   afterShotId?: string;
+  /** The key Dismiss stores, for a hint the labeller can wave away. */
+  dismissKey?: string;
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -360,14 +363,23 @@ export function pointHints(
     ...pointRowMarkList(point, marks).hints,
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
-  return hints.map((mark) => ({
-    code: mark.code,
-    label: hintLabel(mark),
-    detail: markHover(mark, names),
-    actions: hintActions(mark, point, edit),
-    afterShotId:
-      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined,
-  }));
+  return hints.flatMap((mark) => {
+    // "Point ended here" is a suggestion: once dismissed it is not drawn.
+    const ended =
+      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
+    const dismissKey = ended ? pointEndedKey(ended) : undefined;
+    if (dismissKey && point.dismissed.includes(dismissKey)) return [];
+    return [
+      {
+        code: mark.code,
+        label: hintLabel(mark),
+        detail: markHover(mark, names),
+        actions: hintActions(mark, point, edit),
+        afterShotId: ended,
+        dismissKey,
+      },
+    ];
+  });
 }
 
 /**
