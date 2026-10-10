@@ -1329,12 +1329,18 @@ test.describe("a serve's result menu, where lets are replayed", () => {
     const trigger = tag(serve, 'aria-label="Shot 1 result"');
     expect(trigger).toMatch(/^<button/);
     expect(trigger).toContain('aria-haspopup="menu"');
-    // Inside its clipping column: no -5px nudge, no width past the column,
-    // or the trigger's left edge is cut off (a let read as "et").
-    expect(trigger).not.toContain("-ml-[5px]");
-    expect(trigger).not.toContain("w-[calc(100%+7px)]");
-    expect(trigger).toContain("ml-0");
-    expect(trigger).toContain("w-full");
+    // The trigger keeps the shared -5px nudge (the word does not move on
+    // select), and the clipping cell reaches 5px into the gap to hold it, or
+    // the trigger's left edge is cut off (a let read as "et").
+    expect(trigger).toContain("-ml-[5px]");
+    const cell = tag(serve, "data-serve-result");
+    expect(cell).toContain("overflow-hidden");
+    expect(cell).toContain("-ml-[5px]");
+    expect(cell).toContain("pl-[5px]");
+    // A rally stroke's result cell is not widened.
+    expect(
+      tag(shotRow(html, "w-lit"), 'data-calculated="result"'),
+    ).not.toContain("pl-[5px]");
     expect(text(serve.slice(serve.indexOf("data-serve-result")))).toContain(
       "Net",
     );

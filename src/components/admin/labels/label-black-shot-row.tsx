@@ -540,6 +540,10 @@ export function BlackShotRow({
         data-serve-result={serveResult ? "" : undefined}
         className={cn(
           "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[3px] overflow-hidden text-[11px] whitespace-nowrap",
+          // The cell clips (for the pencil), and a select trigger sits 5px
+          // left of its text so the word does not move when the row is
+          // selected: reach the clip 5px into the column gap, content in place.
+          serveResult && SERVE_RESULT_REACH,
           words,
         )}
       >
@@ -1194,8 +1198,11 @@ const LET_INK = "text-[var(--rail-amber)]";
  * It keeps the menu's open state so the cell can say so
  * (`data-menu-open`), which steps the row's actions aside.
  */
-/** The serve-result trigger, held inside its clipping column. */
-export const SERVE_RESULT_TRIGGER = "ml-0 w-full";
+/**
+ * The serve-result cell's clip, reached 5px into the 8px column gap so the
+ * select trigger's shared -5px nudge (`SELECT_TRIGGER_DARK`) is not cut off.
+ */
+export const SERVE_RESULT_REACH = "-ml-[5px] pl-[5px]";
 
 function ServeResultCell({
   editable,
@@ -1257,13 +1264,7 @@ function ServeResultCell({
             onChange={onChange}
             open={shown}
             onOpenChange={setOpen}
-            // The result column clips (`overflow-hidden`, for the pencil), so
-            // the trigger's usual -5px nudge into the cell's left padding is
-            // cut off there: sit it inside the column instead.
-            className={cn(
-              SERVE_RESULT_TRIGGER,
-              isLet && "text-[color:var(--rail-amber)]",
-            )}
+            className={isLet ? "text-[color:var(--rail-amber)]" : undefined}
             // A stored result with no landing to calculate from is not an
             // item, but the trigger still says it.
             placeholder={value ? RESULT_LABEL[value] : undefined}
