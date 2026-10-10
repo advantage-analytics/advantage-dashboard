@@ -161,6 +161,7 @@ test("match delete: the rows are orphaned by the delete and the scheduled run co
   const caller = fakeCaller({ matches: [{ id: matchId }] });
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
+    sharedKeyReader: caller.client,
     attachments: p.deps,
     claimPurge,
   });
@@ -340,6 +341,7 @@ for (const failure of [
     try {
       await expect(
         purgeMatchStorage(caller.client, [matchId], "match delete", {
+          sharedKeyReader: caller.client,
           attachments: p.deps,
           claimPurge,
         }),
@@ -405,6 +407,7 @@ test("account delete: the personal match's video is collected; the retained team
   const admin = fakeCaller({ matches: [{ id: personal }, { id: team }] });
 
   await purgeMatchStorage(admin.client, [personal], "account delete", {
+    sharedKeyReader: admin.client,
     attachments: p.deps,
     claimPurge,
   });
@@ -451,6 +454,7 @@ test("a failed deletion keeps the keys and the retry metadata; the next sweep fi
   const caller = fakeCaller({ matches: [{ id: matchId }] });
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
+    sharedKeyReader: caller.client,
     attachments: p.deps,
     claimPurge,
   });
@@ -504,6 +508,7 @@ test("a copy in flight when the match is deleted: activation is refused, the cop
   const caller = fakeCaller({ matches: [{ id: matchId }] });
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
+    sharedKeyReader: caller.client,
     attachments: p.deps,
     claimPurge,
   });
@@ -546,6 +551,7 @@ test("a late upload under a still-valid credential is fenced at once and collect
   const caller = fakeCaller({ matches: [{ id: matchId }] });
 
   await purgeMatchStorage(caller.client, [matchId], "match delete", {
+    sharedKeyReader: caller.client,
     attachments: p.deps,
     claimPurge,
   });

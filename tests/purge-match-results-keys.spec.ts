@@ -86,7 +86,7 @@ async function purge(
     caller.client,
     matchIds,
     "match delete",
-    { attachments, claimPurge },
+    { attachments, claimPurge, sharedKeyReader: caller.client },
   );
   return { ...caller, result };
 }
@@ -214,6 +214,7 @@ test("when the shared-file check cannot read, nothing is removed", async () => {
   console.error = (...args: unknown[]) => errors.push(args);
   try {
     await purgeMatchStorage(caller.client, [MATCH], "match delete", {
+      sharedKeyReader: caller.client,
       attachments,
       claimPurge,
     });
@@ -400,6 +401,7 @@ test("blast radius: a missing, null or empty match_id contributes no computed ke
         : from(table);
 
     await purgeMatchStorage(caller.client, [MATCH], "match delete", {
+      sharedKeyReader: caller.client,
       attachments,
       claimPurge,
     });

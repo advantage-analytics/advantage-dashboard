@@ -32,6 +32,12 @@ export interface PurgeMatchStorageOptions {
   claimPurge?: (
     matchIds: string[],
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  /**
+   * The client `keysKeptElsewhere` reads every job through — the service
+   * role, since a copy of the match may belong to someone the caller cannot
+   * read. Specs pass their fake.
+   */
+  sharedKeyReader?: SupabaseClient;
 }
 
 /**
@@ -252,6 +258,7 @@ export async function purgeMatchStorage(
   // Console references intentionally block row deletion. Ordinary creators cannot
   // see this provenance through RLS, so a server-only claim RPC checks it for
   // both single-match and account cleanup before any object is removed.
+  const sharedKeyReader = options.sharedKeyReader ?? createAdminClient();
   const claimPurge =
     options.claimPurge ??
     (async (ids: string[]) => {
@@ -330,7 +337,7 @@ export async function purgeMatchStorage(
           ),
         ];
         const kept = await keysKeptElsewhere(
-          supabase,
+          sharedKeyReader,
           ["video_object_key", "trimmed_object_key"],
           candidates,
           matchIds,
@@ -367,7 +374,7 @@ export async function purgeMatchStorage(
           matchIds,
         );
         const kept = await keysKeptElsewhere(
-          supabase,
+          sharedKeyReader,
           [
             "results_object_key",
             "players_object_key",
