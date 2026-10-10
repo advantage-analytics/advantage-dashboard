@@ -27,7 +27,7 @@ import {
   type Transcript,
 } from "./derivation";
 import { RESULTS_BUCKET } from "./config";
-import { HAND_LABELLED_FLAG } from "@/lib/services/labels/apply";
+import { HAND_LABELLED_FLAG } from "./derivation/flags";
 
 const LOG = "[splitstep:persist]";
 
@@ -309,6 +309,35 @@ export async function persistTranscript(params: {
       };
     }
 
+    // Refuse to overwrite hand labels. Checked before the delete, so a refusal
+    // leaves the labelled rows exactly as they were, and before the dry-run
+    // return, so a dry run says up front that --write would be refused.
+    if (!allowOverwriteLabels) {
+      const { count: labelledCount, error: labelledError } = await supabase
+        .from("points")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", job.match_id)
+        .contains("flags", [HAND_LABELLED_FLAG]);
+      if (labelledError) {
+        return {
+          ok: false,
+          reason: `could not check for hand-labelled points: ${labelledError.message}`,
+          transcript,
+          failure: "refused",
+        };
+      }
+      if ((labelledCount ?? 0) > 0) {
+        return {
+          ok: false,
+          reason:
+            "hand labels applied — pass allowOverwriteLabels to replace them",
+          transcript,
+          failure: "refused",
+          labelsProtected: true,
+        };
+      }
+    }
+
     if (dryRun) {
       return {
         ok: true,
@@ -344,34 +373,6 @@ export async function persistTranscript(params: {
         transcript,
         failure: "refused",
       };
-    }
-
-    // Refuse to overwrite hand labels. Checked before the delete, so a refusal
-    // leaves the labelled rows exactly as they were.
-    if (!allowOverwriteLabels) {
-      const { count: labelledCount, error: labelledError } = await supabase
-        .from("points")
-        .select("id", { count: "exact", head: true })
-        .eq("match_id", job.match_id)
-        .contains("flags", [HAND_LABELLED_FLAG]);
-      if (labelledError) {
-        return {
-          ok: false,
-          reason: `could not check for hand-labelled points: ${labelledError.message}`,
-          transcript,
-          failure: "refused",
-        };
-      }
-      if ((labelledCount ?? 0) > 0) {
-        return {
-          ok: false,
-          reason:
-            "hand labels applied — pass allowOverwriteLabels to replace them",
-          transcript,
-          failure: "refused",
-          labelsProtected: true,
-        };
-      }
     }
 
     if (keepPlayerMapping) {

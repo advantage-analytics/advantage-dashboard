@@ -22,6 +22,13 @@ import { LADDER, lastStrokeWinner } from "./winners";
 import type { LineCalls } from "./line-calls";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
+/**
+ * Marks a point written by `scripts/label-apply.ts` from a hand-labelling
+ * session. Not a derivation flag: `persistTranscript` refuses to replace a
+ * match carrying it unless told to.
+ */
+export const HAND_LABELLED_FLAG = "hand_labelled";
+
 export const POINT_FLAGS = {
   /**
    * Score fold and the last stroke's `in` flag name different winners.

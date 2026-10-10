@@ -599,9 +599,21 @@ async function main() {
     process.exit(1);
   }
 
-  await recompute(db, session.matchId);
+  const undo = `npx tsx scripts/label-apply.ts --restore ${file}`;
+  try {
+    await recompute(db, session.matchId);
+  } catch (err) {
+    console.error(
+      `RECOMPUTE FAILED: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    console.error(
+      "The new points and shots are written but match_stats may be stale.",
+    );
+    console.error(`Re-run the recompute, or undo with: ${undo}`);
+    process.exit(1);
+  }
   printStatsDiff(statsBefore, await readMatchStats(db, session.matchId));
-  console.log(`\nUndo with: npx tsx scripts/label-apply.ts --restore ${file}`);
+  console.log(`\nUndo with: ${undo}`);
 }
 
 main().catch((e) => {

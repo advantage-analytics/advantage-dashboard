@@ -58,7 +58,8 @@ import {
 } from "./session";
 
 /** The flag every applied point carries; persist-transcript.ts guards on it. */
-export const HAND_LABELLED_FLAG = "hand_labelled";
+export { HAND_LABELLED_FLAG } from "@/lib/services/splitstep/derivation/flags";
+import { HAND_LABELLED_FLAG } from "@/lib/services/splitstep/derivation/flags";
 
 /** What the vendor stroke says that the label row does not carry. */
 export interface VendorShotFacts {

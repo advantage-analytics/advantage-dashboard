@@ -339,7 +339,7 @@ test.describe("persistTranscript: hand labels are not overwritten", () => {
     expect(out.labelsProtected).toBeUndefined();
   });
 
-  test("a dry run never asks", async () => {
+  test("a dry run says up front that the write would be refused, and deletes nothing", async () => {
     const { calls, supabase } = persistClient({ imported: 0, labelled: 56 });
     const out = await persistTranscript({
       supabase,
@@ -347,7 +347,20 @@ test.describe("persistTranscript: hand labels are not overwritten", () => {
       dryRun: true,
     });
 
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.labelsProtected).toBe(true);
+    expect(calls.find((c) => c.op === "delete")).toBeUndefined();
+  });
+
+  test("a dry run on a match with no hand labels still succeeds", async () => {
+    const { supabase } = persistClient({ imported: 0, labelled: 0 });
+    const out = await persistTranscript({
+      supabase,
+      jobId: "job",
+      dryRun: true,
+    });
+
     expect(out.ok).toBe(true);
-    expect(calls.filter((c) => c.table === "points")).toEqual([]);
   });
 });
