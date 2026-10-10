@@ -159,3 +159,35 @@ Published winner misses agree with `label-scorecard`'s flip counts on 868a7696 a
 
 1. A firing counts any difference in game number, including the renumbering a moved boundary causes. Many of the 15 misses on be930d79 may be that knock-on effect rather than wrong cuts. Consider scoring firings by partition only.
 2. Across the two matches, 10 of 25 firings hit. That is far below the promotion bar, and is input for T9.
+
+## T9 · Tune `SEGMENT_COSTS` — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Only `SEGMENT_COSTS` and its doc comment changed.
+
+**Final weights:** end 5 · side 2 · flipHigh **2** (was 4) · flipLow 1 · vendorBoundaryMoved 1 · vendorBoundaryDropped 1 · changeoverShortGap **4** (was 1) · longGapNotChangeover **3** (was 1) · merge 1. These came from a sweep of 11,664 combinations. The chosen point sits inside a plateau.
+
+**Results (counts only, published → proposed):**
+
+| Job      | Status     | Server          | Winner  | Game partition | Firings hit | Merges |
+| -------- | ---------- | --------------- | ------- | -------------- | ----------- | ------ |
+| be930d79 | fit at 6–2 | 42 → 54 / 56    | 35 → 43 | 15 → 43        | 22 / 23     | 4 / 4  |
+| 868a7696 | fit        | 101 → 105 / 106 | —       | 63 → 97        | 5 / 5       | 1 / 1  |
+| 45ff4bd7 | ambiguous  | 99 → 99 / 101   | —       | —              | no firing   | —      |
+
+**Targets for stage 06 (shortfalls, with numbers):**
+
+1. **be930d79: 54/56 against a target of 55.** Labels #14 and #15 both carry rally 15, with different servers, so one of them must miss. Label #17 opens game 4 on an ad-court serve after a 14 s gap. That is label noise or a point the vendor never saw, not a wrong cut.
+2. **868a7696: points 18 and 102 fire and hit; point 83 cannot.** Labels #82 and #83 both carry rally 81, with different games and servers.
+3. **45ff4bd7: point 19 does not fire.** The vendor's high-confidence winners on rallies 11, 13 and 18 are wrong, so the vendor's cut is self-consistent. The true cut costs 3 high flips plus 2 boundary units, against one long-gap unit of evidence. The gap is 31 s, 1 s over `CHANGEOVER_SHORT_GAP_S`. This is a rule or threshold limit, not a weight problem. Its `ambiguous` result is irreducible: two 7-point no-ad games have identical cost.
+
+**Frozen jobs (info only, read-only):**
+
+- ac56ef8b: ambiguous. Set 1 differs on 3/53 points and set 2 on 23/38. It pays 20 end mismatches, which is the parity problem from design open question 2.
+- 5c377b0a: no_fit, closest 3–3; 26/38 servers differ.
+- 467ccbdc: no_fit, closest 2–3; 8/20 servers differ.
+  **follow-ups:**
+
+1. The `segmentation.ts` header still calls the weights "first guesses". That is a one-word edit outside T9's scope.
+2. The `SEGMENT_COSTS` comment carries some narrative counts, such as game numbers and gaps. Check they meet the "counts only" rule.
+3. Promotion tally so far: 27 of 28 firings hit across 2 matches. That is above 95%, but short of the 30+ firings the bar needs.

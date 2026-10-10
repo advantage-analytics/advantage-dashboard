@@ -243,7 +243,7 @@ ready).
 
 ## T9 · Tune `SEGMENT_COSTS`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T6, T8
 - **files:** (guess)

@@ -142,11 +142,42 @@ export interface SegmentationProposal {
 }
 
 /**
- * The weights, from the design table. First guesses against three labelled
- * matches; T9 tunes them HERE and nowhere else — no other line may carry a
- * weight. End outranks everything because the schedule named the server on
- * every labelled game; a vendor boundary is worth one unit, so the cheapest
- * fit is also the one that moves the fewest of them.
+ * The weights. The design table's first guesses (end 5 / side 2 / flipHigh 4
+ * / flipLow 1 / one unit for every boundary, gap and merge row) were tuned
+ * HERE and nowhere else — no other line may carry a weight — against three
+ * labelled sessions, read-only, with `scripts/splitstep-eval.ts --session`.
+ * Two rows moved:
+ *
+ *   - `flipHigh` 4 → 2. The score stream's winner is wrong far more often
+ *     than a tenth of the time on a bad payload (one labelled match had the
+ *     published winner right on 35 of 56 points), and at 4 a wrong winner
+ *     made the vendor's wrong cut self-consistent: the path paid several
+ *     flips to keep a boundary rather than one to move it. At 2 a flip costs
+ *     what a side mismatch does, still twice a guessed one.
+ *   - `changeoverShortGap` 1 → 4 and `longGapNotChangeover` 1 → 3. The end
+ *     cannot see a changeover boundary — the next server stands where the
+ *     last one did — and the side only says the count is even, so the pause
+ *     is the one witness that places it. Both labelled no-ad matches put a
+ *     changeover a rally or two after a 100 s gap and the ad match's game 7/8
+ *     cut was decided by a 67 s pause against a 19 s one. Both stay below
+ *     `end`, which is still the top witness.
+ *
+ * Result (published → proposed server, firings hit/total), each session
+ * fitting the entered score where it did before:
+ *   be930d79 (ad): fit, 42/56 → 54/56, 22/23 hit, 4 of 4 labelled merges
+ *     proposed (was 52/56, 8/23). The two remaining server misses sit on a
+ *     rally the labeller split into two points with different servers.
+ *   868a7696 (no-ad): fit, 101/106 → 105/106, 5/5 hit, the one labelled
+ *     merge proposed (was ambiguous, 103/106, 2/2).
+ *   45ff4bd7 (no-ad): ambiguous, 99/101 → 99/101, no firing — the tie is
+ *     two seven-point games whose deciding points the stream got wrong the
+ *     same way, so either may be the one the loser took; the vendor's late
+ *     changeover there costs 1 unit against 14 units of wrong winners.
+ * No proposed metric fell below its published one on any session.
+ *
+ * End outranks everything because the schedule named the server on every
+ * labelled game; a vendor boundary is worth one unit, so of two fits with
+ * equal evidence the one that moves fewer of them wins.
  */
 export const SEGMENT_COSTS = {
   /** Serve end is not the end the schedule puts this game's server at. */
@@ -154,7 +185,7 @@ export const SEGMENT_COSTS = {
   /** Serve side is not the side the point count expects (free on a no-ad deciding point and in a tiebreak). */
   side: 2,
   /** Outcome flipped against a high-confidence winner. */
-  flipHigh: 4,
+  flipHigh: 2,
   /** Outcome flipped against a low-confidence winner. */
   flipLow: 1,
   /** A proposed game boundary where the vendor's game key did not change. */
@@ -162,9 +193,9 @@ export const SEGMENT_COSTS = {
   /** A vendor game boundary the proposal does not keep. */
   vendorBoundaryDropped: 1,
   /** A changeover (the ends swap) opened after a gap under `CHANGEOVER_SHORT_GAP_S`. */
-  changeoverShortGap: 1,
+  changeoverShortGap: 4,
   /** A gap of `LONG_GAP_S` or more crossed by anything but a changeover or a set break. */
-  longGapNotChangeover: 1,
+  longGapNotChangeover: 3,
   /** Two rallies consumed as one point. */
   merge: 1,
 } as const;
