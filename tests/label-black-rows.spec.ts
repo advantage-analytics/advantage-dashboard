@@ -903,11 +903,14 @@ test.describe("the black shots well", () => {
     const lit = shotRow(html, "w-lit");
     const open = tag(lit, 'data-row="shot"');
     expect(open).toContain("data-selected");
-    // Player, Stroke, Spin are menus; Time and the two positions are inputs.
+    // Player, Stroke, Spin are menus; Time is an input. The two positions are
+    // never typed: each is a button that hands the court its end.
     expect(lit.match(/data-select-editor/g)).toHaveLength(3);
-    expect(lit.match(/<input/g)).toHaveLength(3);
-    expect(lit).toContain('value="-0.31, -1.82"');
-    expect(lit).toContain('aria-label="Shot 4 hit at, metres x, y"');
+    expect(lit.match(/<input/g)).toHaveLength(1);
+    expect(lit).toContain(
+      'aria-label="Shot 4 hit at: -0.31, -1.82 — place on the court"',
+    );
+    expect(lit.match(/data-position-pick="(hit|landed)"/g)).toHaveLength(2);
 
     for (const id of ["w-fault", "w-serve", "w-return"]) {
       const row = shotRow(html, id);
@@ -927,6 +930,7 @@ test.describe("the black shots well", () => {
     expect(frozen).not.toContain("data-select-editor");
     expect(frozen).not.toContain("<input");
     expect(frozen).not.toContain('role="button"');
+    expect(frozen).not.toContain("data-position-pick");
   });
 
   test("quiet selection: the selected row's fields read as text, a box only where reached for", () => {
@@ -966,15 +970,10 @@ test.describe("the black shots well", () => {
       expect(trigger, field).not.toContain("text-white");
     }
 
-    // Time and the two positions: the field's box, transparent at rest; hover
-    // (unless focused, so it never covers the blue), focus-within (the input
-    // is focused for as long as a draft is typed) and an invalid draft bring
-    // it back.
-    for (const label of [
-      "Shot 4 time",
-      "Shot 4 hit at, metres x, y",
-      "Shot 4 landed at, metres x, y",
-    ]) {
+    // Time: the field's box, transparent at rest; hover (unless focused, so it
+    // never covers the blue), focus-within (the input is focused for as long
+    // as a draft is typed) and an invalid draft bring it back.
+    for (const label of ["Shot 4 time"]) {
       const at = lit.indexOf(`aria-label="${label}"`);
       expect(at, label).toBeGreaterThan(-1);
       const input = lit.slice(lit.lastIndexOf("<input", at));
@@ -1079,7 +1078,8 @@ test.describe("the black shots well", () => {
         edit: wellEdit({
           onPatchShot: (id: string, patch: unknown) =>
             patches.push([id, patch]),
-          onSelectShot: (id: string) => selected.push(id),
+          onSelectShot: (id: string, target?: string) =>
+            selected.push(target ? `${id}:${target}` : id),
         }),
       }),
     );
@@ -1087,6 +1087,23 @@ test.describe("the black shots well", () => {
     const row = all.find((el) => el.props["data-shot-id"] === "w-return");
     (row!.props.onClick as () => void)();
     expect(selected).toEqual(["w-return"]);
+
+    // A position cell selects the stroke with the court on its end; it never
+    // writes a position itself.
+    const position = (end: string) =>
+      all.find(
+        (el) =>
+          el.props["data-position-pick"] === end &&
+          String(el.props["aria-label"]).startsWith("Shot 3 "),
+      );
+    const stop = { stopPropagation() {} };
+    (position("landed")!.props.onClick as (e: unknown) => void)(stop);
+    (position("hit")!.props.onClick as (e: unknown) => void)(stop);
+    expect(selected).toEqual([
+      "w-return",
+      "w-return:landing",
+      "w-return:contact",
+    ]);
 
     const commit = (label: string, value: unknown) => {
       const input = all.find(
@@ -1111,16 +1128,11 @@ test.describe("the black shots well", () => {
     pick("Shot 3 player", "p2");
     pick("Shot 3 stroke", "backhand");
     pick("Shot 3 spin", "topspin");
-    // Past the singles sideline: the result rides in the same patch.
-    commit("Shot 3 landed at, metres x, y", { x: -5, y: 3.9 });
-    commit("Shot 3 hit at, metres x, y", null);
     expect(patches).toEqual([
       ["w-return", { video_time: 959.4 }],
       ["w-return", { hitter: "p2" }],
       ["w-return", { stroke: "backhand" }],
       ["w-return", { spin: "topspin" }],
-      ["w-return", { landing_x: -5, landing_y: 3.9, result: "out" }],
-      ["w-return", { contact_x: null, contact_y: null }],
     ]);
   });
 

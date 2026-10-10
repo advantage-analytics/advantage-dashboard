@@ -57,6 +57,7 @@ import {
 } from "@/lib/services/labels/set-scores";
 import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
+import { useRowInView } from "./use-row-in-view";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -184,7 +185,8 @@ export function LabelBlackRail({
   onTogglePoint?: (pointId: string) => void;
   editable?: boolean;
   selectedShotId?: string | null;
-  onSelectShot?: (shotId: string) => void;
+  /** `target` opens the court on that end: a position cell was clicked. */
+  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   /** Absent: no ⋯ menu, no tick, no Add shot — the rows are read-only. */
@@ -234,6 +236,12 @@ export function LabelBlackRail({
   const [openAtMount] = useState(expandedPointId);
   const [openMoved, setOpenMoved] = useState(false);
   if (!openMoved && expandedPointId !== openAtMount) setOpenMoved(true);
+  // The "Now playing" pill is the way back to a row out of sight; with the
+  // playing point's row on screen it has nothing to point at.
+  const playingRowInView = useRowInView(
+    scrollerRef,
+    affordance?.inCut ? playingPointId : null,
+  );
   // The chip's arithmetic, over the same rows as the scoreboard: only with
   // marks built, not once the labeller has said the video ends early, and only
   // on a disagreement.
@@ -532,7 +540,7 @@ export function LabelBlackRail({
             </div>
           </div>
 
-          {affordance ? (
+          {affordance && !playingRowInView ? (
             <LabelFollowPill
               affordance={affordance}
               onFollow={onFollow}

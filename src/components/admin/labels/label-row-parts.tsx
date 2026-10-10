@@ -65,7 +65,8 @@ export interface EditContext {
   editable: boolean;
   names: SideNames;
   selectedShotId: string | null;
-  onSelectShot?: (shotId: string) => void;
+  /** `target` opens the court on that end: a position cell was clicked. */
+  onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;

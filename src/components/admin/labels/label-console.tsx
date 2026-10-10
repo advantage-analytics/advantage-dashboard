@@ -562,14 +562,20 @@ export function LabelConsole({
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
-  function selectShot(shotId: string) {
+  function selectShot(shotId: string, target?: PlacementTarget) {
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement(placementOf(points, shotId));
     const shot = findShot(points, shotId);
+    // A position cell names its end: the court opens on that end's half.
+    const start = placementOf(points, shotId);
+    setPlacement(
+      target
+        ? setPlacementTarget(start, target, shot?.contactY ?? null)
+        : start,
+    );
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
 

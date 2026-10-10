@@ -36,8 +36,8 @@ import {
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import { positionPatch } from "@/lib/services/labels/shot-derived";
 import { PencilMark, PointHintLine, pointHints } from "./label-black-mark";
+import { placementWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
   SelectEditor,
@@ -403,6 +403,9 @@ export function BlackShotRow({
   const select = () => {
     if (!selected) onSelectShot?.(shot.id);
   };
+  // A position cell selects the row on its own end, even when already selected.
+  const pick = (target: "contact" | "landing") =>
+    onSelectShot?.(shot.id, target);
   const patch = (value: LabelShotPatch) => onPatchShot?.(shot.id, value);
   const cell = { editable, rowSelected: selected };
   const selectCell = { ...cell, menu: tone };
@@ -517,9 +520,7 @@ export function BlackShotRow({
           x={shot.contactX}
           y={shot.contactY}
           muted={fault}
-          onCommit={(p) =>
-            patch(positionPatch(labelShotValues(shot), "contact", p))
-          }
+          onPick={() => pick("contact")}
         />
         <BlackPositionCell
           {...cell}
@@ -528,14 +529,12 @@ export function BlackShotRow({
           x={shot.landingX}
           y={shot.landingY}
           muted={fault}
-          onCommit={(p) =>
-            patch(positionPatch(labelShotValues(shot), "landing", p))
-          }
+          onPick={() => pick("landing")}
         />
         {placement ? (
           // The one word here nobody can open an editor on, in a track that
           // narrows with the rail: whole in the tooltip when it is cut.
-          <ChromeTooltip label={placement} side="top" wrap>
+          <ChromeTooltip {...placementWords(placement, shot)} side="top" wrap>
             <span
               data-calculated="placement"
               className={cn(
@@ -1406,31 +1405,58 @@ const NUM = "mono tabular w-8 flex-none text-right text-[10px]";
 /**
  * A position. The mark stands for the column's name: a ring is where the stroke
  * was hit, a dot where it landed. Then x and y, each right-aligned in a 32px
- * slot so the decimal points line up. The numbers give way to a text field ("x,
- * y" in metres) sized for the longest pair in this 88px track.
+ * slot so the decimal points line up. Never typed: a click selects the row on
+ * this end, and the court panel takes the position.
  */
 function BlackPositionCell({
   editable,
-  rowSelected,
   end,
   label,
   x,
   y,
   muted,
-  onCommit,
+  onPick,
 }: {
   editable: boolean;
-  rowSelected: boolean;
   end: "hit" | "landed";
   label: string;
   x: number | null;
   y: number | null;
   /** A fault row: the numbers a step quieter. */
   muted: boolean;
-  onCommit: (point: { x: number; y: number } | null) => void;
+  /** Select the row with the court on this end. */
+  onPick: () => void;
 }) {
   const pair = courtPair(x, y);
   const text = formatCourtPoint(x, y);
+  const words = positionWords(end, x, y, editable);
+  const numbers = (
+    <span className="inline-flex items-center gap-1.5 align-middle">
+      {pair ? (
+        <>
+          <b
+            className={cn(NUM, "font-normal")}
+            style={{ color: muted ? QUIET_INK : VALUE_INK }}
+          >
+            {pair[0]}
+          </b>
+          <b
+            className={cn(NUM, "font-normal")}
+            style={{ color: muted ? QUIET_INK : VALUE_INK }}
+          >
+            {pair[1]}
+          </b>
+        </>
+      ) : (
+        <>
+          <b className={cn(NUM, "font-normal")}>
+            <Dash label="Not set" />
+          </b>
+          <b className={cn(NUM, "font-normal")} aria-hidden="true" />
+        </>
+      )}
+    </span>
+  );
   return (
     <span data-xy={end} className="flex min-w-0 items-center gap-1.5">
       {end === "hit" ? (
@@ -1446,52 +1472,27 @@ function BlackPositionCell({
           className="mx-px size-[5px] flex-none rounded-full bg-white/50"
         />
       )}
-      <EditableCell
-        editable={editable}
-        rowSelected={rowSelected}
-        label={label}
-        valueText={text ?? "Not set"}
-        className="flex-1"
-        textClassName="cursor-text"
-        display={
-          <span className="inline-flex items-center gap-1.5 align-middle">
-            {pair ? (
-              <>
-                <b
-                  className={cn(NUM, "font-normal")}
-                  style={{ color: muted ? QUIET_INK : VALUE_INK }}
-                >
-                  {pair[0]}
-                </b>
-                <b
-                  className={cn(NUM, "font-normal")}
-                  style={{ color: muted ? QUIET_INK : VALUE_INK }}
-                >
-                  {pair[1]}
-                </b>
-              </>
-            ) : (
-              <>
-                <b className={cn(NUM, "font-normal")}>
-                  <Dash label="Not set" />
-                </b>
-                <b className={cn(NUM, "font-normal")} aria-hidden="true" />
-              </>
-            )}
+      <ChromeTooltip {...words} side="top" wrap>
+        {editable ? (
+          <button
+            type="button"
+            data-cell={label}
+            data-position-pick={end}
+            aria-label={`${label}: ${text ?? "Not set"} — place on the court`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPick();
+            }}
+            className="tabular -ml-[4px] flex min-w-0 flex-1 cursor-pointer items-center rounded-[var(--radius-button)] py-[3px] pl-[4px] transition-colors duration-150 hover:bg-white/[0.08] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            {numbers}
+          </button>
+        ) : (
+          <span data-cell={label} className="tabular flex min-w-0 flex-1">
+            {numbers}
           </span>
-        }
-        editor={
-          <TextEditor
-            label={`${label}, metres x, y`}
-            text={text ?? ""}
-            parse={parseCourtPoint}
-            onCommit={(value) =>
-              onCommit(value as { x: number; y: number } | null)
-            }
-            quiet
-          />
-        }
-      />
+        )}
+      </ChromeTooltip>
     </span>
   );
 }
