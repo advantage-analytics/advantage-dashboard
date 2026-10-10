@@ -1,7 +1,16 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Plus, RotateCcw, Split, Undo2, WandSparkles, X } from "lucide-react";
+import {
+  CornerDownRight,
+  EyeOff,
+  Plus,
+  RotateCcw,
+  Split,
+  Undo2,
+  WandSparkles,
+  X,
+} from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { shotRowRevealDelay } from "@/components/dashboard/matches/match-detail/film/film-shots";
 import { cn } from "@/lib/utils";
@@ -36,7 +45,12 @@ import {
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import { PencilMark, PointHintLine, pointHints } from "./label-black-mark";
+import {
+  PencilMark,
+  PointHintLine,
+  pointHints,
+  type PointHint,
+} from "./label-black-mark";
 import { placementWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
@@ -262,17 +276,18 @@ export function BlackShotsWell({
     );
   }
   const hintLineAfter = (shotId: string) => {
-    const mine = hints.filter((hint) => hint.afterShotId === shotId);
-    if (mine.length === 0) return;
-    const arrival = rowArrival(arrive());
-    rows.push(
-      <PointHintLine
-        key={`hints-${shotId}`}
-        hints={mine}
-        className={arrival.className}
-        style={arrival.style}
-      />,
-    );
+    for (const hint of hints) {
+      if (hint.afterShotId !== shotId) continue;
+      rows.push(
+        <BlackEndedSuggestion
+          key={`hint-${hint.code}-${shotId}`}
+          hint={hint}
+          point={point}
+          edit={edit}
+          arrive={arrive()}
+        />,
+      );
+    }
   };
   // The strokes that went as dead balls after the point, at the end of the
   // rally: from each of them, Undo puts back every one to the end at once.
@@ -1000,6 +1015,98 @@ function BlackSuggestedShot({
     </div>
   );
 }
+
+/**
+ * "Point ended here", under the stroke that ended the point: a suggestion, so
+ * it wears the suggested shot's dashed amber frame, and its answers are laid
+ * out as the selected row's tray lays out its own — the same inset, gap, 10px
+ * type and icons (Split here takes Split's, Remove N takes Delete's), with
+ * Dismiss held at the right edge as Delete is. Dismiss stores the hint's key
+ * on the point (`pointEndedKey`), so it stays gone.
+ */
+function BlackEndedSuggestion({
+  hint,
+  point,
+  edit,
+  arrive,
+}: {
+  hint: PointHint;
+  point: LabelPoint;
+  edit: EditContext;
+  arrive?: number;
+}) {
+  const arrival = rowArrival(arrive);
+  const operations = edit.editable ? edit.operations : undefined;
+  // Split first, as the tray orders it; then the removal.
+  const actions = [...hint.actions].sort(
+    (x, y) => Number(!isSplit(x.label)) - Number(!isSplit(y.label)),
+  );
+  return (
+    <div
+      data-row="suggested-end"
+      data-point-hint={hint.code}
+      style={arrival.style}
+      className={cn(
+        arrival.className,
+        "flex h-[32px] min-w-0 cursor-default items-center gap-4 rounded-lg bg-[var(--rail-amber-wash-faint)] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+      )}
+    >
+      <ChromeTooltip label={hint.label} detail={hint.detail} side="top" wrap>
+        <span
+          data-suggestion-text=""
+          aria-label={`${hint.label}. ${hint.detail}`}
+          className="inline-flex min-w-0 shrink items-center gap-[5px] px-1"
+          style={{ color: AMBER_SUGGESTION_INK }}
+        >
+          <CornerDownRight
+            className="size-[10px] shrink-0"
+            strokeWidth={1.6}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 truncate">{hint.label}</span>
+        </span>
+      </ChromeTooltip>
+      {actions.map((action) => (
+        <BlackTextAction
+          key={action.label}
+          ink="plain"
+          icon={isSplit(action.label) ? Split : X}
+          shrinks
+          small
+          data-point-hint-action={hint.code}
+          aria-label={`${action.label}: ${hint.detail}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            action.run();
+          }}
+        >
+          {action.label}
+        </BlackTextAction>
+      ))}
+      {operations && hint.dismissKey ? (
+        <>
+          <span aria-hidden="true" className="min-w-0 flex-1" />
+          <BlackTextAction
+            ink="muted"
+            icon={EyeOff}
+            small
+            data-suggestion-dismiss=""
+            aria-label={`Dismiss: ${hint.label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              operations.onDismissSuggestion(point.id, hint.dismissKey!);
+            }}
+          >
+            Dismiss
+          </BlackTextAction>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** Whether a hint's answer is its split ("Split here"). */
+const isSplit = (label: string) => label.startsWith("Split");
 
 /** A ghost row's value: struck through, or an unstruck em dash for none. */
 function Struck({

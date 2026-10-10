@@ -237,7 +237,8 @@ export interface LabelPoint {
   note: string | null;
   /**
    * Suggestion keys the labeller dismissed (`label_points.dismissed`):
-   * `missing_shot:<afterEventId>` or `missing_point`. The one stored piece of
+   * `missing_shot:<afterEventId>`, `missing_point` or
+   * `point_ended:<shotId>`. The one stored piece of
    * a mark's life-cycle; the rest is derived from the row's status.
    */
   dismissed: string[];

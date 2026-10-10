@@ -66,9 +66,11 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
     case null:
       return `Point ${point.pointIndex + 1}`;
     case "ace":
-    case "service_winner":
     case "double_fault":
       return `${ENDING_LABEL[ending]}${by(point.endedBy ?? point.server, names)}`;
+    // The server's, though the receiver's miss is what ended it.
+    case "service_winner":
+      return `${ENDING_LABEL[ending]}${by(point.server ?? point.endedBy, names)}`;
     case "let_replayed":
     case "not_a_point":
       return ENDING_LABEL[ending];

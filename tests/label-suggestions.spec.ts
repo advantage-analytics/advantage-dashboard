@@ -245,6 +245,19 @@ test.describe("suggestionState", () => {
 });
 
 test.describe("planDismiss", () => {
+  test("“Did the point end here?” is dismissed by its stroke's id — not a draft's", () => {
+    const key = "point_ended:3f1c2a9e-7b1d-4c2e-9a51-0b6f7d2e8c40";
+    expect(planDismiss({ dismissed: [] }, key)).toEqual({
+      ok: true,
+      write: { dismissed: [key] },
+    });
+    for (const refused of ["point_ended:", "point_ended:pending-shot-3"]) {
+      expect(planDismiss({ dismissed: [] }, refused), refused).toEqual({
+        error: "That is not a suggestion this point can dismiss.",
+      });
+    }
+  });
+
   test("appends the key to the array read", () => {
     expect(planDismiss({ dismissed: [] }, KEY)).toEqual({
       ok: true,

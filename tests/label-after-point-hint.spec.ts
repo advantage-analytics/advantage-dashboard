@@ -60,9 +60,9 @@ test.describe("pointEndedEarly", () => {
       scope: "point",
       params: { shotId: "b", after: ["c"] },
     });
-    expect(hintLabel(one!)).toBe("Point ended here · 1 shot after it");
+    expect(hintLabel(one!)).toBe("Did the point end here? 1 shot follows");
     expect(markHover(one!, NAMES)).toBe(
-      "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.",
+      "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.",
     );
 
     const three = pointEndedEarly(
@@ -77,7 +77,7 @@ test.describe("pointEndedEarly", () => {
       true,
     );
     expect(three?.params).toEqual({ shotId: "a", after: ["b", "c", "d"] });
-    expect(hintLabel(three!)).toBe("Point ended here · 3 shots after it");
+    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
   });
 
   test("the LAST out ball: an earlier one is the point still going", () => {
@@ -146,7 +146,7 @@ test.describe("pointEndedEarly", () => {
       true,
     );
     expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
-    expect(hintLabel(three!)).toBe("Point ended here · 3 shots after it");
+    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
   });
 
   test("nothing when the out ball is the last stroke, is a serve, or there is none", () => {
@@ -254,7 +254,9 @@ test.describe("endingStale", () => {
         )!,
         NAMES,
       ),
-    ).toBe("The strokes say a service winner by Vargas.");
+    ).toBe(
+      "The shots add up to a service winner by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
+    );
   });
 
   test("nothing for a let or a non-point, and nothing while the rows say nothing", () => {

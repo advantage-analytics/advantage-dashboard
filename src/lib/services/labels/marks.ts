@@ -13,7 +13,7 @@
  * and "Same side twice" describe the vendor's score, which the labeller is
  * correcting, so they are raised live from `serveSides` against the labelled
  * score (score-marks.ts, with "Ending can't be read"); "Point ended here",
- * "Ending looks stale", "Second serve?", "No landing on the last shot" and
+ * "Different ending?", "Second serve?", "No landing on the last shot" and
  * "Serve after a serve in play" are read off the labelled rows themselves
  * (marks-state.ts).
  *
@@ -156,7 +156,7 @@ export interface LabelMarkParams {
     after: string[];
   };
   pick_winner: NoParams;
-  /** What the strokes derive (ending-derived.ts) — the "Use it" patch. */
+  /** What the strokes derive (ending-derived.ts) — the "Make it …" patch. */
   ending_stale: {
     ending: LabelEnding;
     endedBy: LabelSide | null;
