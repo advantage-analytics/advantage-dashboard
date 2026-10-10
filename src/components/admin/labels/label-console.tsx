@@ -118,7 +118,12 @@ import {
   type PointCombineSaved,
 } from "@/lib/services/labels/point-combine";
 import type { LabelCombinePointsResult } from "@/lib/services/labels/point-combine-session";
-import { applyPointReset, applyShotReset } from "@/lib/services/labels/reset";
+import {
+  applyPointReset,
+  applyShotReset,
+  pointResetScope,
+} from "@/lib/services/labels/reset";
+import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import type { LabelPointResetResult } from "@/lib/services/labels/reset-session";
 import {
   applyLabelSessionPatch,
@@ -170,6 +175,7 @@ import {
 import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
+import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
 import type { LabelRowOperations } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
@@ -562,14 +568,29 @@ export function LabelConsole({
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
-  function selectShot(shotId: string) {
+  function selectShot(shotId: string, target?: PlacementTarget) {
+    // Already selected: a position cell switches the court's end and nothing
+    // else — the film stays where the labeller scrubbed it.
+    if (target && shotId === placement.shotId) {
+      const shot = findShot(points, shotId);
+      setPlacement(
+        setPlacementTarget(placement, target, shot?.contactY ?? null),
+      );
+      return;
+    }
     const owner = pointOfShot(points, shotId);
     if (owner) holdPoint(owner.id);
     // A draft row cannot be placed or edited until its insert lands; it is
     // selected for placement then (see `addShot`).
     if (shotId.startsWith(PENDING_SHOT_PREFIX)) return;
-    setPlacement(placementOf(points, shotId));
     const shot = findShot(points, shotId);
+    // A position cell names its end: the court opens on that end's half.
+    const start = placementOf(points, shotId);
+    setPlacement(
+      target
+        ? setPlacementTarget(start, target, shot?.contactY ?? null)
+        : start,
+    );
     if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
   }
 
@@ -1505,12 +1526,12 @@ export function LabelConsole({
   }
 
   /** Back to the seed. The dialog asked first; the write happens here. */
-  function resetShot(shotId: string) {
+  function resetShot(shotId: string): Promise<unknown> {
     const before = findShot(points, shotId);
-    if (!before || !operations) return;
+    if (!before || !operations) return Promise.resolve(null);
     // A reset can move the stroke's time, so it re-sorts like a time edit.
     const settlePoint = settlePointOf(shotId);
-    void runOperation(
+    return runOperation(
       (rows) => updateShot(rows, shotId, true, applyShotReset),
       () => operations.resetShot(shotId),
       (rows, result) =>
@@ -1527,10 +1548,22 @@ export function LabelConsole({
    * its seeded one (`reset.ts`): a point switched after a swap must not keep
    * contradicting its rows.
    */
-  function resetPoint(pointId: string) {
+  async function resetPoint(pointId: string) {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
-    const shotsBefore = shotSwapsOf(before.shots);
+    const scope = pointResetScope(before, sharesVendorRally(before, points));
+    if (!scope) return;
+    // The edited strokes one after another — each re-reads its point's ending
+    // — then the point's own fields, whose seed has the last word.
+    for (const shotId of scope.shotIds) {
+      if ((await resetShot(shotId)) === null) return;
+    }
+    if (!scope.fields) return;
+    // The rollback's hitters: the strokes just reset already sit on their
+    // seed, so only the others go back if the point's own write fails.
+    const shotsBefore = shotSwapsOf(
+      before.shots.filter((shot) => !scope.shotIds.includes(shot.id)),
+    );
     void runOperation(
       (rows) => replacePoint(rows, pointId, applyPointReset),
       () => operations.resetPoint(pointId),
@@ -1576,7 +1609,7 @@ export function LabelConsole({
         resetShot(question.shotId);
         return;
       case "reset-point":
-        resetPoint(question.pointId);
+        void resetPoint(question.pointId);
         return;
       case "complete-session":
         // An edit made while the confirm was open would be refused.
@@ -1625,11 +1658,16 @@ export function LabelConsole({
       setConfirm({ kind: "reset-shot", shotId, shotNumber, pointNumber }),
     onAskResetPoint: (pointId) => {
       const point = points.find((p) => p.id === pointId);
-      if (!point) return;
+      const scope = point
+        ? pointResetScope(point, sharesVendorRally(point, points))
+        : null;
+      if (!point || !scope) return;
       setConfirm({
         kind: "reset-point",
         pointId,
         pointNumber: point.pointIndex + 1,
+        fields: scope.fields,
+        shots: scope.shotIds.length,
       });
     },
   });
@@ -1652,13 +1690,25 @@ export function LabelConsole({
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
 
-  // Enter marks the open point checked; Space and ← / → drive the video. Never
-  // from inside a control, where those keys already mean something.
+  // Enter marks the open point checked; Space and ← / → drive the video; ]
+  // and [ go to the next and previous open flag. Never from inside a control,
+  // where those keys already mean something.
   const checkOpenPoint = useRef<() => void>(() => {});
+  // `]` and `[`: the next and previous open flag, as the header's flag does.
+  const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
+  const openMarks = useMemo(
+    () => (liveMarks ? openFlags(points, liveMarks) : []),
+    [points, liveMarks],
+  );
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
       setChecked(expanded.id, true);
+    };
+    stepToFlag.current = (direction) => {
+      if (confirm) return;
+      const flag = stepFlag(openMarks, points, currentPointId, direction);
+      if (flag) findGap(flag.pointId);
     };
   });
   // Escape lets go of the selected stroke, from anywhere in its row: a text
@@ -1693,12 +1743,14 @@ export function LabelConsole({
         (key !== "Enter" &&
           key !== " " &&
           key !== "ArrowLeft" &&
-          key !== "ArrowRight") ||
+          key !== "ArrowRight" &&
+          key !== "[" &&
+          key !== "]") ||
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
-        event.altKey ||
-        event.shiftKey
+        // [ and ] take Option or Shift on some layouts (German, Nordic).
+        ((event.altKey || event.shiftKey) && key !== "[" && key !== "]")
       ) {
         return;
       }
@@ -1706,7 +1758,9 @@ export function LabelConsole({
       if (target?.closest?.(KEY_OWNER_SELECTOR)) return;
       event.preventDefault();
       if (key === "Enter") checkOpenPoint.current();
-      else if (key === " ") player.current?.togglePlay();
+      else if (key === "]" || key === "[") {
+        stepToFlag.current(key === "]" ? 1 : -1);
+      } else if (key === " ") player.current?.togglePlay();
       else player.current?.step(key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", onKeyDown);
@@ -1831,6 +1885,7 @@ export function LabelConsole({
       onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
+      onGoToPoint={railHandlers.findGap}
     />
   );
   const View = fullScreen ? LabelBlackView : LabelSideView;
