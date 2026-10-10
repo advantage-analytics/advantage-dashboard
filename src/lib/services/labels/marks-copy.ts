@@ -36,6 +36,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   last_shot_unresolved: "Ending can’t be read",
   serve_after_serve_in: "Serve after a serve in play",
   pick_winner: "Pick the winner",
+  last_call_overruled: "Was the last ball in?",
   phantom_strokes_dropped: "1 shot removed",
   out_ball_rally_continued: "Out call ignored",
   winner_guessed: "Winner guessed",
@@ -237,6 +238,13 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
       return "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.";
+    case "last_call_overruled": {
+      if (mark.params.vendorCall === "in") {
+        return "The last ball is out by its landing, but the vendor called it in. Watch the bounce: if it was in, change the result.";
+      }
+      const call = mark.params.vendorCall === "net" ? "in the net" : "out";
+      return `The last ball is in by its landing, but the vendor called it ${call}. Watch the bounce: if it was ${call}, change the result.`;
+    }
     case "pick_winner":
       return "The score, the last shot and the next serve don’t agree on who won. Watch the clip and choose.";
     case "ending_stale": {

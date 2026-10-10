@@ -72,6 +72,12 @@ export const LABEL_ONLY_FLAGS = {
   LAST_SHOT_UNRESOLVED: "last_shot_unresolved",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /**
+   * The point's last stroke is seeded off its landing against the vendor's own
+   * call on it — In where the vendor said out or net, or Out or Net where it
+   * said in: the call that decides the point was overruled by geometry alone.
+   */
+  LAST_CALL_OVERRULED: "last_call_overruled",
 } as const;
 
 /**
@@ -91,6 +97,16 @@ export const LABEL_ONLY_FLAGS = {
  * while `score_frozen`, on the same points, stays hidden so a frozen stretch
  * carries one chip, not two. `serve_fault` is hidden: 7 of 15 changed, under
  * the base rate.
+ *
+ * Retiered 2026-10-10 on Emon van Loben Sels v Eli Stephenson (188 points):
+ * `segment_proposal_differs` is counted — 24 of its 28 points changed, most of
+ * them the set-2 tiebreak the vendor had cut into games, and none of those
+ * carried a chip before. `last_call_overruled` is new and counted: across the
+ * checked points of every session, a last rally stroke seeded In that the
+ * vendor called in the net was labelled out or net 25 times in 33, one it
+ * called out 31 in 51, and a last serve it called out 5 in 5; the other
+ * way round, a last stroke seeded Out that the vendor called in was labelled
+ * in 8 times in 11.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -102,6 +118,8 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
+  [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
   [POINT_FLAGS.ENDING_SUSPECT_LINE]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.WINNER_TO_ERROR_BY_BOUNCE]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SHOT_AFTER_POINT_END]: { tier: "hint", scope: "point" },
@@ -115,7 +133,6 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
-  [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "hidden", scope: "point" },
   [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
   [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },
 } as const satisfies Record<
@@ -149,6 +166,8 @@ export interface LabelMarkParams {
   tiebreak_score_off_six_all: NoParams;
   result_type_unknown: NoParams;
   serve_fault: NoParams;
+  /** What the vendor called the last ball, against the seed's reading. */
+  last_call_overruled: { vendorCall: "in" | "out" | "net" };
   shot_after_point_end: {
     /** The last live stroke that lands out or in the net. */
     shotId: string;
@@ -406,6 +425,23 @@ function pointMarks(
   }
   if (rally && isServeFault(rally)) {
     marks.push(mark(LABEL_ONLY_FLAGS.SERVE_FAULT, {}));
+  }
+  // The stroke that decides the point, seeded off its landing against the
+  // vendor's own call: In where it said out or net, Out or Net where it said in.
+  const last = point.shots.at(-1);
+  const called = last
+    ? rally?.strokes.find((stroke) => stroke.eventId === last.event_id)
+    : undefined;
+  if (last && called) {
+    const vendorCall = called.netHit ? "net" : called.in ? "in" : "out";
+    const seededIn = last.result === "In";
+    const seededMissed = last.result === "Out" || last.result === "Net";
+    if (
+      (seededIn && vendorCall !== "in") ||
+      (seededMissed && vendorCall === "in")
+    ) {
+      marks.push(mark(LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED, { vendorCall }));
+    }
   }
   if (settledWinner === null) {
     marks.push(mark(LABEL_ONLY_FLAGS.PICK_WINNER, {}));
