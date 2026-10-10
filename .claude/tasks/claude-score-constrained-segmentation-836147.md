@@ -126,7 +126,7 @@ ready).
 
 ## T5 · Segmenter completion: merges, ambiguity, tiebreak, gaps, mid-match
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4
 - **files:** (guess)

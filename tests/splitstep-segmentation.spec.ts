@@ -29,7 +29,23 @@ interface GameSpec {
   points: Point[];
   /** Override the side of the serve at a point index; `null` means unknown. */
   sides?: Record<number, "deuce" | "ad" | null>;
+  /**
+   * A tiebreak at 6–6: `points` are still relative to each point's server,
+   * who rotates 1, 2-2, … from the player due to serve game 13.
+   */
+  tiebreak?: boolean;
 }
+
+/**
+ * Seconds between consecutive rallies, last stroke to first stroke, as a
+ * clean payload would carry them: a between-point pause, a changeover (the
+ * ends swap, after odd games) and a set break. The changeover sits between
+ * the segmenter's two gap thresholds (30 s and 80 s) so neither gap cost
+ * fires on a fixture whose boundaries are where the rules put them.
+ */
+const POINT_GAP_S = 20;
+const CHANGEOVER_GAP_S = 60;
+const SET_BREAK_GAP_S = 120;
 
 interface Built {
   input: SegmentationInput;
@@ -101,18 +117,37 @@ function build(
   for (const games of sets) {
     let gamesInSet = 0;
     for (const game of games) {
-      const server = gamesPlayed % 2 === 0 ? A : B;
-      const top = playerAtEnd({
-        topAtStart: A,
-        bottomAtStart: B,
-        completedSets,
-        gamesBeforeInSet: gamesInSet,
-        end: "top",
-      });
-      const end = top === server ? "top" : "bottom";
+      const gameServer = gamesPlayed % 2 === 0 ? A : B;
+      if (rallies.length > 0) {
+        // The pause before this game, on top of the between-point gap.
+        const lastSet = completedSets.at(-1) ?? 0;
+        const changeover =
+          gamesInSet === 0 ? lastSet % 2 === 1 : gamesInSet % 2 === 1;
+        if (gamesInSet === 0) time += SET_BREAK_GAP_S - POINT_GAP_S;
+        else if (changeover) time += CHANGEOVER_GAP_S - POINT_GAP_S;
+      }
       gameStarts.push(rallies.length);
       game.points.forEach((point, p) => {
         const rallyId = rallies.length + 1;
+        // In a tiebreak the serve rotates 1, 2-2, … and the ends swap every six points.
+        if (game.tiebreak && p > 0 && p % 6 === 0) {
+          time += CHANGEOVER_GAP_S - POINT_GAP_S;
+        }
+        const server =
+          game.tiebreak && ((p + 1) >> 1) % 2 === 1
+            ? gameServer === A
+              ? B
+              : A
+            : gameServer;
+        const top = playerAtEnd({
+          topAtStart: A,
+          bottomAtStart: B,
+          completedSets,
+          gamesBeforeInSet: gamesInSet,
+          end: "top",
+          tiebreakPointsBefore: game.tiebreak ? p : 0,
+        });
+        const end = top === server ? "top" : "bottom";
         const side =
           game.sides && p in game.sides
             ? game.sides[p]
@@ -120,7 +155,7 @@ function build(
               ? "deuce"
               : "ad";
         const serve = serveStroke(rallyId, server, time, end, side);
-        time += 20;
+        time += POINT_GAP_S;
         rallies.push({ rallyId, strokes: [serve], server, serves: [serve] });
         outcomes.push({
           won: point === "S" ? "server" : "receiver",
@@ -498,5 +533,318 @@ test.describe("proposeSegmentation", () => {
     expect(proposal.cost).toBe(0);
     expect(proposal.games).toHaveLength(30);
     expect(elapsed).toBeLessThan(500);
+  });
+
+  /**
+   * Cut the second point of game 1 (an ad-court serve) into two rallies at
+   * the serve, `gapS` seconds apart: a lone serve stroke the vendor took for
+   * a point of its own, then the point as it was played.
+   */
+  function splitSecondPoint(gapS: number) {
+    const { input } = build([sixTwoSet()], { score: SIX_TWO });
+    const [first, second, ...rest] = input.rallies;
+    const stub = serveStroke(
+      2,
+      A,
+      second.strokes[0].videoTime - gapS,
+      "top",
+      "ad",
+    );
+    const realServe = { ...second.strokes[0], rallyId: 3 };
+    const rally = {
+      ...second.strokes[0],
+      rallyId: 3,
+      strokeNumber: 2,
+      strokeType: "groundstroke" as const,
+      playerLabel: B,
+      videoTime: realServe.videoTime + 2,
+    };
+    const rallies: SplitStepRally[] = [
+      first,
+      { rallyId: 2, strokes: [stub], server: A, serves: [stub] },
+      {
+        rallyId: 3,
+        strokes: [realServe, rally],
+        server: A,
+        serves: [realServe],
+      },
+      ...rest.map((r) => ({
+        ...r,
+        rallyId: r.rallyId + 1,
+        strokes: r.strokes.map((s) => ({ ...s, rallyId: r.rallyId + 1 })),
+      })),
+    ];
+    const outcomes: RallyOutcome[] = [
+      input.outcomes[0],
+      { won: null, confidence: "low" },
+      ...input.outcomes.slice(1),
+    ];
+    const vendorGameStarts = [
+      input.vendorGameStarts[0],
+      false,
+      ...input.vendorGameStarts.slice(1),
+    ];
+    return { ...input, rallies, outcomes, vendorGameStarts };
+  }
+
+  test("an ad→ad split point is merged", () => {
+    const proposal = proposeSegmentation(splitSecondPoint(15));
+
+    expect(proposal.status).toBe("fit");
+    expect(proposal.merges).toEqual([[2, 3]]);
+    expect(proposal.cost).toBe(SEGMENT_COSTS.merge);
+    expect(proposal.costBreakdown.merge).toBe(SEGMENT_COSTS.merge);
+    expect(proposal.costBreakdown.side).toBe(0);
+    expect(proposal.games).toHaveLength(8);
+    expect(proposal.games[0]).toMatchObject({
+      firstRallyId: 1,
+      lastRallyId: 5,
+      winner: "player1",
+    });
+    expect(proposal.diff.gamesMoved).toBe(0);
+    expect(proposal.diff.serversChanged).toBe(0);
+  });
+
+  test("the same pair with a 40 s gap is not merged", () => {
+    const proposal = proposeSegmentation(splitSecondPoint(40));
+
+    expect(proposal.merges).toEqual([]);
+    expect(proposal.costBreakdown.merge).toBe(0);
+    expect(proposal.cost).toBeGreaterThan(SEGMENT_COSTS.merge);
+  });
+
+  test("two equal-cost cuts give ambiguous, with the fewer-moves cut reported", () => {
+    // Game 1 closes 4–1 in five rallies and game 2 takes five more, both
+    // served from the same end. The vendor cut one rally late (after rally
+    // 6); the winners of rallies 1–10 are unknown, rallies 7–10 carry no
+    // side, and the pause is split 40 s / 40 s around rally 6 so the gap
+    // evidence favours neither cut. Keeping the vendor's cut costs one side
+    // mismatch (rally 6 served from the deuce court where the sixth point of
+    // a game is served from the ad court); moving it to where the rules put
+    // it costs one boundary moved plus one dropped. Equal cost, and the cut
+    // that moves nothing wins.
+    const fiveHold: GameSpec = { points: ["S", "S", "R", "S", "S"] };
+    const games = [fiveHold, fiveHold, ...sixTwoSet().slice(2)];
+    const { input, gameStarts } = build([games], { score: SIX_TWO });
+    expect(gameStarts.slice(0, 3)).toEqual([0, 5, 10]);
+
+    const vendorGameStarts = [...input.vendorGameStarts];
+    vendorGameStarts[5] = false;
+    vendorGameStarts[6] = true;
+    const outcomes = input.outcomes.map((o, i) =>
+      i < 10 ? { won: null, confidence: "low" as const } : o,
+    );
+    const times = input.rallies.map((r) => r.strokes[0].videoTime);
+    const gaps = times.map((t, i) => (i === 0 ? 0 : t - times[i - 1]));
+    gaps[5] = 40;
+    gaps[6] = 40;
+    let clock = 0;
+    const retimed = gaps.map((gap) => (clock += gap));
+    const rallies = input.rallies.map((rally, i) => {
+      const strokes = rally.strokes.map((s) => ({
+        ...s,
+        videoTime: retimed[i],
+        playerX: i >= 6 && i < 10 ? null : s.playerX,
+      }));
+      return { ...rally, strokes, serves: strokes };
+    });
+
+    const proposal = proposeSegmentation({
+      ...input,
+      rallies,
+      outcomes,
+      vendorGameStarts,
+    });
+
+    expect(proposal.status).toBe("ambiguous");
+    expect(proposal.cost).toBe(SEGMENT_COSTS.side);
+    expect(proposal.runnerUpCost).toBe(proposal.cost);
+    expect(proposal.diff.gamesMoved).toBe(0);
+    expect(proposal.games[0]).toMatchObject({
+      firstRallyId: 1,
+      lastRallyId: 6,
+    });
+    expect(proposal.games[1]).toMatchObject({
+      firstRallyId: 7,
+      lastRallyId: 10,
+    });
+  });
+
+  /** Games 1–12 are all holds, then a tiebreak A takes 7–0 (A serves point 1). */
+  function sevenSixSet(): GameSpec[] {
+    const tiebreak: GameSpec = {
+      points: ["S", "R", "R", "S", "S", "R", "R"],
+      tiebreak: true,
+    };
+    return [...Array.from({ length: 12 }, () => hold), tiebreak];
+  }
+
+  test("a 7–6 set passes through its tiebreak to fit", () => {
+    const { input } = build([sevenSixSet()], {
+      score: { player1: [7], player2: [6] },
+    });
+    expect(input.rallies).toHaveLength(55);
+
+    const proposal = proposeSegmentation(input);
+
+    expect(proposal.status).toBe("fit");
+    expect(proposal.cost).toBe(0);
+    expect(proposal.games).toHaveLength(13);
+    expect(proposal.games[12]).toMatchObject({
+      set: 1,
+      game: 13,
+      server: "player1",
+      winner: "player1",
+      firstRallyId: 49,
+      lastRallyId: 55,
+    });
+    expect(proposal.diff.gamesMoved).toBe(0);
+    expect(proposal.diff.serversChanged).toBe(0);
+  });
+
+  test("the set after a tiebreak opens with the tiebreak's first receiver serving", () => {
+    // Set 2 opens with B serving (B received first in the tiebreak). Winners
+    // A, A, A, B, A, B, A, A against servers B, A, B, A, B, A, B, A: 6–2.
+    const set2 = [
+      breakGame,
+      hold,
+      breakGame,
+      breakGame,
+      breakGame,
+      breakGame,
+      breakGame,
+      hold,
+    ];
+    const { input } = build([sevenSixSet(), set2], {
+      score: { player1: [7, 6], player2: [6, 2] },
+    });
+
+    const proposal = proposeSegmentation(input);
+
+    expect(proposal.status).toBe("fit");
+    expect(proposal.cost).toBe(0);
+    expect(proposal.games).toHaveLength(21);
+    expect(proposal.games[13]).toMatchObject({
+      set: 2,
+      game: 1,
+      server: "player2",
+      winner: "player1",
+    });
+  });
+
+  test("a mid-match start gives no_fit / starts_mid_match", () => {
+    const { input } = build([sixTwoSet()], { score: SIX_TWO });
+    const rallies = input.rallies.map((rally, i) =>
+      i === 0
+        ? {
+            ...rally,
+            strokes: rally.strokes.map((s) => ({
+              ...s,
+              predGameScore: "2-1",
+              predPointScore: "0-0",
+              predSetScore: "0.0-0.0",
+            })),
+          }
+        : rally,
+    );
+    const proposal = proposeSegmentation({ ...input, rallies });
+
+    expect(proposal.status).toBe("no_fit");
+    expect(proposal.reason).toBe("starts_mid_match");
+    expect(proposal.games).toEqual([]);
+    expect(proposal.closestScore).toBeNull();
+
+    // Zero readings in either of the vendor's formats are a match start.
+    const zeroed = input.rallies.map((rally, i) =>
+      i === 0
+        ? {
+            ...rally,
+            strokes: rally.strokes.map((s) => ({
+              ...s,
+              predGameScore: "0.0-0.0",
+              predPointScore: "0-0",
+              predSetScore: "0-0",
+            })),
+          }
+        : rally,
+    );
+    expect(proposeSegmentation({ ...input, rallies: zeroed }).status).toBe(
+      "fit",
+    );
+    expect(
+      proposeSegmentation({ ...input, rallies: zeroed }).reason,
+    ).toBeUndefined();
+  });
+
+  test("a changeover with no pause and a long gap inside a game are each paid for", () => {
+    const { input, gameStarts } = build([sixTwoSet()], { score: SIX_TWO });
+    // Close the pause before game 2 (a changeover) to 10 s, and open an
+    // 80 s gap before the third point of game 3.
+    const shift = (from: number, by: number) =>
+      input.rallies.map((rally, i) =>
+        i >= from
+          ? {
+              ...rally,
+              strokes: rally.strokes.map((s) => ({
+                ...s,
+                videoTime: s.videoTime + by,
+              })),
+            }
+          : rally,
+      );
+    const closed = proposeSegmentation({
+      ...input,
+      rallies: shift(gameStarts[1], -50),
+    });
+    expect(closed.status).toBe("fit");
+    expect(closed.cost).toBe(SEGMENT_COSTS.changeoverShortGap);
+    expect(closed.costBreakdown.changeoverShortGap).toBe(
+      SEGMENT_COSTS.changeoverShortGap,
+    );
+    expect(closed.diff.gamesMoved).toBe(0);
+
+    const stretched = proposeSegmentation({
+      ...input,
+      rallies: shift(gameStarts[2] + 2, 60),
+    });
+    expect(stretched.status).toBe("fit");
+    expect(stretched.cost).toBe(SEGMENT_COSTS.longGapNotChangeover);
+    expect(stretched.costBreakdown.longGapNotChangeover).toBe(
+      SEGMENT_COSTS.longGapNotChangeover,
+    );
+    expect(stretched.diff.gamesMoved).toBe(0);
+  });
+
+  test("a 150-rally synthetic match completes in under 50 ms", () => {
+    // Three sets of ten five-point games: 6–4, 4–6, 6–4.
+    const five: GameSpec = { points: ["S", "S", "R", "S", "S"] };
+    const fiveBreak: GameSpec = { points: ["R", "R", "S", "R", "R"] };
+    let g = 0;
+    const setOf = (winners: string[]) =>
+      winners.map((winner) => {
+        const server = g % 2 === 0 ? A : B;
+        g += 1;
+        return server === winner ? five : fiveBreak;
+      });
+    const sets = [
+      setOf([A, A, A, B, A, B, A, B, B, A]),
+      setOf([B, B, B, A, B, A, B, A, A, B]),
+      setOf([A, A, A, B, A, B, A, B, B, A]),
+    ];
+    const { input } = build(sets, {
+      score: { player1: [6, 4, 6], player2: [4, 6, 4] },
+    });
+    expect(input.rallies.length).toBe(150);
+
+    // Warm up the JIT, then time one run.
+    proposeSegmentation(input);
+    const started = performance.now();
+    const proposal = proposeSegmentation(input);
+    const elapsed = performance.now() - started;
+
+    expect(proposal.status).toBe("fit");
+    expect(proposal.cost).toBe(0);
+    expect(proposal.games).toHaveLength(30);
+    expect(elapsed).toBeLessThan(50);
   });
 });

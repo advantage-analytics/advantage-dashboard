@@ -15,13 +15,24 @@
  * not a rule. The one hard constraint is the score the player entered.
  *
  * So this is a constrained shortest path. Each state is a legal tennis score
- * (set, games in the set, points in the game capped at deuce equivalence);
- * each step consumes one rally as one point, won by the server or by the
- * receiver; a step pays for every piece of evidence it contradicts; and the
- * final state must equal the entered score, set by set. The cheapest path is
- * the proposal. Who serves each game follows from the first server and the
- * game count alone, so the path is run once per candidate first server and
- * the cheaper run wins.
+ * (set, games in the set, points in the game capped at deuce equivalence, or
+ * the points of a tiebreak at 6–6); each step consumes one rally as one point,
+ * or two rallies as one point where the vendor cut a point in two, won by the
+ * server or by the receiver; a step pays for every piece of evidence it
+ * contradicts; and the final state must equal the entered score, set by set.
+ * The cheapest path is the proposal. Who serves each game follows from the
+ * first server and the game count alone, so the path is run once per
+ * candidate first server and the cheaper run wins.
+ *
+ * The runner-up is tracked alongside: every state keeps its best two ways in
+ * whose proposals differ (game boundaries, game winners or merges — hashed
+ * incrementally, see `mix`), so the cheapest path with a different proposal
+ * is exact, and `ambiguous` says when it costs the same as the winner.
+ *
+ * The gap between rallies is read from `strokes[].videoTime`: the last stroke
+ * of the previous rally to the first stroke of this one, which is how the
+ * design's thresholds (30 s, 80 s) were measured. Serve-to-serve would add the
+ * previous rally's length and read long on long rallies.
  *
  * Two shapes were tried first and rejected:
  *
@@ -38,9 +49,6 @@
  *
  * Review-only: this proposes, and the weights are first guesses against three
  * labelled matches. Nothing here changes a published row. Pure: no I/O.
- *
- * TODO(T5): the rally-pair merge step, the runner-up cost and `ambiguous`,
- * tiebreaks at 6–6, the two gap costs, and a video that starts mid-match.
  */
 
 import { serveCourtSide } from "./court";
@@ -89,8 +97,9 @@ export interface SegmentationInput {
 export interface ProposedGame {
   /** 1-based set. */
   set: number;
-  /** 1-based within the set, not match-cumulative (`points.game_number` is). */
+  /** 1-based within the set, not match-cumulative (`points.game_number` is). A tiebreak is game 13. */
   game: number;
+  /** For a tiebreak, the player who served its first point. */
   server: "player1" | "player2";
   firstRallyId: number;
   lastRallyId: number;
@@ -98,15 +107,21 @@ export interface ProposedGame {
 }
 
 export interface SegmentationProposal {
-  /** TODO(T5): `ambiguous`. */
+  /** `ambiguous`: the best path with a different proposal costs the same (within one unit). */
   status: "fit" | "ambiguous" | "no_fit";
   version: 1;
+  /** Only on no_fit, and only where the DP was not run at all. */
+  reason?: "starts_mid_match";
   cost: number;
-  /** Cost of the best path with any different game assignment. TODO(T5): always null. */
+  /**
+   * Cost of the best path with a different proposal (boundaries, winners or
+   * merges) when it is within one unit of `cost` — i.e. on `ambiguous`.
+   * Null otherwise: every fit has a distant runner-up, and it says nothing.
+   */
   runnerUpCost: number | null;
   /** Fit only, or the closest reachable on no_fit. */
   games: ProposedGame[];
-  /** Rally pairs consumed as one point. TODO(T5): always empty. */
+  /** Rally pairs consumed as one point, as [first, second] rally ids. */
   merges: Array<[number, number]>;
   /** On no_fit: the score the cheapest unconstrained path reaches. */
   closestScore: MatchScore | null;
@@ -136,7 +151,7 @@ export interface SegmentationProposal {
 export const SEGMENT_COSTS = {
   /** Serve end is not the end the schedule puts this game's server at. */
   end: 5,
-  /** Serve side is not the side the point count expects (free on a no-ad deciding point). */
+  /** Serve side is not the side the point count expects (free on a no-ad deciding point and in a tiebreak). */
   side: 2,
   /** Outcome flipped against a high-confidence winner. */
   flipHigh: 4,
@@ -146,7 +161,26 @@ export const SEGMENT_COSTS = {
   vendorBoundaryMoved: 1,
   /** A vendor game boundary the proposal does not keep. */
   vendorBoundaryDropped: 1,
+  /** A changeover (the ends swap) opened after a gap under `CHANGEOVER_SHORT_GAP_S`. */
+  changeoverShortGap: 1,
+  /** A gap of `LONG_GAP_S` or more crossed by anything but a changeover or a set break. */
+  longGapNotChangeover: 1,
+  /** Two rallies consumed as one point. */
+  merge: 1,
 } as const;
+
+/**
+ * The merge thresholds, from four ad→ad pairs in one labelled match. A merge
+ * is allowed only when rallies i and i+1 serve from the same end and side,
+ * the gap between them is under `MERGE_MAX_GAP_S`, and rally i ends on a
+ * serve or has at most `MERGE_MAX_STROKES` strokes.
+ */
+export const MERGE_MAX_GAP_S = 30;
+export const MERGE_MAX_STROKES = 2;
+/** A changeover opened after a shorter gap than this is suspect. */
+export const CHANGEOVER_SHORT_GAP_S = 30;
+/** A gap this long is a changeover or a set break; anything else crossing it is suspect. */
+export const LONG_GAP_S = 80;
 
 export type CostRow = keyof typeof SEGMENT_COSTS;
 
@@ -154,6 +188,9 @@ const COST_ROWS = Object.keys(SEGMENT_COSTS) as CostRow[];
 
 type Outcome = "server" | "receiver";
 const OUTCOMES: readonly Outcome[] = ["server", "receiver"];
+
+/** Tiebreak points past this would overflow the state key; no real tiebreak gets near it. */
+const TIEBREAK_POINT_CAP = 127;
 
 /**
  * The finished sets a state carries, interned once per run so a state can be
@@ -175,22 +212,32 @@ interface State {
   /** Games in the current set. */
   g1: number;
   g2: number;
-  /** Points in the current game, capped at deuce equivalence (3–3, 4–3, 3–4). */
+  /**
+   * Outside a tiebreak: points in the current game for the server and the
+   * receiver, capped at deuce equivalence (3–3, 4–3, 3–4). In a tiebreak:
+   * player1's and player2's points, uncapped, since the server rotates.
+   */
   ps: number;
   pr: number;
+  /** True at 6–6 until the tiebreak is decided. */
+  tiebreak: boolean;
   /** Unique per score; the layer map's key. */
   key: number;
 }
 
-/** g1, g2 < 8 and ps, pr < 5 once capped, so this never collides. */
+/** g1, g2 < 8 and ps, pr < 128 (`TIEBREAK_POINT_CAP`), so this never collides. */
 function keyOf(
   sets: SetsEntry,
   g1: number,
   g2: number,
   ps: number,
   pr: number,
+  tiebreak: boolean,
 ) {
-  return (((sets.id * 8 + g1) * 8 + g2) * 5 + ps) * 5 + pr;
+  return (
+    ((((sets.id * 8 + g1) * 8 + g2) * 128 + ps) * 128 + pr) * 2 +
+    (tiebreak ? 1 : 0)
+  );
 }
 
 function stateOf(
@@ -199,8 +246,17 @@ function stateOf(
   g2: number,
   ps: number,
   pr: number,
+  tiebreak = false,
 ): State {
-  return { sets, g1, g2, ps, pr, key: keyOf(sets, g1, g2, ps, pr) };
+  return {
+    sets,
+    g1,
+    g2,
+    ps,
+    pr,
+    tiebreak,
+    key: keyOf(sets, g1, g2, ps, pr, tiebreak),
+  };
 }
 
 /** What one rally says about itself, read once up front. */
@@ -211,11 +267,20 @@ interface RallyEvidence {
   vendorServer: string;
   vendorGameStart: boolean;
   outcome: RallyOutcome;
+  /**
+   * Seconds from the previous rally's last stroke to this rally's first.
+   * Null on the first rally and wherever either rally has no strokes.
+   */
+  gapBefore: number | null;
+  /** True when this rally and the next may be consumed as one point (`MERGE_*`). */
+  mergeableWithNext: boolean;
 }
 
 function readEvidence(input: SegmentationInput): RallyEvidence[] {
-  return input.rallies.map((rally, i) => {
+  const evidence = input.rallies.map((rally, i): RallyEvidence => {
     const serve = rally.strokes[lastServeIndex(rally)] ?? rally.strokes[0];
+    const first = rally.strokes[0];
+    const previousLast = input.rallies[i - 1]?.strokes.at(-1);
     return {
       rallyId: rally.rallyId,
       end: serveEnd(rally),
@@ -225,8 +290,27 @@ function readEvidence(input: SegmentationInput): RallyEvidence[] {
       vendorServer: rally.server,
       vendorGameStart: i === 0 || (input.vendorGameStarts[i] ?? false),
       outcome: input.outcomes[i] ?? { won: null, confidence: "low" },
+      gapBefore:
+        first && previousLast ? first.videoTime - previousLast.videoTime : null,
+      mergeableWithNext: false,
     };
   });
+
+  for (let i = 0; i + 1 < evidence.length; i += 1) {
+    const here = evidence[i];
+    const next = evidence[i + 1];
+    const strokes = input.rallies[i].strokes;
+    const endsOnServe = strokes.at(-1)?.strokeType === "serve";
+    here.mergeableWithNext =
+      here.end !== null &&
+      here.end === next.end &&
+      here.side !== null &&
+      here.side === next.side &&
+      next.gapBefore !== null &&
+      next.gapBefore < MERGE_MAX_GAP_S &&
+      (endsOnServe || strokes.length <= MERGE_MAX_STROKES);
+  }
+  return evidence;
 }
 
 /** Everything about the match that does not change rally to rally. */
@@ -251,7 +335,7 @@ interface Run {
   start: State;
   /** Finished-set lists by their text, so equal lists share one entry. */
   setsTable: Map<string, SetsEntry>;
-  /** `expectedEnd` by (sets, games before in set, server is first server). */
+  /** `expectedEnd` by (sets, games before in set, server is first server, tiebreak swaps). */
   endCache: Map<number, CourtEnd>;
 }
 
@@ -284,7 +368,7 @@ function otherLabel(rules: Rules, label: string): string {
 }
 
 /** Who serves the game in progress: the first server on even game counts. */
-function serverOf(s: State, rules: Rules): string {
+function gameServerOf(s: State, rules: Rules): string {
   const played = s.sets.gamesTotal + s.g1 + s.g2;
   return played % 2 === 0
     ? rules.firstServer
@@ -292,16 +376,32 @@ function serverOf(s: State, rules: Rules): string {
 }
 
 /**
- * The end the schedule puts this game's server at, or null when unknown.
+ * Who serves the next point. In a tiebreak the player due to serve game 13
+ * serves point 1, then the serve changes every two points (1, 2-2, …); the
+ * tiebreak counts as a game, so the next set opens with its first receiver.
+ */
+function serverOf(s: State, rules: Rules): string {
+  const gameServer = gameServerOf(s, rules);
+  if (!s.tiebreak) return gameServer;
+  const n = s.ps + s.pr;
+  return ((n + 1) >> 1) % 2 === 0 ? gameServer : otherLabel(rules, gameServer);
+}
+
+/**
+ * The end the schedule puts this point's server at, or null when unknown.
  * Memoised: it depends only on the finished sets, the games played in this
- * set and which player serves, and every layer asks the same questions.
+ * set, which player serves and (in a tiebreak) how many six-point swaps have
+ * passed, and every layer asks the same questions.
  */
 function expectedEnd(s: State, run: Run, server: string): CourtEnd | null {
   const { rules } = run;
   if (!rules.ends) return null;
   const before = s.g1 + s.g2;
+  const tiebreakPointsBefore = s.tiebreak ? s.ps + s.pr : 0;
   const key =
-    (s.sets.id * 16 + before) * 2 + (server === rules.firstServer ? 0 : 1);
+    ((s.sets.id * 16 + before) * 2 + (server === rules.firstServer ? 0 : 1)) *
+      16 +
+    (s.tiebreak ? (tiebreakPointsBefore % 12) + 1 : 0);
   const hit = run.endCache.get(key);
   if (hit) return hit;
   const top = playerAtEnd({
@@ -309,6 +409,7 @@ function expectedEnd(s: State, run: Run, server: string): CourtEnd | null {
     completedSets: s.sets.totals,
     gamesBeforeInSet: before,
     end: "top",
+    tiebreakPointsBefore,
   });
   const end: CourtEnd = top === server ? "top" : "bottom";
   run.endCache.set(key, end);
@@ -319,52 +420,112 @@ function isDecidingPoint(s: State, rules: Rules): boolean {
   return !rules.adScoring && s.ps === 3 && s.pr === 3;
 }
 
-/** The side the point count expects; null on a no-ad deciding point. */
+/** The side the point count expects; null on a no-ad deciding point and in a tiebreak (v1). */
 function expectedSide(s: State, rules: Rules): ServeSide | null {
-  if (isDecidingPoint(s, rules)) return null;
+  if (s.tiebreak || isDecidingPoint(s, rules)) return null;
   return (s.ps + s.pr) % 2 === 0 ? "deuce" : "ad";
 }
 
 /**
- * What consuming `rally` as `outcome` from state `s` costs. With `breakdown`
- * each row's share is also added to it — the replay's tally.
+ * What kind of pause, if any, the rules of tennis put before the next point
+ * from this state. A changeover is wherever the ends swap (position.ts): after
+ * odd games of a set, at a set break following an odd set, and every six
+ * points of a tiebreak. A set break after an even set is a rest without a
+ * swap. `plain` is a game boundary with neither; `none` is mid-game.
+ */
+type Pause = "changeover" | "setBreak" | "plain" | "none";
+
+function pauseBefore(s: State): Pause {
+  if (s.ps !== 0 || s.pr !== 0) {
+    return s.tiebreak && (s.ps + s.pr) % 6 === 0 ? "changeover" : "none";
+  }
+  const before = s.g1 + s.g2;
+  if (before === 0) {
+    if (s.sets.sets.length === 0) return "plain";
+    return (s.sets.totals.at(-1) ?? 0) % 2 === 1 ? "changeover" : "setBreak";
+  }
+  return before % 2 === 1 ? "changeover" : "plain";
+}
+
+/** Per-step scratch the DP reads back: the vendor-boundary units the step paid. */
+interface StepTally {
+  moves: number;
+}
+
+/**
+ * What consuming `first` — or `first` and `second` as one merged point — as
+ * `outcome` from state `s` costs. The end, side, gap and vendor boundary are
+ * read off `first`; the outcome off `second` when merging, since the second
+ * rally is the one that was played out; a vendor boundary on `second` is a
+ * boundary the merge drops. With `breakdown` each row's share is also added
+ * to it — the replay's tally.
  */
 function stepCost(
   s: State,
-  rally: RallyEvidence,
   run: Run,
+  first: RallyEvidence,
+  second: RallyEvidence | null,
   outcome: Outcome,
+  tally: StepTally,
   breakdown?: Record<CostRow, number>,
 ): number {
   const { rules } = run;
   let total = 0;
+  tally.moves = 0;
   const pay = (row: CostRow) => {
     total += SEGMENT_COSTS[row];
     if (breakdown) breakdown[row] += SEGMENT_COSTS[row];
   };
 
-  if (rally.end !== null) {
+  if (first.end !== null) {
     const end = expectedEnd(s, run, serverOf(s, rules));
-    if (end !== null && rally.end !== end) pay("end");
+    if (end !== null && first.end !== end) pay("end");
   }
 
-  if (rally.side !== null) {
+  if (first.side !== null) {
     const side = expectedSide(s, rules);
-    if (side !== null && rally.side !== side) pay("side");
+    if (side !== null && first.side !== side) pay("side");
   }
 
-  if (rally.outcome.won !== null && rally.outcome.won !== outcome) {
-    pay(rally.outcome.confidence === "high" ? "flipHigh" : "flipLow");
+  const judged = second ?? first;
+  if (judged.outcome.won !== null && judged.outcome.won !== outcome) {
+    pay(judged.outcome.confidence === "high" ? "flipHigh" : "flipLow");
   }
 
   const opensGame = s.ps === 0 && s.pr === 0;
-  if (opensGame && !rally.vendorGameStart) pay("vendorBoundaryMoved");
-  if (!opensGame && rally.vendorGameStart) pay("vendorBoundaryDropped");
+  if (opensGame && !first.vendorGameStart) {
+    pay("vendorBoundaryMoved");
+    tally.moves += 1;
+  }
+  if (!opensGame && first.vendorGameStart) {
+    pay("vendorBoundaryDropped");
+    tally.moves += 1;
+  }
+  if (second?.vendorGameStart) {
+    pay("vendorBoundaryDropped");
+    tally.moves += 1;
+  }
+
+  if (first.gapBefore !== null) {
+    const pause = pauseBefore(s);
+    if (pause === "changeover" && first.gapBefore < CHANGEOVER_SHORT_GAP_S) {
+      pay("changeoverShortGap");
+    }
+    if (
+      first.gapBefore >= LONG_GAP_S &&
+      pause !== "changeover" &&
+      pause !== "setBreak"
+    ) {
+      pay("longGapNotChangeover");
+    }
+  }
+
+  if (second) pay("merge");
 
   return total;
 }
 
-/** A set ends at 6 with a two-game margin or at 7–5. TODO(T5): 6–6 → tiebreak. */
+/** A set ends at 6 with a two-game margin or at 7–5; 6–6 goes to a tiebreak in `advance`. */
 function setOver(g1: number, g2: number): boolean {
   return (g1 >= 6 || g2 >= 6) && Math.abs(g1 - g2) >= 2;
 }
@@ -373,10 +534,24 @@ function setsWon(sets: SetsEntry, who: 1 | 2): number {
   return sets.sets.filter(([a, b]) => (who === 1 ? a > b : b > a)).length;
 }
 
+/** The set after the games `g1`/`g2` closed it; null when the entered score forbids it. */
+function closeSet(s: State, run: Run, g1: number, g2: number): State | null {
+  const { rules } = run;
+  const k = s.sets.sets.length;
+  if (
+    rules.constrained &&
+    (g1 !== (rules.score.player1[k] ?? 0) ||
+      g2 !== (rules.score.player2[k] ?? 0))
+  ) {
+    return null;
+  }
+  return stateOf(internSets(run, s.sets, g1, g2), 0, 0, 0, 0);
+}
+
 /**
  * The state after `outcome` on the rally; null when that path is dead — it
- * would play a point after the match ended, reach 6–6 (no tiebreak yet), or,
- * under the end condition, leave the entered score unreachable.
+ * would play a point after the match ended or, under the end condition,
+ * leave the entered score unreachable.
  */
 function advance(s: State, run: Run, outcome: Outcome): State | null {
   const { rules } = run;
@@ -391,6 +566,21 @@ function advance(s: State, run: Run, outcome: Outcome): State | null {
     if (setsWon(s.sets, 1) >= majority || setsWon(s.sets, 2) >= majority) {
       return null;
     }
+  }
+
+  const server = serverOf(s, rules);
+  const winner = outcome === "server" ? server : otherLabel(rules, server);
+  const toPlayer1 = winner === rules.player1Label;
+
+  if (s.tiebreak) {
+    // First to 7 by 2; the set then stands 7–6 or 6–7.
+    const p1 = s.ps + (toPlayer1 ? 1 : 0);
+    const p2 = s.pr + (toPlayer1 ? 0 : 1);
+    if (p1 >= TIEBREAK_POINT_CAP || p2 >= TIEBREAK_POINT_CAP) return null;
+    if ((p1 >= 7 || p2 >= 7) && Math.abs(p1 - p2) >= 2) {
+      return closeSet(s, run, p1 > p2 ? 7 : 6, p1 > p2 ? 6 : 7);
+    }
+    return stateOf(s.sets, 6, 6, p1, p2, true);
   }
 
   let ps = s.ps + (outcome === "server" ? 1 : 0);
@@ -410,21 +600,48 @@ function advance(s: State, run: Run, outcome: Outcome): State | null {
     return stateOf(s.sets, s.g1, s.g2, ps, pr);
   }
 
-  const server = serverOf(s, rules);
-  const winner = outcome === "server" ? server : otherLabel(rules, server);
-  const g1 = s.g1 + (winner === rules.player1Label ? 1 : 0);
-  const g2 = s.g2 + (winner === rules.player1Label ? 0 : 1);
+  const g1 = s.g1 + (toPlayer1 ? 1 : 0);
+  const g2 = s.g2 + (toPlayer1 ? 0 : 1);
 
   const t1 = rules.score.player1[k] ?? 0;
   const t2 = rules.score.player2[k] ?? 0;
   if (rules.constrained && (g1 > t1 || g2 > t2)) return null;
 
-  if (setOver(g1, g2)) {
-    if (rules.constrained && (g1 !== t1 || g2 !== t2)) return null;
-    return stateOf(internSets(run, s.sets, g1, g2), 0, 0, 0, 0);
-  }
-  if (g1 === 6 && g2 === 6) return null; // TODO(T5): tiebreak
+  if (setOver(g1, g2)) return closeSet(s, run, g1, g2);
+  if (g1 === 6 && g2 === 6) return stateOf(s.sets, 6, 6, 0, 0, true);
   return stateOf(s.sets, g1, g2, 0, 0);
+}
+
+/**
+ * Can the entered score still be reached with `ralliesLeft` rallies? A lower
+ * bound — four points a game, seven a tiebreak, one rally a point (a merge
+ * only spends more rallies) — so pruning on it is exact. Dead states fall off
+ * the layers early, which is what keeps the merge step's branching cheap.
+ */
+function canStillReach(s: State, rules: Rules, ralliesLeft: number): boolean {
+  const k = s.sets.sets.length;
+  let need = 0;
+  if (k < rules.setCount) {
+    if (s.tiebreak) {
+      need += Math.max(1, 7 - Math.max(s.ps, s.pr));
+    } else {
+      const t1 = rules.score.player1[k] ?? 0;
+      const t2 = rules.score.player2[k] ?? 0;
+      let gamesLeft = t1 - s.g1 + (t2 - s.g2);
+      if (s.ps + s.pr > 0) {
+        // The open game is one of them, and whoever wins it adds a game.
+        if (gamesLeft === 0) return false;
+        gamesLeft -= 1;
+        need += Math.max(1, 4 - Math.max(s.ps, s.pr));
+      }
+      need += gamesLeft * 4;
+    }
+    for (let j = k + 1; j < rules.setCount; j += 1) {
+      need +=
+        ((rules.score.player1[j] ?? 0) + (rules.score.player2[j] ?? 0)) * 4;
+    }
+  }
+  return need <= ralliesLeft;
 }
 
 /** The score a state has reached: finished sets, plus the set in play if any game is. */
@@ -454,144 +671,264 @@ function sameScore(a: MatchScore, b: MatchScore): boolean {
 
 /** Does this final state satisfy the end condition? Points must be 0–0. */
 function reachesScore(s: State, rules: Rules): boolean {
-  return s.ps === 0 && s.pr === 0 && sameScore(scoreOf(s), rules.score);
+  return (
+    !s.tiebreak &&
+    s.ps === 0 &&
+    s.pr === 0 &&
+    sameScore(scoreOf(s), rules.score)
+  );
+}
+
+/** One DP step: the rally (or merged pair) at the node's layer, consumed as `outcome`. */
+interface Step {
+  outcome: Outcome;
+  merged: boolean;
 }
 
 interface Node {
   state: State;
   cost: number;
-  /** Key of the state this one was reached from, in the previous layer. */
-  prev: number | null;
-  outcome: Outcome | null;
+  /** Vendor-boundary units paid so far; breaks cost ties toward the cut that moves fewer. */
+  moves: number;
+  /** Hash of the proposal so far — boundaries, game winners, merges (`mix`). */
+  sig: number;
+  prev: Node | null;
+  step: Step | null;
+}
+
+/**
+ * Fold an event into a proposal signature. Multiplying by an odd constant
+ * modulo 2^32 is a bijection, so two prefixes with different signatures stay
+ * different under the same suffix — which is what lets each state keep just
+ * its best two ways in and still find the exact runner-up (see `offer`).
+ */
+function mix(sig: number, event: number): number {
+  return (Math.imul(sig, 0x01000193) + event) >>> 0;
+}
+
+function better(a: Node, b: Node): boolean {
+  return a.cost < b.cost || (a.cost === b.cost && a.moves < b.moves);
+}
+
+/**
+ * Keep, per state, the cheapest way in and the cheapest way in with a
+ * different signature. Any path dropped here has, at the same state, two
+ * cheaper paths of distinct signatures; extended by the same suffix at most
+ * one of them matches the eventual winner, so the runner-up's cost survives.
+ */
+function offer(layer: Map<number, Node[]>, node: Node) {
+  const slots = layer.get(node.state.key);
+  if (!slots) {
+    layer.set(node.state.key, [node]);
+    return;
+  }
+  const same = slots.findIndex((n) => n.sig === node.sig);
+  if (same >= 0) {
+    if (!better(node, slots[same])) return;
+    slots[same] = node;
+  } else {
+    slots.push(node);
+  }
+  slots.sort((a, b) => (better(a, b) ? -1 : better(b, a) ? 1 : 0));
+  if (slots.length > 2) slots.length = 2;
 }
 
 interface Path {
   cost: number;
-  outcomes: Outcome[];
+  moves: number;
+  sig: number;
+  steps: Step[];
   /** The state after the last rally. */
   final: State;
   /** Rallies consumed; short of the input when every path died early. */
   consumed: number;
 }
 
-/**
- * The shortest path. Layer i holds every live state before rally i is
- * consumed, keyed by score, keeping the cheapest way in. Returns the cheapest
- * accepted final state, and under `constrained` only one that reaches the
- * entered score. Null when no path reaches the end of the rallies at all.
- */
-function shortestPath(evidence: RallyEvidence[], run: Run): Path | null {
-  const { rules, start } = run;
-  const layers: Map<number, Node>[] = [
-    new Map([
-      [start.key, { state: start, cost: 0, prev: null, outcome: null }],
-    ]),
-  ];
+function pathOf(node: Node, consumed: number): Path {
+  const steps: Step[] = [];
+  for (let n: Node | null = node; n && n.step; n = n.prev)
+    steps.unshift(n.step);
+  return {
+    cost: node.cost,
+    moves: node.moves,
+    sig: node.sig,
+    steps,
+    final: node.state,
+    consumed,
+  };
+}
 
-  for (let i = 0; i < evidence.length; i += 1) {
-    const next = new Map<number, Node>();
-    for (const node of layers[i].values()) {
-      for (const outcome of OUTCOMES) {
-        const state = advance(node.state, run, outcome);
-        if (!state) continue;
-        const cost =
-          node.cost + stepCost(node.state, evidence[i], run, outcome);
-        const seen = next.get(state.key);
-        if (!seen || cost < seen.cost) {
-          next.set(state.key, { state, cost, prev: node.state.key, outcome });
+/**
+ * The shortest paths within a cost cap. Layer i holds every live state before
+ * rally i is consumed, keyed by score, keeping the best two ways in
+ * (`offer`). A point step feeds layer i+1, a merge step layer i+2. Returns
+ * the accepted final paths cheapest first — under `constrained` only those
+ * reaching the entered score, and then the second is the exact runner-up
+ * with a different proposal, provided it costs no more than `cap`. Null when
+ * no path within the cap reaches the end of the rallies at all.
+ *
+ * The cap is what keeps this fast: cost only grows along a path, so a node
+ * over the cap can be dropped without losing any path under it, and
+ * `bestOver` raises the cap until the answer is settled. Without it every
+ * legal score is live at every rally — some 3,700 nodes a layer on a clean
+ * three-setter — and nearly all of them are paying an end mismatch a rally.
+ */
+function shortestPaths(
+  evidence: RallyEvidence[],
+  run: Run,
+  cap: number,
+): Path[] | null {
+  const { rules, start } = run;
+  const n = evidence.length;
+  const layers: Map<number, Node[]>[] = Array.from(
+    { length: n + 1 },
+    () => new Map(),
+  );
+  layers[0].set(start.key, [
+    { state: start, cost: 0, moves: 0, sig: 1, prev: null, step: null },
+  ]);
+  const tally: StepTally = { moves: 0 };
+
+  const extend = (node: Node, i: number, merged: boolean, outcome: Outcome) => {
+    const first = evidence[i];
+    const second = merged ? evidence[i + 1] : null;
+    const to = i + (merged ? 2 : 1);
+    const state = advance(node.state, run, outcome);
+    if (!state) return;
+    if (rules.constrained && !canStillReach(state, rules, n - to)) return;
+    const cost =
+      node.cost + stepCost(node.state, run, first, second, outcome, tally);
+    if (cost > cap) return;
+    // The proposal so far: each game's opening rally and server, each
+    // game's winner, each merge. With no games the two first-server runs
+    // are the same (empty) proposal.
+    let sig = node.sig;
+    if (node.state.ps === 0 && node.state.pr === 0) {
+      const server = serverOf(node.state, rules);
+      sig = mix(sig, 0x10000 + i * 2 + (server === rules.player1Label ? 0 : 1));
+    }
+    if (merged) sig = mix(sig, 0x20000 + i);
+    if (state.ps === 0 && state.pr === 0) {
+      const server = serverOf(node.state, rules);
+      const winner = outcome === "server" ? server : otherLabel(rules, server);
+      sig = mix(sig, winner === rules.player1Label ? 3 : 4);
+    }
+    offer(layers[to], {
+      state,
+      cost,
+      moves: node.moves + tally.moves,
+      sig,
+      prev: node,
+      step: { outcome, merged },
+    });
+  };
+
+  for (let i = 0; i < n; i += 1) {
+    for (const slots of layers[i].values()) {
+      for (const node of slots) {
+        for (const outcome of OUTCOMES) {
+          extend(node, i, false, outcome);
+          if (evidence[i].mergeableWithNext) extend(node, i, true, outcome);
         }
       }
     }
-    if (next.size === 0) break;
-    layers.push(next);
   }
 
-  const consumed = layers.length - 1;
-  let best: Node | null = null;
-  for (const node of layers[consumed].values()) {
-    if (
-      consumed === evidence.length &&
-      rules.constrained &&
-      !reachesScore(node.state, rules)
-    ) {
-      continue;
+  let consumed = n;
+  while (consumed > 0 && layers[consumed].size === 0) consumed -= 1;
+  if (rules.constrained && consumed < n) return null;
+
+  const finals: Node[] = [];
+  for (const slots of layers[consumed].values()) {
+    for (const node of slots) {
+      if (rules.constrained && !reachesScore(node.state, rules)) continue;
+      finals.push(node);
     }
-    if (!best || node.cost < best.cost) best = node;
   }
-  if (!best) return null;
-  if (rules.constrained && consumed < evidence.length) return null;
-
-  const outcomes: Outcome[] = [];
-  let node: Node | null = best;
-  for (let i = consumed; i > 0 && node; i -= 1) {
-    if (node.outcome) outcomes.unshift(node.outcome);
-    node = node.prev === null ? null : (layers[i - 1].get(node.prev) ?? null);
-  }
-  return { cost: best.cost, outcomes, final: best.state, consumed };
+  if (finals.length === 0) return null;
+  finals.sort((a, b) => (better(a, b) ? -1 : better(b, a) ? 1 : 0));
+  return finals.map((node) => pathOf(node, consumed));
 }
 
-/** The path replayed: its games, its diff against the vendor, and what each row cost. */
+/** The path replayed: its games and merges, its diff against the vendor, and what each row cost. */
 function replay(
   path: Path,
   evidence: RallyEvidence[],
   run: Run,
-): Pick<SegmentationProposal, "games" | "diff" | "costBreakdown"> {
+): Pick<SegmentationProposal, "games" | "merges" | "diff" | "costBreakdown"> {
   const { rules } = run;
   const breakdown = Object.fromEntries(
     COST_ROWS.map((row) => [row, 0]),
   ) as Record<CostRow, number>;
   const games: ProposedGame[] = [];
+  const merges: Array<[number, number]> = [];
   const differing = new Set<number>();
   let proposedOnly = 0;
   let vendorOnly = 0;
   let serversChanged = 0;
+  const tally: StepTally = { moves: 0 };
 
   const side = (label: string): "player1" | "player2" =>
     label === rules.player1Label ? "player1" : "player2";
 
   let state = run.start;
   let open: { server: string; firstRallyId: number } | null = null;
-  for (let i = 0; i < path.outcomes.length; i += 1) {
-    const rally = evidence[i];
-    const outcome = path.outcomes[i];
-    stepCost(state, rally, run, outcome, breakdown);
+  let i = 0;
+  for (const step of path.steps) {
+    const first = evidence[i];
+    const second = step.merged ? evidence[i + 1] : null;
+    stepCost(state, run, first, second, step.outcome, tally, breakdown);
 
     const server = serverOf(state, rules);
     const opensGame = state.ps === 0 && state.pr === 0;
-    if (opensGame) open = { server, firstRallyId: rally.rallyId };
-    if (opensGame !== rally.vendorGameStart) {
+    if (opensGame) open = { server, firstRallyId: first.rallyId };
+    if (opensGame !== first.vendorGameStart) {
       if (opensGame) proposedOnly += 1;
       else vendorOnly += 1;
-      differing.add(rally.rallyId);
+      differing.add(first.rallyId);
     }
-    if (server !== rally.vendorServer) {
+    if (server !== first.vendorServer) {
       serversChanged += 1;
-      differing.add(rally.rallyId);
+      differing.add(first.rallyId);
+    }
+    if (second) {
+      merges.push([first.rallyId, second.rallyId]);
+      if (second.vendorGameStart) {
+        vendorOnly += 1;
+        differing.add(second.rallyId);
+      }
+      if (server !== second.vendorServer) {
+        serversChanged += 1;
+        differing.add(second.rallyId);
+      }
     }
 
-    const next = advance(state, run, outcome);
+    const next = advance(state, run, step.outcome);
     if (!next) break;
     const closed = next.ps === 0 && next.pr === 0;
     if (closed && open) {
-      const winner = outcome === "server" ? server : otherLabel(rules, server);
+      const winner =
+        step.outcome === "server" ? server : otherLabel(rules, server);
       // The game is counted in the set it was played in, even when it ended that set.
       const game = state.g1 + state.g2 + 1;
       games.push({
         set: state.sets.sets.length + 1,
         game,
-        server: side(server),
+        server: side(open.server),
         firstRallyId: open.firstRallyId,
-        lastRallyId: rally.rallyId,
+        lastRallyId: (second ?? first).rallyId,
         winner: side(winner),
       });
       open = null;
     }
     state = next;
+    i += second ? 2 : 1;
   }
   // A game still in play when the rallies ran out has no winner and is not listed.
 
   return {
     games,
+    merges,
     diff: {
       gamesMoved: Math.max(proposedOnly, vendorOnly),
       serversChanged,
@@ -601,32 +938,116 @@ function replay(
   };
 }
 
-/** Run the path for each candidate first server; the cheaper wins, first in on a tie. */
+interface Ranked {
+  path: Path;
+  run: Run;
+}
+
+function rank(a: Ranked, b: Ranked): number {
+  if (a.path.consumed !== b.path.consumed)
+    return b.path.consumed - a.path.consumed;
+  if (a.path.cost !== b.path.cost) return a.path.cost - b.path.cost;
+  return a.path.moves - b.path.moves;
+}
+
+/** No step pays more than every row at once, so no path costs more than this. */
+const MAX_STEP_COST = Object.values(SEGMENT_COSTS).reduce((a, b) => a + b, 0);
+
+/** Below one unit of evidence, the runner-up is as good as the winner. */
+const AMBIGUITY_MARGIN = 1;
+
+/**
+ * Run the paths for each candidate first server and pool them: furthest
+ * first (only no_fit paths fall short), then cheapest, then the cut that
+ * moves fewer vendor boundaries, then the candidate order — so the vendor's
+ * first server keeps a dead tie. Stable sort keeps candidate order on ties.
+ *
+ * Iterative deepening on the cost cap (0, 1, 2, 4, … then none): each pass
+ * is exact for every path under its cap, so the first pass that settles the
+ * question is the answer. Under the end condition that means a fit was
+ * found and the cap also covers any runner-up close enough to matter
+ * (`AMBIGUITY_MARGIN`); without it, a path that plays every rally — or no
+ * cap at all, after which the furthest path is the closest.
+ */
 function bestOver(
   evidence: RallyEvidence[],
   base: Omit<Rules, "firstServer">,
   candidates: readonly string[],
-): { path: Path; run: Run } | null {
-  let best: { path: Path; run: Run } | null = null;
-  for (const firstServer of candidates) {
-    const run = startRun({ ...base, firstServer });
-    const path = shortestPath(evidence, run);
-    if (!path) continue;
-    // On no_fit, the path that got furthest is the closest, then the cheapest.
+): Ranked[] {
+  const uncapped = evidence.length * MAX_STEP_COST + 1;
+  for (let cap = 0; ; cap = cap === 0 ? 1 : cap * 2) {
+    const effective = cap >= uncapped ? Infinity : cap;
+    const pooled: Ranked[] = [];
+    for (const firstServer of candidates) {
+      const run = startRun({ ...base, firstServer });
+      const paths = shortestPaths(evidence, run, effective);
+      for (const path of paths ?? []) pooled.push({ path, run });
+    }
+    pooled.sort(rank);
+    const best = pooled[0];
+    if (effective === Infinity) return pooled;
     if (
-      !best ||
-      path.consumed > best.path.consumed ||
-      (path.consumed === best.path.consumed && path.cost < best.path.cost)
+      best &&
+      (base.constrained
+        ? effective >= best.path.cost + AMBIGUITY_MARGIN
+        : best.path.consumed === evidence.length)
     ) {
-      best = { path, run };
+      return pooled;
     }
   }
-  return best;
+}
+
+/** "0-0", "0.0-0.0", "0", null and nan all read as zero; anything with a non-zero number does not. */
+function readsZero(score: string | null): boolean {
+  if (score === null) return true;
+  return score.split("-").every((part) => {
+    const value = parseFloat(part);
+    return !Number.isFinite(value) || value === 0;
+  });
+}
+
+/**
+ * The DP starts at 0–0 / 0–0. The vendor writes the score standing BEFORE
+ * each stroke, so the first stroke's point, game and set readings are all
+ * zero on a video that starts with the match (transcript readings are
+ * `predPointScore`, `predGameScore`, `predSetScore` on `rallies[0].strokes[0]`).
+ */
+function startsMidMatch(input: SegmentationInput): boolean {
+  const stroke = input.rallies[0]?.strokes[0];
+  if (!stroke) return false;
+  return !(
+    readsZero(stroke.predPointScore) &&
+    readsZero(stroke.predGameScore) &&
+    readsZero(stroke.predSetScore)
+  );
+}
+
+function emptyProposal(
+  status: SegmentationProposal["status"],
+  closestScore: MatchScore | null,
+): SegmentationProposal {
+  return {
+    status,
+    version: 1,
+    cost: 0,
+    runnerUpCost: null,
+    games: [],
+    merges: [],
+    closestScore,
+    diff: { gamesMoved: 0, serversChanged: 0, rallies: [] },
+    costBreakdown: Object.fromEntries(
+      COST_ROWS.map((row) => [row, 0]),
+    ) as Record<CostRow, number>,
+  };
 }
 
 export function proposeSegmentation(
   input: SegmentationInput,
 ): SegmentationProposal {
+  if (startsMidMatch(input)) {
+    return { ...emptyProposal("no_fit", null), reason: "starts_mid_match" };
+  }
+
   const evidence = readEvidence(input);
   const { player1Label, player2Label, topAtStart } = input;
   const ends =
@@ -653,14 +1074,20 @@ export function proposeSegmentation(
       ? [player2Label, player1Label]
       : [player1Label, player2Label];
 
-  const fit = bestOver(evidence, { ...base, constrained: true }, candidates);
+  const fits = bestOver(evidence, { ...base, constrained: true }, candidates);
+  const fit = fits[0];
   if (fit) {
+    // The runner-up is reported only when it is a contender: a clean fit
+    // has one at some distant cost (flip everything) and says nothing.
+    const runnerUp = fits.find((r) => r.path.sig !== fit.path.sig) ?? null;
+    const ambiguous =
+      runnerUp !== null &&
+      runnerUp.path.cost - fit.path.cost < AMBIGUITY_MARGIN;
     return {
-      status: "fit",
+      status: ambiguous ? "ambiguous" : "fit",
       version: 1,
       cost: fit.path.cost,
-      runnerUpCost: null,
-      merges: [],
+      runnerUpCost: ambiguous && runnerUp ? runnerUp.path.cost : null,
       closestScore: null,
       ...replay(fit.path, evidence, fit.run),
     };
@@ -673,29 +1100,16 @@ export function proposeSegmentation(
     evidence,
     { ...base, constrained: false },
     candidates,
-  );
+  )[0];
   if (!closest) {
     // Unreachable in practice: the unconstrained path always has layer 0.
-    return {
-      status: "no_fit",
-      version: 1,
-      cost: 0,
-      runnerUpCost: null,
-      games: [],
-      merges: [],
-      closestScore: { player1: [], player2: [] },
-      diff: { gamesMoved: 0, serversChanged: 0, rallies: [] },
-      costBreakdown: Object.fromEntries(
-        COST_ROWS.map((row) => [row, 0]),
-      ) as Record<CostRow, number>,
-    };
+    return emptyProposal("no_fit", { player1: [], player2: [] });
   }
   return {
     status: "no_fit",
     version: 1,
     cost: closest.path.cost,
     runnerUpCost: null,
-    merges: [],
     closestScore: scoreOf(closest.path.final),
     ...replay(closest.path, evidence, closest.run),
   };

@@ -55,3 +55,23 @@ The diff also has 15 offline tests in `tests/splitstep-segmentation.spec.ts`, an
 1. The gap to the previous rally is not in the input yet; T5 should read it from `strokes[].videoTime`.
 2. T5's under-50 ms assertion may be tight once merges double the branching. The exact lever is to prune states that can no longer reach the entered score with the rallies left.
 3. T6 must convert `game`, which is numbered per set, before comparing it with the match-cumulative `points.game_number`.
+
+## T5 · Segmenter completion: merges, ambiguity, tiebreak, gaps, mid-match — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `segmentation.ts` gains:
+
+- A merge step: same end and side, a gap under 30 s, and the first rally ending on a serve or within 2 strokes.
+- Ambiguity detection: each DP state keeps its 2 best paths with distinct proposal signatures. It reports `ambiguous` within `AMBIGUITY_MARGIN` 1, and `runnerUpCost` is null unless the result is ambiguous.
+- Tiebreaks at 6–6: a 1, 2-2 rotation, ends swapping via `playerAtEnd`, and the next set opening with the tiebreak's first receiver serving.
+- Gap rows `changeoverShortGap` and `longGapNotChangeover`, with the thresholds as named constants.
+- `reason?: "starts_mid_match"`, read from the first stroke's score strings.
+- Exact branch-and-bound pruning: 150 rallies take about 0.5 ms.
+
+The `build()` helper in the spec now inserts realistic pauses. There are 8 new tests, and T4's test bodies are unchanged.
+**follow-ups:**
+
+1. The new constants `MERGE_MAX_GAP_S`, `MERGE_MAX_STROKES`, `CHANGEOVER_SHORT_GAP_S` and `LONG_GAP_S` are not yet exported from `index.ts`. T6 should add them if needed.
+2. Vendor pseudo-games inside a tiebreak are charged as dropped boundaries, so review will fire on every vendor tiebreak. Decide whether that is wanted.
+3. Should `changeoverShortGap` also apply at the set break after an even set?
+4. The proposal signature is a 32-bit hash. A collision could in theory hide a runner-up.
