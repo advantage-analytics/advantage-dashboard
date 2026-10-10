@@ -1155,9 +1155,9 @@ function ShotTray({
       role="group"
       aria-label={`Shot ${number} actions`}
       onClick={(event) => event.stopPropagation()}
-      // 36px tall, a touch more than the 34px row above it, so the actions sit
-      // clear of the hairline and of the next row instead of hugging either.
-      className="flex h-[36px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[11px] leading-[14px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
+      // 32px tall with 10px type, a step quieter than the 34px row above it,
+      // so the actions sit clear of the hairline without crowding the row.
+      className="flex h-[32px] min-w-0 items-center gap-4 bg-white/[0.12] pr-[14px] pl-[44px] text-[10px] leading-[13px] font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]"
     >
       {actions.map((action) => (
         <Fragment key={action.key}>
@@ -1173,6 +1173,7 @@ function ShotTray({
             icon={SHOT_TRAY_ICON[action.key]}
             // Delete holds its place; the others give way first.
             shrinks={action.key !== "delete"}
+            small
             data-shot-action={action.key}
             aria-label={action.ariaLabel}
             onClick={(event) => {

@@ -50,12 +50,15 @@ export function BlackTextAction({
   ink,
   icon: Icon,
   shrinks = false,
+  small = false,
   children,
   ...props
 }: {
   ink: BlackTextActionInk;
   icon?: LucideIcon;
   shrinks?: boolean;
+  /** 10px type and icon, for the shot tray's quieter actions. */
+  small?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "className">) {
   return (
     <button
@@ -64,7 +67,8 @@ export function BlackTextAction({
       className={cn(
         shrinks ? "min-w-0" : "shrink-0",
         Icon && "inline-flex items-center gap-[5px]",
-        "cursor-pointer rounded-[var(--radius-button)] px-1 text-[11px] font-medium whitespace-nowrap hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        "cursor-pointer rounded-[var(--radius-button)] px-1 font-medium whitespace-nowrap hover:text-white focus-visible:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+        small ? "text-[10px]" : "text-[11px]",
         TEXT_ACTION_INK[ink],
         RAIL_PRESS,
       )}
@@ -72,7 +76,7 @@ export function BlackTextAction({
       {Icon ? (
         <>
           <Icon
-            className="size-[11px] shrink-0"
+            className={cn("shrink-0", small ? "size-[10px]" : "size-[11px]")}
             strokeWidth={1.6}
             aria-hidden="true"
           />
