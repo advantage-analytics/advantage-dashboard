@@ -33,6 +33,7 @@ import {
 import { leftoverIds } from "@/lib/services/labels/game-shift";
 import {
   destinationServerIn,
+  gameInSetOf,
   neighbourGames,
 } from "@/lib/services/labels/operations";
 import {
@@ -171,7 +172,7 @@ export function pointMenuActions(
       const server = destinationServerIn(context.points, point.id, game);
       return {
         key: `${game.setNumber}-${game.gameNumber}`,
-        label: `Set ${game.setNumber} · Game ${game.gameNumber}`,
+        label: `Set ${game.setNumber} · Game ${gameInSetOf(context.points, game)}`,
         description: server ? `${context.names[server]} serving` : undefined,
         run: () => operations.onMovePoint(point.id, game),
       };

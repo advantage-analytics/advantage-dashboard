@@ -623,6 +623,26 @@ export function destinationServerIn(
  * is not its own. Adjacent only, so a moved point never lands in a game
  * whose other points it does not sit beside.
  */
+/**
+ * A game's number within its set, as the bands name it: its rank among the
+ * set's games that still hold a live point. `game_number` counts across the
+ * match, so set 2's first game is not "Game 13".
+ */
+export function gameInSetOf(
+  points: readonly Pick<LabelPoint, "status" | "setNumber" | "gameNumber">[],
+  game: LabelGame,
+): number {
+  const numbers = new Set<number>();
+  for (const point of points) {
+    if (point.status === "deleted" || point.setNumber !== game.setNumber) {
+      continue;
+    }
+    if (point.gameNumber !== null) numbers.add(point.gameNumber);
+  }
+  numbers.add(game.gameNumber);
+  return [...numbers].sort((x, y) => x - y).indexOf(game.gameNumber) + 1;
+}
+
 export function neighbourGames(
   points: readonly Pick<
     LabelPoint,

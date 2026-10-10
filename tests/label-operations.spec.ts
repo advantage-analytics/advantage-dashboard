@@ -19,6 +19,7 @@ import {
   applyPointMove,
   liveShotsAfter,
   moveNeedsServerSwitch,
+  gameInSetOf,
   neighbourGames,
   planAddedShot,
   planPointChecked,
@@ -1623,4 +1624,23 @@ test("no operation issues a SQL DELETE on a label_* row", () => {
     const source = readFileSync(path.resolve(file), "utf8");
     expect(source, file).not.toMatch(/\.delete\s*\(/);
   }
+});
+
+test("a game is named by its place in its set, not the match's count", () => {
+  const at = (setNumber: number, gameNumber: number) => ({
+    status: "unchanged" as const,
+    setNumber,
+    gameNumber,
+  });
+  const points = [at(1, 1), at(1, 12), at(2, 13), at(2, 14), at(2, 23)];
+  expect(gameInSetOf(points, { setNumber: 1, gameNumber: 12 })).toBe(2);
+  expect(gameInSetOf(points, { setNumber: 2, gameNumber: 13 })).toBe(1);
+  expect(gameInSetOf(points, { setNumber: 2, gameNumber: 23 })).toBe(3);
+  // A deleted point holds no game.
+  expect(
+    gameInSetOf([...points, { ...at(2, 20), status: "deleted" as const }], {
+      setNumber: 2,
+      gameNumber: 23,
+    }),
+  ).toBe(3);
 });
