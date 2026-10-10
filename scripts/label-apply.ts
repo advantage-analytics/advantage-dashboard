@@ -20,7 +20,7 @@
  * --write, in order (`publishPlanned`):
  *   1. backs up the match's current derived points, their shots and
  *      bookmarks, and its match_stats, to `match-results`
- *      (`label-backups/{session}/{match}/{stamp}.json`) and to a JSON file
+ *      (`label-backups/{match}/{session}/{stamp}.json`) and to a JSON file
  *      OUTSIDE the repo (~/Desktop/advantage-label-apply-backups/);
  *   2. deletes the match's `derived = true` points (shots cascade) and inserts
  *      the labelled rows, flagged `hand_labelled` — persist-transcript.ts then
@@ -336,7 +336,9 @@ async function main() {
     },
   });
   if (!result.ok) {
-    console.error(`REFUSED: ${result.error}`);
+    // Refusals begin "Not published:"; a written-but-stats-stale publish says
+    // the points are in. Printed as each says, never under one REFUSED.
+    console.error(`\n${result.error}`);
     process.exit(1);
   }
   console.log(

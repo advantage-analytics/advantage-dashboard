@@ -141,6 +141,7 @@ test("the jobs read selects the id, match, uploader and all three recorded resul
     "results_object_key",
     "players_object_key",
     "trajectories_object_key",
+    "label_backup_keys",
   ]) {
     expect(columns).toContain(column);
   }
@@ -163,6 +164,23 @@ test("full case: one remove, holding the three recorded keys plus the ball-paths
       }),
     ].sort(),
   );
+});
+
+test("recorded label backups go too, but only those under the row's own match", async () => {
+  const own = `label-backups/${MATCH}/s1/2026-10-10T19-00-00-000Z.json`;
+  const row = job({
+    label_backup_keys: [
+      own,
+      `label-backups/${OTHER_MATCH}/s1/stamp.json`,
+      `label-backups/${MATCH}/../${OTHER_MATCH}/s1/stamp.json`,
+      `label-backups/${MATCH}`,
+      "",
+      null,
+    ],
+  });
+  const paths = resultsPaths((await purge([row])).removed);
+  expect(paths).toContain(own);
+  expect(paths.filter((p) => p.startsWith("label-backups/"))).toEqual([own]);
 });
 
 test("two jobs sharing keys still produce one de-duplicated remove", async () => {

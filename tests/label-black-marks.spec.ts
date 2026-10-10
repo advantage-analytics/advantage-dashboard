@@ -604,6 +604,18 @@ test.describe("the hints read off the rows, with their answers", () => {
         (h) => h.code,
       ),
     ).toContain("last_call_overruled");
+
+    // "Net or out?" on that last ball is one question too many beside it —
+    // and comes back once the answer is given.
+    const netOrOut = mark("net_hit_contradicts_height", {});
+    const both = (p: LabelPoint) =>
+      pointHints(p, marksOf(p, [call], { [ace.id]: [netOrOut] }), NAMES, edit)
+        .map((h) => h.code)
+        .filter((c) =>
+          ["last_call_overruled", "net_hit_contradicts_height"].includes(c),
+        );
+    expect(both(point)).toEqual(["last_call_overruled"]);
+    expect(both(answered)).toEqual(["net_hit_contradicts_height"]);
   });
 
   /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */

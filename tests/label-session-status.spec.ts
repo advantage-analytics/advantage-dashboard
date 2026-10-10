@@ -4,6 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import type { AdminClient } from "@/lib/supabase/admin";
+import {
+  checkSessionOpen,
+  PUBLISH_LEASE_MS,
+  PUBLISHING,
+} from "@/lib/services/labels/edit-session";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import type { LabelSession } from "@/lib/services/labels/session";
@@ -85,6 +90,10 @@ function fakeClient(rows: {
           call.filters[column] = value;
           return builder;
         },
+        or: (expression: string) => {
+          call.filters.or = expression;
+          return builder;
+        },
         maybeSingle: async () => answer(),
         then: (
           resolve: (v: unknown) => unknown,
@@ -109,13 +118,15 @@ const PUBLISHED = async () => ({
 });
 
 test.describe("writeLabelSessionComplete", () => {
-  test("claims the session, then publishes; a refused or failed publish opens it again", async () => {
+  test("a lease, then the publish, then complete — all matched on that lease", async () => {
     const fake = fakeClient({});
     const order: string[] = [];
+    const now = Date.parse("2026-10-10T21:00:00.000Z");
     expect(
       await writeLabelSessionComplete({
         supabase: fake.supabase,
         sessionId: SESSION_ID,
+        now: () => now,
         publish: async (_db, id) => {
           order.push(`publish ${id} after ${updates(fake).length} update`);
           return PUBLISHED();
@@ -126,11 +137,32 @@ test.describe("writeLabelSessionComplete", () => {
       status: "complete",
       published: { points: 10, shots: 40, insightsRequested: true },
     });
-    // The claim lands first, so a second tab finds it taken.
+    // The lease lands first, so a second tab finds it taken.
     expect(order).toEqual([`publish ${SESSION_ID} after 1 update`]);
+    const [lease, close] = updates(fake);
+    expect(lease).toMatchObject({
+      table: "label_sessions",
+      values: { publishing_since: "2026-10-10T21:00:00.000Z" },
+      filters: {
+        id: SESSION_ID,
+        status: "labelling",
+        or: "publishing_since.is.null,publishing_since.lt.2026-10-10T20:55:00.000Z",
+      },
+    });
+    expect(close).toMatchObject({
+      values: {
+        status: "complete",
+        completed_at: "2026-10-10T21:00:00.000Z",
+        publishing_since: null,
+      },
+      filters: { id: SESSION_ID, publishing_since: "2026-10-10T21:00:00.000Z" },
+    });
+    for (const call of fake.calls) expect(call.table).toBe("label_sessions");
+  });
 
-    const reopened = (fake: ReturnType<typeof fakeClient>) =>
-      updates(fake).map((c) => [c.values?.status, c.filters.status]);
+  test("a refused or failed publish releases only its own lease; the session stays open", async () => {
+    const released = (fake: ReturnType<typeof fakeClient>) =>
+      updates(fake).map((c) => c.values);
 
     const refusedPublish = fakeClient({});
     expect(
@@ -140,10 +172,11 @@ test.describe("writeLabelSessionComplete", () => {
         publish: async () => ({ ok: false, error: "Not published: no." }),
       }),
     ).toEqual({ error: "Not published: no." });
-    expect(reopened(refusedPublish)).toEqual([
-      ["complete", "labelling"],
-      ["labelling", "complete"],
-    ]);
+    const [lease, release] = updates(refusedPublish);
+    expect(released(refusedPublish)[1]).toEqual({ publishing_since: null });
+    expect(release.filters.publishing_since).toBe(
+      lease.values?.publishing_since,
+    );
 
     const threw = fakeClient({});
     expect(
@@ -155,54 +188,50 @@ test.describe("writeLabelSessionComplete", () => {
         },
       }),
     ).toEqual({ error: "Could not publish the labels: boom" });
-    expect(reopened(threw)).toEqual([
-      ["complete", "labelling"],
-      ["labelling", "complete"],
-    ]);
+    expect(released(threw)[1]).toEqual({ publishing_since: null });
+    // Never a status write: a failed publish leaves the session labelling.
+    expect(released(threw).some((v) => v && "status" in v)).toBe(false);
+  });
 
-    // Raced: another tab claimed it — nothing is published.
+  test("a fresh lease refuses edits and a second Complete; a stale one does not", async () => {
+    const now = Date.now();
     let ran = false;
+    const held = fakeClient({
+      session: {
+        status: "labelling",
+        marks_enabled: true,
+        publishing_since: new Date(now - 30_000).toISOString(),
+      },
+    });
     expect(
       await writeLabelSessionComplete({
-        supabase: fakeClient({ raced: true }).supabase,
+        supabase: held.supabase,
         sessionId: SESSION_ID,
         publish: async () => {
           ran = true;
           return PUBLISHED();
         },
       }),
-    ).toHaveProperty("error");
+    ).toEqual({ error: PUBLISHING });
     expect(ran).toBe(false);
-  });
+    expect(updates(held)).toEqual([]);
+    expect(await checkSessionOpen(held.supabase, SESSION_ID)).toBe(PUBLISHING);
 
-  test("the gate, then ONE update of status and completed_at, matched on the id and an open status", async () => {
-    const fake = fakeClient({});
-    const before = Date.now();
+    const stale = fakeClient({
+      session: {
+        status: "labelling",
+        marks_enabled: true,
+        publishing_since: new Date(now - PUBLISH_LEASE_MS - 1000).toISOString(),
+      },
+    });
+    expect(await checkSessionOpen(stale.supabase, SESSION_ID)).toBeNull();
     expect(
       await writeLabelSessionComplete({
-        publish: PUBLISHED,
-        supabase: fake.supabase,
+        supabase: stale.supabase,
         sessionId: SESSION_ID,
+        publish: PUBLISHED,
       }),
-    ).toEqual({
-      ok: true,
-      status: "complete",
-      published: { points: 10, shots: 40, insightsRequested: true },
-    });
-    const [write] = updates(fake);
-    expect(write).toMatchObject({
-      table: "label_sessions",
-      values: { status: "complete" },
-      filters: { id: SESSION_ID, status: "labelling" },
-    });
-    expect(Object.keys(write.values ?? {}).sort()).toEqual([
-      "completed_at",
-      "status",
-    ]);
-    expect(
-      Date.parse(write.values?.completed_at as string),
-    ).toBeGreaterThanOrEqual(before - 1000);
-    for (const call of fake.calls) expect(call.table).toBe("label_sessions");
+    ).toMatchObject({ ok: true, status: "complete" });
   });
 
   test("a session labelled without marks completes like any other", async () => {
@@ -261,9 +290,7 @@ test.describe("writeLabelSessionComplete", () => {
         supabase: fakeClient({ raced: true }).supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({
-      error: "This session changed in another tab. Reload to see it.",
-    });
+    ).toEqual({ error: PUBLISHING });
   });
 });
 

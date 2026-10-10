@@ -21,10 +21,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * Long enough for several large JSON downloads a run (an 80 MB players file
+ * takes seconds, not tens), so a day with a few misses is cleared that day.
+ */
+export const maxDuration = 300;
 
-/** Per-file download clock: an 80 MB players file inside one run. */
-const FETCH_TIMEOUT_MS = 40_000;
+/** Per-file download clock; the deadline below stops new ones in time. */
+const FETCH_TIMEOUT_MS = 45_000;
 
 export async function GET(request: Request) {
   const auth = authorizeCronRequest(request, process.env.CRON_SECRET);
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
     supabase: createAdminClient(),
     write: true,
     timeoutMs: FETCH_TIMEOUT_MS,
-    deadline: Date.now() + (maxDuration - 10) * 1000,
+    deadline: Date.now() + (maxDuration - 15) * 1000,
   });
   for (const line of lines) {
     if (line.outcome === "expired") continue;

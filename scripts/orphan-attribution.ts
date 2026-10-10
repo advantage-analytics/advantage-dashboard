@@ -177,12 +177,10 @@ export const RESULTS_LAYOUTS: KeyLayout[] = [
     }),
   ),
   // The version a hand-labelled publish replaced. Not under `results/`, and
-  // the segment before the match is a session id, not a user — the match id
-  // is still third, which is all attribution reads. The user-facing purge
-  // refuses hand-labelled matches, so this sweep is what removes these once
-  // their match is gone.
+  // the match id is second, not third — `layoutFrom` reads where it sits. The
+  // match purge removes these by prefix; this catches any it missed.
   layoutFrom(
-    "label-backups/{session}/{match}/{stamp}.json",
+    "label-backups/{match}/{session}/{stamp}.json",
     labelBackupObjectKey({
       sessionId: PROBE_JOB,
       matchId: PROBE_MATCH,

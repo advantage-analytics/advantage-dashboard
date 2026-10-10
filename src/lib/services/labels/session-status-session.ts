@@ -4,22 +4,29 @@
  * (a CHECK holds them together). Admin-gated like edit-session.ts; not the
  * marks gate — a session labelled blind completes like any other.
  *
- * Complete is the ordinary gate (`checkSessionOpen`), then ONE update matched
- * on the id and on `status = 'labelling'` that claims the session — so a
- * second tab's click finds it taken and publishes nothing — then the publish:
- * the labelled points replace the match's (apply-session.ts), backed up
- * first. A publish that refuses or fails puts the session back to labelling,
- * with the reason. Reopen leaves the
- * published points as they are; completing again publishes again. Reopen reads the status and writes the
- * reverse, matched on `status = 'complete'`; the partial unique index that
- * allows one open session per job (`label_sessions_one_open_per_job`)
- * refuses it while another session of the match is open.
+ * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
+ * setting `publishing_since`, matched on `status = 'labelling'` and no fresh
+ * lease. While it is held the session stays `labelling` but takes no edits
+ * (the gate refuses them), no second Complete and no Reopen (which needs
+ * `complete`). Then the publish — the labelled points replace the match's
+ * (apply-session.ts), backed up first — and, matched on the lease this call
+ * took, either `complete` or the lease released with the reason. A publish
+ * killed mid-way leaves the session open with a lease that lapses after
+ * `PUBLISH_LEASE_MS`, so Complete again finishes it.
+ *
+ * Reopen leaves the published points as they are; completing again publishes
+ * again. Reopen reads the status and writes the reverse, matched on
+ * `status = 'complete'`; the partial unique index that allows one open
+ * session per job (`label_sessions_one_open_per_job`) refuses it while
+ * another session of the match is open.
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   checkSessionOpen,
   defaultLabelWriteDependencies,
+  PUBLISH_LEASE_MS,
+  PUBLISHING,
   racedMessage,
   type LabelWriteDependencies,
 } from "./edit-session";
@@ -68,29 +75,50 @@ export async function writeLabelSessionComplete(params: {
   supabase: AdminClient;
   sessionId: unknown;
   publish?: LabelPublish;
+  now?: () => number;
 }): Promise<LabelSessionStatusResult> {
-  const { supabase, publish = publishAcceptingScore } = params;
+  const { supabase, publish = publishAcceptingScore, now = Date.now } = params;
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 
   const refused = await checkSessionOpen(supabase, sessionId);
   if (refused) return { error: refused };
 
+  // The lease: taken only on an open session with no fresh lease on it.
+  const claimedAt = new Date(now()).toISOString();
+  const staleBefore = new Date(now() - PUBLISH_LEASE_MS).toISOString();
   const { data, error } = await supabase
     .from("label_sessions")
-    .update({ status: "complete", completed_at: new Date().toISOString() })
+    .update({ publishing_since: claimedAt })
     .eq("id", sessionId)
     .eq("status", "labelling")
+    .or(`publishing_since.is.null,publishing_since.lt.${staleBefore}`)
     .select("id");
   if (error) {
     return { error: `Could not complete the session: ${error.message}` };
   }
-  if (!data || data.length === 0) return { error: RACED };
+  if (!data || data.length === 0) return { error: PUBLISHING };
 
   let failure: string;
   try {
     const result = await publish(supabase, sessionId);
     if (result.ok) {
+      const { data: closed, error: closeError } = await supabase
+        .from("label_sessions")
+        .update({
+          status: "complete",
+          completed_at: new Date(now()).toISOString(),
+          publishing_since: null,
+        })
+        .eq("id", sessionId)
+        .eq("publishing_since", claimedAt)
+        .select("id");
+      if (closeError) {
+        return {
+          error: `The labels are published, but the session could not be marked complete: ${closeError.message}`,
+        };
+      }
+      if (!closed || closed.length === 0) return { error: RACED };
       return {
         ok: true,
         status: "complete",
@@ -106,17 +134,13 @@ export async function writeLabelSessionComplete(params: {
     failure = `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  // Not published, or not fully: open again so it can be fixed and retried.
-  const { error: reopenError } = await supabase
+  // Not published, or not fully: release the lease so it can be retried.
+  // Matched on this call's lease, so a later Complete's is never released.
+  await supabase
     .from("label_sessions")
-    .update({ status: "labelling", completed_at: null })
+    .update({ publishing_since: null })
     .eq("id", sessionId)
-    .eq("status", "complete");
-  if (reopenError) {
-    return {
-      error: `${failure} The session stayed complete; Reopen it to retry.`,
-    };
-  }
+    .eq("publishing_since", claimedAt);
   return { error: failure };
 }
 

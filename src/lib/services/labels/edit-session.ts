@@ -103,6 +103,26 @@ export const ADMIN_REQUIRED = "Administrator access is required.";
 /** The refusal every write gives a `complete` session. */
 export const FROZEN =
   "This session is complete, so its labels can no longer change.";
+/** The refusal while "Mark complete" is publishing the session. */
+export const PUBLISHING =
+  "This session is being published. Wait for it to finish, then reload.";
+
+/**
+ * How long a publish's lease (`label_sessions.publishing_since`) holds the
+ * session: past the 120 s the console's server actions may run, with room.
+ * An older lease is a publish that was killed, and the next Complete takes it.
+ */
+export const PUBLISH_LEASE_MS = 5 * 60 * 1000;
+
+/** Whether a publish holds the session now. */
+export function publishLeaseHeld(
+  publishingSince: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!publishingSince) return false;
+  const since = Date.parse(publishingSince);
+  return Number.isFinite(since) && now - since < PUBLISH_LEASE_MS;
+}
 const BUSY = "This row changed while it was saving. Try again.";
 
 /**
@@ -131,12 +151,17 @@ export async function readSessionGate(
 ): Promise<{ ghosts: boolean } | { error: string }> {
   const { data, error } = await supabase
     .from("label_sessions")
-    .select("status, marks_enabled")
+    .select("status, marks_enabled, publishing_since")
     .eq("id", sessionId)
-    .maybeSingle<{ status: string; marks_enabled?: boolean | null }>();
+    .maybeSingle<{
+      status: string;
+      marks_enabled?: boolean | null;
+      publishing_since?: string | null;
+    }>();
   if (error) return { error: `Could not read the session: ${error.message}` };
   if (!data) return { error: "Session not found." };
   if (data.status !== "labelling") return { error: FROZEN };
+  if (publishLeaseHeld(data.publishing_since)) return { error: PUBLISHING };
   const ghosts = data.marks_enabled === true;
   if (blind !== undefined && !ghosts) return { error: blind };
   return { ghosts };

@@ -443,9 +443,9 @@ export function endingStale(
  * result, and still carries its seeded result. Null once the labeller has
  * deleted it, added a stroke after it or changed its result, and with no such
  * mark. Trailing strokes with no result (a phantom swing at a dead ball) do
- * not count as after it. Offered on a click, never applied on load: across the checked points
- * of three hand-labelled matches the vendor's call was right 41 times in 52,
- * too few to overrule the landing unseen.
+ * not count as after it. Offered on a click, never applied on load: across
+ * the checked points of three hand-labelled matches the vendor's call was
+ * right 41 times in 52, too few to overrule the landing unseen.
  */
 export function lastCallAnswer(
   point: Pick<LabelPoint, "shots">,

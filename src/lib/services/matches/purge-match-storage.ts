@@ -69,6 +69,7 @@ interface ResultsKeyRow {
   results_object_key?: unknown;
   players_object_key?: unknown;
   trajectories_object_key?: unknown;
+  label_backup_keys?: unknown;
 }
 
 /** A usable id: a non-empty string that cannot introduce a path segment. */
@@ -87,7 +88,8 @@ function isKeyId(value: unknown): value is string {
  * of exactly two things:
  *
  *   • a RECORDED column value, verbatim — `results_object_key`,
- *     `players_object_key`, `trajectories_object_key`. Recorded beats
+ *     `players_object_key`, `trajectories_object_key`, and each
+ *     `label_backup_keys` entry under the row's own match. Recorded beats
  *     recomputed: an adopted delivery keeps its `orphaned/…` keys, which no
  *     recomputation would reach. A null column contributes nothing.
  *
@@ -126,6 +128,20 @@ function resultsBucketPaths(
     const { id: jobId, match_id: matchId } = job;
     if (!isKeyId(jobId) || !isKeyId(matchId) || !matchIds.includes(matchId)) {
       continue;
+    }
+
+    // Recorded too, but every column on this row is writable by its creator,
+    // so a backup key is taken only from under this row's own match.
+    if (Array.isArray(job.label_backup_keys)) {
+      for (const key of job.label_backup_keys) {
+        if (
+          typeof key === "string" &&
+          key.startsWith(`label-backups/${matchId}/`) &&
+          !key.includes("..")
+        ) {
+          paths.add(key);
+        }
+      }
     }
 
     const createdBy =
@@ -234,7 +250,7 @@ export async function purgeMatchStorage(
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key",
+      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
     )
     .in("match_id", matchIds);
 

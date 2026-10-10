@@ -71,7 +71,7 @@ test.describe("layouts each store writes are attributed to their match", () => {
     // A hand-labelled publish's backup of the version it replaced.
     expect(
       attributeKey(
-        `label-backups/${JOB}/${MATCH}/2026-10-10T19-00-00-000Z.json`,
+        `label-backups/${MATCH}/${JOB}/2026-10-10T19-00-00-000Z.json`,
         RESULTS_LAYOUTS,
       ),
     ).toBe(MATCH);

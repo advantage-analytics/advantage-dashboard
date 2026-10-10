@@ -371,7 +371,11 @@ export function pointHints(
   const lastCall = lastCallAnswer(point, count, ghosts);
   const hints = [
     ...(lastCall ? [lastCall.mark] : []),
-    ...own,
+    // "Net or out?" asks about the same last ball; with that answer on the
+    // line it is one question too many.
+    ...(lastCall
+      ? own.filter((mark) => mark.code !== "net_hit_contradicts_height")
+      : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
   return hints.flatMap((mark) => {

@@ -21,7 +21,7 @@ const UNTOUCHED = new Proxy(
 ) as Parameters<typeof publishPlanned>[0]["db"];
 
 const CONTEXT = {
-  session: { id: "s1", matchId: "m1" },
+  session: { id: "s1", matchId: "m1", jobId: "j1" },
   beside: { vendor: [], startTimeSeconds: 0, bestOf: 3 },
 } as unknown as ApplyContext;
 
@@ -74,14 +74,32 @@ test("a build problem, a score mismatch not accepted, or no points: refused, not
   });
 });
 
-test("backups are keyed with the match id third, where the orphan sweeper reads it", () => {
+test("a session whose job is gone is refused before anything is stored", async () => {
+  const jobless = {
+    ...CONTEXT,
+    session: { ...CONTEXT.session, jobId: null },
+  } as ApplyContext;
+  const result = await publishPlanned({
+    db: UNTOUCHED,
+    context: jobless,
+    plan: plan({}),
+    acceptScore: false,
+  });
+  expect(result).toEqual({
+    ok: false,
+    error:
+      "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
+  });
+});
+
+test("backups are keyed match first, so the match purge accepts them as its own", () => {
   const backup = {
     createdAt: "2026-10-10T19:00:00.000Z",
     sessionId: "s1",
     matchId: "m1",
   } as LabelApplyBackup;
   expect(backupObjectKey(backup)).toBe(
-    "label-backups/s1/m1/2026-10-10T19-00-00-000Z.json",
+    "label-backups/m1/s1/2026-10-10T19-00-00-000Z.json",
   );
-  expect(backupObjectKey(backup).split("/")[2]).toBe("m1");
+  expect(backupObjectKey(backup).startsWith("label-backups/m1/")).toBe(true);
 });

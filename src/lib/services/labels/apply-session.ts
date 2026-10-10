@@ -10,7 +10,7 @@
  *     again all work and simply publish again;
  *   - every publish first backs up the version it replaces — points, shots,
  *     bookmarks and match_stats — to `match-results` under
- *     `label-backups/{sessionId}/{matchId}/{stamp}.json`, so the first backup
+ *     `label-backups/{matchId}/{sessionId}/{stamp}.json`, so the first backup
  *     of a match is the vendor's original and `--restore <key>` puts any one
  *     back;
  *   - the vendor's strokes file stays in storage, so a forced re-derive
@@ -213,6 +213,32 @@ export async function storeBackup(
   return key;
 }
 
+/**
+ * Note a backup's key on its job (`processing_jobs.label_backup_keys`), where
+ * the match purge reads it: the purge removes a fixed list, never a listing.
+ * Noted BEFORE the upload, so no stored backup goes unnamed; a key whose
+ * upload then fails names nothing, and removing it is a no-op.
+ */
+async function recordBackupKey(db: AdminClient, jobId: string, key: string) {
+  const { data, error } = await db
+    .from("processing_jobs")
+    .select("label_backup_keys")
+    .eq("id", jobId)
+    .maybeSingle<{ label_backup_keys: string[] | null }>();
+  if (error || !data) {
+    throw new Error(
+      `Could not read the job to note the backup: ${error?.message ?? "no job"}`,
+    );
+  }
+  const { error: updateError } = await db
+    .from("processing_jobs")
+    .update({ label_backup_keys: [...(data.label_backup_keys ?? []), key] })
+    .eq("id", jobId);
+  if (updateError) {
+    throw new Error(`Could not note the backup: ${updateError.message}`);
+  }
+}
+
 export async function readStoredBackup(
   db: AdminClient,
   key: string,
@@ -379,6 +405,14 @@ export async function publishPlanned(params: {
   if (plan.built.points.length === 0) {
     return { ok: false, error: "Not published: there are no points to write." };
   }
+  const jobId = session.jobId;
+  if (!jobId) {
+    return {
+      ok: false,
+      error:
+        "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
+    };
+  }
   const [published, imported, statsBefore] = await Promise.all([
     readPublished(db, matchId),
     countImported(db, matchId),
@@ -402,6 +436,7 @@ export async function publishPlanned(params: {
     bookmarks: published.bookmarks,
     matchStats: statsBefore,
   };
+  await recordBackupKey(db, jobId, backupObjectKey(backup));
   const backupKey = await storeBackup(db, backup);
   params.onBackup?.(backup);
 
