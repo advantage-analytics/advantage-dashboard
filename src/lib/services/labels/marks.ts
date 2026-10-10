@@ -27,8 +27,10 @@ import {
   POINT_FLAGS,
   serveCourtSide,
   SHOT_FLAGS,
+  proposedPointsOf,
   type DerivedPoint,
   type DerivedShot,
+  type ProposedPoint,
   type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
@@ -113,6 +115,7 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_FAULT]: { tier: "hidden", scope: "point" },
   [POINT_FLAGS.SCORE_FROZEN]: { tier: "hidden", scope: "point" },
+  [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "hidden", scope: "point" },
   [SHOT_FLAGS.OUT_BALL_RALLY_CONTINUED]: { tier: "hidden", scope: "shot" },
   [SHOT_FLAGS.GEOMETRY_DISCARDED]: { tier: "hidden", scope: "shot" },
 } as const satisfies Record<
@@ -174,6 +177,18 @@ export interface LabelMarkParams {
   };
   winner_guessed: NoParams;
   score_frozen: NoParams;
+  /**
+   * The segmentation's proposal for the point (`transcript.segmentation`).
+   * `proposedGame` is match-cumulative like `points.game_number`, not the
+   * proposal's per-set number; `mergedWith` is the rally id of the neighbour
+   * it would be merged with, when it would be. All null when the transcript
+   * carries no proposal for the rally.
+   */
+  segment_proposal_differs: {
+    proposedGame: number | null;
+    proposedServer: LabelSide | null;
+    mergedWith: number | null;
+  };
   out_ball_rally_continued: { nextHitter: LabelSide | null };
   geometry_discarded: NoParams;
 }
@@ -303,6 +318,7 @@ function pointMarks(
   rally: SplitStepRally | undefined,
   settledWinner: string | null | undefined,
   sideOf: (label: string) => LabelSide,
+  proposed: ProposedPoint | null,
 ): LabelMark[] {
   const marks: LabelMark[] = [];
   const winner: LabelSide | null =
@@ -353,6 +369,17 @@ function pointMarks(
       case POINT_FLAGS.WINNER_GUESSED:
       case POINT_FLAGS.SCORE_FROZEN:
         marks.push(mark(code, {}));
+        break;
+      case POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS:
+        marks.push(
+          mark(code, {
+            proposedGame: proposed?.game ?? null,
+            proposedServer: proposed
+              ? labelSideOf(proposed.server === "player1")
+              : null,
+            mergedWith: proposed?.mergedWith ?? null,
+          }),
+        );
         break;
       default:
         // A shot-scoped or labels-only code in a point's flags is not a mark
@@ -541,6 +568,12 @@ export function buildLabelMarks(
     for (const shot of point.shots) shotByEvent.set(shot.event_id, shot);
   }
   const player1Label = transcript.reconciliation.player1Label;
+  const proposed = transcript.segmentation
+    ? proposedPointsOf(
+        transcript.segmentation,
+        transcript.points.map((point) => point.rally_id),
+      )
+    : new Map<number, ProposedPoint>();
 
   const marks: LabelMarks = {
     points: {},
@@ -576,7 +609,13 @@ export function buildLabelMarks(
     push(
       marks.points,
       pointId,
-      pointMarks(point, rally, settledById.get(point.rally_id), sideOf),
+      pointMarks(
+        point,
+        rally,
+        settledById.get(point.rally_id),
+        sideOf,
+        proposed.get(point.rally_id) ?? null,
+      ),
     );
 
     point.shots.forEach((shot, index) => {

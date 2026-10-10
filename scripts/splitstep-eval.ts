@@ -3,13 +3,26 @@
  *
  *   npx tsx scripts/splitstep-eval.ts --job <uuid> --labels <dir>
  *   npx tsx scripts/splitstep-eval.ts --job <uuid> --labels <dir> --no-trajectories
+ *   npx tsx scripts/splitstep-eval.ts --session <uuid> [--no-trajectories]
+ *
+ * `--session` reads a labelling-console session instead of a sheet export:
+ * the job comes from `label_sessions.job_id` (a `--job` given beside it must
+ * name the same job), and the truth is every `label_points` row the labeller
+ * checked and did not delete. A point joins the transcript on the first id in
+ * its `vendor_rally_ids`; more than one id is the labeller's merge. The join
+ * and the arithmetic are `src/lib/services/labels/session-truth.ts`. It
+ * reports server, winner and ending accuracy for the PUBLISHED rows and for
+ * the segmenter's PROPOSED ones, the proposal's status, folded games against
+ * the entered score, each firing as a hit or a miss, and the proposal's merges
+ * against the labeller's.
  *
  * `<dir>` holds one JSON file per point, as exported from a point-check sheet
  * (`ArtifactData list … out_dir`): `{ n, server, winner, ending, shot, flags,
  * review: { server?, winner?, ending?, note?, … } }`, optionally wrapped in
  * `{ data: … }`. The `review` fields are the labeller's corrections; anything
- * absent means the derived value was right. LABELS ARE A REAL ATHLETE'S DATA:
- * keep them outside the repo.
+ * absent means the derived value was right. LABELS ARE A REAL ATHLETE'S DATA,
+ * and so is this script's output, which names the players: keep both outside
+ * the repo (the session scratchpad, or the labels folder on the Desktop).
  *
  * Reads only; writes nothing. It rebuilds the transcript in memory from the
  * stored results (and trajectories, unless --no-trajectories), so it measures
@@ -37,9 +50,19 @@ import {
   type DerivedPoint,
   type LineCalls,
   type MatchScore,
+  proposedPointsOf,
+  type Transcript,
 } from "@/lib/services/splitstep/derivation";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import { resolveAdScoring } from "@/lib/services/splitstep/persist-transcript";
+import { readLabelSessionRows } from "@/lib/data/labels-server";
+import type { LabelSession } from "@/lib/services/labels/session";
+import {
+  compareMerges,
+  joinSessionTruth,
+  scoreSessionTruth,
+  type AccuracyTally,
+} from "@/lib/services/labels/session-truth";
 
 try {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
@@ -120,17 +143,38 @@ async function main() {
     const i = argv.indexOf(flag);
     return i === -1 ? null : (argv[i + 1] ?? null);
   };
-  const jobId = at("--job");
+  const sessionId = at("--session");
   const labelsDir = at("--labels");
   const useTrajectories = !argv.includes("--no-trajectories");
-  if (!jobId || !UUID.test(jobId) || !labelsDir) {
+  const usage = () => {
     console.error(
-      "usage: splitstep-eval.ts --job <uuid> --labels <dir> [--no-trajectories]",
+      "usage: splitstep-eval.ts --job <uuid> --labels <dir> [--no-trajectories]\n" +
+        "       splitstep-eval.ts --session <uuid> [--no-trajectories]",
     );
     process.exit(1);
-  }
+  };
+  if (sessionId !== null && (!UUID.test(sessionId) || labelsDir)) usage();
 
   const supabase = createAdminClient();
+  // Every query below is a SELECT, plus storage downloads: nothing is written.
+  const session = sessionId
+    ? ((await readLabelSessionRows(supabase, sessionId))?.session ?? null)
+    : null;
+  if (sessionId && !session) {
+    console.error(`no label session ${sessionId}`);
+    process.exit(1);
+  }
+  if (session && !session.jobId) {
+    console.error("the session's job is gone, so there is nothing to score");
+    process.exit(1);
+  }
+  const jobArg = at("--job");
+  if (session && jobArg && jobArg !== session.jobId) {
+    console.error(`--job ${jobArg} is not the session's job ${session.jobId}`);
+    process.exit(1);
+  }
+  const jobId = session?.jobId ?? jobArg;
+  if (!jobId || !UUID.test(jobId) || (!session && !labelsDir)) usage();
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .select(
@@ -189,7 +233,18 @@ async function main() {
     process.exit(1);
   }
 
-  const labels = loadLabels(labelsDir);
+  if (session) {
+    reportSession({
+      jobId: jobId!,
+      session,
+      transcript,
+      entered: (match?.score as MatchScore | null) ?? null,
+      trajectories: rawTrajectories !== null,
+    });
+    return;
+  }
+
+  const labels = loadLabels(labelsDir!);
   const player1 = transcript.reconciliation.player1Label;
 
   console.log(
@@ -374,6 +429,128 @@ async function main() {
   );
   console.log(
     `  they differ on (who was right): ${differ.join(" ") || "none"}`,
+  );
+}
+
+/**
+ * `--session`: the published rows and the segmenter's proposal against a
+ * label session. The proposal moves servers and game boundaries, never how a
+ * point ended, so its ending is the published one; its winner is the published
+ * server-relative outcome under the proposed server.
+ */
+function reportSession(args: {
+  jobId: string;
+  session: LabelSession;
+  transcript: Transcript;
+  entered: MatchScore | null;
+  trajectories: boolean;
+}) {
+  const { jobId, session, transcript, entered } = args;
+  const proposal = transcript.segmentation;
+  const proposed = proposal
+    ? proposedPointsOf(
+        proposal,
+        transcript.points.map((p) => p.rally_id),
+      )
+    : null;
+  const { rows, unmatched, excluded } = joinSessionTruth({
+    labels: session.points,
+    points: transcript.points,
+    proposed,
+    names: { p1: session.player1Name, p2: session.player2Name },
+  });
+  const score = scoreSessionTruth(rows);
+
+  console.log(
+    `=== session ${session.id} (${session.status}) · job ${jobId} · trajectories ${
+      args.trajectories ? "ON" : "OFF"
+    }`,
+  );
+  console.log(
+    `  ${rows.length} checked points joined · ${unmatched.length} with no rally in the transcript (${
+      unmatched.map((l) => `#${l.pointIndex}`).join(",") || "none"
+    }) · ${excluded} unchecked or deleted left out`,
+  );
+  console.log(
+    "  proposed ending = published ending; proposed winner = the published server-relative outcome under the proposed server; an ace is read as a service winner",
+  );
+
+  // --- Accuracy -----------------------------------------------------------
+  const cell = (t: AccuracyTally) =>
+    `${t.right}/${t.of} (${pct(t.right, t.of)})`.padEnd(16);
+  console.log("\naccuracy against the labels   published       proposed");
+  for (const key of ["server", "winner", "ending", "game"] as const) {
+    console.log(
+      `  ${key.padEnd(27)} ${cell(score.published[key])}${cell(score.proposed[key])}`,
+    );
+  }
+  console.log(
+    "  (game = the rallies sharing the point's game are the ones the labeller grouped with it)",
+  );
+  if (score.uncovered > 0) {
+    console.log(
+      `  ${score.uncovered} joined points outside every proposed game count with their published values`,
+    );
+  }
+
+  // --- The proposal -------------------------------------------------------
+  const sets = (s: MatchScore | null) =>
+    s ? s.player1.map((g, i) => `${g}-${s.player2[i] ?? "?"}`).join(" ") : "–";
+  const p1 = transcript.reconciliation.player1Label;
+  const folded = transcript.reconciliation.foldedSets
+    .map((set) => {
+      const p2 = Object.keys(set).find((k) => k !== p1);
+      return `${(p1 && set[p1]) ?? 0}-${(p2 && set[p2]) ?? 0}`;
+    })
+    .join(" ");
+  const sum = (s: MatchScore | null) =>
+    s ? [...s.player1, ...s.player2].reduce((a, b) => a + b, 0) : null;
+  const publishedGames = new Set(
+    transcript.points.map((p) => `${p.set_number}|${p.game_number}`),
+  ).size;
+  const labelledGames = new Set(rows.map((r) => r.truth.gameKey)).size;
+  console.log("\nthe proposal");
+  if (!proposal) {
+    console.log("  none (no score, no top player, or the segmenter threw)");
+  } else {
+    const fires =
+      proposal.diff.gamesMoved + proposal.diff.serversChanged > 0 ||
+      proposal.status === "no_fit";
+    console.log(
+      `  status ${proposal.status}${proposal.reason ? ` (${proposal.reason})` : ""} · cost ${proposal.cost} · runner-up ${proposal.runnerUpCost ?? "–"} · fires ${fires ? "yes" : "no"}`,
+    );
+    console.log(
+      `  diff: ${proposal.diff.gamesMoved} games moved · ${proposal.diff.serversChanged} servers changed · ${proposal.diff.rallies.length} rallies`,
+    );
+    if (proposal.closestScore) {
+      console.log(`  closest reachable score ${sets(proposal.closestScore)}`);
+    }
+  }
+  console.log(
+    `  games: entered ${sum(entered) ?? "–"} (${sets(entered)}) · folded ${transcript.reconciliation.foldedSets.reduce((a, set) => a + Object.values(set).reduce((x, y) => x + y, 0), 0)} (${folded || "–"}) · published ${publishedGames} · proposed ${proposal?.games.length ?? "–"} · labelled ${labelledGames} (checked points only)`,
+  );
+
+  // --- Firings ------------------------------------------------------------
+  const hits = score.firings.filter((f) => f.hit);
+  console.log(
+    `\nfirings (proposed game or server differs from the rows): ${hits.length}/${score.firings.length} hit (${pct(hits.length, score.firings.length)}) — hit = proposed server AND game match the label`,
+  );
+  for (const f of score.firings) {
+    console.log(
+      `  rally ${f.rallyId} (#${f.pointIndex}) ${f.hit ? "hit" : "MISS"}`,
+    );
+  }
+
+  // --- Merges -------------------------------------------------------------
+  const merges = compareMerges(proposal, session.points);
+  console.log(
+    `\nmerges: proposed ${merges.proposed.length} · the labeller's multi-id points ${merges.labelled.length} · agreed ${merges.agreed.length}`,
+  );
+  console.log(
+    `  proposed ${merges.proposed.map(([a, b]) => `${a}+${b}`).join(" ") || "none"}`,
+  );
+  console.log(
+    `  labelled ${merges.labelled.map((ids) => ids.join("+")).join(" ") || "none"}`,
   );
 }
 

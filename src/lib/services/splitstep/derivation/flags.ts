@@ -104,6 +104,14 @@ export const POINT_FLAGS = {
    * score or the serve position is wrong. Skipped on a no-ad deciding point.
    */
   SCORE_SIDE_MISMATCH: "score_side_mismatch",
+  /**
+   * Review-only. The score-constrained segmentation (segmentation.ts, run from
+   * transcript.ts) puts this point in a different game, gives it a different
+   * server, or merges it with a neighbouring rally. Published rows are
+   * unchanged; the proposal is recorded so it can be measured before anything
+   * is promoted.
+   */
+  SEGMENT_PROPOSAL_DIFFERS: "segment_proposal_differs",
 } as const;
 
 /** How close to a line the ball before a winner must land to be suspect. */

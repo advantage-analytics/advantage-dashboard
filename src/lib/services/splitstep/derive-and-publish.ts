@@ -260,7 +260,25 @@ export async function deriveAndPublish(params: {
       player1Source: rec.player1Source,
       reason: rec.ok ? undefined : rec.reason,
     });
-    if (!rec.ok) await recordUnreconciledFold(supabase, jobId, rec.reason);
+
+    // One merge for both keys, so they cannot race each other. `fold` comes
+    // only from the reconciliation above; `segmentation` only from the
+    // segmenter's proposal, and never touches `fold` — the match report's grey
+    // "unreconciled" note reads `fold`, and a fitting proposal must not clear
+    // it. Reached only after a publish: a refusal (hand labels included)
+    // returned above, so a run that wrote nothing records no proposal.
+    const quality: Record<string, unknown> = {};
+    if (!rec.ok) {
+      quality.fold = { reconciled: false, reason: rec.reason ?? null };
+    }
+    // Always overwritten after a publish — null included — so a re-derive
+    // that yields no proposal (no top player, a segmenter throw) cannot leave
+    // the previous run's proposal describing rows that were just rebuilt.
+    const proposal = written.transcript.segmentation;
+    if (proposal !== undefined) quality.segmentation = proposal;
+    if (Object.keys(quality).length > 0) {
+      await mergeDerivationQuality(supabase, jobId, quality);
+    }
 
     return {
       ok: true,
@@ -290,20 +308,21 @@ export async function deriveAndPublish(params: {
 }
 
 /**
- * Merge `{ fold: { reconciled: false, reason } }` into the job's
- * `derivation_quality`, which `grade-results.ts` wrote at grade time — every
- * key it holds (`grade`, `checks`, `failures`, …) is kept. A read-modify-write
- * rather than a jsonb `||` because there is no RPC for it and the job is
- * written by nothing else while it is `deriving`/just `completed`.
+ * Merge `patch` into the job's `derivation_quality`, which `grade-results.ts`
+ * wrote at grade time — every key it holds (`grade`, `checks`, `failures`, …)
+ * and any key not in `patch` is kept. Used for `fold` (an unreconciled fold)
+ * and `segmentation` (the segmenter's proposal). A read-modify-write rather
+ * than a jsonb `||` because there is no RPC for it and the job is written by
+ * nothing else while it is `deriving`/just `completed`.
  *
  * Bookkeeping only: the rows are already published, so a failure here is
  * logged and swallowed — it must never turn a finished derivation into a
  * failed one.
  */
-async function recordUnreconciledFold(
+async function mergeDerivationQuality(
   supabase: ReturnType<typeof createAdminClient>,
   jobId: string,
-  reason: string | null | undefined,
+  patch: Record<string, unknown>,
 ): Promise<void> {
   try {
     const { data, error: readError } = await supabase
@@ -320,17 +339,13 @@ async function recordUnreconciledFold(
         : {};
     const { error: writeError } = await supabase
       .from("processing_jobs")
-      .update({
-        derivation_quality: {
-          ...base,
-          fold: { reconciled: false, reason: reason ?? null },
-        },
-      })
+      .update({ derivation_quality: { ...base, ...patch } })
       .eq("id", jobId);
     if (writeError) throw new Error(writeError.message);
   } catch (err) {
-    console.error(`${LOG} could not record unreconciled fold`, {
+    console.error(`${LOG} could not merge derivation_quality`, {
       jobId,
+      keys: Object.keys(patch),
       error: err instanceof Error ? err.message : String(err),
     });
   }
