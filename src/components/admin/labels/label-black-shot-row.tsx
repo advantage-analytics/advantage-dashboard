@@ -129,9 +129,26 @@ export const SHOT_PADDING_PX = 2 * 14;
 export const SHOT_TRACKS =
   "grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(30px,0.8fr)_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
 
+/**
+ * Below this well width the placement track goes: placement is derived from the
+ * landing and not editable (the court panel still shows it), and dropping its
+ * 30px floor + 8px gap lets the player, stroke and result words stop truncating
+ * at the rail's narrow end.
+ */
+export const SHOT_PLACEMENT_MIN_RAIL_PX = 640;
+
+// `SHOT_TRACKS` without the placement track, under a well (`@container/shots`)
+// narrower than `SHOT_PLACEMENT_MIN_RAIL_PX`. Written out whole for the same
+// reason as `SHOT_TRACKS`: Tailwind cannot see a class assembled at runtime.
+export const SHOT_TRACKS_NARROW =
+  "@max-[640px]/shots:grid-cols-[22px_minmax(56px,0.3fr)_minmax(32px,0.55fr)_minmax(48px,0.8fr)_minmax(26px,0.5fr)_88px_88px_minmax(calc(var(--shot-tail,33px)_+_5px),0.35fr)]";
+
+/** On a cell that leaves with the placement track. */
+const NARROW_HIDDEN = "@max-[640px]/shots:hidden";
+
 // `text-[11px] leading-[14px]`: every cell's own line box is the size of its
 // text, so a value centres on the row instead of hanging from a 16px strut.
-const ROW_GRID = `relative grid ${SHOT_TRACKS} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
+const ROW_GRID = `relative grid ${SHOT_TRACKS} ${SHOT_TRACKS_NARROW} items-center gap-x-2 h-[34px] px-[14px] text-[11px] leading-[14px]`;
 
 const WELL_STYLE = {
   "--shot-tail": `${SHOT_TAIL_PX}px`,
@@ -317,7 +334,7 @@ export function BlackShotsWell({
       onPointerDownCapture={animate ? settleWellOnReach : undefined}
       onKeyDownCapture={animate ? settleWellOnReach : undefined}
     >
-      <div className="flex min-h-0 flex-col overflow-hidden bg-white/[0.035] shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]">
+      <div className="@container/shots flex min-h-0 flex-col overflow-hidden bg-white/[0.035] shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]">
         {rows}
         {edit.editable && operations ? (
           <button
@@ -525,7 +542,7 @@ export function BlackShotRow({
         <ChromeTooltip label={placement} side="top" wrap>
           <span
             data-calculated="placement"
-            className={cn("min-w-0 truncate text-[11px]", words)}
+            className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
           >
             {placement}
           </span>
@@ -533,7 +550,7 @@ export function BlackShotRow({
       ) : (
         <span
           data-calculated="placement"
-          className={cn("min-w-0 truncate text-[11px]", words)}
+          className={cn("min-w-0 truncate text-[11px]", NARROW_HIDDEN, words)}
         >
           <Dash label="No placement" />
         </span>
@@ -687,9 +704,11 @@ export function BlackDeletedShot({
 /**
  * A ghost row's reason and Restore span the placement and result tracks. At its
  * narrowest the span (`GHOST_TAIL_MIN_PX`) holds Restore whole, so the reason's
- * words truncate first.
+ * words truncate first. On a narrow well (`SHOT_TRACKS_NARROW`) there is no
+ * placement track, so the struck landed-at cell steps aside and the tail starts
+ * one track earlier: landed at + result, never narrower than it is here.
  */
-const GHOST_TAIL = "col-[8/-1]";
+const GHOST_TAIL = "col-[8/-1] @max-[640px]/shots:col-[7/-1]";
 
 /** The ghost tail at its narrowest: Restore whole, plus the gap. */
 export const GHOST_TAIL_MIN_PX = SHOT_FLOORS_PX[7] + 8 + SHOT_FLOORS_PX[8];
@@ -789,7 +808,12 @@ export function BlackGhostShot({
             {spinLabel(shot.stroke, shot.spin)}
           </Struck>
           <GhostPosition end="hit" x={shot.contactX} y={shot.contactY} />
-          <GhostPosition end="landed" x={shot.landingX} y={shot.landingY} />
+          <GhostPosition
+            end="landed"
+            x={shot.landingX}
+            y={shot.landingY}
+            className={NARROW_HIDDEN}
+          />
           <span
             data-ghost-reason=""
             className={cn(
@@ -976,14 +1000,19 @@ function GhostPosition({
   end,
   x,
   y,
+  className,
 }: {
   end: "hit" | "landed";
   x: number | null;
   y: number | null;
+  className?: string;
 }) {
   const pair = courtPair(x, y);
   return (
-    <span data-xy={end} className="flex min-w-0 items-center gap-1.5">
+    <span
+      data-xy={end}
+      className={cn("flex min-w-0 items-center gap-1.5", className)}
+    >
       {end === "hit" ? (
         <i
           role="img"

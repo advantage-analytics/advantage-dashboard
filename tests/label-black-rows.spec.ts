@@ -789,6 +789,51 @@ test.describe("the black shots well", () => {
     expect(serve).not.toContain("data-fault");
   });
 
+  test("a narrow well drops the placement track, and the result takes its place", () => {
+    const html = renderWell();
+    const {
+      SHOT_TRACKS,
+      SHOT_TRACKS_NARROW,
+      SHOT_FLOORS_PX,
+      SHOT_PLACEMENT_MIN_RAIL_PX,
+    } = createLoader().load(WELL) as {
+      SHOT_TRACKS: string;
+      SHOT_TRACKS_NARROW: string;
+      SHOT_FLOORS_PX: readonly number[];
+      SHOT_PLACEMENT_MIN_RAIL_PX: number;
+    };
+    const variant = `@max-[${SHOT_PLACEMENT_MIN_RAIL_PX}px]/shots:`;
+
+    // The well's column of rows is the container the rows ask.
+    const column = html.slice(html.indexOf("data-shots-well"));
+    expect(tag(column, "<div")).toContain("@container/shots");
+
+    // Under the breakpoint: the same tracks less placement, written whole.
+    expect(SHOT_TRACKS_NARROW.startsWith(`${variant}grid-cols-[`)).toBe(true);
+    const wide = shotTracks(SHOT_TRACKS, SHOT_FLOORS_PX);
+    const narrowFloors = SHOT_FLOORS_PX.filter((_, i) => i !== 7);
+    const narrow = shotTracks(SHOT_TRACKS_NARROW, narrowFloors);
+    expect(narrow).toHaveLength(8);
+    expect(narrow).toEqual(wide.filter((_, i) => i !== 7));
+    const inner = (spec: string) => /grid-cols-\[(.+)\]$/.exec(spec)![1];
+    expect(inner(SHOT_TRACKS_NARROW)).toBe(
+      inner(SHOT_TRACKS).replace("_minmax(30px,0.8fr)", ""),
+    );
+
+    // Every stroke row carries both; its placement cell leaves.
+    const ids = [...html.matchAll(/data-shot-id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      const row = shotRow(html, id);
+      expect(tag(row, 'data-row="shot"')).toContain(SHOT_TRACKS_NARROW);
+      expect(tag(row, 'data-calculated="placement"')).toContain(
+        `${variant}hidden`,
+      );
+    }
+    // Add shot spans to the last track either way (`col-[2/-1]`).
+    expect(tag(html, "data-add-shot")).toContain(SHOT_TRACKS_NARROW);
+  });
+
   test("a coordinate: x and y in slots of their own, so the columns align", () => {
     const html = renderWell();
     const lit = shotRow(html, "w-lit");
