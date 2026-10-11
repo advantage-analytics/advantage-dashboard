@@ -24,25 +24,39 @@ const FORM_SLOTS = 5;
  * opponent (`reference/tables.md` law 9 — a hairline under the header only,
  * none between rows, and the hover wash as the row's boundary).
  *
- * An opponent is a CONTAINER row (law 3): it will peek in a drawer rather than
- * travel, so it carries no chevron. The name is the row's one control — a
+ * An opponent is a CONTAINER row (law 3): it peeks in the drawer rather than
+ * travelling, so it carries no chevron. The whole row takes the click and the
+ * selected one keeps its wash; the name is the row's one control — a
  * `<button aria-pressed>` — so the selection has somewhere to live for a
- * keyboard and a screen reader; the click that sets it arrives with the
- * drawer, and until then the row draws no pointer cursor it cannot honour.
+ * keyboard and a screen reader. The button has no handler of its own: its
+ * click bubbles to the row, so a press is counted once.
  *
  * Every cell that can be unknown draws the one `EmptyMark`, on the same x as
  * the column's real values — a hand nobody recorded, a meeting with no score,
  * an outcome nobody is yet known to have won.
  */
+/** The row's DOM id — what ↑/↓ stepping scrolls to and Esc returns focus to. */
+export function opponentRowId(key: string): string {
+  // A group key holds a colon and may hold spaces; an id may not hold a space.
+  return `opponent-row-${encodeURIComponent(key)}`;
+}
+
 export function OpponentsTable({
   opponents,
   selectedKey,
+  onToggle,
   empty,
 }: {
   /** The rows to draw, already chipped, filtered and sorted by the page. */
   opponents: readonly PersonalOpponent[];
   /** `PersonalOpponent.key` of the row the drawer is showing, if any. */
   selectedKey: string | null;
+  /**
+   * A row was pressed: open its drawer, or close it when it is the selected
+   * one. `viaKeyboard` is true for Enter/Space on the name, so the drawer can
+   * take focus for the person who cannot click into it.
+   */
+  onToggle: (opponent: PersonalOpponent, viaKeyboard: boolean) => void;
   /**
    * What the body shows when a chip or filter leaves no rows — a
    * `TableEmptyBody`. It is drawn under the column headers: the card and its
@@ -80,6 +94,7 @@ export function OpponentsTable({
                 key={opponent.key}
                 opponent={opponent}
                 selected={opponent.key === selectedKey}
+                onToggle={onToggle}
               />
             ))}
           </div>
@@ -92,9 +107,11 @@ export function OpponentsTable({
 function OpponentRow({
   opponent,
   selected,
+  onToggle,
 }: {
   opponent: PersonalOpponent;
   selected: boolean;
+  onToggle: (opponent: PersonalOpponent, viaKeyboard: boolean) => void;
 }) {
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
@@ -103,10 +120,13 @@ function OpponentRow({
 
   return (
     <div
+      id={opponentRowId(opponent.key)}
+      // `detail` is 0 for a click the keyboard made (Enter/Space on the name).
+      onClick={(event) => onToggle(opponent, event.detail === 0)}
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,
-        "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
+        "cursor-pointer transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
         selected && "bg-[var(--surface-muted)]",
       )}
       style={OPPONENTS_GRID_COLS}
@@ -115,7 +135,7 @@ function OpponentRow({
       <button
         type="button"
         aria-pressed={selected}
-        className="min-w-0 truncate rounded-[var(--radius-cell)] text-left text-[13px] font-medium text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className="min-w-0 cursor-pointer truncate rounded-[var(--radius-cell)] text-left text-[13px] font-medium text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
       >
         {opponent.name}
       </button>

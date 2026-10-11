@@ -44,6 +44,7 @@ interface DbOpponentMatch {
   player1_name: string | null;
   player2_name: string | null;
   created_by: string | null;
+  tournament_name: string | null;
   score: MatchScore | null;
   opponent_player_id: string | null;
   opponent_hand: string | null;
@@ -51,7 +52,7 @@ interface DbOpponentMatch {
 }
 
 const MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, opponent_player_id, opponent_hand, opponent_backhand";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, tournament_name, score, opponent_player_id, opponent_hand, opponent_backhand";
 
 /** One side of one match; a `numeric` column arrives as a string. */
 interface DbStatRow {
@@ -144,6 +145,7 @@ export const getPersonalOpponents = cache(async function getPersonalOpponents(
         opponent_player_id: match.opponent_player_id,
         opponent_hand: match.opponent_hand,
         opponent_backhand: match.opponent_backhand,
+        tournament_name: match.tournament_name,
         score: match.score,
         values: valuesBySide.get(statKey(match.id, isUserPlayer1)) ?? null,
       },

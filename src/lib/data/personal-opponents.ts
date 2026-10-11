@@ -67,6 +67,11 @@ export interface PersonalOpponentMatchInput {
   opponent_player_id: string | null;
   opponent_hand: string | null;
   opponent_backhand: string | null;
+  /**
+   * `matches.tournament_name` — what the drawer's recent-match row is called.
+   * Optional so a caller with no use for it need not spell it.
+   */
+  tournament_name?: string | null;
   score: MatchScore | null;
   /**
    * The viewer's side of the stats row, keyed by
@@ -93,6 +98,8 @@ export interface PersonalOpponentLastMatch {
  * `RosterRecentMatch` minus the opponent's name, which is the group's.
  */
 export interface PersonalOpponentRecentMatch extends PersonalOpponentLastMatch {
+  /** The event or tournament it was played at, trimmed; null when unnamed. */
+  event: string | null;
   /** Whether this match falls in the current academic season. */
   inSeason: boolean;
   /**
@@ -273,6 +280,7 @@ export function groupPersonalOpponents(
         date: match.date,
         won,
         sets: scoreSetsFrom(match.score, { swap: !match.isUserPlayer1 }),
+        event: match.tournament_name?.trim() || null,
         inSeason,
         values,
       }),

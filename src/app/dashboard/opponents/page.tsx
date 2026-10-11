@@ -33,7 +33,11 @@ export const metadata = { title: "Opponents" };
  * that read them is gone because nothing about its shape was settled; the data
  * layer outlives it.
  */
-export default async function OpponentsPage() {
+export default async function OpponentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ opponent?: string | string[] }>;
+}) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 
@@ -51,7 +55,10 @@ export default async function OpponentsPage() {
   return (
     <WidgetBoundary label="Opponents">
       <Suspense fallback={<OpponentsSkeleton />}>
-        <PersonalOpponents userId={workspace.viewer.id} />
+        <PersonalOpponents
+          userId={workspace.viewer.id}
+          searchParams={searchParams}
+        />
       </Suspense>
     </WidgetBoundary>
   );
@@ -64,8 +71,24 @@ export default async function OpponentsPage() {
  * the loader returns no opponents exactly when the account holds no personal
  * match against a named opponent, and that is the state the offer answers.
  */
-async function PersonalOpponents({ userId }: { userId: string }) {
-  const { opponents, totals } = await getPersonalOpponents(userId);
+async function PersonalOpponents({
+  userId,
+  searchParams,
+}: {
+  userId: string;
+  searchParams: Promise<{ opponent?: string | string[] }>;
+}) {
+  const [{ opponents, totals }, { opponent }] = await Promise.all([
+    getPersonalOpponents(userId),
+    searchParams,
+  ]);
   if (opponents.length === 0) return <OpponentsDayZero />;
-  return <OpponentsPageContent opponents={opponents} totals={totals} />;
+  return (
+    <OpponentsPageContent
+      opponents={opponents}
+      totals={totals}
+      // A deep link is the one case that lands with the drawer already open.
+      initialSelectedKey={typeof opponent === "string" ? opponent : null}
+    />
+  );
 }

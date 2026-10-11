@@ -47,3 +47,18 @@ is the runner's. Newest entries at the bottom.
 3. Decide whether the cut (chip, filter, sort) should survive a reload via URL params.
 4. If a literal close-on-apply is wanted, add an opt-in to `MatchesFilterPanel` as its own task — it affects Matches and Schedule.
 5. The two film T16 tests (`film-playback-refresh.spec.ts:1422`, `:1455`) time out intermittently even when run alone on a busy machine — add them to the known-flake notes or harden them.
+
+## T4 · Opponent peek drawer on the roster shell + selection model — done
+
+**gate:** mechanical pass (lint, typecheck, full suite clean at a load average of ~5) · completion pass · widget-states audit: loading ✓ (drawer reads props already on the page — no fetch, no skeleton), empty ✓ (stat block absent when nothing is measured, one sentence in its place; unknown hand/backhand draw `EmptyMark`), error ✓ (inside the page's `WidgetBoundary`)
+
+**changed:** New `src/components/dashboard/opponents/opponent-drawer.tsx` (`OpponentDrawer` through `PeekDrawerFrame`: identity, gated stat block with `Sparkline` + four `StatPill`s, up to three recent-match record rows, pinned Ask / Statistics footer; no ⋯, no Advantage Intelligence note). `opponents-page-content.tsx` gains the roster selection model (toggle, close, step over `visibleOpponents`, window keydown, `?opponent=` via `history.replaceState`, close when a cut hides the selection); `opponents-table.tsx` gains row ids, the click handler, the selected wash and `cursor-pointer`; `page.tsx` reads `searchParams.opponent`. `Sparkline` / `StatPill` lifted verbatim from `team/player-drawer.tsx` into new `shared/drawer-stat-chart.tsx` (roster drawer now imports them; `percent` renamed `drawerPercent`). T1's `personal-opponents.ts` / `-server.ts` gain `recent[].event` from `matches.tournament_name`. Deviations kept: recent-row date is "Sep 14" this year, "Sep ’25" otherwise; pills carry the full label and a trend delta; drawer is `hidden lg:block` as on Matches. The subagent reported it did NOT read `docs/ui-revamp-guardrails.md` or the design SKILL.md in full — the guardrails pass at /pr-check is the first check against them. Not opened in a browser.
+
+**follow-ups:**
+
+1. Eyes-on: slide-in and reflow, Esc and arrows, cut-hides-selection close, and the roster drawer unchanged after the chart lift.
+2. Sparkline tooltip reads "{opponent name} · date" inside that opponent's own drawer — a `caption` on `SparkPoint` could carry the event name.
+3. "W-L against you" could be read as the opponent's record — consider "You lead 5-2".
+4. Lift `PeekDrawerFrame` / `DRAWER_ATTR` out of `matches/match-drawer.tsx` into `shared/`.
+5. A small-screen fallback for peek drawers (Matches and Opponents).
+6. An offline spec for the selection model, ideally after extracting a hook shared with the roster view.

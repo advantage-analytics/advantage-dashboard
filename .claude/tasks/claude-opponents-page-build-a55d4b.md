@@ -62,7 +62,7 @@ ready).
 
 ## T4 · Opponent peek drawer on the roster shell + selection model
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) new `src/components/dashboard/opponents/opponent-drawer.tsx`, `src/components/dashboard/opponents/opponents-page-content.tsx` (selection state), `opponents-table.tsx` (row ids + `aria-pressed` + wash); reads `matches/match-drawer.tsx` (`PeekDrawerFrame`, `DRAWER_ATTR`), `team/player-drawer.tsx` (identity block, `Sparkline`, `StatPill`, `hasStats` gate, `RECENT_MATCH_GRID` from `player-drawer-layout.ts`), `team/roster-view.tsx` (select/close/toggle/step, window keydown, `syncUrl`)
