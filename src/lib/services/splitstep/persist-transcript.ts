@@ -317,7 +317,9 @@ export async function persistTranscript(params: {
         .from("points")
         .select("id", { count: "exact", head: true })
         .eq("match_id", job.match_id)
-        .contains("flags", [HAND_LABELLED_FLAG]);
+        // flags is jsonb: a bare JS array serialises as the Postgres array
+        // literal {hand_labelled}, which jsonb rejects (22P02).
+        .contains("flags", JSON.stringify([HAND_LABELLED_FLAG]));
       if (labelledError) {
         return {
           ok: false,
