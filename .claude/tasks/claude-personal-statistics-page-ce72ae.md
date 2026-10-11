@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Personal statistics loader: per-match values and the points read
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/data/statistics-server.ts (new), src/lib/data/statistics.ts, src/lib/data/personal-matches-server.ts (widen `MATCH_COLUMNS` with `source_provider` and `PERSONAL_STAT_COLUMNS` with the catalogue's columns), tests/statistics-matches.spec.ts (new) — guesses
