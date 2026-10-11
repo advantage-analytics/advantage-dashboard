@@ -9,6 +9,7 @@ import {
   type LabelMarkParams,
   type LabelMarks,
 } from "@/lib/services/labels/marks";
+import { pointEndedEarly } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -16,6 +17,7 @@ import {
   editContext,
   ROW_OPERATIONS,
 } from "./fixtures/label-session";
+import { tag } from "./fixtures/html-probe";
 import { createLoader } from "./fixtures/vm-modules";
 
 /** What the rail's rows DRAW of the marks, by tier: a chip for the counted, one quiet line for hints, nothing for hidden. */
@@ -188,8 +190,8 @@ function hintLine(
 /** One mark of every code, on the fixture's point and its one stroke. */
 const EVERY_HIDDEN: LabelMark[] = [
   mark("phantom_strokes_dropped", { eventIds: [41], hitter: "p2" }),
-  mark("winner_guessed", {}),
   mark("score_frozen", {}),
+  mark("serve_fault", {}),
 ];
 const HIDDEN_ON_SHOT: LabelMark[] = [
   mark("out_ball_rally_continued", { nextHitter: "p2" }),
@@ -198,7 +200,6 @@ const HIDDEN_ON_SHOT: LabelMark[] = [
 const EVERY_HINT: LabelMark[] = [
   mark("ending_suspect_line", {}),
   mark("winner_to_error_by_bounce", { loser: "p1" }),
-  mark("serve_fault", {}),
   mark("second_serve_called_out", {}),
   mark("result_type_unknown", {}),
 ];
@@ -299,8 +300,8 @@ test.describe("a closed row draws only what can change the score", () => {
       expect(html).not.toContain("data-point-hint");
       for (const words of [
         "shot removed",
-        "Winner guessed",
         "Score not read",
+        "Serve fault?",
         "Out call ignored",
         "No position",
       ]) {
@@ -318,7 +319,7 @@ test.describe("the open point's quiet line", () => {
       point,
       marksOf(
         point,
-        [mark("ending_suspect_line", {}), mark("serve_fault", {})],
+        [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
         {
           [shot.id]: [NET_HIT],
         },
@@ -332,25 +333,19 @@ test.describe("the open point's quiet line", () => {
           "Close to the line. The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
       },
       {
-        code: "serve_fault",
-        text: "Serve fault?",
-        label:
-          "Serve fault? The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
-      },
-      {
         code: "net_hit_contradicts_height",
         text: "Net or out?",
         label:
           "Net or out? Marked as hitting the net, but the ball’s height says it cleared it.",
       },
     ]);
-    // One line, with a middle dot between two hints and none at either end.
+    // One line, with a middle dot between the two hints and none at either end.
     expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
     const line = html.slice(
       html.indexOf("data-point-hints"),
       html.indexOf('data-row="shot"'),
     );
-    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(2);
+    expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(1);
     expect(chips(html)).toHaveLength(0);
   });
 });
@@ -370,10 +365,9 @@ test.describe("a stroke row's tail", () => {
     );
     // The cell holds the pencil — and no chip, whatever the marks say of
     // the stroke.
-    const cell = html.slice(
-      html.indexOf('data-calculated="result"'),
-      html.indexOf("data-shot-actions"),
-    );
+    const resultAt = html.indexOf('data-calculated="result"');
+    const nextRow = html.indexOf("data-row=", resultAt);
+    const cell = html.slice(resultAt, nextRow === -1 ? undefined : nextRow);
     expect(cell).toContain("data-shot-marks");
     expect(chips(html)).toHaveLength(0);
     expect(pencils(cell)).toBe(1);
@@ -429,6 +423,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     label: string;
     detail: string;
     actions: { label: string; run: () => void }[];
+    dismissKey?: string;
   };
   type Hints = (
     point: LabelPoint,
@@ -458,15 +453,16 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(hintLine(html)).toEqual([
       {
         code: "ending_stale",
-        text: "Ending looks stale",
-        label: "Ending looks stale. The strokes say an ace by Lee.",
+        text: "Ace by Lee?",
+        label:
+          "Ace by Lee? The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
       },
     ]);
     const button =
       /<button[^>]*data-point-hint-action="ending_stale"[^>]*>([^<]*)</.exec(
         html,
       );
-    expect(button?.[1]).toBe("Use it");
+    expect(button?.[1]).toBe("Make it an ace");
     // The rail's pressed state, as every text action in it.
     expect(button?.[0]).toContain("active:scale-[0.96]");
     expect(chips(html)).toHaveLength(0);
@@ -493,7 +489,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
     const point = stale();
     const [ending] = pointHints(point, marksOf(point, []), NAMES, edit);
-    expect(ending.actions.map((a) => a.label)).toEqual(["Use it"]);
+    expect(ending.actions.map((a) => a.label)).toEqual(["Make it an ace"]);
     ending.actions[0].run();
     // The rows settle the winner too — Lee's ace — so the patch carries it.
     expect(patched).toEqual([
@@ -529,6 +525,99 @@ test.describe("the hints read off the rows, with their answers", () => {
     ]);
   });
 
+  test("Was the last ball in? answers with the vendor's call, until the result is changed", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const patched: unknown[][] = [];
+    const edit = {
+      onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
+    };
+    const point = fixturePoint();
+    const [ace] = point.shots;
+    const call = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: ace.eventId!,
+    });
+    const [hint] = pointHints(point, marksOf(point, [call]), NAMES, edit);
+    expect([hint.code, hint.label]).toEqual([
+      "last_call_overruled",
+      "Was the last ball in?",
+    ]);
+    expect(hint.actions.map((a) => a.label)).toEqual(["Make it out"]);
+    hint.actions[0].run();
+    expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
+
+    // A net call reads as one.
+    const net = mark("last_call_overruled", {
+      vendorCall: "net",
+      eventId: ace.eventId!,
+    });
+    const [netHint] = pointHints(point, marksOf(point, [net]), NAMES, edit);
+    expect(netHint.actions.map((a) => a.label)).toEqual(["Make it a net"]);
+
+    // Once the labeller changed the result, the chip is settled: no answer.
+    const answered = {
+      ...point,
+      shots: [{ ...ace, result: "out" as const }],
+    };
+    expect(
+      pointHints(answered, marksOf(answered, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+
+    // Another stroke is now last — the called one deleted, or a stroke after
+    // it: nothing is offered, so the call is never written to the wrong ball.
+    const after = {
+      ...point,
+      shots: [ace, { ...ace, id: "s-after", eventId: (ace.eventId ?? 0) + 1 }],
+    };
+    expect(
+      pointHints(after, marksOf(after, [call]), NAMES, edit).map((h) => h.code),
+    ).not.toContain("last_call_overruled");
+    const deleted = {
+      ...point,
+      shots: [
+        { ...ace, status: "deleted" as const },
+        { ...ace, id: "s-before", eventId: (ace.eventId ?? 0) - 1 },
+      ],
+    };
+    expect(
+      pointHints(deleted, marksOf(deleted, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).not.toContain("last_call_overruled");
+    // A phantom swing after it, with no result, does not hide the answer.
+    const phantom = {
+      ...point,
+      shots: [
+        ace,
+        {
+          ...ace,
+          id: "s-phantom",
+          eventId: (ace.eventId ?? 0) + 1,
+          result: null,
+        },
+      ],
+    };
+    expect(
+      pointHints(phantom, marksOf(phantom, [call]), NAMES, edit).map(
+        (h) => h.code,
+      ),
+    ).toContain("last_call_overruled");
+
+    // "Net or out?" on that last ball is one question too many beside it —
+    // and comes back once the answer is given.
+    const netOrOut = mark("net_hit_contradicts_height", {});
+    const both = (p: LabelPoint) =>
+      pointHints(p, marksOf(p, [call], { [ace.id]: [netOrOut] }), NAMES, edit)
+        .map((h) => h.code)
+        .filter((c) =>
+          ["last_call_overruled", "net_hit_contradicts_height"].includes(c),
+        );
+    expect(both(point)).toEqual(["last_call_overruled"]);
+    expect(both(answered)).toEqual(["net_hit_contradicts_height"]);
+  });
+
   /** Lee's serve in, Vargas's return long, then two swings at the dead ball. */
   const endedEarly = () => {
     const point = fixturePoint();
@@ -550,20 +639,12 @@ test.describe("the hints read off the rows, with their answers", () => {
           ...ace,
           id: "s-dead-1",
           eventId: 203,
-          stroke: "forehand" as const,
-          result: null,
-          videoTime: 3,
-        },
-        {
-          ...ace,
-          id: "s-dead-2",
-          eventId: 204,
           hitter: "p2" as const,
           stroke: "forehand" as const,
           result: null,
           landingX: null,
           landingY: null,
-          videoTime: 4,
+          videoTime: 3,
         },
       ],
       winner: "p1" as const,
@@ -585,6 +666,103 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
+  test("“Point ended here” is a suggestion row under the stroke that ended the point; the other hints lead the well", () => {
+    const point = endedEarly();
+    const html = renderWell(point, marksOf(point, []));
+    const at = (needle: string) => {
+      const i = html.indexOf(needle);
+      expect(i, needle).toBeGreaterThan(-1);
+      return i;
+    };
+    const ended = at('data-point-hint="shot_after_point_end"');
+    expect(ended).toBeGreaterThan(at('data-shot-id="s-long"'));
+    expect(ended).toBeLessThan(at('data-shot-id="s-dead-1"'));
+    // "No landing on the last shot" is about the point: still the first row.
+    expect(at('data-point-hint="last_landing_missing"')).toBeLessThan(
+      at('data-row="shot"'),
+    );
+    // One hint line on top; the ending is its own dashed suggestion row.
+    expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
+    expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
+  });
+
+  test("“Point ended here” can be dismissed, and stays gone once it is", () => {
+    const calls: unknown[][] = [];
+    const point = endedEarly();
+    const edit = {
+      operations: {
+        ...ROW_OPERATIONS,
+        onDismissSuggestion: (...args: unknown[]) => calls.push(args),
+      },
+    };
+    const html = renderWell(point, marksOf(point, []), edit);
+    expect(tag(html, "data-suggestion-dismiss")).toContain(
+      'aria-label="Dismiss: Did the point end here? 1 shot follows"',
+    );
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const ended = pointHints(point, marksOf(point, []), NAMES).find(
+      (h) => h.code === "shot_after_point_end",
+    )!;
+    expect(ended.dismissKey).toBe("point_ended:s-long");
+    // Dismissed: no row, and the point's own hint is untouched.
+    const gone = { ...point, dismissed: ["point_ended:s-long"] };
+    const after = renderWell(gone, marksOf(gone, []), edit);
+    expect(after).not.toContain('data-point-hint="shot_after_point_end"');
+    expect(after).toContain('data-point-hint="last_landing_missing"');
+    // Read-only: nothing to dismiss with.
+    expect(
+      renderWell(point, marksOf(point, []), { editable: false }),
+    ).not.toContain("data-suggestion-dismiss");
+  });
+
+  test("once a later stroke is settled, the question does not move up to an earlier one", () => {
+    const point = endedEarly();
+    // A second ball out earlier in the rally: s-early, before s-long.
+    const [ace, ...rest] = point.shots;
+    const early = {
+      ...ace,
+      id: "s-early",
+      eventId: 150,
+      stroke: "forehand" as const,
+      result: "out" as const,
+      videoTime: 1.5,
+    };
+    const withEarly = { ...point, shots: [ace, early, ...rest] };
+    const asked = (p: LabelPoint) =>
+      pointEndedEarly(p, true)?.params.shotId ?? null;
+    expect(asked(withEarly)).toBe("s-long");
+    // Dismissed at s-long: nothing moves up to s-early.
+    expect(
+      asked({ ...withEarly, dismissed: ["point_ended:s-long"] }),
+    ).toBeNull();
+    // Resolved by removing what followed (tombstones after it): the same.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-dead-1" || s.id === "s-dead-2"
+            ? {
+                ...s,
+                status: "deleted" as const,
+                statusBeforeDelete: "kept" as const,
+              }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+    // Resolved by correcting s-long's call: edited, so s-early stays quiet.
+    expect(
+      asked({
+        ...withEarly,
+        shots: withEarly.shots.map((s) =>
+          s.id === "s-long"
+            ? { ...s, result: "in" as const, status: "edited" as const }
+            : s,
+        ),
+      }),
+    ).toBeNull();
+  });
+
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const calls: unknown[][] = [];
@@ -594,20 +772,24 @@ test.describe("the hints read off the rows, with their answers", () => {
       operations: {
         ...ROW_OPERATIONS,
         onSplitPoint: (...args: unknown[]) => calls.push(["split", ...args]),
+        onDismissSuggestion: (...args: unknown[]) =>
+          calls.push(["dismiss", ...args]),
       },
     };
     const point = endedEarly();
     const hints = pointHints(point, marksOf(point, []), NAMES, edit);
     const ended = hints.find((h) => h.code === "shot_after_point_end")!;
-    expect(ended.label).toBe("Point ended here · 2 shots after it");
+    expect(ended.label).toBe("Did the point end here? 1 shot follows");
     expect(ended.actions.map((a) => a.label)).toEqual([
-      "Remove 2",
+      "Remove 1",
       "Split here",
     ]);
     ended.actions[0].run();
     ended.actions[1].run();
     expect(calls).toEqual([
       ["remove", point.id, "s-long"],
+      // Split answers the question for good, then splits.
+      ["dismiss", point.id, "point_ended:s-long"],
       ["split", point.id, "s-dead-1"],
     ]);
     // The last swing has no landing: that hint rides beside it, with no answer.
@@ -634,7 +816,7 @@ test.describe("the hints read off the rows, with their answers", () => {
       removeOnly
         .find((h) => h.code === "shot_after_point_end")!
         .actions.map((a) => a.label),
-    ).toEqual(["Remove 2"]);
+    ).toEqual(["Remove 1"]);
     const splitOnly = pointHints(point, marksOf(point, []), NAMES, {
       operations: edit.operations,
     });
@@ -649,20 +831,24 @@ test.describe("the hints read off the rows, with their answers", () => {
       )!.actions,
     ).toEqual([]);
 
-    // Drawn: the words with the count, and a button for each answer.
+    // Drawn: the words with the count, and a button for each answer. The
+    // point's own hint leads the well; "Point ended here" follows its stroke.
     const html = renderWell(point, marksOf(point, []), edit);
     expect(hintLine(html).map((h) => [h.code, h.text])).toEqual([
-      ["shot_after_point_end", "Point ended here · 2 shots after it"],
       ["last_landing_missing", "No landing on the last shot"],
     ]);
+    expect(tag(html, "data-suggestion-text")).toContain(
+      "Did the point end here? 1 shot follows",
+    );
+    // Laid out as the tray lays out its own: Split first, each with its icon.
     const buttons = [
       ...html.matchAll(
-        /<button[^>]*data-point-hint-action="([^"]*)"[^>]*>([^<]*)</g,
+        /<button[^>]*data-point-hint-action="([^"]*)"[^>]*aria-label="([^":]*):/g,
       ),
     ].map((m) => [m[1], m[2]]);
     expect(buttons).toEqual([
-      ["shot_after_point_end", "Remove 2"],
       ["shot_after_point_end", "Split here"],
+      ["shot_after_point_end", "Remove 1"],
     ]);
   });
 

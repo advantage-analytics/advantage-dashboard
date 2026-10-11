@@ -6,11 +6,14 @@ import { getLabelSession } from "@/lib/data/labels-server";
 import {
   addLabelShotAction,
   combineLabelPointsAction,
+  completeLabelSessionAction,
   deleteLabelPointAction,
   deleteLabelShotAction,
   moveLabelPointAction,
   pullLabelGamePointsAction,
+  foldLabelTiebreakAction,
   removeLabelShotsAfterAction,
+  reopenLabelSessionAction,
   resetLabelPointAction,
   resetLabelShotAction,
   restoreLabelPointAction,
@@ -38,7 +41,8 @@ import {
  * reset an edited row to its seed, set a game's server or type, put back a
  * stroke the site removed, dismiss a suggestion, add a suggested point, move
  * a game's leftover points into the next game, store the score the labeller
- * read or that the video ends early) through the rest
+ * read or that the video ends early, mark the session complete or reopen it)
+ * through the rest
  * of `../actions`. The header lives
  * in the console, beside the save line it owns; the page only supplies the
  * way back.
@@ -55,6 +59,13 @@ import {
  * already gates the route.
  */
 export const dynamic = "force-dynamic";
+
+/**
+ * The page's server actions run under this too. "Mark complete" publishes:
+ * it rewrites a match's points and shots and recomputes its statistics, which
+ * takes longer than an ordinary label write.
+ */
+export const maxDuration = 120;
 
 export const metadata = { title: "Label match" };
 
@@ -105,10 +116,13 @@ export default async function AdminLabelSessionPage({
           insertPoint: insertLabelPointAction,
           shiftGameOverflow: shiftLabelGameOverflowAction,
           pullGamePoints: pullLabelGamePointsAction,
+          foldTiebreak: foldLabelTiebreakAction,
           splitPoint: splitLabelPointAction,
           combinePoints: combineLabelPointsAction,
           switchPlayers: switchLabelPointPlayersAction,
           updateSessionFields: updateLabelSessionFieldsAction,
+          completeSession: completeLabelSessionAction,
+          reopenSession: reopenLabelSessionAction,
         }}
         headerAction={
           <Link

@@ -209,6 +209,7 @@ export function labelSessionFixture(): LabelSession {
     player2Name: "Elena Vargas",
     adScoring: true,
     marksEnabled: true,
+    playOnLets: false,
     finalScore: null,
     videoEndsEarly: null,
     matchScore: { player1: [6, 4], player2: [3, 6] },

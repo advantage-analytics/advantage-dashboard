@@ -13,6 +13,7 @@
  */
 
 import {
+  isServeStroke,
   LABEL_SPINS,
   type LabelEnding,
   type LabelPoint,
@@ -47,7 +48,50 @@ export const LABEL_SHOT_RESULTS: readonly LabelShotResult[] = [
   "in",
   "out",
   "net",
+  "let",
 ];
+
+/**
+ * Why a patch may not leave the row a let on a stroke that is not a serve, or
+ * null when it may. A let is a serve's result and nothing else's, so the row is
+ * judged as the patch would leave it: the patch's own `stroke` and `result`
+ * where it carries them, else the stored row's. That refuses both a let set on
+ * a forehand and a let serve retyped to a forehand without its result cleared
+ * (the rail sends the calculated result with such a retype,
+ * `strokeChangePatch`). With nothing in hand to judge (a patch parsed before
+ * the row is read) there is nothing to refuse yet — the write re-asks with the
+ * row (edit-session.ts `writeLabelShotEdit`). Behind every writer, the
+ * `label_shots_let_serve_only` check constraint is the database's backstop:
+ * it refuses a let on any row whose stroke is null or not a serve.
+ *
+ * The `label_shots` writers that compose `result` or `stroke`, and where each
+ * is guarded:
+ * - the console's edit, `writeLabelShotEdit` (edit-session.ts) — here, once
+ *   at parse (`parseLabelShotPatch`) and again against the row read;
+ * - the combine's serve retypes, `writeLabelPointCombine`
+ *   (point-combine-session.ts) — `combineRetypeError` inside
+ *   `planPointCombine`, before any write;
+ * - a shot reset, `writeLabelShotReset` (reset-session.ts) — `planShotReset`
+ *   judges the seed it would write back;
+ * - the seed's insert (seed.ts `buildLabelSeed`, seed-session.ts) — by
+ *   construction: `labelShotResult` never yields `let`.
+ * The writers that set neither column: `planAddedShot` (hitter, time,
+ * status), the player swap and a point reset's hitters (`writeShotSwaps`),
+ * tombstone / restore (status), the site-removal restore
+ * (`site_removal_restored_at`), and the shot moves of a combine, split or
+ * game shift (`label_point_id`).
+ */
+export function letResultError(
+  patch: LabelShotPatch,
+  stored?: Pick<LabelShotValues, "stroke"> &
+    Partial<Pick<LabelShotValues, "result">>,
+): string | null {
+  const result = "result" in patch ? patch.result : stored?.result;
+  if (result !== "let") return null;
+  const stroke = "stroke" in patch ? patch.stroke : stored?.stroke;
+  if (stroke === undefined) return null;
+  return isServeStroke(stroke) ? null : "Only a serve can be a let.";
+}
 
 export const LABEL_ENDINGS: readonly LabelEnding[] = [
   "ace",
@@ -228,7 +272,9 @@ export function parseLabelShotPatch(
   }
   if ("result" in input) {
     const v = vocab(input.result, LABEL_SHOT_RESULTS);
-    if (v === undefined) return { error: "Result must be in, out or net." };
+    if (v === undefined) {
+      return { error: "Result must be in, out, net or let." };
+    }
     patch.result = v;
   }
   if ("spin" in input) {
@@ -285,6 +331,9 @@ export function parseLabelShotPatch(
     }
     patch.unclear = [...new Set(list as LabelShotValueField[])];
   }
+
+  const letError = letResultError(patch);
+  if (letError) return { error: letError };
 
   return { ok: true, patch };
 }

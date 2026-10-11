@@ -17,10 +17,13 @@
  *   outlives the end it was pressed for.
  */
 
+import { takesServeTurn } from "@/lib/services/labels/game-operations";
+import { tiebreakEndsSwapped } from "@/lib/services/labels/tiebreak-fold";
 import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import {
   positionPatch,
-  type ShotGeometry,
+  type ShotPosition,
 } from "@/lib/services/labels/shot-derived";
 import {
   halfOf,
@@ -55,22 +58,82 @@ export interface HalfClue {
   status?: string;
 }
 
-/** The half a stroke was hit from; `earlier` is the strokes before it. */
+/**
+ * The half a stroke was hit from; `earlier` is the strokes before it.
+ * `fallback` is the answer when nothing in the point says: near, unless the
+ * caller knows better (`tiebreakHitterHalf`).
+ */
 export function hitterHalf(
   shot: HalfClue,
   earlier: readonly HalfClue[] = [],
+  fallback: CourtHalf = "near",
 ): CourtHalf {
   if (shot.contactY !== null) return halfOf(shot.contactY);
   const previous = earlier.findLast(
     (other) => other.status !== "deleted" && other.contactY !== null,
   );
-  if (!previous || previous.contactY === null) return "near";
+  if (!previous || previous.contactY === null) return fallback;
   const side = halfOf(previous.contactY);
   const sameHitter =
     shot.hitter !== null &&
     previous.hitter !== null &&
     shot.hitter === previous.hitter;
   return sameHitter ? side : otherHalf(side);
+}
+
+/** What `tiebreakHitterHalf` reads of a point. A `LabelPoint` satisfies it. */
+export type TiebreakHalfPoint = Pick<
+  LabelPoint,
+  "id" | "status" | "pointIndex" | "setNumber" | "gameNumber" | "ending"
+> & {
+  gameType?: LabelPoint["gameType"] | null;
+  shots: readonly HalfClue[];
+};
+
+/**
+ * In a tiebreak, the half `hitter` stands on at point `pointId` when nothing
+ * in that point says: read off the last earlier point of the tiebreak with a
+ * placed contact, across the net when another player hit it, and across again
+ * when the ends changed in between — after every six points
+ * (`tiebreakEndsSwapped`). Null outside a tiebreak, or with nothing to read.
+ */
+export function tiebreakHitterHalf(
+  points: readonly TiebreakHalfPoint[],
+  pointId: string,
+  hitter: LabelSide | null,
+): CourtHalf | null {
+  if (hitter === null) return null;
+  const point = points.find((p) => p.id === pointId);
+  if (!point || (point.gameType ?? "game") === "game") return null;
+  const game = points
+    .filter(
+      (p) =>
+        p.status !== "deleted" &&
+        p.setNumber === point.setNumber &&
+        p.gameNumber === point.gameNumber,
+    )
+    .sort((a, b) => a.pointIndex - b.pointIndex);
+  const playedBefore = (at: TiebreakHalfPoint) =>
+    game.filter((p) => p.pointIndex < at.pointIndex && takesServeTurn(p))
+      .length;
+  const now = tiebreakEndsSwapped(playedBefore(point));
+  for (const earlier of [...game].reverse()) {
+    if (earlier.pointIndex >= point.pointIndex) continue;
+    const contact = earlier.shots.findLast(
+      (shot) =>
+        shot.status !== "deleted" &&
+        shot.hitter !== null &&
+        shot.contactY !== null,
+    );
+    if (!contact || contact.contactY === null) continue;
+    let half = halfOf(contact.contactY);
+    if (contact.hitter !== hitter) half = otherHalf(half);
+    if (tiebreakEndsSwapped(playedBefore(earlier)) !== now) {
+      half = otherHalf(half);
+    }
+    return half;
+  }
+  return null;
 }
 
 /** Selecting a stroke: its next click is its contact, on the hitter's half. */
@@ -130,7 +193,7 @@ const toCm = (n: number) => Math.round(n * 100) / 100;
 export function nextPlacement(
   state: PlacementState,
   point: CourtPoint,
-  shot: ShotGeometry,
+  shot: ShotPosition,
 ): { state: PlacementState; patch: LabelShotPatch } | null {
   if (state.shotId === null) return null;
   const x = toCm(point.x);

@@ -1,7 +1,7 @@
 /**
  * What a labelled point's strokes already say about how it ended. Pure; the
  * server runs it around every shot write (ending-session.ts) and the console
- * reads it for the "Ending looks stale" hint (marks-state.ts).
+ * reads it for the "Different ending?" hint (marks-state.ts).
  *
  * The last ball also settles who won: a ball that missed gives the point to the
  * other side, a ball marked in gives it to its hitter. A last ball with no
@@ -17,6 +17,7 @@ import type { LabelPointPatch } from "./edit";
 import {
   isMissedResult,
   isNonPointEnding,
+  isLetServe,
   isServeStroke,
   liveShotsInOrder,
   opponent,
@@ -43,7 +44,9 @@ type EndingPoint = Pick<LabelPoint, "winner" | "shots">;
 /**
  * The ending the point's live strokes (`isLiveShot`: no tombstone, and no
  * ghost while `ghosts` is on) describe, read in video order off the LAST of
- * them:
+ * them. A let serve (`result: "let"`) is replayed, not played: it is skipped
+ * as if absent, so it never ends a point and never makes the serve after it a
+ * second one.
  *
  * - no live stroke → `null`
  * - a serve that missed → `double_fault` when it is a second serve or an
@@ -59,7 +62,9 @@ export function deriveEnding(
   point: EndingPoint,
   ghosts: boolean,
 ): DerivedEnding | null {
-  const live = liveShotsInOrder(point, ghosts);
+  const live = liveShotsInOrder(point, ghosts).filter(
+    (shot) => !isLetServe(shot),
+  );
   const last = live.at(-1);
   if (!last) return null;
   const endedBy = last.hitter;
@@ -158,4 +163,38 @@ export function endingPatchTo(
     patch.winner = now.winner;
   }
   return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * The ending a point publishes with. A stored ending is the labeller's, as
+ * is. With none stored, the strokes decide it by the rule the console's
+ * "Make it …" hint offers (`deriveEnding`, ghosts on, as `endingStale`); a
+ * point with no played stroke at all is one the score says happened off the
+ * video — written with its winner and server and nothing else; and strokes
+ * that settle nothing leave it `unresolved`, which the publish refuses.
+ * The Mark complete confirm reads the same answer (`completeWarnings`).
+ */
+export type PublishEnding =
+  | { kind: "stored"; ending: LabelEnding; endedBy: LabelSide | null }
+  | {
+      kind: "derived";
+      ending: LabelEnding;
+      endedBy: LabelSide | null;
+      winner: LabelSide | null;
+    }
+  | { kind: "off_video" }
+  | { kind: "unresolved" };
+
+export function publishEnding(
+  point: Pick<LabelPoint, "ending" | "endedBy" | "winner" | "shots">,
+): PublishEnding {
+  if (point.ending !== null) {
+    return { kind: "stored", ending: point.ending, endedBy: point.endedBy };
+  }
+  const played = liveShotsInOrder(point, true).filter(
+    (shot) => !isLetServe(shot),
+  );
+  if (played.length === 0) return { kind: "off_video" };
+  const derived = deriveEnding(point, true);
+  return derived ? { kind: "derived", ...derived } : { kind: "unresolved" };
 }

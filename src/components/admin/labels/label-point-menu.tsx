@@ -33,6 +33,7 @@ import {
 import { leftoverIds } from "@/lib/services/labels/game-shift";
 import {
   destinationServerIn,
+  gameInSetOf,
   neighbourGames,
 } from "@/lib/services/labels/operations";
 import {
@@ -42,7 +43,7 @@ import {
 } from "@/lib/services/labels/player-swap";
 import { combineNeighbour } from "@/lib/services/labels/point-combine";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
-import { canResetPoint } from "@/lib/services/labels/reset";
+import { pointResetScope } from "@/lib/services/labels/reset";
 import type { EditContext, LabelRowOperations } from "./label-row-parts";
 
 /**
@@ -171,15 +172,14 @@ export function pointMenuActions(
       const server = destinationServerIn(context.points, point.id, game);
       return {
         key: `${game.setNumber}-${game.gameNumber}`,
-        label: `Set ${game.setNumber} · Game ${game.gameNumber}`,
+        label: `Set ${game.setNumber} · Game ${gameInSetOf(context.points, game)}`,
         description: server ? `${context.names[server]} serving` : undefined,
         run: () => operations.onMovePoint(point.id, game),
       };
     }),
-    reset:
-      canResetPoint(point) && !sharesVendorRally(point, context.points)
-        ? () => operations.onAskResetPoint(point.id)
-        : null,
+    reset: pointResetScope(point, sharesVendorRally(point, context.points))
+      ? () => operations.onAskResetPoint(point.id)
+      : null,
     remove: () => operations.onAskDeletePoint(point.id),
   };
 }

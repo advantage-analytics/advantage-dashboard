@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/cleanup-match-videos",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/archive-vendor-files",
+      "schedule": "0 6 * * *"
     }
   ]
 }

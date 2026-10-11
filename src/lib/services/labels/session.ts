@@ -70,9 +70,31 @@ export function isLabelSpin(value: unknown): value is LabelSpin {
   );
 }
 
+/**
+ * A stroke the labeller added and then deleted: its tombstone records nothing
+ * the scorer needs (no vendor stroke was rejected), so the console draws no
+ * row for it and does not count it as a change.
+ */
+export function isWithdrawnAdd(
+  shot: Pick<LabelShot, "status"> &
+    Partial<Pick<LabelShot, "statusBeforeDelete">>,
+): boolean {
+  return shot.status === "deleted" && shot.statusBeforeDelete === "added";
+}
+
 /** Whether a stroke is a serve — a first or a second. */
 export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
   return stroke === "first_serve" || stroke === "second_serve";
+}
+
+/**
+ * Whether a stroke out or in the net ends the point: any rally ball, and a
+ * second serve (a double fault). A first serve's fault ends nothing.
+ */
+export function endsPointWhenMissed(
+  stroke: LabelStroke | null | undefined,
+): boolean {
+  return !isServeStroke(stroke) || stroke === "second_serve";
 }
 
 /**
@@ -87,6 +109,17 @@ export function isNonPointEnding(ending: LabelEnding | null): boolean {
 /** Whether a result is a missed ball: out, or in the net. */
 export function isMissedResult(result: unknown): result is "out" | "net" {
   return result === "out" || result === "net";
+}
+
+/**
+ * A let: a serve the labeller marked replayed. The one test every reader
+ * uses, so a stray `result: "let"` on a rally stroke is never skipped as one.
+ */
+export function isLetServe(shot: {
+  stroke: LabelStroke | null;
+  result: string | null;
+}): boolean {
+  return isServeStroke(shot.stroke) && shot.result === "let";
 }
 
 export function opponent(side: LabelSide): LabelSide {
@@ -216,7 +249,8 @@ export interface LabelPoint {
   note: string | null;
   /**
    * Suggestion keys the labeller dismissed (`label_points.dismissed`):
-   * `missing_shot:<afterEventId>` or `missing_point`. The one stored piece of
+   * `missing_shot:<afterEventId>`, `missing_point` or
+   * `point_ended:<shotId>`. The one stored piece of
    * a mark's life-cycle; the rest is derived from the row's status.
    */
   dismissed: string[];
@@ -242,7 +276,8 @@ export interface LabelSession {
   /**
    * Whether the match was played with advantage scoring, for the scoreboard:
    * `label_sessions.ad_scoring` as the labeller set it, else the job's
-   * `processing_jobs.ad_scoring`, else true (`resolveLabelAdScoring`,
+   * `processing_jobs.ad_scoring`, else the match's `matches.format.ad_scoring`,
+   * else true (`resolveLabelAdScoring`,
    * ad-scoring.ts).
    */
   adScoring: boolean;
@@ -252,6 +287,13 @@ export interface LabelSession {
    * whose labels were made blind to the derivation and must stay that way.
    */
   marksEnabled: boolean;
+  /**
+   * Whether a let serve is played on in this match (`matches.format
+   * .play_on_lets`): true only when the column holds a literal `true`, so a
+   * null or missing format reads as false — lets replayed, the default. Only
+   * when false does a serve's result menu offer `Let`.
+   */
+  playOnLets: boolean;
   /**
    * The match's final score as the labeller read it off the video
    * (`label_sessions.final_score`): one `[p1, p2]` games pair per set. Null

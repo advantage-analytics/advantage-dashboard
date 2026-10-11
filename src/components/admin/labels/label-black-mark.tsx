@@ -10,13 +10,16 @@ import type {
 import {
   HINT_ACTION_LABEL,
   hintLabel,
+  lastCallAction,
   markHover,
+  staleEndingAction,
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
   drawsGhosts,
   endingStale,
   hoverLine,
+  lastCallAnswer,
   lastLandingMissing,
   markStates,
   missingPointAdded,
@@ -30,6 +33,10 @@ import {
   type MarkState,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import {
+  isSuggestionKey,
+  pointEndedKey,
+} from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
 import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
@@ -122,6 +129,13 @@ export interface PointHint {
   detail: string;
   /** The answers the hint offers, when the console can write them. */
   actions: readonly PointHintAction[];
+  /**
+   * The stroke the hint is about, when it is one: "Point ended here" sits
+   * under the stroke that ended the point, not at the top of the well.
+   */
+  afterShotId?: string;
+  /** The key Dismiss stores, for a hint the labeller can wave away. */
+  dismissKey?: string;
 }
 
 /** The line's ink — the well's quiet ink, a tombstone's and a ghost line's. */
@@ -330,7 +344,7 @@ export type HintEdit = Pick<
 
 /**
  * The open point's hints: the marks' own, then the five read off the rows —
- * "Point ended here", "Ending looks stale", "Second serve?", "No landing on
+ * "Point ended here", "Different ending?", "Second serve?", "No landing on
  * the last shot" and "Serve after a serve in play". Each carries its answers
  * when `edit` can write them (`hintActions`). Nothing without marks: a
  * session labelled blind reads none of these, and its ghosts are strokes,
@@ -351,16 +365,38 @@ export function pointHints(
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
   ];
+  const { hints: own, count } = pointRowMarkList(point, marks);
+  // "Was the last ball in?" is a chip; its answer is offered on this line
+  // until the labeller changes the last ball's result.
+  const lastCall = lastCallAnswer(point, count, ghosts);
   const hints = [
-    ...pointRowMarkList(point, marks).hints,
+    ...(lastCall ? [lastCall.mark] : []),
+    // "Net or out?" asks about the same last ball; with that answer on the
+    // line it is one question too many.
+    ...(lastCall
+      ? own.filter((mark) => mark.code !== "net_hit_contradicts_height")
+      : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
-  return hints.map((mark) => ({
-    code: mark.code,
-    label: hintLabel(mark),
-    detail: markHover(mark, names),
-    actions: hintActions(mark, point, edit),
-  }));
+  return hints.flatMap((mark) => {
+    // "Point ended here" is a suggestion: once dismissed it is not drawn.
+    const ended =
+      mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
+    const key = ended ? pointEndedKey(ended) : undefined;
+    // A draft stroke has no id to store yet: no Dismiss until it lands.
+    const dismissKey = key && isSuggestionKey(key) ? key : undefined;
+    if (dismissKey && point.dismissed.includes(dismissKey)) return [];
+    return [
+      {
+        code: mark.code,
+        label: hintLabel(mark, names),
+        detail: markHover(mark, names),
+        actions: hintActions(mark, point, edit, lastCall?.shotId),
+        afterShotId: ended,
+        dismissKey,
+      },
+    ];
+  });
 }
 
 /**
@@ -373,6 +409,7 @@ function hintActions(
   mark: LabelMark,
   point: LabelPoint,
   edit: HintEdit | undefined,
+  lastCallShotId?: string,
 ): PointHintAction[] {
   if (!edit) return [];
   const { onPatchPoint, onPatchShot, onRemoveShotsAfter, operations } = edit;
@@ -386,13 +423,23 @@ function hintActions(
       const { ending, endedBy, winner } = mark.params;
       return [
         {
-          label: HINT_ACTION_LABEL.ending_stale,
+          label: staleEndingAction(ending),
           run: () =>
             onPatchPoint(point.id, {
               ending,
               ended_by: endedBy,
               ...(winner !== null ? { winner } : {}),
             }),
+        },
+      ];
+    }
+    case "last_call_overruled": {
+      if (!onPatchShot || !lastCallShotId) return [];
+      const { vendorCall } = mark.params;
+      return [
+        {
+          label: lastCallAction(vendorCall),
+          run: () => onPatchShot(lastCallShotId, { result: vendorCall }),
         },
       ];
     }
@@ -417,7 +464,22 @@ function hintActions(
               },
             ]
           : []),
-        ...splitAt(HINT_ACTION_LABEL.shot_after_point_end, after[0]),
+        // Split also answers the question for good: the strokes after go to
+        // a new point, so nothing after this one is left to say it was seen.
+        ...(operations
+          ? [
+              {
+                label: HINT_ACTION_LABEL.shot_after_point_end,
+                run: () => {
+                  const key = pointEndedKey(shotId);
+                  if (isSuggestionKey(key)) {
+                    operations.onDismissSuggestion(point.id, key);
+                  }
+                  operations.onSplitPoint(point.id, after[0]);
+                },
+              },
+            ]
+          : []),
       ];
     }
     case "serve_after_serve_in":

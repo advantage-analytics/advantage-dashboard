@@ -489,7 +489,7 @@ function numberOf(html: string, shotId: string): string {
   const at = html.indexOf(`data-shot-id="${shotId}"`);
   expect(at, shotId).toBeGreaterThan(-1);
   const row = html.slice(at);
-  const span = row.indexOf("<span");
+  const span = row.indexOf("<span", row.indexOf("data-shot-number"));
   const start = row.indexOf(">", span) + 1;
   return row.slice(start, row.indexOf("<", start));
 }
@@ -507,6 +507,19 @@ function block(html: string, marker: string): string {
 }
 
 test.describe("a ghost in the black well", () => {
+  test("a ghost never draws the stroke tray, even selected", () => {
+    const point = point4();
+    for (const openGhostIds of [new Set<string>(), new Set([GHOST])]) {
+      const html = renderWell(
+        point,
+        marksOf(point, [phantomMark()]),
+        editContext({ openGhostIds, selectedShotId: GHOST }),
+      );
+      expect(html).toContain(`data-shot-ghost="${GHOST}"`);
+      expect(html).not.toContain("data-shot-tray");
+    }
+  });
+
   test("shown: the struck-through row under the line, its reason and Restore", () => {
     const point = point4();
     const html = renderWell(
@@ -540,6 +553,15 @@ test.describe("a ghost in the black well", () => {
     const reason = tag(row, "data-ghost-reason");
     expect(reason).toContain("col-[8/-1]");
     expect(reason).toContain("min-w-0");
+    // On a narrow well there is no placement track (`SHOT_TRACKS_NARROW`):
+    // the struck landed-at cell leaves and the tail starts at its track, so
+    // it spans landed at + result — wider than its 76px floor here.
+    expect(reason).toContain("@max-[640px]/shots:col-[7/-1]");
+    expect(tag(row, 'data-xy="landed"')).toContain("@max-[640px]/shots:hidden");
+    expect(tag(row, 'data-xy="hit"')).not.toContain("/shots:hidden");
+    expect(SHOT_FLOORS_PX[6] + 8 + SHOT_FLOORS_PX[8]).toBeGreaterThan(
+      GHOST_TAIL_MIN_PX,
+    );
     expect(tag(row, "data-restore-site-removal")).toContain("shrink-0");
     // The number's dash, then the struck values.
     expect(text(row)).toMatch(/^– /);

@@ -32,6 +32,12 @@ export interface PurgeMatchStorageOptions {
   claimPurge?: (
     matchIds: string[],
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  /**
+   * The client `keysKeptElsewhere` reads every job through — the service
+   * role, since a copy of the match may belong to someone the caller cannot
+   * read. Specs pass their fake.
+   */
+  sharedKeyReader?: SupabaseClient;
 }
 
 /**
@@ -69,6 +75,7 @@ interface ResultsKeyRow {
   results_object_key?: unknown;
   players_object_key?: unknown;
   trajectories_object_key?: unknown;
+  label_backup_keys?: unknown;
 }
 
 /** A usable id: a non-empty string that cannot introduce a path segment. */
@@ -87,7 +94,8 @@ function isKeyId(value: unknown): value is string {
  * of exactly two things:
  *
  *   • a RECORDED column value, verbatim — `results_object_key`,
- *     `players_object_key`, `trajectories_object_key`. Recorded beats
+ *     `players_object_key`, `trajectories_object_key`, and each
+ *     `label_backup_keys` entry under the row's own match. Recorded beats
  *     recomputed: an adopted delivery keeps its `orphaned/…` keys, which no
  *     recomputation would reach. A null column contributes nothing.
  *
@@ -128,6 +136,20 @@ function resultsBucketPaths(
       continue;
     }
 
+    // Recorded too, server-side only (processing_jobs_guard_storage_keys),
+    // and still taken only from under this row's own match.
+    if (Array.isArray(job.label_backup_keys)) {
+      for (const key of job.label_backup_keys) {
+        if (
+          typeof key === "string" &&
+          key.startsWith(`label-backups/${matchId}/`) &&
+          !key.includes("..")
+        ) {
+          paths.add(key);
+        }
+      }
+    }
+
     const createdBy =
       typeof job.created_by === "string" && job.created_by !== ""
         ? job.created_by
@@ -151,6 +173,45 @@ function resultsBucketPaths(
   }
 
   return [...paths];
+}
+
+/**
+ * Of `keys`, those a job on a match OUTSIDE this purge still records in one of
+ * `columns`, which must survive it. A copied match carries its source's job
+ * keys verbatim — the same results file, the same trimmed video — so deleting
+ * one copy must not take the other's files. Null when a read fails: the lane
+ * then removes nothing, since a leak is recoverable and a lost file is not.
+ */
+async function keysKeptElsewhere(
+  supabase: SupabaseClient,
+  columns: readonly string[],
+  keys: readonly string[],
+  matchIds: readonly string[],
+): Promise<Set<string> | null> {
+  const kept = new Set<string>();
+  if (keys.length === 0) return kept;
+  const reads = await Promise.all(
+    columns.map((column) =>
+      supabase
+        .from("processing_jobs")
+        .select(`match_id, ${column}`)
+        .in(column, [...keys]),
+    ),
+  );
+  for (const [i, { data, error }] of reads.entries()) {
+    if (error) return null;
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const key = row[columns[i]];
+      if (
+        typeof key === "string" &&
+        isKeyId(row.match_id) &&
+        !matchIds.includes(row.match_id)
+      ) {
+        kept.add(key);
+      }
+    }
+  }
+  return kept;
 }
 
 /**
@@ -197,6 +258,7 @@ export async function purgeMatchStorage(
   // Console references intentionally block row deletion. Ordinary creators cannot
   // see this provenance through RLS, so a server-only claim RPC checks it for
   // both single-match and account cleanup before any object is removed.
+  const sharedKeyReader = options.sharedKeyReader ?? createAdminClient();
   const claimPurge =
     options.claimPurge ??
     (async (ids: string[]) => {
@@ -234,7 +296,7 @@ export async function purgeMatchStorage(
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
     .select(
-      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key",
+      "id, match_id, created_by, video_object_key, trimmed_object_key, results_object_key, players_object_key, trajectories_object_key, label_backup_keys",
     )
     .in("match_id", matchIds);
 
@@ -264,7 +326,7 @@ export async function purgeMatchStorage(
         //
         //    Deduped: every job for one match points at the same source blob, so
         //    a re-submitted match would otherwise delete the same blob twice.
-        const blobNames = [
+        const candidates = [
           ...new Set(
             (jobs ?? [])
               .flatMap((j) => [
@@ -274,6 +336,19 @@ export async function purgeMatchStorage(
               .filter((k): k is string => Boolean(k)),
           ),
         ];
+        const kept = await keysKeptElsewhere(
+          sharedKeyReader,
+          ["video_object_key", "trimmed_object_key"],
+          candidates,
+          matchIds,
+        );
+        if (!kept) {
+          console.error(
+            `[${label}] could not check which videos other matches share — none removed`,
+          );
+          return;
+        }
+        const blobNames = candidates.filter((k) => !kept.has(k));
 
         const removed = await Promise.all(
           blobNames.map((blobName) => deleteVideoBlob({ blobName })),
@@ -294,10 +369,27 @@ export async function purgeMatchStorage(
         //    strokes, players and trajectories files and our derived ball
         //    paths. Same bucket the webhook writes to, so this client can
         //    remove them directly. One `remove`, of a fixed de-duplicated list.
-        const resultKeys = resultsBucketPaths(
+        const candidates = resultsBucketPaths(
           (jobs ?? []) as ResultsKeyRow[],
           matchIds,
         );
+        const kept = await keysKeptElsewhere(
+          sharedKeyReader,
+          [
+            "results_object_key",
+            "players_object_key",
+            "trajectories_object_key",
+          ],
+          candidates,
+          matchIds,
+        );
+        if (!kept) {
+          console.error(
+            `[${label}] could not check which results files other matches share — none removed`,
+          );
+          return;
+        }
+        const resultKeys = candidates.filter((k) => !kept.has(k));
 
         if (resultKeys.length > 0) {
           const { error: resultsError } = await supabase.storage

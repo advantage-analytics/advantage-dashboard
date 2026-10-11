@@ -14,8 +14,8 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
 /**
  * The console's one confirm, drawn by the product's `ConfirmDialog`: delete a
  * stroke (with the reason `label_shots` requires), delete a point, move a point
- * into a game someone else serves, or reset an edited stroke or point to its
- * seed. The dialog closes on its action without waiting on the server
+ * into a game someone else serves, reset an edited stroke or point to its
+ * seed, or mark the session complete (listing what is still open). The dialog closes on its action without waiting on the server
  * (`runOperation`'s contract); nothing is written on Cancel.
  */
 export function LabelConfirmDialog({
@@ -36,7 +36,13 @@ export function LabelConfirmDialog({
   // Keyed by the question, so a second delete never inherits the first's
   // reason.
   const key = confirm
-    ? `${confirm.kind}:${"shotId" in confirm ? confirm.shotId : confirm.pointId}`
+    ? `${confirm.kind}:${
+        "shotId" in confirm
+          ? confirm.shotId
+          : "pointId" in confirm
+            ? confirm.pointId
+            : ""
+      }`
     : "closed";
   return (
     <LabelConfirmBody
@@ -97,6 +103,15 @@ function LabelConfirmBody({
             setProblem(null);
           }}
         />
+      ) : confirm.kind === "complete-session" && confirm.warnings.length > 0 ? (
+        <ul
+          data-complete-warnings=""
+          className="flex list-disc flex-col gap-1 pl-4 text-[13px] text-[var(--ink-700)]"
+        >
+          {confirm.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
       ) : null}
     </ConfirmDialog>
   );

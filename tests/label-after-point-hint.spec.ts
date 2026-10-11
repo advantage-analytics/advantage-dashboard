@@ -14,7 +14,7 @@ import { POINT_1_SHOTS } from "./fixtures/label-session";
 
 /**
  * The hints read off the labelled rows (marks-state.ts): "Point ended here" —
- * the last stroke whose ball was out or in the net with strokes after it —
+ * the second-to-last stroke, when its ball was out —
  * then "Ending looks stale", "Second serve?", "No landing on the last shot"
  * (with its counted twin "Ending can't be read") and "Serve after a serve in
  * play".
@@ -49,7 +49,7 @@ const LONG = { x: 0, y: 25 };
 const NETTED = { x: 0, y: 8 };
 
 test.describe("pointEndedEarly", () => {
-  test("the last out ball with one stroke after it, and with three", () => {
+  test("an out ball with one stroke after it; with more after it, play went on", () => {
     const one = pointEndedEarly(
       { shots: [stroke("a", IN), stroke("b", LONG), stroke("c", IN)] },
       true,
@@ -60,9 +60,9 @@ test.describe("pointEndedEarly", () => {
       scope: "point",
       params: { shotId: "b", after: ["c"] },
     });
-    expect(hintLabel(one!)).toBe("Point ended here · 1 shot after it");
+    expect(hintLabel(one!)).toBe("Did the point end here? 1 shot follows");
     expect(markHover(one!, NAMES)).toBe(
-      "The ball was out, so what follows was hit after the point ended — or a second point in the same rally.",
+      "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
     );
 
     const three = pointEndedEarly(
@@ -76,23 +76,31 @@ test.describe("pointEndedEarly", () => {
       },
       true,
     );
-    expect(three?.params).toEqual({ shotId: "a", after: ["b", "c", "d"] });
-    expect(hintLabel(three!)).toBe("Point ended here · 3 shots after it");
+    expect(three).toBeNull();
   });
 
-  test("the LAST out ball: an earlier one is the point still going", () => {
+  test("only the second-to-last stroke: an earlier out read is the point still going", () => {
     const hint = pointEndedEarly(
       {
         shots: [
           stroke("a", LONG),
           stroke("b", IN),
-          stroke("c", NETTED),
+          stroke("c", LONG),
           stroke("d", IN),
         ],
       },
       true,
     );
     expect(hint?.params).toEqual({ shotId: "c", after: ["d"] });
+  });
+
+  test("never a net read: the vendor's bounce on the hitter's own side is usually the incoming one", () => {
+    expect(
+      pointEndedEarly(
+        { shots: [stroke("a", IN), stroke("b", NETTED), stroke("c", IN)] },
+        true,
+      ),
+    ).toBeNull();
   });
 
   test("the result is the coordinates' when all four are placed, the stored one until then", () => {
@@ -114,11 +122,39 @@ test.describe("pointEndedEarly", () => {
       pointEndedEarly(
         { shots: [stroke("a", null, { result: "net" }), stroke("b", IN)] },
         true,
-      )?.params,
-    ).toEqual({ shotId: "a", after: ["b"] });
+      ),
+    ).toBeNull();
     expect(
       pointEndedEarly(
         { shots: [stroke("a", null, { result: null }), stroke("b", IN)] },
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a second serve out is a double fault: the stroke after it was hit after the point ended", () => {
+    const serves = (second: { x: number; y: number }) => [
+      stroke("a", LONG, { stroke: "first_serve" }),
+      stroke("b", second, { stroke: "second_serve" }),
+    ];
+    expect(
+      pointEndedEarly({ shots: [...serves(LONG), stroke("c", IN)] }, true)
+        ?.params,
+    ).toEqual({ shotId: "b", after: ["c"] });
+    // Netted, or with a rally after it: not asked.
+    expect(
+      pointEndedEarly({ shots: [...serves(NETTED), stroke("c", IN)] }, true),
+    ).toBeNull();
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            ...serves(LONG),
+            stroke("c", IN),
+            stroke("d", IN),
+            stroke("e", IN),
+          ],
+        },
         true,
       ),
     ).toBeNull();
@@ -229,7 +265,9 @@ test.describe("endingStale", () => {
         )!,
         NAMES,
       ),
-    ).toBe("The strokes say a service winner by Vargas.");
+    ).toBe(
+      "The shots add up to a service winner by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
+    );
   });
 
   test("nothing for a let or a non-point, and nothing while the rows say nothing", () => {
@@ -322,6 +360,35 @@ test.describe("secondServeAsFirst", () => {
       secondServeAsFirst({ shots: [serve("a", "in"), serve("b", "in")] }, true),
     ).toBeNull();
     expect(secondServeAsFirst({ shots: [serve("a", "out")] }, true)).toBeNull();
+  });
+
+  test("a let is replayed: the first serve after it stays a first serve", () => {
+    // A let alone before a first serve: nothing to retype.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A let between a fault and a serve typed first neither faults nor clears
+    // the fault: that serve is still the second.
+    expect(
+      secondServeAsFirst(
+        {
+          shots: [
+            serve("a", "out", { videoTime: 1 }),
+            serve("b", "let", { videoTime: 2, stroke: "second_serve" }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
   });
 
   test("the earlier serve must be live: not a tombstone, nor a ghost with marks on", () => {
@@ -513,5 +580,39 @@ test.describe("serveAfterServeIn", () => {
     expect(
       serveAfterServeIn({ shots: [ghosted, second] }, false)?.params,
     ).toEqual({ shotId: "b" });
+  });
+  test("a let is not in: a serve after a let raises nothing, a serve after one called in still does", () => {
+    const afterLet = [
+      serve("a", "let", { videoTime: 1 }),
+      serve("b", "in", { videoTime: 2 }),
+      stroke("c", IN, { hitter: "p2", videoTime: 3 }),
+    ];
+    expect(serveAfterServeIn({ shots: afterLet }, true)).toBeNull();
+    // Let, then first serve out, then second serve in: nothing either.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "out", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3, stroke: "second_serve" }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // A serve called in, then another: still the mark, let or no let before.
+    expect(
+      serveAfterServeIn(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+            serve("c", "in", { videoTime: 3 }),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
   });
 });
