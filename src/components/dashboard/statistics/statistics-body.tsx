@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import { seasonStrip } from "@/lib/data/player-profile";
+import { OpponentSplitCard } from "./opponent-split-card";
 import {
   STATISTICS_OPPONENT_SLOT,
   STATISTICS_STACK,
@@ -13,7 +14,6 @@ import {
 } from "./statistics-layout";
 import { StatisticsControls } from "./statistics-controls";
 import {
-  StatisticsOpponentTypesPlaceholder,
   StatisticsPointEndingsPlaceholder,
   StatisticsRallyLengthPlaceholder,
   StatisticsTablePlaceholder,
@@ -112,7 +112,7 @@ export function StatisticsBody({
         </Slot>
         {/* slot: By opponent type */}
         <Slot label="By opponent type" className={STATISTICS_OPPONENT_SLOT}>
-          <StatisticsOpponentTypesPlaceholder />
+          <OpponentSplitCard />
         </Slot>
       </div>
 

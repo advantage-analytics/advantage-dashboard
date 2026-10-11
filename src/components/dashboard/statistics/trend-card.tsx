@@ -4,10 +4,10 @@ import dynamic from "next/dynamic";
 import { PendingBar } from "@/components/dashboard/loading/pending";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import {
-  STATISTIC_GROUPS,
+  formatMean,
+  statisticConfig,
   trendSeries,
   type StatisticConfig,
-  type StatisticFormat,
   type StatisticWindow,
 } from "@/lib/data/statistics";
 import {
@@ -45,17 +45,6 @@ const KpiDetailChart = dynamic(
     ),
   },
 );
-
-const STATISTICS = new Map<string, StatisticConfig>(
-  STATISTIC_GROUPS.flatMap((group) =>
-    group.statistics.map((statistic) => [statistic.key, statistic] as const),
-  ),
-);
-
-/** A mean, as printed: a whole percentage, or a count to one decimal. */
-function formatMean(value: number, format: StatisticFormat): string {
-  return format === "percent" ? `${Math.round(value)}%` : value.toFixed(1);
-}
 
 const matchCount = (n: number) => `${n} ${n === 1 ? "match" : "matches"}`;
 
@@ -160,8 +149,7 @@ function TrendEmpty() {
 export function TrendCard() {
   const { filtered, state } = useStatistics();
   const { stat, window } = state;
-  // The catalogue holds every `StatisticKey`, so this is never undefined.
-  const statistic = STATISTICS.get(stat) as StatisticConfig;
+  const statistic = statisticConfig(stat);
   // No `useMemo`: the React Compiler memoizes this, and refuses a manual one.
   const { points, average, rolling, latest, change } = trendSeries(
     filtered,

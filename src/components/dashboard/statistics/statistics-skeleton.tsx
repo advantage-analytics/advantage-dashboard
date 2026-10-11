@@ -9,13 +9,16 @@ import { STATISTIC_GROUPS } from "@/lib/data/statistics";
 import {
   RegionCard,
   STATISTICS_OPPONENT_SLOT,
-  STATISTICS_SPLIT_GRID,
+  STATISTICS_SPLIT_ANATOMY,
   STATISTICS_STACK,
   STATISTICS_TABLE_GRID,
   STATISTICS_TAIL_GRID,
   STATISTICS_TREND_PLOT,
   STATISTICS_TREND_ROW,
   STATISTICS_TREND_SLOT,
+  SplitFooter,
+  SplitGroup,
+  SplitRow,
   StatisticsColumn,
   StatisticsTitleFrame,
   TrendLegend,
@@ -47,11 +50,6 @@ const CONTROLS = [
 const WINDOW_PILLS = 4;
 
 const TABLE_COLUMNS = ["Average", "Rolling", "Change", "Last 8", "Opponents"];
-
-const SPLITS = [
-  { title: "Hand", rows: ["Right-handed", "Left-handed"] },
-  { title: "Backhand", rows: ["Two-handed", "One-handed"] },
-];
 
 function ControlPending({
   label,
@@ -112,25 +110,21 @@ function StatisticsPendingBody() {
           </div>
           <div className={STATISTICS_OPPONENT_SLOT}>
             <RegionCard title="By opponent type">
-              {SPLITS.map((split) => (
-                <div key={split.title} className="flex flex-col gap-1.5 pt-1">
-                  <span className="eyebrow-sm">{split.title}</span>
+              {STATISTICS_SPLIT_ANATOMY.map((split) => (
+                <SplitGroup key={split.title} title={split.title}>
                   {split.rows.map((row) => (
-                    <div key={row} className={STATISTICS_SPLIT_GRID}>
-                      <span className="truncate text-[12px] text-[var(--ink-700)]">
-                        {row}
-                      </span>
-                      <PendingBar className="h-1" />
-                      <PendingBar className="ml-auto w-7" />
-                    </div>
+                    <SplitRow
+                      key={row}
+                      label={row}
+                      track={<PendingBar className="h-1" />}
+                      value={<PendingBar className="ml-auto w-7" />}
+                    />
                   ))}
-                </div>
+                </SplitGroup>
               ))}
-              <div className="flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
-                <PendingBar className="h-[11px] w-32" />
-                <div className="flex-1" />
-                <PendingBar className="h-[11px] w-16" />
-              </div>
+              <SplitFooter>
+                <PendingBar className="h-[11px] w-48" />
+              </SplitFooter>
             </RegionCard>
           </div>
         </div>

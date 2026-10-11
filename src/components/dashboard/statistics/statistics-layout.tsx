@@ -53,6 +53,15 @@ export const STATISTICS_SPLIT_GRID =
   "grid grid-cols-[minmax(0,1fr)_88px_36px] items-center gap-3";
 
 /**
+ * The rows By opponent type holds before it has a figure: the two closed
+ * lists. A court is free text, so it has no row until a match names one.
+ */
+export const STATISTICS_SPLIT_ANATOMY = [
+  { title: "Hand", rows: ["Right-handed", "Left-handed"] },
+  { title: "Backhand", rows: ["Two-handed", "One-handed"] },
+];
+
+/**
  * The title row: the 30px page title over one line of facts.
  *
  * No primary beside it — this page reads matches, it does not start one.
@@ -147,6 +156,72 @@ export function TrendLegend({
       <LegendKey swatch="var(--viz-opp-mid)">Average</LegendKey>
       <div className="flex-1" />
       {caption}
+    </div>
+  );
+}
+
+/* ── By opponent type ─────────────────────────────────────────────────────── */
+
+/** One titled run of split rows. Shared with the skeleton. */
+export function SplitGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <h3 className="eyebrow-sm">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * One split row on `STATISTICS_SPLIT_GRID`: the label, a 4px track, the value.
+ * `track` and `value` are the caller's — a fill and a figure, a bar each
+ * while loading, or nothing and a dash.
+ */
+export function SplitRow({
+  label,
+  count,
+  track,
+  value,
+}: {
+  label: string;
+  /** How many matches the row averages, printed after the label. */
+  count?: number;
+  track: ReactNode;
+  value: ReactNode;
+}) {
+  return (
+    <div className={STATISTICS_SPLIT_GRID}>
+      <span className="truncate text-[12px] text-[var(--ink-700)]">
+        {label}
+        {count !== undefined && (
+          <>
+            {" "}
+            <span className="mono tabular text-[10px] text-[var(--ink-400)]">
+              {count}
+            </span>
+            <span className="sr-only">
+              {count === 1 ? " match" : " matches"}
+            </span>
+          </>
+        )}
+      </span>
+      {track}
+      <span className="text-right">{value}</span>
+    </div>
+  );
+}
+
+/** The hairline row that closes the card: which statistic, over how many. */
+export function SplitFooter({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-baseline border-t border-[var(--border-hairline)] pt-3">
+      {children}
     </div>
   );
 }

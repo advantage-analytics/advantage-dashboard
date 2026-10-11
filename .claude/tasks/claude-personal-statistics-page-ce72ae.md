@@ -91,7 +91,7 @@ ready).
 
 ## T6 · By opponent type split card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/statistics/opponent-split-card.tsx (new), src/lib/data/statistics.ts, tests/statistics-splits.spec.ts (new) — guesses

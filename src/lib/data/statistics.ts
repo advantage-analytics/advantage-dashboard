@@ -1,4 +1,5 @@
 import type { KpiDetailPoint } from "@/components/dashboard/shared/kpi-detail-chart";
+import { capitalize } from "@/lib/utils";
 import { meanOfPresent, num, pct, statKey } from "./aggregate";
 import { matchOutcome, shortName, type MatchScore } from "./match-utils";
 import { playerSide } from "./player-identity";
@@ -105,6 +106,22 @@ export const STATISTIC_GROUPS: StatisticGroup[] = [
     ],
   },
 ];
+
+const STATISTICS_BY_KEY = new Map<StatisticKey, StatisticConfig>(
+  STATISTIC_GROUPS.flatMap((group) =>
+    group.statistics.map((statistic) => [statistic.key, statistic] as const),
+  ),
+);
+
+/** A key's catalogue entry. The catalogue holds every `StatisticKey`. */
+export function statisticConfig(key: StatisticKey): StatisticConfig {
+  return STATISTICS_BY_KEY.get(key) as StatisticConfig;
+}
+
+/** A mean, as printed: a whole percentage, or a count to one decimal. */
+export function formatMean(value: number, format: StatisticFormat): string {
+  return format === "percent" ? `${Math.round(value)}%` : value.toFixed(1);
+}
 
 /** A rolling window in matches; `null` is Off. */
 export type StatisticWindow = 3 | 5 | 10 | null;
@@ -239,6 +256,106 @@ export function trendSeries(
     latest: means[means.length - 1] ?? null,
     change: windowChange(values, window),
   };
+}
+
+/* ── One statistic by who was across the net: the split card's rows ───────── */
+
+export interface OpponentSplitRow {
+  label: string;
+  /** Matches in the row that MEASURED the statistic. Never 0 — see below. */
+  n: number;
+  /** `averageOf` those matches' values. */
+  value: number | null;
+  /**
+   * The best row of its group: the highest value, or the lowest where the
+   * statistic's `lowerIsBetter`. False on every row of a group that has one
+   * row or whose best is shared — a lead needs someone to lead.
+   */
+  leader: boolean;
+}
+
+export interface OpponentSplitGroup {
+  title: "Hand" | "Backhand" | "Court";
+  rows: OpponentSplitRow[];
+}
+
+// The stored values (`Hand` / `Backhand` in `lib/matches/patch-match.ts`,
+// restated for the reason `statistics-search.ts` gives) and how a row names
+// them. Order is the card's: the commoner of each pair first.
+const HAND_ROWS = [
+  { value: "right", label: "Right-handed" },
+  { value: "left", label: "Left-handed" },
+];
+const BACKHAND_ROWS = [
+  { value: "two-handed", label: "Two-handed" },
+  { value: "one-handed", label: "One-handed" },
+];
+
+/** A free-text attribute as it is compared: casing is whoever typed it. */
+const normalized = (value: string | null) => value?.trim().toLowerCase() ?? "";
+
+/**
+ * The chosen statistic averaged within each kind of opponent and each court.
+ *
+ * Up to three groups, in the order Hand · Backhand · Court. Hand and backhand
+ * are closed lists; a court is whatever was typed, so its rows are the
+ * surfaces `filtered` was actually played on, de-duplicated without regard to
+ * case and sorted by name.
+ *
+ * A row counts only the matches that measured the statistic — an absent value
+ * is never a zero — and a row left with none is OMITTED, as is a group left
+ * with no rows: "Left-handed —" beside a real figure reads as a result.
+ */
+export function opponentSplits(
+  filtered: readonly StatisticsMatch[],
+  statKey: StatisticKey,
+): OpponentSplitGroup[] {
+  const lowerIsBetter = statisticConfig(statKey).lowerIsBetter;
+
+  const group = (
+    title: OpponentSplitGroup["title"],
+    attribute: (match: StatisticsMatch) => string | null,
+    wanted: readonly { value: string; label: string }[],
+  ): OpponentSplitGroup => {
+    const rows = wanted
+      .map(({ value, label }) => {
+        const measured = filtered
+          .filter((match) => normalized(attribute(match)) === value)
+          .map((match) => match.values[statKey])
+          .filter(
+            (each): each is number =>
+              typeof each === "number" && Number.isFinite(each),
+          );
+        return {
+          label,
+          n: measured.length,
+          value: averageOf(measured),
+          leader: false,
+        };
+      })
+      .filter((row) => row.n > 0);
+
+    if (rows.length > 1) {
+      const values = rows.map((row) => row.value as number);
+      const best = lowerIsBetter ? Math.min(...values) : Math.max(...values);
+      const holders = rows.filter((row) => row.value === best);
+      if (holders.length === 1) holders[0].leader = true;
+    }
+    return { title, rows };
+  };
+
+  const courts = [
+    ...new Set(filtered.map((match) => normalized(match.courtType))),
+  ]
+    .filter(Boolean)
+    .sort()
+    .map((value) => ({ value, label: capitalize(value) }));
+
+  return [
+    group("Hand", (match) => match.opponentHand, HAND_ROWS),
+    group("Backhand", (match) => match.opponentBackhand, BACKHAND_ROWS),
+    group("Court", (match) => match.courtType, courts),
+  ].filter((each) => each.rows.length > 0);
 }
 
 /* ── One match, read from the viewer's side ───────────────────────────────── */

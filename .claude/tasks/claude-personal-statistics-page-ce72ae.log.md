@@ -64,3 +64,14 @@ is the runner's. Newest entries at the bottom.
 - **gate:** mechanical pass · completion needs-work
 - **reason:** Criterion 4 names one empty sentence, "Opponent hand, backhand and court haven't been recorded yet". The card shows that sentence only when no filtered match records any attribute; when attributes are recorded but no match measured the chosen statistic (always true for Return winners) it shows a second sentence, "No match here has measured <statistic> yet". It also prints the sentence with a curly apostrophe. The reviewer called both defensible but held the criterion as written. Criteria 1–3 were judged met; the `trend-card.tsx` edit (importing `formatMean` / `statisticConfig` moved into `statistics.ts`) was noted as minor, behaviour-neutral creep.
 - **stash:** 19fd5c58089ed07aabfe61ffc3f0d7c813b981ca
+
+## T6 · By opponent type split card — done
+
+- **gate:** mechanical pass (on the identical code, before the block; not re-run) · completion pass (re-run after the author amended criterion 4 to allow both empty sentences)
+- **changed:** `statistics.ts` gains pure `opponentSplits` plus shared `statisticConfig` and `formatMean`. New `statistics/opponent-split-card.tsx` (`OpponentSplitCard`, `splitBarWidth`) replaces the placeholder in the `By opponent type` slot: Hand / Backhand / Court rows on the `minmax(0,1fr) 88px 36px` grid, leader in `--viz-you`, footer "<label> · N matches", no AI eyebrow, "Ask why" or claim. `statistics-layout.tsx` adds `SplitGroup`, `SplitRow`, `SplitFooter`, `STATISTICS_SPLIT_ANATOMY`, shared with the skeleton. `trend-card.tsx` now imports the shared helpers. `tests/statistics-splits.spec.ts` added (24 tests).
+- **follow-ups:**
+  1. Footer is one left-aligned line; the frame puts the label left and the count right.
+  2. On a season filtered to nothing the card says "…haven’t been recorded yet" beside the page's "No matches fit these filters."
+  3. The leader is conveyed by colour only; it compares one-decimal means, so two rows that both print 72% can still show a leader.
+  4. `matchCount` has three private copies (trend card, placeholders, split card).
+  5. Each row prints its match count after the label; the unmeasured sentence lowercases the statistic label.

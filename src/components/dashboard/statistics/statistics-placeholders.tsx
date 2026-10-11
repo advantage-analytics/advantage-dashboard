@@ -2,12 +2,7 @@
 
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { STATISTIC_GROUPS } from "@/lib/data/statistics";
-import { capitalize } from "@/lib/utils";
-import {
-  RegionCard,
-  STATISTICS_SPLIT_GRID,
-  STATISTICS_TABLE_GRID,
-} from "./statistics-layout";
+import { RegionCard, STATISTICS_TABLE_GRID } from "./statistics-layout";
 import { useStatistics } from "./statistics-provider";
 
 /**
@@ -26,12 +21,6 @@ import { useStatistics } from "./statistics-provider";
  * repeating one fact.
  */
 
-const STATISTIC_LABELS = new Map(
-  STATISTIC_GROUPS.flatMap((group) =>
-    group.statistics.map((s) => [s.key, s.label] as const),
-  ),
-);
-
 const matchCount = (n: number) => `${n} ${n === 1 ? "match" : "matches"}`;
 
 /** A 4px bar track with nothing on it. */
@@ -41,56 +30,6 @@ function Track({ className = "h-1" }: { className?: string }) {
       aria-hidden="true"
       className={`block rounded-[2px] bg-[var(--ink-100)] ${className}`}
     />
-  );
-}
-
-/* ── By opponent type ─────────────────────────────────────────────────────── */
-
-export function StatisticsOpponentTypesPlaceholder() {
-  const { all, filtered, state } = useStatistics();
-  // Hand and backhand are closed lists; a court is whatever was typed, so its
-  // rows are the surfaces this season was actually played on.
-  const courts = [
-    ...new Set(
-      all
-        .map((match) => match.courtType?.trim().toLowerCase())
-        .filter((court): court is string => Boolean(court)),
-    ),
-  ].sort();
-  const groups = [
-    { title: "Hand", rows: ["Right-handed", "Left-handed"] },
-    { title: "Backhand", rows: ["Two-handed", "One-handed"] },
-    { title: "Court", rows: courts.map(capitalize) },
-  ].filter((group) => group.rows.length > 0);
-
-  return (
-    <RegionCard title="By opponent type">
-      {groups.map((group) => (
-        <div key={group.title} className="flex flex-col gap-1.5 pt-1">
-          <h3 className="eyebrow-sm">{group.title}</h3>
-          {group.rows.map((row) => (
-            <div key={row} className={STATISTICS_SPLIT_GRID}>
-              <span className="truncate text-[12px] text-[var(--ink-700)]">
-                {row}
-              </span>
-              <Track />
-              <span className="text-right">
-                <EmptyMark label={`No figure for ${row.toLowerCase()} yet`} />
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
-      <div className="flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
-        <span className="text-[11px] leading-[1.4] text-[var(--ink-600)]">
-          {STATISTIC_LABELS.get(state.stat)}
-        </span>
-        <div className="flex-1" />
-        <span className="tabular text-[11px] whitespace-nowrap text-[var(--ink-600)]">
-          {matchCount(filtered.length)}
-        </span>
-      </div>
-    </RegionCard>
   );
 }
 
