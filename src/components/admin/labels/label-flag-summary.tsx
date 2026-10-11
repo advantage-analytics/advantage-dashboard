@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, Flag } from "lucide-react";
+import { ChevronDown, Flag, Scale } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
   FloatMenu,
@@ -13,15 +13,14 @@ import {
 import { Kbd } from "@/components/ui/kbd";
 import {
   flagGroups,
+  flagStopLabel,
   stepFlag,
   type FlagRow,
+  type FlagStop,
   type OpenFlag,
+  type ScoreStop,
 } from "@/lib/services/labels/flag-nav";
-import {
-  MARK_LABEL,
-  onPointsDetail,
-  toCheckLabel,
-} from "@/lib/services/labels/marks-copy";
+import { onPointsDetail, toCheckLabel } from "@/lib/services/labels/marks-copy";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { RailTone } from "./label-rail-tone";
@@ -63,8 +62,11 @@ const ROW_INK: Record<
  * The header's open marks: today's flag and count, now the jump to the next open
  * flag after `fromPointId` (`]`, and `[` back, are the console's keys for the
  * same), and a quiet chevron that opens every flag in one `FloatMenu`. The
- * score mismatch, when there is one, leads the list (`score`), so the header
- * never carries a second amber pill.
+ * score mismatch, when there is one, leads the list (`score`) and is a stop
+ * of its own (`scoreStop`): its words sit before the count as an amber chip
+ * that goes to the set's last point, it counts as one flag, and the jumps
+ * land on it. It was a 6 px dot by the chevron until 2026-10-10, and a set
+ * labelled 5–5 against a 6–4 record went to publish unnoticed.
  */
 export function LabelFlagSummary({
   openMarks,
@@ -72,6 +74,7 @@ export function LabelFlagSummary({
   fromPointId,
   onGoToPoint,
   score,
+  scoreStop = null,
   tone = "dark",
 }: {
   /** `openFlags(points, marks)`. */
@@ -82,15 +85,21 @@ export function LabelFlagSummary({
   onGoToPoint?: (pointId: string) => void;
   /** The score mismatch's rows, given the menu's close; null when it adds up. */
   score: ((close: () => void) => ReactNode) | null;
+  /** The mismatch as a stop (`scoreStop`, flag-nav.ts); null when it adds up. */
+  scoreStop?: ScoreStop | null;
   tone?: RailTone;
 }) {
   const [open, setOpen] = useState(false);
-  const count = openMarks.length;
-  const openPoints = new Set(openMarks.map((f) => f.pointId)).size;
-  const next = stepFlag(openMarks, points, fromPointId, 1);
-  const prev = stepFlag(openMarks, points, fromPointId, -1);
+  const stops: readonly FlagStop[] = scoreStop
+    ? [...openMarks, scoreStop]
+    : openMarks;
+  const count = stops.length;
+  const openPoints = new Set(stops.map((f) => f.pointId)).size;
+  const next = stepFlag(stops, points, fromPointId, 1);
+  const prev = stepFlag(stops, points, fromPointId, -1);
   const groups = flagGroups(openMarks);
   const ink = ROW_INK[tone];
+  const dot = score !== null && scoreStop === null;
 
   const go = (pointId: string) => {
     setOpen(false);
@@ -123,11 +132,38 @@ export function LabelFlagSummary({
       data-label-flag-summary=""
       className="inline-flex shrink-0 items-center"
     >
+      {scoreStop ? (
+        <ChromeTooltip
+          label={scoreStop.label}
+          detail={`Point ${scoreStop.pointNumber} · the set's last point`}
+          side="bottom"
+          hidden={open}
+        >
+          <button
+            type="button"
+            data-label-score-stop=""
+            aria-label={`Score doesn’t add up: ${scoreStop.label}`}
+            disabled={!onGoToPoint}
+            onClick={() => go(scoreStop.pointId)}
+            className={cn(
+              "mr-1 inline-flex h-6 max-w-[240px] cursor-pointer items-center gap-1 rounded-[6px] px-[7px] text-[11px] whitespace-nowrap transition-colors duration-150 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default",
+              ink.next,
+            )}
+          >
+            <Scale
+              className="size-3 shrink-0"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+            <span className="truncate">{scoreStop.label}</span>
+          </button>
+        </ChromeTooltip>
+      ) : null}
       {next && onGoToPoint ? (
         <ChromeTooltip
           label={`Next flag · point ${next.pointNumber}`}
           detail={[
-            MARK_LABEL[next.code],
+            flagStopLabel(next),
             [toCheckLabel(count), onPointsDetail(openPoints)?.toLowerCase()]
               .filter(Boolean)
               .join(" "),
@@ -181,11 +217,12 @@ export function LabelFlagSummary({
             aria-expanded={open}
             className={cn(
               "relative grid h-6 cursor-pointer place-items-center rounded-r-[6px] text-white/45 transition-colors duration-150 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none aria-expanded:bg-white/[0.08] aria-expanded:text-white",
-              // The score's dot rides beside the chevron, never in a pill of its own.
-              score ? "w-[26px] grid-flow-col gap-[3px]" : "w-[18px]",
+              // Without its chip (a caller that passes no stop), the score's
+              // dot rides beside the chevron.
+              dot ? "w-[26px] grid-flow-col gap-[3px]" : "w-[18px]",
             )}
           >
-            {score ? (
+            {dot ? (
               <span
                 aria-hidden="true"
                 className="size-1.5 rounded-full bg-[var(--rail-amber)]"
@@ -202,7 +239,7 @@ export function LabelFlagSummary({
         {next && onGoToPoint ? (
           <FloatMenuItem
             label="Next flag"
-            description={`Point ${next.pointNumber} · ${MARK_LABEL[next.code]}`}
+            description={`Point ${next.pointNumber} · ${flagStopLabel(next)}`}
             trailing={<MenuKey tone={tone}>]</MenuKey>}
             onSelect={() => go(next.pointId)}
           />
@@ -210,7 +247,7 @@ export function LabelFlagSummary({
         {prev && onGoToPoint && prev.pointId !== next?.pointId ? (
           <FloatMenuItem
             label="Previous flag"
-            description={`Point ${prev.pointNumber} · ${MARK_LABEL[prev.code]}`}
+            description={`Point ${prev.pointNumber} · ${flagStopLabel(prev)}`}
             trailing={<MenuKey tone={tone}>[</MenuKey>}
             onSelect={() => go(prev.pointId)}
           />

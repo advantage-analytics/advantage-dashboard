@@ -177,7 +177,13 @@ import {
 import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
-import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
+import {
+  openFlags,
+  scoreStop,
+  stepFlag,
+  type FlagStop,
+} from "@/lib/services/labels/flag-nav";
+import { sessionScoreMismatch } from "@/lib/services/labels/set-scores";
 import {
   planTiebreakFold,
   tiebreakFolds,
@@ -1724,8 +1730,6 @@ export function LabelConsole({
     findGap,
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
-    fixEnteredScore: (sets: number[][]) =>
-      void updateSessionFields({ final_score: sets }),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
@@ -1736,10 +1740,23 @@ export function LabelConsole({
   const checkOpenPoint = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous open flag, as the header's flag does.
   const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
-  const openMarks = useMemo(
-    () => (liveMarks ? openFlags(points, liveMarks) : []),
-    [points, liveMarks],
-  );
+  // The marks, and the set that doesn't add up as one more stop — as the
+  // rail's header counts and steps them.
+  const openMarks = useMemo(() => {
+    if (!liveMarks) return [];
+    const marked: FlagStop[] = openFlags(points, liveMarks);
+    const stop = scoreStop(
+      sessionScoreMismatch({
+        points,
+        games: scores.games,
+        finalScore: sessionFields.finalScore,
+        matchScore: session.matchScore,
+        videoEndsEarly: sessionFields.videoEndsEarly,
+      }),
+      points,
+    );
+    return stop ? [...marked, stop] : marked;
+  }, [points, liveMarks, scores, sessionFields, session.matchScore]);
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
@@ -1922,7 +1939,6 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
-      onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.findGap}

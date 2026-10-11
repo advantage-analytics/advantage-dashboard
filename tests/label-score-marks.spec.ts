@@ -479,7 +479,9 @@ test.describe("the console reads them live", () => {
   const { P1, P2 } = FIXTURE_POINT_IDS;
 
   test("unchecked, the same two flags are open and counted; with the sides agreeing, nothing is drawn", () => {
-    const session = labelSessionFixture();
+    // No match record: the score's own flag (a set that doesn't add up) is
+    // another spec's business.
+    const session = { ...labelSessionFixture(), matchScore: null };
     const unchecked = {
       ...session,
       points: session.points.map((p) =>
