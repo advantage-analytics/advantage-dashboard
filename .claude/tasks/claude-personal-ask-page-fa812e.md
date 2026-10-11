@@ -46,7 +46,7 @@ ready).
 
 ## T3 · `ask_run_query`: run a model-written query as `ask_reader`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2
 - **files:** supabase/migrations/<live-version>_ask_run_query.sql (new), tests/ask-views-rls.spec.ts (new) — a guess

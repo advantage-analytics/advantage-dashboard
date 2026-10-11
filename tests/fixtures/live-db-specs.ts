@@ -24,6 +24,7 @@ export const LIVE_DB_SPECS = [
   "ask-conversations.spec.ts",
   "ask-quota.spec.ts",
   "ask-views-parity.spec.ts",
+  "ask-views-rls.spec.ts",
   "claim-completion-rpc-live.spec.ts",
   "custom-org-join-request.spec.ts",
   "custom-program-search-rls.spec.ts",

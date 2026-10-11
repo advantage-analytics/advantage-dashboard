@@ -209,3 +209,21 @@ is the runner's. Newest entries at the bottom.
 4. Deleting the open conversation resets the thread and replaces the URL with `/dashboard/ask`; that path has not been exercised in a running app.
 5. The limit heading reads "Questions this month"; the artboard's eyebrow there reads "Advantage Intelligence".
 6. Not looked at on screen: the harness loads no CSS, so the hover reveal is asserted by class only.
+
+## T3 · `ask_run_query`: run a model-written query as `ask_reader` — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass` on the second review. The first returned `needs-work` for one line of the runner's own record: the P9 result quoted the message for a null `scope_sql` while the printed probe passes a null `sql`. The probe was re-run as printed and the line corrected; nothing in the function changed.
+
+**how it ran:** the subagent wrote the SQL and the spec without applying anything; the runner applied the migration through the claude.ai Supabase connector (the author's explicit instruction for T3) and ran the probes. Live version `20261011215730`.
+
+**changed:** `supabase/migrations/20261011215730_ask_run_query.sql` creates `public.ask_run_query(scope_sql text, sql text) returns jsonb`: `SECURITY DEFINER`, owner `ask_reader`, `STABLE`, `search_path = ask, pg_catalog, pg_temp`, executable by `authenticated` only (not `anon`, not `service_role`). It refuses a blank argument or a caller with no JWT subject, switches the transaction read-only, and opens each string as a cursor, returning `{ matches, rows }` with `rows` capped at 200. `tests/ask-views-rls.spec.ts` is the live spec; it is registered in `LIVE_DB_SPECS`.
+
+**probes (live, as an `authenticated` session):** a normal read returned the caller's 14 matches and a stranger got none; insert, update, a data-modifying CTE, two statements (plain and paren-balanced), `create temp table`, turning read-only off and `set role` all errored; `public.users`, `auth.users` and `public.matches` were permission-denied; a null argument and a missing subject were refused; `pg_sleep(30)` was cancelled at 8 s with the timeout set on the calling transaction.
+
+**follow-ups:**
+
+1. BLOCKING for the feature, and a defect in T2, not T3: `ask.match_stats` cannot be read through this function — `42501 permission denied for table match_stats`. It reads `public.match_stats_with_percentages`, which is `security_invoker=on`, so the base table is checked against `ask_reader`. `ask.matches`, `ask.points` and `ask.shots` read fine (14 / 1661 / 6762 rows for the probe user). `ASK_MOCK_PLAN` fails for the same reason, so mock mode fails too. Needs a migration that replaces `ask.match_stats` (for example a definer function owned by postgres returning the caller's rows of the percentages view) — never a grant to `ask_reader` on the base table.
+2. Whether PostgREST's role-level 8 s timeout binds inside the definer function is unproven until `tests/ask-views-rls.spec.ts` runs against a non-production project.
+3. `postgres` holds only ADMIN on `ask_reader`, so it cannot `create or replace` this function later without the grant → alter → revoke steps in the header.
+4. Run `rls-boundary-reviewer` over T1–T3 together, as T3's notes ask, before the PR.
+5. Three EXPECT lines in the header quote message text that differs from what was observed (same SQLSTATEs); cosmetic.
