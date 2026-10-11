@@ -243,3 +243,20 @@ is the runner's. Newest entries at the bottom.
 5. The `cannot_answer` event carries the model's own sentence, which the client does not show (T14 renders fixed copy per code).
 6. Database error messages are fed back to the planner verbatim; cap their length if they could ever carry row data.
 7. `ask.match_stats` is still unreadable through `ask_run_query` live, so mock mode and statistics questions fail against the real database until that view is fixed.
+
+## T10 · `POST /api/ask` route and its API description — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/app/api/ask/route.ts` is the HTTP shell over `reserveAskQuestion()` and `askQuestion()`: same-origin check, session, bounded body, tag and conversation re-resolution, then either a refusal through `errorResponse()` or the NDJSON stream. Refusals: 403 `cross_origin`, 401 `unauthenticated`, 413 `request_too_large`, 400 `invalid_request`, 404 `conversation_not_found`, 409 `no_matches`, 429 `ask_limit_reached` (only on the reserve function's refusal), 500 `internal_error`. `openapi/advantage-api.yaml` describes the route, its seven event shapes and each refusal. `src/lib/services/match-video/http.ts`: `errorResponse()` gains an optional `clientDetail` argument so the 429 carries `{ used, cap, resets_on }` in production too; behaviour without it is unchanged. `src/lib/services/ask/events.ts` adds `MAX_ASK_QUESTION_LENGTH` (1000). `tests/ask-route.spec.ts` pins 26 cases.
+
+**follow-ups:**
+
+1. `npm run api:lint` printed "No issues found" but ran unauthenticated, with the Postman CLI's local rules only; workspace governance rules, if any, were not applied.
+2. 409 is decided on "no personal match", not "no personal match with statistics" as the design's table words it; a match without statistics ends as a `no_data` event.
+3. `postman/collections` was not regenerated (`npm run api:collection`).
+4. The route sets no `maxDuration`; two model calls may want one.
+5. The composer could set `maxLength` from `MAX_ASK_QUESTION_LENGTH`.
+6. `conversationTurnsFromMessages(...)` and the `askQuestion({...})` call sit between the reservation and the `try`; moving them inside would make the no-leak guarantee structural.
+7. `tests/error-response-shape.spec.ts` could gain a direct case for `clientDetail`.
+8. MAP.md's hand-written `src/app/api/` row does not mention `ask` yet (T16).

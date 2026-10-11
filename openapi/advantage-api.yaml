@@ -43,6 +43,11 @@ info:
     figures, the builder's `details` or the resubmit `reason` beside `error`
     where the handler adds them; the admin upload routes answer
     `{ ok: false, message }`; and the two insight routes answer plain text.
+
+    `/api/ask` is same-origin and body-capped exactly as the video mutations
+    are, and refuses through the same `errorResponse()` — `ErrorResponse`
+    with a `code` of its own (`AskRefusalCode`). Once its stream has opened
+    the status is 200 and a failure is an `error` event inside the stream.
 servers:
   - url: https://app.advantage-analytics.com
     description: Production
@@ -76,6 +81,12 @@ tags:
     description: Scheduled jobs, called by Vercel Cron with `CRON_SECRET`.
   - name: Insights
     description: The Focus cards' streamed one-sentence claims.
+  - name: Ask
+    description: >-
+      The personal Ask page — one question about the signed-in player's own
+      matches, answered as a stream of events. The route is
+      `src/app/api/ask/route.ts`; the orchestration is
+      `src/lib/services/ask/ask.ts`.
   - name: Admin uploads
     description: The admin console's file and video submissions.
   - name: Billing
@@ -2281,6 +2292,242 @@ paths:
         "500":
           $ref: "#/components/responses/InsightLlmError"
 
+  /api/ask:
+    post:
+      tags: [Ask]
+      operationId: askQuestion
+      summary: Ask one question about the player's own matches
+      description: |
+        Plans a read-only query over the caller's personal matches, runs it,
+        and streams an answer whose every figure is a cell of that query's
+        result. The answer and its question are saved to a conversation —
+        the one `conversationId` names, or a new one.
+
+        **Before the stream.** Refusals are JSON, in this order, each
+        answered before the next rung reads anything: `403 cross_origin`,
+        `401 unauthenticated`, `413 request_too_large`, `400 invalid_request`,
+        `404 conversation_not_found`, `409 no_matches`, `429 ask_limit_reached`.
+        Nothing is spent by a refused request. The 429 is the refusal of the
+        `ask_reserve_question()` database function, which counts and reserves
+        in one step; the route never compares a count itself.
+
+        **Tags.** A tag is `{ kind, id }` only. Each is re-resolved against
+        the caller's own matches; any other key on a tag is ignored, and one
+        id that is not the caller's refuses the whole question.
+
+        **The stream.** `200 application/x-ndjson`: one `AskEvent` JSON
+        object per line, each line ended by `\n`. A completed answer is
+        `status` (planning, querying, writing) → `headline` → zero to three
+        `figure` → `text` deltas → `sources` → `done`. A failed one ends with
+        a single `error` event instead of `sources` and `done`, and gives its
+        question back: only an answer that reached `done` counts against the
+        monthly limit. A client that stops reading before `done` is not
+        charged either.
+
+        **Mock mode.** With no LLM provider configured the route still
+        answers 200: a fixed query and a sample answer, computed from the
+        caller's real matches. Nothing is reserved and `done.used` is the
+        month's unchanged count.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskRequest"
+            examples:
+              first:
+                summary: The first question of a conversation
+                value:
+                  question: How is my second serve holding up against left-handers?
+                  tags: []
+              tagged:
+                summary: A follow-up about one opponent and one match
+                value:
+                  conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+                  question: What changed between these?
+                  tags:
+                    - kind: opponent
+                      id: anna lee
+                    - kind: match
+                      id: 3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f
+      responses:
+        "200":
+          description: >-
+            The stream opened. Newline-delimited JSON, one `AskEvent` per
+            line. The status says nothing about whether the answer succeeded:
+            read the last event, which is `done` or `error`. An exception on
+            the server after the first byte errors the body, not the status.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: "#/components/schemas/AskEvent"
+        "400":
+          description: >-
+            The body is not JSON, not an object, or carries an unknown key;
+            the question is missing, empty after trimming, or longer than
+            1000 characters; `tags` is not an array, holds more than 10, or
+            holds one that is not `{ kind, id }`; or a tag names a match or
+            opponent that is not the caller's. `error` is the sentence the
+            composer shows.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                emptyQuestion:
+                  summary: Nothing typed
+                  value:
+                    error: Type a question first.
+                    code: invalid_request
+                    detail: question_empty
+                questionTooLong:
+                  summary: Over 1000 characters
+                  value:
+                    error: That question is too long. Keep it under 1000 characters.
+                    code: invalid_request
+                    detail: question_too_long
+                malformedTag:
+                  summary: A tag that is not { kind, id }
+                  value:
+                    error: This request is not valid.
+                    code: invalid_request
+                    detail: tag_shape
+                tagNotViewers:
+                  summary: A match that is not the caller's
+                  value:
+                    error: That match is not one of yours.
+                    code: invalid_request
+                    detail: tag_not_resolved
+        "401":
+          description: No session.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                unauthenticated:
+                  summary: unauthenticated
+                  value:
+                    error: Sign in to ask a question.
+                    code: unauthenticated
+                    detail: no_session
+        "403":
+          description: >-
+            Not a request from a page this deployment served
+            (`checkSameOrigin`). Checked before the session.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                crossOrigin:
+                  $ref: "#/components/examples/CrossOrigin"
+        "404":
+          description: >-
+            `conversationId` is not a UUID, does not exist, or is someone
+            else's. The three are indistinguishable on purpose.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                conversationNotFound:
+                  summary: conversation_not_found
+                  value:
+                    error: This conversation is not available.
+                    code: conversation_not_found
+                    detail: not_visible
+        "409":
+          description: >-
+            The caller has no personal match, so there is nothing to ask
+            about. Decided from the same match list the page reads as its day
+            zero; a match with no statistics yet does not refuse here — a
+            question about one ends as a `no_data` event.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                noMatches:
+                  summary: no_matches
+                  value:
+                    error: Add a match before you ask a question.
+                    code: no_matches
+                    detail: no_personal_match
+        "413":
+          description: The body exceeds 4096 bytes, by `Content-Length` or as streamed.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                requestTooLarge:
+                  $ref: "#/components/examples/RequestTooLarge"
+        "429":
+          description: >-
+            This month's questions are spent. Unlike every other refusal,
+            `detail` here is an object the client renders — the count behind
+            the page's meter — and it is sent in production too. It is
+            omitted only when neither the refusal nor the meter could supply
+            the figures.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskLimitReachedResponse"
+              examples:
+                limitReached:
+                  summary: ask_limit_reached
+                  value:
+                    error: You have used all 20 questions for this month.
+                    code: ask_limit_reached
+                    detail:
+                      used: 20
+                      cap: 20
+                      resets_on: "2026-11-01"
+        "500":
+          description: >-
+            The caller's matches could not be read, the reservation failed
+            for a reason other than the limit, or the stream could not be
+            opened (a question reserved by then is released).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                internalError:
+                  summary: internal_error
+                  value:
+                    error: Something went wrong on our side. Try again in a moment.
+                    code: internal_error
+                    detail: reserve_failed
+
   /api/admin/uploads/file:
     get:
       tags: [Admin uploads]
@@ -4378,3 +4625,279 @@ components:
         jobId:
           type: string
           format: uuid
+    AskTag:
+      type: object
+      description: >-
+        Something the question is about. `id` is a match id for `match`, and
+        the opponent option's key (the normalised name) for `opponent`. Any
+        other key is ignored — a label is never read from the request.
+      required: [kind, id]
+      properties:
+        kind:
+          type: string
+          enum: [match, opponent]
+        id:
+          type: string
+          minLength: 1
+    AskRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        conversationId:
+          description: The conversation to append to. Omit or send null to start one.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        question:
+          type: string
+          description: >-
+            Trimmed by the route; must then be 1 to 1000 characters (UTF-16
+            code units).
+          minLength: 1
+          maxLength: 1000
+        tags:
+          type: array
+          description: Omitted means none. Duplicates are folded.
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/AskTag"
+    AskRefusalCode:
+      type: string
+      description: >-
+        The `code` of a refusal before the stream: this route's own four plus
+        the transport codes of `src/lib/services/match-video/http.ts`.
+      enum:
+        - unauthenticated
+        - cross_origin
+        - invalid_request
+        - request_too_large
+        - conversation_not_found
+        - no_matches
+        - ask_limit_reached
+        - internal_error
+    AskRefusalResponse:
+      description: An `ErrorResponse` whose `code` is always present.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          required: [code]
+          properties:
+            code:
+              $ref: "#/components/schemas/AskRefusalCode"
+    AskLimitReachedResponse:
+      type: object
+      description: >-
+        The 429. Same envelope, but `detail` is the question count rather
+        than a cause slug, and a client may depend on it.
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          const: ask_limit_reached
+        detail:
+          oneOf:
+            - type: object
+              required: [used, cap, resets_on]
+              properties:
+                used:
+                  type: integer
+                  minimum: 0
+                  description: Questions spent this UTC month.
+                cap:
+                  type: integer
+                  minimum: 0
+                resets_on:
+                  type: string
+                  format: date
+                  description: The first day of next month.
+            - type: string
+              description: A cause slug, outside production, when no count could be read.
+    AskStatusEvent:
+      type: object
+      description: Which step the route is on. Sent as each step begins.
+      required: [type, stage]
+      properties:
+        type:
+          type: string
+          const: status
+        stage:
+          type: string
+          enum: [planning, querying, writing]
+      examples:
+        - type: status
+          stage: planning
+    AskHeadlineEvent:
+      type: object
+      description: The answer's first line, one claim. Sent once, whole.
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          const: headline
+        text:
+          type: string
+      examples:
+        - type: headline
+          text: Your second serve holds up better against right-handers.
+    AskFigureEvent:
+      type: object
+      description: >-
+        One figure tile, at most three per answer. `value` is a cell of the
+        query's result, already formatted for display.
+      required: [type, label, value]
+      properties:
+        type:
+          type: string
+          const: figure
+        label:
+          type: string
+        value:
+          type: string
+      examples:
+        - type: figure
+          label: Second-serve points won
+          value: 55.5%
+    AskTextEvent:
+      type: object
+      description: The next piece of the evidence paragraphs; append `delta` to what came before.
+      required: [type, delta]
+      properties:
+        type:
+          type: string
+          const: text
+        delta:
+          type: string
+      examples:
+        - type: text
+          delta: "Across 12 recorded matches you have won 8 and lost 4. "
+    AskSourceMatch:
+      type: object
+      description: One match the answer was computed from.
+      required: [matchId, opponentName, playedOn, iWon, scoreText]
+      properties:
+        matchId:
+          type: string
+          format: uuid
+        opponentName:
+          oneOf:
+            - type: string
+            - type: "null"
+        playedOn:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+        iWon:
+          description: Null when the score cannot say (an unfinished match) — never a loss.
+          oneOf:
+            - type: boolean
+            - type: "null"
+        scoreText:
+          oneOf:
+            - type: string
+            - type: "null"
+    AskSourcesEvent:
+      type: object
+      description: The matches the answer was computed from. Sent after the answer is saved.
+      required: [type, matches]
+      properties:
+        type:
+          type: string
+          const: sources
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/AskSourceMatch"
+      examples:
+        - type: sources
+          matches:
+            - matchId: 3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f
+              opponentName: Anna Lee
+              playedOn: "2026-09-14"
+              iWon: true
+              scoreText: 6-4 6-3
+    AskDoneEvent:
+      type: object
+      description: >-
+        The last event of a completed answer: it is saved to `conversationId`
+        and `used` of `cap` questions are spent this month.
+      required: [type, conversationId, used, cap]
+      properties:
+        type:
+          type: string
+          const: done
+        conversationId:
+          type: string
+          format: uuid
+        used:
+          type: integer
+          minimum: 0
+        cap:
+          type: integer
+          minimum: 0
+      examples:
+        - type: done
+          conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+          used: 6
+          cap: 20
+    AskErrorCode:
+      type: string
+      description: |
+        Why an answer failed after the stream opened (`AskErrorCode` in
+        `src/lib/services/ask/events.ts`). Every one releases the question.
+
+        - `cannot_answer` — the model said the data cannot answer it, or the
+          query was refused or failed twice.
+        - `no_data` — the query ran and no match fits it.
+        - `llm_unavailable` — the provider errored, before or during the answer.
+        - `answer_failed` — the answer could not be shown or kept: it cited a
+          cell the result does not hold, was empty, or could not be saved.
+      enum:
+        - cannot_answer
+        - no_data
+        - llm_unavailable
+        - answer_failed
+    AskErrorEvent:
+      type: object
+      description: >-
+        The last event of a failed answer. `error` is the sentence to show,
+        `code` the slug to branch on. Whatever streamed before it is void.
+      required: [type, code, error]
+      properties:
+        type:
+          type: string
+          const: error
+        code:
+          $ref: "#/components/schemas/AskErrorCode"
+        error:
+          type: string
+      examples:
+        - type: error
+          code: no_data
+          error: None of your matches fit that question, so there was nothing to compute.
+    AskEvent:
+      description: >-
+        One line of the `/api/ask` stream, told apart by `type`
+        (`src/lib/services/ask/events.ts`).
+      oneOf:
+        - $ref: "#/components/schemas/AskStatusEvent"
+        - $ref: "#/components/schemas/AskHeadlineEvent"
+        - $ref: "#/components/schemas/AskFigureEvent"
+        - $ref: "#/components/schemas/AskTextEvent"
+        - $ref: "#/components/schemas/AskSourcesEvent"
+        - $ref: "#/components/schemas/AskDoneEvent"
+        - $ref: "#/components/schemas/AskErrorEvent"
+      discriminator:
+        propertyName: type
+        mapping:
+          status: "#/components/schemas/AskStatusEvent"
+          headline: "#/components/schemas/AskHeadlineEvent"
+          figure: "#/components/schemas/AskFigureEvent"
+          text: "#/components/schemas/AskTextEvent"
+          sources: "#/components/schemas/AskSourcesEvent"
+          done: "#/components/schemas/AskDoneEvent"
+          error: "#/components/schemas/AskErrorEvent"

@@ -137,7 +137,7 @@ ready).
 
 ## T10 · `POST /api/ask` route and its API description
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9
 - **files:** src/app/api/ask/route.ts (new), openapi/advantage-api.yaml, tests/ask-route.spec.ts (new) — a guess

@@ -8,6 +8,14 @@
  * server-only (`next/server`, a node built-in, a Supabase client).
  */
 
+/**
+ * The longest question `POST /api/ask` accepts, in characters (UTF-16 code
+ * units, after trimming). Sized to the route's 4096-byte body cap: a
+ * thousand characters is at most 3000 bytes of UTF-8, which leaves room for
+ * ten tags and a conversation id beside it.
+ */
+export const MAX_ASK_QUESTION_LENGTH = 1000;
+
 /** The three steps a question passes through, in order. */
 export const ASK_STATUS_STAGES = ["planning", "querying", "writing"] as const;
 
