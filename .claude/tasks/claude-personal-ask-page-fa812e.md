@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Saved conversations: tables and functions
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_conversations.sql (new), tests/ask-conversations.spec.ts (new) — a guess
 - **done when:**

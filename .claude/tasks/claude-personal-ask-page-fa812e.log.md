@@ -34,3 +34,19 @@ is the runner's. Newest entries at the bottom.
 1. `ask_quota()` and `ask_reserve_question()` each hold the constant 20; one `ask_question_cap()` helper would keep them from drifting when tiers arrive.
 2. `LEFTOVER_REFERENCES` in `tests/fixtures/live-db-pool.ts` does not list `ask_usage`; adding it would make a crashed spec run fail loudly on the next pool hand-out.
 3. The limit refusal is errcode `54000` with a message starting `ask_limit_reached` — T9/T10 should branch on that code for the 429.
+
+## T5 · Saved conversations: tables and functions — blocked
+
+**gate:** mechanical PASS; completion review `VERDICT: needs-work`.
+
+**reason:** the same as T4. The criterion "the DDL is applied live with `apply_migration` and the repo file is named to the live version" is not met: the subagent's one `apply_migration` call was declined by the session's permission system and, as instructed, it did not retry or apply the DDL another way. The reviewer confirmed `public.ask_conversations` and `public.ask_messages` do not exist live and the newest live migration is still `20261011134127`. The other three criteria were judged met against the file. The SQL has never been executed.
+
+**stash:** `60b6d57230abde568bb56d9cbc4752ff1b954e11` — holds `supabase/migrations/20261011150000_ask_conversations.sql` (self-stamped version, header says NOT YET APPLIED), `tests/ask-conversations.spec.ts`, and the `LIVE_DB_SPECS` registration in `tests/fixtures/live-db-specs.ts` (the T4 stash edits the same file — expect a one-line conflict when both are restored).
+
+**to unblock:** a person applies the migration (or allows `apply_migration` for the session), renames the file to the version `list_migrations` reports, removes the header note, and re-runs the task.
+
+**follow-ups:**
+
+1. `ask_save_exchange` takes the conversation title from `p_question->>'text'` — T9 must keep that key name in the question jsonb.
+2. `ask_save_exchange` raises `42501` for a conversation that is not the caller's, and `ask_delete_conversation` returns `false` — T9/T11/T15 should branch on those.
+3. `LEFTOVER_REFERENCES` in `tests/fixtures/live-db-pool.ts` could list `ask_conversations` and `ask_messages`.
