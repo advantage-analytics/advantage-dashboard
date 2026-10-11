@@ -30,10 +30,12 @@ import { quotaHours } from "@/lib/services/programs/join-quota";
 /**
  * The token as the route carries it, decoded.
  *
- * A malformed percent-escape (`/join/%E0%A4%A`, a link cut short by a chat
- * client) makes `decodeURIComponent` throw. Read raw instead, so it resolves
- * to `not_found` like any other token that is not one — an error page would
- * tell the person less, and tell them it was our fault.
+ * The segment can still hold a percent sign after the framework's own decode
+ * — a link that was encoded twice on its way through a chat client arrives as
+ * `%E0%A4%A`, say — and `decodeURIComponent` throws on a broken escape. Read
+ * raw instead, so it resolves to `not_found` like any other token that is not
+ * one. (A URL that is malformed outright, `/join/%E0%A4%A` typed as-is, never
+ * gets this far: the framework answers it with its own 400.)
  */
 function readToken(raw: string): string {
   try {
