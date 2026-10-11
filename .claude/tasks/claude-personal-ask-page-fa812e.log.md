@@ -62,3 +62,16 @@ is the runner's. Newest entries at the bottom.
 1. Unqualified view names are accepted on the assumption that `ask_run_query`'s `search_path` is `ask, pg_catalog`; if `public` ever enters it, require `ask.`-qualified names.
 2. `intersect` / `except` do not parse in `pgsql-ast-parser` and are refused as unparseable.
 3. The function allowlist is a judgement call; trim or extend it from refusals seen in sampled model output.
+
+## T7 · Answer renderer and the NDJSON stream helper — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/lib/services/ask/events.ts` defines the `AskEvent` union with no imports. `src/lib/services/ask/answer-render.ts` adds `renderAskAnswer(chunks, rows)`, which turns streamed model text into headline, figure and text events, substitutes `{{rN.column}}` cell references (rows 1-based), drops and reports typed numbers, and ends with an `error` event on a reference the result does not have. Exported syntax constants: `ASK_CELL_REFERENCE_SYNTAX`, `ASK_FIGURE_LINE_SYNTAX` (`FIGURE: <label> = {{rN.column}}`), `MAX_ASK_FIGURES`. `src/lib/llm/stream-response.ts` gains `ndjsonStreamResponse()`; `textStreamResponse()` is untouched. `tests/ask-answer-render.spec.ts` pins 70 cases including the formatting table.
+
+**follow-ups:**
+
+1. A new error code `answer_failed` was added for a broken cell reference — the design's table has no code for it. T9 must release the reservation on it, T14 needs copy for it, and the OpenAPI description should list it.
+2. The `sources.matches` item shape (`matchId`, `opponentName`, `playedOn`, `iWon`, `scoreText`) was this task's choice; T9 and T14 should confirm it.
+3. A percentage is recognised by its column name (`*_pct`, `*_percent`, `*_percentage`) — T8's prompt must tell the model to alias percentages that way, to put figure lines only directly under the headline, and to write ordinals in words ("2nd" would lose its digit).
+4. Dropping a typed number can leave clipped prose; T9 should log `droppedDigits` so prompt drift is visible.

@@ -97,7 +97,7 @@ ready).
 
 ## T7 · Answer renderer and the NDJSON stream helper
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/services/ask/answer-render.ts (new), src/lib/services/ask/events.ts (new), src/lib/llm/stream-response.ts, tests/ask-answer-render.spec.ts (new) — a guess
 - **done when:**
