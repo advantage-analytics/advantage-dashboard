@@ -24,8 +24,8 @@ export const metadata = { title: "Opponents" };
  * would flash a table skeleton on its way to "coming soon".
  *
  * ── Team ────────────────────────────────────────────────────────────────────
- * Who this program plays, and who it is about to — not finalised, so the page
- * says so rather than showing a half-answer.
+ * Who this program plays, and who it is about to — not finalised for a team, so
+ * the page says so rather than showing a half-answer.
  *
  * The loaders it will need are live and stay in `opponents-server.ts`:
  * `getConferenceTable` is a seeded directory of 1,940 programs and is never

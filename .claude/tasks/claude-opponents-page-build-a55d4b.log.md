@@ -62,3 +62,14 @@ is the runner's. Newest entries at the bottom.
 4. Lift `PeekDrawerFrame` / `DRAWER_ATTR` out of `matches/match-drawer.tsx` into `shared/`.
 5. A small-screen fallback for peek drawers (Matches and Opponents).
 6. An offline spec for the selection model, ideally after extracting a hook shared with the roster view.
+
+## T5 · Lift the personal comingSoon flag, amend the two nav tests, npm run map — done
+
+**gate:** mechanical pass (lint, typecheck, full suite clean) · completion pass · widget-states: `page.tsx` change is its doc comment only — no state affected
+
+**changed:** `src/lib/dashboard/nav.ts` — `PERSONAL_NAV`'s Opponents entry loses `comingSoon`, `TEAM_NAV`'s keeps it, and the comment above `TEAM_NAV` says the personal page shipped. `tests/nav-icons.spec.ts` gains the commented `splitByWorkspace` allowlist (`/dashboard/opponents`: personal false, team true) and asserts each list against it. `tests/search-palette-pages.spec.ts` expects Opponents absent from team shortcuts and present in personal ones, and the exact personal label list now includes "Opponents". `page.tsx` doc comment reads "not finalised for a team". `npm run map` reported MAP.md already current (byte-identical).
+
+**follow-ups:**
+
+1. `AGENTS.md`'s Routes section still lists `/dashboard/opponents` among the pages that render `ComingSoonPage` — now true for the team workspace only.
+2. The remaining comment lines above `TEAM_NAV` about the Opponents stub want a pass once the team page is built.

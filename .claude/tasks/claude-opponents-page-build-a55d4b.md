@@ -77,7 +77,7 @@ ready).
 
 ## T5 · Lift the personal comingSoon flag, amend the two nav tests, npm run map
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2, T3, T4
 - **files:** (guess) `src/lib/dashboard/nav.ts`, `tests/nav-icons.spec.ts`, `tests/search-palette-pages.spec.ts`, `src/app/dashboard/opponents/page.tsx` (doc comment only), `MAP.md`
