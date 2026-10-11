@@ -178,3 +178,17 @@ is the runner's. Newest entries at the bottom.
 3. Numbers inside evidence paragraphs are plain text; the artboard sets them in ink tabular figures, which would need the route to mark substituted cells.
 4. `ask-sources.tsx` reads the current year at render to decide whether to show a year — a possible hydration mismatch around New Year only.
 5. `answer_failed` and the no-code interruption have copy here but are not in the design's error table or the OpenAPI description yet (T10).
+
+## T12 · Ask page shell — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`. Committed as `9012695b`. This entry is late and out of order: the commit hook blocked the command that was to write it and the `status: done` line, so the task sat at `doing` through T13 and T14. The `widget-states (runner, at commit)` paragraph directly under the T11 entry above belongs to this task.
+
+**changed:** `src/app/dashboard/ask/page.tsx` is now a Server Component that loads tag options, quota, the conversation list and the `?c=` conversation inside a `WidgetBoundary` and renders `<AskPage>`; `loading.tsx` is a skeleton of the same frame. `src/components/dashboard/ask/` gains `ask-page.tsx` (client shell), `ask-frame.tsx` (the shared 720px column and 340px rail), `use-ask-stream.ts` (NDJSON reader, reducer, saved-message reader and the hook) and placeholders for the composer, answer and rail. `tests/ask-stream.spec.ts` pins 23 cases. `tests/nav-icons.spec.ts` gains a `BUILT_AHEAD_OF_NAV` list holding `/dashboard/ask`, because the page stops rendering `ComingSoonPage` before its nav entry is opened.
+
+**follow-ups:**
+
+1. T16 MUST remove `/dashboard/ask` from `BUILT_AHEAD_OF_NAV` in `tests/nav-icons.spec.ts` when it unflags the nav entry — the spec fails until it does.
+2. The saved-message reader expects a question as `{ text, tags: [{ kind, id, label }] }` and an answer as `{ headline, figures, body, sources }` — T9 should save that shape, including a tag `label`, and never the SQL in a field the reader shows.
+3. After a first answer the URL carries `?c=<id>` but the server-side key is still `"new"`; a `revalidatePath` from T15's delete action would remount the thread and drop an answer that is mid-stream.
+4. `use-ask-stream.ts` is 719 lines; a candidate for splitting at `/pr-check`.
+5. `loading.tsx` always draws the two-column skeleton, so a day-zero account sees it briefly before the empty state. The conversation date beside the title was left out to avoid a hydration mismatch.
