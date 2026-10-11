@@ -24,6 +24,22 @@ import {
 import { quotaHours } from "@/lib/services/programs/join-quota";
 
 /**
+ * The token as the route carries it, decoded.
+ *
+ * A malformed percent-escape (`/join/%E0%A4%A`, a link cut short by a chat
+ * client) makes `decodeURIComponent` throw. Read raw instead, so it resolves
+ * to `not_found` like any other token that is not one — an error page would
+ * tell the person less, and tell them it was our fault.
+ */
+function readToken(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * The tab title, and the card a pasted link unfurls to.
  *
  * A join link is pasted into a group chat, so its preview is the first thing a
@@ -41,7 +57,7 @@ export async function generateMetadata({
   params: Promise<{ token: string }>;
 }): Promise<Metadata> {
   const { token } = await params;
-  const state = await resolveJoinStateOnce(decodeURIComponent(token));
+  const state = await resolveJoinStateOnce(readToken(token));
   const robots = { index: false, follow: false };
 
   switch (state.kind) {
@@ -49,13 +65,16 @@ export async function generateMetadata({
     case "link_ready":
     case "link_full": {
       const title = `Join ${state.programName}`;
-      const social = {
-        title: `${title} on Advantage`,
-        description: "Create an account or sign in, then join as a player.",
-      };
+      // A full team's card must not invite people to a join the page will
+      // refuse; it says what the page says.
+      const description =
+        state.kind === "link_full"
+          ? "Every player seat is taken right now. Ask a coach to free one."
+          : "Create an account or sign in, then join as a player.";
+      const social = { title: `${title} on Advantage`, description };
       return {
         title,
-        description: social.description,
+        description,
         openGraph: social,
         twitter: social,
         robots,
@@ -105,7 +124,7 @@ export default async function JoinPage({
 }) {
   const { token } = await params;
   const query = await searchParams;
-  const state = await resolveJoinStateOnce(decodeURIComponent(token));
+  const state = await resolveJoinStateOnce(readToken(token));
   // 'college' where the state carries no org type — those branches (not_found,
   // expired, already_used, wrong_account) never render an allowance figure.
   const { programHours, personalHours } = quotaHours(
