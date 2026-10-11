@@ -35,4 +35,11 @@ export const UPLOADING_COPY = {
     /** The reassurance — only where leaving the screen is safe. */
     keepUsing: "You can keep using the dashboard.",
   },
+  /**
+   * Said once more before the upload exists: the last thing on the wizard's
+   * Details step, above Save match. No time estimate — nothing has been
+   * measured yet, and "an hour or more" is a floor, not a forecast.
+   */
+  beforeSave:
+    "Uploading starts when you save. It runs in this tab, so keep the tab open and your computer awake until it finishes. A full match can take an hour or more on home Wi-Fi.",
 } as const;

@@ -38,13 +38,36 @@ export function UploadKeepOpenNote({
     .join(" ");
 
   return (
-    <div className={cn(noteStripCls, "mt-1", className)} data-testid={testId}>
+    <UploadNoteStrip className={cn("mt-1", className)} data-testid={testId}>
+      {text}
+    </UploadNoteStrip>
+  );
+}
+
+/**
+ * The strip itself: grey, a dark monitor, the first sentence in medium weight.
+ *
+ * Exported for the one other place that talks about the upload's tab — the
+ * wizard's Details step, which says it before the upload starts — so the
+ * instruction looks the same before and during.
+ */
+export function UploadNoteStrip({
+  children,
+  className,
+  "data-testid": testId,
+}: {
+  children: string;
+  className?: string;
+  "data-testid"?: string;
+}) {
+  return (
+    <div className={cn(noteStripCls, className)} data-testid={testId}>
       <Monitor
         className={cn(noteIconCls, "text-[var(--ink-900)]")}
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <NoticeText>{text}</NoticeText>
+      <NoticeText>{children}</NoticeText>
     </div>
   );
 }
