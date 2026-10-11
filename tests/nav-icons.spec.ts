@@ -67,22 +67,51 @@ test.describe("nav data: icons and comingSoon flags", () => {
     };
     walk(appDir);
 
-    for (const link of [...PERSONAL_NAV, ...TEAM_NAV]) {
-      const file = routeToFile.get(link.href);
-      // Fail loudly rather than skipping: an href we cannot resolve to a page
-      // is exactly the silent hole this test exists to close.
-      expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
+    /**
+     * Routes whose single `page.tsx` branches on workspace kind, so the
+     * file-text rule cannot decide them: the file mentions `ComingSoonPage`
+     * (the team branch) yet the personal page is real. Each entry states the
+     * expected `comingSoon` flag per nav list; every other route keeps the
+     * file-text rule. Remove an entry when both branches agree again.
+     */
+    const splitByWorkspace: Record<
+      string,
+      { personal: boolean; team: boolean }
+    > = {
+      "/dashboard/opponents": { personal: false, team: true },
+    };
 
-      const rendersComingSoon = fs
-        .readFileSync(file as string, "utf8")
-        .includes("ComingSoonPage");
+    const lists = [
+      { kind: "personal", links: PERSONAL_NAV },
+      { kind: "team", links: TEAM_NAV },
+    ] as const;
 
-      expect(
-        Boolean(link.comingSoon),
-        rendersComingSoon
-          ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
-          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
-      ).toBe(rendersComingSoon);
+    for (const { kind, links } of lists) {
+      for (const link of links) {
+        const split = splitByWorkspace[link.href];
+        if (split) {
+          expect(
+            Boolean(link.comingSoon),
+            `${link.href} in ${kind} nav should be comingSoon=${split[kind]}`,
+          ).toBe(split[kind]);
+          continue;
+        }
+        const file = routeToFile.get(link.href);
+        // Fail loudly rather than skipping: an href we cannot resolve to a page
+        // is exactly the silent hole this test exists to close.
+        expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
+
+        const rendersComingSoon = fs
+          .readFileSync(file as string, "utf8")
+          .includes("ComingSoonPage");
+
+        expect(
+          Boolean(link.comingSoon),
+          rendersComingSoon
+            ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
+            : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
+        ).toBe(rendersComingSoon);
+      }
     }
   });
 });
