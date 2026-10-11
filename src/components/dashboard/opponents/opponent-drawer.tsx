@@ -20,6 +20,7 @@ import {
   type PersonalOpponent,
   type PersonalOpponentMeasureKey,
 } from "@/lib/data/personal-opponents";
+import { PERSONAL_NAV } from "@/lib/dashboard/nav";
 import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { playedSets } from "@/lib/ui/score-format";
@@ -61,9 +62,17 @@ function rowDate(isoDate: string): string {
  * figure they are absent, not empty, and one sentence under Recent matches
  * says what will arrive.
  *
- * Statistics and Ask are both coming-soon pages today; the name and the two
- * footer links point there by the author's instruction, for every opponent.
+ * Nothing in the drawer leads to a coming-soon page. Statistics and Ask are
+ * both stubs today, so while the nav still flags them the name and the primary
+ * button open the Matches list searched for this opponent, and the Ask button
+ * is absent. Each returns on its own the day its nav flag is lifted
+ * (`isLive` below reads `PERSONAL_NAV`).
  */
+/** Whether a personal nav destination is a real page yet, not its stub. */
+function isLive(href: string): boolean {
+  return !PERSONAL_NAV.find((link) => link.href === href)?.comingSoon;
+}
+
 export function OpponentDrawer({
   opponent,
   index,
@@ -138,6 +147,9 @@ export function OpponentDrawer({
     opponent.name === UNKNOWN_OPPONENT_NAME
       ? "/dashboard/matches"
       : `/dashboard/matches?q=${encodeURIComponent(opponent.name)}`;
+  const statisticsLive = isLive("/dashboard/statistics");
+  const askLive = isLive("/dashboard/ask");
+  const primaryHref = statisticsLive ? "/dashboard/statistics" : allMatchesHref;
 
   return (
     <PeekDrawerFrame
@@ -156,17 +168,21 @@ export function OpponentDrawer({
       onClosed={onClosed}
       footer={
         <>
+          {askLive && (
+            <Link
+              href="/dashboard/ask"
+              className={cn(advButton("ghost", "md"), "w-full")}
+            >
+              Ask about {firstName}
+            </Link>
+          )}
           <Link
-            href="/dashboard/ask"
-            className={cn(advButton("ghost", "md"), "w-full")}
-          >
-            Ask about {firstName}
-          </Link>
-          <Link
-            href="/dashboard/statistics"
+            href={primaryHref}
             className={cn(advButton("primary", "md"), "w-full")}
           >
-            Open statistics vs. {firstName}
+            {statisticsLive
+              ? `Open statistics vs. ${firstName}`
+              : `View matches vs. ${firstName}`}
           </Link>
         </>
       }
@@ -186,7 +202,7 @@ export function OpponentDrawer({
                 drawer never truncates (Peek Drawer). */}
             <h2 className="text-title-lg min-w-0">
               <Link
-                href="/dashboard/statistics"
+                href={primaryHref}
                 className="block rounded-[var(--radius-cell)] [text-wrap:balance] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
                 {opponent.name}
