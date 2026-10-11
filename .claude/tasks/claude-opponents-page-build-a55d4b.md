@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Opponents list page: title row, table card, footer, skeleton, day zero
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) `src/app/dashboard/opponents/page.tsx` (personal branch renders the page; team branch keeps the existing `ComingSoonPage` call verbatim), new `src/components/dashboard/opponents/opponents-title-row.tsx`, `opponents-table.tsx`, `opponents-table-layout.ts` (grid string, no JSX), `opponents-skeleton.tsx`, `opponents-day-zero.tsx`, `opponents-page-content.tsx` (client; owns selection state for T4); reads `matches/matches-title-row.tsx`, `matches/matches-day-zero.tsx`, `matches/matches-skeleton.tsx`, `shared/form-ticks.tsx`, `dashboard/result-mark.tsx`, `ui/empty-mark.tsx`, `lib/ui/score-format.ts`, `matches/player-hands.ts`

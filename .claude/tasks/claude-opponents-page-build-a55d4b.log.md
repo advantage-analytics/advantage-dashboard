@@ -17,3 +17,19 @@ is the runner's. Newest entries at the bottom.
 4. `currentSeason` reads the clock in UTC — a user-zone clock would be exact around Aug 1.
 5. The PostToolUse typecheck hook picks up the main checkout's `_video/` errors from inside a worktree.
 6. Confirm at /pr-check that a `created_by = me` match is never legitimately dropped by the null-`playerSide` skip.
+
+## T2 · Opponents list page: title row, table card, footer, skeleton, day zero — done
+
+**gate:** mechanical pass (lint + typecheck clean; full suite failed twice on unrelated load-only flakes under a machine load average of ~26 — run 1: 7 failures in event-table / film-playback-refresh / match-video-attachment-flow / match-video-azure-smoke / match-video-file-step / schedule-doubles-picker, all 7 passed re-run alone; run 2: 5,816 passed, 2 failed, `film-playback-refresh.spec.ts:571` and `match-video-attachment-flow.spec.ts:1015`, both 4/4 alone with `--repeat-each=4`; none reachable from this diff) · completion pass · widget-states audit: loading ✓, empty ✓, error ✓
+
+**changed:** `src/app/dashboard/opponents/page.tsx` branches on workspace kind — team keeps the literal `ComingSoonPage` call, personal renders `getPersonalOpponents` inside `Suspense` with `OpponentsSkeleton`, wrapped in `WidgetBoundary`. New `src/components/dashboard/opponents/`: `opponents-table-layout.ts` (grid, labels, row box, page frame), `opponents-title-row.tsx`, `opponents-table.tsx`, `opponents-page-content.tsx` (client; holds `selectedKey` for T4), `opponents-skeleton.tsx`, `opponents-day-zero.tsx`, `opponents-toolbar.tsx` (the frame's toolbar drawn inert for T3), `opponent-style.ts` (hand/backhand labels). Deviations kept: day zero fires on `opponents.length === 0` (loader has no raw match count); card `min-w-[822px]` rather than the frame's 720px; shared `FormTicks` and comma-joined score sets kept; no `cursor-pointer` until T4; counts singularised. Not opened in a browser.
+
+**follow-ups:**
+
+1. Return a raw personal-match count from the loader so "no matches" and "matches, none naming an opponent" get different copy.
+2. Widen the Last match column when any row needs the year, as Matches does.
+3. `formatShortDate` parses date-only ISO as UTC — the cell can read a day early in US zones (shared with Matches).
+4. Skeleton shows the h1, day zero drops it — an empty account sees the title flash; reuse the layout's presence read.
+5. Give `WidgetBoundary`'s retry state the page padding on this route.
+6. Add an offline spec for `opponent-style.ts`.
+7. Confirm the 822px card floor and form-tick alignment at /pr-check eyes-on.
