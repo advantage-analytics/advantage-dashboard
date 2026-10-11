@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Statistics catalogue and rolling-window helpers (pure, with tests)
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/statistics.ts (new, pure — no Supabase, no React), tests/statistics-rolling.spec.ts (new) — guesses
 - **done when:**
