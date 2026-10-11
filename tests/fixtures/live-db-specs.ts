@@ -21,6 +21,7 @@ export const LIVE_DB_SPECS = [
   "admin-program-rpcs.spec.ts",
   "admin-routes.spec.ts",
   "admin-self-promotion.spec.ts",
+  "ask-conversations.spec.ts",
   "ask-quota.spec.ts",
   "ask-views-parity.spec.ts",
   "claim-completion-rpc-live.spec.ts",
