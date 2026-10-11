@@ -91,7 +91,7 @@ ready).
 
 ## T6 · By opponent type split card
 
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/statistics/opponent-split-card.tsx (new), src/lib/data/statistics.ts, tests/statistics-splits.spec.ts (new) — guesses
@@ -100,7 +100,7 @@ ready).
   - [ ] A pure `opponentSplits(filtered, statKey)` returns up to three groups — Hand (Right-handed / Left-handed), Backhand (Two-handed / One-handed), Court (one row per distinct court) — each row `{ label, n, value: averageOf(group values), leader }`; rows with `n = 0` and groups with no rows are omitted; null values are not counted in `n`; the spec pins this.
   - [ ] The card renders each group's title and rows in a `minmax(0, 1fr) 88px 36px` grid — label, a bar whose width is the value (leader `--viz-you`, others `--player-1-bar-tint`), the value — and a footer "<statistic label> · N matches".
   - [ ] The card carries no "Advantage Intelligence" eyebrow, no "Ask why" action and no generated claim sentence.
-  - [ ] With no group to show, the card keeps its anatomy with the sentence "Opponent hand, backhand and court haven't been recorded yet" and `—` where values go; the spec renders it through `createLoader()` and asserts.
+  - [ ] With no group to show, the card keeps its anatomy with `—` where values go and one sentence: "Opponent hand, backhand and court haven’t been recorded yet" (curly apostrophe, the codebase's convention) when no filtered match records any of the three, or "No match here has measured <statistic label> yet" when they are recorded but no match measured the chosen statistic; the spec renders both cases through `createLoader()` and asserts.
 - **notes:** Sits beside the Trend card in the frame's flex row (`flex: 1 1 184px`-class column, 20px padding, 12px gap). The statistic shown is the provider's `stat`, same as Trend.
 
 ## T7 · All statistics table
