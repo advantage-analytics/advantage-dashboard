@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Question limit: `ask_usage` and its functions
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_usage.sql (new), tests/ask-quota.spec.ts (new) — a guess
 - **done when:**
