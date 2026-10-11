@@ -15,7 +15,11 @@ import {
 import { JoinPane } from "@/components/join/join-pane";
 import { JoinTermsPanel } from "@/components/join/join-terms";
 import { NothingSent } from "@/components/join/nothing-sent";
-import { resolveJoinStateOnce } from "@/lib/services/programs/join-state-server";
+import {
+  resolveJoinStateOnce,
+  sessionNeedsName,
+} from "@/lib/services/programs/join-state-server";
+import { authHref } from "@/lib/auth/safe-next";
 import {
   isNotNow,
   joinHref,
@@ -146,6 +150,18 @@ export default async function JoinPage({
   // means anything on the two screens that offer a Join button; everywhere
   // else the state itself is the answer.
   const declined = isNotNow(query);
+
+  // A Join button is about to render for an account with no name. Joining
+  // marks the account onboarded, so this is the last point the name step can
+  // run — see `sessionNeedsName`. It comes back here by the same `?next=` the
+  // auth pages use. Declining skips it: nothing is being joined.
+  if (
+    !declined &&
+    (state.kind === "ready" || state.kind === "link_ready") &&
+    (await sessionNeedsName())
+  ) {
+    redirect(authHref("/onboarding", joinHref(token)));
+  }
 
   switch (state.kind) {
     // Revoked, mistyped, never real — an invitation or a join link alike. One

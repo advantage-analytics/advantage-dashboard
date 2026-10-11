@@ -1,5 +1,7 @@
 import { cache } from "react";
+import { createClient } from "@/lib/supabase/server";
 import { resolveJoinState, type JoinState } from "./invite-acceptance";
+import { hasProfileName } from "./join-name";
 import { joinTokenFromPath } from "./join-links";
 
 /**
@@ -42,4 +44,32 @@ export async function joinProgramNameForNext(
     default:
       return null;
   }
+}
+
+/**
+ * Whether the signed-in account still needs a name before it joins.
+ *
+ * Joining writes the roster row from the profile and marks the account
+ * onboarded, so onboarding's name step never runs afterwards: an account that
+ * joins nameless stays nameless, and its roster row is named after its
+ * address. The join page asks this before it shows a Join button and sends a
+ * nameless account through the name step first.
+ *
+ * Fails toward "has a name". A read that errors must not trap someone in a
+ * redirect; the worst case is the address-named row this exists to prevent.
+ */
+export async function sessionNeedsName(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("first_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error || !data) return false;
+  return !hasProfileName(data.first_name as string | null);
 }

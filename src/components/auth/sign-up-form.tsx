@@ -100,8 +100,8 @@ export function SignUpForm({
     >
       {joinProgram ? (
         <FormHeader
-          eyebrow={joinProgram}
-          title={`Create an account to join ${joinProgram}`}
+          eyebrow={`Joining ${joinProgram}`}
+          title="Create Account."
           description="The confirmation email brings you back to the invitation. Nothing is shared until you press Join there."
         />
       ) : (

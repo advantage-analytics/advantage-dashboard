@@ -159,8 +159,8 @@ export function LoginForm({
     >
       {joinProgram ? (
         <FormHeader
-          eyebrow={joinProgram}
-          title={`Sign in to join ${joinProgram}`}
+          eyebrow={`Joining ${joinProgram}`}
+          title="Welcome Back."
           description="You'll see what your coaches can see before anything is shared, then decide whether to join."
         />
       ) : (

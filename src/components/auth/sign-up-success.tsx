@@ -50,9 +50,12 @@ export function SignUpSuccess({
         <FormHeader
           eyebrow="Account created"
           title="Check your email."
-          description={`We sent a confirmation link. Open it to activate your account and return to ${
+          // True for a new address and for one that already has an account:
+          // sign-up answers both the same way and mails only the first, and
+          // this screen must not be what tells them apart.
+          description={`If this address is new, we sent a confirmation link. Open it to activate your account and return to ${
             joinProgram ? `${joinProgram}'s invitation` : "the invitation"
-          }.`}
+          }. Already have an account? Sign in below.`}
         />
       ) : (
         <FormHeader
