@@ -162,3 +162,19 @@ is the runner's. Newest entries at the bottom.
 3. The menu caps at 5 opponents and 8 matches with no "type to narrow" hint.
 4. `askTagRows` / `askTagKey` could be shared with the rail (T15) so chips and "Tagged in this question" agree; the exchange view in `ask-page.tsx` still draws plain chips.
 5. Option rows are not focusable and follow the mouse via `onMouseMove` (the `aria-activedescendant` listbox pattern) — worth an accessibility look at `/pr-check`.
+
+## T14 · Ask answer and sources — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/components/dashboard/ask/ask-answer.tsx` is the real answer: engine mark and name, headline, up to three figure tiles, evidence paragraphs, a `role="status"` line naming the step while in flight, and fixed copy per error code (`ASK_ERROR_COPY`). `ask-sources.tsx` renders "Computed from N matches" with linked record rows, two shown and "All N" expanding in place. `ask-engine-mark.tsx` is the one shared engine mark, and `ask-composer.tsx` now uses it (same markup). `tests/ask-answer-view.spec.ts` pins 16 cases through `tests/fixtures/ask-answer-harness.tsx`.
+
+**widget-states (runner, at commit):** loading ✓ (in-flight status text naming the real step, no spinner or bar); empty ✓ (`no_data` and `cannot_answer` each have their own copy, never dressed as a finding); error ✓ (one message per code, an interruption shows the reader's own sentence).
+
+**follow-ups:**
+
+1. An unfinished match draws a local dashed-circle mark, because `ResultMark`'s null state is labelled "Level". Promote the unfinished mark into `ResultMark` and `reference/tables.md` so Matches rows stop calling an unfinished match "Level".
+2. Any error drops whatever had already streamed and shows only the copy. `no_data`'s copy is fixed, so a more specific server sentence is not shown.
+3. Numbers inside evidence paragraphs are plain text; the artboard sets them in ink tabular figures, which would need the route to mark substituted cells.
+4. `ask-sources.tsx` reads the current year at render to decide whether to show a year — a possible hydration mismatch around New Year only.
+5. `answer_failed` and the no-code interruption have copy here but are not in the design's error table or the OpenAPI description yet (T10).

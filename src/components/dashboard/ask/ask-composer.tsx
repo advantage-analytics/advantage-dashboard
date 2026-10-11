@@ -17,6 +17,7 @@ import {
   flatAskTagRows,
   type AskTagRow,
 } from "./ask-tag-menu";
+import { AskEngineMark } from "./ask-engine-mark";
 import type { AskQuestion, AskTag } from "./use-ask-stream";
 
 /**
@@ -397,14 +398,7 @@ export function AskComposer({
             data-ask-engine=""
             className="flex items-center gap-2 text-[12px] text-[var(--ink-700)]"
           >
-            <span
-              aria-hidden="true"
-              className="flex size-4 shrink-0 items-center justify-center rounded-[3px] bg-[var(--ink-900)]"
-            >
-              {/* The mark, cut out of white by its own file — `next/image`
-                  would read `process.env` under the component harness. */}
-              <span className="h-[6px] w-[9px] bg-white [mask:url(/logos/logo3.svg)_center/contain_no-repeat]" />
-            </span>
+            <AskEngineMark />
             Advantage Intelligence
           </span>
 

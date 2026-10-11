@@ -190,7 +190,7 @@ ready).
 
 ## T14 · Ask answer and sources
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** src/components/dashboard/ask/ask-answer.tsx (new), src/components/dashboard/ask/ask-sources.tsx (new), src/components/dashboard/ask/ask-page.tsx, tests/ask-answer-view.spec.ts (new), tests/fixtures/ask-answer-harness.tsx (new) — a guess
