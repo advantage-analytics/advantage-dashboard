@@ -192,3 +192,20 @@ is the runner's. Newest entries at the bottom.
 3. After a first answer the URL carries `?c=<id>` but the server-side key is still `"new"`; a `revalidatePath` from T15's delete action would remount the thread and drop an answer that is mid-stream.
 4. `use-ask-stream.ts` is 719 lines; a candidate for splitting at `/pr-check`.
 5. `loading.tsx` always draws the two-column skeleton, so a day-zero account sees it briefly before the empty state. The conversation date beside the title was left out to avoid a hydration mismatch.
+
+## T15 · Ask right rail: tags, limit meter, earlier questions — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/components/dashboard/ask/ask-rail.tsx` is the real rail: "Tagged in this question", the limit ("N questions left", a 20-unit meter, the count line) and "Earlier questions" with a delete row action behind `ConfirmDialog`. `src/app/dashboard/ask/actions.ts` adds `deleteAskConversation`, which validates the id, calls `ask_delete_conversation` on the cookie-auth client and revalidates the page. `ask-page.tsx` wires both; `ask-tag-menu.tsx` exports `ASK_TAG_ICON` and `askTagMeta` so the rail and the composer's chips agree. `tests/ask-rail.spec.ts` pins 22 cases through `tests/fixtures/ask-rail-harness.tsx`.
+
+**widget-states (runner, at commit):** no loading state of its own (it renders from the page's loaders, covered by `loading.tsx`); empty ✓ ("Tagged in this question" and "Earlier questions" are each absent when there is nothing to list, and the limit section is omitted when the quota could not be read — never `0 / 20`); error ✓ (a failed delete keeps the row and says so in the dialog).
+
+**follow-ups:**
+
+1. The count line renders "8 / 20 · Resets on the 1st" with a capital R, not the task's quoted lower-case form: design-drift fails on a lower-case word after a middot. The reviewer ruled the criterion met; the quote in the task text is what is off.
+2. `deleteAskConversation` has no test of its own (the spec proves the handler receives the id through a stand-in); it wants a live-DB spec.
+3. Delete is disabled while an answer is in flight, with no explanation shown — a disabled button has no tooltip.
+4. Deleting the open conversation resets the thread and replaces the URL with `/dashboard/ask`; that path has not been exercised in a running app.
+5. The limit heading reads "Questions this month"; the artboard's eyebrow there reads "Advantage Intelligence".
+6. Not looked at on screen: the harness loads no CSS, so the hover reveal is asserted by class only.

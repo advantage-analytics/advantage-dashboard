@@ -164,6 +164,36 @@ export function askTagKey(tag: Pick<AskTag, "kind" | "id">): string {
   return `${tag.kind}:${tag.id}`;
 }
 
+/** The glyph each kind of tag carries: in the menu, on a chip, in the rail. */
+export const ASK_TAG_ICON = {
+  opponent: Brain,
+  match: GalleryHorizontalEnd,
+} as const;
+
+const ASK_TAG_KIND_LABEL = { opponent: "Opponent", match: "Match" } as const;
+
+/**
+ * The line under a tag's name in the rail: what kind of thing it is, then
+ * what the menu says about it — "Opponent · 4 matches · Left-handed".
+ *
+ * Read from the same row builders as the menu, so the two cannot disagree,
+ * and from every option rather than the menu's capped head. A tag the
+ * options no longer hold — a saved question about a match since deleted —
+ * still says what kind it was.
+ */
+export function askTagMeta(options: AskTagOptions, tag: AskTag): string {
+  const kind = ASK_TAG_KIND_LABEL[tag.kind];
+  let detail = "";
+  if (tag.kind === "opponent") {
+    const option = options.opponents.find((other) => other.id === tag.id);
+    if (option) detail = opponentRow(option).meta;
+  } else {
+    const option = options.matches.find((other) => other.matchId === tag.id);
+    if (option) detail = matchRow(option, null).row.meta;
+  }
+  return detail ? `${kind} · ${detail}` : kind;
+}
+
 // ── The menu ────────────────────────────────────────────────────────────────
 
 export const ASK_TAG_MENU_LABEL = "Tag a match or opponent";
@@ -202,12 +232,17 @@ export function AskTagMenu({
   chosen,
 }: AskTagMenuProps) {
   const groups = [
-    { title: "Opponents", rows: rows.opponents, offset: 0, icon: Brain },
+    {
+      title: "Opponents",
+      rows: rows.opponents,
+      offset: 0,
+      icon: ASK_TAG_ICON.opponent,
+    },
     {
       title: "Matches",
       rows: rows.matches,
       offset: rows.opponents.length,
-      icon: GalleryHorizontalEnd,
+      icon: ASK_TAG_ICON.match,
     },
   ].filter((group) => group.rows.length > 0);
 

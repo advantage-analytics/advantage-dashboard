@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, AtSign, Brain, GalleryHorizontalEnd, X } from "lucide-react";
+import { ArrowUp, AtSign, X } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
@@ -9,6 +9,7 @@ import type { AskTagOptions } from "@/lib/data/ask-tags";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import {
+  ASK_TAG_ICON,
   ASK_TAG_MENU_LABEL,
   AskTagMenu,
   askTagKey,
@@ -301,8 +302,7 @@ export function AskComposer({
         {value.tags.length > 0 && (
           <ul aria-label="Tagged" className="flex flex-wrap gap-1.5">
             {value.tags.map((tag) => {
-              const Icon =
-                tag.kind === "opponent" ? Brain : GalleryHorizontalEnd;
+              const Icon = ASK_TAG_ICON[tag.kind];
               return (
                 <li
                   key={askTagKey(tag)}

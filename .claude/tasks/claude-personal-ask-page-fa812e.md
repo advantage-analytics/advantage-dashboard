@@ -204,7 +204,7 @@ ready).
 
 ## T15 · Ask right rail: tags, limit meter, earlier questions
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** src/components/dashboard/ask/ask-rail.tsx (new), src/components/dashboard/ask/ask-page.tsx, src/app/dashboard/ask/actions.ts (new), tests/ask-rail.spec.ts (new), tests/fixtures/ask-rail-harness.tsx (new) — a guess

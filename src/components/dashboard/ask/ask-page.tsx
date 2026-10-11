@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { deleteAskConversation } from "@/app/dashboard/ask/actions";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
 import type {
   AskConversation,
@@ -41,6 +42,17 @@ import { useAskStream, type AskExchange } from "./use-ask-stream";
  * change that key and rebuild the thread from the saved row under the
  * reader. "New question" is the opposite case — it clears the thread here and
  * then navigates, so the server drops `?c=` and re-reads the list.
+ *
+ * ── Deleting a conversation ─────────────────────────────────────────────────
+ * The rail's row action calls `deleteAskConversation`, which revalidates this
+ * route, so the list comes back from the server without the row. That same
+ * re-render reads the address bar: after a first answer it says `?c=<id>`
+ * while the key is still "new", so the key changes and the thread is rebuilt
+ * from the saved row. Harmless once an answer is saved — it is the same
+ * answer — and not while one is arriving, so the action is disabled for as
+ * long as a stream is in flight. Deleting the conversation that is open
+ * clears the thread and leaves for the bare URL: its id no longer names
+ * anything, and a follow-up sent to it could not be saved.
  */
 export interface AskPageProps {
   /** What can be tagged. No matches here is the page's day zero. */
@@ -141,6 +153,16 @@ function AskThread({
     });
   }
 
+  async function deleteConversation(id: string) {
+    const result = await deleteAskConversation(id);
+    if (!result.ok) return false;
+    if (id === state.conversationId) {
+      reset();
+      router.replace("/dashboard/ask");
+    }
+    return true;
+  }
+
   function newQuestion() {
     reset();
     // Already at the bare URL when nothing was saved; a push would only add
@@ -184,9 +206,12 @@ function AskThread({
               ? state.draft.tags
               : (state.exchanges.at(-1)?.question.tags ?? [])
           }
+          tagOptions={tagOptions}
           quota={quotaView}
           conversations={listed}
           activeConversationId={state.conversationId}
+          onDeleteConversation={deleteConversation}
+          deleteDisabled={state.inFlight}
         />
       }
     >
