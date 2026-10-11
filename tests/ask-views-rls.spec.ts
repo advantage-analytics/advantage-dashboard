@@ -12,6 +12,7 @@ import {
   runMarker,
 } from "./fixtures/live-db";
 import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
+import { ASK_MOCK_PLAN } from "@/lib/services/ask/mock";
 
 /**
  * `public.ask_run_query(scope_sql, sql)` — the one door into schema `ask`,
@@ -229,6 +230,29 @@ test.describe("ask_run_query: scope and guards (live)", () => {
     expect(got.data?.matches.map((m) => m.match_id)).toEqual([
       matchIds.bPersonal,
     ]);
+  });
+
+  // The door must open onto all four views. ask.match_stats once did not:
+  // it read a security_invoker view, so ask_reader was refused on the base
+  // table and every statistics question (and the mock plan) failed with
+  // 42501 — unnoticed, because nothing had read it through this function.
+  test("every ask view can be read through the function", async () => {
+    for (const view of ["matches", "match_stats", "points", "shots"]) {
+      const got = await run(
+        a.client,
+        SCOPE_ALL,
+        `select count(*) from ask.${view} t join scope using (match_id)`,
+      );
+      expect(got.error, `ask.${view}`).toBeNull();
+      expect(got.data?.rows, `ask.${view}`).toHaveLength(1);
+    }
+  });
+
+  test("the mock plan runs", async () => {
+    const got = await run(a.client, ASK_MOCK_PLAN.scope_sql, ASK_MOCK_PLAN.sql);
+    expect(got.error).toBeNull();
+    expect(got.data?.rows).toHaveLength(1);
+    expect(got.data?.rows[0]).toMatchObject({ matches: 2 });
   });
 
   test("a narrower scope narrows both matches and rows", async () => {

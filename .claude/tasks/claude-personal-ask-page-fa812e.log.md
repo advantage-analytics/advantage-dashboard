@@ -274,3 +274,16 @@ is the runner's. Newest entries at the bottom.
 3. Nothing on this branch has been looked at in a signed-in browser, and none of the five live-DB specs has run (they skip against production). `/pr-check`'s eyes-on stage needs the verifier account to hold a personal match with statistics.
 4. `rls-boundary-reviewer` over T1–T3 and `pipeline-guardrails-reviewer` over the dashboard diff are `/pr-check`'s.
 5. The `nav.ts` comment about the two Ask routes reads awkwardly and could be reworded.
+
+## Fix outside the queue · `ask.match_stats` readable by `ask_reader` — done
+
+**gate:** not a runner dispatch and no full gate run: done in session at the author's instruction on 2026-10-11. Typecheck, eslint, and the `ask-views-rls`, `live-db-target-guard` and `ask-prompt` specs pass; the change is one migration file and two cases in a live spec that skips against production.
+
+**changed:** migration `20261011231355_ask_match_stats_readable.sql`, applied live through the claude.ai Supabase connector, adds the definer function `ask.my_stat_rows()` (owner postgres; the caller's own rows of `public.match_stats_with_percentages`; execute for `ask_reader` only) and replaces `ask.match_stats` to read from it. Same 86 columns, comments and grant. This closes the blocking follow-up recorded under T3 and T2's defect. `tests/ask-views-rls.spec.ts` gains "every ask view can be read through the function" and "the mock plan runs" — the cases whose absence let the defect through.
+
+**verified live:** `ASK_MOCK_PLAN` through `ask_run_query` returns `{ matches: 14, wins: 9, losses: 5, second_serve_won_pct: 57.1 }` for the probe user, and the same percentage computed directly from the base table is 57.1; `public.match_stats` is still permission-denied through the function; a caller with no matches reads 0 rows; `ask_reader`'s privileges are unchanged.
+
+**follow-ups:**
+
+1. `ask.my_stat_rows()` returns the percentages view's row type, so that view cannot be dropped without dropping the function first (adding columns to it is fine).
+2. The header of `20261011215730_ask_run_query.sql` still records P1 as failing; that was true when it was written and this entry supersedes it.
