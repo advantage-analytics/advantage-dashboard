@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Statistics route: page shell, URL state model, loading and day-zero states, nav
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/app/dashboard/statistics/page.tsx, src/app/dashboard/statistics/loading.tsx (new), src/components/dashboard/statistics/{statistics-page-content.tsx, statistics-provider.tsx, statistics-search.ts, statistics-day-zero.tsx, statistics-skeleton.tsx} (new), src/lib/dashboard/nav.ts, MAP.md, tests/statistics-search.spec.ts (new), tests/statistics-page-states.spec.ts (new) — guesses

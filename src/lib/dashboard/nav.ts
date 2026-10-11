@@ -41,12 +41,7 @@ export type NavLink = {
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
   { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
-  {
-    name: "Statistics",
-    href: "/dashboard/statistics",
-    icon: ChartLine,
-    comingSoon: true,
-  },
+  { name: "Statistics", href: "/dashboard/statistics", icon: ChartLine },
   {
     name: "Opponents",
     href: "/dashboard/opponents",

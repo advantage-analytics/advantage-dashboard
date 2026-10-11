@@ -25,3 +25,15 @@ is the runner's. Newest entries at the bottom.
   2. "Total points won" heads a percentage here and a count on the match report; consider a distinguishing label or unit.
   3. For derived (video) matches the card shows Aces and Winners from point tallies; here `values.aces` / `values.winners` are the published columns and may be null or differ on `isDerived` matches.
   4. `personal-kpis-server.ts` duplicates the `ProfileResult` construction now in `toStatisticsMatches`; note the season strip keeps matches with no stat row and this drops them.
+
+## T3 · Statistics route: page shell, URL state model, loading and day-zero states, nav — done
+
+- **gate:** mechanical pass · completion pass
+- **changed:** `/dashboard/statistics` is a real page: `page.tsx` resolves the workspace (team → `/dashboard/team/statistics`), streams the title row and body inside `WidgetBoundary` > `Suspense`; `loading.tsx` exports `StatisticsSkeleton`. New under `src/components/dashboard/statistics/`: `statistics-search.ts` (pure URL contract + `applyStatisticsFilters`), `statistics-provider.tsx` (`useStatistics()` → `{ all, filtered, points, state, setState }`), `statistics-page-content.tsx`, `statistics-body.tsx` (one `<Slot>` per region — Filters, Season averages, Trend, By opponent type, All statistics, Rally length, How points ended), `statistics-placeholders.tsx`, `statistics-layout.tsx`, `statistics-title-row.tsx`, `statistics-day-zero.tsx`, `statistics-skeleton.tsx`. `nav.ts` drops `comingSoon` from the personal entry; `tests/search-palette-pages.spec.ts` updated because the ⌘K palette derives from nav. `MAP.md` already current. Specs: `tests/statistics-search.spec.ts`, `tests/statistics-page-states.spec.ts`.
+- **follow-ups:**
+  1. `AGENTS.md` (Routes bullet) and `.skills/advantage-analytics-design/reference/empty-and-loading.md` still describe `/dashboard/statistics` as coming-soon.
+  2. Home's "Placement view" link points at `/dashboard/statistics`, which has no placement section.
+  3. Points are awaited before the title row streams; on a long season, pass the promise down and `use()` it in the two point regions.
+  4. Day zero offers only "View matches"; a true first-day player would be saved a hop by the standard "Send match video / Import instead" pair.
+  5. `loading.tsx` always draws the skeleton; it could draw day zero on first paint the way Home and Matches do.
+  6. The title row omits the frame's today's-date label; the column is `mx-auto`, following Home rather than the frame.

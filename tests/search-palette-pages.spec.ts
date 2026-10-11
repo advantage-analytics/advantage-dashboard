@@ -45,12 +45,21 @@ test("a team workspace lists its live rail pages first, under its own name", () 
 });
 
 test("coming-soon pages are never shortcuts", () => {
+  // Statistics is a stub in a program and a real page in a personal
+  // workspace, so it is a shortcut in exactly one of them.
+  const stubs = {
+    team: ["Statistics", "Opponents", "Ask", "Schedule"],
+    personal: ["Opponents", "Ask", "Schedule"],
+  };
   for (const kind of ["team", "personal"] as const) {
     const labels = pagesFor(kind, true).map((page) => page.label);
-    for (const stub of ["Statistics", "Opponents", "Ask", "Schedule"]) {
-      expect(labels).not.toContain(stub);
+    for (const stub of stubs[kind]) {
+      expect(labels, `${kind}: ${stub}`).not.toContain(stub);
     }
   }
+  expect(pagesFor("personal", true).map((page) => page.label)).toContain(
+    "Statistics",
+  );
 });
 
 test("account pages are the settings sections, then Help Center", () => {
@@ -74,6 +83,7 @@ test("Teams is only listed for someone on a team", () => {
   expect(labels).toEqual([
     "Home",
     "Matches",
+    "Statistics",
     "Profile",
     "Account",
     "Preferences",
