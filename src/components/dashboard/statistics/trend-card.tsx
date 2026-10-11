@@ -14,6 +14,7 @@ import {
   RegionCard,
   STATISTICS_TREND_PLOT,
   TrendLegend,
+  trendDelta,
 } from "./statistics-layout";
 import { useStatistics } from "./statistics-provider";
 
@@ -47,28 +48,6 @@ const KpiDetailChart = dynamic(
 );
 
 const matchCount = (n: number) => `${n} ${n === 1 ? "match" : "matches"}`;
-
-/**
- * The change between this window and the one before, as the DS `Delta`:
- * a Unicode arrow that travels with its colour. The arrow is the direction
- * the number moved; the colour is whether that is good, which flips for a
- * statistic where lower is better.
- */
-export function trendDelta(
-  change: number,
-  lowerIsBetter: boolean,
-): { text: string; spoken: string; color: string } {
-  const size = `${Math.abs(change)}`;
-  if (change === 0) {
-    return { text: "→ 0", spoken: "No change", color: "var(--ink-500)" };
-  }
-  const up = change > 0;
-  return {
-    text: `${up ? "↑" : "↓"} ${size}`,
-    spoken: `${up ? "Up" : "Down"} ${size}`,
-    color: up !== lowerIsBetter ? "var(--viz-good)" : "var(--viz-bad)",
-  };
-}
 
 const READOUT = "inline-flex items-baseline gap-1.5";
 const READOUT_LABEL = "text-[12px] text-[var(--ink-600)]";

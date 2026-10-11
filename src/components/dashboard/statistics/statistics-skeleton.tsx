@@ -11,7 +11,12 @@ import {
   STATISTICS_OPPONENT_SLOT,
   STATISTICS_SPLIT_ANATOMY,
   STATISTICS_STACK,
-  STATISTICS_TABLE_GRID,
+  STATISTICS_TABLE_COLUMNS,
+  STATISTICS_TABLE_GROUP_HEAD,
+  STATISTICS_TABLE_HEAD,
+  STATISTICS_TABLE_HEAD_CELL,
+  STATISTICS_TABLE_LABEL,
+  STATISTICS_TABLE_ROW,
   STATISTICS_TAIL_GRID,
   STATISTICS_TREND_PLOT,
   STATISTICS_TREND_ROW,
@@ -20,6 +25,7 @@ import {
   SplitGroup,
   SplitRow,
   StatisticsColumn,
+  StatisticsTableCard,
   StatisticsTitleFrame,
   TrendLegend,
 } from "./statistics-layout";
@@ -48,8 +54,6 @@ const CONTROLS = [
 
 /** Off · 3 · 5 · 10. */
 const WINDOW_PILLS = 4;
-
-const TABLE_COLUMNS = ["Average", "Rolling", "Change", "Last 8", "Opponents"];
 
 function ControlPending({
   label,
@@ -129,47 +133,51 @@ function StatisticsPendingBody() {
           </div>
         </div>
 
-        <RegionCard
-          title="All statistics"
-          className="overflow-x-auto"
-          aside={<PendingBar className="h-[11px] w-56" />}
-        >
-          <div className="min-w-[720px]">
-            <div
-              className={`${STATISTICS_TABLE_GRID} border-b border-[var(--border-hairline)] pb-[11px]`}
-            >
-              <span />
-              {TABLE_COLUMNS.map((column) => (
-                <span
-                  key={column}
-                  className="text-right text-[12px] font-medium text-[var(--ink-900)]"
-                >
-                  {column}
-                </span>
-              ))}
-            </div>
-            {STATISTIC_GROUPS.map((group) => (
-              <div key={group.title}>
-                <div className="flex items-baseline pt-3 pb-0.5">
-                  <span className="eyebrow-sm">{group.title}</span>
-                </div>
-                {group.statistics.map((statistic) => (
-                  <div
-                    key={statistic.key}
-                    className={`${STATISTICS_TABLE_GRID} min-h-[30px]`}
-                  >
-                    <span className="min-w-0 truncate text-[13px] text-[var(--text-body)]">
-                      {statistic.label}
-                    </span>
-                    {TABLE_COLUMNS.map((column) => (
-                      <PendingBar key={column} className="ml-auto w-8" />
-                    ))}
-                  </div>
-                ))}
-              </div>
+        {/* `AllStatisticsTable`, from the same card, grid and row classes:
+            every label it will hold, a bar where each figure lands. */}
+        <StatisticsTableCard note={<PendingBar className="h-[11px] w-56" />}>
+          <div className={STATISTICS_TABLE_HEAD}>
+            <span />
+            {STATISTICS_TABLE_COLUMNS.map((column) => (
+              <span
+                key={column}
+                className={`${STATISTICS_TABLE_HEAD_CELL} ${
+                  column === "Opponents"
+                    ? "text-[var(--ink-600)]"
+                    : "text-[var(--ink-900)]"
+                }`}
+              >
+                {column}
+              </span>
             ))}
           </div>
-        </RegionCard>
+          {STATISTIC_GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className={STATISTICS_TABLE_GROUP_HEAD}>
+                <span className="eyebrow-sm">{group.title}</span>
+              </div>
+              {group.statistics.map((statistic) => (
+                <div key={statistic.key} className={STATISTICS_TABLE_ROW}>
+                  <span
+                    className={`${STATISTICS_TABLE_LABEL} text-[var(--text-body)]`}
+                  >
+                    {statistic.label}
+                  </span>
+                  {STATISTICS_TABLE_COLUMNS.map((column) => (
+                    <PendingBar
+                      key={column}
+                      className={
+                        column === "Last 8"
+                          ? "ml-auto h-3.5 w-20"
+                          : "ml-auto w-8"
+                      }
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </StatisticsTableCard>
 
         <div className={STATISTICS_TAIL_GRID}>
           <RegionCard

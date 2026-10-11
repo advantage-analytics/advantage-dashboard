@@ -1,8 +1,7 @@
 "use client";
 
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { STATISTIC_GROUPS } from "@/lib/data/statistics";
-import { RegionCard, STATISTICS_TABLE_GRID } from "./statistics-layout";
+import { RegionCard } from "./statistics-layout";
 import { useStatistics } from "./statistics-provider";
 
 /**
@@ -21,8 +20,6 @@ import { useStatistics } from "./statistics-provider";
  * repeating one fact.
  */
 
-const matchCount = (n: number) => `${n} ${n === 1 ? "match" : "matches"}`;
-
 /** A 4px bar track with nothing on it. */
 function Track({ className = "h-1" }: { className?: string }) {
   return (
@@ -30,90 +27,6 @@ function Track({ className = "h-1" }: { className?: string }) {
       aria-hidden="true"
       className={`block rounded-[2px] bg-[var(--ink-100)] ${className}`}
     />
-  );
-}
-
-/* ── All statistics ───────────────────────────────────────────────────────── */
-
-const HEAD_CELL = "text-right text-[12px] font-medium";
-
-export function StatisticsTablePlaceholder() {
-  const { filtered, state } = useStatistics();
-  const { window } = state;
-  const columns = [
-    { label: "Average", tone: "text-[var(--ink-900)]" },
-    {
-      label: window === null ? "Rolling" : `Rolling ${window}`,
-      tone: "text-[var(--ink-900)]",
-    },
-    { label: "Change", tone: "text-[var(--ink-900)]" },
-    { label: "Last 8", tone: "text-[var(--ink-900)]" },
-    { label: "Opponents", tone: "text-[var(--ink-600)]" },
-  ];
-  const note =
-    window === null
-      ? `Rolling window off · ${matchCount(filtered.length)}`
-      : `Last ${window} matches against the ${window} before · ${matchCount(filtered.length)}`;
-
-  return (
-    <RegionCard
-      title="All statistics"
-      className="overflow-x-auto"
-      aside={
-        <span className="text-micro tabular whitespace-nowrap">{note}</span>
-      }
-    >
-      <div role="table" aria-label="All statistics" className="min-w-[720px]">
-        <div
-          role="row"
-          className={`${STATISTICS_TABLE_GRID} border-b border-[var(--border-hairline)] pb-[11px]`}
-        >
-          {/* The sr-only text sits INSIDE the cell: `sr-only` is absolutely
-              positioned, so on the cell itself it would leave the grid and
-              shift every heading one track left. */}
-          <span role="columnheader">
-            <span className="sr-only">Statistic</span>
-          </span>
-          {columns.map((column) => (
-            <span
-              key={column.label}
-              role="columnheader"
-              className={`${HEAD_CELL} ${column.tone}`}
-            >
-              {column.label}
-            </span>
-          ))}
-        </div>
-        {STATISTIC_GROUPS.map((group) => (
-          <div key={group.title} role="rowgroup">
-            <div role="row" className="flex items-baseline pt-3 pb-0.5">
-              <span role="rowheader" className="eyebrow-sm">
-                {group.title}
-              </span>
-            </div>
-            {group.statistics.map((statistic) => (
-              <div
-                key={statistic.key}
-                role="row"
-                className={`${STATISTICS_TABLE_GRID} min-h-[30px]`}
-              >
-                <span
-                  role="rowheader"
-                  className="min-w-0 truncate text-[13px] text-[var(--text-body)]"
-                >
-                  {statistic.label}
-                </span>
-                {columns.map((column) => (
-                  <span key={column.label} role="cell" className="text-right">
-                    <EmptyMark label={`No ${column.label.toLowerCase()} yet`} />
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </RegionCard>
   );
 }
 

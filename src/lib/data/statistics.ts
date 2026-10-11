@@ -258,6 +258,84 @@ export function trendSeries(
   };
 }
 
+/* ── Every statistic at once: the All statistics table's rows ─────────────── */
+
+/** Whether a change is the direction the player wants. */
+export type ChangeTone = "good" | "bad" | "flat";
+
+/**
+ * A change read for the player: a rise is good unless the statistic is one
+ * where the lower number is the better one, and no movement is neither.
+ */
+export function changeTone(change: number, lowerIsBetter: boolean): ChangeTone {
+  if (change === 0) return "flat";
+  return change > 0 !== lowerIsBetter ? "good" : "bad";
+}
+
+/** How many matches the table's sparkline reaches back over. */
+export const SPARK_LENGTH = 8;
+
+export interface StatisticsTableRow {
+  key: StatisticKey;
+  label: string;
+  /** `averageOf` the viewer's values over the whole filtered set. */
+  average: number | null;
+  /** The newest rolling value; null when Off or short of one window. */
+  rolling: number | null;
+  /** `windowChange`; null when Off or short of two windows. */
+  change: number | null;
+  /** `changeTone` of `change`; null wherever `change` is. */
+  tone: ChangeTone | null;
+  /** The last eight MEASURED values, oldest → newest. Fewer early on. */
+  spark: number[];
+  /** `averageOf` what the other seat did in the same matches. */
+  opponents: number | null;
+}
+
+export interface StatisticsTableGroup {
+  title: string;
+  rows: StatisticsTableRow[];
+}
+
+/**
+ * The catalogue as the All statistics table prints it: the same groups in the
+ * same order, one row per statistic, every row over the same `filtered` set.
+ *
+ * Rolling and Change run over EVERY match, as `trendSeries` does and for its
+ * reason — a window counts matches. The sparkline is the one column that
+ * skips the unmeasured: it draws a shape, and a gap has no height to draw.
+ */
+export function statisticsTableRows(
+  filtered: readonly StatisticsMatch[],
+  window: StatisticWindow,
+): StatisticsTableGroup[] {
+  return STATISTIC_GROUPS.map((group) => ({
+    title: group.title,
+    rows: group.statistics.map(({ key, label, lowerIsBetter }) => {
+      const values = filtered.map((match) => match.values[key]);
+      const means = rollingMean(values, window);
+      const change = windowChange(values, window);
+      return {
+        key,
+        label,
+        average: averageOf(values),
+        rolling: means[means.length - 1] ?? null,
+        change,
+        tone: change === null ? null : changeTone(change, lowerIsBetter),
+        spark: values
+          .filter(
+            (each): each is number =>
+              typeof each === "number" && Number.isFinite(each),
+          )
+          .slice(-SPARK_LENGTH),
+        opponents: averageOf(
+          filtered.map((match) => match.opponentValues[key]),
+        ),
+      };
+    }),
+  }));
+}
+
 /* ── One statistic by who was across the net: the split card's rows ───────── */
 
 export interface OpponentSplitRow {

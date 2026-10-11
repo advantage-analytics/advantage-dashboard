@@ -105,7 +105,7 @@ ready).
 
 ## T7 · All statistics table
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/statistics/all-statistics-table.tsx (new), src/lib/data/statistics.ts, tests/statistics-table.spec.ts (new) — guesses

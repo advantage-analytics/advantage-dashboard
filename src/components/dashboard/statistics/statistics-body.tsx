@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import { seasonStrip } from "@/lib/data/player-profile";
+import { AllStatisticsTable } from "./all-statistics-table";
 import { OpponentSplitCard } from "./opponent-split-card";
 import {
   STATISTICS_OPPONENT_SLOT,
@@ -16,7 +17,6 @@ import { StatisticsControls } from "./statistics-controls";
 import {
   StatisticsPointEndingsPlaceholder,
   StatisticsRallyLengthPlaceholder,
-  StatisticsTablePlaceholder,
 } from "./statistics-placeholders";
 import { useStatistics } from "./statistics-provider";
 import { TrendCard } from "./trend-card";
@@ -28,7 +28,7 @@ import { TrendCard } from "./trend-card";
  * ── The slots ───────────────────────────────────────────────────────────────
  * Each `<Slot>` below owns its place in the layout and its `WidgetBoundary`;
  * the component inside it owns nothing but its own card. So a region's task
- * replaces ONE child — `<StatisticsTablePlaceholder />` with its real
+ * replaces ONE child — `<AllStatisticsTable />` with its real
  * component — and touches no layout. Every region reads `useStatistics()`,
  * so none takes props.
  *
@@ -118,7 +118,7 @@ export function StatisticsBody({
 
       {/* slot: All statistics */}
       <Slot label="All statistics">
-        <StatisticsTablePlaceholder />
+        <AllStatisticsTable />
       </Slot>
 
       <div className={STATISTICS_TAIL_GRID}>

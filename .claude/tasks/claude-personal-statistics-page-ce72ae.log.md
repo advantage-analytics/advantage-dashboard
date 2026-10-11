@@ -75,3 +75,14 @@ is the runner's. Newest entries at the bottom.
   3. The leader is conveyed by colour only; it compares one-decimal means, so two rows that both print 72% can still show a leader.
   4. `matchCount` has three private copies (trend card, placeholders, split card).
   5. Each row prints its match count after the label; the unmeasured sentence lowercases the statistic label.
+
+## T7 · All statistics table — done
+
+- **gate:** mechanical pass · completion pass
+- **changed:** `statistics.ts` gains pure `statisticsTableRows`, `changeTone` (good / bad / flat), `SPARK_LENGTH` and the row/group types (rows also carry `tone`). New `statistics/all-statistics-table.tsx` (`AllStatisticsTable`, pure `statisticsTableNote`, `sparklinePath`) replaces the placeholder in the `All statistics` slot: a `role="grid"` of 15 rows in three groups, `aria-selected` on the chosen row, click / Enter / Space → `setState({ stat })`, ↑/↓ move focus. `statistics-layout.tsx` adds `StatisticsTableCard` and the table class constants and now owns `trendDelta` (imported by `trend-card.tsx`). Skeleton's table block rebuilt from the same card. `tests/statistics-table.spec.ts` added (26 tests).
+- **follow-ups:**
+  1. Rows are 30px following the frame, not the table laws' 52px, and carry no chevron (a click selects in-page) — confirm at branch review.
+  2. Return winners is a selectable row with nothing behind it; choosing it empties Trend and By opponent type. Its Last 8 cell is the grey placeholder curve, not a dash.
+  3. Fifteen tab stops; a roving tabindex would cut it to one.
+  4. `PlaceholderSparkline` gradient ids are offset by 100 to avoid the season strip's; an id prefix or `useId` would be cleaner.
+  5. No browser pass was done on the table (≈760px width, selected row).

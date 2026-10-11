@@ -194,7 +194,7 @@ test.describe("a season that filters to nothing", () => {
     // The strip's own empty anatomy, with the page's reason under each rule.
     expect(html).toContain('aria-label="Season averages"');
     expect(html).toContain("No matches fit these filters</p>");
-    // The table's fifteen rows by five columns are dashes on their own.
+    // The table's fifteen rows by four figure columns are dashes on their own.
     expect(html).toContain("First serve points won");
     expect(html).toContain("Rolling 3");
     expect(marks(html)).toBeGreaterThan(75);

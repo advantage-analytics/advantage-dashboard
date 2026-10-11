@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { changeTone, type ChangeTone } from "@/lib/data/statistics";
 
 /**
  * The personal Statistics page's geometry, in one place.
@@ -47,6 +48,98 @@ export const STATISTICS_TAIL_GRID =
 /** All statistics: the label, then Average · Rolling · Change · Last 8 · Opponents. */
 export const STATISTICS_TABLE_GRID =
   "grid grid-cols-[minmax(200px,1fr)_72px_72px_64px_96px_88px] items-center gap-x-4";
+
+/** The table's column, which the card scrolls sideways under ~760px. */
+export const STATISTICS_TABLE_COLUMN = "flex min-w-[720px] flex-col";
+
+/** The column-label row: the grid, a hairline under it and nothing between rows. */
+export const STATISTICS_TABLE_HEAD = `${STATISTICS_TABLE_GRID} border-b border-[var(--border-hairline)] pb-[11px]`;
+
+/** One column label. Opponents is the quiet one, as its figures are. */
+export const STATISTICS_TABLE_HEAD_CELL = "text-right text-[12px] font-medium";
+
+/** A group's title row, off the grid: it heads the rows, not a column. */
+export const STATISTICS_TABLE_GROUP_HEAD = "flex items-baseline pt-3 pb-0.5";
+
+/**
+ * One statistic's row. The 8px it reaches past the grid on either side is the
+ * hover and selected wash's inset — the cells stay on the header's tracks.
+ */
+export const STATISTICS_TABLE_ROW = `${STATISTICS_TABLE_GRID} -mx-2 min-h-[30px] rounded-[var(--radius-element)] px-2`;
+
+export const STATISTICS_TABLE_LABEL = "min-w-0 truncate text-[13px]";
+
+/** The five measures, in column order. `Rolling` gains its window once known. */
+export const STATISTICS_TABLE_COLUMNS = [
+  "Average",
+  "Rolling",
+  "Change",
+  "Last 8",
+  "Opponents",
+] as const;
+
+/**
+ * The All statistics card. Not a `RegionCard`: the frame scrolls the eyebrow
+ * and the note WITH the table, so both sit inside the 720px column, 14px
+ * above the column labels.
+ */
+export function StatisticsTableCard({
+  note,
+  children,
+}: {
+  /** The "Last 5 matches against the 5 before · 22 matches" line, or its bar. */
+  note: ReactNode;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={id}
+      className="surface-card overflow-x-auto p-[var(--pad-card)]"
+    >
+      <div className={STATISTICS_TABLE_COLUMN}>
+        <div className="flex items-baseline gap-3 pb-3.5">
+          <h2 id={id} className="eyebrow">
+            All statistics
+          </h2>
+          <div className="flex-1" />
+          {note}
+        </div>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+const TONE_COLOR: Record<ChangeTone, string> = {
+  good: "var(--viz-good)",
+  bad: "var(--viz-bad)",
+  flat: "var(--ink-500)",
+};
+
+/**
+ * The change between this window and the one before, as the DS `Delta`:
+ * a Unicode arrow that travels with its colour. The arrow is the direction
+ * the number moved; the colour is whether that is good (`changeTone`), which
+ * flips for a statistic where lower is better.
+ *
+ * One delta for the page: the Trend card's readout and the table's Change
+ * column both print this.
+ */
+export function trendDelta(
+  change: number,
+  lowerIsBetter: boolean,
+): { text: string; spoken: string; color: string } {
+  const size = `${Math.abs(change)}`;
+  const color = TONE_COLOR[changeTone(change, lowerIsBetter)];
+  if (change === 0) return { text: "→ 0", spoken: "No change", color };
+  const up = change > 0;
+  return {
+    text: `${up ? "↑" : "↓"} ${size}`,
+    spoken: `${up ? "Up" : "Down"} ${size}`,
+    color,
+  };
+}
 
 /** The split rows of By opponent type: label, track, value. */
 export const STATISTICS_SPLIT_GRID =
