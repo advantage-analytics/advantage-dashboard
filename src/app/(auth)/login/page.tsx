@@ -1,5 +1,6 @@
 import { LoginForm } from "@/components/auth/login-form";
 import { safeNext } from "@/lib/auth/safe-next";
+import { joinProgramNameForNext } from "@/lib/services/programs/join-state-server";
 
 export const metadata = { title: "Sign in" };
 
@@ -17,12 +18,17 @@ export const metadata = { title: "Sign in" };
  * shipping an empty panel and drawing its form only after hydration. Awaiting
  * the params makes the route dynamic, and the render is pure JSX with no I/O,
  * so that buys a full first paint for a per-request render of nothing.
+ *
+ * The one read: when `next` is a join link, the header names the team it is
+ * for (`joinProgramNameForNext`). Every other sign-in skips it.
  */
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { next } = await searchParams;
-  return <LoginForm next={safeNext(typeof next === "string" ? next : null)} />;
+  const { next: raw } = await searchParams;
+  const next = safeNext(typeof raw === "string" ? raw : null);
+  const joinProgram = await joinProgramNameForNext(next);
+  return <LoginForm next={next} joinProgram={joinProgram} />;
 }

@@ -50,6 +50,34 @@ export function signInThenHref(path: string): string {
   return `/login?next=${encodeURIComponent(path)}`;
 }
 
+/**
+ * Create an account first, then come back to `path`.
+ *
+ * The sign-up page carries `next` into its confirmation mail's
+ * `/confirm?next=`, so the click that activates the account is also the one
+ * that lands back on the join link. Same clamp as `/login`.
+ */
+export function signUpThenHref(path: string): string {
+  return `/sign-up?next=${encodeURIComponent(path)}`;
+}
+
+/**
+ * The token in a `/join/<token>` path, or null for any other path.
+ *
+ * The auth pages use it to tell that a `next` came from a join link, so they
+ * can say which team the sign-in is for. Reads only the path segment: a query
+ * string or hash after the token (`?not-now=1`) is not part of it.
+ */
+export function joinTokenFromPath(path: string): string | null {
+  const match = /^\/join\/([^/?#]+)/.exec(path);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]) || null;
+  } catch {
+    return null;
+  }
+}
+
 const NOT_NOW_PARAM = "not-now";
 
 /**

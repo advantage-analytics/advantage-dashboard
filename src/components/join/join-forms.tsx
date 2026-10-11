@@ -12,17 +12,11 @@ import {
   ClaimActions,
 } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
-import {
-  JoinQuotaFooter,
-  JoinSharingTerms,
-  NotNowLink,
-  Problem,
-} from "@/components/join/join-terms";
+import { NotNowLink, Problem } from "@/components/join/join-terms";
 import {
   acceptInvite,
   acceptJoinLink,
   createAccountAndAccept,
-  createAccountAndJoinByLink,
   requestFreshInvite,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
@@ -30,6 +24,7 @@ import {
   joinHref,
   notNowHref,
   signInThenHref,
+  signUpThenHref,
   type JoinLinkMode,
 } from "@/lib/services/programs/join-links";
 import type { InviterName } from "@/lib/services/programs/invite-acceptance";
@@ -50,33 +45,16 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  * person could change it, and the only thing changing it can do is fail.
  */
 
-/**
- * What the two accepting screens share.
- *
- * The sharing terms and the quota line are the same on both, and the design's
- * whole argument for 8.2 is that nobody reaches a Join button without passing
- * them. Threading the same two props through each form rather than letting
- * each one decide is what keeps that true when a third is added.
- */
-interface JoinTermsProps {
-  /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
-  programHours: number;
-  /** The personal allowance the same person already has. */
-  personalHours: number;
-}
-
 /** Signed in as the invited address. One button. */
 export function JoinReady({
   token,
   programName,
   role,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
-} & JoinTermsProps) {
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -85,7 +63,6 @@ export function JoinReady({
       <p className="text-body">
         You&apos;ll join {programName} as {ROLE_NOUN[role]}.
       </p>
-      <JoinSharingTerms />
       <Problem message={error} />
       <ClaimActions>
         <button
@@ -105,10 +82,6 @@ export function JoinReady({
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
       </ClaimActions>
     </div>
   );
@@ -120,14 +93,12 @@ export function JoinSignUp({
   programName,
   role,
   email,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
   email: string;
-} & JoinTermsProps) {
+}) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
@@ -158,8 +129,6 @@ export function JoinSignUp({
         {ROLE_NOUN[role]}. Your account uses{" "}
         <span className="text-[var(--ink-900)]">{email}</span>.
       </p>
-
-      <JoinSharingTerms />
 
       <div className="flex max-w-[380px] gap-3">
         <div className="min-w-0 flex-1">
@@ -228,10 +197,6 @@ export function JoinSignUp({
         <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
           Sign in with Google instead
         </Link>
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
       </ClaimActions>
     </form>
   );
@@ -377,15 +342,13 @@ export function JoinLinkReady({
   mode,
   inviterName,
   rosterMatchName,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   mode: JoinLinkMode;
   inviterName: InviterName;
   rosterMatchName: string | null;
-} & JoinTermsProps) {
+}) {
   const [result, submit, pending] = useActionState(
     () => acceptJoinLink(token),
     null,
@@ -411,7 +374,6 @@ export function JoinLinkReady({
           </>
         )}
       </p>
-      <JoinSharingTerms />
       <Problem message={error} />
       <ClaimActions>
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
@@ -424,10 +386,6 @@ export function JoinLinkReady({
               : `Join ${programName}`}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
       </ClaimActions>
     </form>
   );
@@ -436,155 +394,59 @@ export function JoinLinkReady({
 /**
  * Nobody signed in, holding a live join link.
  *
- * Unlike `JoinSignUp` this one asks for the address: the link was pasted into
- * a group chat, not mailed to anyone, so there is no address to read off it.
- * That is also why the account is not confirmed on the spot — see
- * `createAccountAndJoinByLink` — and why, in production, the form gives way to
- * a "check your email" note instead of landing inside the program.
+ * No form. The link was pasted into a group chat, not mailed to anyone, so
+ * there is no address to read off it — and an account is the auth pages' job,
+ * not this screen's. Both buttons leave for them carrying `?next=` back to
+ * this token: `/sign-up` returns through its confirmation mail, `/login`
+ * (password or Google) straight away. Either way the person lands here again
+ * holding a session, and the page answers `link_ready` with the Join button.
+ *
+ * One primary. "Sign in" is its `ghost` companion rather than a text link
+ * because it is an equal way in, not a way out; "Not now" is the way out, and
+ * stays text.
  */
 export function JoinLinkSignUp({
   token,
   programName,
   mode,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   mode: JoinLinkMode;
-} & JoinTermsProps) {
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const approve = mode === "approve";
-
-  // The link is on its way. Whoever opens it is the mailbox owner; it comes
-  // back to this token signed in, where the page answers `link_ready`. One
-  // sentence for a new address and one that already has an account — both
-  // get a link — so nothing here says which (`createAccountAndJoinByLink`).
-  if (sentTo) {
-    return (
-      <div className="flex flex-col gap-4">
-        <p className="text-body max-w-[58ch]" role="status">
-          Check your email. We sent a link to{" "}
-          <span className="text-[var(--ink-900)]">{sentTo}</span> — open it and
-          you&apos;ll land back here to finish joining.
-        </p>
-        <ClaimActions>
-          <Link href="/claim/exit" className={advButton("ghost")}>
-            Close
-          </Link>
-        </ClaimActions>
-      </div>
-    );
-  }
+}) {
+  const here = joinHref(token);
 
   return (
-    <form
-      noValidate
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        start(async () => {
-          setError(null);
-          const result = await createAccountAndJoinByLink(token, {
-            email,
-            firstName,
-            lastName,
-          });
-          if (!result.ok) setError(result.error);
-          else setSentTo(result.email);
-        });
-      }}
-    >
+    <div className="flex flex-col gap-4">
       <p className="text-body max-w-[58ch]">
-        {approve
-          ? `Tell us who you are to ask to join ${programName}. Its coaches approve each person who joins by this link.`
-          : `Tell us who you are and you’ll join ${programName} as a player.`}{" "}
+        {mode === "approve"
+          ? `Create an account or sign in, and you’ll come back here to ask to join ${programName}. Its coaches approve each person who joins by this link.`
+          : "Create an account or sign in, and you’ll come back here to join as a player."}{" "}
         Use the address your coach has for you, if you have one — it puts you on
         your own roster row.
       </p>
 
-      <JoinSharingTerms />
-
-      <div className="flex max-w-[380px] flex-col gap-3.5">
-        <div>
-          <label className={CLAIM_LABEL} htmlFor="join-link-email">
-            Email
-          </label>
-          <input
-            id="join-link-email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@school.edu"
-            className={CLAIM_FIELD}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-        <div className="flex gap-3">
-          <div className="min-w-0 flex-1">
-            <label className={CLAIM_LABEL} htmlFor="join-link-first">
-              First name
-            </label>
-            <input
-              id="join-link-first"
-              autoComplete="given-name"
-              className={CLAIM_FIELD}
-              value={firstName}
-              onChange={(event) => setFirstName(event.target.value)}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <label className={CLAIM_LABEL} htmlFor="join-link-last">
-              Last name
-            </label>
-            <input
-              id="join-link-last"
-              autoComplete="family-name"
-              className={CLAIM_FIELD}
-              value={lastName}
-              onChange={(event) => setLastName(event.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* No password here, on purpose: a link pasted into a group chat cannot
-          know whose address was typed, so the account's credential is never
-          chosen on this screen (see `createAccountAndJoinByLink`). */}
+      {/* Above the buttons, where this flow puts the line that qualifies them:
+          neither button commits to anything, and saying so is what lets
+          someone press one. */}
       <p className="text-micro max-w-[58ch]">
-        We&apos;ll email you a link to finish — no password to choose.
+        {mode === "approve"
+          ? "Nothing is shared until you ask to join on the next screen and a coach approves it."
+          : "Nothing is shared until you press Join on the next screen."}
       </p>
 
-      <Problem message={error} />
-
-      <div className="border-t border-[var(--border-hairline)] pt-[18px]">
-        <ClaimActions>
-          {/* The button says what pressing it does: it sends mail. The join
-              itself is one click on the screen that mail comes back to. */}
-          <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
-            {pending ? "Sending…" : "Email me a link"}
-          </button>
-          <NotNowLink href={notNowHref(joinHref(token))} />
-          {/* Google lives on `/login`; `?next=` brings them back here holding
-              a session, where this screen becomes the Join button. */}
-          <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
-            Sign in with Google instead
-          </Link>
-          <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
-            Already have an account? Sign in
-          </Link>
-          <JoinQuotaFooter
-            programHours={programHours}
-            personalHours={personalHours}
-          />
-        </ClaimActions>
-      </div>
-    </form>
+      <ClaimActions>
+        <Link href={signUpThenHref(here)} className={CLAIM_BUTTON}>
+          Create account
+        </Link>
+        <Link href={signInThenHref(here)} className={advButton("ghost")}>
+          Sign in
+        </Link>
+        <Link href={notNowHref(here)} className={CLAIM_LINK}>
+          Not now
+        </Link>
+      </ClaimActions>
+    </div>
   );
 }
 

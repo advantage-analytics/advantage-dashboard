@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
@@ -12,8 +13,9 @@ import {
   JoinWrongAccount,
 } from "@/components/join/join-forms";
 import { JoinPane } from "@/components/join/join-pane";
+import { JoinTermsPanel } from "@/components/join/join-terms";
 import { NothingSent } from "@/components/join/nothing-sent";
-import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
+import { resolveJoinStateOnce } from "@/lib/services/programs/join-state-server";
 import {
   isNotNow,
   joinHref,
@@ -21,7 +23,48 @@ import {
 } from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
 
-export const metadata = { title: "Join your program" };
+/**
+ * The tab title, and the card a pasted link unfurls to.
+ *
+ * A join link is pasted into a group chat, so its preview is the first thing a
+ * player sees — and "Advantage Analytics" over the product description told
+ * them neither whose link it was nor what to do with it. Only the JOIN-LINK
+ * states name the team. An invitation was addressed to one person, and a token
+ * that is unknown, spent or expired must read exactly like one that never
+ * existed; both keep the generic title and the site's default card.
+ *
+ * Never indexed: a link is for the people it was sent to.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const state = await resolveJoinStateOnce(decodeURIComponent(token));
+  const robots = { index: false, follow: false };
+
+  switch (state.kind) {
+    case "link_sign_up":
+    case "link_ready":
+    case "link_full": {
+      const title = `Join ${state.programName}`;
+      const social = {
+        title: `${title} on Advantage`,
+        description: "Create an account or sign in, then join as a player.",
+      };
+      return {
+        title,
+        description: social.description,
+        openGraph: social,
+        twitter: social,
+        robots,
+      };
+    }
+    default:
+      return { title: "Join your program", robots };
+  }
+}
 
 /**
  * Where an invitation link lands.
@@ -32,7 +75,8 @@ export const metadata = { title: "Join your program" };
  * would never hear anything — and could not have accepted if they had.
  *
  * Seven states, and every one of them is a real thing that happens rather than
- * a defensive branch. Two carry a form; one carries no screen at all, because
+ * a defensive branch. One carries a form (`sign_up`, the addressed invitation,
+ * whose token already proves the address); one carries no screen at all, because
  * `sign_in` means the account exists and signing into an account that exists
  * belongs to `/login?next=`, not to a password box grown on an invitation link;
  * four are ends with a way out, and those are the ones worth designing, because
@@ -61,7 +105,7 @@ export default async function JoinPage({
 }) {
   const { token } = await params;
   const query = await searchParams;
-  const state = await resolveJoinState(decodeURIComponent(token));
+  const state = await resolveJoinStateOnce(decodeURIComponent(token));
   // 'college' where the state carries no org type — those branches (not_found,
   // expired, already_used, wrong_account) never render an allowance figure.
   const { programHours, personalHours } = quotaHours(
@@ -71,6 +115,12 @@ export default async function JoinPage({
           pilotEligible: state.programPilotEligible,
         }
       : { orgType: "college", pilotEligible: false },
+  );
+
+  // The terms and the allowance line, beside the decision on every screen that
+  // carries a Join button — see `JoinTermsPanel`.
+  const terms = (
+    <JoinTermsPanel programHours={programHours} personalHours={personalHours} />
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
@@ -162,13 +212,16 @@ export default async function JoinPage({
         );
       }
       return (
-        <JoinPane eyebrow={state.programName} title="Join your program">
+        <JoinPane
+          eyebrow={state.programName}
+          title="Join your program"
+          mark={state.programName}
+          aside={terms}
+        >
           <JoinReady
             token={token}
             programName={state.programName}
             role={state.role}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
@@ -193,14 +246,17 @@ export default async function JoinPage({
         );
       }
       return (
-        <JoinPane eyebrow={state.programName} title="Set up your account">
+        <JoinPane
+          eyebrow={state.programName}
+          title="Set up your account"
+          mark={state.programName}
+          aside={terms}
+        >
           <JoinSignUp
             token={token}
             programName={state.programName}
             role={state.role}
             email={state.email}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
@@ -223,6 +279,8 @@ export default async function JoinPage({
         <JoinPane
           eyebrow={state.programName}
           title={`Join ${state.programName}`}
+          mark={state.programName}
+          aside={terms}
         >
           <JoinLinkReady
             token={token}
@@ -230,8 +288,6 @@ export default async function JoinPage({
             mode={state.mode}
             inviterName={state.inviterName}
             rosterMatchName={state.rosterMatchName}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
@@ -250,13 +306,19 @@ export default async function JoinPage({
         );
       }
       return (
-        <JoinPane eyebrow={state.programName} title="Set up your account">
+        // Same heading as `link_ready`: it is the same page one sign-in
+        // earlier, and "Set up your account" described a form that has moved
+        // to the auth pages.
+        <JoinPane
+          eyebrow={state.programName}
+          title={`Join ${state.programName}`}
+          mark={state.programName}
+          aside={terms}
+        >
           <JoinLinkSignUp
             token={token}
             programName={state.programName}
             mode={state.mode}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
