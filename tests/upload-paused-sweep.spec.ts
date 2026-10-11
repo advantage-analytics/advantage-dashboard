@@ -195,13 +195,15 @@ function fakeDb(options: {
   /** Match ids that belong to a program, and the users still in it. */
   teamMatches?: string[];
   members?: string[];
+  /** Dedupe keys already in `notification_sends`. */
+  mailed?: string[];
 }) {
   const calls = {
     rpc: [] as Array<[string, unknown]>,
     filters: [] as Array<[string, string, unknown]>,
   };
   const from = (table: string) => {
-    const state = { match: "", user: "" };
+    const state = { match: "", user: "", keys: [] as string[] };
     const builder: Record<string, unknown> = {};
     const chain = () => builder;
     const record =
@@ -220,6 +222,10 @@ function fakeDb(options: {
     builder.eq = record("eq");
     builder.not = record("not");
     builder.lt = record("lt");
+    builder.in = (_column: string, keys: string[]) => {
+      state.keys = keys;
+      return builder;
+    };
     builder.maybeSingle = async () => {
       if (table === "matches")
         return {
@@ -244,6 +250,10 @@ function fakeDb(options: {
         data = (options.members ?? []).includes(state.user)
           ? [{ user_id: state.user }]
           : [];
+      else if (table === "notification_sends")
+        data = state.keys
+          .filter((key) => (options.mailed ?? []).includes(key))
+          .map((dedupe_key) => ({ dedupe_key }));
       return Promise.resolve({ data, error: null }).then(resolveRows);
     };
     return builder;
@@ -342,6 +352,30 @@ test("a job already mailed for is not mailed again, even if it pauses twice", as
   const result = await sweepStalledUploads(db, seams.deps);
   expect(result.sent).toBe(1);
   expect(seams.sent.map((m) => m.to)).toEqual(["user-b@example.test"]);
+});
+
+test("jobs already mailed are dropped before the cap, so they cannot starve newer ones", async () => {
+  // Thirty paused uploads, the 25 longest-quiet already mailed and still
+  // paused. The five behind them must still be reached this run.
+  const jobs = Array.from({ length: 30 }, (_, i) => job(`j${i}`));
+  const { db } = fakeDb({
+    paused: jobs,
+    mailed: jobs.slice(0, 25).map((row) => `upload_paused:${row.id}`),
+  });
+  const seams = deps();
+  const result = await sweepStalledUploads(db, seams.deps);
+  expect(result).toEqual({ reaped: 1, paused: 30, sent: 5 });
+  expect(seams.claims).toEqual(
+    jobs.slice(25).map((row) => `upload_paused:${row.id}`),
+  );
+});
+
+test("at most twenty-five emails go out in one run", async () => {
+  const jobs = Array.from({ length: 40 }, (_, i) => job(`j${i}`));
+  const { db } = fakeDb({ paused: jobs });
+  const seams = deps();
+  const result = await sweepStalledUploads(db, seams.deps);
+  expect(result.sent).toBe(25);
 });
 
 test("nobody is mailed with the switch off or with no uploader", async () => {

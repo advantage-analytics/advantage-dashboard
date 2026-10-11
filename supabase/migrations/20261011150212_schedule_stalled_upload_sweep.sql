@@ -24,7 +24,10 @@
 --
 --   select vault.create_secret('<the value of CRON_SECRET in Vercel>', 'cron_secret');
 --
--- Until it exists step 2 is skipped and step 1 still runs.
+-- Until it exists step 2 is skipped and step 1 still runs. The secret now
+-- lives in two places: rotate CRON_SECRET in Vercel and this row must change
+-- with it (vault.update_secret), or the route answers 401 and the emails stop
+-- with nothing to say so.
 --
 -- The URL is production's. Applied to any other project, step 2 would call
 -- production with that project's secret and be refused.
@@ -49,5 +52,17 @@ select cron.schedule(
     )
     from vault.decrypted_secrets as secret
     where secret.name = 'cron_secret';
+  $job$
+);
+
+-- pg_cron keeps a row in cron.job_run_details for every run and never removes
+-- one. At a run every five minutes that is ~105,000 rows a year for this job
+-- alone, so keep a week of history — enough to see when a sweep last failed.
+select cron.schedule(
+  'purge-cron-run-details',
+  '17 4 * * *',
+  $job$
+    delete from cron.job_run_details
+     where end_time < now() - interval '7 days';
   $job$
 );

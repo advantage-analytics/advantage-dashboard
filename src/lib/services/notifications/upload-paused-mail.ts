@@ -17,8 +17,16 @@ import {
 
 const LOG = "[notifications:upload-paused]";
 
-/** Per run. A sweep every five minutes never has a backlog worth more. */
+/** Emails per run. A sweep every five minutes never has a backlog worth more. */
 const MAX_PER_RUN = 25;
+
+/**
+ * Paused jobs read per run. Wider than `MAX_PER_RUN` because a job stays
+ * paused — and so keeps being read — for up to six hours after it was mailed;
+ * the already-mailed ones are dropped before the cap, or they would fill it
+ * and starve the uploads that paused after them.
+ */
+const MAX_CANDIDATES = 200;
 
 export interface StalledUploadSweepResult {
   /** Jobs this run failed, or null when the reaper itself could not run. */
@@ -112,7 +120,7 @@ export async function sweepStalledUploads(
       .not("upload_progress_percent", "is", null)
       .lt("updated_at", quietSince)
       .order("updated_at", { ascending: true })
-      .limit(MAX_PER_RUN);
+      .limit(MAX_CANDIDATES);
 
     if (error) {
       console.error(`${LOG} could not read paused uploads`, {
@@ -121,10 +129,34 @@ export async function sweepStalledUploads(
       return result;
     }
 
-    const rows = ((data ?? []) as PausedRow[]).filter(
+    const paused = ((data ?? []) as PausedRow[]).filter(
       (row) => row.match_id !== null && row.created_by !== null,
     );
-    result.paused = rows.length;
+    result.paused = paused.length;
+    if (paused.length === 0) return result;
+
+    // Drop the ones already mailed before spending the cap, or a read, on
+    // them. `claimSend()` below is still what makes a send happen once; this
+    // is only what keeps a mailed job from being looked up again every run.
+    const { data: mailed, error: mailedError } = await db
+      .from("notification_sends")
+      .select("dedupe_key")
+      .in(
+        "dedupe_key",
+        paused.map((row) => claimKey(row.id)),
+      );
+    if (mailedError) {
+      console.error(`${LOG} could not read sent mail`, {
+        error: mailedError.message,
+      });
+      return result;
+    }
+    const alreadyMailed = new Set(
+      (mailed ?? []).map((row) => row.dedupe_key as string),
+    );
+    const rows = paused
+      .filter((row) => !alreadyMailed.has(claimKey(row.id)))
+      .slice(0, MAX_PER_RUN);
     if (rows.length === 0) return result;
 
     const prefs = await deps.prefs([
@@ -141,6 +173,11 @@ export async function sweepStalledUploads(
   }
 
   return result;
+}
+
+/** One email per job, however many times it pauses. */
+function claimKey(jobId: string): string {
+  return `upload_paused:${jobId}`;
 }
 
 async function notifyPausedUpload(
@@ -182,7 +219,7 @@ async function notifyPausedUpload(
 
   // Claimed after the cheap reads and before the render, like the analysis
   // mail: a claim that then finds no address would block a later, correct send.
-  if (!(await deps.claim(`upload_paused:${row.id}`))) return false;
+  if (!(await deps.claim(claimKey(row.id)))) return false;
 
   const percent = row.upload_progress_percent ?? 0;
   const sent = await deps.send(

@@ -50,10 +50,10 @@ export async function markJobUploaded(
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId)
-      // Only a job that is still uploading. A row the reaper failed while the
-      // tab slept, and that a second upload has since replaced, must not be
-      // flipped back to `uploaded` — `job-liveness.ts` is where a reaped job
-      // is taken back, before the commit, and only when nothing replaced it.
+      // Only a job that is still uploading. One that was ended while the tab
+      // was away — restarted from another screen, or reaped — must not be
+      // flipped back to `uploaded`: a failed job is over, and
+      // `job-liveness.ts` stops its upload before the commit.
       .in("status", ["pending", "uploading"])
       .select("id");
 

@@ -256,8 +256,10 @@ export async function uploadAndSubmitVideo({
   let livenessCheckedAt = Date.now();
   const stopIfSuperseded = async (force: boolean) => {
     if (superseded) return;
-    // One read a block would be hundreds on a full match. Unforced, it only
-    // asks after a pause — which is exactly what a sleep looks like.
+    // One read a block would be hundreds on a full match. Unforced, it asks
+    // at most once per interval — about two reads a minute of transfer — and
+    // so always on the first request after a pause, which is what a sleep
+    // looks like.
     if (!force && Date.now() - livenessCheckedAt < LIVENESS_CHECK_MS) return;
     // The commit publishes the file, so an answer matters most there: a
     // computer that has just woken is often offline for its first seconds.
@@ -616,7 +618,11 @@ export async function uploadAndSubmitVideo({
           error_message: message,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", jobId);
+        .eq("id", jobId)
+        // Never over a job that got past uploading. If the terminal write
+        // landed and only its confirmation was lost, the row says `uploaded`
+        // and the video is committed; calling that failed would discard it.
+        .in("status", ["pending", "uploading"]);
       if (failError) {
         console.error("Could not mark the job failed:", failError.message);
       }

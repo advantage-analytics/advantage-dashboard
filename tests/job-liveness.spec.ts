@@ -155,6 +155,10 @@ test("the upload stops before the URL, after a pause, and always before the comm
   expect(guard).toBeGreaterThan(-1);
   expect(failWrite).toBeGreaterThan(guard);
   expect(submit.indexOf('status: "failed"')).toBe(failWrite);
+  // And it never lands on a job that got past uploading.
+  expect(submit.slice(failWrite, failWrite + 500)).toContain(
+    '.in("status", ["pending", "uploading"]);',
+  );
 });
 
 test("a replaced upload's ending does not land on its replacement in the same tab", () => {
