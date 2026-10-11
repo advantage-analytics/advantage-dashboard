@@ -69,6 +69,19 @@ function endingPhrase(
   return `${ENDING_PHRASE[ending]}${by}`;
 }
 
+/**
+ * An ending as a noun phrase with its owner: "an error by Quan", "a service
+ * winner by Kim" (the server's, though the receiver's miss ends it).
+ */
+export function ownedEndingPhrase(
+  ending: LabelEnding,
+  endedBy: LabelSide | null,
+  winner: LabelSide | null,
+  names: MarkNames,
+): string {
+  return endingPhrase(ending, endingOwner(ending, endedBy, winner), names);
+}
+
 /** An ending as the start of a question: "Ace", "Double fault". */
 const ENDING_NOUN: Record<LabelEnding, string> = {
   ace: "Ace",

@@ -310,7 +310,7 @@ test.describe("persistTranscript: hand labels are not overwritten", () => {
     expect(out.labelsProtected).toBe(true);
     expect(out.reason).toContain("allowOverwriteLabels");
     expect(calls.find((c) => c.op === "delete")).toBeUndefined();
-    expect(calls.find((c) => c.contains)?.contains).toEqual(["hand_labelled"]);
+    expect(calls.find((c) => c.contains)?.contains).toBe('["hand_labelled"]');
   });
 
   test("allowOverwriteLabels skips the check and reaches the delete", async () => {

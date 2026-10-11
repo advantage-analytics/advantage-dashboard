@@ -24,6 +24,7 @@ import { tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
   labelSessionFixture,
+  labelShot,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -424,6 +425,8 @@ test.describe("completeWarnings", () => {
       "Game 1 unfinished (15–15)",
       "Game 2 unfinished (0–0)",
       "Set 1 labelled 0–0, entered 6–3",
+      // The fixture's open point: its strokes disagree with its winner.
+      "Point 4's strokes say player 2 won, not the labelled winner, so publishing will refuse",
     ]);
   });
 
@@ -461,6 +464,70 @@ test.describe("completeWarnings", () => {
     );
   });
 
+  test("how the publish will read a point with no ending: from its strokes, as score only, or refused", () => {
+    const fixture = labelSessionFixture();
+    const [first, second] = fixture.points;
+    const third = {
+      ...second,
+      id: "x-point",
+      pointIndex: second.pointIndex + 1,
+    };
+    const points = [
+      // No stroke: off the video.
+      { ...first, ending: null, endedBy: null, shots: [] },
+      // A rally ball marked in by its hitter, the labelled winner.
+      {
+        ...second,
+        ending: null,
+        endedBy: null,
+        winner: "p1" as const,
+        shots: [
+          labelShot("x-1", second.id, {
+            hitter: "p1",
+            stroke: "first_serve",
+            result: "in",
+          }),
+          labelShot("x-2", second.id, {
+            hitter: "p2",
+            stroke: "backhand",
+            result: "out",
+          }),
+        ],
+      },
+      // A lone first serve out settles nothing.
+      {
+        ...third,
+        ending: null,
+        endedBy: null,
+        shots: [
+          labelShot("x-3", third.id, {
+            hitter: "p1",
+            stroke: "first_serve",
+            result: "out",
+          }),
+        ],
+      },
+    ];
+    const warnings = completeWarnings({
+      points,
+      adScoring: fixture.adScoring,
+      marks: null,
+      finalScore: null,
+      videoEndsEarly: true,
+      matchScore: null,
+      names: NAMES,
+    });
+    expect(warnings).toContain(
+      `Point ${first.pointIndex + 1} isn't on the video and will publish as score only`,
+    );
+    expect(warnings).toContain(
+      `Point ${second.pointIndex + 1}'s ending will be taken from its strokes (a service winner by ${NAMES.p1})`,
+    );
+    expect(warnings).toContain(
+      `Point ${third.pointIndex + 1} has no ending its strokes can settle, so publishing will refuse`,
+    );
+  });
+
   test("the games the caller already scored are the ones read", () => {
     const session = labelSessionFixture();
     expect(
@@ -473,7 +540,10 @@ test.describe("completeWarnings", () => {
         matchScore: null,
         games: [],
       }),
-    ).toEqual(["2 points of 3 not checked"]);
+    ).toEqual([
+      "2 points of 3 not checked",
+      "Point 4's strokes say player 2 won, not the labelled winner, so publishing will refuse",
+    ]);
   });
 
   test("nothing at all on a session with nothing left", () => {
