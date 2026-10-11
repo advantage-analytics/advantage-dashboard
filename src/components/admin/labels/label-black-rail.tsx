@@ -7,7 +7,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Maximize2, Minimize2, Scale } from "lucide-react";
+import { Flag, Maximize2, Minimize2 } from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -32,7 +32,7 @@ import {
   scoreMismatchDetail,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
-import { openFlags, scoreStop } from "@/lib/services/labels/flag-nav";
+import { openFlags } from "@/lib/services/labels/flag-nav";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   bandsBeforePoints,
@@ -46,9 +46,12 @@ import type {
   MatchScore,
 } from "@/lib/services/labels/session";
 import {
+  enteredScore,
+  formatSets,
+  labelSetScores,
   mismatchGameKey,
+  scoreMismatch,
   scoreMismatchSentence,
-  sessionScoreMismatch,
   scoreReasonText,
   type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
@@ -56,7 +59,6 @@ import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
-import { BlackTextAction, gameSlot } from "./label-black-parts";
 import { tiebreakFolds } from "@/lib/services/labels/tiebreak-fold";
 import { LabelGameBand } from "./label-game-band";
 import {
@@ -147,6 +149,7 @@ export function LabelBlackRail({
   finalScore = null,
   videoEndsEarly = null,
   matchScore = null,
+  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onGoToPoint,
@@ -211,10 +214,11 @@ export function LabelBlackRail({
   videoEndsEarly?: boolean | null;
   matchScore?: MatchScore | null;
   /**
-   * The chip's answers. Given both, the chip opens a menu of them; absent, it
-   * is words alone. Neither rewrites the entered score: the match record's is
-   * the source of truth the labelled points are held against.
+   * The chip's answers. Given all three, the chip opens a menu of them; absent,
+   * it is words alone. `onFixEnteredScore` gets the labelled sets as `[p1, p2]`
+   * pairs, as `final_score` stores them.
    */
+  onFixEnteredScore?: (finalScore: number[][]) => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   /** Make a point current, hold the rail and bring the row up: the flag jumps. */
@@ -247,19 +251,14 @@ export function LabelBlackRail({
   // The chip's arithmetic, over the same rows as the scoreboard: only with
   // marks built, not once the labeller has said the video ends early, and only
   // on a disagreement.
+  const labelledSets = useMemo(
+    () => labelSetScores(points, scores.games),
+    [points, scores],
+  );
   const mismatch =
-    marks !== null
-      ? sessionScoreMismatch({
-          points,
-          games: scores.games,
-          finalScore,
-          matchScore,
-          videoEndsEarly,
-        })
+    marks !== null && videoEndsEarly !== true
+      ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
       : null;
-  // The mismatch as a flag of its own: counted, jumped to, and a slot after
-  // the set's last point (`BlackSetScoreSlot`).
-  const setScoreStop = scoreStop(mismatch, points);
   // The header's open marks, over every live row — marks, not points, as the rows
   // roll them up. None on the marks-off session.
   const openMarks = useMemo(
@@ -395,22 +394,31 @@ export function LabelBlackRail({
               fromPointId={expandedPointId ?? playingPointId}
               onGoToPoint={onGoToPoint}
               tone={tone}
-              scoreStop={setScoreStop}
               score={
                 mismatch
                   ? (close) => (
                       <ScoreRows
                         mismatch={mismatch}
+                        stored={formatSets(labelledSets)}
                         close={close}
                         onGoToGame={goToGame}
+                        onFixEnteredScore={
+                          onFixEnteredScore && editable
+                            ? () =>
+                                onFixEnteredScore(
+                                  labelledSets.map((set) => [
+                                    set.games[0],
+                                    set.games[1],
+                                  ]),
+                                )
+                            : undefined
+                        }
                         onVideoEndsEarly={
                           editable ? onVideoEndsEarly : undefined
                         }
                         onFindGap={editable ? onFindGap : undefined}
                         onClearEnteredScore={
-                          // Only where the stored score is the one held:
-                          // a match record outranks it (`enteredScore`).
-                          editable && finalScore !== null && !matchScore
+                          editable && finalScore !== null
                             ? onClearEnteredScore
                             : undefined
                         }
@@ -559,15 +567,6 @@ export function LabelBlackRail({
                         onAddPoint={onAddPoint}
                       />
                     ) : null}
-                    {mismatch && setScoreStop?.pointId === point.id
-                      ? setScoreSlot({
-                          mismatch,
-                          anchor: point.id,
-                          onVideoEndsEarly: editable
-                            ? onVideoEndsEarly
-                            : undefined,
-                        })
-                      : null}
                   </Fragment>
                 );
               })}
@@ -595,27 +594,34 @@ export function LabelBlackRail({
  */
 export function ScoreRows({
   mismatch,
+  stored,
   close,
   onGoToGame,
+  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
+  /** The labelled sets as "Fix the entered score" will store them: "6–3, 4–5". */
+  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
+  onFixEnteredScore?: () => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
 }) {
   const { setNumber, labelled, entered } = mismatch;
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
-  if (onVideoEndsEarly && onFindGap) {
+  if (onFixEnteredScore && onVideoEndsEarly && onFindGap) {
     return (
       <ScoreChipMenu
         mismatch={mismatch}
+        stored={stored}
         close={close}
         onGoToGame={onGoToGame}
+        onFixEnteredScore={onFixEnteredScore}
         onVideoEndsEarly={onVideoEndsEarly}
         onFindGap={onFindGap}
         onClearEnteredScore={onClearEnteredScore}
@@ -641,20 +647,24 @@ export function ScoreRows({
 
 /**
  * The chip's menu rows, hook-free so a spec can read them: "Go to game N"
- * when a game is named, the two answers, and "Use the match score again"
+ * when a game is named, the three answers, and "Use the match score again"
  * when given. Each row closes the menu, then asks.
  */
 export function ScoreChipMenu({
   mismatch,
+  stored,
   close,
   onGoToGame,
+  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
+  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
+  onFixEnteredScore: () => void;
   onVideoEndsEarly: () => void;
   onFindGap: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
@@ -673,6 +683,14 @@ export function ScoreChipMenu({
           }}
         />
       ) : null}
+      <FloatMenuItem
+        label={SCORE_MISMATCH_ANSWERS.fix.label}
+        description={`Store ${stored} as the entered score.`}
+        onSelect={() => {
+          close();
+          onFixEnteredScore();
+        }}
+      />
       <FloatMenuItem
         label={SCORE_MISMATCH_ANSWERS.endsEarly.label}
         description={SCORE_MISMATCH_ANSWERS.endsEarly.description}
@@ -701,55 +719,6 @@ export function ScoreChipMenu({
       ) : null}
     </>
   );
-}
-
-/**
- * After the last point of a set whose games don't make the match record's
- * score: "Set 1 ends 5–5" over "The match record says 6–4", in the game
- * slots' dashed amber. It names no game: without the video, a guess at which
- * game was credited to the wrong player sends the labeller to the wrong one.
- * Its one answer is "Video ends early" — the other two causes are fixed in
- * the rows, or on the match record itself. When the rows never reach the
- * set, it sits after the last point and says so.
- */
-export function setScoreSlot({
-  mismatch,
-  anchor,
-  onVideoEndsEarly,
-}: {
-  mismatch: LabelScoreMismatch;
-  /** The point it follows: the set's last, or the session's last. */
-  anchor: string;
-  onVideoEndsEarly?: () => void;
-}) {
-  const reached = mismatch.lastPointId !== null;
-  const label = SCORE_MISMATCH_ANSWERS.endsEarly.label;
-  return gameSlot({
-    icon: Scale,
-    row: "set-score",
-    anchor,
-    title: reached
-      ? `Set ${mismatch.setNumber} ends ${mismatch.labelled}`
-      : `These points stop before set ${mismatch.setNumber}`,
-    reason: reached
-      ? `The match record says ${mismatch.entered}. A game is missing or credited to the wrong player`
-      : `The match record says set ${mismatch.setNumber} was ${mismatch.entered}`,
-    action: onVideoEndsEarly ? (
-      <BlackTextAction
-        ink="amber"
-        data-set-score-ends-early=""
-        aria-label={`${label}: ${SCORE_MISMATCH_ANSWERS.endsEarly.description}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onVideoEndsEarly();
-        }}
-      >
-        {label}
-      </BlackTextAction>
-    ) : null,
-    actionLabel: label,
-    details: [SCORE_MISMATCH_ANSWERS.endsEarly.description],
-  });
 }
 
 interface OverflowSlot {

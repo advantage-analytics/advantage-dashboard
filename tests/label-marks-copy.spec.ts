@@ -189,7 +189,7 @@ test.describe("mark copy", () => {
       "Follows a faulted serve, so it is the second serve.",
     );
     expect(markHover(sample("shot_after_point_end"), names)).toBe(
-      "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
+      "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.",
     );
     expect(markHover(sample("last_landing_missing"), names)).toBe(
       "Place the last bounce to settle Out, Net or In.",

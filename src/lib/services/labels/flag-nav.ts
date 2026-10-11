@@ -9,7 +9,6 @@ import type { LabelMarkCode, LabelMarks } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
 import { markStates, pointRowMarkList } from "./marks-state";
 import type { LabelPoint } from "./session";
-import type { LabelScoreMismatch } from "./set-scores";
 
 /** One open mark on one point. */
 export interface OpenFlag {
@@ -17,51 +16,6 @@ export interface OpenFlag {
   /** As the rail numbers the point: `pointIndex + 1`. */
   pointNumber: number;
   code: LabelMarkCode;
-}
-
-/**
- * The score that doesn't add up, as one more stop: on the mismatching set's
- * last live point — where the set's score is read — or, when the rows never
- * reach that set, on the last live point of all. Counted with the marks, and
- * `]` lands on it, so a set that ends on the wrong score is never a dot alone.
- */
-export interface ScoreStop {
-  pointId: string;
-  pointNumber: number;
-  /** "Set 1 ends 5–5, record 6–4". */
-  label: string;
-}
-
-/** A stop `[` / `]` can land on: an open mark, or the score. */
-export type FlagStop = OpenFlag | ScoreStop;
-
-/** "Set 1 ends 5–5, record 6–4": the score stop's words. */
-export function scoreStopLabel(mismatch: LabelScoreMismatch): string {
-  return `Set ${mismatch.setNumber} ends ${mismatch.labelled}, record ${mismatch.entered}`;
-}
-
-/** The score stop for `mismatch`; null with none, or no live point at all. */
-export function scoreStop(
-  mismatch: LabelScoreMismatch | null,
-  points: readonly Pick<LabelPoint, "id" | "pointIndex" | "status">[],
-): ScoreStop | null {
-  if (!mismatch) return null;
-  const id =
-    mismatch.lastPointId ??
-    points.findLast((point) => point.status !== "deleted")?.id ??
-    null;
-  const point = id === null ? undefined : points.find((p) => p.id === id);
-  if (!point) return null;
-  return {
-    pointId: point.id,
-    pointNumber: point.pointIndex + 1,
-    label: scoreStopLabel(mismatch),
-  };
-}
-
-/** What a stop is called in a tooltip: its mark's words, or the score's. */
-export function flagStopLabel(stop: FlagStop): string {
-  return "code" in stop ? MARK_LABEL[stop.code] : stop.label;
 }
 
 /** Every open `count` mark, in the rail's order. Deleted points have none. */
@@ -159,9 +113,7 @@ export function flagGroups(flags: readonly OpenFlag[]): FlagGroup[] {
 }
 
 /** One mark per point, the first in the list: a jump goes to a point. */
-function firstPerPoint<F extends Pick<OpenFlag, "pointId">>(
-  flags: readonly F[],
-): F[] {
+function firstPerPoint(flags: readonly OpenFlag[]): OpenFlag[] {
   const seen = new Set<string>();
   return flags.filter((f) => !seen.has(f.pointId) && seen.add(f.pointId));
 }
@@ -170,20 +122,19 @@ function firstPerPoint<F extends Pick<OpenFlag, "pointId">>(
  * The flag a jump lands on: the first flagged point after `fromPointId` (or
  * the last before it, going back), wrapping round the match. From no point,
  * forward starts at the top and back at the bottom. Null with nothing open.
- * `flags` may come in any order (the score stop is appended to the marks).
  */
-export function stepFlag<F extends Pick<OpenFlag, "pointId">>(
-  flags: readonly F[],
+export function stepFlag(
+  flags: readonly OpenFlag[],
   points: readonly Pick<LabelPoint, "id">[],
   fromPointId: string | null,
   direction: 1 | -1,
-): F | null {
+): OpenFlag | null {
   if (flags.length === 0) return null;
   const order = new Map(points.map((point, i) => [point.id, i]));
   const at = fromPointId === null ? null : (order.get(fromPointId) ?? null);
-  const pos = (f: F) => order.get(f.pointId) ?? -1;
   // One per point, the point's first open mark: a jump goes to a point.
-  const stops = firstPerPoint([...flags].sort((a, b) => pos(a) - pos(b)));
+  const stops = firstPerPoint(flags);
+  const pos = (f: OpenFlag) => order.get(f.pointId) ?? -1;
   if (direction === 1) {
     return (
       (at === null ? undefined : stops.find((f) => pos(f) > at)) ?? stops[0]

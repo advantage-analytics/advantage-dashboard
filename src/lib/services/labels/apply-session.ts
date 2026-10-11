@@ -18,8 +18,8 @@
  *
  * Refuses, before writing anything, on: build problems, imported points on
  * the match (never mix providers), nothing to write, or a labelled score that
- * differs from the entered one unless `acceptScore` — only
- * `scripts/label-apply.ts --accept-score` passes it; the console never does.
+ * differs from the entered one unless `acceptScore` — the console passes it,
+ * because its confirm already listed the difference.
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -390,7 +390,7 @@ export async function publishPlanned(params: {
   if (plan.mismatch && !acceptScore) {
     return {
       ok: false,
-      error: `Not published: ${scoreMismatchSentence(plan.mismatch)}. Fix the set, mark the video as ending early, or correct the match record.`,
+      error: `Not published: ${scoreMismatchSentence(plan.mismatch)}`,
     };
   }
   if (plan.built.points.length === 0) {

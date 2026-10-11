@@ -9,8 +9,8 @@
  * counts for who it was settled for. Each set lists those two kinds, so the
  * chip can say why its pair falls short.
  *
- * The entered score is a set total (`matches.score`, else
- * `label_sessions.final_score`), so a disagreement is placed at a set: `scoreMismatch`
+ * The entered score is a set total (`label_sessions.final_score`, else
+ * `matches.score`), so a disagreement is placed at a set: `scoreMismatch`
  * names the first set whose pair differs, that set's first live point (where
  * "Find the gap" goes) and its unfinished and run-over games, the first of
  * which is where the chip scrolls to.
@@ -44,8 +44,6 @@ export interface LabelSetScore {
   games: [number, number];
   /** The set's first live point in rail order — where its gap would start. */
   firstPointId: string;
-  /** The set's last live point in rail order — where its score is read. */
-  lastPointId: string;
   /** The set's games left unfinished, in point order. */
   unfinished: UnfinishedGame[];
   /** The set's games with rows past their end, in point order. */
@@ -71,12 +69,10 @@ export function labelSetScores(
         setNumber: point.setNumber,
         games: [0, 0],
         firstPointId: point.id,
-        lastPointId: point.id,
         unfinished: [],
         overflow: [],
       });
     }
-    sets.get(point.setNumber)!.lastPointId = point.id;
   }
   for (const band of games) {
     const set = sets.get(band.setNumber);
@@ -109,27 +105,21 @@ function sideIndex(side: LabelSide): 0 | 1 {
 }
 
 /**
- * The score the labelled points are held against: the match record's — the
- * source of truth, which labelling never writes — as `[p1, p2]` pairs per
- * set; the session's own `final_score` only for a match with no recorded
- * score; null when neither says anything. The labels answer to the score,
- * never the other way round.
+ * The score the labelled points are held against: what the labeller entered
+ * on the session when they have, else the match record's — as `[p1, p2]`
+ * pairs per set — or null when neither says anything.
  */
 export function enteredScore(
   finalScore: readonly (readonly number[])[] | null,
   matchScore: MatchScore | null,
 ): number[][] | null {
-  const sets = matchScore
-    ? Math.max(matchScore.player1.length, matchScore.player2.length)
-    : 0;
-  if (matchScore && sets > 0) {
-    return Array.from({ length: sets }, (_, i) => [
-      matchScore.player1[i] ?? 0,
-      matchScore.player2[i] ?? 0,
-    ]);
-  }
   if (finalScore) return finalScore.map((pair) => [pair[0] ?? 0, pair[1] ?? 0]);
-  return null;
+  if (!matchScore) return null;
+  const sets = Math.max(matchScore.player1.length, matchScore.player2.length);
+  return Array.from({ length: sets }, (_, i) => [
+    matchScore.player1[i] ?? 0,
+    matchScore.player2[i] ?? 0,
+  ]);
 }
 
 /** Why a set's labelled pair is what it is: one game, and what is wrong with it. */
@@ -148,8 +138,6 @@ export interface LabelScoreMismatch {
    * never reach that set (the entered score has more sets than the rows do).
    */
   firstPointId: string | null;
-  /** The set's last live point; null exactly when `firstPointId` is. */
-  lastPointId: string | null;
   /** The set's unfinished games, then its run-over ones; empty when neither. */
   reasons: LabelScoreReason[];
 }
@@ -178,7 +166,6 @@ export function scoreMismatch(
       labelled: formatPair(have),
       entered: formatPair([want[0] ?? 0, want[1] ?? 0]),
       firstPointId: set?.firstPointId ?? null,
-      lastPointId: set?.lastPointId ?? null,
       reasons: [
         ...(set?.unfinished ?? []).map((game): LabelScoreReason => ({
           kind: "unfinished",
@@ -192,26 +179,6 @@ export function scoreMismatch(
     };
   }
   return null;
-}
-
-/**
- * The session's mismatch as the console reads it — the labelled sets against
- * `enteredScore` — or null once the labeller has said the video ends early.
- * The rail draws it and `]` steps to it, so both read this one answer.
- */
-export function sessionScoreMismatch(input: {
-  points: readonly ScorablePoint[];
-  /** `labelScores(points, adScoring).games`. */
-  games: readonly LabelGameBand[];
-  finalScore: readonly (readonly number[])[] | null;
-  matchScore: MatchScore | null;
-  videoEndsEarly: boolean | null;
-}): LabelScoreMismatch | null {
-  if (input.videoEndsEarly === true) return null;
-  return scoreMismatch(
-    labelSetScores(input.points, input.games),
-    enteredScore(input.finalScore, input.matchScore),
-  );
 }
 
 /** "game 5 unfinished (30–40)" or "game 3 has 2 extra points". */
@@ -240,7 +207,7 @@ export function mismatchGameKey(mismatch: LabelScoreMismatch): string | null {
   return first ? gameKey(first) : null;
 }
 
-/** "6–3, 4–6": the labelled sets, as the publish script prints them. */
+/** "6–3, 4–6": the labelled sets as "Fix the entered score" will store them. */
 export function formatSets(sets: readonly LabelSetScore[]): string {
   return sets.map((set) => formatPair(set.games)).join(", ");
 }

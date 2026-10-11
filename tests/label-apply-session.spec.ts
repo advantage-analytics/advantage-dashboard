@@ -65,8 +65,7 @@ test("a build problem, a score mismatch not accepted, or no points: refused, not
   const mismatch = await refuse(plan({ mismatch: true }));
   expect(mismatch).toEqual({
     ok: false,
-    error:
-      "Not published: Set 1: labelled 4–5, entered 3–6. Fix the set, mark the video as ending early, or correct the match record.",
+    error: "Not published: Set 1: labelled 4–5, entered 3–6",
   });
 
   expect(await refuse(plan({ points: 0 }))).toEqual({

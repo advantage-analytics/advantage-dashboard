@@ -271,57 +271,53 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
 }
 
 /**
- * "Point ended here": the point's second-to-last live stroke, when it is not a
- * first serve and its ball reads out — a rally ball, or a second serve's
- * double fault (`endsPointWhenMissed`). The one stroke after it was hit after
- * the point ended, so the hint offers to remove it or to split there. Live
- * means not deleted and, with `ghosts` on, not a ghost. Not once the labeller
- * has settled it or anything after it.
- *
- * Only at the end, and never a net call. Measured 2026-10-10 over every
- * checked label point: a stroke read missed from the vendor's bounce with a
- * whole rally after it was a ball in play on 247 of 251 strokes in Andy
- * Nguyen v Shaurya Bharadwaj alone. That bounce is often the wrong bounce,
- * the incoming one on the hitter's own side, which reads as a net ball. Held to
- * the second-to-last stroke, an out read ended the point 25 times in 47, and
- * a net read 6 times in 40.
+ * "Point ended here": the last live stroke that is not a first serve and
+ * whose ball was out or in the net — a rally ball, or a second serve's double
+ * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
+ * hit after the point ended — or are a second point the vendor ran into this
+ * one — so the hint offers to remove them or to split there. Live means not
+ * deleted and, with `ghosts` on, not a ghost. Only the latest such stroke is
+ * asked about, and not once the labeller has settled it or anything after it.
  */
 export function pointEndedEarly(
   point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
-  if (live.length < 2) return null;
-  const i = live.length - 2;
-  const shot = live[i];
-  if (!endsPointWhenMissed(shot.stroke)) return null;
-  if (effectiveShotResult(shot) !== "out") return null;
-  // Settled once the labeller has looked at this stroke or one after it:
-  // dismissed the question there, or edited, added or deleted a stroke
-  // after it.
   const ordered = orderLabelShots(point.shots);
   const dismissed = new Set(point.dismissed ?? []);
-  const at = ordered.findIndex((s) => s.id === shot.id);
-  const settled =
-    dismissed.has(pointEndedKey(shot.id)) ||
-    ordered.slice(at + 1).some(
-      (s) =>
-        dismissed.has(pointEndedKey(s.id)) ||
-        s.status === "edited" ||
-        s.status === "added" ||
-        // A stroke added and deleted by mistake was never looked at.
-        (s.status === "deleted" && !isWithdrawnAdd(s)),
-    );
-  if (settled) return null;
-  return {
-    code: "shot_after_point_end",
-    tier: "hint",
-    scope: "point",
-    params: {
-      shotId: shot.id,
-      after: live.slice(i + 1).map((s) => s.id),
-    },
-  };
+  for (let i = live.length - 2; i >= 0; i -= 1) {
+    const shot = live[i];
+    if (!endsPointWhenMissed(shot.stroke)) continue;
+    if (!isMissedResult(effectiveShotResult(shot))) continue;
+    // Settled once the labeller has looked at this stroke or one after it:
+    // dismissed the question there, or edited, added or deleted a stroke
+    // after it. Play went on past a later stroke, so the rally was live
+    // through every one before it — the question does not move up the rally
+    // to a stroke the labeller has already watched go by.
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at.
+          (s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
+    if (settled) return null;
+    return {
+      code: "shot_after_point_end",
+      tier: "hint",
+      scope: "point",
+      params: {
+        shotId: shot.id,
+        after: live.slice(i + 1).map((s) => s.id),
+      },
+    };
+  }
+  return null;
 }
 
 /** A stroke with no landing placed, the labeller not having called it unclear. */

@@ -193,13 +193,12 @@ export function scoreMismatchDetail(
   return `These points make ${labelled} in set ${setNumber}. The score entered was ${entered}. Stats are estimates until one of them is fixed.`;
 }
 
-/**
- * The two answers, each with what choosing it does. Neither rewrites the
- * entered score: "Fix the entered score" (store what the points say) was
- * removed on 2026-10-10 after it overwrote a correct 6–4 6–4 with a mislabelled
- * 5–5 6–4 and hid the chip that could have undone it.
- */
+/** The three answers, each with what choosing it does. */
 export const SCORE_MISMATCH_ANSWERS = {
+  fix: {
+    label: "Fix the entered score",
+    description: "Make the entered score what these points say.",
+  },
   endsEarly: {
     label: "Video ends early",
     description: "The points stop before the match did; the score stands.",
@@ -256,7 +255,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
-      return "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.";
+      return "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.";
     case "last_call_overruled": {
       if (mark.params.vendorCall === "in") {
         return "The last ball is out by its landing, but the vendor called it in. Watch the bounce: if it was in, change the result.";

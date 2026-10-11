@@ -112,12 +112,8 @@
  * across 2 matches, short of 30. Re-deriving a job changes no published game,
  * server, winner or score: each gains only the flag, the `segmentation` key
  * and the new version stamp.
- * 0.8.1 (2026-10-10) narrows the serve side's dead zone from 0.3 m to 0.1 m
- * (flags.ts `SIDE_DEAD_ZONE_M`), so `score_side_mismatch` reads the side of a
- * serve struck 0.1–0.3 m off the centre mark, where many deuce stances sit.
- * No published game, server, winner or score moves; only that flag can.
  */
-export const DERIVATION_VERSION = "0.8.1-unreconciled";
+export const DERIVATION_VERSION = "0.8.0-unreconciled";
 
 export type {
   RawSplitStepStroke,

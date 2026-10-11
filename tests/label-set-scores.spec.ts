@@ -92,7 +92,6 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [2, 1],
         firstPointId: "pt-1",
-        lastPointId: "pt-12",
         unfinished: [],
         overflow: [],
       },
@@ -100,7 +99,6 @@ test.describe("labelSetScores", () => {
         setNumber: 2,
         games: [0, 1],
         firstPointId: "pt-13",
-        lastPointId: "pt-18",
         unfinished: [
           { setNumber: 2, gameNumber: 5, gameInSet: 2, score: "0–0" },
         ],
@@ -127,7 +125,6 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 0],
         firstPointId: "pt-1",
-        lastPointId: "pt-9",
         unfinished: [
           { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "30–40" },
         ],
@@ -152,7 +149,6 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 1],
         firstPointId: "pt-1",
-        lastPointId: "pt-10",
         unfinished: [],
         overflow: [{ setNumber: 1, gameNumber: 1, gameInSet: 1, extra: 2 }],
       },
@@ -174,7 +170,6 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 1],
         firstPointId: "pt-2",
-        lastPointId: "pt-12",
         unfinished: [
           { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "40–0" },
         ],
@@ -185,7 +180,7 @@ test.describe("labelSetScores", () => {
     expect(setsOf([{ ...won(1, 1, "p1"), setNumber: null }])).toEqual([]);
   });
 
-  test("formatSets writes the labelled sets as the publish script prints them", () => {
+  test("formatSets writes the sets as Fix the entered score will store them", () => {
     expect(formatSets(setsOf(twoSets()))).toBe("2–1, 0–1");
     expect(formatSets([])).toBe("");
   });
@@ -197,21 +192,13 @@ test.describe("labelSetScores", () => {
 });
 
 test.describe("enteredScore", () => {
-  test("matches.score wins over final_score; final_score only without one; neither is null", () => {
+  test("final_score wins over matches.score; neither is null", () => {
     const match = { player1: [6, 4], player2: [3, 6] };
     expect(enteredScore(null, match)).toEqual([
       [6, 3],
       [4, 6],
     ]);
-    // The match record is the source of truth: a stored reading never
-    // replaces it (Andy Nguyen v Shaurya Bharadwaj, 2026-10-10).
-    expect(enteredScore([[2, 1]], match)).toEqual([
-      [6, 3],
-      [4, 6],
-    ]);
-    expect(enteredScore([[2, 1]], { player1: [], player2: [] })).toEqual([
-      [2, 1],
-    ]);
+    expect(enteredScore([[2, 1]], match)).toEqual([[2, 1]]);
     expect(enteredScore([[2, 1]], null)).toEqual([[2, 1]]);
     expect(enteredScore(null, null)).toBeNull();
     // A record with sides of unequal length pads the short side with 0.
@@ -236,7 +223,6 @@ test.describe("scoreMismatch", () => {
       labelled: "0–1",
       entered: "5–2",
       firstPointId: "pt-13",
-      lastPointId: "pt-18",
       reasons: [
         {
           kind: "unfinished",
@@ -281,7 +267,6 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–4",
       firstPointId: null,
-      lastPointId: null,
       reasons: [],
     });
     // The rows run into a set the entered score never had.
@@ -297,7 +282,6 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–3",
       firstPointId: null,
-      lastPointId: null,
       reasons: [],
     });
   });
@@ -309,7 +293,6 @@ test.describe("the chip's sentence", () => {
     labelled: "4–5",
     entered: "4–6",
     firstPointId: "pt-13",
-    lastPointId: "pt-18",
     reasons,
   });
 

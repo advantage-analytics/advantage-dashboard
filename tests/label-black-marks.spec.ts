@@ -639,12 +639,20 @@ test.describe("the hints read off the rows, with their answers", () => {
           ...ace,
           id: "s-dead-1",
           eventId: 203,
+          stroke: "forehand" as const,
+          result: null,
+          videoTime: 3,
+        },
+        {
+          ...ace,
+          id: "s-dead-2",
+          eventId: 204,
           hitter: "p2" as const,
           stroke: "forehand" as const,
           result: null,
           landingX: null,
           landingY: null,
-          videoTime: 3,
+          videoTime: 4,
         },
       ],
       winner: "p1" as const,
@@ -697,7 +705,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
     const html = renderWell(point, marksOf(point, []), edit);
     expect(tag(html, "data-suggestion-dismiss")).toContain(
-      'aria-label="Dismiss: Did the point end here? 1 shot follows"',
+      'aria-label="Dismiss: Did the point end here? 2 shots follow"',
     );
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const ended = pointHints(point, marksOf(point, []), NAMES).find(
@@ -779,9 +787,9 @@ test.describe("the hints read off the rows, with their answers", () => {
     const point = endedEarly();
     const hints = pointHints(point, marksOf(point, []), NAMES, edit);
     const ended = hints.find((h) => h.code === "shot_after_point_end")!;
-    expect(ended.label).toBe("Did the point end here? 1 shot follows");
+    expect(ended.label).toBe("Did the point end here? 2 shots follow");
     expect(ended.actions.map((a) => a.label)).toEqual([
-      "Remove 1",
+      "Remove 2",
       "Split here",
     ]);
     ended.actions[0].run();
@@ -816,7 +824,7 @@ test.describe("the hints read off the rows, with their answers", () => {
       removeOnly
         .find((h) => h.code === "shot_after_point_end")!
         .actions.map((a) => a.label),
-    ).toEqual(["Remove 1"]);
+    ).toEqual(["Remove 2"]);
     const splitOnly = pointHints(point, marksOf(point, []), NAMES, {
       operations: edit.operations,
     });
@@ -838,7 +846,7 @@ test.describe("the hints read off the rows, with their answers", () => {
       ["last_landing_missing", "No landing on the last shot"],
     ]);
     expect(tag(html, "data-suggestion-text")).toContain(
-      "Did the point end here? 1 shot follows",
+      "Did the point end here? 2 shots follow",
     );
     // Laid out as the tray lays out its own: Split first, each with its icon.
     const buttons = [
@@ -848,7 +856,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     ].map((m) => [m[1], m[2]]);
     expect(buttons).toEqual([
       ["shot_after_point_end", "Split here"],
-      ["shot_after_point_end", "Remove 1"],
+      ["shot_after_point_end", "Remove 2"],
     ]);
   });
 

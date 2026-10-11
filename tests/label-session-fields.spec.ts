@@ -496,19 +496,9 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     );
   });
 
-  test("gone when the labelled points agree with the score — the match record first", () => {
-    // A stored reading that matches the rows does not hide a record that
-    // does not: the record is the source of truth.
-    const stored = { ...labelSessionFixture(), finalScore: [[0, 0]] };
-    expect(CHEVRON(black(stored, EMPTY_MARKS))).toContain(
-      "data-score-mismatch",
-    );
-    // Without a record, the stored reading is held against the rows.
-    const agreed = {
-      ...labelSessionFixture(),
-      matchScore: null,
-      finalScore: [[0, 0]],
-    };
+  test("gone when the labelled points agree with the score — final_score first", () => {
+    // The labeller's reading matches the rows: no dot, whatever the record says.
+    const agreed = { ...labelSessionFixture(), finalScore: [[0, 0]] };
     expect(header(black(agreed, EMPTY_MARKS))).not.toContain(
       "data-score-mismatch",
     );
@@ -526,17 +516,13 @@ test.describe("a score that doesn't add up, in the flag list", () => {
       "data-score-mismatch",
     );
     // A reading that differs from the rows shows.
-    const differs = {
-      ...labelSessionFixture(),
-      matchScore: null,
-      finalScore: [[4, 0]],
-    };
+    const differs = { ...labelSessionFixture(), finalScore: [[4, 0]] };
     expect(CHEVRON(black(differs, EMPTY_MARKS))).toContain(
       "data-score-mismatch",
     );
   });
 
-  test("the menu: Go to game first, no answer rewrites the score, Use the match score again only with a score stored", () => {
+  test("the menu: Go to game first, Fix says what it stores, Use the match score again only with a score stored", () => {
     const { ScoreChipMenu } = createLoader().load(RAIL) as {
       ScoreChipMenu: (props: Record<string, unknown>) => React.ReactNode;
     };
@@ -544,8 +530,10 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     const calls: string[] = [];
     const props = {
       mismatch: one,
+      stored: "0–0",
       close: () => calls.push("close"),
       onGoToGame: (key: string) => calls.push(`go ${key}`),
+      onFixEnteredScore: () => calls.push("fix"),
       onVideoEndsEarly: () => calls.push("early"),
       onFindGap: () => calls.push("gap"),
     };
@@ -557,6 +545,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     const without = ScoreChipMenu(props);
     expect(rows(without)).toEqual([
       ["Go to game 1", "game 1 unfinished (15–15)"],
+      ["Fix the entered score", "Store 0–0 as the entered score."],
       [
         "Video ends early",
         "The points stop before the match did; the score stands.",
@@ -577,6 +566,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     });
     expect(rows(withStored).map(([label]) => label)).toEqual([
       "Go to game 1",
+      "Fix the entered score",
       "Video ends early",
       "Find the gap",
       "Use the match score again",
@@ -586,7 +576,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
       ...props,
       mismatch: { ...one, reasons: [] },
     });
-    expect(rows(noGame)[0][0]).toBe("Video ends early");
+    expect(rows(noGame)[0][0]).toBe("Fix the entered score");
   });
 
   test("the band or slot carrying the game's key is where Go to game scrolls", () => {
@@ -637,48 +627,16 @@ test.describe("a score that doesn't add up, in the flag list", () => {
 
 test.describe("the header's total", () => {
   test("a flag with the match's count, named for a reader", () => {
-    const html = black(
-      { ...labelSessionFixture(), matchScore: null },
-      EMPTY_MARKS,
-    );
+    const html = black(labelSessionFixture(), EMPTY_MARKS);
     const head = header(html);
-    // Nothing on any row and no score to hold them to: it reads zero.
+    // Nothing on any row: it reads zero.
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('role="img"');
     expect(toCheck).toContain('aria-label="Nothing left to check"');
   });
 
-  test("a set that doesn't add up is a flag: counted, a chip that names it, and a slot after the set's last point", () => {
-    // The fixture's points make 0–0 against a 6–3 record.
-    const session = labelSessionFixture();
-    const head = header(black(session, EMPTY_MARKS));
-    expect(tag(head, 'data-label-rail-to-check=""')).toContain(
-      'aria-label="1 flag to check"',
-    );
-    const chip = tag(head, 'data-label-score-stop=""');
-    expect(chip).toContain(
-      'aria-label="Score doesn’t add up: Set 1 ends 0–0, record 6–3"',
-    );
-    // The chip replaces the dot by the chevron.
-    expect(CHEVRON(black(session, EMPTY_MARKS))).not.toContain(
-      "rounded-full bg-[var(--rail-amber)]",
-    );
-    const html = black(session, EMPTY_MARKS);
-    const last = session.points.at(-1)!;
-    const slot = tag(html, 'data-row="set-score"');
-    expect(slot).toContain(`data-set-score="${last.id}"`);
-    expect(html).toContain("Set 1 ends 0–0");
-    expect(html).toContain(
-      "The match record says 6–3. A game is missing or credited to the wrong player",
-    );
-    // Video ends early answers it: no chip, no slot, nothing counted.
-    const early = black({ ...session, videoEndsEarly: true }, EMPTY_MARKS);
-    expect(early).not.toContain("data-label-score-stop");
-    expect(early).not.toContain('data-row="set-score"');
-  });
-
   test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
-    const session = { ...labelSessionFixture(), matchScore: null };
+    const session = labelSessionFixture();
     const [p1, p2, , p4] = session.points;
     const m = (code: string, tier: string, scope = "point") =>
       ({ code, tier, scope, params: {} }) as LabelMarks["points"][string][0];

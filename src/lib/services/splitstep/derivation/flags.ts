@@ -134,15 +134,8 @@ export const CONFIDENT_OUT_CALL = 0.85;
 /**
  * Servers stand close to the centre mark, so a stance this near x = 0 says
  * nothing about the side; `score_side_mismatch` ignores it.
- *
- * 0.3 until 2026-10-10. Many players serve from deuce 0.15–0.3 m off the mark
- * (Andy Nguyen at 0.16–0.18 on every far-end deuce game start), so the wide
- * zone hid exactly the game-opening serves "wrong side for the score" exists
- * to check. Over the four most-checked label sessions the sign of x named the
- * side on all 426 game serves at 0.05 m or more; the misreads that remain sit
- * under 0.05.
  */
-export const SIDE_DEAD_ZONE_M = 0.1;
+export const SIDE_DEAD_ZONE_M = 0.3;
 
 /** Strokes after a second serve that can still be the returner at a dead ball. */
 export const MAX_DEAD_TAIL = 2;
