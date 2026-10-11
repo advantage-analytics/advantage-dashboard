@@ -162,7 +162,7 @@ ready).
 
 ## T12 · Ask page shell
 
-- **status:** todo
+- **status:** doing
 - **model:** opus
 - **needs:** T7, T11
 - **files:** src/app/dashboard/ask/page.tsx, src/app/dashboard/ask/loading.tsx (new), src/components/dashboard/ask/ask-page.tsx (new), src/components/dashboard/ask/use-ask-stream.ts (new), tests/ask-stream.spec.ts (new) — a guess
