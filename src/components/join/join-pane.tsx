@@ -18,7 +18,7 @@ import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
  *
  * `aside` is `ClaimShell`'s own slot: the screens that ask for a decision put
  * what it means beside it (`JoinTermsPanel`) rather than above the button, and
- * the pane widens to the two-sided measure when one is passed. `mark` is the
+ * the pane lays out two-sided when one is passed. `mark` is the
  * program's name, drawn as the team mark the sidebar draws for a workspace —
  * the initial on ink — above the heading, so a link opened from a group chat
  * says whose it is before a word is read.
@@ -45,11 +45,16 @@ export function JoinPane({
   // inside a second one here.
   return (
     <ClaimShell
-      width={aside ? 840 : width}
+      // 720 with the 300 panel, not the claim screens' 840/340. Those carry a
+      // form in the left column that fills it; here the left column is a
+      // heading, a sentence and a button row, and at 840 the buttons ended
+      // 220px short of the panel — two blocks on one page rather than one
+      // decision with its terms beside it.
+      width={aside ? 720 : width}
       gap={20}
       exitLabel="Leave"
       aside={aside}
-      asideWidth={340}
+      asideWidth={300}
     >
       {mark && (
         <WorkspaceMark

@@ -146,10 +146,14 @@ export function JoinTermsPanel({
       <div className="border-t border-[var(--border-medium)] pt-3">
         <TermsBlock terms={JOIN_TERMS_KEPT} />
       </div>
-      <JoinQuotaNote
-        programHours={programHours}
-        personalHours={personalHours}
-      />
+      {/* Balanced, so the narrow panel never leaves "2h." alone on a line.
+          `text-micro` on the block too: its line box, not the page's. */}
+      <div className="text-micro text-balance">
+        <JoinQuotaNote
+          programHours={programHours}
+          personalHours={personalHours}
+        />
+      </div>
     </div>
   );
 }
