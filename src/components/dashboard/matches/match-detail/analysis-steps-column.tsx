@@ -45,6 +45,7 @@ import {
   type MatchLineProps,
 } from "../match-line";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { UploadKeepOpenNote } from "../upload-keep-open-note";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import { RecoveryAction } from "./recovery-action";
 import {
@@ -237,12 +238,7 @@ function StepBody({
               {body.eta}
             </p>
           )}
-          <div className="mt-1 flex flex-col gap-0.5">
-            <p className={cn(NOTE, "text-[var(--ink-700)]")}>
-              {UPLOADING_COPY.notes.keepTabOpen}
-            </p>
-            <p className={NOTE}>{UPLOADING_COPY.notes.keepUsing}</p>
-          </div>
+          <UploadKeepOpenNote />
         </>
       );
 

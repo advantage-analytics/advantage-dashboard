@@ -3,6 +3,7 @@ import {
   UploadAbortedError,
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
+import { holdTabAwake } from "@/lib/services/upload/tab-keep-awake";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
 import { remuxedJobWindow } from "@/lib/video/trim-plan";
@@ -220,6 +221,9 @@ export async function uploadAndSubmitVideo({
     return event.returnValue;
   };
   window.addEventListener("beforeunload", handleBeforeUnload);
+  // The other way an hour-long upload dies: the computer sleeps. Held for the
+  // cut and the transfer, released wherever the unload guard comes off.
+  const awake = holdTabAwake();
 
   let preparedStorageName: string | null = null;
 
@@ -342,6 +346,7 @@ export async function uploadAndSubmitVideo({
           // Local UI first: throttled only to the precision it can actually
           // show, not to the database's cadence. A bar that moves once a minute
           // is the problem this exists to fix.
+          awake.setPercent(exact);
           const tenth = Math.round(exact * 10);
           if (tenth !== lastSentTenth) {
             lastSentTenth = tenth;
@@ -386,6 +391,7 @@ export async function uploadAndSubmitVideo({
       });
     } finally {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      awake.release();
     }
 
     // The bytes are committed in Azure; the local cut has done its job.
@@ -497,6 +503,7 @@ export async function uploadAndSubmitVideo({
     }
   } catch (uploadErr) {
     window.removeEventListener("beforeunload", handleBeforeUnload);
+    awake.release();
     if (preparedStorageName) void discardPreparedVideo(preparedStorageName);
 
     const cancelled =

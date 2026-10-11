@@ -16,13 +16,30 @@ const src = readFileSync(
   "utf8",
 );
 
-test("mid-upload, the instruction leads and the reassurance sits under it", () => {
-  // The strings live in `upload-progress-copy.ts` (shared with the match
-  // page's progress panel); the order they render in is this file's.
-  const keep = src.indexOf("UPLOADING_COPY.notes.keepTabOpen");
-  const reassure = src.indexOf("UPLOADING_COPY.notes.keepUsing");
-  expect(keep).toBeGreaterThan(-1);
-  expect(reassure).toBeGreaterThan(keep);
+test("mid-upload, the keep-open strip sits under the progress detail, reassurance included", () => {
+  // The strings live in `upload-progress-copy.ts` and the strip that orders
+  // them in `upload-keep-open-note.tsx` (shared with the match page's progress
+  // panel and the add-video flow); where it sits is this file's.
+  const video = src.slice(src.indexOf('if (key === "video")'));
+  const detail = video.indexOf("<CancelUploadControl");
+  const strip = video.indexOf("<UploadKeepOpenNote />");
+  expect(detail).toBeGreaterThan(-1);
+  expect(strip).toBeGreaterThan(detail);
+  // Leaving in-app is safe here, so the reassurance is not switched off.
+  expect(src).not.toContain("reassure={false}");
+
+  const note = readFileSync(
+    resolve(
+      __dirname,
+      "../src/components/dashboard/matches/upload-keep-open-note.tsx",
+    ),
+    "utf8",
+  );
+  expect(note).toContain(
+    "[keepTabOpen, ifItStops, reassure ? keepUsing : null]",
+  );
+  expect(note).toContain("<Monitor");
+  expect(note).toContain("noteStripCls");
 });
 
 test("Back to matches shows only once nothing in this tab is running, and never beside Back to the event", () => {

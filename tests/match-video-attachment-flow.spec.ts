@@ -1268,7 +1268,9 @@ test("Trim and upload replaces the wizard with the upload screen", async ({
 
   // One instruction, and no reassurance: leaving this screen cancels.
   await expect(
-    page.getByText("Keep this tab open until the upload finishes."),
+    page.getByText(
+      "Keep this tab open and your computer awake until the upload finishes.",
+    ),
   ).toHaveCount(1);
   await expect(page.getByText("You can keep using the dashboard.")).toHaveCount(
     0,
