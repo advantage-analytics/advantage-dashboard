@@ -299,6 +299,8 @@ export function MatchStep() {
       handleScoreChange,
       handleTiebreakChange,
       isProcessingProvider,
+      uploadedFile,
+      videoProbe,
       whoPlayed,
       attachedLine,
       attachLine,
@@ -306,7 +308,7 @@ export function MatchStep() {
       parsingState,
       error,
     },
-    view: { scoreCheckVisible, oneSetSettled },
+    view: { scoreCheckVisible, oneSetSettled, trimSelected },
     actions: { dismissScoreCheck, chooseOneSet, undoOneSet },
     meta: { workspaceKind, preset },
   } = useUploadWizard();
@@ -352,6 +354,25 @@ export function MatchStep() {
     workspaces.viewer.id,
     workspaces.active,
   ]);
+
+  // Stable for the same reason as `subject`. Only while the File itself is
+  // held: a restored draft brings back the form, not the video.
+  const heldFile = isProcessingProvider ? (uploadedFile?.file ?? null) : null;
+  const videoName = uploadedFile?.name;
+  const videoSize = uploadedFile?.size;
+  const video = useMemo(
+    () =>
+      heldFile
+        ? {
+            file: heldFile,
+            name: videoName ?? heldFile.name,
+            size: videoSize ?? "",
+            probe: videoProbe,
+            keptSeconds: trimSelected > 0 ? trimSelected : null,
+          }
+        : null,
+    [heldFile, videoName, videoSize, videoProbe, trimSelected],
+  );
 
   if (admin?.attachment)
     return (
@@ -435,6 +456,7 @@ export function MatchStep() {
       oneSetSettled={oneSetSettled}
       onOneSet={chooseOneSet}
       onUndoOneSet={undoOneSet}
+      video={video}
     />
   );
 }

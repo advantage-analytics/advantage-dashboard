@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Why the result is checked at all: this write used to be fire-and-check-never.
  * When it failed the row stayed `uploading` with the bytes already in Azure,
  * `/api/splitstep/jobs` answered 409 ("still uploading") to the auto-submit,
- * and nothing moved until `reap_stalled_uploads()` failed the job 15 minutes
+ * and nothing moved until `reap_stalled_uploads()` failed the job
  * later. One retry covers a transient blip; anything longer is the caller's to
  * report.
  *
@@ -38,7 +38,7 @@ export async function markJobUploaded(
   let lastError = "Could not mark the video as uploaded";
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("processing_jobs")
       .update({
         video_object_key: videoObjectKey,
@@ -49,10 +49,30 @@ export async function markJobUploaded(
         upload_progress_percent: 100,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      // Only a job that is still uploading. One that was ended while the tab
+      // was away — restarted from another screen, or reaped — must not be
+      // flipped back to `uploaded`: a failed job is over, and
+      // `job-liveness.ts` stops its upload before the commit.
+      .in("status", ["pending", "uploading"])
+      .select("id");
 
-    if (!error) return { ok: true };
-    lastError = error.message || lastError;
+    if (!error && (data?.length ?? 0) > 0) return { ok: true };
+    if (error) {
+      lastError = error.message || lastError;
+      continue;
+    }
+    // No row matched. Either the job is no longer uploading, or an earlier
+    // attempt landed and only its response was lost — in which case the row
+    // already says `uploaded`, and reporting a failure would have the caller
+    // mark a committed video failed.
+    const { data: now } = await supabase
+      .from("processing_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (now?.status === "uploaded") return { ok: true };
+    lastError = "This upload is no longer the match's current one";
   }
 
   return { ok: false, error: lastError };

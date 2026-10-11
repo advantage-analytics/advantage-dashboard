@@ -87,6 +87,7 @@ import {
   type UpdateAlignmentRequest,
   type UpdateAlignmentResult,
 } from "@/lib/match-video/types";
+import { holdTabAwake } from "@/lib/services/upload/tab-keep-awake";
 import { discardPreparedVideo, prepareVideoForUpload } from "@/lib/video/trim";
 
 import {
@@ -708,6 +709,10 @@ export function useAttachmentFlow(
         /** Set once a cut exists in OPFS; discarded however this attempt ends. */
         let preparedStorageName: string | null = null;
 
+        // Same courtesy the wizard's upload gets: the screen stays awake for
+        // the cut and the transfer, and the tab title carries the percentage.
+        const awake = holdTabAwake();
+
         let result: Awaited<ReturnType<typeof deps.transfer>>;
         try {
           // The window on screen when it belongs to this mark — the person
@@ -798,12 +803,20 @@ export function useAttachmentFlow(
             expectedActive,
             clientRequestId: clientRequestId.current,
             signal: controller.signal,
-            onProgress: reportProgress,
+            onProgress: (progress) => {
+              reportProgress(progress);
+              if (progress.phase === "uploading" && progress.totalBytes > 0) {
+                awake.setPercent(
+                  (progress.bytesTransferred / progress.totalBytes) * 100,
+                );
+              }
+            },
             onReserved: (attachmentId) => {
               pendingAttachmentId.current = attachmentId;
             },
           });
         } finally {
+          awake.release();
           // Success, failure and cancel alike: the bytes are either in Azure
           // or not going there from this copy. A retry cuts again.
           if (preparedStorageName) {

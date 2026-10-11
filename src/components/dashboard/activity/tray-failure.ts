@@ -138,3 +138,23 @@ export function trayFailureReason(
       return TRAY_REASON.none;
   }
 }
+
+/**
+ * Where a dead upload stopped, when the row should say so.
+ *
+ * Only for `upload_again` — the one failure whose remedy is to send the file
+ * again, so how far the last attempt got is the fact the reader is weighing.
+ * Every other class, and an `upload_again` row with no recorded progress,
+ * returns undefined and keeps the ordinary failed row.
+ */
+export function trayStoppedUploadPercent(
+  analysis: Pick<MatchAnalysis, "recovery" | "stoppedUploadPercent">,
+): number | undefined {
+  if (analysis.recovery !== "upload_again") return undefined;
+  return analysis.stoppedUploadPercent;
+}
+
+/** "Upload stopped at 27%" — the stepper's own words for the failed step. */
+export function trayStoppedUploadReason(percent: number): string {
+  return `${STEPPER_COPY.steps.videoFailed} at ${percent}%`;
+}

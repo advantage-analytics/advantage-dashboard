@@ -171,6 +171,72 @@ export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
   };
 }
 
+export interface UploadPausedInput {
+  to: string;
+  matchId: string;
+  matchTitle: string;
+  matchContext: string;
+  /**
+   * The last progress the transfer recorded, floored — or null when it has
+   * recorded none worth saying (it went quiet during the cut). A number, not a
+   * string: the sentence decides how to say it.
+   */
+  pausedPercent: number | null;
+}
+
+/**
+ * "Your upload has paused" — to the person whose upload went quiet.
+ *
+ * A match video uploads from the browser tab for an hour or more, and it stops
+ * moving when the tab closes or the computer sleeps. Nothing told the
+ * uploader: the job sat at "Uploading 27%" until they next opened a page. The
+ * scheduled sweep (`/api/cron/reap-stalled-uploads`) sends this once per job,
+ * twenty minutes into the silence.
+ *
+ * Paused, not failed, and the copy keeps to that. The job is still live: a tab
+ * whose computer wakes up carries on from where it stopped, and one real
+ * upload finished that way after four hours asleep. So the first thing it asks
+ * is whether that tab is still open — telling this person to start over would
+ * have them upload the same match twice. Starting again is for a tab that is
+ * gone, and it is done from the match page, which ends the paused upload
+ * first.
+ *
+ * The last line is the deadline: `UPLOAD_ABANDONED_AFTER`, when the upload
+ * credential has expired and nothing can finish it.
+ */
+export function uploadPausedEmail(input: UploadPausedInput): EmailMessage {
+  const { to, matchId, matchTitle, matchContext, pausedPercent } = input;
+  const where =
+    pausedPercent === null
+      ? "The upload has stopped moving"
+      : `The upload has stopped moving at ${pausedPercent}%`;
+
+  const content: EmailContent = {
+    preheader: `Your video for ${matchTitle} has stopped uploading.`,
+    eyebrow: "Upload paused",
+    heading: "Your video upload has paused",
+    body: [
+      `${where}, so there is nothing to analyze yet. Your match and its score are saved.`,
+      "If the tab you uploaded from is still open, go back to it: once the computer is awake and online, the upload carries on from where it paused. If you closed that tab, open the match and choose to upload the video again.",
+      "The upload runs in the browser tab, so the tab has to stay open and the computer awake until it reaches 100%. A full match can take an hour or more on home Wi-Fi. An upload that stays paused for six hours is ended.",
+    ],
+    facts: [
+      { label: "Match", value: matchTitle },
+      { label: "Where", value: matchContext },
+    ],
+    cta: { label: "Open the match", url: matchUrl(matchId) },
+    note: `Reply to this email if it keeps pausing and we'll look at it directly. ${preferenceNote("Email me if analysis fails")}`,
+  };
+
+  return {
+    to,
+    subject: `Your video for ${matchTitle} has stopped uploading`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "upload_paused" },
+  };
+}
+
 export interface AnalysisFailedInternalInput {
   /** `INTERNAL_ALERTS_ADDRESS`, passed by the caller (`analysis-mail.ts`). */
   to: string;

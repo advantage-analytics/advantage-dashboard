@@ -22,6 +22,8 @@ import {
   isAnalysisFailed,
   isInFlight,
   isSubmitStalled,
+  isUploadPaused,
+  UPLOAD_PAUSED_LABEL,
   uploadEtaSeconds,
   type MatchAnalysis,
   type RecoveryClass,
@@ -87,10 +89,12 @@ export const STEPPER_COPY = {
     failed: "Analysis didn't finish",
     statsFailed: "Stats couldn't be added",
     cancelled: "Analysis cancelled",
+    paused: UPLOAD_PAUSED_LABEL,
   },
   steps: {
     videoDone: "Video uploaded",
     videoFailed: "Upload stopped",
+    videoPaused: UPLOAD_PAUSED_LABEL,
     handOff: "Handing off to Advantage Intelligence",
     inLine: "Analysis in line",
     analyzing: "Analyzing video",
@@ -106,6 +110,19 @@ export const STEPPER_COPY = {
    * the spread moves.
    */
   aboutAnHour: "about an hour",
+  /**
+   * Under a paused upload. Nothing has failed: the tab that started it picks
+   * the transfer back up when its computer is awake and online, so that is
+   * the first thing to try. Starting again is for a tab that is gone.
+   */
+  paused: {
+    note: "Nothing has uploaded for a while. If the tab you started this from is still open, go back to it and the upload carries on. If you closed it, upload the video again.",
+    /** For a viewer who did not start it, and so cannot restart it. */
+    noteViewer:
+      "Nothing has uploaded for a while. It carries on once the tab it was started from is open and online again.",
+    action: "Upload the video again",
+    pending: "Opening…",
+  },
   /** The queued step's quiet escape: the action, then what it gives back. */
   cancel: {
     action: "Cancel analysis",
@@ -137,6 +154,20 @@ export interface StepAction {
 export type AnalysisStepBody =
   /** The transfer: a measured bar, an estimate once one exists, the notes. */
   | { kind: "upload"; percent: number; eta?: string }
+  /**
+   * The transfer, gone quiet: the bar frozen where it stopped, what to do
+   * about it, and — for the job's submitter only — the way to start again.
+   */
+  | {
+      kind: "paused";
+      percent: number;
+      /**
+       * The row's last move as this view read it. The restart only ends the
+       * job if the row still says so — a stale page must not end an upload
+       * that has since moved.
+       */
+      since: string;
+    }
   /**
    * One quiet line of reassurance; then, on the match page only, the timing
    * line (`meta`) and at most one action — Cancel while queued, resend once
@@ -326,6 +357,31 @@ export function analysisStepsView(
       // transfer that has not finished.
       const measured = analysis.uploadPercent;
       const pct = measured === undefined ? undefined : Math.floor(measured);
+      // Twenty minutes with no progress write. Only a clock can say so, and
+      // before its first tick the view reads as uploading — the same rule the
+      // stalled hand-off below follows.
+      if (now !== null && isUploadPaused(analysis, now)) {
+        return {
+          title: STEPPER_COPY.titles.paused,
+          steps: [
+            SAVED,
+            {
+              key: "video",
+              label: STEPPER_COPY.steps.videoPaused,
+              state: "wait",
+              value: pct === undefined ? undefined : `${pct}%`,
+              body: {
+                kind: "paused",
+                percent: measured ?? 0,
+                // Defined: `isUploadPaused()` is false without it.
+                since: analysis.updatedAt ?? "",
+              },
+            },
+            ANALYSIS_LATER,
+            STATS_LATER,
+          ],
+        };
+      }
       const etaSeconds =
         now === null ? undefined : uploadEtaSeconds(analysis, now);
       return {
@@ -585,7 +641,7 @@ export const DRAWER_NO_ACTION_TITLE = "Analysis stopped";
 /** A drawer step's text: one quiet line, or the step that stopped. */
 export type DrawerAnalysisStepBody = Exclude<
   AnalysisStepBody,
-  { kind: "upload" }
+  { kind: "upload" } | { kind: "paused" }
 >;
 
 export interface DrawerAnalysisStepView {
@@ -640,7 +696,9 @@ export function drawerAnalysisStepsView(
   const steps = page.steps.map((step): DrawerAnalysisStepView => {
     const { key, label, state, value } = step;
     const body = step.body;
-    if (!body || body.kind === "upload") {
+    // A paused upload reads like a running one here: the label and the
+    // percentage say it, and the drawer has no room for the rest.
+    if (!body || body.kind === "upload" || body.kind === "paused") {
       return value === undefined
         ? { key, label, state }
         : { key, label, state, value };

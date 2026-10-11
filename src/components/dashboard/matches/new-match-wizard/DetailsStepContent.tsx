@@ -98,7 +98,20 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { rankLineOffers } from "./offer-match";
-import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
+import type {
+  EventPreset,
+  FormData,
+  LineOffer,
+  ValueSource,
+  VideoProbeSummary,
+} from "./types";
+import {
+  CheckedFileRow,
+  VideoFileLead,
+  videoUploadFacts,
+} from "./CheckedFileRow";
+import { UploadNoteStrip } from "../upload-keep-open-note";
+import { UPLOADING_COPY } from "../upload-progress-copy";
 import {
   floatMenuCls,
   floatMenuDividerCls,
@@ -200,6 +213,26 @@ export interface DetailsStepContentProps {
   onOneSet: () => void;
   /** Back to the remembered format, with the question open again. */
   onUndoOneSet: () => void;
+  /**
+   * The video Save match is about to upload, for a processing provider that
+   * still holds the picked File. Null or absent draws no Video section — an
+   * import has no video, and a restored draft has lost its File.
+   */
+  video?: DetailsVideo | null;
+}
+
+/** What the Video section draws: the picked file and what the probe read. */
+export interface DetailsVideo {
+  file: File;
+  name: string;
+  /** Already formatted, as the file step shows it ("3.80 GB"). */
+  size: string;
+  probe: VideoProbeSummary | null;
+  /**
+   * The trim window's length in seconds, or null when none is chosen. What
+   * uploads is this cut, not the whole file.
+   */
+  keptSeconds: number | null;
 }
 
 type Hand = "right" | "left";
@@ -972,6 +1005,7 @@ function DetailsStepContentImpl({
   oneSetSettled,
   onOneSet,
   onUndoOneSet,
+  video = null,
 }: DetailsStepContentProps) {
   const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
@@ -2098,6 +2132,31 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
+      {/* Video — what Save match is about to start. Only while the wizard
+          holds the file: a restored draft keeps the form but not the File, and
+          a section naming a video that is not there would be a false promise. */}
+      {isProcessingProvider && video && (
+        <div
+          className="flex flex-col gap-[18px] border-t border-[var(--border-hairline)] pt-6"
+          data-testid="details-video-section"
+        >
+          <SectionHead label="Video" micro="what uploads when you save" />
+          <CheckedFileRow
+            lead={
+              <VideoFileLead
+                file={video.file}
+                durationSeconds={video.probe?.durationSeconds ?? 0}
+              />
+            }
+            name={video.name}
+            facts={
+              videoUploadFacts(video.probe, video.size, video.keptSeconds) ??
+              video.size
+            }
+          />
+          <UploadNoteStrip>{UPLOADING_COPY.beforeSave}</UploadNoteStrip>
+        </div>
+      )}
       {/* Red: the scores entered for the dropped sets are gone once this runs,
           and the stock dialog's blue button said otherwise. */}
       <ConfirmDialog

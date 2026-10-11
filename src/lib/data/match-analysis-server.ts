@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type MatchAnalysis,
+  UPLOAD_ABANDONED_AFTER,
   chainAttempts,
   importedAnalysis,
   jobRecoveryFacts,
@@ -98,7 +99,11 @@ export async function loadMatchAnalysis(
   // page in the app, twice per request on the matches list. A read path that
   // quietly writes is only safe while its callers are few enough to enumerate.
   if (options.reap) {
-    const { error: reapError } = await supabase.rpc("reap_stalled_uploads");
+    // Six hours, not the function's fifteen-minute default — see
+    // `UPLOAD_ABANDONED_AFTER`. Until then a quiet upload reads "paused".
+    const { error: reapError } = await supabase.rpc("reap_stalled_uploads", {
+      p_stale_after: UPLOAD_ABANDONED_AFTER,
+    });
     if (reapError) {
       // Never fatal — the list is more useful slightly stale than not at all.
       console.warn("[match-analysis] could not reap stalled uploads", {
