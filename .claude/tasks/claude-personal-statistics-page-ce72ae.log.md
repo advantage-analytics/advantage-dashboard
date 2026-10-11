@@ -47,3 +47,14 @@ is the runner's. Newest entries at the bottom.
   2. Rolling-window pills carry no literal check-dot glyph, though the task notes point at the `Radio` vocabulary.
   3. A long opponent-type sentence truncates in the trigger with no tooltip; the trigger shows no engaged wash when a cut is applied.
   4. Nothing here was looked at in a browser — trigger width, wrapping at narrow widths and the popover under the custom trigger are unverified.
+
+## T5 · Trend card — done
+
+- **gate:** mechanical pass · completion pass
+- **changed:** `statistics.ts` gains pure `trendSeries` / `TrendSeries`. `shared/kpi-detail-chart.tsx` gains optional `average`, `rolling`, `rollingWindow` and `plotOnly` props (dashed average `ReferenceLine`, rolling drawn as a second `Area`; unchanged without them, `kpi-tile.tsx` untouched). New `statistics/trend-card.tsx` (`TrendCard`, `trendDelta`) replaces the placeholder in the `Trend` slot. `statistics-layout.tsx`: `RegionCard` takes an optional `subject`, plus `TrendLegend` and `STATISTICS_TREND_PLOT`. Skeleton's Trend block mirrors the card. `tests/statistics-trend.spec.ts` added (29 tests).
+- **follow-ups:**
+  1. Colours: the task note said dots in `VIZ_BLUE`; the frame draws light-blue dots under a `--viz-you` line. The note was followed (rolling line `VIZ_BLUE_DEEP`); matching the frame is a two-constant swap plus two legend swatches.
+  2. The frame's header has a statistic select; here the label is static text — `RegionCard`'s `subject` slot is where a picker would go.
+  3. Window Off: `trendSeries.rolling` is all-null (aligned), not `[]`, and the legend drops its "Rolling N" key.
+  4. X axis is categorical on date, so same-day matches share a tick; dots at the Y extremes are half-clipped — a little domain padding in `plotOnly` mode would fix it.
+  5. `statistics.ts` type-imports `KpiDetailPoint` from the client chart file; the type may belong somewhere shared.

@@ -44,50 +44,6 @@ function Track({ className = "h-1" }: { className?: string }) {
   );
 }
 
-/* ── Trend ────────────────────────────────────────────────────────────────── */
-
-function Figure({ label, missing }: { label: string; missing: string }) {
-  return (
-    <span className="inline-flex items-baseline gap-1.5">
-      <span className="text-[12px] text-[var(--ink-600)]">{label}</span>
-      <EmptyMark label={missing} />
-    </span>
-  );
-}
-
-export function StatisticsTrendPlaceholder() {
-  const { state } = useStatistics();
-  return (
-    <RegionCard
-      title="Trend"
-      aside={
-        <span className="inline-flex items-baseline gap-5">
-          <Figure label="Average" missing="No average yet" />
-          {state.window !== null && (
-            <Figure
-              label={`Rolling ${state.window}`}
-              missing="No rolling average yet"
-            />
-          )}
-        </span>
-      }
-    >
-      <p className="text-[12px] text-[var(--ink-900)]">
-        {STATISTIC_LABELS.get(state.stat)}
-      </p>
-      {/* The chart's own 760×250 box and its grid, with no series on it. */}
-      <div
-        aria-hidden="true"
-        className="flex aspect-[760/250] w-full flex-col justify-between"
-      >
-        {[0, 1, 2, 3].map((line) => (
-          <span key={line} className="h-px bg-[var(--border-hairline)]" />
-        ))}
-      </div>
-    </RegionCard>
-  );
-}
-
 /* ── By opponent type ─────────────────────────────────────────────────────── */
 
 export function StatisticsOpponentTypesPlaceholder() {

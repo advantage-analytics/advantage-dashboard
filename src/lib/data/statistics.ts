@@ -1,3 +1,4 @@
+import type { KpiDetailPoint } from "@/components/dashboard/shared/kpi-detail-chart";
 import { meanOfPresent, num, pct, statKey } from "./aggregate";
 import { matchOutcome, shortName, type MatchScore } from "./match-utils";
 import { playerSide } from "./player-identity";
@@ -172,6 +173,72 @@ export function windowChange(
   if (latest === null || previous === null) return null;
   // Both sides are one-decimal means; the difference is not, in binary.
   return Math.round((latest - previous) * 10) / 10;
+}
+
+/* ── One statistic across the season: the Trend card's series ─────────────── */
+
+export interface TrendSeries {
+  /**
+   * One per match that MEASURED the statistic, oldest → newest. A match that
+   * did not publish it has no dot — an absent value is never drawn as a zero.
+   */
+  points: KpiDetailPoint[];
+  /** Mean of `points`, or null over none. */
+  average: number | null;
+  /**
+   * Aligned to `points`: the rolling value at the match each point came from.
+   * Null where that match's window is not yet full, or measured nothing — and
+   * at every point when the window is Off.
+   */
+  rolling: (number | null)[];
+  /** The newest rolling value — the window ending at the last match. */
+  latest: number | null;
+  /** `windowChange` over the whole series. */
+  change: number | null;
+}
+
+/**
+ * What the Trend card draws for one statistic.
+ *
+ * The window counts MATCHES (see the file header), so the rolling mean runs
+ * over every match in `filtered` — unmeasured ones included, as gaps inside
+ * their windows — and is only then lined up with the measured points. Rolling
+ * over `points` instead would quietly widen a "last 5 matches" window to
+ * however many matches it took to find five values.
+ */
+export function trendSeries(
+  filtered: readonly StatisticsMatch[],
+  key: StatisticKey,
+  window: StatisticWindow,
+): TrendSeries {
+  const values = filtered.map((match) => match.values[key]);
+  const means = rollingMean(values, window);
+
+  const points: KpiDetailPoint[] = [];
+  const rolling: (number | null)[] = [];
+  filtered.forEach((match, index) => {
+    const value = values[index];
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return;
+    }
+    points.push({
+      value,
+      date: match.date ?? "",
+      opponent: match.opponentName,
+    });
+    // `means[i]` is the window ENDING at match `i + window − 1`.
+    rolling.push(
+      window === null ? null : (means[index - (window - 1)] ?? null),
+    );
+  });
+
+  return {
+    points,
+    average: averageOf(points.map((point) => point.value)),
+    rolling,
+    latest: means[means.length - 1] ?? null,
+    change: windowChange(values, window),
+  };
 }
 
 /* ── One match, read from the viewer's side ───────────────────────────────── */

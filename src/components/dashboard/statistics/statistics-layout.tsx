@@ -71,11 +71,14 @@ export function StatisticsTitleFrame({ children }: { children: ReactNode }) {
 /** The card every region sits in: `surface-card`, 20px, a 12px column. */
 export function RegionCard({
   title,
+  subject,
   aside,
   className = "",
   children,
 }: {
   title: string;
+  /** What the card is about, beside its title — the Trend card's statistic. */
+  subject?: ReactNode;
   /** What sits at the right of the header row. */
   aside?: ReactNode;
   className?: string;
@@ -91,10 +94,59 @@ export function RegionCard({
         <h2 id={id} className="eyebrow">
           {title}
         </h2>
+        {subject}
         <div className="flex-1" />
         {aside}
       </div>
       {children}
     </section>
+  );
+}
+
+/* ── Trend ────────────────────────────────────────────────────────────────── */
+
+/** The Trend plot's box: the frame's 760×250, as wide as the card. */
+export const STATISTICS_TREND_PLOT = "aspect-[760/250] w-full";
+
+function LegendKey({ swatch, children }: { swatch: string; children: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        aria-hidden="true"
+        className="size-1.5 rounded-[2px]"
+        style={{ background: swatch }}
+      />
+      <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The hairline row under the Trend plot: what each mark is, then how many
+ * matches are drawn. Shared with the skeleton, which knows the marks and not
+ * yet the window or the count.
+ *
+ * The swatches are the CSS twins of the hues `KpiDetailChart` draws with
+ * (`VIZ_BLUE`, `VIZ_BLUE_DEEP`, `VIZ_SLATE_LIGHT` in `data-viz.ts`).
+ */
+export function TrendLegend({
+  rolling,
+  caption,
+}: {
+  /** "Rolling 5"; omitted when the window is Off and no such line is drawn. */
+  rolling?: string;
+  /** The "N matches" caption, or the skeleton's bar for it. */
+  caption: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-[var(--border-hairline)] pt-3">
+      <LegendKey swatch="var(--viz-you)">Each match</LegendKey>
+      {rolling && <LegendKey swatch="var(--viz-you-deep)">{rolling}</LegendKey>}
+      <LegendKey swatch="var(--viz-opp-mid)">Average</LegendKey>
+      <div className="flex-1" />
+      {caption}
+    </div>
   );
 }

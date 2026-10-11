@@ -17,9 +17,9 @@ import {
   StatisticsPointEndingsPlaceholder,
   StatisticsRallyLengthPlaceholder,
   StatisticsTablePlaceholder,
-  StatisticsTrendPlaceholder,
 } from "./statistics-placeholders";
 import { useStatistics } from "./statistics-provider";
+import { TrendCard } from "./trend-card";
 
 /**
  * Everything under the Statistics title row: the controls, the season strip
@@ -28,7 +28,7 @@ import { useStatistics } from "./statistics-provider";
  * ── The slots ───────────────────────────────────────────────────────────────
  * Each `<Slot>` below owns its place in the layout and its `WidgetBoundary`;
  * the component inside it owns nothing but its own card. So a region's task
- * replaces ONE child — `<StatisticsTrendPlaceholder />` with its real
+ * replaces ONE child — `<StatisticsTablePlaceholder />` with its real
  * component — and touches no layout. Every region reads `useStatistics()`,
  * so none takes props.
  *
@@ -108,7 +108,7 @@ export function StatisticsBody({
       <div className={STATISTICS_TREND_ROW}>
         {/* slot: Trend */}
         <Slot label="Trend" className={STATISTICS_TREND_SLOT}>
-          <StatisticsTrendPlaceholder />
+          <TrendCard />
         </Slot>
         {/* slot: By opponent type */}
         <Slot label="By opponent type" className={STATISTICS_OPPONENT_SLOT}>

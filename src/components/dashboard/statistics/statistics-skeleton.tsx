@@ -13,10 +13,12 @@ import {
   STATISTICS_STACK,
   STATISTICS_TABLE_GRID,
   STATISTICS_TAIL_GRID,
+  STATISTICS_TREND_PLOT,
   STATISTICS_TREND_ROW,
   STATISTICS_TREND_SLOT,
   StatisticsColumn,
   StatisticsTitleFrame,
+  TrendLegend,
 } from "./statistics-layout";
 
 /**
@@ -99,10 +101,13 @@ function StatisticsPendingBody() {
           <div className={STATISTICS_TREND_SLOT}>
             <RegionCard
               title="Trend"
-              aside={<PendingBar className="h-4 w-40" />}
+              subject={<PendingBar className="h-3 w-36" />}
+              aside={<PendingBar className="h-4 w-48" />}
             >
-              <PendingBar className="h-3 w-36" />
-              <PendingBar className="aspect-[760/250] h-auto rounded-[4px]" />
+              <PendingBar
+                className={`${STATISTICS_TREND_PLOT} h-auto rounded-[4px]`}
+              />
+              <TrendLegend caption={<PendingBar className="h-[11px] w-16" />} />
             </RegionCard>
           </div>
           <div className={STATISTICS_OPPONENT_SLOT}>

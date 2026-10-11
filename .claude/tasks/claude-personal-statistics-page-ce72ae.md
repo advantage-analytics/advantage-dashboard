@@ -76,7 +76,7 @@ ready).
 
 ## T5 · Trend card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/statistics/trend-card.tsx (new), src/components/dashboard/shared/kpi-detail-chart.tsx (extend), src/lib/data/statistics.ts, tests/statistics-trend.spec.ts (new) — guesses
