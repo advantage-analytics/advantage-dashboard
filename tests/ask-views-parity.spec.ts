@@ -30,6 +30,15 @@ import { poolLogin } from "./fixtures/live-db-pool";
  * set count, then asserts the view's `i_won` and `opponent_name` equal what
  * the imported TypeScript functions say for every row.
  *
+ * `20261011193659_ask_stats_points_shots_views.sql` applies the same side
+ * rule to statistics, points and shots. The player-1 and player-2 seeds also
+ * get a `match_stats` row per side and a handful of `points`, and the spec
+ * asserts that `ask.match_stats`'s `side = 'me'` row is the `match_stats`
+ * row whose `is_player1` matches `playerSide()`, and that `ask.points`'s
+ * `i_served` / `i_won` are `server_is_player1` / `won_by_player1` turned by
+ * the same side. `ask.shots` has no seed here: its `mine` is the one-line
+ * rule the points case already pins, on `shots.is_player1`.
+ *
  * Schema `ask` is deliberately NOT exposed through PostgREST, so supabase-js
  * cannot read the view. The read goes over a direct Postgres connection
  * (`pg`, already a dev dependency) to the same project, as the connection's
@@ -141,6 +150,84 @@ interface AskMatchRow {
   i_won: boolean | null;
 }
 
+/** Seed indices that get statistics and points: the player-1 and player-2
+ *  matches, one on each side of `is_player1`. */
+const STATS_SEEDS = [0, 1] as const;
+
+/** The counters the stats case compares; chosen so one side's row cannot
+ *  be mistaken for the other's (every counter differs between the two). */
+const STAT_COLUMNS = [
+  "aces",
+  "double_faults",
+  "winners",
+  "unforced_errors",
+  "first_serves",
+  "first_serves_in",
+  "first_serve_points_won",
+  "total_points",
+  "total_points_won",
+] as const;
+type StatColumn = (typeof STAT_COLUMNS)[number];
+type StatCounters = Record<StatColumn, number>;
+
+/** One `match_stats` row per side, every counter distinct across sides. */
+function statsSeed(
+  matchId: string,
+  isPlayer1: boolean,
+): StatCounters & { match_id: string; is_player1: boolean } {
+  const base = isPlayer1 ? 10 : 50;
+  return {
+    match_id: matchId,
+    is_player1: isPlayer1,
+    aces: base + 1,
+    double_faults: base + 2,
+    winners: base + 3,
+    unforced_errors: base + 4,
+    first_serves: base + 20,
+    first_serves_in: base + 15,
+    first_serve_points_won: base + 9,
+    total_points: base + 40,
+    total_points_won: base + 25,
+  };
+}
+
+interface PointSeed {
+  match_id: string;
+  point_number: number;
+  set_number: number;
+  game_number: number;
+  server_is_player1: boolean;
+  won_by_player1: boolean;
+}
+
+/** Six points across two sets with `game_number` counted through the match
+ *  (set 2 starts at game 3), as the derivation engine stores it; server and
+ *  winner alternate on different periods so no single flip passes both. */
+function pointsSeed(matchId: string): PointSeed[] {
+  return [1, 2, 3, 4, 5, 6].map((n) => ({
+    match_id: matchId,
+    point_number: n,
+    set_number: n <= 4 ? 1 : 2,
+    game_number: n <= 2 ? 1 : n <= 4 ? 2 : 3,
+    server_is_player1: n % 2 === 1,
+    won_by_player1: n % 3 !== 0,
+  }));
+}
+
+type AskStatsRow = { match_id: string; side: "me" | "opponent" } & Record<
+  StatColumn,
+  number
+> & { first_serve_pct: string | null };
+
+interface AskPointRow {
+  match_id: string;
+  set_number: number;
+  game_number: number;
+  point_number: number;
+  i_served: boolean;
+  i_won: boolean;
+}
+
 test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", () => {
   test.describe.configure({ mode: "serial", timeout: 60_000 });
   test.skip(!HAVE_ENV, SKIP_REASON);
@@ -196,6 +283,22 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
       return id;
     });
 
+    // Statistics and points for the two sided matches. Both tables cascade
+    // from `matches`, so the sweep and afterAll above clean these up too.
+    const stats = await admin
+      .from("match_stats")
+      .insert(
+        STATS_SEEDS.flatMap((index) => [
+          statsSeed(seededIds[index], true),
+          statsSeed(seededIds[index], false),
+        ]),
+      );
+    if (stats.error) throw new Error(`seed stats: ${stats.error.message}`);
+    const points = await admin
+      .from("points")
+      .insert(STATS_SEEDS.flatMap((index) => pointsSeed(seededIds[index])));
+    if (points.error) throw new Error(`seed points: ${points.error.message}`);
+
     db = new PgClientCtor({ connectionString: DB_URL! });
     await db.connect();
     await db.query("set statement_timeout = '15s'");
@@ -208,25 +311,49 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
     await db?.end();
   });
 
-  /** `ask.matches` as the seeded account sees it: the request's JWT claims
-   *  set for the transaction, so `auth.uid()` resolves inside the view. */
-  async function readAsPlayer(): Promise<AskMatchRow[]> {
+  /** A query over schema `ask` as the seeded account sees it: the request's
+   *  JWT claims set for the transaction, so `auth.uid()` resolves inside
+   *  the views. */
+  async function readAsPlayer<R>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<R[]> {
     await db.query("begin");
     try {
       await db.query("select set_config('request.jwt.claims', $1, true)", [
         JSON.stringify({ sub: player.userId, role: "authenticated" }),
       ]);
-      const { rows } = await db.query<AskMatchRow>(
-        "select match_id, opponent_name, i_won from ask.matches",
-      );
+      const { rows } = await db.query<R>(sql, values);
       return rows;
     } finally {
       await db.query("rollback");
     }
   }
 
+  function readMatches(): Promise<AskMatchRow[]> {
+    return readAsPlayer<AskMatchRow>(
+      "select match_id, opponent_name, i_won from ask.matches",
+    );
+  }
+
+  /** The side `playerSide()` gives a seed, which the sided seeds always have. */
+  function seedSide(index: number): "player1" | "player2" {
+    const seed = seeds(player.userId)[index];
+    const side = playerSide(
+      {
+        player1_id: seed.player1_id,
+        player2_id: seed.player2_id,
+        created_by: player.userId,
+      },
+      [player.userId],
+      player.userId,
+    );
+    if (!side) throw new Error(`${seed.label}: playerSide() must resolve`);
+    return side;
+  }
+
   test("i_won and opponent_name equal matchOutcome() and the playerSide()-derived opponent for every row", async () => {
-    const rows = await readAsPlayer();
+    const rows = await readMatches();
     const byId = new Map(rows.map((row) => [row.match_id, row]));
 
     // The pool user has no claimed roster profile, so its login id is its
@@ -256,26 +383,133 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
   });
 
   test("the view shows exactly the account's personal matches", async () => {
-    const rows = await readAsPlayer();
+    const rows = await readMatches();
     expect(rows.map((row) => row.match_id).sort()).toEqual(
       [...seededIds].sort(),
     );
   });
 
+  test("ask.match_stats side = 'me' is the match_stats row whose is_player1 matches playerSide()", async () => {
+    const columns = STAT_COLUMNS.join(", ");
+    const rows = await readAsPlayer<AskStatsRow>(
+      `select match_id, side, ${columns}, first_serve_pct
+         from ask.match_stats where match_id = any($1)`,
+      [STATS_SEEDS.map((index) => seededIds[index])],
+    );
+    expect(rows).toHaveLength(STATS_SEEDS.length * 2);
+
+    for (const index of STATS_SEEDS) {
+      const label = seeds(player.userId)[index].label;
+      const meIsPlayer1 = seedSide(index) === "player1";
+      for (const side of ["me", "opponent"] as const) {
+        const isPlayer1 = side === "me" ? meIsPlayer1 : !meIsPlayer1;
+        const stored = await admin
+          .from("match_stats")
+          .select(`${columns}, first_serves, first_serves_in`)
+          .eq("match_id", seededIds[index])
+          .eq("is_player1", isPlayer1)
+          .single();
+        if (stored.error) throw new Error(stored.error.message);
+        const expected = stored.data as unknown as StatCounters;
+
+        const row = rows.find(
+          (r) => r.match_id === seededIds[index] && r.side === side,
+        );
+        expect(row, `${label}: ${side} row`).toBeDefined();
+        for (const column of STAT_COLUMNS) {
+          expect(row![column], `${label}: ${side}.${column}`).toBe(
+            expected[column],
+          );
+        }
+        // The percentage passes through match_stats_with_percentages
+        // unchanged; pg returns numeric as text.
+        expect(
+          Number(row!.first_serve_pct),
+          `${label}: ${side}.first_serve_pct`,
+        ).toBeCloseTo(
+          (100 * expected.first_serves_in) / expected.first_serves,
+          1,
+        );
+      }
+    }
+  });
+
+  test("ask.points i_served / i_won are server_is_player1 / won_by_player1 turned by playerSide(), and game_number restarts per set", async () => {
+    const rows = await readAsPlayer<AskPointRow>(
+      `select match_id, set_number, game_number, point_number, i_served, i_won
+         from ask.points where match_id = any($1)`,
+      [STATS_SEEDS.map((index) => seededIds[index])],
+    );
+    const byKey = new Map(
+      rows.map((row) => [`${row.match_id}:${row.point_number}`, row]),
+    );
+
+    for (const index of STATS_SEEDS) {
+      const label = seeds(player.userId)[index].label;
+      const meIsPlayer1 = seedSide(index) === "player1";
+      const stored = await admin
+        .from("points")
+        .select(
+          "point_number, set_number, game_number, server_is_player1, won_by_player1",
+        )
+        .eq("match_id", seededIds[index]);
+      if (stored.error) throw new Error(stored.error.message);
+      const points = stored.data as unknown as PointSeed[];
+      expect(points, `${label}: points seeded`).toHaveLength(6);
+
+      for (const point of points) {
+        const row = byKey.get(`${seededIds[index]}:${point.point_number}`);
+        const at = `${label}: point ${point.point_number}`;
+        expect(row, at).toBeDefined();
+        expect(row!.i_served, `${at} i_served`).toBe(
+          point.server_is_player1 === meIsPlayer1,
+        );
+        expect(row!.i_won, `${at} i_won`).toBe(
+          point.won_by_player1 === meIsPlayer1,
+        );
+        expect(row!.set_number, `${at} set_number`).toBe(point.set_number);
+        // Stored cumulatively (set 2 starts at game 3); shown per set.
+        expect(row!.game_number, `${at} game_number`).toBe(
+          point.set_number === 1 ? point.game_number : point.game_number - 2,
+        );
+      }
+    }
+  });
+
+  test("the three views expose no coordinate, video, flag or id column but match_id", async () => {
+    const { rows } = await db.query<{
+      table_name: string;
+      column_name: string;
+    }>(
+      `select table_name, column_name from information_schema.columns
+        where table_schema = 'ask'
+          and table_name in ('match_stats', 'points', 'shots')`,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    const banned = rows.filter(
+      ({ column_name }) =>
+        column_name !== "match_id" &&
+        /(_x|_y|_id|video_time|flags|derived|^id)$/.test(column_name),
+    );
+    expect(banned).toEqual([]);
+  });
+
   test("authenticated holds nothing in schema ask", async () => {
-    await db.query("begin");
-    try {
-      await db.query("set local role authenticated");
-      await db.query("select set_config('request.jwt.claims', $1, true)", [
-        JSON.stringify({ sub: player.userId, role: "authenticated" }),
-      ]);
-      const refused = await db
-        .query("select match_id from ask.matches")
-        .then(() => null)
-        .catch((error: { code?: string }) => error);
-      expect(refused?.code).toBe(INSUFFICIENT_PRIVILEGE);
-    } finally {
-      await db.query("rollback");
+    for (const view of ["matches", "match_stats", "points", "shots"]) {
+      await db.query("begin");
+      try {
+        await db.query("set local role authenticated");
+        await db.query("select set_config('request.jwt.claims', $1, true)", [
+          JSON.stringify({ sub: player.userId, role: "authenticated" }),
+        ]);
+        const refused = await db
+          .query(`select match_id from ask.${view}`)
+          .then(() => null)
+          .catch((error: { code?: string }) => error);
+        expect(refused?.code, view).toBe(INSUFFICIENT_PRIVILEGE);
+      } finally {
+        await db.query("rollback");
+      }
     }
   });
 });

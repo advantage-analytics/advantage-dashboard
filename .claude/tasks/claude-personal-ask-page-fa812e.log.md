@@ -98,3 +98,17 @@ is the runner's. Newest entries at the bottom.
 
 1. The live specs for T1, T4 and T5 skip against production by design, so the functions' behaviour (the cap, concurrent reservations, cross-user refusals, view parity) has been reviewed and structurally verified but never executed; run them once against a non-production project.
 2. Later tasks that apply migrations (T2, T3) should expect the local Supabase MCP to decline `apply_migration`.
+
+## T2 · `ask.match_stats`, `ask.points`, `ask.shots` — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** migration `20261011193659_ask_stats_points_shots_views.sql`, applied live through the claude.ai Supabase connector, adds three views in schema `ask`, each limited to `ask.my_match_ids()` and turned to me/opponent with `ask.my_side`: `ask.match_stats` (86 columns, one row per match per side), `ask.points` (12) and `ask.shots` (9), every column commented, `SELECT` granted to `ask_reader` only. `tests/ask-views-parity.spec.ts` gains cases for the `me` stats row, `i_served` / `i_won`, the no-coordinates/no-ids rule and the refusal for `authenticated`.
+
+**follow-ups:**
+
+1. `ask.points.game_number` is renumbered from 1 within each set (the table's value is match-cumulative); `ask.shots.spin_type` is passed through `initcap()` because live data mixes cases. T8's schema text should say both.
+2. A match whose side cannot be resolved has no row in the three views but is still listed in `ask.matches`.
+3. `is_pressure_point` is never true in live data; the model should use the break, set and match point flags.
+4. `ask.match_stats` carries no date — a period question must join `ask.matches`.
+5. The parity spec seeds no shots, so `ask.shots.mine` is untested; the new live cases have not run (they skip against production).

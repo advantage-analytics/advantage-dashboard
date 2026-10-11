@@ -32,7 +32,7 @@ ready).
 
 ## T2 · `ask.match_stats`, `ask.points`, `ask.shots`
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** supabase/migrations/<live-version>_ask_stats_points_shots_views.sql (new), tests/ask-views-parity.spec.ts — a guess
