@@ -5,6 +5,10 @@ import {
   PendingFrame,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import {
+  OUTCOME_META,
+  RALLY_BAND_META,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { STATISTIC_GROUPS } from "@/lib/data/statistics";
 import {
   RegionCard,
@@ -179,16 +183,39 @@ function StatisticsPendingBody() {
           ))}
         </StatisticsTableCard>
 
+        {/* `RallyLengthSummary` and `PointEndingsSummary`: the band and
+            outcome names are known, their figures and the bars are not. */}
         <div className={STATISTICS_TAIL_GRID}>
           <RegionCard
             title="Rally length"
             aside={<PendingBar className="h-[11px] w-14" />}
           >
-            <PendingBar className="h-28 rounded-[4px]" />
-            <div className="grid grid-cols-3 gap-3">
-              {[0, 1, 2].map((band) => (
-                <PendingBar key={band} className="h-[11px] w-20" />
+            <div className="flex flex-col gap-2">
+              <PendingBar className="h-28 rounded-[4px]" />
+              <div className="flex">
+                {RALLY_BAND_META.map((band) => (
+                  <div key={band.key} className="box-border flex-1 pr-3">
+                    <div className="flex items-baseline gap-1 whitespace-nowrap">
+                      <span className="text-[11px] text-[var(--ink-700)]">
+                        {band.label}
+                      </span>
+                      <PendingBar className="h-[10px] w-12" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3.5">
+              {["You won", "Opponents won"].map((key) => (
+                <span key={key} className="inline-flex items-center gap-1.5">
+                  <PendingBar className="size-1.5 rounded-[2px]" />
+                  <span className="text-micro whitespace-nowrap">{key}</span>
+                </span>
               ))}
+              <div className="flex-1" />
+              <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+                Width is how often
+              </span>
             </div>
           </RegionCard>
           <RegionCard
@@ -209,9 +236,15 @@ function StatisticsPendingBody() {
                 <PendingBar className="h-2.5 rounded-[4px]" />
               </div>
             ))}
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {[0, 1, 2, 3].map((ending) => (
-                <PendingBar key={ending} className="h-[11px] w-20" />
+            <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 pt-0.5">
+              {OUTCOME_META.map((o) => (
+                <span key={o.key} className="inline-flex items-center gap-1.5">
+                  <PendingBar className="size-1.5 rounded-[2px]" />
+                  <span className="text-micro whitespace-nowrap">
+                    {o.label}
+                  </span>
+                  <PendingBar className="h-[10px] w-6" />
+                </span>
               ))}
             </div>
           </RegionCard>

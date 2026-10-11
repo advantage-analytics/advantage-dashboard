@@ -6,6 +6,8 @@ import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import { seasonStrip } from "@/lib/data/player-profile";
 import { AllStatisticsTable } from "./all-statistics-table";
 import { OpponentSplitCard } from "./opponent-split-card";
+import { PointEndingsSummary } from "./point-endings-summary";
+import { RallyLengthSummary } from "./rally-length-summary";
 import {
   STATISTICS_OPPONENT_SLOT,
   STATISTICS_STACK,
@@ -14,10 +16,6 @@ import {
   STATISTICS_TREND_SLOT,
 } from "./statistics-layout";
 import { StatisticsControls } from "./statistics-controls";
-import {
-  StatisticsPointEndingsPlaceholder,
-  StatisticsRallyLengthPlaceholder,
-} from "./statistics-placeholders";
 import { useStatistics } from "./statistics-provider";
 import { TrendCard } from "./trend-card";
 
@@ -30,7 +28,8 @@ import { TrendCard } from "./trend-card";
  * the component inside it owns nothing but its own card. So a region's task
  * replaces ONE child — `<AllStatisticsTable />` with its real
  * component — and touches no layout. Every region reads `useStatistics()`,
- * so none takes props.
+ * so none takes props. The two point-tallying regions at the tail read
+ * `points` too, and throw a `null` read to their slot's boundary.
  *
  * Rendered by the populated page and, inside an `inert` grade with an empty
  * provider, by the day zero — the same components, so the shape a new player
@@ -124,11 +123,11 @@ export function StatisticsBody({
       <div className={STATISTICS_TAIL_GRID}>
         {/* slot: Rally length */}
         <Slot label="Rally length" className="min-w-0">
-          <StatisticsRallyLengthPlaceholder />
+          <RallyLengthSummary />
         </Slot>
         {/* slot: How points ended */}
         <Slot label="How points ended" className="min-w-0">
-          <StatisticsPointEndingsPlaceholder />
+          <PointEndingsSummary />
         </Slot>
       </div>
     </div>

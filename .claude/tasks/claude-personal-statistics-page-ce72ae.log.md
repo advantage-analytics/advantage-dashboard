@@ -86,3 +86,14 @@ is the runner's. Newest entries at the bottom.
   3. Fifteen tab stops; a roving tabindex would cut it to one.
   4. `PlaceholderSparkline` gradient ids are offset by 100 to avoid the season strip's; an id prefix or `useId` would be cleaner.
   5. No browser pass was done on the table (≈760px width, selected row).
+
+## T8 · Rally length and How points ended over aggregated points — done
+
+- **gate:** mechanical pass · completion pass
+- **changed:** Pure `rallyBands` / `outcomeTally` (plus `RALLY_BAND_META`, `OUTCOME_META`, the `EndingPoint` supertype the four ending predicates now accept) live in `match-detail/match-filters/model.ts`. New `src/lib/data/point-tallies.ts`: `rallyBandsAcross` / `outcomeTalliesAcross` tally each match with its own `isPlayer1` / `isDerived`, then sum. New presentational `shared/rally-length-mosaic.tsx` and `shared/point-endings-bars.tsx`; the two match-detail cards are now wrappers that render through them (implementer reported byte-identical markup across 64 combinations; the three named specs pass unchanged). New `statistics/rally-length-summary.tsx` and `statistics/point-endings-summary.tsx` fill the last two slots — no watch handlers, honest-zero anatomy, throw on a `null` points read so the slot's `WidgetBoundary` shows. `statistics-placeholders.tsx` deleted; skeleton tail mirrors the real cards. `tests/statistics-points-cards.spec.ts` added (25 tests).
+- **follow-ups:**
+  1. Season points carry no shot rows, so Winners / Unforced on this page use the no-shot fallback (point winner / loser) where the match report reads the decisive shot's hitter — figures can differ by a point or two per match. Selecting a last-shot-hitter column in `getPersonalStatisticsPoints` would close it.
+  2. Band captions show the band's share of points ("Short 1–4 · 54%"); the frame's sample numbers coincide with you-won % instead. Flip via the `caption` prop if that was intended.
+  3. Per-match means divide by matches holding at least one point, not all filtered matches.
+  4. `OUTCOME_META` / `RALLY_BAND_META` carry CSS-var fills in `model.ts` because the Server-Component skeleton needs them.
+  5. No browser pass was done on either card.

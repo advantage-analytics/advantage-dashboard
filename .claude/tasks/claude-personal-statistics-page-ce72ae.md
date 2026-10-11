@@ -120,7 +120,7 @@ ready).
 
 ## T8 · Rally length and How points ended over aggregated points
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T2, T3
 - **files:** src/components/dashboard/matches/match-detail/rally-length-card.tsx, src/components/dashboard/matches/match-detail/point-endings-card.tsx (extract), src/components/dashboard/statistics/{rally-length-summary.tsx, point-endings-summary.tsx} (new), src/components/dashboard/statistics/statistics-page-content.tsx, tests/statistics-points-cards.spec.ts (new) — guesses

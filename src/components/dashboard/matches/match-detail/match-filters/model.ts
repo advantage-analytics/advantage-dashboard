@@ -550,6 +550,20 @@ export function returnContactOf(
 }
 
 /**
+ * What the ending rules below read of a point — the four columns a
+ * cross-match tally carries (`StatisticsPoint`) plus the shot rows a full
+ * `MatchPoint` adds. Every `MatchPoint` is one; the Statistics page's
+ * reduced rows are too, so `point-tallies.ts` runs the same rules over both.
+ */
+export interface EndingPoint {
+  resultType: string | null;
+  wonByPlayer1: boolean;
+  serverIsPlayer1: boolean;
+  rallyLength: number | null;
+  shots?: MatchShot[];
+}
+
+/**
  * The serve was never returned and the server won the point: a one-shot
  * rally won by whoever served. Structural on purpose — rally length and the
  * point's winner, never the "Service Winner" label — so a service winner
@@ -558,7 +572,7 @@ export function returnContactOf(
  * derived match are this one predicate, laid by the server — keep them so.
  * A double fault is never one: the server lost it.
  */
-export function isUnreturnedServe(point: MatchPoint): boolean {
+export function isUnreturnedServe(point: EndingPoint): boolean {
   return (
     point.rallyLength === 1 && point.wonByPlayer1 === point.serverIsPlayer1
   );
@@ -648,8 +662,10 @@ export function returnResultOf(point: MatchPoint): ReturnResult | null {
  * 9+ long. Null below 1: 0 is "no shot count recorded", which that card
  * leaves out of every band.
  */
-export function rallyLengthBandOf(rallyLength: number): RallyLengthBand | null {
-  if (!(rallyLength >= 1)) return null;
+export function rallyLengthBandOf(
+  rallyLength: number | null,
+): RallyLengthBand | null {
+  if (rallyLength === null || !(rallyLength >= 1)) return null;
   if (rallyLength >= 9) return "long";
   if (rallyLength >= 5) return "medium";
   return "short";
@@ -713,7 +729,7 @@ export function finalShotOf(
  * Return, hit by the returner — out of the Error + Serve cut that the
  * head-to-head and Point endings Double faults figures open.
  */
-export function lastShotOf(point: MatchPoint): MatchShot | undefined {
+export function lastShotOf(point: EndingPoint): MatchShot | undefined {
   const shots = point.shots ?? [];
   if (lower(point.resultType).includes("double fault")) {
     for (let i = shots.length - 1; i >= 0; i -= 1) {
@@ -747,7 +763,7 @@ function matchesMissed(
  * last-shot rule would credit the wrong player. Every other winner is the
  * decisive shot's hitter (`point.player`'s rule), else the point's winner.
  */
-export function winnerHitBy(point: MatchPoint): boolean | null {
+export function winnerHitBy(point: EndingPoint): boolean | null {
   const rt = lower(point.resultType);
   if (rt === "service winner" || /\bace\b/.test(rt)) {
     return point.serverIsPlayer1;
@@ -763,7 +779,7 @@ export function winnerHitBy(point: MatchPoint): boolean | null {
  * decisive shot's hitter, else the point's loser. With NO result type, a
  * last shot recorded Out or Net is its hitter's error.
  */
-export function errorMadeBy(point: MatchPoint): boolean | null {
+export function errorMadeBy(point: EndingPoint): boolean | null {
   const rt = lower(point.resultType);
   if (rt.includes("double fault")) return point.serverIsPlayer1;
   const last = lastShotOf(point);
@@ -1405,4 +1421,213 @@ export function parseMatchFilters(input: unknown): MatchFilters {
     out[key] = [...held, ...values.filter((v) => !held.includes(v))];
   }
   return out as unknown as MatchFilters;
+}
+
+/* ── Point tallies ────────────────────────────────────────────────────────── */
+
+/**
+ * The two tallies the match report's Rally length and How points ended
+ * cards draw, and the personal Statistics page draws again over a season
+ * (`lib/data/point-tallies.ts` sums them match by match). They live here —
+ * one implementation each, beside the band and ending rules they read — so
+ * the cards, the page and an offline spec count the same way with no React
+ * and no `next/*` behind them.
+ *
+ * Every "won" test is `wonByPlayer1 === isPlayer1` for the side handed in
+ * (guardrails §4): nothing here reads player order, the caller says which
+ * seat the viewer holds.
+ */
+
+/** The point columns a tally reads: a `MatchPoint` or a `StatisticsPoint`. */
+export type TallyPoint = EndingPoint;
+
+export interface RallyBandMeta {
+  key: RallyLengthBand;
+  /** Tooltip heading, e.g. "Short rallies · 1–4 shots". */
+  title: string;
+  /** Band name under the bar, e.g. "Short". */
+  label: string;
+  /** The band's shot range, e.g. "1–4". */
+  range: string;
+}
+
+/** Short, Medium, Long — in the order the mosaic draws them. */
+export const RALLY_BAND_META: readonly RallyBandMeta[] = [
+  {
+    key: "short",
+    title: "Short rallies · 1–4 shots",
+    label: "Short",
+    range: "1–4",
+  },
+  {
+    key: "medium",
+    title: "Medium rallies · 5–8 shots",
+    label: "Medium",
+    range: "5–8",
+  },
+  { key: "long", title: "Long rallies · 9+ shots", label: "Long", range: "9+" },
+];
+
+export interface RallyBand {
+  key: RallyLengthBand;
+  count: number;
+  youWon: number;
+  oppWon: number;
+}
+
+export interface RallyBands {
+  /** Short, Medium, Long — always all three, in that order. */
+  bands: RallyBand[];
+  /** Points with a shot count, i.e. in some band. */
+  total: number;
+  /** Their shots added up; `avgShots` is this over `total`. */
+  shots: number;
+  avgShots: number;
+}
+
+/**
+ * The three bands (`rallyLengthBandOf`), each with its points and how many
+ * the viewer won. A point whose `rallyLength` is 0 or null recorded no shot
+ * count: it is in no band and not in `total`, so the average is over
+ * counted rallies only.
+ */
+export function rallyBands(
+  points: readonly TallyPoint[],
+  youIsPlayer1: boolean,
+): RallyBands {
+  const counters: Record<RallyLengthBand, { count: number; youWon: number }> = {
+    short: { count: 0, youWon: 0 },
+    medium: { count: 0, youWon: 0 },
+    long: { count: 0, youWon: 0 },
+  };
+
+  let shots = 0;
+  for (const p of points) {
+    const key = rallyLengthBandOf(p.rallyLength);
+    if (!key) continue;
+    counters[key].count += 1;
+    if (p.wonByPlayer1 === youIsPlayer1) counters[key].youWon += 1;
+    shots += p.rallyLength ?? 0;
+  }
+
+  const total =
+    counters.short.count + counters.medium.count + counters.long.count;
+
+  return {
+    total,
+    shots,
+    avgShots: total > 0 ? shots / total : 0,
+    bands: RALLY_BAND_META.map<RallyBand>(({ key }) => ({
+      key,
+      count: counters[key].count,
+      youWon: counters[key].youWon,
+      oppWon: counters[key].count - counters[key].youWon,
+    })),
+  };
+}
+
+export type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
+
+export const OUTCOME_KEYS: readonly OutcomeKey[] = [
+  "winners",
+  "aces",
+  "unforcedErrors",
+  "doubleFaults",
+];
+
+export interface OutcomeMeta {
+  key: OutcomeKey;
+  label: string;
+  /** Shorter legend text — the 6px-swatch row has no room for "errors". */
+  legendLabel?: string;
+  /** Fill for the viewer's bar. */
+  you: string;
+  /** Fill for the opponent's bar. */
+  opp: string;
+}
+
+/** The four outcomes in bar order, each with its name and its two fills. */
+export const OUTCOME_META: readonly OutcomeMeta[] = [
+  {
+    key: "winners",
+    label: "Winners",
+    you: "var(--viz-you-deep)",
+    opp: "var(--viz-opp-deep)",
+  },
+  { key: "aces", label: "Aces", you: "var(--viz-you)", opp: "var(--viz-opp)" },
+  {
+    key: "unforcedErrors",
+    label: "Unforced errors",
+    legendLabel: "Unforced",
+    you: "var(--viz-you-mid)",
+    opp: "var(--viz-opp-mid)",
+  },
+  {
+    key: "doubleFaults",
+    label: "Double faults",
+    you: "var(--viz-you-light)",
+    opp: "var(--viz-opp-light)",
+  },
+];
+
+export type OutcomeTally = Record<OutcomeKey, number>;
+
+export function emptyOutcomeTally(): OutcomeTally {
+  return { winners: 0, aces: 0, unforcedErrors: 0, doubleFaults: 0 };
+}
+
+export function outcomeTotal(tally: OutcomeTally): number {
+  return OUTCOME_KEYS.reduce((sum, key) => sum + tally[key], 0);
+}
+
+/**
+ * One side's OWN decisive shots — winners, aces, unforced errors, double
+ * faults — in one pass, one bucket per point. The chain is exclusive on
+ * purpose: a point counted in two segments would make the bar's own total
+ * disagree with the counts in its segment hovers.
+ *
+ * BUCKETING follows `calculate_match_stats`, which reads all four off the
+ * free-text `points.result_type`:
+ *   aces           `result_type = 'Ace'`
+ *   double faults  `result_type = 'Double Fault'`
+ *   winners        `result_type LIKE '%Winner%'`  (so 'Service Winner',
+ *                  'Forehand Winner' … all land here, as they do in the
+ *                  published card)
+ *   unforced errs  `result_type LIKE '%Unforced Error%'`
+ * Aces and double faults belong to the server structurally. Winners are
+ * credited by `winnerHitBy` — a service winner to the SERVER, though its
+ * last shot row is usually the returner's missed return — and unforced
+ * errors by `errorMadeBy`: the rules the Result filters a segment opens
+ * read, and the one `calculate_match_stats` publishes winners by.
+ *
+ * ACES ON A DERIVED MATCH (`isDerived`). The derivation never emits 'Ace'
+ * (see `services/splitstep/derivation/result-type.ts`): every unreturned
+ * serve is a 'Service Winner'. Product decision (2026-09-29): on these
+ * matches an unreturned serve the server won IS an ace
+ * (`isUnreturnedServe`), as the head-to-head Aces row counts it. So the
+ * Aces bucket takes those and Winners leaves them out.
+ */
+export function outcomeTally(
+  points: readonly TallyPoint[],
+  isPlayer1: boolean,
+  isDerived: boolean,
+): OutcomeTally {
+  const t = emptyOutcomeTally();
+
+  for (const p of points) {
+    const result = (p.resultType ?? "").toLowerCase();
+    const iServed = p.serverIsPlayer1 === isPlayer1;
+
+    if (isDerived ? isUnreturnedServe(p) : result === "ace") {
+      if (iServed) t.aces += 1;
+    } else if (result === "double fault") {
+      if (iServed) t.doubleFaults += 1;
+    } else if (result.includes("winner")) {
+      if (winnerHitBy(p) === isPlayer1) t.winners += 1;
+    } else if (result.includes("unforced error")) {
+      if (errorMadeBy(p) === isPlayer1) t.unforcedErrors += 1;
+    }
+  }
+
+  return t;
 }
