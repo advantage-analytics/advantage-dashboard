@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Personal opponents loader + pure grouping module
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) new `src/lib/data/personal-opponents.ts` (pure grouping, no Supabase import), new `src/lib/data/personal-opponents-server.ts` (loader, `cache()`d), new `tests/personal-opponents.spec.ts`; reads `src/lib/data/personal-matches-server.ts` (scope predicate + viewer-side), `src/lib/data/match-utils.ts` (`matchOutcome`), `src/lib/data/person-name.ts` (`normalizedPersonName`), `src/lib/data/player-measures.ts`, `src/lib/data/team-roster-server.ts` (`RosterRecentMatch` / `RosterMeasure` shape to mirror)
 - **done when:**
