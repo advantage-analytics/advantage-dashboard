@@ -31,9 +31,10 @@ import { createClient } from "@/lib/supabase/server";
  * `cache()`d because a dashboard render asks several times: the match page, the
  * activity tray and the stats baseline all need it, and it is one round trip.
  */
-export const getMyPlayerIds = cache(async function getMyPlayerIds(): Promise<
-  string[]
-> {
+const readMyPlayerIds = cache(async function readMyPlayerIds(): Promise<{
+  ids: string[];
+  failed: boolean;
+}> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("my_player_ids");
 
@@ -41,20 +42,38 @@ export const getMyPlayerIds = cache(async function getMyPlayerIds(): Promise<
     console.error("[identity] could not read player ids", {
       error: error.message,
     });
-    return [];
+    return { ids: [], failed: true };
   }
 
   // The RPC returns a set of uuids, which PostgREST hands over either as bare
   // strings or as `{ my_player_ids: uuid }` rows depending on how it resolves
   // the set-returning shape. Accept both rather than depending on which.
-  return (data ?? [])
+  const ids = (data ?? [])
     .map((row: unknown) =>
       typeof row === "string"
         ? row
         : ((row as { my_player_ids?: string })?.my_player_ids ?? null),
     )
     .filter((id: string | null): id is string => Boolean(id));
+  return { ids, failed: false };
 });
+
+export const getMyPlayerIds = cache(async function getMyPlayerIds(): Promise<
+  string[]
+> {
+  return (await readMyPlayerIds()).ids;
+});
+
+/**
+ * `getMyPlayerIds`, for a caller that would draw a wrong page from an empty
+ * list: it throws when the lookup itself failed, so the surrounding boundary
+ * shows its retry instead of "you have no matches". Shares the one RPC.
+ */
+export async function getMyPlayerIdsOrThrow(): Promise<string[]> {
+  const { ids, failed } = await readMyPlayerIds();
+  if (failed) throw new Error("Could not read the viewer's player ids");
+  return ids;
+}
 
 /**
  * Does this match belong to the viewer, and were they player one?

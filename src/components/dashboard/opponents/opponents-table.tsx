@@ -1,6 +1,7 @@
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { LIST_TRACK_TRANSITION } from "@/components/dashboard/matches/match-list-layout";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { PersonalOpponent } from "@/lib/data/personal-opponents";
 import { formatShortDate } from "@/lib/ui/date-format";
@@ -10,14 +11,22 @@ import { opponentBackhandLabel, opponentHandLabel } from "./opponent-style";
 import {
   OPPONENTS_CARD_PADDING,
   OPPONENTS_COLUMNS,
-  OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
+  OPPONENTS_MIN_WIDTH_COMPACT,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
+  opponentsGrid,
 } from "./opponents-table-layout";
+import { OpponentsTableHeader } from "./opponents-table-header";
 
 /** How many ticks the Form cell holds — the grouping's own five-match window. */
 const FORM_SLOTS = 5;
+
+/** The row's DOM id — what ↑/↓ stepping scrolls to and Esc returns focus to. */
+export function opponentRowId(key: string): string {
+  // A group key holds a colon and may hold spaces; an id may not hold a space.
+  return `opponent-row-${encodeURIComponent(key)}`;
+}
 
 /**
  * The personal Opponents table: one card, eight tracks, a 52px row per
@@ -35,17 +44,12 @@ const FORM_SLOTS = 5;
  * the column's real values — a hand nobody recorded, a meeting with no score,
  * an outcome nobody is yet known to have won.
  */
-/** The row's DOM id — what ↑/↓ stepping scrolls to and Esc returns focus to. */
-export function opponentRowId(key: string): string {
-  // A group key holds a colon and may hold spaces; an id may not hold a space.
-  return `opponent-row-${encodeURIComponent(key)}`;
-}
-
 export function OpponentsTable({
   opponents,
   selectedKey,
   onToggle,
   empty,
+  compact = false,
 }: {
   /** The rows to draw, already chipped, filtered and sorted by the page. */
   opponents: readonly PersonalOpponent[];
@@ -64,6 +68,11 @@ export function OpponentsTable({
    * bare page.
    */
   empty?: React.ReactNode;
+  /**
+   * The drawer is open beside the table: Hand and Backhand collapse (the
+   * drawer states both), so Score stays inside the card.
+   */
+  compact?: boolean;
 }) {
   return (
     <section
@@ -71,20 +80,13 @@ export function OpponentsTable({
       className="surface-card overflow-x-auto"
       style={{ padding: OPPONENTS_CARD_PADDING }}
     >
-      <div className={OPPONENTS_MIN_WIDTH}>
-        <div
-          className={cn(
-            OPPONENTS_ROW_FRAME,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-          style={OPPONENTS_GRID_COLS}
-        >
-          {OPPONENTS_COLUMNS.map((label) => (
-            <span key={label} className="eyebrow-sm min-w-0 truncate">
-              {label}
-            </span>
-          ))}
-        </div>
+      <div
+        className={cn(
+          compact ? OPPONENTS_MIN_WIDTH_COMPACT : OPPONENTS_MIN_WIDTH,
+          LIST_TRACK_TRANSITION,
+        )}
+      >
+        <OpponentsTableHeader compact={compact} />
         {opponents.length === 0 ? (
           empty
         ) : (
@@ -95,6 +97,7 @@ export function OpponentsTable({
                 opponent={opponent}
                 selected={opponent.key === selectedKey}
                 onToggle={onToggle}
+                compact={compact}
               />
             ))}
           </div>
@@ -108,15 +111,18 @@ function OpponentRow({
   opponent,
   selected,
   onToggle,
+  compact,
 }: {
   opponent: PersonalOpponent;
   selected: boolean;
+  compact: boolean;
   onToggle: (opponent: PersonalOpponent, viaKeyboard: boolean) => void;
 }) {
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
   const { lastMatch } = opponent;
   const sets = playedSets(lastMatch.sets);
+  const grid = opponentsGrid(compact);
 
   return (
     <div
@@ -126,10 +132,12 @@ function OpponentRow({
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,
-        "cursor-pointer transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
+        grid.className,
+        LIST_TRACK_TRANSITION,
+        "cursor-pointer hover:bg-[var(--surface-muted)]",
         selected && "bg-[var(--surface-muted)]",
       )}
-      style={OPPONENTS_GRID_COLS}
+      style={grid.style}
     >
       {/* Opponent — the name a reader scans for, and the row's one control. */}
       <button

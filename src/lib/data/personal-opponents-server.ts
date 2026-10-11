@@ -5,13 +5,17 @@ import type { MatchScore } from "@/lib/data/match-utils";
 import {
   PERSONAL_OPPONENT_MEASURE_KEYS,
   currentSeason,
+  countUnnamedMatches,
   groupPersonalOpponents,
   personalOpponentTotals,
   type PersonalOpponent,
   type PersonalOpponentMatchInput,
   type PersonalOpponentTotals,
 } from "@/lib/data/personal-opponents";
-import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
+import {
+  getMyPlayerIdsOrThrow,
+  playerSide,
+} from "@/lib/data/player-identity-server";
 
 /**
  * The personal Opponents page's one read: the viewer's own matches and their
@@ -93,7 +97,7 @@ export const getPersonalOpponents = cache(async function getPersonalOpponents(
         .eq("created_by", userId)
         .is("program_id", null)
         .order("date", { ascending: false, nullsFirst: false }),
-      getMyPlayerIds(),
+      getMyPlayerIdsOrThrow(),
     ]);
   if (matchError)
     throw new Error("Could not load personal opponents", { cause: matchError });
@@ -153,5 +157,9 @@ export const getPersonalOpponents = cache(async function getPersonalOpponents(
   });
 
   const opponents = groupPersonalOpponents(inputs, season);
-  return { opponents, totals: personalOpponentTotals(opponents), season };
+  return {
+    opponents,
+    totals: personalOpponentTotals(opponents, countUnnamedMatches(inputs)),
+    season,
+  };
 });

@@ -17,6 +17,7 @@ import {
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
 } from "./opponents-table-layout";
+import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
 
 /**
@@ -73,21 +74,46 @@ function GhostRow({ opacity }: { opacity: number }) {
   );
 }
 
-export function OpponentsDayZero() {
+export function OpponentsDayZero({
+  unnamedMatches = 0,
+}: {
+  /**
+   * Matches the account has that name no opponent. With any, this is not an
+   * empty account: the offer says what is missing instead of inviting a first
+   * match, and sends the reader to the list where the names can be added.
+   */
+  unnamedMatches?: number;
+}) {
+  const hasUnnamed = unnamedMatches > 0;
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={OPPONENTS_PAGE_COLUMN}>
         <div className="flex flex-1 flex-col gap-4">
           <DayZeroOffer
-            headline="Everyone you play is kept here."
+            headline={
+              hasUnnamed
+                ? unnamedMatches === 1
+                  ? "Your match does not name an opponent yet."
+                  : `None of your ${unnamedMatches} matches name an opponent yet.`
+                : "Everyone you play is kept here."
+            }
             headlineMeasure="30ch"
             actions={
-              <Link
-                href="/dashboard/matches/new"
-                className={advButton("primary")}
-              >
-                New match
-              </Link>
+              hasUnnamed ? (
+                <Link
+                  href="/dashboard/matches"
+                  className={advButton("primary")}
+                >
+                  View matches
+                </Link>
+              ) : (
+                <Link
+                  href="/dashboard/matches/new"
+                  className={advButton("primary")}
+                >
+                  New match
+                </Link>
+              )
             }
           />
 
@@ -104,19 +130,7 @@ export function OpponentsDayZero() {
               style={{ padding: OPPONENTS_CARD_PADDING }}
             >
               <div className={OPPONENTS_MIN_WIDTH}>
-                <div
-                  className={cn(
-                    OPPONENTS_ROW_FRAME,
-                    "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-                  )}
-                  style={OPPONENTS_GRID_COLS}
-                >
-                  {OPPONENTS_COLUMNS.map((label) => (
-                    <span key={label} className="eyebrow-sm min-w-0 truncate">
-                      {label}
-                    </span>
-                  ))}
-                </div>
+                <OpponentsTableHeader />
                 <div>
                   {GHOST_OPACITY.map((opacity) => (
                     <GhostRow key={opacity} opacity={opacity} />

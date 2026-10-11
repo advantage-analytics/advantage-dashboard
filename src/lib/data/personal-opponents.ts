@@ -157,6 +157,12 @@ export interface PersonalOpponentTotals {
   matches: number;
   won: number;
   analyzed: number;
+  /**
+   * The viewer's matches that name no opponent — in none of the figures
+   * above, and counted here so the page can say they exist rather than
+   * quietly disagreeing with the Matches list.
+   */
+  unnamed: number;
 }
 
 /**
@@ -196,6 +202,16 @@ export function personalOpponentKey(
     ? normalizedPersonName(match.player2_name)
     : normalizedPersonName(match.player1_name);
   return name ? `name:${name}` : null;
+}
+
+/** What an id-keyed group is called when none of its matches carries a name. */
+export const UNKNOWN_OPPONENT_NAME = "Unknown opponent";
+
+/** How many matches `groupPersonalOpponents` leaves out for naming nobody. */
+export function countUnnamedMatches(
+  matches: readonly Parameters<typeof personalOpponentKey>[0][],
+): number {
+  return matches.filter((match) => personalOpponentKey(match) === null).length;
 }
 
 /** The opponent's name as typed, with the whitespace noise taken out. */
@@ -313,7 +329,7 @@ export function groupPersonalOpponents(
         group.find((m) => m.opponent_player_id)?.opponent_player_id ?? null,
       name:
         group.map(opponentDisplayName).find((name) => name !== "") ??
-        "Unknown opponent",
+        UNKNOWN_OPPONENT_NAME,
       hand: group.find((m) => m.opponent_hand)?.opponent_hand ?? null,
       backhand:
         group.find((m) => m.opponent_backhand)?.opponent_backhand ?? null,
@@ -347,6 +363,7 @@ export function groupPersonalOpponents(
 /** The page totals, over exactly the rows the table lists. */
 export function personalOpponentTotals(
   opponents: readonly PersonalOpponent[],
+  unnamed = 0,
 ): PersonalOpponentTotals {
   return opponents.reduce<PersonalOpponentTotals>(
     (totals, opponent) => ({
@@ -354,7 +371,8 @@ export function personalOpponentTotals(
       matches: totals.matches + opponent.played,
       won: totals.won + opponent.wins,
       analyzed: totals.analyzed + opponent.analyzed,
+      unnamed,
     }),
-    { opponents: 0, matches: 0, won: 0, analyzed: 0 },
+    { opponents: 0, matches: 0, won: 0, analyzed: 0, unnamed },
   );
 }

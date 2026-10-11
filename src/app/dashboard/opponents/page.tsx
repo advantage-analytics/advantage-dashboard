@@ -82,7 +82,9 @@ async function PersonalOpponents({
     getPersonalOpponents(userId),
     searchParams,
   ]);
-  if (opponents.length === 0) return <OpponentsDayZero />;
+  if (opponents.length === 0) {
+    return <OpponentsDayZero unnamedMatches={totals.unnamed} />;
+  }
   return (
     <OpponentsPageContent
       opponents={opponents}

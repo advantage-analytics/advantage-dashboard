@@ -68,7 +68,8 @@ export function OpponentsPageContent({
 
   const [selectedKey, setSelectedKey] = useState<string | null>(landOn);
   const [drawerKey, setDrawerKey] = useState<string | null>(landOn);
-  const [closing, setClosing] = useState(false);
+  // Slid shut but still mounted: the drawer holds a record nothing selects.
+  const closing = drawerKey !== null && selectedKey === null;
   const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cut, setCut] = useState<OpponentCut>(RESTING_OPPONENT_CUT);
@@ -98,13 +99,11 @@ export function OpponentsPageContent({
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = null;
     setDrawerKey(null);
-    setClosing(false);
   }, []);
 
   const select = useCallback((key: string, viaKeyboard: boolean) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = null;
-    setClosing(false);
     setSelectedKey(key);
     setDrawerKey(key);
     setOpenedByKeyboard(viaKeyboard);
@@ -114,7 +113,6 @@ export function OpponentsPageContent({
   const close = useCallback(
     (returnFocusTo: string | null) => {
       setSelectedKey(null);
-      setClosing(true);
       syncUrl(null);
       // `onAnimationEnd` normally finishes this; the timer covers reduced
       // motion, where no animation runs, and is harmless when both fire.
@@ -180,7 +178,6 @@ export function OpponentsPageContent({
   if (drawerKey && !drawerOpponent) {
     setSelectedKey(null);
     setDrawerKey(null);
-    setClosing(false);
   }
 
   useEffect(() => {
@@ -291,6 +288,9 @@ export function OpponentsPageContent({
           opponents={visibleOpponents}
           selectedKey={selectedKey}
           onToggle={toggle}
+          // Tracks follow the rail: collapsed while a row is selected, and
+          // reopening as soon as the slide-out starts.
+          compact={selectedKey !== null}
           empty={
             <TableEmptyBody
               icon={Brain}
@@ -309,6 +309,9 @@ export function OpponentsPageContent({
             {totals.opponents === 1 ? "opponent" : "opponents"} ·{" "}
             {totals.analyzed} of {totals.matches}{" "}
             {totals.matches === 1 ? "match" : "matches"} analyzed
+            {totals.unnamed > 0
+              ? ` · ${totals.unnamed} more ${totals.unnamed === 1 ? "match names" : "matches name"} no opponent`
+              : null}
           </span>
           <div className="flex-1" />
           <Link

@@ -136,20 +136,30 @@ test.describe("view chips", () => {
     expect(inView("played-3")).toEqual(["Ana Castillo", "Cara Ellis"]);
     expect(
       matchesOpponentView(
-        { played: 3, wins: 0, playedThisSeason: 0 },
+        { played: 3, wins: 0, losses: 3, playedThisSeason: 0 },
         "played-3",
       ),
     ).toBe(true);
     expect(
       matchesOpponentView(
-        { played: 2, wins: 0, playedThisSeason: 0 },
+        { played: 2, wins: 0, losses: 2, playedThisSeason: 0 },
         "played-3",
       ),
     ).toBe(false);
   });
 
-  test("Never beaten keeps wins === 0", () => {
+  test("Never beaten keeps no wins and at least one loss", () => {
     expect(inView("never-beaten")).toEqual(["Bea Dorn", "Cara Ellis"]);
+  });
+
+  test("Never beaten leaves out a 0-0 record", () => {
+    // One undecided meeting: nobody has beaten anybody yet.
+    expect(
+      matchesOpponentView(
+        { played: 1, wins: 0, losses: 0, playedThisSeason: 1 },
+        "never-beaten",
+      ),
+    ).toBe(false);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
 } from "./opponents-table-layout";
+import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
 
 /**
@@ -62,19 +63,7 @@ export function OpponentsSkeleton() {
             style={{ padding: OPPONENTS_CARD_PADDING }}
           >
             <div className={OPPONENTS_MIN_WIDTH}>
-              <div
-                className={cn(
-                  OPPONENTS_ROW_FRAME,
-                  "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-                )}
-                style={OPPONENTS_GRID_COLS}
-              >
-                {OPPONENTS_COLUMNS.map((label) => (
-                  <span key={label} className="eyebrow-sm min-w-0 truncate">
-                    {label}
-                  </span>
-                ))}
-              </div>
+              <OpponentsTableHeader />
               <div>
                 {Array.from({ length: PENDING_ROWS }, (_, row) => (
                   <div

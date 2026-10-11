@@ -138,14 +138,7 @@ export function OpponentsToolbar({
           onToggleChecklist={noop}
           segmentedValue={(key) => filters[key]}
           onSelectSegment={(key, value) =>
-            onFiltersChange(
-              key === "hand"
-                ? { ...filters, hand: value as OpponentHandFilter | null }
-                : {
-                    ...filters,
-                    backhand: value as OpponentBackhandFilter | null,
-                  },
-            )
+            onFiltersChange({ ...filters, [key]: value })
           }
           onClear={() => onFiltersChange(NO_OPPONENT_FILTERS)}
           resultCount={resultCount}

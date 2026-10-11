@@ -15,9 +15,10 @@ import {
 import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
-import type {
-  PersonalOpponent,
-  PersonalOpponentMeasureKey,
+import {
+  UNKNOWN_OPPONENT_NAME,
+  type PersonalOpponent,
+  type PersonalOpponentMeasureKey,
 } from "@/lib/data/personal-opponents";
 import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
@@ -124,7 +125,19 @@ export function OpponentDrawer({
 
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
-  const firstName = opponent.name.split(" ")[0];
+  // What the two footer buttons call them. A group with no name on any match
+  // has nobody to address ("Ask about Unknown" is not a sentence), and a name
+  // typed surname-first ("Gimena, Cj") would put the comma on the button.
+  const firstName =
+    opponent.name === UNKNOWN_OPPONENT_NAME
+      ? "this opponent"
+      : opponent.name.split(" ")[0].replace(/[,;]+$/, "") || "this opponent";
+  // The Matches list filtered to this opponent by its own search box, so the
+  // count in "All N" is the count on the page it opens.
+  const allMatchesHref =
+    opponent.name === UNKNOWN_OPPONENT_NAME
+      ? "/dashboard/matches"
+      : `/dashboard/matches?q=${encodeURIComponent(opponent.name)}`;
 
   return (
     <PeekDrawerFrame
@@ -255,7 +268,7 @@ export function OpponentDrawer({
             {/* "All 0" is a link to nothing. */}
             {opponent.played > 0 && (
               <Link
-                href="/dashboard/matches"
+                href={allMatchesHref}
                 className="rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
               >
                 All {opponent.played}

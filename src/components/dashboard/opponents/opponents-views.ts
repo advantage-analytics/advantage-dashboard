@@ -36,7 +36,7 @@ export const DEFAULT_OPPONENT_VIEW: OpponentView = "all";
 
 type ViewFields = Pick<
   PersonalOpponent,
-  "played" | "wins" | "playedThisSeason"
+  "played" | "wins" | "losses" | "playedThisSeason"
 >;
 
 /**
@@ -44,8 +44,9 @@ type ViewFields = Pick<
  *
  * "This season" is at least one meeting in the current `academicSeason()` —
  * the loader counts them into `playedThisSeason`, so the clock stays out of
- * this module. "Never beaten" is `wins === 0`, which includes somebody whose
- * only meetings are still undecided: nobody has beaten them yet either way.
+ * this module. "Never beaten" is no wins and at least one loss:
+ * somebody whose only meetings are still undecided (0-0) has not beaten the
+ * viewer either, and listing them would read as a losing record.
  */
 export function matchesOpponentView(
   opponent: ViewFields,
@@ -59,7 +60,7 @@ export function matchesOpponentView(
     case "played-3":
       return opponent.played >= PLAYED_OFTEN_MIN;
     case "never-beaten":
-      return opponent.wins === 0;
+      return opponent.wins === 0 && opponent.losses > 0;
   }
 }
 

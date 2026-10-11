@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   PERSONAL_OPPONENT_MEASURE_KEYS,
+  countUnnamedMatches,
   currentSeason,
   groupPersonalOpponents,
   isInSeason,
@@ -311,13 +312,28 @@ test.describe("ordering, totals and season", () => {
       matches: 3,
       won: 1,
       analyzed: 1,
+      unnamed: 0,
     });
     expect(personalOpponentTotals([])).toEqual({
       opponents: 0,
       matches: 0,
       won: 0,
       analyzed: 0,
+      unnamed: 0,
     });
+  });
+
+  test("matches that name nobody are counted apart, never listed", () => {
+    const matches = [
+      match({ player2_name: "A" }),
+      match({ player2_name: "   " }),
+      match({ player2_name: null }),
+    ];
+    const opponents = groupPersonalOpponents(matches, SEASON);
+    expect(countUnnamedMatches(matches)).toBe(2);
+    expect(
+      personalOpponentTotals(opponents, countUnnamedMatches(matches)),
+    ).toMatchObject({ opponents: 1, matches: 1, unnamed: 2 });
   });
 
   test("a match is marked against the current academic season", () => {
