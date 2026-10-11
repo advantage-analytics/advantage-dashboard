@@ -44,6 +44,8 @@ export interface LabelSetScore {
   games: [number, number];
   /** The set's first live point in rail order — where its gap would start. */
   firstPointId: string;
+  /** The set's last live point in rail order — where its score is read. */
+  lastPointId: string;
   /** The set's games left unfinished, in point order. */
   unfinished: UnfinishedGame[];
   /** The set's games with rows past their end, in point order. */
@@ -69,10 +71,12 @@ export function labelSetScores(
         setNumber: point.setNumber,
         games: [0, 0],
         firstPointId: point.id,
+        lastPointId: point.id,
         unfinished: [],
         overflow: [],
       });
     }
+    sets.get(point.setNumber)!.lastPointId = point.id;
   }
   for (const band of games) {
     const set = sets.get(band.setNumber);
@@ -144,6 +148,8 @@ export interface LabelScoreMismatch {
    * never reach that set (the entered score has more sets than the rows do).
    */
   firstPointId: string | null;
+  /** The set's last live point; null exactly when `firstPointId` is. */
+  lastPointId: string | null;
   /** The set's unfinished games, then its run-over ones; empty when neither. */
   reasons: LabelScoreReason[];
 }
@@ -172,6 +178,7 @@ export function scoreMismatch(
       labelled: formatPair(have),
       entered: formatPair([want[0] ?? 0, want[1] ?? 0]),
       firstPointId: set?.firstPointId ?? null,
+      lastPointId: set?.lastPointId ?? null,
       reasons: [
         ...(set?.unfinished ?? []).map((game): LabelScoreReason => ({
           kind: "unfinished",
@@ -185,6 +192,26 @@ export function scoreMismatch(
     };
   }
   return null;
+}
+
+/**
+ * The session's mismatch as the console reads it — the labelled sets against
+ * `enteredScore` — or null once the labeller has said the video ends early.
+ * The rail draws it and `]` steps to it, so both read this one answer.
+ */
+export function sessionScoreMismatch(input: {
+  points: readonly ScorablePoint[];
+  /** `labelScores(points, adScoring).games`. */
+  games: readonly LabelGameBand[];
+  finalScore: readonly (readonly number[])[] | null;
+  matchScore: MatchScore | null;
+  videoEndsEarly: boolean | null;
+}): LabelScoreMismatch | null {
+  if (input.videoEndsEarly === true) return null;
+  return scoreMismatch(
+    labelSetScores(input.points, input.games),
+    enteredScore(input.finalScore, input.matchScore),
+  );
 }
 
 /** "game 5 unfinished (30–40)" or "game 3 has 2 extra points". */

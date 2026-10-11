@@ -424,7 +424,7 @@ test.describe("completeWarnings", () => {
       "2 points of 3 not checked",
       "Game 1 unfinished (15–15)",
       "Game 2 unfinished (0–0)",
-      "Set 1 labelled 0–0, entered 6–3",
+      "Set 1 labelled 0–0, the match record says 6–3, so publishing will refuse",
       // The fixture's open point: its strokes disagree with its winner.
       "Point 4's strokes say player 2 won, not the labelled winner, so publishing will refuse",
     ]);

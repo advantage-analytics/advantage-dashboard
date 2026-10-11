@@ -637,16 +637,48 @@ test.describe("a score that doesn't add up, in the flag list", () => {
 
 test.describe("the header's total", () => {
   test("a flag with the match's count, named for a reader", () => {
-    const html = black(labelSessionFixture(), EMPTY_MARKS);
+    const html = black(
+      { ...labelSessionFixture(), matchScore: null },
+      EMPTY_MARKS,
+    );
     const head = header(html);
-    // Nothing on any row: it reads zero.
+    // Nothing on any row and no score to hold them to: it reads zero.
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('role="img"');
     expect(toCheck).toContain('aria-label="Nothing left to check"');
   });
 
-  test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
+  test("a set that doesn't add up is a flag: counted, a chip that names it, and a slot after the set's last point", () => {
+    // The fixture's points make 0–0 against a 6–3 record.
     const session = labelSessionFixture();
+    const head = header(black(session, EMPTY_MARKS));
+    expect(tag(head, 'data-label-rail-to-check=""')).toContain(
+      'aria-label="1 flag to check"',
+    );
+    const chip = tag(head, 'data-label-score-stop=""');
+    expect(chip).toContain(
+      'aria-label="Score doesn’t add up: Set 1 ends 0–0, record 6–3"',
+    );
+    // The chip replaces the dot by the chevron.
+    expect(CHEVRON(black(session, EMPTY_MARKS))).not.toContain(
+      "rounded-full bg-[var(--rail-amber)]",
+    );
+    const html = black(session, EMPTY_MARKS);
+    const last = session.points.at(-1)!;
+    const slot = tag(html, 'data-row="set-score"');
+    expect(slot).toContain(`data-set-score="${last.id}"`);
+    expect(html).toContain("Set 1 ends 0–0");
+    expect(html).toContain(
+      "The match record says 6–3. A game is missing or credited to the wrong player",
+    );
+    // Video ends early answers it: no chip, no slot, nothing counted.
+    const early = black({ ...session, videoEndsEarly: true }, EMPTY_MARKS);
+    expect(early).not.toContain("data-label-score-stop");
+    expect(early).not.toContain('data-row="set-score"');
+  });
+
+  test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
+    const session = { ...labelSessionFixture(), matchScore: null };
     const [p1, p2, , p4] = session.points;
     const m = (code: string, tier: string, scope = "point") =>
       ({ code, tier, scope, params: {} }) as LabelMarks["points"][string][0];

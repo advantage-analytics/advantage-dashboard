@@ -92,6 +92,7 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [2, 1],
         firstPointId: "pt-1",
+        lastPointId: "pt-12",
         unfinished: [],
         overflow: [],
       },
@@ -99,6 +100,7 @@ test.describe("labelSetScores", () => {
         setNumber: 2,
         games: [0, 1],
         firstPointId: "pt-13",
+        lastPointId: "pt-18",
         unfinished: [
           { setNumber: 2, gameNumber: 5, gameInSet: 2, score: "0–0" },
         ],
@@ -125,6 +127,7 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 0],
         firstPointId: "pt-1",
+        lastPointId: "pt-9",
         unfinished: [
           { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "30–40" },
         ],
@@ -149,6 +152,7 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 1],
         firstPointId: "pt-1",
+        lastPointId: "pt-10",
         unfinished: [],
         overflow: [{ setNumber: 1, gameNumber: 1, gameInSet: 1, extra: 2 }],
       },
@@ -170,6 +174,7 @@ test.describe("labelSetScores", () => {
         setNumber: 1,
         games: [1, 1],
         firstPointId: "pt-2",
+        lastPointId: "pt-12",
         unfinished: [
           { setNumber: 1, gameNumber: 1, gameInSet: 1, score: "40–0" },
         ],
@@ -231,6 +236,7 @@ test.describe("scoreMismatch", () => {
       labelled: "0–1",
       entered: "5–2",
       firstPointId: "pt-13",
+      lastPointId: "pt-18",
       reasons: [
         {
           kind: "unfinished",
@@ -275,6 +281,7 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–4",
       firstPointId: null,
+      lastPointId: null,
       reasons: [],
     });
     // The rows run into a set the entered score never had.
@@ -290,6 +297,7 @@ test.describe("scoreMismatch", () => {
       labelled: "0–0",
       entered: "6–3",
       firstPointId: null,
+      lastPointId: null,
       reasons: [],
     });
   });
@@ -301,6 +309,7 @@ test.describe("the chip's sentence", () => {
     labelled: "4–5",
     entered: "4–6",
     firstPointId: "pt-13",
+    lastPointId: "pt-18",
     reasons,
   });
 
