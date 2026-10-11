@@ -1258,7 +1258,7 @@ export const getAdminTeam = cache(
         // reads; `invited_by` is a `users.id` and the person may be an admin
         // who holds no membership row, so it cannot be resolved from `members`.
         .select(
-          "id, email, role, created_at, invited_by, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
+          "id, email, role, created_at, invited_by, player_id, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
         )
         .eq("program_id", programId)
         .is("accepted_at", null)
@@ -1408,6 +1408,7 @@ export const getAdminTeam = cache(
           role: string;
           created_at: string;
           invited_by: string | null;
+          player_id: string | null;
           expires_at: string;
           inviter: RawInviter | RawInviter[] | null;
         }[]
@@ -1419,6 +1420,7 @@ export const getAdminTeam = cache(
           role: invite.role as MemberRole,
           createdAt: invite.created_at,
           invitedBy: invite.invited_by,
+          playerId: invite.player_id,
           expiresAt: invite.expires_at,
           expired: Date.parse(invite.expires_at) <= Date.now(),
           // The same fallback ladder every other name on this page uses: a

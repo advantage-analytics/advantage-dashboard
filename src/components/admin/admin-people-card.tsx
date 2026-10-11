@@ -23,7 +23,7 @@ import {
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
-  resendRole,
+  resendInput,
 } from "@/components/dashboard/team/roster-vocabulary";
 import {
   adminInviteMember,
@@ -391,12 +391,13 @@ export function AdminPeopleCard({
                   () =>
                     adminInviteMember({
                       programId,
-                      email: invite.email,
                       // `create_program_invite` upserts on the one-open-invite
                       // index, so this refreshes the row and mints a fresh
                       // token rather than leaving two live links into one
                       // program — exactly as the Roster resends.
-                      role: resendRole(invite.role),
+                      // Carries the roster row it claims, when it claims
+                      // one — see `resendInput`.
+                      ...resendInput(invite),
                     }),
                   `Invitation to ${invite.email} sent again.`,
                 )
