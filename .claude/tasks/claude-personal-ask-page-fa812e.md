@@ -19,7 +19,7 @@ ready).
 
 ## T1 · `ask` schema: side and outcome rules, `ask.matches`, the reader role
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_schema_matches_view.sql (new), tests/ask-views-parity.spec.ts (new) — a guess
 - **done when:**
@@ -59,7 +59,7 @@ ready).
 
 ## T4 · Question limit: `ask_usage` and its functions
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_usage.sql (new), tests/ask-quota.spec.ts (new) — a guess
 - **done when:**
@@ -72,7 +72,7 @@ ready).
 
 ## T5 · Saved conversations: tables and functions
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_conversations.sql (new), tests/ask-conversations.spec.ts (new) — a guess
 - **done when:**

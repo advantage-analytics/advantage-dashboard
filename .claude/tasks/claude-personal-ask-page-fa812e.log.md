@@ -75,3 +75,26 @@ is the runner's. Newest entries at the bottom.
 2. The `sources.matches` item shape (`matchId`, `opponentName`, `playedOn`, `iWon`, `scoreText`) was this task's choice; T9 and T14 should confirm it.
 3. A percentage is recognised by its column name (`*_pct`, `*_percent`, `*_percentage`) — T8's prompt must tell the model to alias percentages that way, to put figure lines only directly under the headline, and to write ordinals in words ("2nd" would lose its digit).
 4. Dropping a typed number can leave clipped prose; T9 should log `droppedDigits` so prompt drift is visible.
+
+## T1 · `ask` schema: side and outcome rules, `ask.matches`, the reader role — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`. Resolved by hand on 2026-10-11 at the author's instruction, not by a runner dispatch.
+
+**changed:** the blocked stash was restored and fixed in session (commit `da9dd703`): `tests/ask-views-parity.spec.ts` is registered in `LIVE_DB_SPECS` and its pool slot is written as a literal so the slot guard can read it. The migration `20261011134127_ask_schema_matches_view.sql` (already live since the blocked run) is now in the repo. The blocked entry above is superseded.
+
+## T4 · Question limit: `ask_usage` and its functions — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`. Resolved by hand on 2026-10-11 at the author's instruction, not by a runner dispatch.
+
+**changed:** the migration was applied to the live project through the claude.ai Supabase connector (the local Supabase MCP declined `apply_migration` each time) and took version `20261011191432`; the stashed files were restored under that name (commit `1149e11b`). Live checks: RLS on, one owner SELECT policy, `authenticated` holds SELECT only, the three functions are executable by `authenticated` and not `anon`. The blocked entry above is superseded.
+
+## T5 · Saved conversations: tables and functions — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`. Resolved by hand on 2026-10-11 at the author's instruction, not by a runner dispatch.
+
+**changed:** the migration was applied the same way and took version `20261011191453`; the stashed files were restored under that name with the "not yet applied" header note replaced (commit `e5a348e9`). Live checks as for T4, on `ask_conversations` and `ask_messages` and the two functions. The blocked entry above is superseded.
+
+**follow-ups:**
+
+1. The live specs for T1, T4 and T5 skip against production by design, so the functions' behaviour (the cap, concurrent reservations, cross-user refusals, view parity) has been reviewed and structurally verified but never executed; run them once against a non-production project.
+2. Later tasks that apply migrations (T2, T3) should expect the local Supabase MCP to decline `apply_migration`.
