@@ -14,7 +14,10 @@ const STEPS = [
 ];
 
 /** The same three, when the sign-up began on a join link. */
-const JOIN_STEPS = [STEPS[0], STEPS[1], "Come back to the invitation and join"];
+const JOIN_STEPS = [
+  ...STEPS.slice(0, 2),
+  "Come back to the invitation and join",
+];
 
 /**
  * The screen after `SignUpForm` succeeds.

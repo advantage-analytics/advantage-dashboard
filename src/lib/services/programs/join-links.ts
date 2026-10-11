@@ -7,14 +7,17 @@
  * consumer disagreeing about the flag fails silently: the decline link just
  * re-renders the offer. So the flag has one name, one writer and one reader.
  *
- * A leaf on purpose: no imports, so client components can build a link
- * without dragging server code into their bundle. That is also why the
+ * A leaf on purpose: its only import is `auth/safe-next`, itself import-free,
+ * so client components can build a link without dragging server code into
+ * their bundle. That is also why the
  * ABSOLUTE join-link URL is not built here: it needs `siteUrl()`, which reads
  * `VERCEL_*` variables a browser bundle does not have and would silently
  * resolve to `localhost`. `joinLinkUrl()` in `lib/data/team-settings-server.ts`
  * composes `siteUrl()` with `joinHref()` the way `matchShareUrl()` does, and
  * every URL a client sees is handed down from the server already built.
  */
+
+import { authHref } from "@/lib/auth/safe-next";
 
 /**
  * Who a program's join link admits — `program_join_links.mode`.
@@ -47,7 +50,7 @@ export function invitationHref(inviteId: string): string {
  * `components/auth/login-form.tsx`.
  */
 export function signInThenHref(path: string): string {
-  return `/login?next=${encodeURIComponent(path)}`;
+  return authHref("/login", path);
 }
 
 /**
@@ -58,7 +61,7 @@ export function signInThenHref(path: string): string {
  * that lands back on the join link. Same clamp as `/login`.
  */
 export function signUpThenHref(path: string): string {
-  return `/sign-up?next=${encodeURIComponent(path)}`;
+  return authHref("/sign-up", path);
 }
 
 /**

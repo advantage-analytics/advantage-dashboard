@@ -71,14 +71,14 @@ export interface JoinTerms {
 }
 
 /** What the program gains. */
-export const JOIN_TERMS_SEEN: JoinTerms = {
+const JOIN_TERMS_SEEN: JoinTerms = {
   title: "Your coaches will see",
   text: "Matches uploaded to the team, with their video, stats and full report. Your trends across those matches. Any personal match you choose to share, one at a time.",
   emphasis: "to the team",
 };
 
 /** What does not move. */
-export const JOIN_TERMS_KEPT: JoinTerms = {
+const JOIN_TERMS_KEPT: JoinTerms = {
   title: "Stays yours",
   text: "Everything you've uploaded up to now, personal matches you upload later unless you share them, and your account if you leave. The team's matches stay with the team.",
 };
