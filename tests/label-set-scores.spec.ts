@@ -180,7 +180,7 @@ test.describe("labelSetScores", () => {
     expect(setsOf([{ ...won(1, 1, "p1"), setNumber: null }])).toEqual([]);
   });
 
-  test("formatSets writes the sets as Fix the entered score will store them", () => {
+  test("formatSets writes the labelled sets as the publish script prints them", () => {
     expect(formatSets(setsOf(twoSets()))).toBe("2–1, 0–1");
     expect(formatSets([])).toBe("");
   });
@@ -192,13 +192,21 @@ test.describe("labelSetScores", () => {
 });
 
 test.describe("enteredScore", () => {
-  test("final_score wins over matches.score; neither is null", () => {
+  test("matches.score wins over final_score; final_score only without one; neither is null", () => {
     const match = { player1: [6, 4], player2: [3, 6] };
     expect(enteredScore(null, match)).toEqual([
       [6, 3],
       [4, 6],
     ]);
-    expect(enteredScore([[2, 1]], match)).toEqual([[2, 1]]);
+    // The match record is the source of truth: a stored reading never
+    // replaces it (Andy Nguyen v Shaurya Bharadwaj, 2026-10-10).
+    expect(enteredScore([[2, 1]], match)).toEqual([
+      [6, 3],
+      [4, 6],
+    ]);
+    expect(enteredScore([[2, 1]], { player1: [], player2: [] })).toEqual([
+      [2, 1],
+    ]);
     expect(enteredScore([[2, 1]], null)).toEqual([[2, 1]]);
     expect(enteredScore(null, null)).toBeNull();
     // A record with sides of unequal length pads the short side with 0.

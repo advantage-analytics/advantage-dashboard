@@ -47,7 +47,6 @@ import type {
 } from "@/lib/services/labels/session";
 import {
   enteredScore,
-  formatSets,
   labelSetScores,
   mismatchGameKey,
   scoreMismatch,
@@ -149,7 +148,6 @@ export function LabelBlackRail({
   finalScore = null,
   videoEndsEarly = null,
   matchScore = null,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onGoToPoint,
@@ -214,11 +212,10 @@ export function LabelBlackRail({
   videoEndsEarly?: boolean | null;
   matchScore?: MatchScore | null;
   /**
-   * The chip's answers. Given all three, the chip opens a menu of them; absent,
-   * it is words alone. `onFixEnteredScore` gets the labelled sets as `[p1, p2]`
-   * pairs, as `final_score` stores them.
+   * The chip's answers. Given both, the chip opens a menu of them; absent, it
+   * is words alone. Neither rewrites the entered score: the match record's is
+   * the source of truth the labelled points are held against.
    */
-  onFixEnteredScore?: (finalScore: number[][]) => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   /** Make a point current, hold the rail and bring the row up: the flag jumps. */
@@ -399,20 +396,8 @@ export function LabelBlackRail({
                   ? (close) => (
                       <ScoreRows
                         mismatch={mismatch}
-                        stored={formatSets(labelledSets)}
                         close={close}
                         onGoToGame={goToGame}
-                        onFixEnteredScore={
-                          onFixEnteredScore && editable
-                            ? () =>
-                                onFixEnteredScore(
-                                  labelledSets.map((set) => [
-                                    set.games[0],
-                                    set.games[1],
-                                  ]),
-                                )
-                            : undefined
-                        }
                         onVideoEndsEarly={
                           editable ? onVideoEndsEarly : undefined
                         }
@@ -594,34 +579,27 @@ export function LabelBlackRail({
  */
 export function ScoreRows({
   mismatch,
-  stored,
   close,
   onGoToGame,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
-  /** The labelled sets as "Fix the entered score" will store them: "6–3, 4–5". */
-  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
-  onFixEnteredScore?: () => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
 }) {
   const { setNumber, labelled, entered } = mismatch;
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
-  if (onFixEnteredScore && onVideoEndsEarly && onFindGap) {
+  if (onVideoEndsEarly && onFindGap) {
     return (
       <ScoreChipMenu
         mismatch={mismatch}
-        stored={stored}
         close={close}
         onGoToGame={onGoToGame}
-        onFixEnteredScore={onFixEnteredScore}
         onVideoEndsEarly={onVideoEndsEarly}
         onFindGap={onFindGap}
         onClearEnteredScore={onClearEnteredScore}
@@ -647,24 +625,20 @@ export function ScoreRows({
 
 /**
  * The chip's menu rows, hook-free so a spec can read them: "Go to game N"
- * when a game is named, the three answers, and "Use the match score again"
+ * when a game is named, the two answers, and "Use the match score again"
  * when given. Each row closes the menu, then asks.
  */
 export function ScoreChipMenu({
   mismatch,
-  stored,
   close,
   onGoToGame,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
-  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
-  onFixEnteredScore: () => void;
   onVideoEndsEarly: () => void;
   onFindGap: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
@@ -683,14 +657,6 @@ export function ScoreChipMenu({
           }}
         />
       ) : null}
-      <FloatMenuItem
-        label={SCORE_MISMATCH_ANSWERS.fix.label}
-        description={`Store ${stored} as the entered score.`}
-        onSelect={() => {
-          close();
-          onFixEnteredScore();
-        }}
-      />
       <FloatMenuItem
         label={SCORE_MISMATCH_ANSWERS.endsEarly.label}
         description={SCORE_MISMATCH_ANSWERS.endsEarly.description}

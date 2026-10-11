@@ -1724,8 +1724,6 @@ export function LabelConsole({
     findGap,
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
-    fixEnteredScore: (sets: number[][]) =>
-      void updateSessionFields({ final_score: sets }),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
@@ -1922,7 +1920,6 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
-      onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.findGap}

@@ -9,8 +9,8 @@
  * counts for who it was settled for. Each set lists those two kinds, so the
  * chip can say why its pair falls short.
  *
- * The entered score is a set total (`label_sessions.final_score`, else
- * `matches.score`), so a disagreement is placed at a set: `scoreMismatch`
+ * The entered score is a set total (`matches.score`, else
+ * `label_sessions.final_score`), so a disagreement is placed at a set: `scoreMismatch`
  * names the first set whose pair differs, that set's first live point (where
  * "Find the gap" goes) and its unfinished and run-over games, the first of
  * which is where the chip scrolls to.
@@ -105,21 +105,27 @@ function sideIndex(side: LabelSide): 0 | 1 {
 }
 
 /**
- * The score the labelled points are held against: what the labeller entered
- * on the session when they have, else the match record's — as `[p1, p2]`
- * pairs per set — or null when neither says anything.
+ * The score the labelled points are held against: the match record's — the
+ * source of truth, which labelling never writes — as `[p1, p2]` pairs per
+ * set; the session's own `final_score` only for a match with no recorded
+ * score; null when neither says anything. The labels answer to the score,
+ * never the other way round.
  */
 export function enteredScore(
   finalScore: readonly (readonly number[])[] | null,
   matchScore: MatchScore | null,
 ): number[][] | null {
+  const sets = matchScore
+    ? Math.max(matchScore.player1.length, matchScore.player2.length)
+    : 0;
+  if (matchScore && sets > 0) {
+    return Array.from({ length: sets }, (_, i) => [
+      matchScore.player1[i] ?? 0,
+      matchScore.player2[i] ?? 0,
+    ]);
+  }
   if (finalScore) return finalScore.map((pair) => [pair[0] ?? 0, pair[1] ?? 0]);
-  if (!matchScore) return null;
-  const sets = Math.max(matchScore.player1.length, matchScore.player2.length);
-  return Array.from({ length: sets }, (_, i) => [
-    matchScore.player1[i] ?? 0,
-    matchScore.player2[i] ?? 0,
-  ]);
+  return null;
 }
 
 /** Why a set's labelled pair is what it is: one game, and what is wrong with it. */
@@ -207,7 +213,7 @@ export function mismatchGameKey(mismatch: LabelScoreMismatch): string | null {
   return first ? gameKey(first) : null;
 }
 
-/** "6–3, 4–6": the labelled sets as "Fix the entered score" will store them. */
+/** "6–3, 4–6": the labelled sets, as the publish script prints them. */
 export function formatSets(sets: readonly LabelSetScore[]): string {
   return sets.map((set) => formatPair(set.games)).join(", ");
 }

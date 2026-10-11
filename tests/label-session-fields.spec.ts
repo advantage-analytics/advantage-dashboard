@@ -496,9 +496,19 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     );
   });
 
-  test("gone when the labelled points agree with the score — final_score first", () => {
-    // The labeller's reading matches the rows: no dot, whatever the record says.
-    const agreed = { ...labelSessionFixture(), finalScore: [[0, 0]] };
+  test("gone when the labelled points agree with the score — the match record first", () => {
+    // A stored reading that matches the rows does not hide a record that
+    // does not: the record is the source of truth.
+    const stored = { ...labelSessionFixture(), finalScore: [[0, 0]] };
+    expect(CHEVRON(black(stored, EMPTY_MARKS))).toContain(
+      "data-score-mismatch",
+    );
+    // Without a record, the stored reading is held against the rows.
+    const agreed = {
+      ...labelSessionFixture(),
+      matchScore: null,
+      finalScore: [[0, 0]],
+    };
     expect(header(black(agreed, EMPTY_MARKS))).not.toContain(
       "data-score-mismatch",
     );
@@ -516,13 +526,17 @@ test.describe("a score that doesn't add up, in the flag list", () => {
       "data-score-mismatch",
     );
     // A reading that differs from the rows shows.
-    const differs = { ...labelSessionFixture(), finalScore: [[4, 0]] };
+    const differs = {
+      ...labelSessionFixture(),
+      matchScore: null,
+      finalScore: [[4, 0]],
+    };
     expect(CHEVRON(black(differs, EMPTY_MARKS))).toContain(
       "data-score-mismatch",
     );
   });
 
-  test("the menu: Go to game first, Fix says what it stores, Use the match score again only with a score stored", () => {
+  test("the menu: Go to game first, no answer rewrites the score, Use the match score again only with a score stored", () => {
     const { ScoreChipMenu } = createLoader().load(RAIL) as {
       ScoreChipMenu: (props: Record<string, unknown>) => React.ReactNode;
     };
@@ -530,10 +544,8 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     const calls: string[] = [];
     const props = {
       mismatch: one,
-      stored: "0–0",
       close: () => calls.push("close"),
       onGoToGame: (key: string) => calls.push(`go ${key}`),
-      onFixEnteredScore: () => calls.push("fix"),
       onVideoEndsEarly: () => calls.push("early"),
       onFindGap: () => calls.push("gap"),
     };
@@ -545,7 +557,6 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     const without = ScoreChipMenu(props);
     expect(rows(without)).toEqual([
       ["Go to game 1", "game 1 unfinished (15–15)"],
-      ["Fix the entered score", "Store 0–0 as the entered score."],
       [
         "Video ends early",
         "The points stop before the match did; the score stands.",
@@ -566,7 +577,6 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     });
     expect(rows(withStored).map(([label]) => label)).toEqual([
       "Go to game 1",
-      "Fix the entered score",
       "Video ends early",
       "Find the gap",
       "Use the match score again",
@@ -576,7 +586,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
       ...props,
       mismatch: { ...one, reasons: [] },
     });
-    expect(rows(noGame)[0][0]).toBe("Fix the entered score");
+    expect(rows(noGame)[0][0]).toBe("Video ends early");
   });
 
   test("the band or slot carrying the game's key is where Go to game scrolls", () => {
