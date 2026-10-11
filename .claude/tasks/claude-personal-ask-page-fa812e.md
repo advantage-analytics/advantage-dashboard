@@ -19,7 +19,7 @@ ready).
 
 ## T1 · `ask` schema: side and outcome rules, `ask.matches`, the reader role
 
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** supabase/migrations/<live-version>_ask_schema_matches_view.sql (new), tests/ask-views-parity.spec.ts (new) — a guess
 - **done when:**
