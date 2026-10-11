@@ -260,3 +260,17 @@ is the runner's. Newest entries at the bottom.
 6. `conversationTurnsFromMessages(...)` and the `askQuestion({...})` call sit between the reservation and the `try`; moving them inside would make the no-leak guarantee structural.
 7. `tests/error-response-shape.spec.ts` could gain a direct case for `clientDetail`.
 8. MAP.md's hand-written `src/app/api/` row does not mention `ask` yet (T16).
+
+## T16 · Open Ask in the nav; regenerate the map — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/lib/dashboard/nav.ts` drops `comingSoon` from the personal Ask entry (the team entry keeps it). `MAP.md`'s `src/app/api/` row names `ask`; the generated route table was already current. `AGENTS.md` no longer lists `/dashboard/ask` among the stub routes and gains one sentence on `/api/ask` under "LLM and email". `tests/nav-icons.spec.ts`: `BUILT_AHEAD_OF_NAV` is empty again. `tests/search-palette-pages.spec.ts`: personal Ask is now an expected search-palette shortcut; team Ask, Statistics, Opponents and Schedule are still asserted absent.
+
+**follow-ups:**
+
+1. DO NOT MERGE YET: `ask.match_stats` is unreadable through `ask_run_query` (see T3's entry), so statistics questions and mock mode fail at the database. The nav entry is now open on this branch.
+2. Still owed before the PR (never a task): about 20 real questions against a live model, read by a person — including one asking for advice, one about a teammate, one the data cannot answer — with the transcript attached (brief success criterion 5).
+3. Nothing on this branch has been looked at in a signed-in browser, and none of the five live-DB specs has run (they skip against production). `/pr-check`'s eyes-on stage needs the verifier account to hold a personal match with statistics.
+4. `rls-boundary-reviewer` over T1–T3 and `pipeline-guardrails-reviewer` over the dashboard diff are `/pr-check`'s.
+5. The `nav.ts` comment about the two Ask routes reads awkwardly and could be reworded.

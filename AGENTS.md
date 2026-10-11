@@ -75,7 +75,7 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   area (`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace and role
   lookup it depends on. Webhook and cron routes are excluded from the matcher on
   purpose.
-- `/dashboard/statistics`, `/dashboard/team/statistics`, `/dashboard/ask`,
+- `/dashboard/statistics`, `/dashboard/team/statistics`,
   `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
   shape is not settled, so there is no implementation behind them to revive — the
   loaders in `opponents-server.ts` are the exception and are live elsewhere.
@@ -144,7 +144,7 @@ internal naming only.
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
 `/api/team-insight`; `LLM_PROVIDER=anthropic|openai`, SDKs dynamically imported, mock
 mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the OpenAI SDK
-against Gemini (`gemini-3.5-flash-lite`), and production runs it.
+against Gemini (`gemini-3.5-flash-lite`), and production runs it. `/api/ask` also streams through `getLLMStream()`, runs model-written SQL only through `ask_run_query` as role `ask_reader`, and the model never types a number: every figure is a cell reference the server substitutes.
 
 Match-report insights come from the `generate-insights` edge function (Gemini,
 `GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash`, since

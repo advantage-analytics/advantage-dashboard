@@ -50,11 +50,7 @@ test.describe("nav data: icons and comingSoon flags", () => {
    * fails this test until the href is taken off the list. Empty is the
    * normal state.
    */
-  const BUILT_AHEAD_OF_NAV: readonly string[] = [
-    // Personal Ask: the page shell is in; `POST /api/ask`, the composer, the
-    // answer and the rail follow, and the last task of that queue unflags it.
-    "/dashboard/ask",
-  ];
+  const BUILT_AHEAD_OF_NAV: readonly string[] = [];
 
   test("a nav entry is flagged exactly when its page renders ComingSoonPage", () => {
     const appDir = path.join(process.cwd(), "src/app");

@@ -218,7 +218,7 @@ ready).
 
 ## T16 · Open Ask in the nav; regenerate the map
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T10, T13, T14, T15
 - **files:** src/lib/dashboard/nav.ts, MAP.md, AGENTS.md — a guess

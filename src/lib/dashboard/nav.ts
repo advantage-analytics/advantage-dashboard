@@ -57,7 +57,6 @@ export const PERSONAL_NAV: readonly NavLink[] = [
     name: "Ask",
     href: "/dashboard/ask",
     icon: MessageSquare,
-    comingSoon: true,
   },
 ];
 
@@ -110,7 +109,7 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * comment leaves as a placeholder for: the personal route intentionally shows
  * the viewer's own matches from inside a team workspace, so a program-wide
  * version needs a URL of its own rather than a branch inside that page. Both
- * are `ComingSoonPage` stubs today and need no guard of their own —
+ * are `ComingSoonPage` stubs today (the personal Ask page, `/dashboard/ask`, is built) and need no guard of their own —
  * `team/layout.tsx` already redirects anyone here who is not in a team
  * workspace, which is what "only work inside a team workspace" means until
  * there is program data to scope.

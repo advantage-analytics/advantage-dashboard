@@ -47,7 +47,10 @@ test("a team workspace lists its live rail pages first, under its own name", () 
 test("coming-soon pages are never shortcuts", () => {
   for (const kind of ["team", "personal"] as const) {
     const labels = pagesFor(kind, true).map((page) => page.label);
-    for (const stub of ["Statistics", "Opponents", "Ask", "Schedule"]) {
+    // Personal Ask is a built page, so it is a shortcut; team Ask is a stub.
+    const stubs = ["Statistics", "Opponents", "Schedule"];
+    if (kind === "team") stubs.push("Ask");
+    for (const stub of stubs) {
       expect(labels).not.toContain(stub);
     }
   }
@@ -74,6 +77,7 @@ test("Teams is only listed for someone on a team", () => {
   expect(labels).toEqual([
     "Home",
     "Matches",
+    "Ask",
     "Profile",
     "Account",
     "Preferences",
