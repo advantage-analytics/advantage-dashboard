@@ -160,45 +160,45 @@ test.describe("getActivityFeed carries each failed row's recovery class", () => 
 
   test("a failed row carries where its upload stopped; a running one does not", async () => {
     const { client } = fakeClient([
-      // Reaped mid-transfer: no video landed, the heartbeat's last value stays.
-      row("stopped", { video_object_key: null, upload_progress_percent: 27 }),
+      // Reaped mid-transfer. The row HAS a video key — the upload-url route
+      // writes it before a byte moves — and was never handed to the vendor.
+      row("stopped", { external_job_id: null, upload_progress_percent: 27 }),
       // Stopped during the cut — the heartbeat only ever wrote 0.
-      row("at-zero", { video_object_key: null, upload_progress_percent: 0 }),
-      row("never", { video_object_key: null, upload_progress_percent: null }),
-      // Failed after the upload finished: a video was recorded, so nothing
-      // stopped part-way.
+      row("at-zero", { external_job_id: null, upload_progress_percent: 0 }),
+      // No recorded progress says nothing: the key is taken at its word.
+      row("never", { external_job_id: null, upload_progress_percent: null }),
+      // The transfer finished (the terminal write records 100), then failed.
       row("after-upload", {
+        external_job_id: null,
         error_code: "INTERNAL_ERROR",
         upload_progress_percent: 100,
       }),
-      // The transfer finished but the `uploaded` write was lost: no video on
-      // the row, and a heartbeat too close to the end to call a stop.
-      row("lost-write", {
-        video_object_key: null,
-        upload_progress_percent: 98,
-      }),
-      row("near-end", { video_object_key: null, upload_progress_percent: 97 }),
+      // Handed to the vendor: whatever the heartbeat says, the video landed.
+      row("submitted", { upload_progress_percent: 64 }),
       row("running", {
         status: "uploading",
-        video_object_key: null,
+        external_job_id: null,
         upload_progress_percent: 42,
       }),
     ]);
     const { items } = await getActivityFeed(client, WORKSPACE);
     const byMatch = new Map(items.map((item) => [item.matchId, item.analysis]));
 
+    // The key alone used to make this `retry` — a resend of a video that was
+    // never committed. The heartbeat says the transfer never finished.
     expect(byMatch.get("stopped")).toMatchObject({
       recovery: "upload_again",
       stoppedUploadPercent: 27,
     });
     expect(byMatch.get("stopped")?.uploadPercent).toBeUndefined();
+    expect(byMatch.get("at-zero")?.recovery).toBe("upload_again");
     expect(byMatch.get("at-zero")?.stoppedUploadPercent).toBeUndefined();
+    expect(byMatch.get("never")?.recovery).toBe("retry");
     expect(byMatch.get("never")?.stoppedUploadPercent).toBeUndefined();
     expect(byMatch.get("after-upload")?.recovery).toBe("retry");
     expect(byMatch.get("after-upload")?.stoppedUploadPercent).toBeUndefined();
-    expect(byMatch.get("lost-write")?.recovery).toBe("upload_again");
-    expect(byMatch.get("lost-write")?.stoppedUploadPercent).toBeUndefined();
-    expect(byMatch.get("near-end")?.stoppedUploadPercent).toBe(97);
+    expect(byMatch.get("submitted")?.recovery).toBe("retry");
+    expect(byMatch.get("submitted")?.stoppedUploadPercent).toBeUndefined();
     expect(byMatch.get("running")?.uploadPercent).toBe(42);
     expect(byMatch.get("running")?.stoppedUploadPercent).toBeUndefined();
   });

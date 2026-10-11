@@ -48,6 +48,7 @@ import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { UploadKeepOpenNote } from "../upload-keep-open-note";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import { RecoveryAction } from "./recovery-action";
+import { RestartUpload } from "./restart-upload";
 import {
   CancelAnalysisDialog,
   requestResubmit,
@@ -239,6 +240,32 @@ function StepBody({
             </p>
           )}
           <UploadKeepOpenNote />
+        </>
+      );
+
+    case "paused":
+      return (
+        <>
+          {/* Frozen where it stopped: grey, no sheen. Blue and movement both
+              say "being measured right now", and nothing is. */}
+          <AnalysisProgressTrack
+            percent={body.percent}
+            tone="var(--ink-300)"
+            label={STEPPER_COPY.steps.videoPaused}
+          />
+          <p className={cn(NOTE, "mt-1")}>
+            {canAct ? STEPPER_COPY.paused.note : STEPPER_COPY.paused.noteViewer}
+          </p>
+          {/* Only the person who started it: restarting ends their job. */}
+          {canAct && jobId && (
+            <div className="mt-1 flex">
+              <RestartUpload
+                jobId={jobId}
+                matchId={matchId}
+                pausedSince={body.since}
+              />
+            </div>
+          )}
         </>
       );
 

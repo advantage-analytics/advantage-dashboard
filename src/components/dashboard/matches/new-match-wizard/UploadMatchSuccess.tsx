@@ -631,8 +631,8 @@ function wizardHref(url: URL | null, match: string | null): string {
  *
  * ── It re-sends the lost "failed" first ─────────────────────────────────────
  * When a transfer dies because the connection dropped, the write marking its
- * job `failed` usually dies with it, and the job sits at `uploading` until the
- * reaper retires it a quarter of an hour later. The `?match=` page counts that
+ * job `failed` usually dies with it, and the job sits at `uploading` — reading
+ * as paused after twenty minutes — until the reaper retires it hours later. The `?match=` page counts that
  * as live and sends the person to the match instead of the wizard. So the
  * click writes it again — the same write the transfer's own catch makes, and
  * only onto a job still claiming to upload — and follows the link however

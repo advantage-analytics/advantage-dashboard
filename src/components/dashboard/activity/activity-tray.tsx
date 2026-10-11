@@ -22,7 +22,9 @@ import {
   ANALYSIS_LABEL,
   isInFlight,
   isLiveUpdating,
+  isUploadPaused,
   inFlightMark,
+  UPLOAD_PAUSED_LABEL,
 } from "@/lib/data/match-analysis";
 import { invitationHref } from "@/lib/services/programs/join-links";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
@@ -120,8 +122,13 @@ const RING = (
 
 function InFlightRow({ item }: { item: ActivityItem }) {
   const { analysis, title } = item;
-  const word = ANALYSIS_LABEL[analysis.status];
   const now = new Date();
+  // Quiet for twenty minutes. The job is still `uploading`, so the row stays
+  // here rather than under the failures — but it must not look like progress:
+  // the still ring, the words, and a grey bar with no sheen. The match page
+  // it opens is where the upload can be started again.
+  const paused = isUploadPaused(analysis, now.getTime());
+  const word = paused ? UPLOAD_PAUSED_LABEL : ANALYSIS_LABEL[analysis.status];
 
   return (
     <Link
@@ -133,7 +140,10 @@ function InFlightRow({ item }: { item: ActivityItem }) {
         <span className="mt-0.5 flex">
           {/* Spinner only while work runs; a queued or stored job wears the
               still `wait` ring, as it does in the Matches and Roster rows. */}
-          <StepMark state={inFlightMark(analysis.status)} size="compact" />
+          <StepMark
+            state={paused ? "wait" : inFlightMark(analysis.status)}
+            size="compact"
+          />
         </span>
       </Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
@@ -159,7 +169,8 @@ function InFlightRow({ item }: { item: ActivityItem }) {
           analysis.progressPercent !== undefined && (
             <AnalysisProgressTrack
               percent={analysis.progressPercent}
-              live
+              live={!paused}
+              tone={paused ? "var(--ink-300)" : undefined}
               label={`${word} ${title}`}
             />
           )}

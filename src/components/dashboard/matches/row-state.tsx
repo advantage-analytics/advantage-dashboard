@@ -7,7 +7,9 @@ import {
   ANALYSIS_LABEL,
   isInFlight,
   isSubmitStalled,
+  isUploadPaused,
   inFlightMark,
+  UPLOAD_PAUSED_LABEL,
   matchListGroup,
   matchListStatusLabel,
   type MatchAnalysis,
@@ -44,6 +46,32 @@ export function RowLifecycle({
 
   if (status === "uploading") {
     const percent = analysis.uploadPercent;
+    // Quiet for twenty minutes: still uploading as far as the job goes, but
+    // not moving. Waiting, not working — the still ring, a grey bar frozen
+    // where it stopped, and words that do not claim progress.
+    if (isUploadPaused(analysis)) {
+      return (
+        <span className="flex w-full max-w-[280px] flex-col items-stretch gap-[5px]">
+          <AnalysisStatusLine
+            mark="wait"
+            value={
+              percent === undefined ? undefined : `${Math.floor(percent)}%`
+            }
+          >
+            {UPLOAD_PAUSED_LABEL}
+          </AnalysisStatusLine>
+          {percent !== undefined && (
+            <span className={STATUS_LINE_INDENT}>
+              <AnalysisProgressTrack
+                percent={percent}
+                tone="var(--ink-300)"
+                label={`${UPLOAD_PAUSED_LABEL}: ${label}`}
+              />
+            </span>
+          )}
+        </span>
+      );
+    }
     return (
       /* Line over track, both taking the cell's width up to a cap: a 3px rule
          running a whole wide cell starts to read as a divider in a table that

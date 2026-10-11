@@ -297,7 +297,7 @@ async function notifyInternalFailure(
  * match. UTC on purpose — the same rule every email date follows
  * (`docs/email-system.md` §5).
  */
-async function describeContext(
+export async function describeContext(
   supabase: SupabaseClient,
   input: { programId: string | null; date: string | null },
 ): Promise<string> {

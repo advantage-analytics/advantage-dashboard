@@ -289,6 +289,21 @@ that file.
   time, so it stays well under the 100-a-day cap below and never starves the
   sweep of the route's 60 s.
 
+- **`uploadPausedEmail`** (`templates/analysis.ts`) — "Your video upload has
+  paused". Sent by `/api/cron/reap-stalled-uploads` through
+  `services/notifications/upload-paused-mail.ts`. Not a `vercel.json` cron:
+  the sweep runs every five minutes, from Postgres (`pg_cron` → `pg_net`, the
+  `schedule_stalled_upload_sweep` migration) with the `CRON_SECRET` bearer
+  read from Vault. Each run mails the uploader of every job still `uploading`
+  with no progress write for twenty minutes, once, after
+  `claimSend("upload_paused:<job_id>")`, then fails the ones quiet for six
+  hours (`reap_stalled_uploads`, no second email). Gated on "Email me if
+  analysis fails". Skipped for a job that never recorded progress and for a
+  team match's uploader who has left the program. At most 25 a run. Paused,
+  not failed: the copy asks about the tab first, because a computer that
+  slept carries the upload on when it wakes, and only a closed tab needs a
+  second one.
+
 ## 9. Written but not yet wired
 
 Inherited from the pilot branch (merged in PR #131), each waiting on one call

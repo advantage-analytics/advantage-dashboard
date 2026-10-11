@@ -384,22 +384,26 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     expect(cancelled?.recovery).toBeUndefined();
 
     // A live failure carries where its upload stopped, floored; a running
-    // upload carries none, so a resubmission resets the last attempt's.
+    // upload carries none, so a resubmission resets the last attempt's. The
+    // row has a video key throughout — it is written before the bytes move.
     const stopped = liveAnalysisPatch({
       ...row,
       status: "failed",
-      video_object_key: null,
+      external_job_id: null,
       upload_progress_percent: 27.8,
     });
     expect(stopped?.stoppedUploadPercent).toBe(27);
     expect(stopped?.uploadPercent).toBeUndefined();
-    // A failure after the video was recorded did not stop part-way.
+    expect(stopped?.recovery).toBe("upload_again");
+    // A failure after the transfer finished did not stop part-way.
     const afterUpload = liveAnalysisPatch({
       ...row,
       status: "failed",
+      external_job_id: null,
       upload_progress_percent: 100,
     });
     expect(afterUpload).toHaveProperty("stoppedUploadPercent", undefined);
+    expect(afterUpload?.recovery).toBe("retry");
     const rerun = liveAnalysisPatch({
       ...row,
       status: "uploading",
