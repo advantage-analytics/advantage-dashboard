@@ -158,6 +158,43 @@ test.describe("getActivityFeed carries each failed row's recovery class", () => 
     expect(selects[0]).not.toContain("error_message");
   });
 
+  test("a failed row carries where its upload stopped; a running one does not", async () => {
+    const { client } = fakeClient([
+      // Reaped mid-transfer: no video landed, the heartbeat's last value stays.
+      row("stopped", { video_object_key: null, upload_progress_percent: 27 }),
+      // Stopped during the cut — the heartbeat only ever wrote 0.
+      row("at-zero", { video_object_key: null, upload_progress_percent: 0 }),
+      row("never", { video_object_key: null, upload_progress_percent: null }),
+      // Failed after the upload finished: the reading is carried, and the
+      // tray ignores it because the class is not `upload_again`.
+      row("after-upload", {
+        error_code: "INTERNAL_ERROR",
+        upload_progress_percent: 100,
+      }),
+      row("running", {
+        status: "uploading",
+        video_object_key: null,
+        upload_progress_percent: 42,
+      }),
+    ]);
+    const { items } = await getActivityFeed(client, WORKSPACE);
+    const byMatch = new Map(items.map((item) => [item.matchId, item.analysis]));
+
+    expect(byMatch.get("stopped")).toMatchObject({
+      recovery: "upload_again",
+      stoppedUploadPercent: 27,
+    });
+    expect(byMatch.get("stopped")?.uploadPercent).toBeUndefined();
+    expect(byMatch.get("at-zero")?.stoppedUploadPercent).toBeUndefined();
+    expect(byMatch.get("never")?.stoppedUploadPercent).toBeUndefined();
+    expect(byMatch.get("after-upload")).toMatchObject({
+      recovery: "retry",
+      stoppedUploadPercent: 100,
+    });
+    expect(byMatch.get("running")?.uploadPercent).toBe(42);
+    expect(byMatch.get("running")?.stoppedUploadPercent).toBeUndefined();
+  });
+
   test("no storage key and no note reaches an item", async () => {
     const { client } = fakeClient(ROWS);
     const { items } = await getActivityFeed(client, WORKSPACE);

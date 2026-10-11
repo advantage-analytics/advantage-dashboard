@@ -122,6 +122,15 @@ export interface MatchAnalysis {
    */
   uploadPercent?: number;
   /**
+   * Where the transfer stood when a failed job stopped, floored 0-100 — see
+   * `stoppedUploadPercent()`. Its own field rather than `uploadPercent`,
+   * which means bytes are moving right now and drives a live bar: this one is
+   * a reading taken off a job nothing is running for. Only worth showing when
+   * `recovery` is `upload_again`; a job that failed after its upload finished
+   * carries one too, and it says nothing useful there.
+   */
+  stoppedUploadPercent?: number;
+  /**
    * When the job row was created, ISO. Stands in for "when the transfer
    * started" — the row is inserted immediately before the upload begins, so the
    * gap is a couple of seconds against a transfer measured in minutes.
@@ -698,6 +707,26 @@ export function stageFillPercent(
  * raw. Passing it raw is what used to make a 99%-transferred file light the
  * "Analyzing" bar nearly full, since 40-100 of this axis belongs to analysis.
  */
+/**
+ * The last progress a failed job recorded, as a whole percent.
+ *
+ * `processing_jobs.upload_progress_percent` is a liveness heartbeat, and
+ * neither `reap_stalled_uploads()` nor the transfer-failure write clears it,
+ * so a dead upload's row still says how far it got. Undefined for any status
+ * but `failed`, and for 0 — a job that stopped during the cut, or before the
+ * first block landed, has no position worth drawing a bar for.
+ */
+export function stoppedUploadPercent(
+  status: AnalysisStatus,
+  uploadProgressPercent: number | null | undefined,
+): number | undefined {
+  if (status !== "failed") return undefined;
+  if (uploadProgressPercent == null || !(uploadProgressPercent > 0)) {
+    return undefined;
+  }
+  return Math.min(100, Math.floor(uploadProgressPercent));
+}
+
 export function pipelinePercent(
   status: AnalysisStatus,
   uploadPercent?: number,

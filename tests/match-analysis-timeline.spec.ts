@@ -382,6 +382,24 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     expect(cancelled?.vendorStartedAt).toBeUndefined();
     // A cancel is not a failure: no recovery class, so no Retry.
     expect(cancelled?.recovery).toBeUndefined();
+
+    // A live failure carries where its upload stopped, floored; a running
+    // upload carries none, so a resubmission resets the last attempt's.
+    const stopped = liveAnalysisPatch({
+      ...row,
+      status: "failed",
+      video_object_key: null,
+      upload_progress_percent: 27.8,
+    });
+    expect(stopped?.stoppedUploadPercent).toBe(27);
+    expect(stopped?.uploadPercent).toBeUndefined();
+    const rerun = liveAnalysisPatch({
+      ...row,
+      status: "uploading",
+      upload_progress_percent: 3,
+    });
+    expect(rerun).toHaveProperty("stoppedUploadPercent", undefined);
+    expect(rerun?.uploadPercent).toBe(3);
   });
 });
 

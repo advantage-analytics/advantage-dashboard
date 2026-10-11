@@ -34,6 +34,9 @@ import {
   isTrayFailure,
   trayFailureAction,
   trayFailureReason,
+  trayStoppedUploadPercent,
+  trayStoppedUploadReason,
+  type TrayFailureAction,
 } from "./tray-failure";
 import type {
   ActivityFeed,
@@ -184,6 +187,11 @@ function InFlightRow({ item }: { item: ActivityItem }) {
  */
 function FailedRow({ item }: { item: ActivityItem }) {
   const action = trayFailureAction(item.analysis, item.matchId);
+  const stoppedAt = trayStoppedUploadPercent(item.analysis);
+
+  if (stoppedAt !== undefined) {
+    return <StoppedUploadRow item={item} action={action} percent={stoppedAt} />;
+  }
 
   return (
     <Link
@@ -201,15 +209,90 @@ function FailedRow({ item }: { item: ActivityItem }) {
           {trayFailureReason(item.analysis)}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-1">
-        <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
-          {action.label}
+      <RowAction label={action.label} />
+    </Link>
+  );
+}
+
+/** A failed row's trailing word and chevron: where the click goes. */
+function RowAction({ label }: { label: string }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
+        {label}
+      </span>
+      <ChevronRight
+        className="size-[13px] text-[var(--ink-400)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+    </span>
+  );
+}
+
+/**
+ * An upload that died part-way, in the shape of the upload row it replaces.
+ *
+ * The row that was moving a minute ago — title, started day, a bar — becomes
+ * this one, so the reader recognises it as the same item rather than a new
+ * failure that appeared from nowhere: the same three lines, with the fail
+ * mark, the bar frozen where the transfer stopped, and that position in
+ * words beside the one thing to do about it.
+ *
+ * The bar is grey and still. Blue and the travelling sheen both mean "this
+ * is being measured right now", and nothing is. Still one link, like every
+ * failed row.
+ */
+function StoppedUploadRow({
+  item,
+  action,
+  percent,
+}: {
+  item: ActivityItem;
+  action: TrayFailureAction;
+  percent: number;
+}) {
+  const now = new Date();
+  const reason = trayStoppedUploadReason(percent);
+
+  return (
+    <Link
+      href={action.href}
+      className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS, "group")}
+    >
+      <Lead>
+        {/* Down 2px so the 14px mark centres on the title's line, as on the
+            upload row. */}
+        <span className="mt-0.5 flex">
+          <StepMark state="fail" size="compact" />
         </span>
-        <ChevronRight
-          className="size-[13px] text-[var(--ink-400)]"
-          strokeWidth={1.5}
-          aria-hidden="true"
+      </Lead>
+      <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--ink-900)]">
+            {item.title}
+          </span>
+          <ChromeTooltip
+            label={trayStartedTitle(item.at, now)}
+            side="top"
+            align="end"
+          >
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
+              {trayStartedDay(item.at, now)}
+            </span>
+          </ChromeTooltip>
+        </span>
+        <AnalysisProgressTrack
+          percent={percent}
+          tone="var(--ink-300)"
+          label={`${reason}: ${item.title}`}
         />
+        <span className="flex items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)] tabular-nums">
+            {reason}
+          </span>
+          <RowAction label={action.label} />
+        </span>
       </span>
     </Link>
   );
