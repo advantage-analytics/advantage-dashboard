@@ -130,3 +130,17 @@ is the runner's. Newest entries at the bottom.
 5. The plan prompt is about 20k characters, mostly the 86 `match_stats` columns; group them if latency or cost matters.
 6. A difference between two percentages (a `*_diff` column) prints without a percent sign.
 7. No real model has read these prompts yet.
+
+## T11 · Ask server loaders — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/lib/data/ask-tags.ts` adds the pure `buildAskTagOptions(matches, sideOf)` and `askOpponentKey()`; `src/lib/data/ask-server.ts` adds the `cache()`d loaders `getAskTagOptions()`, `getAskQuota()`, `getAskConversations()` and `getAskConversation(id)`, all on the cookie-auth client; `tests/ask-tags.spec.ts` pins opponent grouping, blank names and ordering in 11 cases.
+
+**follow-ups:**
+
+1. An opponent tag's id is the normalised name — T9's tag resolver must use `askOpponentKey()` so both sides group by the same rule. A match tag's id is the match id.
+2. `getAskQuota()` returns null on a read failure; T13 and T15 must handle it rather than assume 0 of 20.
+3. A saved message's `content` is `unknown` here. The design stores the SQL that produced an answer inside the assistant message, and `getAskConversation` returns `content` whole — whoever defines the saved shape (T9) should strip the SQL before it reaches a client component.
+4. A question and its answer share one `created_at`; the loader orders by `created_at` then `role` descending so the question comes first.
+5. The loaders in `ask-server.ts` have no automated test and have not been exercised against the live database.

@@ -150,7 +150,7 @@ ready).
 
 ## T11 · Ask server loaders
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T5
 - **files:** src/lib/data/ask-server.ts (new), src/lib/data/ask-tags.ts (new), tests/ask-tags.spec.ts (new) — a guess
