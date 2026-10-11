@@ -176,7 +176,7 @@ ready).
 
 ## T13 · Ask composer and tag menu
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** src/components/dashboard/ask/ask-composer.tsx (new), src/components/dashboard/ask/ask-tag-menu.tsx (new), src/components/dashboard/ask/ask-page.tsx, tests/ask-composer.spec.ts (new), tests/fixtures/ask-composer-harness.tsx (new) — a guess

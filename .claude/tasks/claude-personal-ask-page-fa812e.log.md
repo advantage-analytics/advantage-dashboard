@@ -146,3 +146,19 @@ is the runner's. Newest entries at the bottom.
 5. The loaders in `ask-server.ts` have no automated test and have not been exercised against the live database.
 
 **widget-states (runner, at commit):** loading ✓ (`PendingFrame` with `role="status"`, real title, bars only); empty ✓ (day zero renders the offer, no composer, no `return null`); stream settles on every exit ✓ (done, error, refusal, interruption, abort). Error: FIXED after the gate — the page awaited its loaders outside any boundary, so a failed match read fell through to the app-wide error screen; `page.tsx` now reads inside a `WidgetBoundary` (`AskContent`). That one edit postdates the full gate; typecheck, eslint and the `ask-stream`, `nav-icons`, `client-bundle-boundary` and `generate-map` specs were re-run on it and pass.
+
+## T13 · Ask composer and tag menu — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/components/dashboard/ask/ask-composer.tsx` is the real composer: tag chips, labelled textarea, "Tag a match or opponent", the static "Advantage Intelligence" label, the `n / 20` count and Send. `ask-tag-menu.tsx` is the `@` listbox in two groups (Opponents, Matches) on `FloatMenu`. `src/components/ui/float-menu.tsx` gains four optional props (`role`, `listId`, `onOpenAutoFocus`, `onCloseAutoFocus`) with unchanged defaults, so the menu can be a listbox without taking focus from the textarea. `tests/ask-composer.spec.ts` drives 18 cases with real key presses through `tests/fixtures/ask-composer-harness.tsx`.
+
+**widget-states (runner, at commit):** no loading state of its own; empty ✓ (a filter that matches nothing shows an honest empty line); no spinner; `quota` null omits the count rather than inventing one.
+
+**follow-ups:**
+
+1. At the limit only Send and Enter-to-send are disabled; the textarea stays editable so a restored question can be copied. The design says "the composer is disabled" — confirm which is wanted.
+2. Not looked at on screen: the harness loads no CSS, so layout, the engine mark and the focus ring are for `/pr-check`'s eyes-on stage.
+3. The menu caps at 5 opponents and 8 matches with no "type to narrow" hint.
+4. `askTagRows` / `askTagKey` could be shared with the rail (T15) so chips and "Tagged in this question" agree; the exchange view in `ask-page.tsx` still draws plain chips.
+5. Option rows are not focusable and follow the mouse via `onMouseMove` (the `aria-activedescendant` listbox pattern) — worth an accessibility look at `/pr-check`.
