@@ -109,7 +109,7 @@ ready).
 
 ## T8 · Prompts and mock mode
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T7
 - **files:** src/lib/services/ask/prompts.ts (new), src/lib/services/ask/schema.ts (new), src/lib/services/ask/mock.ts (new), src/lib/llm/adapter.ts, tests/ask-prompt.spec.ts (new) — a guess

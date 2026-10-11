@@ -112,3 +112,21 @@ is the runner's. Newest entries at the bottom.
 3. `is_pressure_point` is never true in live data; the model should use the break, set and match point flags.
 4. `ask.match_stats` carries no date — a period question must join `ask.matches`.
 5. The parity spec seeds no shots, so `ask.shots.mine` is untested; the new live cases have not run (they skip against production).
+
+## T8 · Prompts and mock mode — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`. Run out of file order: T3 was eligible first but could not be dispatched (see the note below).
+
+**changed:** `src/lib/services/ask/schema.ts` holds the four `ask` views' columns and meanings as `ASK_SCHEMA` (meanings generated from the migrations' column comments). `src/lib/services/ask/prompts.ts` adds `buildPlanPrompt()` and `buildAnswerPrompt()`, with the function list and the reference/figure syntax rendered from T6's and T7's constants, and `ASK_NO_ADVICE_SENTENCE` exported and absent from both prompts. `src/lib/services/ask/mock.ts` holds the fixed plan and answer template. `src/lib/llm/adapter.ts` gains `isLLMConfigured()` only. `tests/ask-prompt.spec.ts` pins the wording in 26 cases.
+
+**note on T3:** T3's dispatch was refused by the session's permission system (the brief told the subagent to apply its migration through the claude.ai Supabase connector). T3 was returned to `todo` untouched and awaits the author's decision on how its migration is applied.
+
+**follow-ups:**
+
+1. The reply contract is `{ scope_sql, sql, asks_for_advice }` or `{ cannot_answer, asks_for_advice }`; T9's parser must tolerate a reply that omits `asks_for_advice`.
+2. The current question is NOT in the plan prompt — T9 sends it as the user message. The plan prompt keeps the newest 6 turns, each cut to 600 characters.
+3. `tags.ts` (T9) must produce `AskPromptTag`: `{ kind: "match", matchId, opponentName, playedOn }` or `{ kind: "opponent", opponentName, matchIds }`. `buildAnswerPrompt` needs `matchCount`.
+4. `isLLMConfigured()` restates `getLLMStream()`'s two conditions rather than sharing a predicate, because the task forbade other changes to the file.
+5. The plan prompt is about 20k characters, mostly the 86 `match_stats` columns; group them if latency or cost matters.
+6. A difference between two percentages (a `*_diff` column) prints without a percent sign.
+7. No real model has read these prompts yet.
