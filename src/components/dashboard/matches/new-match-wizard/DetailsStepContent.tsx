@@ -108,7 +108,7 @@ import type {
 import {
   CheckedFileRow,
   VideoFileLead,
-  videoFileFacts,
+  videoUploadFacts,
 } from "./CheckedFileRow";
 import { UploadNoteStrip } from "../upload-keep-open-note";
 import { UPLOADING_COPY } from "../upload-progress-copy";
@@ -228,6 +228,11 @@ export interface DetailsVideo {
   /** Already formatted, as the file step shows it ("3.80 GB"). */
   size: string;
   probe: VideoProbeSummary | null;
+  /**
+   * The trim window's length in seconds, or null when none is chosen. What
+   * uploads is this cut, not the whole file.
+   */
+  keptSeconds: number | null;
 }
 
 type Hand = "right" | "left";
@@ -2144,7 +2149,10 @@ function DetailsStepContentImpl({
               />
             }
             name={video.name}
-            facts={videoFileFacts(video.probe, video.size) ?? video.size}
+            facts={
+              videoUploadFacts(video.probe, video.size, video.keptSeconds) ??
+              video.size
+            }
           />
           <UploadNoteStrip>{UPLOADING_COPY.beforeSave}</UploadNoteStrip>
         </div>

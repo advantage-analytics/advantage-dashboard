@@ -308,7 +308,7 @@ export function MatchStep() {
       parsingState,
       error,
     },
-    view: { scoreCheckVisible, oneSetSettled },
+    view: { scoreCheckVisible, oneSetSettled, trimSelected },
     actions: { dismissScoreCheck, chooseOneSet, undoOneSet },
     meta: { workspaceKind, preset },
   } = useUploadWizard();
@@ -368,9 +368,10 @@ export function MatchStep() {
             name: videoName ?? heldFile.name,
             size: videoSize ?? "",
             probe: videoProbe,
+            keptSeconds: trimSelected > 0 ? trimSelected : null,
           }
         : null,
-    [heldFile, videoName, videoSize, videoProbe],
+    [heldFile, videoName, videoSize, videoProbe, trimSelected],
   );
 
   if (admin?.attachment)

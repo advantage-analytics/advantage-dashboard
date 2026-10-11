@@ -28,17 +28,21 @@ const read = (file: string) =>
   readFileSync(resolve(process.cwd(), file), "utf8");
 
 const loader = createLoader();
-const { CheckedFileRow, VideoFileLead, videoFileFacts } = loader.load(
-  `${WIZARD}/CheckedFileRow.tsx`,
-) as {
-  CheckedFileRow: React.ComponentType<Record<string, unknown>>;
-  VideoFileLead: React.ComponentType<Record<string, unknown>>;
-  videoFileFacts: (
-    probe: Record<string, unknown> | null,
-    size: string | undefined,
-    tail?: string,
-  ) => string | null;
-};
+const { CheckedFileRow, VideoFileLead, videoFileFacts, videoUploadFacts } =
+  loader.load(`${WIZARD}/CheckedFileRow.tsx`) as {
+    CheckedFileRow: React.ComponentType<Record<string, unknown>>;
+    VideoFileLead: React.ComponentType<Record<string, unknown>>;
+    videoFileFacts: (
+      probe: Record<string, unknown> | null,
+      size: string | undefined,
+      tail?: string,
+    ) => string | null;
+    videoUploadFacts: (
+      probe: Record<string, unknown> | null,
+      size: string | undefined,
+      keptSeconds: number | null,
+    ) => string | null;
+  };
 const { UploadNoteStrip } = loader.load(
   "src/components/dashboard/matches/upload-keep-open-note.tsx",
 ) as { UploadNoteStrip: React.ComponentType<Record<string, unknown>> };
@@ -53,6 +57,25 @@ test("the facts line reads duration, resolution, rate and size; 'checked' is the
     "1:12:16 · 1080p · 30 fps · 3.80 GB · checked",
   );
   expect(videoFileFacts(null, "3.80 GB")).toBeNull();
+});
+
+test("a trimmed upload reads the kept length against the recording's, with no size", () => {
+  // The whole clip, or no window chosen: the file's own facts.
+  expect(videoUploadFacts(PROBE, "3.80 GB", null)).toBe(
+    "1:12:16 · 1080p · 30 fps · 3.80 GB",
+  );
+  expect(videoUploadFacts(PROBE, "3.80 GB", 4336)).toBe(
+    "1:12:16 · 1080p · 30 fps · 3.80 GB",
+  );
+  // Within a second of the whole clip is the whole clip.
+  expect(videoUploadFacts(PROBE, "3.80 GB", 4335.5)).toBe(
+    "1:12:16 · 1080p · 30 fps · 3.80 GB",
+  );
+  // A real cut: the size shown would be the uncut file's, so it is left off.
+  expect(videoUploadFacts(PROBE, "3.80 GB", 3480)).toBe(
+    "0:58:00 of 1:12:16 · 1080p · 30 fps",
+  );
+  expect(videoUploadFacts(null, "3.80 GB", 3480)).toBeNull();
 });
 
 test("the row draws lead, name and facts; actions and the hairline are the caller's", () => {
@@ -146,6 +169,13 @@ test("the flow hands Details a video only while it holds the File, and never for
   const memo = src.slice(src.indexOf("const video = useMemo("));
   expect(memo.slice(0, 400)).toContain("heldFile");
   expect(memo.slice(0, 400)).toContain(": null,");
+  // What uploads is the trim window, so Details is told its length.
+  expect(memo.slice(0, 400)).toContain(
+    "keptSeconds: trimSelected > 0 ? trimSelected : null,",
+  );
+  expect(read(`${WIZARD}/DetailsStepContent.tsx`)).toContain(
+    "videoUploadFacts(video.probe, video.size, video.keptSeconds)",
+  );
   expect(src).toContain("video={video}");
 });
 

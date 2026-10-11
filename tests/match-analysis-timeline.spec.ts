@@ -393,6 +393,13 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     });
     expect(stopped?.stoppedUploadPercent).toBe(27);
     expect(stopped?.uploadPercent).toBeUndefined();
+    // A failure after the video was recorded did not stop part-way.
+    const afterUpload = liveAnalysisPatch({
+      ...row,
+      status: "failed",
+      upload_progress_percent: 100,
+    });
+    expect(afterUpload).toHaveProperty("stoppedUploadPercent", undefined);
     const rerun = liveAnalysisPatch({
       ...row,
       status: "uploading",

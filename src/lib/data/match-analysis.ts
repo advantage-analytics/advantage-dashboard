@@ -125,9 +125,8 @@ export interface MatchAnalysis {
    * Where the transfer stood when a failed job stopped, floored 0-100 — see
    * `stoppedUploadPercent()`. Its own field rather than `uploadPercent`,
    * which means bytes are moving right now and drives a live bar: this one is
-   * a reading taken off a job nothing is running for. Only worth showing when
-   * `recovery` is `upload_again`; a job that failed after its upload finished
-   * carries one too, and it says nothing useful there.
+   * a reading taken off a job nothing is running for. Absent once a video was
+   * recorded, so it only ever accompanies `upload_again`.
    */
   stoppedUploadPercent?: number;
   /**
@@ -694,6 +693,38 @@ export function stageFillPercent(
 }
 
 /**
+ * Where a failed job's upload stopped, as a whole percent — or undefined when
+ * it did not stop part-way.
+ *
+ * `processing_jobs.upload_progress_percent` is a liveness heartbeat, and
+ * neither `reap_stalled_uploads()` nor the transfer-failure write clears it,
+ * so a dead upload's row still says how far it got. Three things make a
+ * reading not worth drawing:
+ *
+ *   - any status but `failed`;
+ *   - a recorded video. The transfer finished, so whatever failed came after
+ *     it, and "stopped at N%" would describe a transfer that did not stop;
+ *   - 0, or `UPLOAD_HEARTBEAT_CEILING` and above. Zero is a job that died in
+ *     the cut or before its first block. The top of the range cannot be told
+ *     from a finished transfer whose `uploaded` write was lost: the heartbeat
+ *     is written every two points, so its last value before 100 is 98 or 99.
+ */
+export function stoppedUploadPercent(job: {
+  status: AnalysisStatus;
+  uploadProgressPercent: number | null | undefined;
+  hasVideo: boolean;
+}): number | undefined {
+  if (job.status !== "failed" || job.hasVideo) return undefined;
+  const percent = job.uploadProgressPercent;
+  if (percent == null || !(percent > 0)) return undefined;
+  const floored = Math.floor(percent);
+  return floored >= UPLOAD_HEARTBEAT_CEILING ? undefined : floored;
+}
+
+/** The heartbeat's two-point step below 100 — see `stoppedUploadPercent()`. */
+const UPLOAD_HEARTBEAT_CEILING = 98;
+
+/**
  * Where a job sits on the PIPELINE_STAGES axis.
  *
  * Only the upload is measured; everything after it is a position, not a
@@ -707,26 +738,6 @@ export function stageFillPercent(
  * raw. Passing it raw is what used to make a 99%-transferred file light the
  * "Analyzing" bar nearly full, since 40-100 of this axis belongs to analysis.
  */
-/**
- * The last progress a failed job recorded, as a whole percent.
- *
- * `processing_jobs.upload_progress_percent` is a liveness heartbeat, and
- * neither `reap_stalled_uploads()` nor the transfer-failure write clears it,
- * so a dead upload's row still says how far it got. Undefined for any status
- * but `failed`, and for 0 — a job that stopped during the cut, or before the
- * first block landed, has no position worth drawing a bar for.
- */
-export function stoppedUploadPercent(
-  status: AnalysisStatus,
-  uploadProgressPercent: number | null | undefined,
-): number | undefined {
-  if (status !== "failed") return undefined;
-  if (uploadProgressPercent == null || !(uploadProgressPercent > 0)) {
-    return undefined;
-  }
-  return Math.min(100, Math.floor(uploadProgressPercent));
-}
-
 export function pipelinePercent(
   status: AnalysisStatus,
   uploadPercent?: number,

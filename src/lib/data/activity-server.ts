@@ -329,10 +329,11 @@ export async function getActivityFeed(
         uploadPercent,
         // A failed upload keeps the upload row's shape in the tray, frozen
         // where it stopped. The tray draws it for `upload_again` only.
-        stoppedUploadPercent: stoppedUploadPercent(
+        stoppedUploadPercent: stoppedUploadPercent({
           status,
-          row.upload_progress_percent,
-        ),
+          uploadProgressPercent: row.upload_progress_percent,
+          hasVideo: row.video_object_key !== null,
+        }),
         startedAt: row.created_at,
         recovery,
         jobId: row.id,

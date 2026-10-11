@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -213,4 +216,66 @@ test("an untitled page gets the bare label, with no trailing separator", () => {
   expect(page.doc.title).toBe("5% · Uploading video");
   hold.release();
   expect(page.doc.title).toBe("");
+});
+
+test("two holds in one tab share the title without nesting their prefixes", () => {
+  const page = fakeDocument("Matches · Advantage");
+  const first = holdTabAwake("Uploading video", { document: page.doc });
+  const second = holdTabAwake("Uploading video", { document: page.doc });
+
+  first.setPercent(27);
+  second.setPercent(5);
+  expect(page.doc.title).toBe("5% · Uploading video · Matches · Advantage");
+  // Many alternating writes later, still one prefix.
+  for (let pct = 28; pct < 60; pct++) {
+    first.setPercent(pct);
+    second.setPercent(pct - 20);
+  }
+  expect(page.doc.title).toBe("39% · Uploading video · Matches · Advantage");
+
+  // The first finishes while the second's title is showing: left alone.
+  first.release();
+  expect(page.doc.title).toBe("39% · Uploading video · Matches · Advantage");
+  second.release();
+  expect(page.doc.title).toBe("Matches · Advantage");
+});
+
+test("a hold started under another hold's title restores the page's own", () => {
+  const page = fakeDocument("Matches · Advantage");
+  const first = holdTabAwake("Uploading video", { document: page.doc });
+  first.setPercent(80);
+  // Captured while the first hold's prefix is on screen.
+  const second = holdTabAwake("Uploading video", { document: page.doc });
+  first.release();
+  second.setPercent(3);
+  expect(page.doc.title).toBe("3% · Uploading video · Matches · Advantage");
+  second.release();
+  expect(page.doc.title).toBe("Matches · Advantage");
+});
+
+test("the upload paths release the hold on every exit", () => {
+  // Source-level: `uploadAndSubmitVideo` needs a live transfer to run. A cut
+  // that fails never reaches the transfer's `finally`, so the outer `catch`
+  // has to release too — beside each place the unload guard comes off.
+  const read = (file: string) =>
+    readFileSync(resolve(process.cwd(), file), "utf8");
+  const submit = read("src/lib/services/splitstep/submit-match-video.ts");
+  const guardOff =
+    'window.removeEventListener("beforeunload", handleBeforeUnload);';
+  const exits = submit.split(guardOff).slice(1);
+  expect(exits).toHaveLength(2);
+  for (const after of exits) {
+    expect(after.trimStart().startsWith("awake.release();")).toBe(true);
+  }
+  expect(submit.indexOf("const awake = holdTabAwake();")).toBeGreaterThan(
+    submit.indexOf('window.addEventListener("beforeunload"'),
+  );
+
+  const attach = read(
+    "src/components/dashboard/matches/match-video-attachment/use-attachment-flow.ts",
+  );
+  const hold = attach.indexOf("const awake = holdTabAwake();");
+  const release = attach.indexOf("} finally {\n          awake.release();");
+  expect(hold).toBeGreaterThan(-1);
+  expect(release).toBeGreaterThan(hold);
 });

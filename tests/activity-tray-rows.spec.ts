@@ -202,7 +202,7 @@ test("an upload_again row with no stopped percent keeps the ordinary failed row"
 });
 
 test("any other failure ignores a stopped percent and keeps the ordinary failed row", () => {
-  // A job that failed after its upload finished still carries a reading.
+  // The server never sets a reading on such a row; the tray ignores one anyway.
   const html = render([
     item(RETRY_ID, "A. Lee vs B. Cruz", {
       status: "failed",

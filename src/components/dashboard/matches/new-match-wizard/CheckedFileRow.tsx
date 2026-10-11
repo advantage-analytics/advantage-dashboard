@@ -103,6 +103,35 @@ export function videoFileFacts(
 }
 
 /**
+ * The same line for the video as it will be uploaded.
+ *
+ * The wizard cuts the file to the trim window before any bytes move, so once
+ * a window narrower than the clip is chosen the whole file's length and size
+ * describe something that is not sent. The line then leads with the kept
+ * length against the recording's, and leaves the size off: the cut's size is
+ * not known until it is made.
+ */
+export function videoUploadFacts(
+  probe: VideoProbeSummary | null,
+  size: string | undefined,
+  keptSeconds: number | null,
+): string | null {
+  if (!probe) return null;
+  const trimmed =
+    keptSeconds !== null &&
+    keptSeconds > 0 &&
+    keptSeconds < probe.durationSeconds - 1;
+  if (!trimmed) return videoFileFacts(probe, size);
+  return [
+    `${formatTimecode(keptSeconds)} of ${formatTimecode(probe.durationSeconds)}`,
+    formatResolution(probe.width, probe.height),
+    formatProbeFps(probe),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
  * A still from the file, as the row's 40px lead.
  *
  * Its own object URL rather than the trim step's: that one is created when the

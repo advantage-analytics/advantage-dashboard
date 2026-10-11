@@ -153,10 +153,11 @@ export function liveAnalysisPatch(
     uploadPercent,
     // Set on every patch, so a resubmission resets it to undefined instead of
     // leaving the last attempt's reading merged over a running upload.
-    stoppedUploadPercent: stoppedUploadPercent(
+    stoppedUploadPercent: stoppedUploadPercent({
       status,
-      row.upload_progress_percent,
-    ),
+      uploadProgressPercent: row.upload_progress_percent,
+      hasVideo: row.video_object_key != null,
+    }),
     // Without this the patch would blank the ETA's only input the moment the
     // first live event landed.
     startedAt: row.created_at,

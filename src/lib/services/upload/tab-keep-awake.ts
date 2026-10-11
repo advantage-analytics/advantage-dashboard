@@ -101,10 +101,17 @@ export function holdTabAwake(
   acquire();
   doc?.addEventListener("visibilitychange", onVisibility);
 
+  // Our own prefix, wherever it came from. A second hold in the same tab (two
+  // uploads at once) sees the first one's title; without this each would take
+  // the other's for the page's own and prefix it again on every write.
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ownPrefix = new RegExp(`^(?:\\d{1,3}% · ${escapedLabel}(?: · |$))+`);
+  const pageTitleOf = (title: string) => title.replace(ownPrefix, "");
+
   // The title the page itself last set. In-app navigation rewrites
   // `document.title` under a running upload, so it is re-read on every write
   // rather than captured once.
-  let pageTitle = doc?.title ?? "";
+  let pageTitle = pageTitleOf(doc?.title ?? "");
   let ownTitle: string | null = null;
   let lastPercent: number | null = null;
 
@@ -114,7 +121,7 @@ export function holdTabAwake(
       const floored = Math.max(0, Math.min(100, Math.floor(percent)));
       const navigated = ownTitle !== null && doc.title !== ownTitle;
       if (floored === lastPercent && !navigated) return;
-      if (ownTitle === null || navigated) pageTitle = doc.title;
+      if (ownTitle === null || navigated) pageTitle = pageTitleOf(doc.title);
       lastPercent = floored;
       ownTitle = pageTitle
         ? `${floored}% · ${label} · ${pageTitle}`

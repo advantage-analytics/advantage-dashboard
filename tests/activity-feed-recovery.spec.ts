@@ -165,12 +165,19 @@ test.describe("getActivityFeed carries each failed row's recovery class", () => 
       // Stopped during the cut — the heartbeat only ever wrote 0.
       row("at-zero", { video_object_key: null, upload_progress_percent: 0 }),
       row("never", { video_object_key: null, upload_progress_percent: null }),
-      // Failed after the upload finished: the reading is carried, and the
-      // tray ignores it because the class is not `upload_again`.
+      // Failed after the upload finished: a video was recorded, so nothing
+      // stopped part-way.
       row("after-upload", {
         error_code: "INTERNAL_ERROR",
         upload_progress_percent: 100,
       }),
+      // The transfer finished but the `uploaded` write was lost: no video on
+      // the row, and a heartbeat too close to the end to call a stop.
+      row("lost-write", {
+        video_object_key: null,
+        upload_progress_percent: 98,
+      }),
+      row("near-end", { video_object_key: null, upload_progress_percent: 97 }),
       row("running", {
         status: "uploading",
         video_object_key: null,
@@ -187,10 +194,11 @@ test.describe("getActivityFeed carries each failed row's recovery class", () => 
     expect(byMatch.get("stopped")?.uploadPercent).toBeUndefined();
     expect(byMatch.get("at-zero")?.stoppedUploadPercent).toBeUndefined();
     expect(byMatch.get("never")?.stoppedUploadPercent).toBeUndefined();
-    expect(byMatch.get("after-upload")).toMatchObject({
-      recovery: "retry",
-      stoppedUploadPercent: 100,
-    });
+    expect(byMatch.get("after-upload")?.recovery).toBe("retry");
+    expect(byMatch.get("after-upload")?.stoppedUploadPercent).toBeUndefined();
+    expect(byMatch.get("lost-write")?.recovery).toBe("upload_again");
+    expect(byMatch.get("lost-write")?.stoppedUploadPercent).toBeUndefined();
+    expect(byMatch.get("near-end")?.stoppedUploadPercent).toBe(97);
     expect(byMatch.get("running")?.uploadPercent).toBe(42);
     expect(byMatch.get("running")?.stoppedUploadPercent).toBeUndefined();
   });
