@@ -82,6 +82,7 @@ function parseNamePair(input: {
 }
 
 const NAME_ERROR = "Enter your first and last name.";
+const SAVE_ERROR = "We couldn't save that. Try again.";
 
 /**
  * The player's intake answers from screens 1.5 and 1.7, re-typed for the write.
@@ -211,7 +212,7 @@ export async function finishOnboarding(input: {
     if (error) {
       console.error("[onboarding] could not save", { message: error.message });
     }
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   // The dashboard layout read the null stamp when it bounced them here.
@@ -304,7 +305,7 @@ export async function finishGuardianOnboarding(input: {
         message: error.message,
       });
     }
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   revalidatePath("/dashboard", "layout");
@@ -336,7 +337,7 @@ export async function saveNameThenJoin(input: {
 
   const next = safeNext(typeof input?.next === "string" ? input.next : null);
   if (joinTokenFromPath(next) === null) {
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   const supabase = await createClient();
@@ -357,7 +358,7 @@ export async function saveNameThenJoin(input: {
         message: error.message,
       });
     }
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   redirect(next);
