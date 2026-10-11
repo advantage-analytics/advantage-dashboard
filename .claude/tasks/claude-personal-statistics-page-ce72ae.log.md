@@ -58,3 +58,9 @@ is the runner's. Newest entries at the bottom.
   3. Window Off: `trendSeries.rolling` is all-null (aligned), not `[]`, and the legend drops its "Rolling N" key.
   4. X axis is categorical on date, so same-day matches share a tick; dots at the Y extremes are half-clipped — a little domain padding in `plotOnly` mode would fix it.
   5. `statistics.ts` type-imports `KpiDetailPoint` from the client chart file; the type may belong somewhere shared.
+
+## T6 · By opponent type split card — blocked
+
+- **gate:** mechanical pass · completion needs-work
+- **reason:** Criterion 4 names one empty sentence, "Opponent hand, backhand and court haven't been recorded yet". The card shows that sentence only when no filtered match records any attribute; when attributes are recorded but no match measured the chosen statistic (always true for Return winners) it shows a second sentence, "No match here has measured <statistic> yet". It also prints the sentence with a curly apostrophe. The reviewer called both defensible but held the criterion as written. Criteria 1–3 were judged met; the `trend-card.tsx` edit (importing `formatMean` / `statisticConfig` moved into `statistics.ts`) was noted as minor, behaviour-neutral creep.
+- **stash:** 19fd5c58089ed07aabfe61ffc3f0d7c813b981ca
