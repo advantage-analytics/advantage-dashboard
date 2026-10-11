@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { HomeKpisPending } from "@/components/dashboard/loading/home-skeleton";
 import {
   PendingBar,
@@ -33,11 +34,15 @@ import {
  * constants the loaded page lays out with, so nothing moves when it lands.
  */
 
+/** The three selects, at the widths their triggers hold at rest. */
 const CONTROLS = [
-  { label: "Opponent", bar: "w-28" },
-  { label: "Opponent type", bar: "w-40" },
-  { label: "Matches", bar: "w-24" },
+  { label: "Opponent", box: "w-[168px]" },
+  { label: "Opponent type", box: "w-[200px]" },
+  { label: "Matches", box: "w-[168px]" },
 ];
+
+/** Off · 3 · 5 · 10. */
+const WINDOW_PILLS = 4;
 
 const TABLE_COLUMNS = ["Average", "Rolling", "Change", "Last 8", "Opponents"];
 
@@ -46,15 +51,19 @@ const SPLITS = [
   { title: "Backhand", rows: ["Two-handed", "One-handed"] },
 ];
 
-function ControlPending({ label, bar }: { label: string; bar: string }) {
+function ControlPending({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] leading-[1.4] text-[var(--ink-600)]">
         {label}
       </span>
-      <span className="flex h-[30px] items-center">
-        <PendingBar className={bar} />
-      </span>
+      {children}
     </div>
   );
 }
@@ -67,15 +76,21 @@ function StatisticsPendingBody() {
       </StatisticsTitleFrame>
 
       <div className={STATISTICS_STACK}>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
-            {CONTROLS.map((control) => (
-              <ControlPending key={control.label} {...control} />
-            ))}
-            <div className="flex-1" />
-            <ControlPending label="Rolling window, in matches" bar="w-8" />
-          </div>
-          <PendingBar className="h-[11px] w-28" />
+        {/* `StatisticsControls`' row: a 30px box per select, four pills. */}
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          {CONTROLS.map((control) => (
+            <ControlPending key={control.label} label={control.label}>
+              <PendingBar className={`h-[30px] rounded-[6px] ${control.box}`} />
+            </ControlPending>
+          ))}
+          <div className="flex-1" />
+          <ControlPending label="Rolling window, in matches">
+            <span className="flex h-[30px] w-[200px] items-center gap-1">
+              {Array.from({ length: WINDOW_PILLS }, (_, i) => (
+                <PendingBar key={i} className="h-[26px] flex-1 rounded-full" />
+              ))}
+            </span>
+          </ControlPending>
         </div>
 
         <HomeKpisPending />

@@ -1,18 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { STATISTIC_GROUPS } from "@/lib/data/statistics";
+import { capitalize } from "@/lib/utils";
 import {
   RegionCard,
   STATISTICS_SPLIT_GRID,
   STATISTICS_TABLE_GRID,
 } from "./statistics-layout";
 import { useStatistics } from "./statistics-provider";
-import {
-  CLEARED_STATISTICS_FILTERS,
-  hasStatisticsFilters,
-} from "./statistics-search";
 
 /**
  * The Statistics page's regions before their own components exist.
@@ -45,90 +41,6 @@ function Track({ className = "h-1" }: { className?: string }) {
       aria-hidden="true"
       className={`block rounded-[2px] bg-[var(--ink-100)] ${className}`}
     />
-  );
-}
-
-/* ── Controls ─────────────────────────────────────────────────────────────── */
-
-function Readout({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <dt className="text-[11px] leading-[1.4] text-[var(--ink-600)]">
-        {label}
-      </dt>
-      <dd className="flex h-[30px] items-center text-[12px] text-[var(--ink-900)]">
-        {children}
-      </dd>
-    </div>
-  );
-}
-
-const HAND_WORDS = { right: "Right-handed", left: "Left-handed" } as const;
-const BACKHAND_WORDS = {
-  "one-handed": "one-handed backhand",
-  "two-handed": "two-handed backhand",
-} as const;
-
-const titled = (value: string) =>
-  value.charAt(0).toUpperCase() + value.slice(1);
-
-/**
- * The controls row, read-only: what the URL is asking for, in the frame's
- * four positions, and how much of the season answers it.
- *
- * Text, not disabled fields — a control that cannot open has nothing to be.
- * The one live element is "Clear filters", because a link can filter this
- * page to nothing and there must be a way back that is not editing the URL.
- */
-export function StatisticsControlsPlaceholder() {
-  const { all, filtered, state, setState } = useStatistics();
-  const type = [
-    state.hand ? HAND_WORDS[state.hand] : "Any hand",
-    state.backhand ? BACKHAND_WORDS[state.backhand] : "any backhand",
-    state.courtType ? `${state.courtType} court` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const filteredOut = filtered.length === 0 && all.length > 0;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
-        <Readout label="Opponent">{state.opponent ?? "All opponents"}</Readout>
-        <Readout label="Opponent type">{type}</Readout>
-        <Readout label="Matches">
-          {state.matches === "all"
-            ? "All analyzed"
-            : `Last ${state.matches} analyzed`}
-        </Readout>
-        <div className="flex-1" />
-        <Readout label="Rolling window, in matches">
-          <span className="tabular">{state.window ?? "Off"}</span>
-        </Readout>
-      </dl>
-      {/* Day zero has no season to count against; the offer above says so. */}
-      {all.length > 0 && (
-        <p
-          role="status"
-          className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-[1.4] text-[var(--ink-500)]"
-        >
-          <span className="tabular">
-            {filteredOut
-              ? "No matches fit these filters."
-              : `${filtered.length} of ${matchCount(all.length)}`}
-          </span>
-          {hasStatisticsFilters(state) && (
-            <button
-              type="button"
-              onClick={() => setState(CLEARED_STATISTICS_FILTERS)}
-              className="rounded-sm font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)] focus-visible:text-[var(--blue-hover)] focus-visible:outline-none"
-            >
-              Clear filters
-            </button>
-          )}
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -192,7 +104,7 @@ export function StatisticsOpponentTypesPlaceholder() {
   const groups = [
     { title: "Hand", rows: ["Right-handed", "Left-handed"] },
     { title: "Backhand", rows: ["Two-handed", "One-handed"] },
-    { title: "Court", rows: courts.map(titled) },
+    { title: "Court", rows: courts.map(capitalize) },
   ].filter((group) => group.rows.length > 0);
 
   return (

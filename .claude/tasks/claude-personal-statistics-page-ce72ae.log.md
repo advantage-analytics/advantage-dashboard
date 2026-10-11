@@ -37,3 +37,13 @@ is the runner's. Newest entries at the bottom.
   4. Day zero offers only "View matches"; a true first-day player would be saved a hop by the standard "Send match video / Import instead" pair.
   5. `loading.tsx` always draws the skeleton; it could draw day zero on first paint the way Home and Matches do.
   6. The title row omits the frame's today's-date label; the column is `mx-auto`, following Home rather than the frame.
+
+## T4 · Statistics controls: Opponent, Opponent type, Matches, Rolling window — done
+
+- **gate:** mechanical pass · completion pass
+- **changed:** New `statistics-controls.tsx` (`StatisticsControls`, pure `opponentTypeSummary` / `opponentTypeSections`) replaces the controls placeholder in the `Filters` slot: Opponent and Matches `MenuSelect`s, the Matches filter panel under a sentence trigger, and an Off / 3 / 5 / 10 radiogroup; a status line with "Clear filters" shows only while a filter is on. `matches-filter-panel.tsx` gains one optional `trigger` render prop (unchanged without it). New shared `matches/opponent-type-phrase.ts`, now also used by `matches-page-content.tsx`. Skeleton reshaped to the real row. `tests/statistics-controls.spec.ts` added; one assertion in `tests/statistics-page-states.spec.ts` updated.
+- **follow-ups:**
+  1. Court is single-select (one `courtType` URL value) inside a checklist that is multi-select on the Matches page — worth an eyes-on look.
+  2. Rolling-window pills carry no literal check-dot glyph, though the task notes point at the `Radio` vocabulary.
+  3. A long opponent-type sentence truncates in the trigger with no tooltip; the trigger shows no engaged wash when a cut is applied.
+  4. Nothing here was looked at in a browser — trigger width, wrapping at narrow widths and the popover under the custom trigger are unverified.

@@ -80,6 +80,14 @@ interface MatchesFilterPanelProps<K extends string> {
   label?: string;
   /** The footer's noun, singular and plural. Matches by default. */
   noun?: { singular: string; plural: string };
+  /**
+   * A trigger of the caller's own, in place of the "Filters" button — for a
+   * panel that sits in a row of labelled selects and states its cut in its
+   * own words (Statistics › Opponent type). It is handed whether the panel is
+   * open; the popover adds the click and ARIA wiring, so the element must
+   * pass its props and ref on to a `<button>`.
+   */
+  trigger?: (state: { open: boolean }) => React.ReactElement;
 }
 
 const SEGMENT_ROW =
@@ -141,6 +149,7 @@ export function MatchesFilterPanel<K extends string>({
   totalCount,
   label = "Filter matches",
   noun = { singular: "match", plural: "matches" },
+  trigger,
 }: MatchesFilterPanelProps<K>): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
   // A panel with nothing in it is a button that does nothing when pressed.
@@ -151,7 +160,11 @@ export function MatchesFilterPanel<K extends string>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <FilterTrigger aria-expanded={open} engaged={engaged} />
+        {trigger ? (
+          trigger({ open })
+        ) : (
+          <FilterTrigger aria-expanded={open} engaged={engaged} />
+        )}
       </PopoverTrigger>
 
       <PopoverContent

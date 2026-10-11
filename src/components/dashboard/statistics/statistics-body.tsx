@@ -11,8 +11,8 @@ import {
   STATISTICS_TREND_ROW,
   STATISTICS_TREND_SLOT,
 } from "./statistics-layout";
+import { StatisticsControls } from "./statistics-controls";
 import {
-  StatisticsControlsPlaceholder,
   StatisticsOpponentTypesPlaceholder,
   StatisticsPointEndingsPlaceholder,
   StatisticsRallyLengthPlaceholder,
@@ -98,7 +98,7 @@ export function StatisticsBody({
     <div className={STATISTICS_STACK}>
       {/* slot: controls — Opponent · Opponent type · Matches · Rolling window */}
       <Slot label="Filters">
-        <StatisticsControlsPlaceholder />
+        <StatisticsControls />
       </Slot>
 
       <Slot label="Season averages">

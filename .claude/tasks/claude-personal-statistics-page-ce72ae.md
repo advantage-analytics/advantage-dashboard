@@ -61,7 +61,7 @@ ready).
 
 ## T4 · Statistics controls: Opponent, Opponent type, Matches, Rolling window
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/statistics/statistics-controls.tsx (new), src/components/dashboard/statistics/statistics-page-content.tsx, src/components/dashboard/matches/matches-filter-panel.tsx (reuse, not edit), src/components/dashboard/matches/matches-page-content.tsx (extract the hand/backhand phrase helper), tests/statistics-controls.spec.ts (new) — guesses

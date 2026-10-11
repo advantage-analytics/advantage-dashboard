@@ -42,6 +42,11 @@ import {
   type FilterOption,
   type FilterPanelSection,
 } from "./matches-filter-panel";
+import {
+  OPPONENT_BACKHAND_OPTIONS,
+  OPPONENT_HAND_OPTIONS,
+  opponentTypePhrase,
+} from "./opponent-type-phrase";
 import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 import { MATCHES_PAGE_SIZE, matchesListShape } from "./match-list-layout";
 import { rememberMatchesShape } from "./matches-shape-memory";
@@ -124,23 +129,14 @@ interface ActiveFilter {
 /**
  * Design 18a's three fixed 2-option facets — segmented, not checklists, so
  * they're single-select by construction (see `matches-filter-panel.tsx`).
- * `HAND_OPTIONS`/`BACKHAND_OPTIONS` also back `describeFilters`'s scouting
- * sentence below, which needs the same value → phrase mapping.
+ * Hand and Backhand's options, and the scouting sentence `describeFilters`
+ * builds from them, live in `opponent-type-phrase.ts`: the Statistics page
+ * offers the same two rows and reads them back in the same words.
  */
 const RESULT_OPTIONS: FilterOption[] = [
   { value: null, label: "All" },
   { value: "Won", label: "Won" },
   { value: "Loss", label: "Lost" },
-];
-const HAND_OPTIONS: FilterOption[] = [
-  { value: null, label: "Any" },
-  { value: "right", label: "Right" },
-  { value: "left", label: "Left" },
-];
-const BACKHAND_OPTIONS: FilterOption[] = [
-  { value: null, label: "Any" },
-  { value: "one-handed", label: "One-hand" },
-  { value: "two-handed", label: "Two-hand" },
 ];
 
 /** For every facet's stored value → its human label, used uniformly by `describeFilters`. */
@@ -163,17 +159,8 @@ function describeFilters(filters: ActiveFilter[]): string {
   const rest = filters.filter((f) => f.key !== "hand" && f.key !== "backhand");
   const parts: string[] = [];
 
-  if (hand && backhand) {
-    parts.push(
-      `${hand === "left" ? "Left" : "Right"}-handed opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
-    );
-  } else if (hand) {
-    parts.push(`${hand === "left" ? "Left" : "Right"}-handed opponents`);
-  } else if (backhand) {
-    parts.push(
-      `Opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`,
-    );
-  }
+  const opponentType = opponentTypePhrase(hand, backhand);
+  if (opponentType) parts.push(opponentType);
 
   parts.push(...rest.map((f) => displayValueFor(f.key, f.value)));
   return parts.join(" · ");
@@ -987,7 +974,7 @@ export function MatchesPageContent({
                 {
                   key: "hand" as FilterKey,
                   rowLabel: "Hand",
-                  options: HAND_OPTIONS,
+                  options: OPPONENT_HAND_OPTIONS,
                 },
               ]
             : []),
@@ -996,7 +983,7 @@ export function MatchesPageContent({
                 {
                   key: "backhand" as FilterKey,
                   rowLabel: "Backhand",
-                  options: BACKHAND_OPTIONS,
+                  options: OPPONENT_BACKHAND_OPTIONS,
                 },
               ]
             : []),

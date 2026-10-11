@@ -185,7 +185,8 @@ test.describe("a season that filters to nothing", () => {
   test("says so once, with a way back", () => {
     expect(count(html, "No matches fit these filters.")).toBe(1);
     expect(html).toContain(">Clear filters</button>");
-    expect(html).toContain("Any hand, one-handed backhand");
+    // The Opponent-type trigger states the cut in the Matches page's words.
+    expect(html).toContain("Opponents with a one-handed backhand");
   });
 
   test("keeps the page: every region, its labels, and a dash per value", () => {
