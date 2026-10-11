@@ -227,3 +227,19 @@ is the runner's. Newest entries at the bottom.
 3. `postgres` holds only ADMIN on `ask_reader`, so it cannot `create or replace` this function later without the grant → alter → revoke steps in the header.
 4. Run `rls-boundary-reviewer` over T1–T3 together, as T3's notes ask, before the PR.
 5. Three EXPECT lines in the header quote message text that differs from what was observed (same SQLSTATEs); cosmetic.
+
+## T9 · Ask orchestration: tags, reserve, plan, run, answer, save — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/lib/services/ask/tags.ts` adds `resolveAskTags()`, which re-resolves each tag against the viewer's own tag options and takes every name from those rows. `src/lib/services/ask/ask.ts` adds `reserveAskQuestion()` and the generator `askQuestion()`, which takes its database client, model and clock as arguments and yields planning → guard → query → answer → save → sources → done, with one fed-back retry, a release on every failure path and on an abandoned stream, mock mode with no reservation, and the fixed no-advice sentence appended when the plan flags advice. Also `parsePlanReply()` and `conversationTurnsFromMessages()`. `tests/ask-orchestration.spec.ts` pins 37 cases offline.
+
+**follow-ups:**
+
+1. Deviation the reviewer accepted: the criterion says "one function … reserve → …"; reserving is a separate exported `reserveAskQuestion()` so the route (T10) can answer 429 before a stream opens, and `askQuestion()` takes the reservation as an argument.
+2. T10 wiring: `model = { configured: isLLMConfigured(), stream: (s, m) => getLLMStream(s, m, createLLMObservabilityContext(userId)) }`, `now: () => new Date()`. On `ask_limit_reached` with a null `detail`, read `ask_quota()` for the 429 body.
+3. A failed `ask_save_exchange` ends as `answer_failed` and releases the reservation — an unsaved answer is not kept or charged.
+4. A non-empty scope whose query returns zero rows reaches the answer step and then fails as `answer_failed`; consider treating zero rows as `no_data` after sampling live output.
+5. The `cannot_answer` event carries the model's own sentence, which the client does not show (T14 renders fixed copy per code).
+6. Database error messages are fed back to the planner verbatim; cap their length if they could ever carry row data.
+7. `ask.match_stats` is still unreadable through `ask_run_query` live, so mock mode and statistics questions fail against the real database until that view is fixed.

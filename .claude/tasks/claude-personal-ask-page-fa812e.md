@@ -123,7 +123,7 @@ ready).
 
 ## T9 · Ask orchestration: tags, reserve, plan, run, answer, save
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T3, T4, T5, T6, T7, T8
 - **files:** src/lib/services/ask/ask.ts (new), src/lib/services/ask/tags.ts (new), tests/ask-orchestration.spec.ts (new) — a guess
