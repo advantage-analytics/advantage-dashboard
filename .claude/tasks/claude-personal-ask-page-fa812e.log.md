@@ -50,3 +50,15 @@ is the runner's. Newest entries at the bottom.
 1. `ask_save_exchange` takes the conversation title from `p_question->>'text'` — T9 must keep that key name in the question jsonb.
 2. `ask_save_exchange` raises `42501` for a conversation that is not the caller's, and `ask_delete_conversation` returns `false` — T9/T11/T15 should branch on those.
 3. `LEFTOVER_REFERENCES` in `tests/fixtures/live-db-pool.ts` could list `ask_conversations` and `ask_messages`.
+
+## T6 · SQL guard for model-written queries — done
+
+**gate:** mechanical PASS; completion review `VERDICT: pass`.
+
+**changed:** `src/lib/services/ask/sql-guard.ts` adds `checkAskSql({ scopeSql, sql })`, a pure guard built on `pgsql-ast-parser` (pure JavaScript, so `next.config.ts` is unchanged). It walks the AST against an allowlist of node kinds, so anything that is not a single read-only `SELECT` is refused by default; relations are limited to the four `ask` views, the query's own CTEs, and `scope` in `sql` only; functions to the exported `ASK_SQL_FUNCTION_ALLOWLIST`. `tests/ask-sql-guard.spec.ts` pins 22 accept and refuse cases.
+
+**follow-ups:**
+
+1. Unqualified view names are accepted on the assumption that `ask_run_query`'s `search_path` is `ask, pg_catalog`; if `public` ever enters it, require `ask.`-qualified names.
+2. `intersect` / `except` do not parse in `pgsql-ast-parser` and are refused as unparseable.
+3. The function allowlist is a judgement call; trim or extend it from refusals seen in sampled model output.

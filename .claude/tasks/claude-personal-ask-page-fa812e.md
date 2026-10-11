@@ -84,7 +84,7 @@ ready).
 
 ## T6 · SQL guard for model-written queries
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/services/ask/sql-guard.ts (new), tests/ask-sql-guard.spec.ts (new), package.json, next.config.ts — a guess
 - **done when:**
