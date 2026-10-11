@@ -94,12 +94,12 @@ export function LabelFlagSummary({
     ? [...openMarks, scoreStop]
     : openMarks;
   const count = stops.length;
-  const openPoints = new Set(stops.map((f) => f.pointId)).size;
+  // Points carrying an open mark: the score stop's point carries none.
+  const openPoints = new Set(openMarks.map((f) => f.pointId)).size;
   const next = stepFlag(stops, points, fromPointId, 1);
   const prev = stepFlag(stops, points, fromPointId, -1);
   const groups = flagGroups(openMarks);
   const ink = ROW_INK[tone];
-  const dot = score !== null && scoreStop === null;
 
   const go = (pointId: string) => {
     setOpen(false);
@@ -216,18 +216,9 @@ export function LabelFlagSummary({
             aria-haspopup="menu"
             aria-expanded={open}
             className={cn(
-              "relative grid h-6 cursor-pointer place-items-center rounded-r-[6px] text-white/45 transition-colors duration-150 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none aria-expanded:bg-white/[0.08] aria-expanded:text-white",
-              // Without its chip (a caller that passes no stop), the score's
-              // dot rides beside the chevron.
-              dot ? "w-[26px] grid-flow-col gap-[3px]" : "w-[18px]",
+              "relative grid h-6 w-[18px] cursor-pointer place-items-center rounded-r-[6px] text-white/45 transition-colors duration-150 hover:bg-white/[0.08] hover:text-white focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none aria-expanded:bg-white/[0.08] aria-expanded:text-white",
             )}
           >
-            {dot ? (
-              <span
-                aria-hidden="true"
-                className="size-1.5 rounded-full bg-[var(--rail-amber)]"
-              />
-            ) : null}
             <ChevronDown
               className="size-3"
               strokeWidth={1.8}
