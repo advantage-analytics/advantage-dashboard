@@ -37,15 +37,22 @@ test.describe("the catalogue", () => {
   test("agrees with the card on format and on which rows read lower-is-better", () => {
     const configs = H2H_GROUPS.flatMap((g) => g.configs);
     ALL.forEach((statistic, i) => {
-      expect(statistic.format, statistic.label).toBe(
-        configs[i].isPercentage ? "percent" : "count",
-      );
+      // The one deliberate departure: this page shows total points won as a
+      // percentage of the points played, the card as a count.
+      if (statistic.key !== "totalPointsWon") {
+        expect(statistic.format, statistic.label).toBe(
+          configs[i].isPercentage ? "percent" : "count",
+        );
+      }
       expect(statistic.lowerIsBetter, statistic.label).toBe(
         configs[i].lowerIsBetter === true,
       );
     });
     expect(new Set(ALL.map((statistic) => statistic.key)).size).toBe(15);
     expect(ALL.map((statistic) => statistic.key)).toContain("returnWinners");
+    expect(
+      ALL.find((statistic) => statistic.key === "totalPointsWon")?.format,
+    ).toBe("percent");
   });
 });
 

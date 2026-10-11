@@ -47,10 +47,12 @@ export interface DbPersonalMatch {
   duration: number | null;
   opponent_hand: string | null;
   opponent_backhand: string | null;
+  /** `"splitstep"` for an Advantage Intelligence (video-derived) match. */
+  source_provider: string | null;
 }
 
 const MATCH_COLUMNS =
-  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand";
+  "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand, source_provider";
 
 /**
  * `STAT_COLUMNS` is the season strip's list — every `PLAYER_MEASURES` rate
@@ -65,7 +67,31 @@ const EXTRA_STAT_COLUMNS = [
   "avg_rally_length",
 ];
 
-const PERSONAL_STAT_COLUMNS = [STAT_COLUMNS, ...EXTRA_STAT_COLUMNS].join(", ");
+/**
+ * What the Statistics page's catalogue (`statistics.ts`) reads beyond the two
+ * lists above: the made/attempts behind break points saved, net points won
+ * and total points won, and the two return rates.
+ */
+const STATISTICS_STAT_COLUMNS = [
+  "net_points_won",
+  "net_points_appearances",
+  "total_points",
+  "total_points_won",
+  "break_points_faced",
+  "break_points_saved",
+  "first_return_won_pct",
+  "second_return_won_pct",
+];
+
+// A Set because the lists overlap (the return rates are `PLAYER_MEASURES`
+// columns too) and a column named twice is a column PostgREST returns twice.
+const PERSONAL_STAT_COLUMNS = [
+  ...new Set([
+    ...STAT_COLUMNS.split(", "),
+    ...EXTRA_STAT_COLUMNS,
+    ...STATISTICS_STAT_COLUMNS,
+  ]),
+].join(", ");
 
 export interface PersonalMatchData {
   /** Newest first. Empty when the account has no personal match. */
