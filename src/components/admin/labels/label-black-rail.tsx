@@ -403,7 +403,9 @@ export function LabelBlackRail({
                         }
                         onFindGap={editable ? onFindGap : undefined}
                         onClearEnteredScore={
-                          editable && finalScore !== null
+                          // Only where the stored score is the one held:
+                          // a match record outranks it (`enteredScore`).
+                          editable && finalScore !== null && !matchScore
                             ? onClearEnteredScore
                             : undefined
                         }
