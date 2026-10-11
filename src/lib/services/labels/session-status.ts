@@ -87,7 +87,8 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     // The set's unfinished and run-over games are listed above already.
     if (mismatch) {
       warnings.push(
-        `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}, so publishing will refuse`,
+        // Marks off, the publish takes the score as it is (apply-session.ts).
+        `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? ", so publishing will refuse" : ""}`,
       );
     }
   }

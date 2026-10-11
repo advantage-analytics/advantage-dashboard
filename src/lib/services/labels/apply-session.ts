@@ -472,7 +472,12 @@ export async function publishPlanned(params: {
   };
 }
 
-/** Load, plan and publish one session. */
+/**
+ * Load, plan and publish one session. A session labelled with marks off is
+ * published whatever its score: it draws no score flag and cannot be told the
+ * video ends early (session-fields-session.ts), so a refusal there would have
+ * no answer the console can give.
+ */
 export async function publishLabelSession(params: {
   db: AdminClient;
   sessionId: string;
@@ -484,6 +489,6 @@ export async function publishLabelSession(params: {
     db: params.db,
     context,
     plan: planApply(context),
-    acceptScore: params.acceptScore,
+    acceptScore: params.acceptScore || !context.session.marksEnabled,
   });
 }
