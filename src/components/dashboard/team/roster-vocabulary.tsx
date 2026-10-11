@@ -97,11 +97,7 @@ export function resendInput(invite: {
   email: string;
   role: MemberRole;
   playerId: string | null;
-}): {
-  email: string;
-  role: Exclude<MemberRole, "owner">;
-  playerId: string | null;
-} {
+}) {
   return {
     email: invite.email,
     role: resendRole(invite.role),
