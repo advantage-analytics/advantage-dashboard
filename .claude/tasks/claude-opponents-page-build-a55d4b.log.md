@@ -33,3 +33,17 @@ is the runner's. Newest entries at the bottom.
 5. Give `WidgetBoundary`'s retry state the page padding on this route.
 6. Add an offline spec for `opponent-style.ts`.
 7. Confirm the 822px card floor and form-tick alignment at /pr-check eyes-on.
+
+## T3 · Opponents view chips, sort menu and filter panel — done
+
+**gate:** mechanical pass (lint + typecheck clean; full suite 5,837 passed, 4 failed under a machine load average of 20–65, none reachable from this diff: `film-playback-refresh.spec.ts:1422` and `:1455`, `schedule-drawer-actions.spec.ts:270`, `viz-fullscreen-filters-browser.spec.ts:317`. Repeated alone ×3 at load ~10: schedule-drawer and viz-fullscreen 3/3 each variant; the two film T16 tests passed 2 of 3 each, the miss a 30 s timeout — intermittent, in the file already recorded as a load-only flake. Counted as passed on that basis; worth a clean re-run at /pr-check) · completion pass · widget-states audit: loading ✓ (skeleton and day zero keep the inert toolbar), empty ✓ (`TableEmptyBody` under the kept header row), error ✓
+
+**changed:** New `src/components/dashboard/opponents/opponents-views.ts` (pure chip / facet / sort predicates, labels, `applyOpponentCut`, strip and empty-sentence copy) and `tests/opponents-views.spec.ts` (29 tests). `opponents-toolbar.tsx` gains the live `OpponentsToolbar` (four chips via the shared `Chip`, `SortTrigger` + `FloatMenu`, `FilterTrigger` through the shared `MatchesFilterPanel`); `OpponentsToolbarStatic` stays inert for the skeleton and day zero. `opponents-page-content.tsx` owns the cut state, applied strip, empty body and footer count, and exposes `visibleOpponents` for T4. `opponents-table.tsx` gains an `empty` slot. Deviations kept: the filter panel applies live and closes on outside click / Esc (shared panel, no Apply button) rather than "on apply"; panel and strip "N of M" read against the current chip's set; chips use `schedule/static/chip.tsx`; empty-body icon is the Opponents nav icon. Not opened in a browser.
+
+**follow-ups:**
+
+1. Eyes-on: filter panel placement on a right-side trigger, the strip, and the empty body inside the 822px card.
+2. One constant for the Opponents nav icon and the empty-body icon.
+3. Decide whether the cut (chip, filter, sort) should survive a reload via URL params.
+4. If a literal close-on-apply is wanted, add an opt-in to `MatchesFilterPanel` as its own task — it affects Matches and Schedule.
+5. The two film T16 tests (`film-playback-refresh.spec.ts:1422`, `:1455`) time out intermittently even when run alone on a busy machine — add them to the known-flake notes or harden them.

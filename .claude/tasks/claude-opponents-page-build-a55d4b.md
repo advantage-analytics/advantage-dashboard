@@ -47,7 +47,7 @@ ready).
 
 ## T3 · Opponents view chips, sort menu and filter panel
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/opponents/opponents-page-content.tsx`, new `opponents-view-chips.tsx` (or reuse the 26px pill anatomy from `matches/lifecycle-chips.tsx`), new `opponents-filter-panel.tsx`; reads `shared/list-toolbar-trigger.tsx` (`FilterTrigger`/`SortTrigger`), `ui/float-menu.tsx`, `matches/matches-filter-panel.tsx` (panel + applied-strip pattern), `shared/table-empty-body.tsx`

@@ -37,10 +37,19 @@ const FORM_SLOTS = 5;
 export function OpponentsTable({
   opponents,
   selectedKey,
+  empty,
 }: {
+  /** The rows to draw, already chipped, filtered and sorted by the page. */
   opponents: readonly PersonalOpponent[];
   /** `PersonalOpponent.key` of the row the drawer is showing, if any. */
   selectedKey: string | null;
+  /**
+   * What the body shows when a chip or filter leaves no rows — a
+   * `TableEmptyBody`. It is drawn under the column headers: the card and its
+   * labels stay, so an empty cut never swaps the table for a line on the
+   * bare page.
+   */
+  empty?: React.ReactNode;
 }) {
   return (
     <section
@@ -62,15 +71,19 @@ export function OpponentsTable({
             </span>
           ))}
         </div>
-        <div>
-          {opponents.map((opponent) => (
-            <OpponentRow
-              key={opponent.key}
-              opponent={opponent}
-              selected={opponent.key === selectedKey}
-            />
-          ))}
-        </div>
+        {opponents.length === 0 ? (
+          empty
+        ) : (
+          <div>
+            {opponents.map((opponent) => (
+              <OpponentRow
+                key={opponent.key}
+                opponent={opponent}
+                selected={opponent.key === selectedKey}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
