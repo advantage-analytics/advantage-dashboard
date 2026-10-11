@@ -263,22 +263,32 @@ and what the trailing action does (navigate vs mutate). Personal workspaces
 render neither — no schedule, no slot to state.
 
 **`TermMark`** — the mark before a row in a short list of facts a person is
-asked to read before they commit: the join flow's sharing terms
-(`components/join/join-terms.tsx`) and the guardian consent acknowledgments
+asked to read before they commit: the guardian consent acknowledgments
 (`app/onboarding/onboarding-flow.tsx`). A Lucide `Check` at 14px, stroke 1.5,
 `mt-[3px]` against `text-body-sm`, `aria-hidden` — the sentence carries the
 meaning, the glyph only separates the rows. It replaced a 2 × 12px bar, which
 read as a rendering artefact rather than a mark.
 
 Colour is the rule, not the glyph. `--blue` marks a row where something is
-gained or granted and `--ink-500` a row where nothing moves — that pairing is
-what makes the sharing terms' two columns readable as "they gain this" versus
-"you keep this" without a second sentence of policy. **Never `--blue` in a
-list that sits above a checkbox**: `AuthCheckbox` fills Signal Blue with a
+gained or granted and `--ink-500` a row where nothing moves. **Never `--blue`
+in a list that sits above a checkbox**: `AuthCheckbox` fills Signal Blue with a
 white check when set, and blue marks above it stack four blue checkmarks in
 one column with only the last one meaning anything. The guardian
 acknowledgments are ink for exactly that reason. Never `--ink-300` — a stroked
 glyph at that weight disappears.
+
+**Short labels are rows; full sentences are prose.** The join flow's sharing
+terms (`components/join/join-terms.tsx`) were six check-marked sentences and
+are now two short paragraphs under their eyebrows — "Your coaches will see",
+"Stays yours" — in the grey side panel beside the Join button
+(`JoinTermsPanel`, 2026-10-11). A row list earns its marks when each row is a
+label a person can scan; six sentences in a list read as fine print on the one
+screen where the text has to be read. The same rule that makes a confirm's
+cost prose rather than a bulleted tub.
+_Supersedes: "the join flow's sharing terms (`components/join/join-terms.tsx`)
+and the guardian consent acknowledgments" as the two users of `TermMark`, and
+"that pairing is what makes the sharing terms' two columns readable as 'they
+gain this' versus 'you keep this' without a second sentence of policy"._
 
 Not `CircleCheck`, which is `ResultMark`'s and means a match outcome. Not the
 claim flow's `ArrowRight` (`components/claim/sharing-rows.tsx`), which marks
