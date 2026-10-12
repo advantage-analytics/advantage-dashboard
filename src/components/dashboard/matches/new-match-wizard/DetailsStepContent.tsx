@@ -1289,15 +1289,20 @@ function DetailsStepContentImpl({
       formData.opponentTeamSource,
     ],
   );
+  // Only where the "their team" field is on screen — a team workspace, not the
+  // admin console. Anywhere else a remembered team would be written to the
+  // match with no field to see it in or clear it from.
+  const teamFieldShown = workspaceKind === "team" && !admin;
   const rememberTeam = useCallback(
     (seen: OpponentPlayed | undefined) => {
+      if (!teamFieldShown) return;
       const team = opponentTeamFromHistory(currentTeam, seen);
       if (!team) return;
       onInputChange("opponentTeamProgram", team.opponentTeamProgram);
       onInputChange("opponentTeamSchool", team.opponentTeamSchool);
       onInputChange("opponentTeamSource", team.opponentTeamSource);
     },
-    [currentTeam, onInputChange],
+    [currentTeam, onInputChange, teamFieldShown],
   );
 
   // What the "their team" line under the opponent's name reads back. The
@@ -1974,7 +1979,7 @@ function DetailsStepContentImpl({
                 {/* Their team — optional, a team workspace's question only,
                     and under the name like everything else this row says
                     beyond its three answers. */}
-                {workspaceKind === "team" && !admin && (
+                {teamFieldShown && (
                   <OpponentTeamField
                     className="mt-1"
                     program={teamFromLine ? null : formData.opponentTeamProgram}
