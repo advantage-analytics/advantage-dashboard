@@ -316,7 +316,7 @@ test.describe("match_share_links RLS (live)", () => {
       (
         await staff.client
           .from("match_share_links")
-          .select("include_visualizations, include_video")
+          .select("include_visualizations, include_video, video_shared_by")
           .eq("match_id", matchId!)
           .single()
       ).data;
@@ -351,9 +351,13 @@ test.describe("match_share_links RLS (live)", () => {
       );
     expect((await read())?.include_video).toBe(false);
 
-    // Staff can.
+    // Staff can — and the link records WHO did, which is the person the
+    // public page re-checks (not whoever made the link).
     expect((await setVideo(staff, true)).error).toBeNull();
-    expect((await read())?.include_video).toBe(true);
+    expect(await read()).toMatchObject({
+      include_video: true,
+      video_shared_by: staff.userId,
+    });
 
     // With the video on, a player can still change the link's other option —
     // the reason `include_video` is not policed in the UPDATE policy.
@@ -365,11 +369,15 @@ test.describe("match_share_links RLS (live)", () => {
     expect(await read()).toEqual({
       include_visualizations: true,
       include_video: true,
+      video_shared_by: staff.userId,
     });
 
     // And can take the video of their own match back down.
     expect((await setVideo(seated, false)).error).toBeNull();
-    expect((await read())?.include_video).toBe(false);
+    expect(await read()).toMatchObject({
+      include_video: false,
+      video_shared_by: null,
+    });
 
     // The program's setting: a player cannot move it, staff can, and once it
     // is on a player who may share the match may add the video.

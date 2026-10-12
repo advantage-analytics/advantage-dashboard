@@ -507,7 +507,7 @@ export function SharePopoverPanel({
               aria-checked={false}
               aria-disabled="true"
               tabIndex={0}
-              className="flex items-start gap-2 rounded-[var(--radius-cell)]"
+              className="flex items-start gap-2 rounded-[var(--radius-cell)] outline-none focus-visible:shadow-[var(--focus-ring)]"
             >
               <CheckboxMark checked={false} disabled className="mt-px" />
               <span className="flex min-w-0 flex-col gap-px">
@@ -567,7 +567,11 @@ export function SharePopoverPanel({
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
-    note = "A link shows the video only if it is added.";
+    // Only a match with a video has anything to say about it; the sentence
+    // read as a riddle on one without ("added" to what?).
+    note = hasVideo
+      ? "The video is not on a link unless you add it."
+      : "A link shows the match report only.";
   }
 
   return (

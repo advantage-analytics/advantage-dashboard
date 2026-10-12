@@ -9,8 +9,7 @@ import { shareScopeLabel } from "@/lib/data/match-share-format";
  * One block beside one mark: the sharer's avatar, then two lines —
  * "Shared from Advantage by <name>" over "<date> · Statistics only" ("No video"
  * when the link carries the visualizations too, "With video" when the video
- * is on the page). The
- * scope sits on the date line because it is a fact about the share, like
+ * is on the page). The scope sits on the date line because it is a fact about the share, like
  * the date, not a caption about the person. It was a separate lock line
  * under the block; indented and wrapping at the rail's 300px, it read as a
  * second group hanging off the sharer. (Design canvas "Shared Match Report

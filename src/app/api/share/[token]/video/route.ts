@@ -19,11 +19,11 @@ import { matchVideoError } from "@/lib/match-video/types";
  * `GET /api/matches/[matchId]/video` — but that route asks the caller's
  * session whether they can see the match, and a reader with a link has no
  * session. Here the TOKEN is the question: `sharedVideoMatchId` answers with
- * a match only for a live link whose maker ticked the video and may still
- * share it, and everything below that is the same ladder (`respondWithPlayback`).
+ * a match only for a live link whose video was added by someone who may
+ * still share it, and everything below that is the same ladder (`respondWithPlayback`).
  *
  * One 404 for every refusal — a bad token, a link turned off, a link without
- * the video, a maker who may no longer share it — so the route cannot be used
+ * the video, a sharer who may no longer share it — so the route cannot be used
  * to learn which. No CORS header and `no-store`, as on the dashboard's route;
  * nothing here writes, and watching through a link does not record a view.
  *

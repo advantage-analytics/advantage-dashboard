@@ -73,30 +73,39 @@ export function realTournamentName(
 
 /**
  * May a public link show the match's video right now? Asked every time the
- * link is read, about the person who MADE it — the database asked the same
- * question of them when they ticked the box (`can_share_match_video`), and
- * this is what takes the video back off the page when the answer changes: a
- * program that turns "players can share video" off, a coach who leaves the
- * staff, an account that is gone.
+ * link is read, about the person who ADDED the video
+ * (`match_share_links.video_shared_by`) — the database asked the same
+ * question of them when they ticked the box, and this is its twin
+ * (`can_share_match_video`), so the answer changing is what takes the video
+ * back off the page: a program that turns "players can share video" off, a
+ * coach who leaves the staff, a player no longer on the match, an account
+ * that is gone.
  *
- *   - a maker who no longer exists → never;
- *   - a personal match → yes, it was theirs to share;
- *   - a team match → the maker is on the program's staff today, or the
- *     program lets its players share video.
+ *   - nobody on record → never;
+ *   - they may no longer share the match at all (`can_share_match`: its
+ *     uploader, a seated player, or the program's staff) → no;
+ *   - a personal match → yes;
+ *   - a team match → they are on the program's staff today, or the program
+ *     lets its players share video.
  */
 export function sharedVideoAllowed(link: {
-  makerId: string | null;
+  /** Who added the video; null when their account is gone. */
+  sharerId: string | null;
   programId: string | null;
-  /** The maker's role on the match's program today; null when not a member. */
-  makerRole: string | null;
+  /** The sharer's role on the match's program today; null when not a member. */
+  sharerRole: string | null;
+  /** The sharer uploaded the match or holds one of its two seats. */
+  sharerOnMatch: boolean;
   playersCanShareVideo: boolean;
 }): boolean {
-  if (!link.makerId) return false;
-  if (!link.programId) return true;
+  if (!link.sharerId) return false;
   const isStaff =
-    link.makerRole === "owner" ||
-    link.makerRole === "coach" ||
-    link.makerRole === "staff";
+    link.programId !== null &&
+    (link.sharerRole === "owner" ||
+      link.sharerRole === "coach" ||
+      link.sharerRole === "staff");
+  if (!link.sharerOnMatch && !isStaff) return false;
+  if (!link.programId) return true;
   return isStaff || link.playersCanShareVideo;
 }
 

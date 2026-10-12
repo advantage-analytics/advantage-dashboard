@@ -227,7 +227,9 @@ function FilmRoom({
     setFilmRemainder,
   } = useMatchFilters();
   const [savedOnly, setSavedOnly] = useState<boolean>(
-    () => parseLegacyFilmQuery(searchParams)?.savedOnly ?? false,
+    // Never on a shared link: its reader has no bookmarks, so a pasted
+    // `?saved` would open on "You haven't saved a point yet".
+    () => !readOnly && (parseLegacyFilmQuery(searchParams)?.savedOnly ?? false),
   );
   // The pure input shape the list's rules take.
   const local = useMemo<FilmLocalFilters>(

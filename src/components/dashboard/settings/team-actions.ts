@@ -793,7 +793,7 @@ export async function setPlayersCanUpload(
  * writes the audit row. Nothing here re-derives that rule.
  *
  * Turning it off does not edit any link: the public page asks again on every
- * read whether the link's maker may still share the video.
+ * read whether whoever added the video may still share it.
  */
 export async function setPlayersCanShareVideo(
   programId: string,

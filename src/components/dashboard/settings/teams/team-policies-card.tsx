@@ -100,6 +100,13 @@ export function TeamPoliciesCard({
   // Optimistic: the switch moves at once and steps back, with the reason, if
   // the save is refused.
   const [shareVideo, setShareVideo] = useState(playersCanShareVideo);
+  // A fresh server render (this save's own revalidation, another staff
+  // member's change) hands down the current value; follow it.
+  const [seeded, setSeeded] = useState(playersCanShareVideo);
+  if (seeded !== playersCanShareVideo) {
+    setSeeded(playersCanShareVideo);
+    setShareVideo(playersCanShareVideo);
+  }
   const [shareVideoError, setShareVideoError] = useState<string | null>(null);
   const [savingShareVideo, startShareVideo] = useTransition();
 
