@@ -28,7 +28,8 @@ function strictStrings<K extends string>(
 const refusals: Record<string, string> = {
   "admin-required": "Administrator access is required.",
   "program-not-found": "That program no longer exists.",
-  "program-inactive": "Analysis requires an active program.",
+  "program-inactive":
+    "This program is suspended, so analysis can't be attached for it.",
   "match-not-found": "That match no longer exists.",
   "wrong-program": "That match belongs to another program.",
   "processing-in-flight": "This match already has analysis in progress.",

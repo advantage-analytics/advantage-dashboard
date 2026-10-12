@@ -65,6 +65,35 @@ test("console wizard consumes target roster and allowance without membership rea
   expect(mode.operationId).toBe("11111111-1111-4111-8111-111111111111");
 });
 
+// The console uploads for teams nobody has approved yet; the dashboard's
+// approval gate is not its rule. Only a suspension still refuses.
+for (const [status, ok] of [
+  ["unclaimed", true],
+  ["claim_pending", true],
+  ["suspended", false],
+] as const) {
+  test(`console video upload for a ${status} team is ${ok ? "eligible" : "refused"}`, async () => {
+    const mode = adminMode();
+    (mode.context.workspace as { programStatus: string }).programStatus =
+      status;
+    const h = uploadWizardHarness({
+      team: true,
+      admin: mode,
+      workspace: { programStatus: status, canSubmitVideo: ok },
+      props: { initialProvider: "splitstep" },
+    });
+    await h.flush();
+    h.current.whoPlayed.choose({
+      kind: "roster",
+      playerId: "athlete",
+      name: "Target athlete",
+    });
+    await h.flush();
+    expect(h.current.eligibility.ok).toBe(ok);
+    expect(h.programStatusCallCount).toBe(0);
+  });
+}
+
 test("file admission retains exact operation IDs across queued retries and never inserts browser matches", async () => {
   const mode = adminMode();
   const requests: globalThis.FormData[] = [];
