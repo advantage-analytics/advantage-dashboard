@@ -73,3 +73,14 @@ is the runner's. Newest entries at the bottom.
 
 1. `AGENTS.md`'s Routes section still lists `/dashboard/opponents` among the pages that render `ComingSoonPage` — now true for the team workspace only.
 2. The remaining comment lines above `TEAM_NAV` about the Opponents stub want a pass once the team page is built.
+
+## T6 · Migration: opponent_program_id + opponent_school on matches, grants, applied live — done
+
+**gate:** mechanical pass · completion pass (checked against the live database)
+
+**changed:** New `supabase/migrations/20261012003309_matches_opponent_program.sql`, applied live as version `20261012003309`: `matches.opponent_program_id uuid null references programs(id) on delete set null`, `matches.opponent_school text null`, CHECK that at most one is set, partial index on `opponent_program_id`, column grants to `authenticated` and `service_role`, two column comments. No policy changed (four policies identical before and after); 0 rows carry either column. Deviation: the task's reason for the column grants was false — `matches` has a table-wide grant to `authenticated` and no real column ACLs (only `users` has them), so the grants are redundant; they were kept and the file's comment says so. No generated Supabase types file exists in the repo, so none was updated.
+
+**follow-ups:**
+
+1. AGENTS.md / memory: "every new column needs a column grant" is true for `users` only (the one table with column-scoped grants).
+2. `program_event_entries.opponent_program_id` and the new `matches` pair can disagree for a match with an `event_entry_id` (0 such matches today) — decide which wins, or backfill.

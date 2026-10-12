@@ -91,7 +91,7 @@ ready).
 
 ## T6 · Migration: opponent_program_id + opponent_school on matches, grants, applied live
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) new `supabase/migrations/<live-version>_matches_opponent_program.sql`; read `supabase/migrations/20261001184305_function_default_privileges_no_anon.sql` and the newest files for house style
 - **done when:**
