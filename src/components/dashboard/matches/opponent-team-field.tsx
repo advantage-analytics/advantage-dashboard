@@ -103,7 +103,6 @@ export function OpponentTeamField({
   const [term, setTerm] = useState("");
   const [active, setActive] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   // Set when the search closes by Esc or a pick — the input the keyboard was
   // in is gone, so focus goes back to the link. Left alone on blur: focus
   // already went where the person sent it.
@@ -186,7 +185,6 @@ export function OpponentTeamField({
                   aria-hidden="true"
                 />
                 <input
-                  ref={inputRef}
                   autoFocus
                   value={term}
                   placeholder="Search schools"

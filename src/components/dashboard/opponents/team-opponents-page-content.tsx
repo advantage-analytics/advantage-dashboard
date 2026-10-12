@@ -6,6 +6,7 @@ import { useRowSelection } from "@/components/dashboard/schedule/use-row-selecti
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { TeamOpponentsGrouping } from "@/lib/data/team-opponents";
 import { cn } from "@/lib/utils";
+import { opponentNameButton } from "./opponent-cells";
 import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { opponentRowId } from "./opponents-table";
 import {
@@ -214,12 +215,4 @@ export function TeamOpponentsPageContent({
       )}
     </div>
   );
-}
-
-/**
- * Where focus returns when the drawer closes: the name `<button>`, the first
- * button in the row — the row `<div>` itself is not focusable.
- */
-function opponentNameButton(row: HTMLElement): HTMLElement | null {
-  return row.querySelector("button");
 }

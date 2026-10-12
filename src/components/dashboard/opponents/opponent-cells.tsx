@@ -108,3 +108,11 @@ export function OpponentLastMatchCell({
     </span>
   );
 }
+
+/**
+ * Where focus returns when the drawer closes: the name `<button>`, the row's
+ * first button — the row `<div>` itself is not focusable.
+ */
+export function opponentNameButton(row: HTMLElement): HTMLElement | null {
+  return row.querySelector("button");
+}

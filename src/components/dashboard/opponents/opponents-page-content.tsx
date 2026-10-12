@@ -7,6 +7,7 @@ import { useRowSelection } from "@/components/dashboard/schedule/use-row-selecti
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { PersonalOpponentsData } from "@/lib/data/personal-opponents-server";
 import { cn } from "@/lib/utils";
+import { opponentNameButton } from "./opponent-cells";
 import { OpponentDrawer } from "./opponent-drawer";
 import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { OpponentsTable, opponentRowId } from "./opponents-table";
@@ -212,12 +213,4 @@ export function OpponentsPageContent({
       )}
     </div>
   );
-}
-
-/**
- * Where focus returns when the drawer closes: the name `<button>`, the row's
- * one control — the row `<div>` itself is not focusable.
- */
-function opponentNameButton(row: HTMLElement): HTMLElement | null {
-  return row.querySelector("button");
 }

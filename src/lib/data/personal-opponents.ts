@@ -221,7 +221,7 @@ function opponentDisplayName(match: PersonalOpponentMatchInput): string {
 }
 
 /** Newest first; undated last, so a missing date never reads as "most recent". */
-function byDateDescending(a: string | null, b: string | null): number {
+export function byDateDescending(a: string | null, b: string | null): number {
   if (a === b) return 0;
   if (a === null) return 1;
   if (b === null) return -1;
