@@ -278,7 +278,8 @@ type PlanProblem = {
     | "range"
     | "baseline"
     | "followup"
-    | "undocumented";
+    | "undocumented"
+    | "siblings";
   detail: string;
 };
 
@@ -659,6 +660,21 @@ export async function* askQuestion(
         return;
       }
       let resultRows = run.result.rows;
+      const same =
+        attempt === 0 && !fallback ? identicalSiblings(resultRows) : null;
+      if (same !== null) {
+        messages.push(
+          { role: "assistant", content: step.reply },
+          {
+            role: "user",
+            content: feedback({
+              kind: "siblings",
+              detail: `The columns ${same.join(", ")} are identical. Count each one from its own rows: a serve's direction is ask.shots.zone ('T', 'Body', 'Wide') on the serve's shot row, joined to ask.points on match_id and point_number; never the match totals in ask.match_stats repeated for every point.`,
+            }),
+          },
+        );
+        continue;
+      }
       const badColumn = percentageOutOfRange(resultRows);
       if (badColumn !== null) {
         if (fallback) {
@@ -1135,6 +1151,42 @@ export function withStoredSpelling(sql: string): string {
   });
 }
 
+/**
+ * The three serve directions, or the three rally lengths, returned as the
+ * same number greater than zero: the query counted one thing three times
+ * rather than three things. Names the columns, or null.
+ */
+export function identicalSiblings(rows: readonly AskRow[]): string[] | null {
+  if (rows.length !== 1) return null;
+  const row = rows[0];
+  for (const words of [
+    ["t", "body", "wide"],
+    ["short", "medium", "long"],
+  ]) {
+    const groups = new Map<string, { column: string; value: number }[]>();
+    for (const [column, value] of Object.entries(row)) {
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const parts = column.split("_");
+      const at = parts.findIndex((part) => words.includes(part));
+      if (at === -1) continue;
+      const key = [...parts.slice(0, at), "*", ...parts.slice(at + 1)].join(
+        "_",
+      );
+      groups.set(key, [...(groups.get(key) ?? []), { column, value }]);
+    }
+    for (const group of groups.values()) {
+      if (
+        group.length === words.length &&
+        group[0].value > 0 &&
+        group.every((entry) => entry.value === group[0].value)
+      ) {
+        return group.map((entry) => entry.column);
+      }
+    }
+  }
+  return null;
+}
+
 const BIG_POINTS_REASON =
   "The question is about big points (break points, set points, match points), but the query reads every point. Restrict it to ask.points rows where is_break_point or is_set_point or is_match_point is true, joined to ask.shots on match_id and point_number when a shot is needed, and name the columns for what they hold (big_point_…).";
 
@@ -1187,7 +1239,9 @@ function feedback(problem: PlanProblem): string {
               ? "That query measures one thing where the previous question measured several."
               : problem.kind === "undocumented"
                 ? "That query returned a percentage with no documented definition."
-                : "That reply could not be read.";
+                : problem.kind === "siblings"
+                  ? "That query returned the same number for each of three things that are counted separately."
+                  : "That reply could not be read.";
   return `${lead} ${oneLine(problem.detail)} Reply again with ONE JSON object and nothing else, following every rule.`;
 }
 

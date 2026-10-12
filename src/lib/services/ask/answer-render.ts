@@ -1370,6 +1370,30 @@ export const MAX_SAME_CELL_CITATIONS = 2;
 const ANY_REFERENCE = /\{\{\s*(r\d+\.[A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 
 /**
+ * Whether a body sentence cites a cell the result does not have: a row past
+ * the last, or a column no row carries (`break_points_converted` where the
+ * query returned `break_points_converted_pct`). Such a sentence is left out
+ * rather than failing an answer whose other sentences are sound.
+ */
+export function citesMissingCell(
+  sentence: string,
+  rows: readonly AskRow[],
+): boolean {
+  for (const match of sentence.matchAll(ANY_REFERENCE)) {
+    const [row, column] = match[1].split(".");
+    const index = Number(row.slice(1)) - 1;
+    const target = rows[index];
+    if (
+      target === undefined ||
+      !Object.prototype.hasOwnProperty.call(target, column)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether a sentence cites one cell more than {@link MAX_SAME_CELL_CITATIONS}
  * times: "54.2% on Feb 7, 54.2% on Feb 7, 54.2% on Feb 7" — a model reciting
  * a result row by row and writing the first row's reference for each.
@@ -1849,6 +1873,7 @@ async function* dropSameCellRanges(
         if (
           !citesSameCellAsRange(sentence) &&
           !recitesOneCell(sentence) &&
+          !citesMissingCell(sentence, rows) &&
           !(severalRows && citesScopeTotalPerRow(sentence)) &&
           misranksSiblings(sentence, rankings) === null
         ) {

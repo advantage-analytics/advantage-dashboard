@@ -22,6 +22,7 @@ import {
   MAX_ASK_FIGURES,
   type AskRow,
   formatAskCell,
+  citesMissingCell,
   citesSameCellAsRange,
   citesScopeTotalPerRow,
   canonicalLabel,
@@ -468,34 +469,10 @@ test.describe("renderAskAnswer — references the result does not have", () => {
   const cases: [name: string, text: string, kind: string, reference: string][] =
     [
       [
-        "a row that does not exist",
-        "Headline.\nYou won {{r3.matches}} matches.",
-        "missing_row",
-        "{{r3.matches}}",
-      ],
-      [
-        "a column that does not exist",
-        "Headline.\nYou hit {{r1.aces}} aces.",
-        "missing_column",
-        "{{r1.aces}}",
-      ],
-      [
-        "row zero — rows count from one",
-        "Headline.\nYou won {{r0.matches}} matches.",
-        "malformed_reference",
-        "{{r0.matches}}",
-      ],
-      [
         "something that is not a reference",
         "Headline.\nYou won {{matches}} matches.",
         "malformed_reference",
         "{{matches}}",
-      ],
-      [
-        "an inherited property, which is not a column",
-        "Headline.\nYou won {{r1.constructor}} matches.",
-        "missing_column",
-        "{{r1.constructor}}",
       ],
       [
         "a reference that never closes",
@@ -522,6 +499,27 @@ test.describe("renderAskAnswer — references the result does not have", () => {
     });
   }
 
+  // A well-formed reference to a cell the result lacks is a slip of one name
+  // or one row number: in the body, that sentence is left out and the rest of
+  // the answer stands (`citesMissingCell()`). Nothing is printed in its place.
+  for (const [name, sentence] of [
+    ["a row that does not exist", "You won {{r3.matches}} matches."],
+    ["a column that does not exist", "You hit {{r1.aces}} aces."],
+    ["an inherited property", "You won {{r1.constructor}} matches."],
+    ["row zero — rows count from one", "You won {{r0.matches}} matches."],
+  ] as const) {
+    test(`${name}, cited in the body, leaves that sentence out`, async () => {
+      const { events, result } = await render([
+        `Headline.\n\nYou won {{r1.matches}}. ${sentence} That is all.`,
+      ]);
+
+      expect(result.failure).toBeNull();
+      expect(result.droppedSentences).toBe(1);
+      expect(events.some((event) => event.type === "error")).toBe(false);
+      expect(body(events)).toMatch(/^You won \S+\. That is all\.$/);
+    });
+  }
+
   test("a missing cell in the headline fails before any headline is sent", async () => {
     const { events } = await render(["You won {{r9.matches}} matches.\nBody."]);
 
@@ -539,7 +537,7 @@ test.describe("renderAskAnswer — references the result does not have", () => {
     async function* source(): AsyncGenerator<string> {
       for (const chunk of [
         "Headline.\nFine so far. ",
-        "Then {{r1.nope}} breaks. ",
+        "Then {{nope}} breaks. ",
         "This chunk is never asked for.",
       ]) {
         pulled += 1;
@@ -561,7 +559,7 @@ test.describe("renderAskAnswer — references the result does not have", () => {
   });
 
   test("an empty result has no row one", async () => {
-    const { result } = await render(["Headline.\n{{r1.matches}}"], []);
+    const { result } = await render(["You won {{r1.matches}}.\nBody."], []);
 
     expect(result.failure).toEqual({
       kind: "missing_row",
@@ -1292,7 +1290,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     ]);
   });
 
-  test("a bad reference in the headline or the body still fails the answer; in a FIGURE line it drops that figure alone", async () => {
+  test("a bad reference in the headline still fails the answer; in a FIGURE line it drops that figure alone, in the body that sentence", async () => {
     const block =
       "CHART: table | Caption.\nCOLUMNS: You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Aces | {{r1.aces}} | {{r1.forced}}\n\nBody.";
     const headline = await render([`Claim {{r1.nope}}.\n${block}`], COMPARISON);
@@ -1308,11 +1306,13 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       "FIGURE: (a reference the result does not have)",
     ]);
     expect(figure.result.visual?.kind).toBe("table");
+    // In the body it costs that sentence, not the answer.
     const text = await render(
       [`Claim.\n\nYou hit {{r1.nope}} aces.`],
       COMPARISON,
     );
-    expect(text.result.failure?.kind).toBe("missing_column");
+    expect(text.result.failure).toBeNull();
+    expect(text.result.droppedSentences).toBe(1);
     // A malformed reference in a figure is still a failure: that is not a slip of one name.
     const malformed = await render(
       [`Claim.\nFIGURE: Aces = {{aces}}\n\nBody.`],
@@ -1426,7 +1426,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     expect(body(events)).toBe("Body.");
   });
 
-  test("a bad reference inside a block drops the block, while one in prose still fails the answer", async () => {
+  test("a bad reference inside a block drops the block; a malformed one in prose still fails the answer", async () => {
     const inBlock = await render(
       [
         "Claim.\nCHART: split | Caption.\nROW: A | {{r1.nope}}\nROW: B | {{r1.forced}}\nFine.",
@@ -1439,13 +1439,13 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
 
     const inProse = await render(
       [
-        "Claim.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\nThen {{r1.nope}}.",
+        "Claim.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\nThen {{nope}}.",
       ],
       COMPARISON,
     );
     expect(inProse.result.failure).toEqual({
-      kind: "missing_column",
-      reference: "{{r1.nope}}",
+      kind: "malformed_reference",
+      reference: "{{nope}}",
     });
     expect(inProse.events.at(-1)?.type).toBe("error");
   });
@@ -1808,6 +1808,21 @@ test.describe("a sentence that cites one cell as both ends of a range", () => {
         .join(""),
     };
   }
+
+  test("a body sentence citing a cell the result lacks is left out; the rest stands", async () => {
+    expect(citesMissingCell("It was {{r1.nope}}.", [{ aces: 3 }])).toBe(true);
+    expect(citesMissingCell("It was {{r2.aces}}.", [{ aces: 3 }])).toBe(true);
+    expect(citesMissingCell("It was {{r1.aces}}.", [{ aces: 3 }])).toBe(false);
+
+    const { events, result } = await render(
+      [
+        "Headline.\n\nAces were {{r1.aces}}. Converted {{r1.break_points_converted}} of them. Done.",
+      ],
+      [{ aces: 3 }],
+    );
+    expect(result.failure).toBeNull();
+    expect(body(events)).toBe("Aces were 3. Done.");
+  });
 
   test("citesSameCellAsRange: the identical reference after 'from' and after 'to', and nothing looser", () => {
     expect(

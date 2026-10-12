@@ -39,6 +39,7 @@ import {
   withoutOutOfRangePercentages,
   undocumentedDetail,
   databaseHint,
+  identicalSiblings,
   ignoresBigPoints,
   withStoredSpelling,
 } from "@/lib/services/ask/ask";
@@ -618,6 +619,18 @@ test.describe("a plan that cannot be used is told back once", () => {
     expect(withStoredSpelling(other)).toBe(other);
   });
 
+  test("three directions returned as one number are told back", () => {
+    expect(
+      identicalSiblings([{ serve_t: 114, serve_body: 114, serve_wide: 114 }]),
+    ).toEqual(["serve_t", "serve_body", "serve_wide"]);
+    expect(
+      identicalSiblings([{ serve_t: 65, serve_body: 46, serve_wide: 64 }]),
+    ).toBeNull();
+    expect(
+      identicalSiblings([{ serve_t: 0, serve_body: 0, serve_wide: 0 }]),
+    ).toBeNull();
+  });
+
   test("the rounding error the planner keeps making comes back with its fix", () => {
     expect(
       databaseHint("function round(double precision, integer) does not exist"),
@@ -878,7 +891,7 @@ test.describe("the other failures", () => {
     const { db, releases, saves } = fakeDb();
     const { model } = fakeModel([
       JSON.stringify(PLAN),
-      "Your second serve held.\n\nYou won {{r1.no_such_column}} of points.",
+      "Your second serve held at {{r1.no_such_column}}.\n\nBody.",
     ]);
 
     const events = await collect(askQuestion(input({ db, model })));
