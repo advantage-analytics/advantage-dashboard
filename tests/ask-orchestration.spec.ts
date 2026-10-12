@@ -40,6 +40,7 @@ import {
   undocumentedDetail,
   databaseHint,
   ignoresBigPoints,
+  withStoredSpelling,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
 import type { AskEvent, AskVisual } from "@/lib/services/ask/events";
@@ -601,6 +602,20 @@ test.describe("a plan that cannot be used is told back once", () => {
       ),
     ).toBe(false);
     expect(ignoresBigPoints("Where do I serve?", all)).toBe(false);
+  });
+
+  test("shot values are turned to the spelling the table stores", () => {
+    expect(
+      withStoredSpelling(
+        "select 1 from ask.shots s where s.zone = 't' and s.shot_type in ('first serve', 'Second Serve') and s.result = 'IN'",
+      ),
+    ).toBe(
+      "select 1 from ask.shots s where s.zone = 'T' and s.shot_type in ('First Serve', 'Second Serve') and s.result = 'In'",
+    );
+    // A pattern, a name and another column's value are not shot values.
+    const other =
+      "select 1 from ask.matches where court_type ilike '%hard%' and opponent_hand = 'left' and opponent_name = 'Kick Buttowski'";
+    expect(withStoredSpelling(other)).toBe(other);
   });
 
   test("the rounding error the planner keeps making comes back with its fix", () => {

@@ -579,6 +579,12 @@ export async function* askQuestion(
         return;
       }
 
+      // The stored spelling of the shot values, whatever case the planner
+      // typed: `zone = 't'` matches no row and reads as "no serves went there".
+      if (!step.review) {
+        step.plan.sql = withStoredSpelling(step.plan.sql);
+        step.plan.scope_sql = withStoredSpelling(step.plan.scope_sql);
+      }
       const guard = checkAskSql({
         scopeSql: step.plan.scope_sql,
         sql: step.plan.sql,
@@ -1081,6 +1087,54 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
 }
 
 /** What the planner is told when its last reply could not be used. */
+/**
+ * The values ask.shots stores in zone, shot_type, result and spin_type, in
+ * the spelling it stores them. A comparison is case-sensitive, and the
+ * planner writes 't' and 'first serve' often enough to matter.
+ */
+const STORED_SHOT_VALUES = [
+  "T",
+  "Body",
+  "Wide",
+  "Crosscourt",
+  "Down the Line",
+  "Middle",
+  "First Serve",
+  "Second Serve",
+  "Forehand",
+  "Backhand",
+  "Forehand Volley",
+  "Backhand Volley",
+  "Volley",
+  "Overhead",
+  "Feed",
+  "In",
+  "Net",
+  "Out",
+  "Backspin",
+  "Flat",
+  "Kick",
+  "Sidespin",
+  "Slice",
+  "Topspin",
+] as const;
+
+const STORED_BY_LOWER = new Map<string, string>(
+  STORED_SHOT_VALUES.map((value) => [value.toLowerCase(), value]),
+);
+
+/**
+ * The query with each quoted literal that names a stored shot value in
+ * another case turned to the stored spelling. A literal that is anything
+ * else — a pattern, a name, a value of another column — is left alone.
+ */
+export function withStoredSpelling(sql: string): string {
+  return sql.replace(/'([^'%_]{1,20})'/g, (literal, inner: string) => {
+    const stored = STORED_BY_LOWER.get(inner.toLowerCase());
+    return stored !== undefined && stored !== inner ? `'${stored}'` : literal;
+  });
+}
+
 const BIG_POINTS_REASON =
   "The question is about big points (break points, set points, match points), but the query reads every point. Restrict it to ask.points rows where is_break_point or is_set_point or is_match_point is true, joined to ask.shots on match_id and point_number when a shot is needed, and name the columns for what they hold (big_point_…).";
 
