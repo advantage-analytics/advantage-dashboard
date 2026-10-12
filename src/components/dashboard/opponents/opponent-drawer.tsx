@@ -15,35 +15,23 @@ import {
 import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
-import {
-  UNKNOWN_OPPONENT_NAME,
-  type PersonalOpponent,
-  type PersonalOpponentMeasureKey,
+import type {
+  PersonalOpponent,
+  PersonalOpponentMeasureKey,
 } from "@/lib/data/personal-opponents";
 import { PERSONAL_NAV } from "@/lib/dashboard/nav";
 import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { playedSets } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
+import {
+  RECENT_ROWS,
+  opponentDrawerFooter,
+  opponentFirstName,
+  opponentMatchesHref,
+  rowDate,
+} from "./opponent-drawer-shared";
 import { opponentBackhandLabel, opponentHandLabel } from "./opponent-style";
-
-/** How many recent matches the drawer lists; the chart plots all of `recent`. */
-const RECENT_ROWS = 3;
-
-/**
- * The recent row's date, cut to its 40px mono track: "Sep 14" this year,
- * "Sep ’25" once it is not. `formatShortDate`'s "Sep 14, 2025" is twice the
- * track and would run under the score; the match page carries the whole date.
- */
-function rowDate(isoDate: string): string {
-  const d = new Date(isoDate);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  if (d.getFullYear() === new Date().getFullYear()) {
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-  const month = d.toLocaleDateString("en-US", { month: "short" });
-  return `${month} ’${String(d.getFullYear()).slice(-2)}`;
-}
 
 /**
  * The personal Opponents page's 340px peek drawer — one opponent, read from
@@ -66,13 +54,9 @@ function rowDate(isoDate: string): string {
  * both stubs today, so while the nav still flags them the name and the primary
  * button open the Matches list searched for this opponent, and the Ask button
  * is absent. Each returns on its own the day its nav flag is lifted
- * (`isLive` below reads `PERSONAL_NAV`).
+ * (`opponentDrawerFooter` reads `PERSONAL_NAV` through the `isLive` it shares
+ * with the team drawer — `opponent-drawer-shared.ts`).
  */
-/** Whether a personal nav destination is a real page yet, not its stub. */
-function isLive(href: string): boolean {
-  return !PERSONAL_NAV.find((link) => link.href === href)?.comingSoon;
-}
-
 export function OpponentDrawer({
   opponent,
   index,
@@ -134,22 +118,18 @@ export function OpponentDrawer({
 
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
-  // What the two footer buttons call them. A group with no name on any match
-  // has nobody to address ("Ask about Unknown" is not a sentence), and a name
-  // typed surname-first ("Gimena, Cj") would put the comma on the button.
-  const firstName =
-    opponent.name === UNKNOWN_OPPONENT_NAME
-      ? "this opponent"
-      : opponent.name.split(" ")[0].replace(/[,;]+$/, "") || "this opponent";
+  // What the footer buttons and the placeholder call them.
+  const firstName = opponentFirstName(opponent.name);
   // The Matches list filtered to this opponent by its own search box, so the
   // count in "All N" is the count on the page it opens.
-  const allMatchesHref =
-    opponent.name === UNKNOWN_OPPONENT_NAME
-      ? "/dashboard/matches"
-      : `/dashboard/matches?q=${encodeURIComponent(opponent.name)}`;
-  const statisticsLive = isLive("/dashboard/statistics");
-  const askLive = isLive("/dashboard/ask");
-  const primaryHref = statisticsLive ? "/dashboard/statistics" : allMatchesHref;
+  const allMatchesHref = opponentMatchesHref(opponent.name);
+  const footer = opponentDrawerFooter({
+    nav: PERSONAL_NAV,
+    statisticsHref: "/dashboard/statistics",
+    askHref: "/dashboard/ask",
+    name: opponent.name,
+  });
+  const primaryHref = footer.primary.href;
 
   return (
     <PeekDrawerFrame
@@ -168,21 +148,19 @@ export function OpponentDrawer({
       onClosed={onClosed}
       footer={
         <>
-          {askLive && (
+          {footer.ghost && (
             <Link
-              href="/dashboard/ask"
+              href={footer.ghost.href}
               className={cn(advButton("ghost", "md"), "w-full")}
             >
-              Ask about {firstName}
+              {footer.ghost.label}
             </Link>
           )}
           <Link
             href={primaryHref}
             className={cn(advButton("primary", "md"), "w-full")}
           >
-            {statisticsLive
-              ? `Open statistics vs. ${firstName}`
-              : `View matches vs. ${firstName}`}
+            {footer.primary.label}
           </Link>
         </>
       }

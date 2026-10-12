@@ -27,3 +27,14 @@
  */
 export const RECENT_MATCH_GRID =
   "grid-cols-[14px_minmax(0,1fr)_minmax(72px,max-content)_40px_12px]";
+
+/**
+ * The same row with a roster face in it — the team opponent drawer's recent
+ * matches, where the first thing a coach reads is who of theirs played.
+ *
+ * `RECENT_MATCH_GRID` with one 18px track after the result mark and before
+ * the event; every other track, the score's self-sizing one included, is
+ * unchanged, so the two rows keep their score and date on the same reasoning.
+ */
+export const RECENT_MATCH_GRID_WITH_FACE =
+  "grid-cols-[14px_18px_minmax(0,1fr)_minmax(72px,max-content)_40px_12px]";

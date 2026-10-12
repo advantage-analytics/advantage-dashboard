@@ -202,3 +202,17 @@ is the runner's. Newest entries at the bottom.
 3. `formatShortDate` parses date-only strings as UTC — rows can read a day early in US zones (shared helper).
 4. A row with no result and no score shows two adjacent dashes in Last match.
 5. The stack is focusable for its tooltip, so each row has two tab stops.
+
+## T14 · Team opponent drawer: identity, Faced by, narrowed stats, recent rows with faces — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (the drawer reads props already on the page — no fetch), empty ✓ (stat block absent with a one-sentence placeholder naming the scope; "No team" line; `EmptyMark` for unknown hand / backhand / result), error ✓ (inside the page's `WidgetBoundary`)
+
+**changed:** `team-opponent-drawer.tsx` rewritten from the placeholder: `PeekDrawerFrame`, identity (48px avatar, wrapping name, `ProgramCrest` + wrapping school with "conference · division", or "No team · Add their team"; a typed school draws an initials crest), "Faced by" as `Chip`s ("All" + one per roster player with an 18px face, first name and own record) or a `SortTrigger` + `FloatMenu` above four players, stats and recent matches narrowed to the chosen scope, recent rows on the new `RECENT_MATCH_GRID_WITH_FACE`, footer via the shared rule. New `opponent-drawer-shared.ts` (`isLive(nav, href)`, `rowDate`, `opponentFirstName`, `opponentMatchesHref`, `opponentDrawerFooter` — the personal drawer now imports these and renders the same), `team-opponent-scope.ts` (pure scope / label / chip-vs-menu rules) and `tests/team-opponent-scope.spec.ts` (19 tests). `schedule/static/chip.tsx` gains optional `leading` and `detail`. "Add their team" is a button with no handler until T15. Verified on screen in every state through a throwaway fixture route, since deleted. Deviations kept: the menu's first row reads "Whole team" while the trigger reads "Faced by: All"; 18px faces use 8px initials (7px is off the type scale); "All N" shows the chosen scope's count but links to the opponent-name search.
+
+**follow-ups:**
+
+1. With a player chosen, "All N" opens a Matches search listing every roster player's matches against that opponent — needs a player facet in the link.
+2. `FloatMenuItem` could gain `leading` and `detail` slots so the Faced-by rows are not hand-built.
+3. Sparkline hover tips print the opponent's name on every point; in the "All" scope the roster player's name would say more.
+4. The sparkline's left date label prints the full date where recent rows use the short form (both drawers).
+5. A typed-school opponent has no route to a directory program — decide whether it gets a "Change" action.

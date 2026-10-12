@@ -201,7 +201,7 @@ ready).
 
 ## T14 · Team opponent drawer: identity, Faced by, narrowed stats, recent rows with faces
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** (guess) new `src/components/dashboard/opponents/team-opponent-drawer.tsx`, `src/components/dashboard/team/player-drawer-layout.ts` (a `RECENT_MATCH_GRID_WITH_FACE` constant: `14px 18px minmax(0,1fr) minmax(72px,max-content) 40px 12px`), `team-opponents-page-content.tsx` (mounts it); reads `opponent-drawer.tsx`, `shared/drawer-stat-chart.tsx`, `matches/match-drawer.tsx` (`PeekDrawerFrame`), `shared/list-toolbar-trigger.tsx` (`SortTrigger`), `ui/float-menu.tsx`, `schedule/static/chip.tsx`
