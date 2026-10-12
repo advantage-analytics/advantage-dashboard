@@ -285,7 +285,7 @@ ready).
 
 ## T20 · Eyes-on harness: open any path in the team workspace with a `team:` prefix
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `scripts/eyes-on/capture.mjs` (header comment ~1–35, `usage()` ~57–62, argv loop ~70–80, `ACTS_ON_DATA` check ~85–98, `slugOf` ~227, page loop ~389–432), `.claude/agents/ui-verifier.md` (~40–46, ~67–70), `.claude/skills/pr-check/SKILL.md` (~320–330), `queue-format.md` only if it describes `routes:` syntax (grep first); new `tests/eyes-on-path-spec.spec.ts`
 - **done when:**

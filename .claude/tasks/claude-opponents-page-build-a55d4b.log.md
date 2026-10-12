@@ -182,3 +182,9 @@ is the runner's. Newest entries at the bottom.
 4. `firstName` is the first token of `display_name` — two-word first names are cut short.
 5. Both opponents loaders pass every match id to one `.in()` — chunk or use an RPC before programs reach hundreds of matches.
 6. `byDateDescending` exists privately in both pure modules.
+
+## T20 · Eyes-on harness: open any path in the team workspace with a `team:` prefix — done
+
+**gate:** mechanical pass · completion pass · live check by the runner: `capture.mjs "team:/dashboard/opponents" /dashboard/opponents` produced `team_dashboard_opponents.png` (ZZ Test Program team workspace) and `dashboard_opponents.png` (personal), with `workspace: "team"` / `"personal"` in `report.json`, both 200
+
+**changed:** New `scripts/eyes-on/path-spec.mjs` (`parsePathSpec(arg)` → `{ team, path, clicks }` or null; no side effects) and `tests/eyes-on-path-spec.spec.ts` (7 tests). `capture.mjs` uses it: `team:/…` is accepted, stripped before the `::` split, sets the workspace cookie, and the bounce note fires only for `/dashboard/team` paths; `report.json` entries gain `workspace`. `.claude/agents/ui-verifier.md` and `.claude/skills/pr-check/SKILL.md` each describe the prefix. Syntax: `[team:]/route[::click…]`.
