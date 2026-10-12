@@ -1,11 +1,12 @@
 import type { CSSProperties } from "react";
 
 /**
- * The personal Opponents table's tracks and page frame, shared by the populated
- * table, the loading skeleton and the day-zero ghost table — a ghost table
- * never restates its own geometry (`reference/tables.md` → Table page states).
+ * The Opponents tables' tracks and page frame — the personal table first, the
+ * team table under its own heading below — shared by the populated table, the
+ * loading skeleton and the day-zero ghost table: a ghost table never restates
+ * its own geometry (`reference/tables.md` → Table page states).
  *
- * Opponent · Hand · Backhand · Record · Form · Last match · Result · Score
+ * Personal: Opponent · Hand · Backhand · Record · Form · Last match · Result · Score
  *
  * No JSX here, so the skeleton and the day zero can import the grid without
  * pulling the table's client code with it.
@@ -31,23 +32,87 @@ export const OPPONENTS_GRID_COLS = {
 } as const;
 
 /**
- * The live table's tracks, which compact beside the drawer. Two custom
- * properties and a class rather than one inline `gridTemplateColumns`: the
- * drawer only renders at `lg`, so the collapse must be a breakpoint rule, and
- * an inline style cannot carry one. Spread `style` on the element that takes
- * `className`.
+ * A resting / compact track pair as the class and custom properties that
+ * switch between them. Two custom properties and a class rather than one
+ * inline `gridTemplateColumns`: the drawer only renders at `lg`, so the
+ * collapse must be a breakpoint rule, and an inline style cannot carry one.
  */
-export function opponentsGrid(compact: boolean) {
+function trackGrid(compact: boolean, rest: string, collapsed: string) {
   return {
     className: compact
       ? "[grid-template-columns:var(--opp-cols)] lg:[grid-template-columns:var(--opp-cols-compact)]"
       : "[grid-template-columns:var(--opp-cols)]",
     style: {
-      "--opp-cols": OPPONENTS_GRID_TEMPLATE,
-      "--opp-cols-compact": OPPONENTS_GRID_TEMPLATE_COMPACT,
+      "--opp-cols": rest,
+      "--opp-cols-compact": collapsed,
     } as CSSProperties,
   };
 }
+
+/**
+ * The live personal table's tracks, which compact beside the drawer. Spread
+ * `style` on the element that takes `className`.
+ */
+export function opponentsGrid(compact: boolean) {
+  return trackGrid(
+    compact,
+    OPPONENTS_GRID_TEMPLATE,
+    OPPONENTS_GRID_TEMPLATE_COMPACT,
+  );
+}
+
+/* ── The team table ──────────────────────────────────────────────────────── */
+
+/**
+ * Opponent · Program · Faced by · Plays · Record · Last match
+ *
+ * Six tracks at rest, one line per row. As on the personal table the one fluid
+ * track is the first, Opponent; Program is bounded (120–180px) so a long
+ * school name truncates instead of pushing Faced by off its x.
+ */
+export const TEAM_OPPONENTS_GRID_TEMPLATE =
+  "minmax(160px,1fr) minmax(120px,180px) 124px 150px 100px 220px";
+
+/**
+ * Beside the open drawer Program and Plays slide shut — the drawer states both
+ * under the name — and the other four keep their order and content. The same
+ * six tracks, so the browser can interpolate the shift.
+ */
+export const TEAM_OPPONENTS_GRID_TEMPLATE_COMPACT =
+  "minmax(160px,1fr) minmax(0px,0px) 124px 0px 100px 220px";
+
+export const TEAM_OPPONENTS_GRID_COLS = {
+  gridTemplateColumns: TEAM_OPPONENTS_GRID_TEMPLATE,
+} as const;
+
+/** `opponentsGrid` for the team table: same class, same two properties. */
+export function teamOpponentsGrid(compact: boolean) {
+  return trackGrid(
+    compact,
+    TEAM_OPPONENTS_GRID_TEMPLATE,
+    TEAM_OPPONENTS_GRID_TEMPLATE_COMPACT,
+  );
+}
+
+/** One header label per team track, in track order. */
+export const TEAM_OPPONENTS_COLUMNS = [
+  "Opponent",
+  "Program",
+  "Faced by",
+  "Plays",
+  "Record",
+  "Last match",
+] as const;
+
+/** The team tracks' floor: 874px of minimums plus five 16px gaps. */
+export const TEAM_OPPONENTS_MIN_WIDTH = "min-w-[954px]";
+
+/** The floor beside the open drawer: 604px of minimums plus the same gaps. */
+export const TEAM_OPPONENTS_MIN_WIDTH_COMPACT =
+  "min-w-[954px] lg:min-w-[684px]";
+
+/** Which of the two tables a shared piece — header, skeleton, ghost — draws. */
+export type OpponentsScope = "personal" | "team";
 
 /** The row's grid and its 16px column gap; header, rows and ghost rows alike. */
 export const OPPONENTS_ROW_FRAME = "grid items-center gap-x-4";

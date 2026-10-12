@@ -5,7 +5,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   OPPONENTS_CARD_PADDING,
-  OPPONENTS_COLUMNS,
   OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
   OPPONENTS_PAGE_COLUMN,
@@ -13,6 +12,9 @@ import {
   OPPONENTS_PAGE_GAP,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
+  TEAM_OPPONENTS_GRID_COLS,
+  TEAM_OPPONENTS_MIN_WIDTH,
+  type OpponentsScope,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
@@ -26,17 +28,23 @@ const PENDING_ROWS = 5;
 
 /**
  * The populated page's frame with the data blanked — the `Suspense` fallback
- * for the personal Opponents page, so nothing moves when the rows arrive.
+ * for either Opponents page (`scope`), so nothing moves when the rows arrive.
  *
  * What the page already knows renders as itself: the "Opponents" h1, the
- * toolbar at rest, and the eight column labels. Only what is arriving is a
+ * toolbar at rest, and the column labels — eight on the personal table, six
+ * on the team one. Only what is arriving is a
  * bar, and every bar is a `PendingBar` inside the one `PendingRegion`.
  *
  * The h1 sits OUTSIDE the region on purpose. `PendingRegion` hides its
  * contents from assistive technology, and a page whose only heading is hidden
  * has not told a screen reader where it landed.
  */
-export function OpponentsSkeleton() {
+export function OpponentsSkeleton({
+  scope = "personal",
+}: {
+  scope?: OpponentsScope;
+}) {
+  const team = scope === "team";
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={cn(OPPONENTS_PAGE_COLUMN, OPPONENTS_PAGE_GAP)}>
@@ -62,23 +70,20 @@ export function OpponentsSkeleton() {
             className="surface-card overflow-x-auto"
             style={{ padding: OPPONENTS_CARD_PADDING }}
           >
-            <div className={OPPONENTS_MIN_WIDTH}>
-              <OpponentsTableHeader />
+            <div
+              className={team ? TEAM_OPPONENTS_MIN_WIDTH : OPPONENTS_MIN_WIDTH}
+            >
+              <OpponentsTableHeader scope={scope} />
               <div>
                 {Array.from({ length: PENDING_ROWS }, (_, row) => (
                   <div
                     key={row}
                     className={cn(OPPONENTS_ROW_FRAME, OPPONENTS_ROW_BOX)}
-                    style={OPPONENTS_GRID_COLS}
+                    style={
+                      team ? TEAM_OPPONENTS_GRID_COLS : OPPONENTS_GRID_COLS
+                    }
                   >
-                    <PendingBar className="h-3 w-32" />
-                    <PendingBar className="h-3 w-[72px]" />
-                    <PendingBar className="h-3 w-[68px]" />
-                    <PendingBar className="h-3 w-7" />
-                    <PendingBar className="h-3 w-[25px]" />
-                    <PendingBar className="h-3 w-11" />
-                    <PendingBar className="size-3.5 rounded-full" />
-                    <PendingBar className="h-3 w-20" />
+                    {team ? <TeamPendingCells /> : <PersonalPendingCells />}
                   </div>
                 ))}
               </div>
@@ -94,5 +99,53 @@ export function OpponentsSkeleton() {
         </PendingRegion>
       </div>
     </div>
+  );
+}
+
+/** Opponent · Hand · Backhand · Record · Form · Last match · Result · Score. */
+function PersonalPendingCells() {
+  return (
+    <>
+      <PendingBar className="h-3 w-32" />
+      <PendingBar className="h-3 w-[72px]" />
+      <PendingBar className="h-3 w-[68px]" />
+      <PendingBar className="h-3 w-7" />
+      <PendingBar className="h-3 w-[25px]" />
+      <PendingBar className="h-3 w-11" />
+      <PendingBar className="size-3.5 rounded-full" />
+      <PendingBar className="h-3 w-20" />
+    </>
+  );
+}
+
+/**
+ * Opponent · Program · Faced by · Plays · Record · Last match — each cell at
+ * the footprint its real content takes: the 26px crest and a name, one 26px
+ * face and a first name, the record beside its ticks, the date, mark and
+ * score on one line.
+ */
+function TeamPendingCells() {
+  return (
+    <>
+      <PendingBar className="h-3 w-32" />
+      <span className="flex items-center gap-2.5">
+        <PendingBar className="size-[26px] rounded-[8px]" />
+        <PendingBar className="h-3 w-20" />
+      </span>
+      <span className="flex items-center gap-2">
+        <PendingBar className="size-[26px] rounded-full" />
+        <PendingBar className="h-3 w-10" />
+      </span>
+      <PendingBar className="h-3 w-[104px]" />
+      <span className="flex items-center gap-2.5">
+        <PendingBar className="h-3 w-[26px]" />
+        <PendingBar className="h-3 w-[25px]" />
+      </span>
+      <span className="flex items-center gap-2.5">
+        <PendingBar className="h-3 w-11" />
+        <PendingBar className="size-3.5 rounded-full" />
+        <PendingBar className="h-3 w-20" />
+      </span>
+    </>
   );
 }

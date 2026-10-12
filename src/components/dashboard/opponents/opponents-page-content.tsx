@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Brain, Filter as FilterIcon } from "lucide-react";
+import { Brain } from "lucide-react";
 import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { PersonalOpponentsData } from "@/lib/data/personal-opponents-server";
 import { cn } from "@/lib/utils";
 import { OpponentDrawer } from "./opponent-drawer";
+import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { OpponentsTable, opponentRowId } from "./opponents-table";
 import {
   OPPONENTS_PAGE_COLUMN,
@@ -22,6 +23,7 @@ import {
   emptyOpponentCut,
   hasOpponentFilters,
   NO_OPPONENT_FILTERS,
+  personalOpponentsSubline,
   RESTING_OPPONENT_CUT,
   type OpponentCut,
 } from "./opponents-views";
@@ -134,7 +136,7 @@ export function OpponentsPageContent({
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={cn(OPPONENTS_PAGE_COLUMN, OPPONENTS_PAGE_GAP)}>
-        <OpponentsTitleRow totals={totals} />
+        <OpponentsTitleRow subline={personalOpponentsSubline(totals)} />
         <OpponentsToolbar
           view={cut.view}
           onViewChange={(view) => applyCut({ view })}
@@ -146,40 +148,13 @@ export function OpponentsPageContent({
           totalCount={inView}
         />
 
-        {/* The panel closes on apply; this states the cut in words —
-            "Left-handed · Two-handed · 3 of 10 · Clear filter". Never chips,
-            never a badge (Data Table law 6). */}
         {filtered ? (
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-            style={{ background: "var(--surface-subtle)" }}
-          >
-            <FilterIcon
-              className="size-[13px] shrink-0"
-              strokeWidth={1.5}
-              style={{ color: "var(--ink-500)" }}
-              aria-hidden="true"
-            />
-            <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-              {describeOpponentFilters(cut.filters)}
-            </span>
-            <span
-              className="size-[3px] rounded-full"
-              style={{ background: "var(--ink-300)" }}
-              aria-hidden="true"
-            />
-            <span className="text-micro tabular">
-              {shown} of {inView}
-            </span>
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="cursor-pointer rounded-sm text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              Clear filter
-            </button>
-          </div>
+          <OpponentsFilterStrip
+            description={describeOpponentFilters(cut.filters)}
+            shown={shown}
+            inView={inView}
+            onClear={clearFilters}
+          />
         ) : null}
 
         {/* A cut that leaves nothing keeps the card and its header row and

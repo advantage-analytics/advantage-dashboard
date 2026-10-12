@@ -188,3 +188,17 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass · completion pass · live check by the runner: `capture.mjs "team:/dashboard/opponents" /dashboard/opponents` produced `team_dashboard_opponents.png` (ZZ Test Program team workspace) and `dashboard_opponents.png` (personal), with `workspace: "team"` / `"personal"` in `report.json`, both 200
 
 **changed:** New `scripts/eyes-on/path-spec.mjs` (`parsePathSpec(arg)` → `{ team, path, clicks }` or null; no side effects) and `tests/eyes-on-path-spec.spec.ts` (7 tests). `capture.mjs` uses it: `team:/…` is accepted, stripped before the `::` split, sets the workspace cookie, and the bounce note fires only for `/dashboard/team` paths; `report.json` entries gain `workspace`. `.claude/agents/ui-verifier.md` and `.claude/skills/pr-check/SKILL.md` each describe the prefix. Syntax: `[team:]/route[::click…]`.
+
+## T13 · Team Opponents page: six-column table, faced-by stack, toolbar facets, skeleton, day zero — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (`OpponentsSkeleton scope="team"` as the Suspense fallback), empty ✓ (team day zero for no opponents; `TableEmptyBody` under the kept header for an empty cut; `EmptyMark` for no team, no style, no result), error ✓ (inside `WidgetBoundary`; the loader throws on a roster error instead of drawing a false day zero)
+
+**changed:** `page.tsx`'s team branch renders `getTeamOpponents` (the `ComingSoonPage` stub is gone). New in `src/components/dashboard/opponents/`: `team-opponents-page-content.tsx`, `team-opponents-table.tsx`, `faced-by-stack.tsx` (avatar stack with the Dark Tooltip, no caret), `opponent-cells.tsx` (shared Plays / Record + ticks / Last-match cells), `opponents-filter-strip.tsx` (extracted, personal page renders the same), and `team-opponent-drawer.tsx` as a minimal placeholder for T14. `opponents-table-layout.ts` gains the six-track team grid and its compact twin (Program and Plays collapse); `opponents-views.ts` gains Program (incl. "No team") and Faced-by facets and the subline / footer copy; `tests/opponents-views.spec.ts` +16 cases. A typed school with no directory program is its own Program option and draws a crest from its initials. First run was cut off by a network failure after the work was on disk; a second agent verified and finished it. Deviations kept: the footer adds "· N more match(es) with no roster player" when any are unattributed; counts singularise. `TEAM_NAV` still flags Opponents `comingSoon` until T18. On screen: the harness shows only team day zero (the verifier's team has no opponent matches); the populated table was checked through a throwaway fixture route, since deleted.
+
+**follow-ups:**
+
+1. Seed the eyes-on verifier's team with opponent matches (a directory program, a typed school, no team, four or more roster players) so the populated table is visible to the harness.
+2. Stack faces ring in `--surface-card` on the selected row; the design rings them in `--surface-muted` there.
+3. `formatShortDate` parses date-only strings as UTC — rows can read a day early in US zones (shared helper).
+4. A row with no result and no score shows two adjacent dashes in Last match.
+5. The stack is focusable for its tooltip, so each row has two tab stops.

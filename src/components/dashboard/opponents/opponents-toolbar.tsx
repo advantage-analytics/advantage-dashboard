@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MatchesFilterPanel } from "@/components/dashboard/matches/matches-filter-panel";
 import type { FilterPanelSection } from "@/components/dashboard/matches/matches-filter-panel";
 import { Chip } from "@/components/dashboard/schedule/static/chip";
@@ -19,10 +19,12 @@ import {
   OPPONENT_SORTS,
   OPPONENT_VIEWS,
   opponentSortTriggerLabel,
-  type OpponentBackhandFilter,
+  toggleFacetValue,
+  type OpponentChecklistFacetKey,
+  type OpponentFacetChoice,
   type OpponentFacetKey,
   type OpponentFilters,
-  type OpponentHandFilter,
+  type OpponentSegmentedFacetKey,
   type OpponentSort,
   type OpponentView,
 } from "./opponents-views";
@@ -71,23 +73,46 @@ export function OpponentsToolbarStatic() {
 }
 
 /**
- * The filter panel's one section: two segmented facets about the counterparty,
- * under an "Opponent" heading (`reference/tables.md` law 6). There is no
- * record-side section above it — every row on this page IS an opponent.
+ * The section every Opponents panel ends on: two segmented facets about the
+ * counterparty, under an "Opponent" heading (`reference/tables.md` law 6). On
+ * the personal page it is the whole panel — there is no record-side section
+ * above it, because every row on that page IS an opponent.
  */
-const FILTER_SECTIONS: FilterPanelSection<OpponentFacetKey>[] = [
-  {
-    label: "Opponent",
-    segmented: [
-      { key: "hand", rowLabel: "Hand", options: [...OPPONENT_HAND_OPTIONS] },
-      {
-        key: "backhand",
-        rowLabel: "Backhand",
-        options: [...OPPONENT_BACKHAND_OPTIONS],
+const STYLE_SECTION: FilterPanelSection<OpponentFacetKey> = {
+  label: "Opponent",
+  segmented: [
+    { key: "hand", rowLabel: "Hand", options: [...OPPONENT_HAND_OPTIONS] },
+    {
+      key: "backhand",
+      rowLabel: "Backhand",
+      options: [...OPPONENT_BACKHAND_OPTIONS],
+    },
+  ],
+};
+
+/**
+ * One checklist section over a facet's choices, or nothing when the page
+ * passed none. The panel draws `values` and words each through
+ * `displayValue`, so the stored value stays the key and the label the text.
+ */
+function checklistSection(
+  label: string,
+  key: OpponentChecklistFacetKey,
+  choices: readonly OpponentFacetChoice[] | undefined,
+): FilterPanelSection<OpponentFacetKey>[] {
+  if (!choices || choices.length === 0) return [];
+  const labels = new Map(choices.map((c) => [c.value, c.label]));
+  return [
+    {
+      label,
+      checklist: {
+        key,
+        values: choices.map((c) => c.value),
+        displayValue: (value) => labels.get(value) ?? value,
       },
-    ],
-  },
-];
+    },
+  ];
+}
 
 /**
  * The populated page's toolbar: the view switcher, the filter panel and the
@@ -105,6 +130,8 @@ export function OpponentsToolbar({
   onSortChange,
   resultCount,
   totalCount,
+  programChoices,
+  facedByChoices,
 }: {
   view: OpponentView;
   onViewChange: (next: OpponentView) => void;
@@ -116,7 +143,25 @@ export function OpponentsToolbar({
   resultCount: number;
   /** Rows the current chip holds before the filter — its "M". */
   totalCount: number;
+  /**
+   * Team page only: the Program checklist (`opponentProgramChoices`) and the
+   * Faced-by checklist (`opponentFacedByChoices`). The personal page passes
+   * neither and its panel stays the one "Opponent" section.
+   */
+  programChoices?: readonly OpponentFacetChoice[];
+  facedByChoices?: readonly OpponentFacetChoice[];
 }) {
+  // Facets about our own side first, then the counterparty's: who on the
+  // roster faced them, where they play, and how they play (law 6).
+  const sections = useMemo(
+    () => [
+      ...checklistSection("Faced by", "facedBy", facedByChoices),
+      ...checklistSection("Program", "programs", programChoices),
+      STYLE_SECTION,
+    ],
+    [facedByChoices, programChoices],
+  );
+
   return (
     // `data-row-keys`: ↑/↓/Esc on a chip, the Filters trigger or the sort
     // belong to that control, not to the open drawer (`useRowSelection`).
@@ -134,11 +179,19 @@ export function OpponentsToolbar({
       </div>
       <div className={TOOLBAR_GROUP}>
         <MatchesFilterPanel<OpponentFacetKey>
-          sections={FILTER_SECTIONS}
+          sections={sections}
           hasActive={hasOpponentFilters(filters)}
-          isChecklistActive={() => false}
-          onToggleChecklist={noop}
-          segmentedValue={(key) => filters[key]}
+          isChecklistActive={(key, value) =>
+            filters[key as OpponentChecklistFacetKey].includes(value)
+          }
+          onToggleChecklist={(key, value) => {
+            const facet = key as OpponentChecklistFacetKey;
+            onFiltersChange({
+              ...filters,
+              [facet]: toggleFacetValue(filters[facet], value),
+            });
+          }}
+          segmentedValue={(key) => filters[key as OpponentSegmentedFacetKey]}
           onSelectSegment={(key, value) =>
             onFiltersChange({ ...filters, [key]: value })
           }

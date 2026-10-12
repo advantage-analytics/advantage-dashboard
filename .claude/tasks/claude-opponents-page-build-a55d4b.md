@@ -186,7 +186,7 @@ ready).
 
 ## T13 · Team Opponents page: six-column table, faced-by stack, toolbar facets, skeleton, day zero
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7, T12, T16
 - **files:** (guess) `src/app/dashboard/opponents/page.tsx` (team branch replaces `ComingSoonPage`), new `src/components/dashboard/opponents/team-opponents-page-content.tsx`, `team-opponents-table.tsx`, `faced-by-stack.tsx`, `opponent-cells.tsx` (shared Plays / Record+ticks / Last-match cells, reused by T17), `opponents-table-layout.ts` (team grid + compact), `opponents-views.ts` (generic row fields + Program / Faced-by facets), `opponents-toolbar.tsx`, `opponents-skeleton.tsx`, `opponents-day-zero.tsx`, `opponents-title-row.tsx`; `tests/opponents-views.spec.ts`

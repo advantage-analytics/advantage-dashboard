@@ -1,3 +1,4 @@
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { PersonalOpponent } from "@/lib/data/personal-opponents";
 import { opponentBackhandLabel, opponentHandLabel } from "./opponent-style";
 
@@ -14,6 +15,14 @@ import { opponentBackhandLabel, opponentHandLabel } from "./opponent-style";
  * then sort. A chip is a view of the list and a filter is a cut of that view
  * (`reference/tables.md` laws 6 and 7), so the filter's "N of M" reads against
  * the chip's set and never the other way round.
+ *
+ * ── One row type, two pages ─────────────────────────────────────────────────
+ * Every predicate reads a `Pick` of the fields it needs, so the personal
+ * page's `PersonalOpponent` and the team page's `TeamOpponent` both pass
+ * through the same functions. The two team-only facets — Program and Faced by
+ * — read fields a personal row does not carry (`ProgramFields`,
+ * `FacedByFields`, all optional): a personal row simply never matches a
+ * program or a roster player, and the personal toolbar never offers either.
  */
 
 /* ── View chips ──────────────────────────────────────────────────────────── */
@@ -69,17 +78,31 @@ export function matchesOpponentView(
 export type OpponentHandFilter = "right" | "left";
 export type OpponentBackhandFilter = "one-handed" | "two-handed";
 
-/** `null` is a facet's "Any". */
+/**
+ * `null` is a segmented facet's "Any"; an empty list is a checklist facet's.
+ * Within a checklist the ticked values OR; the facets AND with each other.
+ */
 export interface OpponentFilters {
   hand: OpponentHandFilter | null;
   backhand: OpponentBackhandFilter | null;
+  /** Team page only — `opponentProgramKey` values. */
+  programs: readonly string[];
+  /** Team page only — roster `playerId`s. */
+  facedBy: readonly string[];
 }
 
-export type OpponentFacetKey = keyof OpponentFilters;
+/** The two-or-three-option facets, drawn as segmented rows. */
+export type OpponentSegmentedFacetKey = "hand" | "backhand";
+/** The open, data-driven facets, drawn as checklists. */
+export type OpponentChecklistFacetKey = "programs" | "facedBy";
+export type OpponentFacetKey =
+  OpponentSegmentedFacetKey | OpponentChecklistFacetKey;
 
 export const NO_OPPONENT_FILTERS: OpponentFilters = {
   hand: null,
   backhand: null,
+  programs: [],
+  facedBy: [],
 };
 
 interface FacetOption<V extends string> {
@@ -115,7 +138,12 @@ const BACKHAND_PHRASE: Record<
 > = { "one-handed": "One-handed", "two-handed": "Two-handed" };
 
 export function hasOpponentFilters(filters: OpponentFilters): boolean {
-  return filters.hand !== null || filters.backhand !== null;
+  return (
+    filters.hand !== null ||
+    filters.backhand !== null ||
+    filters.programs.length > 0 ||
+    filters.facedBy.length > 0
+  );
 }
 
 type StyleFields = Pick<PersonalOpponent, "hand" | "backhand">;
@@ -143,24 +171,177 @@ export function matchesBackhandFilter(
   return opponentBackhandLabel(opponent.backhand) === BACKHAND_PHRASE[backhand];
 }
 
-/** Both facets at once — they AND. */
+/* ── Program and Faced by — the team page's two checklist facets ─────────── */
+
+/** One checklist row: the value the filter stores and the words beside it. */
+export interface OpponentFacetChoice {
+  value: string;
+  label: string;
+}
+
+/** Where an opponent plays, as far as the Program facet reads it. */
+interface ProgramFields {
+  /** The directory program on their matches, when one was chosen. */
+  program?: { id: string; schoolName: string } | null;
+  /** The school as somebody typed it — only ever set when `program` is null. */
+  school?: string | null;
+}
+
+/** Who on the roster met them, as far as the Faced-by facet reads it. */
+interface FacedByFields {
+  facedBy?: readonly { playerId: string; name: string }[];
+}
+
+/** The Program facet's value for an opponent with neither program nor school. */
+export const NO_PROGRAM_KEY = "none";
+export const NO_PROGRAM_LABEL = "No team";
+
+/**
+ * The Program facet's value for one opponent.
+ *
+ * A directory program is keyed by id. A school somebody typed, with no
+ * directory program behind it, is a place of its own and is keyed by its
+ * normalised name — the rule `teamOpponentTotals` counts programs by, so the
+ * facet lists exactly as many places as the title row's "P programs" says. It
+ * is never folded into "No team": that option means nobody has said where the
+ * opponent plays at all.
+ */
+export function opponentProgramKey(opponent: ProgramFields): string {
+  if (opponent.program) return `id:${opponent.program.id}`;
+  const school = opponent.school?.trim();
+  if (school) return `name:${normalizedPersonName(school)}`;
+  return NO_PROGRAM_KEY;
+}
+
+function byLabel(a: OpponentFacetChoice, b: OpponentFacetChoice): number {
+  return a.label.localeCompare(b.label, "en", { sensitivity: "base" });
+}
+
+/**
+ * The Program checklist: one row per place the listed opponents play, A–Z,
+ * then "No team" last — always offered, so the cut "nobody has said where they
+ * play" is reachable whichever rows the loader sent.
+ */
+export function opponentProgramChoices(
+  opponents: readonly ProgramFields[],
+): OpponentFacetChoice[] {
+  const labels = new Map<string, string>();
+  for (const opponent of opponents) {
+    const key = opponentProgramKey(opponent);
+    if (key === NO_PROGRAM_KEY || labels.has(key)) continue;
+    labels.set(
+      key,
+      opponent.program?.schoolName ?? opponent.school?.trim() ?? "",
+    );
+  }
+  return [
+    ...[...labels].map(([value, label]) => ({ value, label })).sort(byLabel),
+    { value: NO_PROGRAM_KEY, label: NO_PROGRAM_LABEL },
+  ];
+}
+
+/** The Faced-by checklist: one row per roster player on any listed row, A–Z. */
+export function opponentFacedByChoices(
+  opponents: readonly FacedByFields[],
+): OpponentFacetChoice[] {
+  const names = new Map<string, string>();
+  for (const opponent of opponents) {
+    for (const player of opponent.facedBy ?? []) {
+      if (!names.has(player.playerId)) names.set(player.playerId, player.name);
+    }
+  }
+  return [...names].map(([value, label]) => ({ value, label })).sort(byLabel);
+}
+
+/** Program: nothing ticked keeps everybody; otherwise any ticked place. */
+export function matchesProgramFilter(
+  opponent: ProgramFields,
+  programs: readonly string[],
+): boolean {
+  if (programs.length === 0) return true;
+  return programs.includes(opponentProgramKey(opponent));
+}
+
+/**
+ * Faced by: nothing ticked keeps everybody; otherwise an opponent any ticked
+ * roster player has met. A row with no `facedBy` — every personal row —
+ * matches nobody.
+ */
+export function matchesFacedByFilter(
+  opponent: FacedByFields,
+  facedBy: readonly string[],
+): boolean {
+  if (facedBy.length === 0) return true;
+  return (opponent.facedBy ?? []).some((p) => facedBy.includes(p.playerId));
+}
+
+/** A checklist tick flipped: a new list, in the order the ticks were made. */
+export function toggleFacetValue(
+  values: readonly string[],
+  value: string,
+): string[] {
+  return values.includes(value)
+    ? values.filter((v) => v !== value)
+    : [...values, value];
+}
+
+type FilterFields = StyleFields & ProgramFields & FacedByFields;
+
+/** Every facet at once — they AND. */
 export function matchesOpponentFilters(
-  opponent: StyleFields,
+  opponent: FilterFields,
   filters: OpponentFilters,
 ): boolean {
   return (
     matchesHandFilter(opponent, filters.hand) &&
-    matchesBackhandFilter(opponent, filters.backhand)
+    matchesBackhandFilter(opponent, filters.backhand) &&
+    matchesProgramFilter(opponent, filters.programs) &&
+    matchesFacedByFilter(opponent, filters.facedBy)
   );
 }
 
+/** The ticked values as their labels, in the checklist's own order. */
+function chosenLabels(
+  values: readonly string[],
+  choices: readonly OpponentFacetChoice[] | undefined,
+): string[] {
+  const known = (choices ?? []).filter((c) => values.includes(c.value));
+  return known.map((c) => c.label);
+}
+
 /**
- * The cut in words, for the applied strip: "Left-handed · Two-handed". Plain
- * phrases joined by middots, each starting with a capital (law 6); empty when
- * no filter is on.
+ * The cut in words, for the applied strip: "Faced by Ana Ruiz · No team ·
+ * Left-handed · Two-handed". Plain phrases joined by middots, each starting
+ * with a capital (law 6); empty when no filter is on.
+ *
+ * `choices` are the checklists the panel drew, so a ticked program or player
+ * is named rather than counted. Several ticks in one facet read as one phrase
+ * joined by "or", because that is how they combine.
  */
-export function describeOpponentFilters(filters: OpponentFilters): string {
+export function describeOpponentFilters(
+  filters: OpponentFilters,
+  choices: {
+    programs?: readonly OpponentFacetChoice[];
+    facedBy?: readonly OpponentFacetChoice[];
+  } = {},
+): string {
   const phrases: string[] = [];
+  if (filters.facedBy.length > 0) {
+    const names = chosenLabels(filters.facedBy, choices.facedBy);
+    phrases.push(
+      names.length > 0
+        ? `Faced by ${names.join(" or ")}`
+        : `Faced by ${filters.facedBy.length} of the roster`,
+    );
+  }
+  if (filters.programs.length > 0) {
+    const names = chosenLabels(filters.programs, choices.programs);
+    phrases.push(
+      names.length > 0
+        ? names.join(" or ")
+        : `Program is one of ${filters.programs.length}`,
+    );
+  }
   if (filters.hand) phrases.push(HAND_PHRASE[filters.hand]);
   if (filters.backhand) phrases.push(BACKHAND_PHRASE[filters.backhand]);
   return phrases.join(" · ");
@@ -251,7 +432,7 @@ export const RESTING_OPPONENT_CUT: OpponentCut = {
   sort: DEFAULT_OPPONENT_SORT,
 };
 
-type CutFields = ViewFields & StyleFields & SortFields;
+type CutFields = ViewFields & FilterFields & SortFields;
 
 /**
  * The list a cut leaves, in the order the table draws it, plus the size of the
@@ -299,7 +480,13 @@ export function emptyOpponentCut(cut: Pick<OpponentCut, "view" | "filters">): {
   const backhand = filters.backhand
     ? ` with a ${BACKHAND_PHRASE[filters.backhand].toLowerCase()} backhand`
     : "";
-  const title = `No ${subject}${backhand}${VIEW_CLAUSE[view]}`;
+  // A program or a roster player is named in the strip above the table, not
+  // repeated here: the sentence would run past the card on three ticks.
+  const checklist =
+    filters.programs.length > 0 || filters.facedBy.length > 0
+      ? " in this filter"
+      : "";
+  const title = `No ${subject}${backhand}${VIEW_CLAUSE[view]}${checklist}`;
 
   return hasOpponentFilters(filters)
     ? {
@@ -316,4 +503,56 @@ export function emptyOpponentCut(cut: Pick<OpponentCut, "view" | "filters">): {
           undo: { view: DEFAULT_OPPONENT_VIEW, filters },
         },
       };
+}
+
+/* ── The count lines ─────────────────────────────────────────────────────── */
+
+function count(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/** The personal title row's subline: "10 opponents · 31 matches · 18 won". */
+export function personalOpponentsSubline(totals: {
+  opponents: number;
+  matches: number;
+  won: number;
+}): string {
+  return [
+    count(totals.opponents, "opponent", "opponents"),
+    count(totals.matches, "match", "matches"),
+    `${totals.won} won`,
+  ].join(" · ");
+}
+
+/** The team title row's subline: "7 opponents · 4 programs · 23 matches". */
+export function teamOpponentsSubline(totals: {
+  opponents: number;
+  programs: number;
+  matches: number;
+}): string {
+  return [
+    count(totals.opponents, "opponent", "opponents"),
+    count(totals.programs, "program", "programs"),
+    count(totals.matches, "match", "matches"),
+  ].join(" · ");
+}
+
+/**
+ * The team footer: "7 of 7 opponents · 18 of 23 matches analyzed", plus the
+ * matches nobody on the roster is recorded as playing, when there are any —
+ * they are in none of the figures before it.
+ */
+export function teamOpponentsFooter(
+  shown: number,
+  totals: {
+    opponents: number;
+    matches: number;
+    analyzed: number;
+    unattributed: number;
+  },
+): string {
+  const line = `${shown} of ${count(totals.opponents, "opponent", "opponents")} · ${totals.analyzed} of ${count(totals.matches, "match", "matches")} analyzed`;
+  return totals.unattributed > 0
+    ? `${line} · ${count(totals.unattributed, "more match", "more matches")} with no roster player`
+    : line;
 }
