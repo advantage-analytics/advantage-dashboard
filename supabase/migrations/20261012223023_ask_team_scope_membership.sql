@@ -1,8 +1,5 @@
 -- Team Ask: close two gaps the access review of 20261012170339 found.
 --
--- NOT YET APPLIED when this file was written (2026-10-12). Rename it to the
--- live version and record the probes below once it is.
---
 -- 1. The side functions answered for a program the caller is not in.
 --    20261012170339 put the membership test in ask.my_match_ids(), which is
 --    what scopes the four views. But ask.my_side() and ask.side_player_name()
@@ -41,19 +38,26 @@
 --    (program_id null) are unchanged. ask_delete_conversation() is unchanged:
 --    a former member may still delete their own rows.
 --
--- PROBES to run after apply, rolled back, as `authenticated` with JWT claims:
---   M1 a non-member (or a member of another program), through ask_run_query:
---      select set_config('ask.program_id', '<program>', true),
---             ask.my_side(jsonb_populate_record(null::public.matches,
---               '{"program_id":"<program>","player1_id":"<a roster id>"}')),
---             ask.side_player_name(jsonb_populate_record(null::public.matches,
---               '{"program_id":"<program>","player1_id":"<a roster id>",
---                 "player1_name":"x"}'))
---      → null, null. The same call by a member → 'player1' and the name.
---   M2 the team probes of 20261012170339 (T1, T2, T3, T4, T6) → unchanged.
---   M3 a user with a team conversation, after their program_members row is
---      removed (in the rolled-back transaction) → 0 rows of it from
---      ask_conversations and ask_messages; their personal ones still read.
+-- BEFORE this migration, run live and rolled back on 2026-10-12: a signed-in
+-- user who is not a member of the program, through ask_run_query with the
+-- setting pointed at it, got side = 'player1' and the roster name for a
+-- hand-built row (and 0 rows of ask.matches).
+--
+-- VERIFIED live after apply (2026-10-12, version 20261012223023), rolled back,
+-- as `authenticated` sessions with the JWT claims set:
+--   M1 the same call by the non-member → side null, no name, 0 matches. By
+--      a member of the program → 'player1', the roster name, 10 matches.
+--   M2 the team probes of 20261012170339 → unchanged: a non-member in team
+--      scope reads 0 matches; the member reads 10, grouped under the same
+--      three roster names (1, 3 and 6 matches); ask.match_stats 10 rows
+--      'me' and 10 'opponent', ask.points 1183, ask.shots 7995; the same
+--      caller in personal scope reads their 1 personal match.
+--   M3 a member with 3 team conversations and 3 personal ones (12 messages):
+--      with their program_members row deleted inside the transaction, 0 team
+--      conversations, 3 personal conversations and 6 messages read back.
+--   As postgres: ask.my_side and ask.side_player_name are not executable by
+--   authenticated; ask.on_roster is not executable by ask_reader;
+--   ask.side_player_name still is.
 
 create or replace function ask.on_roster(p_program_id uuid, p_id uuid)
 returns boolean
