@@ -362,11 +362,17 @@ export async function fetchPlaybackSource(
   matchId: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
+  /**
+   * The route to ask instead of the match's own — the public share page's
+   * `/api/share/<token>/video`, which answers in the same envelope for a
+   * reader with a link and no session.
+   */
+  endpoint?: string,
 ): Promise<RefreshOutcome> {
   let response: Response;
   try {
     response = await fetchImpl(
-      `/api/matches/${encodeURIComponent(matchId)}/video`,
+      endpoint ?? `/api/matches/${encodeURIComponent(matchId)}/video`,
       { method: "GET", credentials: "same-origin", cache: "no-store", signal },
     );
   } catch {

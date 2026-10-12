@@ -180,10 +180,25 @@ export async function handleGetPlayback(
     console.log(`${LOG} refused — ${access.error.detail}`, { matchId });
     return errorResponse(access.error);
   }
+  return respondWithPlayback(access.value.match.id, deps);
+}
 
+/**
+ * The answer below the gate: the active attachment's metadata and a fresh
+ * read-only credential, or one of the three refusals.
+ *
+ * For a match id the caller has ALREADY been cleared for — by
+ * {@link handleGetPlayback}'s visibility check, or by a public share link
+ * that carries the video (`GET /api/share/[token]/video`). It asks no access
+ * question of its own.
+ */
+export async function respondWithPlayback(
+  matchId: string,
+  deps: Omit<PlaybackDeps, keyof MatchVideoAccessDeps>,
+): Promise<NextResponse> {
   let loaded: HttpResult<PlaybackAttachmentRow | null>;
   try {
-    loaded = await deps.loadActiveAttachment(access.value.match.id);
+    loaded = await deps.loadActiveAttachment(matchId);
   } catch (cause) {
     console.error(`${LOG} unhandled failure`, { matchId, cause });
     return errorResponse(transportError("internal_error", "unhandled"));

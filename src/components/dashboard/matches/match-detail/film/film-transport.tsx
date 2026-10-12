@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { RepeatOff } from "./film-glyphs";
 import { FilmTrack } from "./film-track";
 import type { TrackSegment } from "./film-timeline";
+import { useFilmReadOnly } from "./film-read-only";
 
 /** Playback rates the speed control cycles through. */
 export const PLAYBACK_RATES = [0.5, 1, 1.5, 2] as const;
@@ -166,7 +167,10 @@ export function FilmTransport(p: FilmTransportProps) {
     if (p.saved !== null) p.onToggleSaved();
   };
 
-  const shown = (control: FilmTransportControl) => !p.hide?.includes(control);
+  // A shared link's reader has no bookmarks to keep (`film-read-only.ts`).
+  const readOnly = useFilmReadOnly();
+  const shown = (control: FilmTransportControl) =>
+    !p.hide?.includes(control) && !(control === "saved" && readOnly);
 
   return (
     <div

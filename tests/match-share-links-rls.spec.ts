@@ -304,6 +304,112 @@ test.describe("match_share_links RLS (live)", () => {
     await removeLink();
   });
 
+  test("video on a link: only through the function, staff by default, players once the program allows it", async () => {
+    const insert = await creator.client.from("match_share_links").insert({
+      match_id: matchId,
+      token: `${MARK}-video`,
+      created_by: creator.userId,
+    });
+    expect(insert.error).toBeNull();
+
+    const read = async () =>
+      (
+        await staff.client
+          .from("match_share_links")
+          .select("include_visualizations, include_video, video_shared_by")
+          .eq("match_id", matchId!)
+          .single()
+      ).data;
+    const setVideo = (s: typeof creator, include: boolean) =>
+      s.client.rpc("set_match_share_video", {
+        p_match_id: matchId,
+        p_include: include,
+      });
+    expect((await read())?.include_video).toBe(false);
+
+    // The column has no grant: not even staff can write it directly.
+    const direct = await staff.client
+      .from("match_share_links")
+      .update({ include_video: true })
+      .eq("match_id", matchId!);
+    expect(direct.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    // A player who may share the match may not add its video…
+    for (const s of [creator, seated]) {
+      expect((await setVideo(s, true)).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+      expect(
+        (await s.client.rpc("can_share_match_video", { p_match_id: matchId }))
+          .data,
+      ).toBe(false);
+    }
+    // …and someone who cannot share it at all cannot touch it either way.
+    for (const s of [member, stranger])
+      expect((await setVideo(s, false)).error?.code).toBe(
+        INSUFFICIENT_PRIVILEGE,
+      );
+    expect((await read())?.include_video).toBe(false);
+
+    // Staff can — and the link records WHO did, which is the person the
+    // public page re-checks (not whoever made the link).
+    expect((await setVideo(staff, true)).error).toBeNull();
+    expect(await read()).toMatchObject({
+      include_video: true,
+      video_shared_by: staff.userId,
+    });
+
+    // With the video on, a player can still change the link's other option —
+    // the reason `include_video` is not policed in the UPDATE policy.
+    const viz = await seated.client
+      .from("match_share_links")
+      .update({ include_visualizations: true })
+      .eq("match_id", matchId!);
+    expect(viz.error).toBeNull();
+    expect(await read()).toEqual({
+      include_visualizations: true,
+      include_video: true,
+      video_shared_by: staff.userId,
+    });
+
+    // And can take the video of their own match back down.
+    expect((await setVideo(seated, false)).error).toBeNull();
+    expect(await read()).toMatchObject({
+      include_video: false,
+      video_shared_by: null,
+    });
+
+    // The program's setting: a player cannot move it, staff can, and once it
+    // is on a player who may share the match may add the video.
+    const setProgram = (s: typeof creator, enabled: boolean) =>
+      s.client.rpc("set_program_players_can_share_video", {
+        p_program_id: programId,
+        p_enabled: enabled,
+      });
+    expect((await setProgram(seated, true)).error?.code).toBe(
+      INSUFFICIENT_PRIVILEGE,
+    );
+    expect((await setProgram(staff, true)).error).toBeNull();
+    expect((await setVideo(seated, true)).error).toBeNull();
+    expect((await read())?.include_video).toBe(true);
+    // A plain member still cannot: they could never share the match.
+    expect((await setVideo(member, true)).error?.code).toBe(
+      INSUFFICIENT_PRIVILEGE,
+    );
+
+    expect((await setProgram(staff, false)).error).toBeNull();
+    await removeLink();
+
+    // A link cannot be born with the video on it.
+    const born = await staff.client.from("match_share_links").insert({
+      match_id: matchId,
+      token: `${MARK}-born`,
+      created_by: staff.userId,
+      include_video: true,
+    });
+    expect(born.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+  });
+
   test("an anonymous client reads nothing", async () => {
     const anon = createClient(SUPABASE_URL!, ANON_KEY!);
     const { data, error } = await anon

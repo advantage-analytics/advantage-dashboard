@@ -5,6 +5,7 @@ import {
   realTournamentName,
   sharedMatchPair,
   sharedMatchWinner,
+  sharedVideoAllowed,
   shareScopeLabel,
 } from "@/lib/data/match-share-format";
 
@@ -73,6 +74,75 @@ test("the Unknown Event placeholder reads as no tournament", () => {
 });
 
 test("a link's scope is named the same way wherever it is printed", () => {
-  expect(shareScopeLabel(false)).toBe("Statistics only");
-  expect(shareScopeLabel(true)).toBe("No video");
+  expect(shareScopeLabel({ visualizations: false, video: false })).toBe(
+    "Statistics only",
+  );
+  expect(shareScopeLabel({ visualizations: true, video: false })).toBe(
+    "No video",
+  );
+  // The video is the fact worth the line, with or without the charts.
+  for (const visualizations of [true, false])
+    expect(shareScopeLabel({ visualizations, video: true })).toBe("With video");
+});
+
+test("the video stays on a link only while whoever added it may still share it", () => {
+  const sharer = "11111111-2222-4333-8444-555555555555";
+  const program = "99999999-2222-4333-8444-555555555555";
+  const base = {
+    sharerId: sharer,
+    programId: program as string | null,
+    sharerRole: null as string | null,
+    sharerOnMatch: false,
+    playersCanShareVideo: false,
+  };
+
+  // A personal match: its uploader or a seated player, and nobody else.
+  expect(
+    sharedVideoAllowed({ ...base, programId: null, sharerOnMatch: true }),
+  ).toBe(true);
+  expect(sharedVideoAllowed({ ...base, programId: null })).toBe(false);
+  // A role means nothing without a program to hold it on.
+  expect(
+    sharedVideoAllowed({ ...base, programId: null, sharerRole: "owner" }),
+  ).toBe(false);
+
+  // A team match: staff always, in any of the three staff roles, seated or not.
+  for (const sharerRole of ["owner", "coach", "staff"])
+    expect(sharedVideoAllowed({ ...base, sharerRole })).toBe(true);
+
+  // A player on the match, only while the program lets players share video —
+  // so turning the setting off takes the video off the links players made.
+  const player = { ...base, sharerRole: "player", sharerOnMatch: true };
+  expect(sharedVideoAllowed({ ...player, playersCanShareVideo: true })).toBe(
+    true,
+  );
+  expect(sharedVideoAllowed(player)).toBe(false);
+
+  // The setting does not help someone who can no longer share the match at
+  // all: a teammate with no seat on it, or a former member.
+  expect(
+    sharedVideoAllowed({
+      ...base,
+      sharerRole: "player",
+      playersCanShareVideo: true,
+    }),
+  ).toBe(false);
+  expect(sharedVideoAllowed({ ...base, playersCanShareVideo: true })).toBe(
+    false,
+  );
+  // A coach who left the staff, with the setting off.
+  expect(sharedVideoAllowed({ ...base, sharerOnMatch: true })).toBe(false);
+
+  // Nobody on record — the account is gone — can vouch for nothing.
+  for (const programId of [null, program])
+    expect(
+      sharedVideoAllowed({
+        ...base,
+        sharerId: null,
+        programId,
+        sharerRole: "owner",
+        sharerOnMatch: true,
+        playersCanShareVideo: true,
+      }),
+    ).toBe(false);
 });

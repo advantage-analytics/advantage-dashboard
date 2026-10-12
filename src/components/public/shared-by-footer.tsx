@@ -7,9 +7,9 @@ import { shareScopeLabel } from "@/lib/data/match-share-format";
  * and what the share covers.
  *
  * One block beside one mark: the sharer's avatar, then two lines —
- * "Shared from Advantage by <name>" over "<date> · Statistics only" (or
- * "No video", when the link carries the visualizations too). The
- * scope sits on the date line because it is a fact about the share, like
+ * "Shared from Advantage by <name>" over "<date> · Statistics only" ("No video"
+ * when the link carries the visualizations too, "With video" when the video
+ * is on the page). The scope sits on the date line because it is a fact about the share, like
  * the date, not a caption about the person. It was a separate lock line
  * under the block; indented and wrapping at the rail's 300px, it read as a
  * second group hanging off the sharer. (Design canvas "Shared Match Report
@@ -21,11 +21,17 @@ import { shareScopeLabel } from "@/lib/data/match-share-format";
 export function SharedByFooter({
   sharedBy,
   includesVisualizations,
+  includesVideo,
 }: {
   sharedBy: SharedBy | null;
   includesVisualizations: boolean;
+  /** The video is actually on the page — not merely ticked on the link. */
+  includesVideo: boolean;
 }) {
-  const scope = shareScopeLabel(includesVisualizations);
+  const scope = shareScopeLabel({
+    visualizations: includesVisualizations,
+    video: includesVideo,
+  });
   return (
     <div className="flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-5 pt-4 pb-[18px]">
       {sharedBy ? (
