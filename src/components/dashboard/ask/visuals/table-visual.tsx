@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { VisualFrame } from "./visual-frame";
 
 /**
- * Stat table: measures down the side, two or three columns across. Every
+ * Stat table: measures down the side, one to three columns across. Every
  * cell is the server's display string — the table only prints. The first
  * value column is the subject of the question and reads in full ink.
  */

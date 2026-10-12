@@ -13,6 +13,7 @@ import type {
 } from "@/lib/services/ask/events";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import {
+  ASK_SCOPE_COUNT_COLUMN,
   type AskPlanQuery,
   type AskPlanReply,
   type AskPromptTurn,
@@ -205,9 +206,45 @@ function readLimitDetail(message: string) {
 
 /** Why a plan could not be used, told back to the planner once. */
 type PlanProblem = {
-  kind: "unparseable" | "guard" | "database";
+  kind: "unparseable" | "guard" | "database" | "range";
   detail: string;
 };
+
+/**
+ * The one column this module adds to every result row
+ * (`ASK_SCOPE_COUNT_COLUMN`, defined beside the prompts that name it): how
+ * many matches `scope_sql` selected, read from the `matches` list
+ * `ask_run_query` returns. It is the only number in the answer that says how
+ * many matches it covers — the baseline run had the planner count them
+ * itself and answered "from 4 matches against Timofey" over a one-match
+ * scope. A planner column of the same name is overwritten, so the injected
+ * value always wins.
+ */
+export { ASK_SCOPE_COUNT_COLUMN };
+
+/**
+ * A `_pct` column holding a value outside 0–100 is a wrong denominator (the
+ * baseline run printed 118.5%); it is refused like a database error and told
+ * back to the planner by column name. Checked after the query, before the
+ * answer step ever sees the rows.
+ */
+export function percentageOutOfRange(rows: readonly AskRow[]): string | null {
+  for (const row of rows) {
+    for (const [column, value] of Object.entries(row)) {
+      if (!/_pct$/.test(column) || typeof value !== "number") continue;
+      if (!Number.isFinite(value) || value < 0 || value > 100) return column;
+    }
+  }
+  return null;
+}
+
+/** The rows with {@link ASK_SCOPE_COUNT_COLUMN} set on every one of them. */
+export function withScopeCount(
+  rows: readonly AskRow[],
+  matchCount: number,
+): AskRow[] {
+  return rows.map((row) => ({ ...row, [ASK_SCOPE_COUNT_COLUMN]: matchCount }));
+}
 
 type PlanStep =
   | { ok: true; plan: AskPlanQuery; reply: string }
@@ -327,8 +364,29 @@ export async function* askQuestion(
         yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
         return;
       }
+      const badColumn = percentageOutOfRange(run.result.rows);
+      if (badColumn !== null) {
+        if (attempt === 0) {
+          messages.push(
+            { role: "assistant", content: step.reply },
+            {
+              role: "user",
+              content: feedback({
+                kind: "range",
+                detail: `The column ${badColumn} holds a value below 0 or above 100. A percentage is round(100.0 * numerator / nullif(denominator, 0), 1) with the numerator and denominator the Percentages section pairs; check which counter the denominator should be.`,
+              }),
+            },
+          );
+          continue;
+        }
+        yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+        return;
+      }
       plan = step.plan;
-      result = run.result;
+      result = {
+        matches: run.result.matches,
+        rows: withScopeCount(run.result.rows, run.result.matches.length),
+      };
     }
 
     if (plan === null || result === null) {
@@ -396,13 +454,15 @@ export async function* askQuestion(
         digits: answer.droppedDigits,
       });
     }
-    if (answer.droppedVisuals.length > 0) {
-      // Reasons and kinds only: a drop's detail is fixed text, but a block's
-      // labels and cells never leave the renderer.
+    if (answer.droppedVisuals.length > 0 || answer.droppedVisualRows > 0) {
+      // Reasons, kinds and counts only: a drop's detail is fixed text, but a
+      // block's labels and cells never leave the renderer. `rows` counts the
+      // ROW lines left out of a block that was still sent.
       console.warn(ASK_DROPPED_VISUALS_LOG, {
         count: answer.droppedVisuals.length,
         reasons: answer.droppedVisuals.map((drop) => drop.reason),
         kinds: answer.droppedVisuals.map((drop) => drop.kind),
+        rows: answer.droppedVisualRows,
       });
     }
 
@@ -542,7 +602,9 @@ function feedback(problem: PlanProblem): string {
       ? "The database refused that query."
       : problem.kind === "guard"
         ? "That query was refused before it ran."
-        : "That reply could not be read.";
+        : problem.kind === "range"
+          ? "That query returned a percentage outside 0 to 100."
+          : "That reply could not be read.";
   return `${lead} ${oneLine(problem.detail)} Reply again with ONE JSON object and nothing else, following every rule.`;
 }
 
@@ -699,8 +761,16 @@ async function spentCount(
 // ── Conversation turns ───────────────────────────────────────────────────────
 
 /**
- * Saved messages as the plan prompt's earlier turns: a question's text, an
- * answer's headline and body. The SQL and the sources are not turns.
+ * Saved messages as the plan prompt's earlier turns: a question's text with
+ * what its tags named, an answer's headline and body. The SQL and the
+ * sources are not turns.
+ *
+ * A saved question's tags (`AskSavedTag`: a match id with its chip label, or
+ * an opponent's name) are appended to the turn as "(about: match <id> vs
+ * <label>; opponent <name>)", so a follow-up with no tags of its own — "and
+ * on second serves?" — can keep the earlier question's scope: the plan
+ * prompt tells the planner to reuse those ids. Labels are database text, not
+ * request text (`tags.ts`), and are flattened to one line.
  */
 export function conversationTurnsFromMessages(
   messages: readonly { role: "user" | "assistant"; content: unknown }[],
@@ -716,8 +786,28 @@ export function conversationTurnsFromMessages(
             .filter((part) => part && part.trim() !== "")
             .join("\n\n");
     if (!text || text.trim() === "") return [];
-    return [{ role: message.role, content: text }];
+    const about = message.role === "user" ? savedTagsAbout(record?.tags) : "";
+    return [{ role: message.role, content: about ? `${text} ${about}` : text }];
   });
+}
+
+/** `(about: match <id> vs <label>; opponent <name>)` from a saved question's tags, or "". */
+function savedTagsAbout(tags: unknown): string {
+  if (!Array.isArray(tags)) return "";
+  const parts = tags.flatMap((tag): string[] => {
+    const record = asRecord(tag);
+    const id = stringOrNull(record?.id);
+    const label = stringOrNull(record?.label);
+    if (!record || !id) return [];
+    if (record.kind === "match") {
+      return [`match ${oneLine(id)}${label ? ` vs ${oneLine(label)}` : ""}`];
+    }
+    if (record.kind === "opponent") {
+      return [`opponent ${oneLine(label ?? id)}`];
+    }
+    return [];
+  });
+  return parts.length === 0 ? "" : `(about: ${parts.join("; ")})`;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

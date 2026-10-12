@@ -102,7 +102,7 @@ export const MAX_ASK_BARS_ROWS = 6;
 /** `table`: rows beyond this many drop the block. */
 export const MAX_ASK_TABLE_ROWS = 8;
 /** `table`: column headings, inclusive. */
-export const MIN_ASK_TABLE_COLUMNS = 2;
+export const MIN_ASK_TABLE_COLUMNS = 1;
 export const MAX_ASK_TABLE_COLUMNS = 3;
 /** `trend`: points (one per result row with a value), inclusive. */
 export const MIN_ASK_TREND_POINTS = 2;
@@ -149,8 +149,10 @@ export interface AskBarsVisual {
 }
 
 /**
- * Stat table: measures down the side, 2–3 columns across. Every cell is
- * already a display string — the table only prints.
+ * Stat table: measures down the side, 1–3 columns across — the prompt asks
+ * for two or three, and one is what is left when a model heads the label
+ * column and gives a single value column. Every cell is already a display
+ * string — the table only prints.
  */
 export interface AskTableVisual {
   kind: "table";

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  ASK_SIDE_REQUIRED_REASON,
   ASK_SQL_FUNCTION_ALLOWLIST,
   ASK_VIEWS,
   checkAskSql,
@@ -95,6 +96,42 @@ test.describe("checkAskSql — accepts", () => {
          from ask.matches m
          join scope on scope.match_id = m.match_id
          where exists (select 1 from ask.points p where p.match_id = m.match_id and p.is_break_point)`,
+      ),
+    ).toEqual({ ok: true });
+  });
+});
+
+test.describe("checkAskSql — side on ask.match_stats", () => {
+  test("sql that sums ask.match_stats without ever naming side is refused, with the reason the planner can act on", () => {
+    const result = check(
+      `select sum(s.break_points_saved) as saved, sum(s.break_points_faced) as faced
+       from ask.match_stats s join scope on scope.match_id = s.match_id`,
+    );
+    expectRefused(result, /reads ask\.match_stats but never mentions side/);
+    if (!result.ok) expect(result.reason).toBe(ASK_SIDE_REQUIRED_REASON);
+  });
+
+  test("a side filter, a case-when on side, or side in a CTE all satisfy it", () => {
+    for (const sql of [
+      `select sum(s.aces) as aces from ask.match_stats s join scope on scope.match_id = s.match_id where s.side = 'opponent'`,
+      `select sum(case when s.side = 'me' then s.winners else 0 end) as me_winners, sum(case when s.side = 'opponent' then s.winners else 0 end) as opp_winners from ask.match_stats s where s.match_id in (select match_id from scope)`,
+      `with mine as (select match_id, aces from ask.match_stats where side = 'me') select sum(mine.aces) as aces from mine join scope on scope.match_id = mine.match_id`,
+      `select sum(aces) as aces from match_stats where SIDE = 'me' and match_id in (select match_id from scope)`,
+    ]) {
+      expect(check(sql), sql).toEqual({ ok: true });
+    }
+  });
+
+  test("sql over the other views needs no side, and scope_sql reading ask.match_stats without it is fine", () => {
+    expect(
+      check(
+        "select count(*) as points from ask.points p join scope on scope.match_id = p.match_id",
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      check(
+        "select count(*) as n from scope",
+        "select match_id from ask.match_stats where aces > 5",
       ),
     ).toEqual({ ok: true });
   });

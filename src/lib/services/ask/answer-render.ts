@@ -38,7 +38,9 @@ import {
  *
  *   1. the first non-blank line                → one `headline` event
  *   2. the figure lines directly beneath it    → `figure` events, at most
- *      (`ASK_FIGURE_LINE_SYNTAX`)                `MAX_ASK_FIGURES`
+ *      (`ASK_FIGURE_LINE_SYNTAX`)                `MAX_ASK_FIGURES`, sent once
+ *                                                the block has resolved, minus
+ *                                                any that repeat a block cell
  *   3. an optional visual block                → one `visual` event, resolved
  *      (`ASK_VISUAL_SYNTAX`)                      against the rows
  *   4. everything after                        → `text` deltas
@@ -281,9 +283,18 @@ export type AskAnswerFailure =
  * - `unknown_kind` — the `CHART:` line names a kind outside the catalogue.
  * - `malformed` — a line is the wrong shape for the kind: a keyword it does
  *   not take, the wrong number of fields, an empty label or caption, a cell
- *   that is not exactly one reference, or a required line missing.
+ *   that is not exactly one reference, or a required line missing. Four
+ *   slips are read as meant first (`blockFields()`, `LONE_TOKEN`, the
+ *   `table` case of `parseBlock()`): a `=` after a `ROW:` label, a trailing
+ *   separator, a `%` after a cell, and a table heading written for the
+ *   label column.
  * - `bad_reference` — a reference in the block names a row or column the
  *   result does not have, or a `PLOT:` column is missing from a row.
+ *
+ * In a `table` or `bars` block a `malformed` or `bad_reference` ROW is left
+ * out on its own (`droppedVisualRows`) and the block drops only when no row
+ * is left: each row there is a separate reading. In `split` and `serve` the
+ * rows are parts of one whole, so one bad row still drops the block.
  * - `bad_value` — a cell is the wrong type for its place: a bar outside
  *   0–100, a negative count, a value that is not a number, a form result
  *   that is not a boolean.
@@ -320,10 +331,20 @@ export interface AskAnswerResult {
   text: string;
   /** Every number the model typed instead of referencing, in order. All were dropped. */
   droppedDigits: string[];
-  /** Figure lines left out: a fourth and later, or one with no label or no value. */
+  /**
+   * Figure lines left out: a fourth and later, one with no label or no
+   * value, or one that repeats a cell of the visual block under the same
+   * label (the page would print the number twice).
+   */
   droppedFigures: string[];
   /** Visual blocks left out, with why. */
   droppedVisuals: AskDroppedVisual[];
+  /**
+   * `ROW:` lines left out of a `table` or `bars` block that was still sent:
+   * the wrong number of cells, a cell that is not exactly one reference, or
+   * a reference the result does not have. A count only — never model text.
+   */
+  droppedVisualRows: number;
   /** Why the stream ended with an `error` event; null when it did not. */
   failure: AskAnswerFailure | null;
 }
@@ -518,14 +539,58 @@ function expand(
 // ── The visual block ─────────────────────────────────────────────────────────
 
 type BlockOutcome =
-  { ok: true; visual: AskVisual } | { ok: false; drop: AskDroppedVisual };
+  | { ok: true; visual: AskVisual; droppedRows: number }
+  | { ok: false; drop: AskDroppedVisual };
 
 /** The lone token a block cell must be, or why it is not one. */
 type CellRead =
   | { ok: true; token: Extract<Token, { ok: true }> }
   | { ok: false; reason: "malformed" | "bad_reference" };
 
-const LONE_TOKEN = /^\u0001(\d+)\u0002$/;
+/**
+ * A cell: one token, trimmed, with a `%` after it tolerated — a `_pct` cell
+ * already prints with one, and a model that adds another has still named
+ * exactly one cell. Anything else beside the token is not a cell.
+ */
+const LONE_TOKEN = /^\u0001(\d+)\u0002%?$/;
+
+/**
+ * A block line's fields after its keyword, split on the separator and
+ * trimmed. Two slips a small model makes are read as what it meant, since
+ * neither can name a different cell: a `=` after a `ROW:` label, as a figure
+ * line uses (`ROW: Saved = {{r1.a}} | {{r1.b}}`), splits the label from the
+ * first cell; and a separator with nothing after it (`ROW: A | {{r1.a}} |`)
+ * is dropped. A `=` is read this way only when the label would otherwise hold
+ * a cell, so a label that merely contains one is left alone.
+ */
+function blockFields(
+  body: string,
+  keyword: string,
+  kind: AskVisualKind,
+): string[] {
+  const fields = body.split(ASK_VISUAL_FIELD_SEPARATOR).map((f) => f.trim());
+  // A table row keeps a trailing empty field: it is an empty cell, read as
+  // `ASK_NULL_CELL` below, where every other kind needs a number there.
+  if (
+    kind !== "table" &&
+    fields.length > 1 &&
+    fields[fields.length - 1] === ""
+  ) {
+    fields.pop();
+  }
+  if (keyword === ASK_VISUAL_ROW_PREFIX && fields.length > 0) {
+    const cut = fields[0].indexOf("=");
+    if (cut !== -1 && LONE_TOKEN.test(fields[0].slice(cut + 1).trim())) {
+      fields.splice(
+        0,
+        1,
+        fields[0].slice(0, cut).trim(),
+        fields[0].slice(cut + 1).trim(),
+      );
+    }
+  }
+  return fields;
+}
 
 function readCell(field: string, tokens: readonly Token[]): CellRead {
   const match = LONE_TOKEN.exec(field.trim());
@@ -600,10 +665,7 @@ function parseBlock(
     if (!keyword || !taken[kind].includes(keyword)) {
       return drop("malformed", kind, "a line this kind does not take");
     }
-    const fields = line
-      .slice(keyword.length)
-      .split(ASK_VISUAL_FIELD_SEPARATOR)
-      .map((field) => field.trim());
+    const fields = blockFields(line.slice(keyword.length), keyword, kind);
     if (keyword === ASK_VISUAL_SERIES_PREFIX) series.push(fields);
     else if (keyword === ASK_VISUAL_COLUMNS_PREFIX) columns.push(fields);
     else if (keyword === ASK_VISUAL_ROW_PREFIX) rowLines.push(fields);
@@ -642,6 +704,36 @@ function parseBlock(
     return { ok: true, number: { value: raw, text } };
   };
 
+  /**
+   * The rows a `table` or `bars` block leaves out. Only a `malformed` or
+   * `bad_reference` row is skipped: a `bad_value` (a count where a share
+   * belongs) says the block itself was built on the wrong columns, and still
+   * drops it. When every row was skipped the block drops for the first
+   * row's reason, as it did before rows could be skipped.
+   */
+  const rowSkips = (blockKind: AskVisualKind) => {
+    const skips: { reason: AskVisualDropReason; detail: string }[] = [];
+    const add = (reason: AskVisualDropReason, detail: string) => {
+      skips.push({ reason, detail });
+    };
+    return {
+      add,
+      /** Skips the row and answers true, or answers false: the block drops. */
+      take: (reason: AskVisualDropReason, detail: string) => {
+        if (reason !== "malformed" && reason !== "bad_reference") return false;
+        add(reason, detail);
+        return true;
+      },
+      count: () => skips.length,
+      block: (): BlockOutcome =>
+        drop(
+          skips[0]?.reason ?? "malformed",
+          blockKind,
+          skips[0]?.detail ?? "no ROW line",
+        ),
+    };
+  };
+
   const isPercent = (n: number) => n >= 0 && n <= 100;
   const isCount = (n: number) => n >= 0;
 
@@ -666,28 +758,59 @@ function parseBlock(
         baselineLabel: seriesLabels.labels[1],
         rows: [],
       };
+      const skipped = rowSkips(kind);
       for (const fields of rowLines) {
         if (fields.length !== 3) {
-          return drop("malformed", kind, "a ROW needs a label and two cells");
+          skipped.add("malformed", "a ROW needs a label and two cells");
+          continue;
         }
         const rowLabel = labels([fields[0]]);
-        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a row label");
+        if (!rowLabel.ok) {
+          if (!skipped.take(rowLabel.reason, "a row label")) {
+            return drop(rowLabel.reason, kind, "a row label");
+          }
+          continue;
+        }
         const subject = number(fields[1], isPercent);
-        if (!subject.ok) return drop(subject.reason, kind, "a subject cell");
+        if (!subject.ok) {
+          if (!skipped.take(subject.reason, "a subject cell")) {
+            return drop(subject.reason, kind, "a subject cell");
+          }
+          continue;
+        }
         const baseline = number(fields[2], isPercent);
-        if (!baseline.ok) return drop(baseline.reason, kind, "a baseline cell");
+        if (!baseline.ok) {
+          if (!skipped.take(baseline.reason, "a baseline cell")) {
+            return drop(baseline.reason, kind, "a baseline cell");
+          }
+          continue;
+        }
         out.rows.push({
           label: rowLabel.labels[0],
           subject: subject.number,
           baseline: baseline.number,
         });
       }
-      return { ok: true, visual: out };
+      if (out.rows.length === 0) return skipped.block();
+      return { ok: true, visual: out, droppedRows: skipped.count() };
     }
 
     case "table": {
       if (columns.length !== 1) {
         return drop("malformed", kind, "exactly one COLUMNS line is needed");
+      }
+      // A heading written for the label column ("Set | Points played |
+      // Points won", "Metric | Value") leaves every row one cell short. When
+      // every row is short by exactly that one, the first heading is the
+      // label column's — the wire format has none — and is dropped so the
+      // rows line up. When only some rows are short, the headings stand and
+      // those rows are left out below.
+      if (
+        columns[0].length >= 2 &&
+        rowLines.length > 0 &&
+        rowLines.every((fields) => fields.length === columns[0].length)
+      ) {
+        columns[0] = columns[0].slice(1);
       }
       if (
         columns[0].length < MIN_ASK_TABLE_COLUMNS ||
@@ -710,25 +833,53 @@ function parseBlock(
         columns: headings.labels,
         rows: [],
       };
+      const skipped = rowSkips(kind);
       for (const fields of rowLines) {
+        // A trailing separator after a full row is dropped; one standing
+        // for a cell the model left empty (`ROW: Faced | {{r1.a}} | `) stays,
+        // and that cell reads as `ASK_NULL_CELL`.
+        if (
+          fields.length === headings.labels.length + 2 &&
+          fields[fields.length - 1] === ""
+        ) {
+          fields.pop();
+        }
         if (fields.length !== headings.labels.length + 1) {
-          return drop(
+          skipped.add(
             "malformed",
-            kind,
             "a ROW needs a label and one cell per column",
           );
+          continue;
         }
         const rowLabel = labels([fields[0]]);
-        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a row label");
+        if (!rowLabel.ok) {
+          if (!skipped.take(rowLabel.reason, "a row label")) {
+            return drop(rowLabel.reason, kind, "a row label");
+          }
+          continue;
+        }
         const cells: string[] = [];
+        let bad: "malformed" | "bad_reference" | null = null;
         for (const field of fields.slice(1)) {
+          if (field === "") {
+            cells.push(ASK_NULL_CELL);
+            continue;
+          }
           const cell = readCell(field, tokens);
-          if (!cell.ok) return drop(cell.reason, kind, "a table cell");
+          if (!cell.ok) {
+            bad = cell.reason;
+            break;
+          }
           cells.push(cell.token.text);
+        }
+        if (bad) {
+          skipped.add(bad, "a table cell");
+          continue;
         }
         out.rows.push({ label: rowLabel.labels[0], cells });
       }
-      return { ok: true, visual: out };
+      if (out.rows.length === 0) return skipped.block();
+      return { ok: true, visual: out, droppedRows: skipped.count() };
     }
 
     case "trend": {
@@ -798,7 +949,7 @@ function parseBlock(
           value: { value: point.y, text: point.text },
         });
       }
-      return { ok: true, visual: { kind, caption, points } };
+      return { ok: true, visual: { kind, caption, points }, droppedRows: 0 };
     }
 
     case "split": {
@@ -823,7 +974,7 @@ function parseBlock(
         if (!count.ok) return drop(count.reason, kind, "a count cell");
         out.parts.push({ label: rowLabel.labels[0], count: count.number });
       }
-      return { ok: true, visual: out };
+      return { ok: true, visual: out, droppedRows: 0 };
     }
 
     case "serve": {
@@ -861,7 +1012,7 @@ function parseBlock(
           wide: wide.number,
         });
       }
-      return { ok: true, visual: out };
+      return { ok: true, visual: out, droppedRows: 0 };
     }
 
     case "form": {
@@ -898,7 +1049,7 @@ function parseBlock(
           `results must be ${MIN_ASK_FORM_RESULTS} to ${MAX_ASK_FORM_RESULTS}`,
         );
       }
-      return { ok: true, visual: { kind, caption, results } };
+      return { ok: true, visual: { kind, caption, results }, droppedRows: 0 };
     }
   }
 }
@@ -928,8 +1079,14 @@ function createLineStage(
   let heldSpace = "";
   let blockLines: string[] = [];
   let blocksSeen = 0;
+  /**
+   * Figure lines are held until the block (if any) has resolved, so a figure
+   * that repeats one of its cells can be left out: the page would otherwise
+   * print the same number twice, once large and once in the table.
+   */
+  let heldFigures: { label: string; value: string; line: string }[] = [];
 
-  function figure(line: string): AskAnswerEvent[] {
+  function figure(line: string): void {
     const body = line.slice(ASK_FIGURE_LINE_PREFIX.length);
     const cut = body.indexOf(ASK_FIGURE_LINE_SEPARATOR);
     const labelRead = expand(cut === -1 ? body : body.slice(0, cut), tokens);
@@ -940,20 +1097,34 @@ function createLineStage(
     const failure = labelRead.failure ?? valueRead.failure;
     if (failure) {
       result.failure = failure;
-      return [];
+      return;
     }
     const label = labelRead.text.trim();
     const value = valueRead.text.trim();
-    if (
-      label === "" ||
-      value === "" ||
-      result.figures.length >= MAX_ASK_FIGURES
-    ) {
+    if (label === "" || value === "" || heldFigures.length >= MAX_ASK_FIGURES) {
       result.droppedFigures.push(expand(line, tokens).text);
-      return [];
+      return;
     }
-    result.figures.push({ label, value });
-    return [{ type: "figure", label, value }];
+    heldFigures.push({ label, value, line });
+  }
+
+  /** The held figures as events, minus any that repeat a cell of `visual` under the same label. */
+  function flushFigures(visual: AskVisual | null): AskAnswerEvent[] {
+    const cells = visual ? blockCells(visual) : [];
+    const events: AskAnswerEvent[] = [];
+    for (const held of heldFigures) {
+      const key = labelKey(held.label);
+      if (
+        cells.some((cell) => cell.label === key && cell.text === held.value)
+      ) {
+        result.droppedFigures.push(expand(held.line, tokens).text);
+        continue;
+      }
+      result.figures.push({ label: held.label, value: held.value });
+      events.push({ type: "figure", label: held.label, value: held.value });
+    }
+    heldFigures = [];
+    return events;
   }
 
   function openBlock(line: string): void {
@@ -971,15 +1142,19 @@ function createLineStage(
         kind: kindOf(lines[0]),
         detail: `an answer carries at most ${MAX_ASK_VISUALS} block`,
       });
-      return [];
+      return flushFigures(result.visual);
     }
     const outcome = parseBlock(lines, tokens, rows);
     if (!outcome.ok) {
       result.droppedVisuals.push(outcome.drop);
-      return [];
+      return flushFigures(null);
     }
     result.visual = outcome.visual;
-    return [{ type: "visual", visual: outcome.visual }];
+    result.droppedVisualRows += outcome.droppedRows;
+    return [
+      ...flushFigures(outcome.visual),
+      { type: "visual", visual: outcome.visual },
+    ];
   }
 
   function text(piece: string): AskAnswerEvent[] {
@@ -1030,7 +1205,9 @@ function createLineStage(
           start !== "" &&
           !candidates.some((prefix) => couldBe(start, prefix))
         ) {
-          if (section === "block") events.push(...closeBlock());
+          events.push(
+            ...(section === "block" ? closeBlock() : flushFigures(null)),
+          );
           section = "text";
         }
         break;
@@ -1051,7 +1228,7 @@ function createLineStage(
         events.push({ type: "headline", text: result.headline });
         section = "figures";
       } else if (line.startsWith(ASK_FIGURE_LINE_PREFIX)) {
-        events.push(...figure(line));
+        figure(line);
       } else if (line.startsWith(ASK_VISUAL_LINE_PREFIX)) {
         if (section === "block") events.push(...closeBlock());
         openBlock(line);
@@ -1061,7 +1238,9 @@ function createLineStage(
       ) {
         blockLines.push(line);
       } else {
-        if (section === "block") events.push(...closeBlock());
+        events.push(
+          ...(section === "block" ? closeBlock() : flushFigures(null)),
+        );
         section = "text";
         buffer = `${line}\n${buffer}`;
       }
@@ -1069,8 +1248,8 @@ function createLineStage(
 
     if (result.failure) return events;
 
-    if (final && section === "block") {
-      events.push(...closeBlock());
+    if (final && section !== "text") {
+      events.push(...(section === "block" ? closeBlock() : flushFigures(null)));
       section = "text";
     }
     if (section === "text" && buffer !== "") {
@@ -1081,6 +1260,44 @@ function createLineStage(
   }
 
   return { push };
+}
+
+/** A label as it is compared: lowercased, letters and digits only. */
+function labelKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Every labelled number a visual shows, as (label key, printed text) pairs,
+ * so a figure that repeats one can be recognised. Trend points and form
+ * results have no label a figure could share.
+ */
+function blockCells(visual: AskVisual): { label: string; text: string }[] {
+  switch (visual.kind) {
+    case "table":
+      return visual.rows.flatMap((row) =>
+        row.cells.map((text) => ({ label: labelKey(row.label), text })),
+      );
+    case "bars":
+      return visual.rows.flatMap((row) => [
+        { label: labelKey(row.label), text: row.subject.text },
+        { label: labelKey(row.label), text: row.baseline.text },
+      ]);
+    case "split":
+      return visual.parts.map((part) => ({
+        label: labelKey(part.label),
+        text: part.count.text,
+      }));
+    case "serve":
+      return visual.courts.flatMap((court) =>
+        [court.t, court.body, court.wide].map((n) => ({
+          label: labelKey(court.label),
+          text: n.text,
+        })),
+      );
+    default:
+      return [];
+  }
 }
 
 /** The kind a block's header claims, when it is one of the six. */
@@ -1161,6 +1378,7 @@ export function renderAskAnswer(
     droppedDigits: [],
     droppedFigures: [],
     droppedVisuals: [],
+    droppedVisualRows: 0,
     failure: null,
   };
   return { events: render(chunks, rows, result), result };

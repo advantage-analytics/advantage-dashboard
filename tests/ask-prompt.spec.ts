@@ -28,17 +28,23 @@ import {
   ASK_ANSWER_EXAMPLE_REPLY,
   ASK_ANSWER_EXAMPLE_ROWS,
   ASK_NO_ADVICE_SENTENCE,
+  ASK_PLAN_EXAMPLE_DIAGNOSTIC,
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
+  ASK_SCOPE_COUNT_COLUMN,
   ASK_VISUAL_EXAMPLES,
   type AskPlanPromptInput,
   MAX_ASK_PROMPT_ROWS,
   MAX_ASK_PROMPT_TURNS,
   buildAnswerPrompt,
   buildPlanPrompt,
+  renderAskPercentageBlock,
   renderAskSchemaBlock,
 } from "@/lib/services/ask/prompts";
-import { ASK_SCHEMA } from "@/lib/services/ask/schema";
+import {
+  ASK_PERCENTAGE_DEFINITIONS,
+  ASK_SCHEMA,
+} from "@/lib/services/ask/schema";
 import {
   ASK_SQL_FUNCTION_ALLOWLIST,
   ASK_VIEWS,
@@ -198,7 +204,9 @@ test.describe("buildPlanPrompt", () => {
     expect(listed).toEqual(
       ASK_SCHEMA.map((view) => ({
         view: view.view,
-        columns: view.columns.map((column) => column.name),
+        columns: view.columns
+          .filter((column) => !column.hidden)
+          .map((column) => column.name),
       })),
     );
 
@@ -207,6 +215,94 @@ test.describe("buildPlanPrompt", () => {
       [...prompt.matchAll(/\bask\.([a-z_]+)\b/g)].map((match) => match[1]),
     );
     expect([...mentioned].sort()).toEqual([...ASK_VIEWS].sort());
+  });
+
+  test("hides the three composite ratings from the planner, and nothing else", () => {
+    const hidden = ASK_SCHEMA.flatMap((view) =>
+      view.columns.filter((column) => column.hidden).map((c) => c.name),
+    );
+    expect(hidden.sort()).toEqual([
+      "return_rating",
+      "serve_rating",
+      "under_pressure_rating",
+    ]);
+    for (const name of hidden) {
+      expect(prompt).not.toContain(name);
+    }
+    expect(prompt).toContain(
+      "There is no rating or score column; do not invent one.",
+    );
+  });
+
+  test("shows every percentage's numerator and denominator, each over real match_stats columns", () => {
+    const block = renderAskPercentageBlock();
+    expect(prompt).toContain(`## Percentages\n`);
+    expect(prompt).toContain(block);
+    expect(prompt).toContain(
+      "Across several matches, sum the numerator and the denominator and divide — never average per-match _pct columns, and never pick a different denominator.",
+    );
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const names = new Set(stats?.columns.map((column) => column.name));
+    expect(ASK_PERCENTAGE_DEFINITIONS.length).toBeGreaterThanOrEqual(20);
+    for (const definition of ASK_PERCENTAGE_DEFINITIONS) {
+      expect(names.has(definition.column), definition.column).toBe(true);
+      for (const part of `${definition.numerator} + ${definition.denominator}`.split(
+        " + ",
+      )) {
+        expect(names.has(part), `${definition.column}: ${part}`).toBe(true);
+      }
+      expect(block).toContain(
+        `  ${definition.column} = ${definition.numerator} / ${definition.denominator}`,
+      );
+    }
+    // The pair the baseline run got wrong.
+    expect(block).toContain(
+      "  first_return_won_pct = first_return_points_won / first_returns\n",
+    );
+  });
+
+  test("never lets the planner count the matches in scope; the server's column is the only count", () => {
+    expect(prompt).toContain(
+      `- NEVER count the matches in scope, and never name a column matches. The app counts them itself and adds the column ${ASK_SCOPE_COUNT_COLUMN} to every row; that is the only match count the answer may use.`,
+    );
+    expect(ASK_PLAN_EXAMPLE_QUERY.sql).not.toMatch(/\bas matches\b/);
+    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).not.toMatch(/\bas matches\b/);
+  });
+
+  test("plans a diagnostic question as one row of me_ and opp_ columns, advice questions included", () => {
+    expect(prompt).toContain(
+      "### Diagnostic questions: compare the player with the opponent",
+    );
+    expect(prompt).toContain(
+      "columns named me_<measure> and opp_<measure>. The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct.",
+    );
+    expect(prompt).toContain(
+      '"How do I beat this opponent?" is the diagnostic query over the matches against them.',
+    );
+    expect(prompt).toContain(
+      "A question that asks for advice is ALWAYS answered with shape A whenever the views hold facts on its subject",
+    );
+  });
+
+  test("tells the planner how a follow-up keeps its scope and how an untagged opponent name is matched", () => {
+    expect(prompt).toContain(
+      "A follow-up that names no match, opponent or period of its own keeps the scope of the previous player turn — reuse its match ids, or its opponent with opponent_name ilike.",
+    );
+    expect(prompt).toContain(
+      "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it (ilike '%timof%' finds Timofey and a misspelt Timofy) and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
+    );
+    expect(prompt).toContain(
+      'A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal',
+    );
+    expect(prompt).toContain(
+      "- Never for a question that is short, vague or misspelt: those get shape A over all matches.",
+    );
+  });
+
+  test("requires side on every sum over ask.match_stats", () => {
+    expect(prompt).toContain(
+      "Every sum over it MUST name side — filter side = 'me' for the player's own numbers, side = 'opponent' for the other player's, or sum with case when side = … — otherwise the two rows are added together and the query is refused.",
+    );
   });
 
   test("renders today's date, the resolved tags and the conversation so far", () => {
@@ -338,19 +434,50 @@ test.describe("buildPlanPrompt", () => {
     }
   });
 
-  test("its worked examples are in the prompt and the query one passes the guard", () => {
+  test("its worked examples are in the prompt and the query ones pass the guard", () => {
     expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_QUERY));
+    expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_DIAGNOSTIC));
     expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_REFUSAL));
-    expect(
-      checkAskSql({
-        scopeSql: ASK_PLAN_EXAMPLE_QUERY.scope_sql,
-        sql: ASK_PLAN_EXAMPLE_QUERY.sql,
-      }),
-    ).toEqual({ ok: true });
-    // The example obeys the prompt's own naming rules.
-    expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(" as matches,");
+    for (const example of [
+      ASK_PLAN_EXAMPLE_QUERY,
+      ASK_PLAN_EXAMPLE_DIAGNOSTIC,
+    ]) {
+      expect(
+        checkAskSql({ scopeSql: example.scope_sql, sql: example.sql }),
+      ).toEqual({ ok: true });
+    }
+    // The examples obey the prompt's own naming rules.
     expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(" as second_serve_won_pct,");
+    expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(" as all_matches,");
     expect(ASK_PLAN_EXAMPLE_REFUSAL.cannot_answer).not.toMatch(/\d/);
+    // The diagnostic one: every measure twice, me_ then opp_, both sides named.
+    const columns = [
+      ...ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql.matchAll(/ as (\w+)/g),
+    ].map((match) => match[1]);
+    expect(columns).toEqual([
+      "me_first_serve_pct",
+      "opp_first_serve_pct",
+      "me_second_serve_won_pct",
+      "opp_second_serve_won_pct",
+      "me_return_won_pct",
+      "opp_return_won_pct",
+      "me_break_points_converted",
+      "me_break_point_opportunities",
+      "opp_break_points_converted",
+      "opp_break_point_opportunities",
+      "me_winners",
+      "opp_winners",
+      "me_unforced_errors",
+      "opp_unforced_errors",
+      "me_total_points_won_pct",
+      "opp_total_points_won_pct",
+    ]);
+    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain("s.side = 'me'");
+    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain("s.side = 'opponent'");
+    // Its percentages use the pairs the Percentages section lists.
+    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain(
+      "s.first_serves_in else 0 end) / nullif(sum(case when s.side = 'me' then s.first_serves else 0 end), 0), 1) as me_first_serve_pct",
+    );
   });
 });
 
@@ -385,12 +512,21 @@ test.describe("buildAnswerPrompt", () => {
     expect(long).toContain("(3 more rows are not shown; do not refer to them)");
   });
 
-  test("pins the claim-first rule: no digits on the first line", () => {
+  test("pins the headline rule: a specific finding, no digits, no sample-size preamble, no filler", () => {
     expect(prompt).toContain(
-      "Line 1: the claim. One or two sentences saying what the result shows. NO digits and no cell reference on this line.",
+      'Line 1: the headline. One sentence, at most two, stating the single most specific finding the result shows — the decisive difference, named in words, as something a reader could check against the numbers: "Unforced errors decided it: you made far more than Beau did." NO digits and NO {{…}} reference anywhere on this line: a number belongs in a figure line, never in the headline. NEVER a remark on how much or how little is recorded, and never filler such as "your performance varies", "metrics are available" or "a moderate number". Do not copy the example\'s wording: "decided it" fits a match that was won or lost, not a question about one statistic.',
     );
     expect(prompt).toContain(
-      "- CLAIM FIRST. The first line is a falsifiable claim about what the result shows, with no digits.",
+      "- HEADLINE FIRST. The first line is a specific, falsifiable finding about what the result shows, in plain words with no digits.",
+    );
+  });
+
+  test("pins what a figure is: a number that carries the claim, never a match count, date or score", () => {
+    expect(prompt).toContain(
+      'A figure is one of the one to three numbers that carry the headline\'s claim. Never the number of matches, a date, a score or a name. A number with a unit names it in the label ("First-serve speed (mph)").',
+    );
+    expect(prompt).toContain(
+      "A number shown in the block is not repeated as a figure: with a block, the figures are the numbers the block does not hold, or there are none — before writing a figure line, check the block, and leave the figure out if its cell is in a ROW.",
     );
   });
 
@@ -406,7 +542,7 @@ test.describe("buildAnswerPrompt", () => {
       'Write ordinals as words: "second serve", "first set", "third game". Never "2nd".',
     );
     expect(prompt).toContain(
-      `up to ${MAX_ASK_FIGURES} figure lines, directly under the claim with no blank line between, each written exactly as\n${ASK_FIGURE_LINE_SYNTAX}\n`,
+      `up to ${MAX_ASK_FIGURES} figure lines, directly under the headline with no blank line between, each written exactly as\n${ASK_FIGURE_LINE_SYNTAX}\n`,
     );
     expect(prompt).toContain("Figure lines go only here, never further down.");
   });
@@ -427,20 +563,33 @@ test.describe("buildAnswerPrompt", () => {
     expect(prompt).toContain("no exclamation marks");
   });
 
-  test("states a sample of one or two matches as provisional", () => {
+  test("the match count is the server's column, said once at most, never in the headline", () => {
     expect(prompt).toContain(
-      "- A THIN SAMPLE IS STATED AS THIN. A result drawn from one or two matches is provisional, and the answer says so in plain words.",
+      `- THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.`,
     );
-    expect(prompt).toContain("Not thin. Do not call the result provisional.");
+    expect(prompt).not.toContain("THIN");
+    expect(prompt).not.toContain("provisional");
+    expect(prompt).not.toContain("in the little you have recorded");
     for (const matchCount of [1, 2]) {
       const thin = buildAnswerPrompt({ ...ANSWER_INPUT, matchCount });
       expect(thin).toContain(
-        "THIN. This result is computed from only one or two matches. You MUST say so in the first paragraph",
+        `The result is computed from ${matchCount} ${matchCount === 1 ? "match" : "matches"}: the column ${ASK_SCOPE_COUNT_COLUMN}, which the page also prints under the answer. It is the ONLY way to say how many matches an answer covers; no other cell counts matches. The body's LAST sentence may say so once, plainly — "This is one match." or "These are two matches." — and nothing else in the answer remarks on it.`,
       );
-      expect(thin).not.toContain("Not thin.");
     }
     expect(buildAnswerPrompt({ ...ANSWER_INPUT, matchCount: 3 })).toContain(
-      "Not thin.",
+      "The result is computed from 3 matches: the column matches_in_scope, which the page also prints under the answer. It is the ONLY way to say how many matches an answer covers; no other cell counts matches. Do not remark on how many there are.",
+    );
+  });
+
+  test("explains me_ and opp_ columns and how a diagnostic result is drawn", () => {
+    expect(prompt).toContain(
+      "A column starting me_ is the player's own figure and the matching opp_ column is the opponent's for the same measure.",
+    );
+    expect(prompt).toContain(
+      'A result with me_ and opp_ columns is drawn as a table with the columns "You" and the opponent\'s name (or "Opponent"), holding the four to six measures that differ most between the two, the largest difference first. Leave out a measure whose cells are null.',
+    );
+    expect(prompt).toContain(
+      "In each row the first cell is the me_ column and the second is the opp_ column of the SAME measure: never two me_ columns in one row, and never a percentage beside a count.",
     );
   });
 
@@ -455,36 +604,42 @@ test.describe("buildAnswerPrompt", () => {
     expect(result.droppedDigits).toEqual([]);
     expect(result.droppedFigures).toEqual([]);
     expect(result.headline).not.toMatch(/\d/);
+    expect(result.headline).toBe(
+      "Second serves and returns decided it: Beau won most of the points behind his second serve and more than half of his return points, while you won well under half of each.",
+    );
     expect(result.figures).toEqual([
-      { label: "Second-serve points won", value: "41.2%" },
-      { label: "Across all matches", value: "52.8%" },
-      { label: "Matches against left-handers", value: "4" },
+      { label: "Points won", value: "45.6%" },
+      { label: "Unforced errors", value: "38" },
     ]);
     expect(result.droppedVisuals).toEqual([]);
     expect(result.visual).toEqual({
-      kind: "bars",
-      caption:
-        "Second-serve points won, from 4 matches against left-handers and 13 overall.",
-      subjectLabel: "Against left-handers",
-      baselineLabel: "All matches",
+      kind: "table",
+      caption: "The measures that separated you, from 1 match.",
+      columns: ["You", "Beau"],
       rows: [
-        {
-          label: "Second-serve points won",
-          subject: { value: 41.2, text: "41.2%" },
-          baseline: { value: 52.8, text: "52.8%" },
-        },
+        { label: "Second-serve points won", cells: ["41.2%", "70.8%"] },
+        { label: "Return points won", cells: ["35.6%", "51.9%"] },
+        { label: "Winners", cells: ["15", "24"] },
+        { label: "Break points converted", cells: ["2", "4"] },
       ],
     });
-    expect(events.map((event) => event.type).slice(0, 5)).toEqual([
+    expect(events.map((event) => event.type).slice(0, 4)).toEqual([
       "headline",
-      "figure",
       "figure",
       "figure",
       "visual",
     ]);
-    // One paragraph beneath the block, as the prompt's own rule asks.
+    // One paragraph beneath the block, as the prompt's own rule asks, ending
+    // with the one-match sentence — and no figure repeats a table cell.
     expect(result.text).not.toContain("\n\n");
-    expect(result.text).toContain("the most recent on Sep 14, 2026.");
+    expect(result.text).toMatch(/ This is one match\.$/);
+    const cells =
+      result.visual?.kind === "table"
+        ? result.visual.rows.flatMap((row) => row.cells)
+        : [];
+    for (const figure of result.figures) {
+      expect(cells).not.toContain(figure.value);
+    }
     expect(events.some((event) => event.type === "error")).toBe(false);
 
     // The example itself types no number and gives no advice.
@@ -525,10 +680,29 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
       "Figure lines stay allowed beside a block, still at most 3 and always above it.",
     );
     expect(prompt).toContain(
-      "- When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, saying what the block shows.",
+      "- When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, adding what the block does not show — which measures were level, what the numbers the block leaves out say — not reciting its cells.",
     );
     expect(prompt).toContain(
       "A cell is exactly one {{rN.column}} and nothing else.",
+    );
+    expect(prompt).toContain(
+      "After a ROW label comes |, never an equals sign.",
+    );
+  });
+
+  test("says bars take only percentages, a split only counts, and a table row exactly one cell per column", () => {
+    expect(ASK_VISUAL_EXAMPLES.bars.when).toContain(
+      "ONLY _pct cells: a count, a speed or a rating in a bars row drops the block; put those in a table.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.split.when).toContain("never a percentage");
+    expect(ASK_VISUAL_EXAMPLES.table.when).toContain(
+      "COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Measure, Metric, Stat, Set or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by |; a row with fewer or more cells is left out. One column of your own numbers is not a table",
+    );
+    expect(ASK_VISUAL_EXAMPLES.split.when).toContain(
+      "ONLY counts that are parts of ONE whole: they add up to a total the caption names",
+    );
+    expect(ASK_VISUAL_EXAMPLES.split.when).toContain(
+      "An average is never a part: a column named avg_… or …_per_match does not go in a split. Two unlike numbers — two averages, or winners beside unforced errors — compare two measures and add up to nothing: leave them as figure lines or draw a table, never a split.",
     );
   });
 

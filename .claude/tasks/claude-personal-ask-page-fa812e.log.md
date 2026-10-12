@@ -321,3 +321,18 @@ is the runner's. Newest entries at the bottom.
 5. Headline and figure tiles kept their built sizes; the mockups' larger claim was not adopted.
 6. Not looked at below 1440px, nor inside the signed-in page.
 7. `/design/ask/answers` still shows the four numbered design sheets beside the new "As built" sheet; they are historical now.
+
+## Change outside the queue · Ask answer quality, tuned against real questions — done
+
+**gate:** full `npm test` green (6268 passed, 415 skipped), typecheck and lint clean. Not a queue task; done in session on 2026-10-12 at the author's request to make answers more meaningful and to test until they were.
+
+**changed:** `scripts/ask-eval.ts` runs a list of 37 realistic questions through the real `askQuestion()` as the eyes-on verifier account (real model, real `ask_run_query`, nothing reserved or saved) and writes each query and answer to a report. Driven by it: the plan prompt gained the exact numerator/denominator for every percentage, a you-vs-opponent recipe for diagnostic questions, firmer handling of advice-shaped questions and of follow-ups (earlier turns now carry their tags), and no longer shows the composite rating columns; the answer prompt bans sample-size preambles and filler headlines and says which block fits which answer. Mechanical guards: a `_pct` outside 0–100 is fed back to the planner as an error, a query over `ask.match_stats` must mention `side`, and the scope's match count is injected as `matches_in_scope`. The block parser tolerates a label-column heading and drops a bad table or bars row without dropping the block; a table may have one value column.
+
+**measured (two full runs):** 0 dropped blocks in both; refusals only for the three out-of-scope questions in one run and one extra planner failure ("under pressure") in the other; no percentage outside 0–100. The Timofey match's table (second-serve points won 41.2% vs 70.8%, return points won 35.6% vs 44.4%, winners 15 vs 24, break points converted 2 vs 4) was checked against `match_stats_with_percentages` and matches.
+
+**follow-ups:**
+
+1. The model is small and non-deterministic: about one answer per run still draws a split of numbers that are not parts of one whole, and a headline occasionally spells out a count or carries a date.
+2. One planner failure in three runs of "How do I do under pressure?" was not explained.
+3. The verifier account has one real match and three near-identical fixtures; answers across many matches (trends, strengths) are thinly exercised. Re-run the eval against an account with a real season before trusting those.
+4. Eval reports hold a player's statistics and stay outside the repo.

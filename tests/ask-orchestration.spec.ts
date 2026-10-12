@@ -9,6 +9,7 @@ import {
   ASK_LLM_UNAVAILABLE_MESSAGE,
   ASK_NO_DATA_MESSAGE,
   ASK_SAVE_FAILED_MESSAGE,
+  ASK_SCOPE_COUNT_COLUMN,
   type AskDatabase,
   type AskModel,
   type AskQuestionInput,
@@ -19,6 +20,7 @@ import {
   askQuestion,
   conversationTurnsFromMessages,
   parsePlanReply,
+  percentageOutOfRange,
   reserveAskQuestion,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
@@ -566,8 +568,119 @@ test.describe("a plan that cannot be used is told back once", () => {
 /** A plan the guard accepts and the (faked) database refuses. */
 const PLAN_REFUSED_BY_DB: AskPlanQuery = {
   ...PLAN,
-  sql: "select count(*) as matches, avg(s.second_serve) as second_serve_won_pct from ask.match_stats s join scope on scope.match_id = s.match_id",
+  sql: "select count(*) as matches, avg(s.second_serve) as second_serve_won_pct from ask.match_stats s join scope on scope.match_id = s.match_id where s.side = 'me'",
 };
+
+// ── The post-query checks ───────────────────────────────────────────────────
+
+test.describe("the rows the answer step is given", () => {
+  test(`carry ${ASK_SCOPE_COUNT_COLUMN} on every row, set to the scope's size, overwriting a planner column of that name`, async () => {
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              {
+                set_number: 1,
+                points_won_pct: 45.8,
+                [ASK_SCOPE_COUNT_COLUMN]: 99,
+              },
+              { set_number: 2, points_won_pct: 45.5 },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls } = fakeModel([
+      JSON.stringify(PLAN),
+      `Even sets.\nFIGURE: First set = {{r1.points_won_pct}}\n\nFrom {{r2.${ASK_SCOPE_COUNT_COLUMN}}} matches, {{r1.${ASK_SCOPE_COUNT_COLUMN}}} in the first row too.`,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(text(events)).toBe("From 2 matches, 2 in the first row too.");
+    expect(calls[1].system).toContain(`  ${ASK_SCOPE_COUNT_COLUMN}: 2\n`);
+    expect(calls[1].system).not.toContain(`${ASK_SCOPE_COUNT_COLUMN}: 99`);
+    expect(calls[1].system).toContain("The result is computed from 2 matches");
+  });
+
+  test("a _pct value outside 0–100 is fed back to the planner once, naming the column", async () => {
+    const { db, calls, releases } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [{ first_return_won_pct: 118.5, aces: 3 }],
+          },
+          error: null,
+        },
+        RUN_OK,
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    expect(releases()).toHaveLength(0);
+    expect(modelCalls).toHaveLength(3);
+    const retry = modelCalls[1].messages;
+    expect(retry[2].role).toBe("user");
+    expect(retry[2].content).toContain(
+      "That query returned a percentage outside 0 to 100.",
+    );
+    expect(retry[2].content).toContain(
+      "The column first_return_won_pct holds a value below 0 or above 100.",
+    );
+    expect(retry[2].content).toContain("ONE JSON object");
+    // The bad rows never reached the answer step.
+    expect(modelCalls[2].system).not.toContain("118.5");
+  });
+
+  test("a second out-of-range percentage ends with cannot_answer and releases", async () => {
+    const bad: AskRpcResult = {
+      data: { matches: MATCH_ROWS, rows: [{ win_pct: -4 }] },
+      error: null,
+    };
+    const { db, releases, saves } = fakeDb({ run: [bad, bad] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events)).toEqual({
+      type: "error",
+      code: "cannot_answer",
+      error: ASK_CANNOT_ANSWER_MESSAGE,
+    });
+    expect(modelCalls).toHaveLength(2);
+    expect(saves()).toHaveLength(0);
+    expect(releases()[0].args).toEqual({ usage_id: USAGE_ID });
+  });
+
+  test("a null or in-range percentage, or a big count, passes the check", () => {
+    expect(
+      percentageOutOfRange([
+        { a_pct: null, b_pct: 0, c_pct: 100, aces: 1204, speed_mph: 139.4 },
+      ]),
+    ).toBeNull();
+    expect(percentageOutOfRange([{ a_pct: 100.1 }])).toBe("a_pct");
+    expect(percentageOutOfRange([{ ok_pct: 5 }, { late_pct: -0.1 }])).toBe(
+      "late_pct",
+    );
+  });
+});
 
 // ── The other failure paths ─────────────────────────────────────────────────
 
@@ -906,7 +1019,7 @@ test.describe("an answer with a visual block", () => {
     expect(warned).toEqual([
       [
         ASK_DROPPED_VISUALS_LOG,
-        { count: 1, reasons: ["bad_reference"], kinds: ["table"] },
+        { count: 1, reasons: ["bad_reference"], kinds: ["table"], rows: 0 },
       ],
     ]);
     const logged = JSON.stringify(warned);
@@ -919,6 +1032,40 @@ test.describe("an answer with a visual block", () => {
     expect(saved.visual).toBeNull();
     expect(saved.headline).toBe(
       "Your second serve has held up across these matches.",
+    );
+  });
+
+  test("a row left out of a block that was still sent is logged as a count only", async () => {
+    const { db, saves } = fakeDb();
+    const { model } = fakeModel([
+      JSON.stringify(PLAN),
+      ANSWER_WITH_VISUAL.replace(
+        "{{r1.second_serve_won_pct}}\n\n",
+        "{{r1.second_serve_won_pct}}\nROW: Aces | {{r1.aces}} | null\n\n",
+      ),
+    ]);
+    const warned: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warned.push(args);
+    };
+    let events: AskEvent[];
+    try {
+      events = await collect(askQuestion(input({ db, model })));
+    } finally {
+      console.warn = warn;
+    }
+
+    expect(events.find((event) => event.type === "visual")).toEqual({
+      type: "visual",
+      visual: VISUAL,
+    });
+    expect(warned).toEqual([
+      [ASK_DROPPED_VISUALS_LOG, { count: 0, reasons: [], kinds: [], rows: 1 }],
+    ]);
+    expect(JSON.stringify(warned)).not.toContain("Aces");
+    expect((saves()[0].args?.p_answer as AskSavedAnswer).visual).toEqual(
+      VISUAL,
     );
   });
 
@@ -1158,6 +1305,39 @@ test("conversationTurnsFromMessages keeps text, headline and body, never the SQL
     { role: "user", content: "a legacy string question" },
   ]);
   expect(JSON.stringify(turns)).not.toContain("select");
+});
+
+test("conversationTurnsFromMessages carries a saved question's tags as what it was about, so a follow-up keeps its scope", () => {
+  const turns = conversationTurnsFromMessages([
+    {
+      role: "user",
+      content: {
+        text: "Why did I lose to Timofey?",
+        tags: [
+          {
+            kind: "opponent",
+            id: "timofey stepanov",
+            label: "Timofey\nStepanov",
+          },
+          { kind: "match", id: MATCH_A, label: "Sep 14, 2026 · Anna Lee" },
+          { kind: "match", id: MATCH_B },
+          { kind: "nonsense", id: "x", label: "y" },
+          "not a tag",
+        ],
+      },
+    },
+    { role: "assistant", content: { headline: "Errors.", body: "" } },
+    { role: "user", content: { text: "And on second serves?", tags: [] } },
+  ]);
+
+  expect(turns).toEqual([
+    {
+      role: "user",
+      content: `Why did I lose to Timofey? (about: opponent Timofey Stepanov; match ${MATCH_A} vs Sep 14, 2026 · Anna Lee; match ${MATCH_B})`,
+    },
+    { role: "assistant", content: "Errors." },
+    { role: "user", content: "And on second serves?" },
+  ]);
 });
 
 // ── Tags ────────────────────────────────────────────────────────────────────

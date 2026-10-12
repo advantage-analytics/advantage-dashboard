@@ -212,7 +212,23 @@ interface WalkState {
   readonly cteNames: Set<string>;
   /** Whether a `scope` relation was read (meaningful in `sql` mode). */
   scopeReferenced: boolean;
+  /** Whether `ask.match_stats` was read anywhere in the statement. */
+  matchStatsReferenced: boolean;
+  /** Whether a column named `side` was referenced anywhere in the statement. */
+  sideReferenced: boolean;
 }
+
+/** The view with two rows per match, and the column that tells them apart. */
+const TWO_SIDED_VIEW = "match_stats";
+const SIDE_COLUMN = "side";
+
+/**
+ * The reason `sql` is refused when it reads `ask.match_stats` and never
+ * mentions `side`: every sum over that view would then add the player's
+ * row to the opponent's. Exported so the plan prompt can quote it.
+ */
+export const ASK_SIDE_REQUIRED_REASON =
+  "sql reads ask.match_stats but never mentions side. That view has two rows per match (side = 'me' and side = 'opponent'); filter side = 'me', side = 'opponent', or sum with case when side = 'me' then … end.";
 
 /**
  * Every CTE alias the statement defines, anywhere in its tree, collected
@@ -261,7 +277,10 @@ function checkRelation(name: Node, state: WalkState): void {
       `"${schema}.${relation}" is not an ask view; only ask.matches, ask.match_stats, ask.points and ask.shots may be read.`,
     );
   }
-  if ((ASK_VIEWS as readonly string[]).includes(relation)) return;
+  if ((ASK_VIEWS as readonly string[]).includes(relation)) {
+    if (relation === TWO_SIDED_VIEW) state.matchStatsReferenced = true;
+    return;
+  }
   if (schema === "ask") {
     refuse(
       `"ask.${relation}" is not one of the ask views (matches, match_stats, points, shots).`,
@@ -350,6 +369,9 @@ function walk(value: unknown, state: WalkState): void {
             `Column reference "${str(table.schema)}.${str(table.name)}.${str(value.name)}" may not name a schema.`,
           );
         }
+        if (str(value.name)?.toLowerCase() === SIDE_COLUMN) {
+          state.sideReferenced = true;
+        }
         break;
       }
       default:
@@ -387,9 +409,14 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
     mode,
     cteNames: new Set(),
     scopeReferenced: false,
+    matchStatsReferenced: false,
+    sideReferenced: false,
   };
   collectCteNames(statement, state.cteNames);
   walk(statement, state);
+  if (mode === "sql" && state.matchStatsReferenced && !state.sideReferenced) {
+    refuse(ASK_SIDE_REQUIRED_REASON);
+  }
   return state;
 }
 
@@ -403,6 +430,11 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *   defines, or — in `sql` only — `scope`;
  * - `sql` reads `scope`, so the answer is computed over the matches the
  *   scope step chose;
+ * - `sql` that reads `ask.match_stats` mentions `side` somewhere, so the
+ *   player's row and the opponent's are never summed together
+ *   ({@link ASK_SIDE_REQUIRED_REASON}); a mention is all that is checked —
+ *   the view's two rows make a query without one wrong by construction, and
+ *   one with it is the planner's to get right;
  * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST}.
  *
  * The first problem found is the reason; the route feeds it back to the model.

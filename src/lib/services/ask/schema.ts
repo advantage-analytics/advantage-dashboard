@@ -35,7 +35,136 @@ export interface AskColumn {
   type: AskColumnType;
   /** The view's `comment on column`, verbatim. */
   meaning: string;
+  /**
+   * True for a column the view has but the planner is not shown. The three
+   * composite ratings are opaque sums of percentages: shown, a small model
+   * averages them and answers "serve rating 231.9", which no player can read.
+   * They stay here so the schema still matches the migrations column for
+   * column; `renderAskSchemaBlock()` leaves them out.
+   */
+  hidden?: true;
 }
+
+/**
+ * How every percentage over `ask.match_stats` is computed, as the live view
+ * `match_stats_with_percentages` computes it: `round(100.0 * numerator /
+ * nullif(denominator, 0), 1)`. For one match the view's own `_pct` column is
+ * already right; across several matches the planner must sum these pairs,
+ * and this table is what it is shown so it never guesses a denominator (the
+ * baseline run divided `first_return_points_won` by `first_returns_in` and
+ * answered 118.5%). The return direction and contact shares are left out:
+ * each is a count over its three siblings, and the prompt is paid for by the
+ * character.
+ */
+export interface AskPercentageDefinition {
+  /** The `_pct` column of `ask.match_stats`. */
+  column: string;
+  numerator: string;
+  denominator: string;
+}
+
+export const ASK_PERCENTAGE_DEFINITIONS: readonly AskPercentageDefinition[] = [
+  {
+    column: "first_serve_pct",
+    numerator: "first_serves_in",
+    denominator: "first_serves",
+  },
+  {
+    column: "first_serve_won_pct",
+    numerator: "first_serve_points_won",
+    denominator: "first_serves_in",
+  },
+  {
+    column: "second_serve_won_pct",
+    numerator: "second_serve_points_won",
+    denominator: "second_serves_in",
+  },
+  {
+    column: "service_games_won_pct",
+    numerator: "service_games_won",
+    denominator: "service_games",
+  },
+  {
+    column: "first_return_in_pct",
+    numerator: "first_returns_in",
+    denominator: "first_returns",
+  },
+  {
+    column: "second_return_in_pct",
+    numerator: "second_returns_in",
+    denominator: "second_returns",
+  },
+  {
+    column: "first_return_won_pct",
+    numerator: "first_return_points_won",
+    denominator: "first_returns",
+  },
+  {
+    column: "second_return_won_pct",
+    numerator: "second_return_points_won",
+    denominator: "second_returns",
+  },
+  {
+    column: "return_games_won_pct",
+    numerator: "return_games_won",
+    denominator: "return_games",
+  },
+  {
+    column: "break_points_saved_pct",
+    numerator: "break_points_saved",
+    denominator: "break_points_faced",
+  },
+  {
+    column: "break_points_converted_pct",
+    numerator: "break_points_converted",
+    denominator: "break_point_opportunities",
+  },
+  {
+    column: "set_points_saved_pct",
+    numerator: "set_points_saved",
+    denominator: "set_points_faced",
+  },
+  {
+    column: "set_points_converted_pct",
+    numerator: "set_points_converted",
+    denominator: "set_point_opportunities",
+  },
+  {
+    column: "total_points_won_pct",
+    numerator: "total_points_won",
+    denominator: "total_points",
+  },
+  {
+    column: "short_rally_won_pct",
+    numerator: "short_rally_won",
+    denominator: "short_rally_total",
+  },
+  {
+    column: "medium_rally_won_pct",
+    numerator: "medium_rally_won",
+    denominator: "medium_rally_total",
+  },
+  {
+    column: "long_rally_won_pct",
+    numerator: "long_rally_won",
+    denominator: "long_rally_total",
+  },
+  {
+    column: "serve_wide_pct",
+    numerator: "serve_wide",
+    denominator: "serve_wide + serve_body + serve_t",
+  },
+  {
+    column: "serve_body_pct",
+    numerator: "serve_body",
+    denominator: "serve_wide + serve_body + serve_t",
+  },
+  {
+    column: "serve_t_pct",
+    numerator: "serve_t",
+    denominator: "serve_wide + serve_body + serve_t",
+  },
+];
 
 export interface AskViewSchema {
   view: AskViewName;
@@ -529,18 +658,21 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "number",
         meaning:
           "Composite serve score: first-serve %, first- and second-serve points won %, and service games held % summed, plus aces minus double faults; higher is better, null when any part is missing.",
+        hidden: true,
       },
       {
         name: "return_rating",
         type: "number",
         meaning:
           "Composite return score: first- and second-serve return points won %, return games won % and break points converted % summed; higher is better, null when any part is missing.",
+        hidden: true,
       },
       {
         name: "under_pressure_rating",
         type: "number",
         meaning:
           "Average of the break- and set-point percentages this side had a chance at (saved and converted), 0–100; null when it had none.",
+        hidden: true,
       },
       {
         name: "short_rally_won_pct",

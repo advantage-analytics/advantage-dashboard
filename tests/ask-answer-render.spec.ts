@@ -38,6 +38,7 @@ import {
   MAX_ASK_TREND_POINTS,
   MAX_ASK_VISUALS,
   MIN_ASK_SPLIT_PARTS,
+  MIN_ASK_TABLE_COLUMNS,
   MIN_ASK_TREND_POINTS,
   readAskVisual,
 } from "@/lib/services/ask/events";
@@ -260,6 +261,7 @@ test.describe("renderAskAnswer — shape", () => {
       droppedDigits: [],
       droppedFigures: [],
       droppedVisuals: [],
+      droppedVisualRows: 0,
       failure: null,
     });
   });
@@ -956,8 +958,43 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       "malformed",
     ],
     [
-      "a table row with fewer cells than columns",
-      "CHART: table | Caption.\nCOLUMNS: A | B\nROW: X | {{r1.matches}}",
+      "a table whose only row has more cells than columns",
+      "CHART: table | Caption.\nCOLUMNS: A | B\nROW: X | {{r1.matches}} | {{r1.matches}} | {{r1.matches}}",
+      "malformed",
+    ],
+    [
+      "a table whose rows are all invalid",
+      "CHART: table | Caption.\nCOLUMNS: A | B\nROW: X | {{r1.matches}} | null\nROW: Y | {{r1.nope}} | {{r1.matches}}\nROW: Z | {{r1.matches}}",
+      "malformed",
+    ],
+    [
+      "a table whose only row has a bad reference",
+      "CHART: table | Caption.\nCOLUMNS: A | B\nROW: X | {{r1.matches}} | {{r1.nope}}",
+      "bad_reference",
+    ],
+    [
+      "bars whose rows are all invalid",
+      "CHART: bars | Caption.\nSERIES: A | B\nROW: A | {{r1.nope}} | {{r1.all_first_serve_pct}}\nROW: B | {{r1.first_serve_pct}}",
+      "bad_reference",
+    ],
+    [
+      "bars with a count in one row, beside a good row",
+      "CHART: bars | Caption.\nSERIES: A | B\nROW: A | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\nROW: B | {{r1.big}} | {{r1.all_first_serve_pct}}",
+      "bad_value",
+    ],
+    [
+      "a split with a bad reference in one of three parts",
+      "CHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\nROW: C | {{r1.double_faults_lost}}",
+      "bad_reference",
+    ],
+    [
+      "a serve block with a bad reference in one of two courts",
+      "CHART: serve | Caption.\nROW: First | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}\nROW: Second | {{r1.serve_t}} | {{r1.nope}} | {{r1.serve_wide}}",
+      "bad_reference",
+    ],
+    [
+      "a table with no value column",
+      "CHART: table | Caption.\nCOLUMNS:\nROW: X | {{r1.matches}}",
       "malformed",
     ],
     [
@@ -1052,6 +1089,275 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       expect(JSON.stringify(result.droppedVisuals)).not.toContain("Caption");
     });
   }
+
+  test("three slips are read as meant: '=' after a ROW label, a trailing separator, a '%' after a cell", async () => {
+    const { result } = await render(
+      [
+        `${HEAD}CHART: bars | Caption.\nSERIES: A | B |\nROW: Saved = {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}%\nROW: Won | {{r1.second_serve_won_pct}} | {{r1.all_second_serve_won_pct}} |\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual).toEqual({
+      kind: "bars",
+      caption: "Caption.",
+      subjectLabel: "A",
+      baselineLabel: "B",
+      rows: [
+        {
+          label: "Saved",
+          subject: { value: 58.2, text: "58.2%" },
+          baseline: { value: 61.4, text: "61.4%" },
+        },
+        {
+          label: "Won",
+          subject: { value: 41.2, text: "41.2%" },
+          baseline: { value: 52.8, text: "52.8%" },
+        },
+      ],
+    });
+    expect(result.droppedDigits).toEqual([]);
+  });
+
+  test("a heading written for the label column is dropped when every row is one cell short, down to one value column", async () => {
+    const measure = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Measure | You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Errors | {{r1.unforced}} | {{r1.double_faults}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(measure.result.droppedVisuals).toEqual([]);
+    expect(measure.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["You", "Opponent"],
+      rows: [
+        { label: "Winners", cells: ["8", "11"] },
+        { label: "Errors", cells: ["15", "4"] },
+      ],
+    });
+
+    // Any first heading, not a fixed list of words: "Set" heads the labels
+    // here because every row is one cell short.
+    const set = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Set | Points played | Points won\nROW: First set | {{r1.winners}} | {{r1.first_serve_pct}}\nROW: Second set | {{r1.forced}} | {{r1.second_serve_won_pct}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(set.result.droppedVisuals).toEqual([]);
+    expect(set.result.droppedVisualRows).toBe(0);
+    expect(set.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["Points played", "Points won"],
+      rows: [
+        { label: "First set", cells: ["8", "58.2%"] },
+        { label: "Second set", cells: ["11", "41.2%"] },
+      ],
+    });
+
+    // One value column is what is left, and is a table.
+    const single = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Pressure metric | Value\nROW: Winners | {{r1.winners}}\nROW: Forced errors | {{r1.forced}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(single.result.droppedVisuals).toEqual([]);
+    expect(single.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["Value"],
+      rows: [
+        { label: "Winners", cells: ["8"] },
+        { label: "Forced errors", cells: ["11"] },
+      ],
+    });
+    expect(
+      readAskVisual(JSON.parse(JSON.stringify(single.result.visual))),
+    ).toEqual(single.result.visual);
+
+    // A one-column table written as one is accepted too.
+    const one = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Value\nROW: Winners | {{r1.winners}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(one.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["Value"],
+      rows: [{ label: "Winners", cells: ["8"] }],
+    });
+
+    // Rows that disagree on the cell count: the headings stand, and the
+    // short row is left out.
+    const mixed = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Errors | {{r1.unforced}}\nROW: Serves | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(mixed.result.droppedVisuals).toEqual([]);
+    expect(mixed.result.droppedVisualRows).toBe(2);
+    expect(mixed.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["You", "Opponent"],
+      rows: [{ label: "Winners", cells: ["8", "11"] }],
+    });
+
+    // Rows that already have one cell per heading keep "Measure" as a column.
+    const full = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Measure | You\nROW: Winners | {{r1.winners}} | {{r1.forced}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(
+      full.result.visual?.kind === "table" && full.result.visual.columns,
+    ).toEqual(["Measure", "You"]);
+  });
+
+  test("a table row that is invalid on its own is left out and counted; the block survives on the rows that are left", async () => {
+    const { events, result } = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Volley winners | {{r1.unforced}} | null\nROW: Aces | {{r1.aces}} | {{r1.forced}}\nROW: Worded | about a dozen | {{r1.forced}}\nROW: {{r1.nope}} | {{r1.winners}} | {{r1.forced}}\nROW: Errors | {{r1.unforced}} | {{r1.double_faults}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(result.failure).toBeNull();
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.droppedVisualRows).toBe(4);
+    expect(result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["You", "Opponent"],
+      rows: [
+        { label: "Winners", cells: ["8", "11"] },
+        { label: "Errors", cells: ["15", "4"] },
+      ],
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+    ]);
+    // Nothing the model wrote in a left-out row reached the page.
+    expect(JSON.stringify(result.visual)).not.toContain("dozen");
+    expect(JSON.stringify(result.visual)).not.toContain("null");
+  });
+
+  test("a bars row with a bad reference or the wrong cell count is left out; split and serve still drop whole", async () => {
+    const bars = await render(
+      [
+        `${HEAD}CHART: bars | Caption.\nSERIES: A | B\nROW: First serves in | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\nROW: Returns | {{r1.return_won_pct}} | {{r1.all_first_serve_pct}}\nROW: Short | {{r1.first_serve_pct}}\nROW: Second | {{r1.second_serve_won_pct}} | {{r1.all_second_serve_won_pct}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(bars.result.droppedVisuals).toEqual([]);
+    expect(bars.result.droppedVisualRows).toBe(2);
+    expect(
+      bars.result.visual?.kind === "bars" &&
+        bars.result.visual.rows.map((row) => row.label),
+    ).toEqual(["First serves in", "Second"]);
+
+    const split = await render(
+      [
+        `${HEAD}CHART: split | Caption.\nROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}\nROW: Double faults | {{r1.double_faults_lost}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(split.result.visual).toBeNull();
+    expect(split.result.droppedVisualRows).toBe(0);
+    expect(split.result.droppedVisuals).toEqual([
+      { reason: "bad_reference", kind: "split", detail: expect.any(String) },
+    ]);
+  });
+
+  test("a bad reference in the headline or a FIGURE line still fails the answer, whatever the block tolerates", async () => {
+    const block =
+      "CHART: table | Caption.\nCOLUMNS: You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Aces | {{r1.aces}} | {{r1.forced}}\n\nBody.";
+    const headline = await render([`Claim {{r1.nope}}.\n${block}`], COMPARISON);
+    expect(headline.result.failure?.kind).toBe("missing_column");
+    const figure = await render(
+      [`Claim.\nFIGURE: Aces = {{r1.nope}}\n${block}`],
+      COMPARISON,
+    );
+    expect(figure.result.failure?.kind).toBe("missing_column");
+  });
+
+  test("an empty table cell reads as an em dash, and a trailing separator after a full row is ignored", async () => {
+    const { result } = await render(
+      [
+        `${HEAD}CHART: table | Caption.\nCOLUMNS: Count | Share\nROW: Faced | {{r1.winners}} | \nROW: Saved | {{r1.forced}} | {{r1.first_serve_pct}} |\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["Count", "Share"],
+      rows: [
+        { label: "Faced", cells: ["8", "—"] },
+        { label: "Saved", cells: ["11", "58.2%"] },
+      ],
+    });
+  });
+
+  test("a figure that repeats a block cell under the same label is dropped; the others keep their place before the block", async () => {
+    const { events, result } = await render(
+      [
+        "Claim.\nFIGURE: Winners = {{r1.winners}}\nFIGURE: Points won = {{r1.first_serve_pct}}\nFIGURE: Forced errors = {{r1.forced}}\nCHART: table | Caption.\nCOLUMNS: You | Them\nROW: Winners | {{r1.winners}} | {{r1.unforced}}\nROW: Forced errors | {{r1.serve_t}} | {{r1.forced}}\n\nBody.",
+      ],
+      COMPARISON,
+    );
+    expect(result.failure).toBeNull();
+    expect(result.figures).toEqual([{ label: "Points won", value: "58.2%" }]);
+    expect(result.droppedFigures).toEqual([
+      "FIGURE: Winners = 8",
+      "FIGURE: Forced errors = 11",
+    ]);
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+    ]);
+    // The same value under a different label is a different measure and stays.
+    const kept = await render(
+      [
+        "Claim.\nFIGURE: Aces = {{r1.winners}}\nCHART: split | Caption.\nROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}\n\nBody.",
+      ],
+      COMPARISON,
+    );
+    expect(kept.result.figures).toEqual([{ label: "Aces", value: "8" }]);
+  });
+
+  test("a '=' in a ROW label that is not followed by a cell is left alone, and a cell with words beside it is still malformed", async () => {
+    const kept = await render(
+      [
+        `${HEAD}CHART: split | Caption.\nROW: Won = lost | {{r1.winners}}\nROW: B | {{r1.forced}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(kept.result.visual?.kind).toBe("split");
+    expect(
+      kept.result.visual?.kind === "split" && kept.result.visual.parts[0].label,
+    ).toBe("Won = lost");
+
+    const malformed = await render(
+      [
+        `${HEAD}CHART: split | Caption.\nROW: A | {{r1.winners}} points\nROW: B | {{r1.forced}}\n\nBody.`,
+      ],
+      COMPARISON,
+    );
+    expect(malformed.result.droppedVisuals[0]?.reason).toBe("malformed");
+  });
 
   test("the drop records the kind the block claimed", async () => {
     const { result } = await render(
@@ -1307,6 +1613,16 @@ test.describe("readAskVisual — a saved or streamed visual, defensively", () =>
     }
   });
 
+  test("accepts a table with one column", () => {
+    const one = {
+      ...TABLE,
+      columns: ["A"],
+      rows: [{ label: "X", cells: ["1"] }],
+    };
+    expect(MIN_ASK_TABLE_COLUMNS).toBe(1);
+    expect(readAskVisual(JSON.parse(JSON.stringify(one)))).toEqual(one);
+  });
+
   test("ignores keys it does not know", () => {
     expect(readAskVisual({ ...FORM, extra: 1 })).toEqual(FORM);
   });
@@ -1354,8 +1670,12 @@ test.describe("readAskVisual — a saved or streamed visual, defensively", () =>
       },
     ],
     [
-      "a table with one column",
-      { ...TABLE, columns: ["A"], rows: [{ label: "X", cells: ["1"] }] },
+      "a table with no columns",
+      { ...TABLE, columns: [], rows: [{ label: "X", cells: [] }] },
+    ],
+    [
+      "a one-column table whose row has two cells",
+      { ...TABLE, columns: ["A"], rows: [{ label: "X", cells: ["1", "2"] }] },
     ],
     [
       "a table row with the wrong cell count",
