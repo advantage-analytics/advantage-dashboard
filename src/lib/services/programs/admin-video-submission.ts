@@ -80,11 +80,12 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
   if (!resolved.ok || resolved.context.actorId !== actor.id)
     return refuse("This program is unavailable.");
   const context = resolved.context;
-  if (
-    !context.workspace.canSubmitVideo ||
-    context.workspace.programStatus !== "active"
-  )
-    return refuse("This program must be active before submitting video.");
+  // Approval is not asked: see `adminCanUploadFor()`, which the context
+  // already answered into `canSubmitVideo`.
+  if (!context.workspace.canSubmitVideo)
+    return refuse(
+      "This program is suspended, so video can't be submitted for it.",
+    );
   const admin = deps.createAdminClient();
   const player = context.roster.find((p) => p.playerId === id("playerId"));
   let player1Name = player?.name ?? "",

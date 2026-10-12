@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
 import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
+import { adminUploadApproval } from "@/lib/admin/uploads/approval";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { Workspace } from "@/lib/workspace/types";
 import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
@@ -1856,8 +1857,10 @@ export function useUploadMatchWizard({
     ProgramApprovalReading | undefined
   > => {
     if (admin) {
-      const reading = admin.context.workspace
-        .programStatus as ProgramApprovalReading;
+      // The console uploads for teams that are not approved yet.
+      const reading = adminUploadApproval(
+        admin.context.workspace.programStatus,
+      );
       setApprovalReading(reading);
       return reading;
     }
@@ -2119,9 +2122,15 @@ export function useUploadMatchWizard({
     () =>
       wizardUploadEligibility({
         ...eligibilityInput,
-        approval: approvalReading,
+        // Before any re-read, a team workspace falls back to its own status,
+        // which would refuse the console for an unapproved team.
+        approval:
+          approvalReading ??
+          (admin
+            ? adminUploadApproval(admin.context.workspace.programStatus)
+            : undefined),
       }),
-    [eligibilityInput, approvalReading],
+    [eligibilityInput, approvalReading, admin],
   );
   /**
    * Retry a retryable refusal — re-reads whichever lookup failed (the
