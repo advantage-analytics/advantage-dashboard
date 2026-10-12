@@ -143,7 +143,7 @@ ready).
 
 ## T10 · Wizard UI: "their team" under the opponent's name
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T9
 - **files:** (guess) new `src/components/dashboard/matches/opponent-team-field.tsx` (states: link → search → chosen; reused by T11 and T15), `src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx` (Players section ~1528–1760: mount under the opponent name, the `opponentProvenance` line ~1370–1390), reads `src/components/dashboard/schedule/static/use-program-search.ts`, `src/components/dashboard/settings/teams/program-crest.tsx`, `src/components/ui/popover.tsx`, `float-menu.tsx` classes

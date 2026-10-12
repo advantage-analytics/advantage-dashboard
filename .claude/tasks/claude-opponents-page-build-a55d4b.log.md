@@ -136,3 +136,19 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. If one-word names should show three letters ("STA"), that changes every existing caller — its own task.
+
+## T10 · Wizard UI: "their team" under the opponent's name — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (search shows a hint under two characters and results as they arrive; no skeleton needed for an inline field), empty ✓ (the "Add their team" link is the empty state; "Use … as typed" covers no results), error ✓ (a failed search leaves the as-typed row usable)
+
+**changed:** New `src/components/dashboard/matches/opponent-team-field.tsx` (`OpponentTeamField`, prop-driven: link → combobox search → chosen line; exports `OpponentTeamChange`). `DetailsStepContent.tsx` mounts it under the opponent's read-back name, in team workspaces only and not in admin mode, and derives the read-only "line" state in the UI from the saving dual line when the field is empty. Results are `ProgramCrest` 26 + school + "conference · division · squad" (long labels, e.g. "Men's"), then "Use “…” as typed"; results with no id are not listed; capped at six. Validation and `canContinue` untouched; guardrail-protected inputs untouched. Deviations kept: the field appears only once an opponent is named; the menu shows "Type their school." under two characters; rows restate `FloatMenuItem`'s geometry by hand because its leading slot cannot hold a crest. Not opened in a browser, and the details step needs an uploaded file, so eyes-on probably cannot reach it.
+
+**follow-ups:**
+
+1. No way to clear a team once set (Change only swaps it) — a "Remove" row, if wanted.
+2. Enter before the debounced results arrive keeps the term as typed rather than picking the matching program.
+3. The search can list the workspace's own program as an opponent's team.
+4. The line state shows an initials crest; resolving the line's program to its short code and crest needs a read the wizard defers to save.
+5. `OpponentTeamProgram` / `OpponentTeamSource` could move out of the wizard's `types.ts` now that T11 and T15 reuse the field.
+6. An offline spec for the field's three states.
+7. The hand/backhand provenance line can sit directly above "From your last match against {name}" — check on screen.

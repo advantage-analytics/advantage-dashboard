@@ -105,7 +105,8 @@ import type {
   OpponentTeamProgram,
   ValueSource,
 } from "./types";
-import { opponentTeamFromHistory } from "./opponent-team";
+import { opponentTeamFromHistory, opponentTeamIsEmpty } from "./opponent-team";
+import { OpponentTeamField } from "@/components/dashboard/matches/opponent-team-field";
 import {
   floatMenuCls,
   floatMenuDividerCls,
@@ -1270,6 +1271,20 @@ function DetailsStepContentImpl({
     [currentTeam, onInputChange],
   );
 
+  // What the "their team" line under the opponent's name reads back. The
+  // field's own answer first. With the field empty, a match filed under a dual
+  // line takes that line's program when it is saved — `line.opponentProgramKey`
+  // on `preset ?? attachedLine`, the same line and the same test the save in
+  // `useUploadMatchWizard` uses — so the line's school is shown as the answer,
+  // read-only: nothing puts source "line" into the form, the line decides it.
+  const savingLine = preset ?? attachedLine;
+  const lineTeamSchool =
+    savingLine?.eventKind === "dual" && savingLine.opponentProgramKey
+      ? savingLine.opponentSchool?.trim() || null
+      : null;
+  const teamFromLine =
+    opponentTeamIsEmpty(currentTeam) && lineTeamSchool !== null;
+
   const pickPlayed = useCallback(
     (row: OpponentPlayed) => {
       onInputChange("opponentName", row.name);
@@ -1926,6 +1941,33 @@ function DetailsStepContentImpl({
                   <span className="text-micro whitespace-nowrap">
                     {opponentProvenance}
                   </span>
+                )}
+                {/* Their team — optional, a team workspace's question only,
+                    and under the name like everything else this row says
+                    beyond its three answers. */}
+                {workspaceKind === "team" && !admin && (
+                  <OpponentTeamField
+                    className="mt-1"
+                    program={teamFromLine ? null : formData.opponentTeamProgram}
+                    school={
+                      teamFromLine
+                        ? lineTeamSchool
+                        : formData.opponentTeamSchool
+                    }
+                    source={teamFromLine ? "line" : formData.opponentTeamSource}
+                    opponentFirstName={firstNameOf(formData.opponentName)}
+                    onChange={(team) => {
+                      onInputChange(
+                        "opponentTeamProgram",
+                        team.program ?? undefined,
+                      );
+                      onInputChange(
+                        "opponentTeamSchool",
+                        team.school ?? undefined,
+                      );
+                      onInputChange("opponentTeamSource", team.source);
+                    }}
+                  />
                 )}
               </span>
             )}
