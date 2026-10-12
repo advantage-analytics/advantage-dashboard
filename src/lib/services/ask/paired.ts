@@ -479,3 +479,211 @@ export function onlyName(names: readonly (string | null)[]): string | null {
   if (!first || first.trim() === "") return null;
   return names.every((name) => name === first) ? first : null;
 }
+
+// ── Two groups ───────────────────────────────────────────────────────────────
+
+/** The fewest shared measures two rows need to be written this way. */
+export const MIN_TWO_GROUP_MEASURES = 2;
+
+const DATE_LIKE = /^\d{4}-\d{2}(?:-\d{2})?/;
+
+/**
+ * The same answer for the other shape a comparison takes: two rows, one per
+ * group ("left" and "right", "Hard Court" and "Clay Court", two players),
+ * with the same measures in both. Which group is higher on each measure is
+ * worked out here, so no sentence can say it backwards; the groups are named
+ * by cell reference, exactly as the query labelled them.
+ *
+ * Null unless the result is exactly two rows with one text label column
+ * (not a date — two months are a trend, not two groups) and at least
+ * {@link MIN_TWO_GROUP_MEASURES} measures with a figure in both rows.
+ */
+export function buildTwoGroupAnswer(
+  rows: readonly AskRow[],
+  context: { matchCount: number },
+): AskPairedAnswer | null {
+  if (rows.length !== 2) return null;
+  const [first, second] = rows;
+  const labelColumns = Object.keys(first).filter(
+    (column) =>
+      typeof first[column] === "string" &&
+      typeof second[column] === "string" &&
+      first[column] !== second[column],
+  );
+  if (labelColumns.length !== 1) return null;
+  const label = labelColumns[0];
+  if (
+    DATE_LIKE.test(String(first[label])) ||
+    DATE_LIKE.test(String(second[label]))
+  ) {
+    return null;
+  }
+
+  const ref = (row: 1 | 2, column: string) => `{{r${row}.${column}}}`;
+  const counts: string[] = [];
+  const measures: {
+    column: string;
+    name: string;
+    percentage: boolean;
+    leader: 1 | 2 | 0;
+    gap: number;
+  }[] = [];
+  for (const column of Object.keys(first)) {
+    if (column === SCOPE_COUNT_COLUMN) continue;
+    const a = first[column];
+    const b = second[column];
+    if (!isNumber(a) || !isNumber(b)) continue;
+    if (NOT_A_MEASURE.test(column)) {
+      counts.push(column);
+      continue;
+    }
+    const left = printed(a);
+    const right = printed(b);
+    const larger = Math.max(Math.abs(left), Math.abs(right));
+    measures.push({
+      column,
+      name: pairLabel(column),
+      percentage: /_(?:pct|percent|percentage)$/.test(column),
+      leader: left === right ? 0 : left > right ? 1 : 2,
+      gap: larger === 0 ? 0 : Math.abs(left - right) / larger,
+    });
+  }
+  if (measures.length < MIN_TWO_GROUP_MEASURES) return null;
+  measures.sort((x, y) => y.gap - x.gap);
+
+  const clause = (entry: (typeof measures)[number]): string => {
+    const hi = entry.leader === 1 ? 1 : 2;
+    const lo = hi === 1 ? 2 : 1;
+    const figures = `(${ref(hi, entry.column)} to ${ref(lo, entry.column)})`;
+    return entry.percentage
+      ? `${lowerFirst(entry.name)} was higher for ${ref(hi, label)} ${figures}`
+      : `${lowerFirst(entry.name)} was greater for ${ref(hi, label)} ${figures}`;
+  };
+  const stated = measures.filter((entry) => entry.leader !== 0);
+  const level = measures.filter((entry) => entry.leader === 0);
+  const lead = stated.slice(0, MAX_PAIRED_HEADLINE);
+  const headline =
+    lead.length > 0
+      ? `${upperFirst(lead.map(clause).join("; "))}.`
+      : "The two groups were level on every measure compared.";
+
+  const tabled = measures.slice(0, MAX_ASK_TABLE_ROWS);
+  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const table = [
+    `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first.`,
+    `COLUMNS: ${ref(1, label)} ${S} ${ref(2, label)}`,
+    ...tabled.map(
+      (entry) =>
+        `ROW: ${entry.name} ${S} ${ref(1, entry.column)} ${S} ${ref(2, entry.column)}`,
+    ),
+  ];
+
+  const body: string[] = [];
+  const rest = stated.slice(
+    MAX_PAIRED_HEADLINE,
+    MAX_PAIRED_HEADLINE + MAX_PAIRED_BODY,
+  );
+  if (rest.length > 0) body.push(`${upperFirst(rest.map(clause).join("; "))}.`);
+  if (level.length > 0 && lead.length > 0) {
+    body.push(
+      `Level: ${joined(level.map((entry) => `${lowerFirst(entry.name)} (${ref(1, entry.column)})`))}.`,
+    );
+  }
+  // Each group's own match count, when the query carried one.
+  for (const column of counts.slice(0, 1)) {
+    body.push(
+      `Matches, ${ref(1, label)}: ${ref(1, column)}. Matches, ${ref(2, label)}: ${ref(2, column)}.`,
+    );
+  }
+  body.push(`From ${count} in all.`);
+
+  return {
+    text: `${headline}\n${table.join("\n")}\n\n${body.join(" ")}`,
+    rows: [...rows],
+  };
+}
+
+// ── A list of matches ────────────────────────────────────────────────────────
+
+/** The most matches a list is written out for; a longer one stays with the model. */
+export const MAX_MATCH_LIST = 10;
+
+/** The columns the server adds to row 1 so the tally is cited, never typed. */
+const LIST_WON_COLUMN = `${PAIRED_NAME_PREFIX}list_won`;
+const LIST_LOST_COLUMN = `${PAIRED_NAME_PREFIX}list_lost`;
+
+/**
+ * "How did my last five matches go?" comes back as one row per match: a
+ * date, an opponent, a result, a score. Retelling such a list is where a
+ * model pins one match's result on another, so the server writes it: the
+ * tally, the win/loss strip, and one sentence per match with the result
+ * read from that row's own `i_won`.
+ *
+ * Null unless every row is a match (played_on, opponent_name and i_won all
+ * present), there are at most {@link MAX_MATCH_LIST}, and no row carries a
+ * numeric measure — a per-match list of figures is a trend, not a retelling.
+ */
+export function buildMatchListAnswer(
+  rows: readonly AskRow[],
+  context: { team: boolean },
+): AskPairedAnswer | null {
+  if (rows.length === 0 || rows.length > MAX_MATCH_LIST) return null;
+  for (const row of rows) {
+    if (typeof row.played_on !== "string") return null;
+    if (typeof row.opponent_name !== "string") return null;
+    if (!("i_won" in row)) return null;
+    if (row.i_won !== null && typeof row.i_won !== "boolean") return null;
+    for (const [column, value] of Object.entries(row)) {
+      if (column === SCOPE_COUNT_COLUMN || NOT_A_MEASURE.test(column)) continue;
+      if (isNumber(value)) return null;
+    }
+  }
+  // Oldest first, so the strip and the sentences run in the order played.
+  const ordered = [...rows].sort((a, b) =>
+    String(a.played_on).localeCompare(String(b.played_on)),
+  );
+  const won = ordered.filter((row) => row.i_won === true).length;
+  const lost = ordered.filter((row) => row.i_won === false).length;
+
+  const sentences = ordered.map((row, index) => {
+    const n = index + 1;
+    const named =
+      context.team && typeof row.player_name === "string"
+        ? `{{r${n}.player_name}} `
+        : "";
+    const verb =
+      row.i_won === true
+        ? `${named}won against`
+        : row.i_won === false
+          ? `${named}lost to`
+          : `${named}played`;
+    const score =
+      typeof row.score_text === "string" && row.score_text.trim() !== ""
+        ? `, {{r${n}.score_text}}`
+        : "";
+    const unknown = row.i_won === null ? " (result not recorded)" : "";
+    return `{{r${n}.played_on}}: ${verb} {{r${n}.opponent_name}}${score}${unknown}.`;
+  });
+
+  const single = ordered.length === 1;
+  const headline = single
+    ? ordered[0].i_won === true
+      ? "This match was won."
+      : ordered[0].i_won === false
+        ? "This match was lost."
+        : "This match has no recorded result."
+    : `Won {{r1.${LIST_WON_COLUMN}}}, lost {{r1.${LIST_LOST_COLUMN}}}.`;
+  const strip =
+    won + lost >= 2
+      ? `\n${ASK_VISUAL_LINE_PREFIX} form ${S} These matches, oldest first.\nPLOT: i_won`
+      : "";
+
+  return {
+    text: `${headline}${strip}\n\n${sentences.join(" ")}`,
+    rows: ordered.map((row, index) =>
+      index === 0
+        ? { ...row, [LIST_WON_COLUMN]: won, [LIST_LOST_COLUMN]: lost }
+        : { ...row },
+    ),
+  };
+}

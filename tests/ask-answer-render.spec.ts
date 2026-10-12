@@ -826,22 +826,6 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     });
   });
 
-  test('serve: the example\'s "All serves" label is not kept over other cells', async () => {
-    const { events } = await render(
-      [
-        HEAD +
-          "CHART: serve | Where your break point serves went.\n" +
-          "ROW: All serves | {{r1.bp_serves_t}} | {{r1.bp_serves_body}} | {{r1.bp_serves_wide}}\n",
-      ],
-      [{ bp_serves_t: 5, bp_serves_body: 2, bp_serves_wide: 4 }],
-    );
-
-    expect(visualOf(events)).toMatchObject({
-      kind: "serve",
-      courts: [{ label: "Serves" }],
-    });
-  });
-
   test("form: one result per row, an unknown result skipped, oldest first", async () => {
     const { events } = await render(
       [

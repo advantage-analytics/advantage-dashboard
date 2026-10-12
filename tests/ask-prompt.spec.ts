@@ -784,7 +784,7 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
       caption: "Where your serves went across 22 matches.",
       courts: [
         {
-          label: "All serves",
+          label: "Serves",
           t: { value: 13, text: "13" },
           body: { value: 8, text: "8" },
           wide: { value: 18, text: "18" },

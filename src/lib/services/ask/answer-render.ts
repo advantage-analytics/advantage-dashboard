@@ -1031,17 +1031,7 @@ function parseBlock(
         if (!bodyCount.ok) return drop(bodyCount.reason, kind, "the body cell");
         const wide = number(fields[3], isCount);
         if (!wide.ok) return drop(wide.reason, kind, "the wide cell");
-        // "All serves" is the prompt example's label; over cells that are not
-        // the whole-match direction counts (serves on break points, say) it
-        // would misname the court, so it falls back to the neutral word.
-        const wholeMatch = fields.slice(1).every((field) => {
-          const cell = readCell(field, tokens);
-          return cell.ok && /^serve_(?:t|body|wide)$/.test(cell.token.column);
-        });
-        const courtLabel =
-          /^all serves$/i.test(rowLabel.labels[0].trim()) && !wholeMatch
-            ? "Serves"
-            : rowLabel.labels[0];
+        const courtLabel = rowLabel.labels[0];
         out.courts.push({
           label: courtLabel,
           t: t.number,

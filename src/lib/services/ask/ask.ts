@@ -40,7 +40,12 @@ import {
   readAskReview,
   reviewAnswerRow,
 } from "@/lib/services/ask/review";
-import { buildPairedAnswer, onlyName } from "@/lib/services/ask/paired";
+import {
+  buildMatchListAnswer,
+  buildPairedAnswer,
+  buildTwoGroupAnswer,
+  onlyName,
+} from "@/lib/services/ask/paired";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -517,13 +522,22 @@ export async function* askQuestion(
     /** A server-written answer in the renderer's syntax: the review's, or a pair-shaped result's. */
     let reviewText: string | null = null;
     let queried = false;
+    let followUpRefusalRetried = false;
     // A first result that ran but whose baselines all equalled the scoped
     // figures, with those columns already left out. If the planner's second
     // try fails in any way, this is the answer: a result without a baseline
     // is better than no answer.
     let fallback: { plan: AskPlanQuery; result: QueryResult } | null = null;
 
-    for (let attempt = 0; attempt < 2 && result === null; attempt += 1) {
+    // Two tries for a query that ran and was sent back for what it measured.
+    // A third only for a query that never ran: one refused by the guard or
+    // by the database, or a reply that could not be read. The soft checks
+    // below fire on the first try alone, so a second or third result stands.
+    for (
+      let attempt = 0;
+      attempt < MAX_PLAN_ATTEMPTS && result === null;
+      attempt += 1
+    ) {
       const step = await planOnce(model, systemPrompt, messages, cannotAnswer);
       if (!step.ok && fallback) {
         ({ plan, result } = fallback);
@@ -535,10 +549,25 @@ export async function* askQuestion(
           return;
         }
         if ("refusal" in step) {
+          // A follow-up ("why did she lose?", "and on clay?") refused on its
+          // first try is usually a pronoun or an ellipsis left unresolved.
+          // The planner is pointed at the previous query once; a second
+          // refusal stands.
+          if (input.previousPlan && !followUpRefusalRetried) {
+            followUpRefusalRetried = true;
+            messages.push(
+              {
+                role: "assistant",
+                content: JSON.stringify({ cannot_answer: step.refusal }),
+              },
+              { role: "user", content: FOLLOW_UP_REFUSAL_FEEDBACK },
+            );
+            continue;
+          }
           yield await fail("cannot_answer", step.refusal);
           return;
         }
-        if (attempt === 0) {
+        if (attempt < MAX_PLAN_ATTEMPTS - 1) {
           messages.push(
             { role: "assistant", content: step.reply },
             { role: "user", content: feedback(step.problem) },
@@ -578,7 +607,7 @@ export async function* askQuestion(
           ({ plan, result } = fallback);
           break;
         }
-        if (attempt === 0) {
+        if (attempt < MAX_PLAN_ATTEMPTS - 1) {
           messages.push(
             { role: "assistant", content: step.reply },
             {
@@ -602,12 +631,15 @@ export async function* askQuestion(
           ({ plan, result } = fallback);
           break;
         }
-        if (attempt === 0) {
+        if (attempt < MAX_PLAN_ATTEMPTS - 1) {
           messages.push(
             { role: "assistant", content: step.reply },
             {
               role: "user",
-              content: feedback({ kind: "database", detail: run.error }),
+              content: feedback({
+                kind: "database",
+                detail: databaseHint(run.error),
+              }),
             },
           );
           continue;
@@ -787,9 +819,17 @@ export async function* askQuestion(
           ? onlyName(result.matches.map((match) => match.playerName))
           : null,
       });
-      if (paired !== null) {
-        reviewText = paired.text;
-        result = { matches: result.matches, rows: paired.rows };
+      // Or two rows, one per group, with the same measures in both.
+      const written =
+        paired ??
+        buildTwoGroupAnswer(result.rows, {
+          matchCount: result.matches.length,
+        }) ??
+        // Or a short list of matches to retell.
+        buildMatchListAnswer(result.rows, { team });
+      if (written !== null) {
+        reviewText = written.text;
+        result = { matches: result.matches, rows: written.rows };
       }
     }
 
@@ -1032,6 +1072,23 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
 }
 
 /** What the planner is told when its last reply could not be used. */
+/** How many times the planner is asked before the question is refused. */
+const MAX_PLAN_ATTEMPTS = 3;
+
+const FOLLOW_UP_REFUSAL_FEEDBACK =
+  "This question follows the previous one. A pronoun (she, he, they, it) or a missing subject means the player, opponent, period or matches of the previous query: reuse its scope and filters. Refuse again only if what is asked is not recorded in the views. Reply again with ONE JSON object and nothing else, following every rule.";
+
+/**
+ * The database's error, with the fix spelled out for the one the planner
+ * keeps making: Postgres has round(numeric, integer) and no
+ * round(double precision, integer).
+ */
+export function databaseHint(error: string): string {
+  return /round\(double precision/i.test(error)
+    ? `${error} Cast the value to numeric before rounding: round((…)::numeric, 1).`
+    : error;
+}
+
 function feedback(problem: PlanProblem): string {
   const lead =
     problem.kind === "database"

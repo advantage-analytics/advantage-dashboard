@@ -644,7 +644,7 @@ ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
       },
     ],
     block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where your serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches.
-ROW: All serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
+ROW: Serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
   },
   form: {
     when: `a record or a run of results, when the result has one row per match in date order with i_won. Up to ${MAX_ASK_FORM_RESULTS} rows; name the true-or-false column and the app reads every row, skipping an unknown result.`,
@@ -1098,7 +1098,7 @@ ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
       when: ASK_VISUAL_EXAMPLES.serve.when,
       rows: ASK_VISUAL_EXAMPLES.serve.rows,
       block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where the team's serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches.
-ROW: All serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
+ROW: Serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
     },
     form: {
       when: ASK_VISUAL_EXAMPLES.form.when,

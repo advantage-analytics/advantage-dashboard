@@ -38,6 +38,7 @@ import {
   topRowHasNoRankingFigure,
   withoutOutOfRangePercentages,
   undocumentedDetail,
+  databaseHint,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
 import type { AskEvent, AskVisual } from "@/lib/services/ask/events";
@@ -481,9 +482,10 @@ test.describe("a plan that cannot be used is told back once", () => {
     ).toHaveLength(1);
   });
 
-  test("a second database failure ends with cannot_answer and releases", async () => {
+  test("a third database failure ends with cannot_answer and releases", async () => {
     const { db, calls, releases, saves } = fakeDb({ run: [RUN_FAILED] });
     const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
       JSON.stringify(PLAN),
       JSON.stringify(PLAN),
       ANSWER,
@@ -496,8 +498,8 @@ test.describe("a plan that cannot be used is told back once", () => {
       code: "cannot_answer",
       error: ASK_CANNOT_ANSWER_MESSAGE,
     });
-    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
-    expect(modelCalls).toHaveLength(2);
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(3);
+    expect(modelCalls).toHaveLength(3);
     expect(releases()).toEqual([
       { fn: "ask_release_question", args: { usage_id: USAGE_ID } },
     ]);
@@ -524,9 +526,10 @@ test.describe("a plan that cannot be used is told back once", () => {
     expect(retry[2].content).toContain("users");
   });
 
-  test("two guard refusals end with cannot_answer and release", async () => {
+  test("three guard refusals end with cannot_answer and release", async () => {
     const { db, calls, releases } = fakeDb();
     const { model } = fakeModel([
+      JSON.stringify(PLAN_REFUSED),
       JSON.stringify(PLAN_REFUSED),
       JSON.stringify(PLAN_REFUSED),
     ]);
@@ -543,11 +546,12 @@ test.describe("a plan that cannot be used is told back once", () => {
     ]);
   });
 
-  test("a reply that is not a plan is fed back once, then cannot_answer", async () => {
+  test("a reply that is not a plan is fed back twice, then cannot_answer", async () => {
     const { db, releases } = fakeDb();
     const { model, calls: modelCalls } = fakeModel([
       "Sure! Here is the SQL you asked for: select 1",
       "I cannot do that.",
+      "Still no.",
     ]);
 
     const events = await collect(askQuestion(input({ db, model })));
@@ -560,6 +564,33 @@ test.describe("a plan that cannot be used is told back once", () => {
       "That reply could not be read.",
     );
     expect(releases()).toHaveLength(1);
+  });
+
+  test("a database refusal after a guard refusal still gets its own retry", async () => {
+    const { db, calls } = fakeDb({ run: [RUN_FAILED, RUN_OK] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN_REFUSED),
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    expect(modelCalls[2].messages.at(-1)?.content).toContain(
+      "The database refused that query.",
+    );
+  });
+
+  test("the rounding error the planner keeps making comes back with its fix", () => {
+    expect(
+      databaseHint("function round(double precision, integer) does not exist"),
+    ).toContain("::numeric");
+    expect(databaseHint("column x does not exist")).toBe(
+      "column x does not exist",
+    );
   });
 
   test("the planner's own refusal is cannot_answer with its sentence, released, nothing run", async () => {
@@ -1641,9 +1672,9 @@ The team's players won {{r1.second_serve_won_pct}} of second-serve points.`;
   });
 
   test("its refusals speak of the program's matches", async () => {
-    // Two unusable plans, then an empty scope.
+    // Three unusable plans, then an empty scope.
     const refused = teamDb();
-    const twice = fakeModel(["not json", "still not json"]);
+    const twice = fakeModel(["not json", "still not json", "nor this"]);
     const first = await collect(
       askQuestion(input({ db: refused.db, model: twice.model, scope: TEAM })),
     );

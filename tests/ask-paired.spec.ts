@@ -5,7 +5,9 @@ import type { AskAnswerEvent, AskVisual } from "@/lib/services/ask/events";
 import {
   type AskPairedContext,
   MAX_PAIRED_HEADLINE,
+  buildMatchListAnswer,
   buildPairedAnswer,
+  buildTwoGroupAnswer,
   onlyName,
   pairLabel,
   pairedShape,
@@ -382,5 +384,150 @@ test.describe("buildPairedAnswer — a measure against its baseline", () => {
       "There were more winners than over the previous five matches (30 to 24).",
     );
     expect(result.text).toBe("This is one match.");
+  });
+});
+
+test.describe("buildTwoGroupAnswer — two rows, one per group", () => {
+  const HANDS: AskRow[] = [
+    {
+      opponent_hand: "left",
+      group_matches: 5,
+      first_serve_won_pct: 75.3,
+      second_serve_won_pct: 40,
+      total_points_won_pct: 50,
+      matches_in_scope: 15,
+    },
+    {
+      opponent_hand: "right",
+      group_matches: 10,
+      first_serve_won_pct: 68.2,
+      second_serve_won_pct: 54.6,
+      total_points_won_pct: 52.2,
+      matches_in_scope: 15,
+    },
+  ];
+
+  async function twoGroups(rows: AskRow[]) {
+    const answer = buildTwoGroupAnswer(rows, { matchCount: 15 });
+    if (!answer) throw new Error("not two groups");
+    const { events, result } = renderAskAnswer(
+      (async function* chunks() {
+        yield answer.text;
+      })(),
+      answer.rows,
+    );
+    for await (const event of events) void event;
+    return result;
+  }
+
+  test("each measure is stated for the group that leads it, widest gap first", async () => {
+    const result = await twoGroups(HANDS);
+    expect(result.headline).toBe(
+      "Second-serve points won was higher for right (54.6% to 40%); first-serve points won was higher for left (75.3% to 68.2%); total points won was higher for right (52.2% to 50%).",
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(table(result.visual).columns).toEqual(["left", "right"]);
+    expect(result.text).toContain("Matches, left: 5. Matches, right: 10.");
+    expect(result.text).toContain("From 15 matches in all.");
+  });
+
+  test("not for one row, three rows, two dates, or a single shared measure", () => {
+    const context = { matchCount: 15 };
+    expect(buildTwoGroupAnswer([HANDS[0]], context)).toBeNull();
+    expect(buildTwoGroupAnswer([...HANDS, HANDS[0]], context)).toBeNull();
+    expect(
+      buildTwoGroupAnswer(
+        [
+          { month: "2026-08-01", winners: 3, aces: 1 },
+          { month: "2026-09-01", winners: 5, aces: 2 },
+        ],
+        context,
+      ),
+    ).toBeNull();
+    expect(
+      buildTwoGroupAnswer(
+        [
+          { surface: "Hard", win_pct: 75 },
+          { surface: "Clay", win_pct: 16.7 },
+        ],
+        context,
+      ),
+    ).toBeNull();
+  });
+});
+
+test.describe("buildMatchListAnswer — a short list of matches", () => {
+  const LIST: AskRow[] = [
+    {
+      played_on: "2026-09-05",
+      opponent_name: "Sam Okafor",
+      i_won: false,
+      score_text: "3-6, 6-7",
+      matches_in_scope: 3,
+    },
+    {
+      played_on: "2026-08-22",
+      opponent_name: "Ilya Brandt",
+      i_won: true,
+      score_text: "6-3, 3-6, 6-4",
+      matches_in_scope: 3,
+    },
+    {
+      played_on: "2026-09-28",
+      opponent_name: "Riley Marsh",
+      i_won: true,
+      score_text: "6-3, 6-4",
+      matches_in_scope: 3,
+    },
+  ];
+
+  async function listed(rows: AskRow[], team = false) {
+    const answer = buildMatchListAnswer(rows, { team });
+    if (!answer) throw new Error("not a match list");
+    const { events, result } = renderAskAnswer(
+      (async function* chunks() {
+        yield answer.text;
+      })(),
+      answer.rows,
+    );
+    for await (const event of events) void event;
+    return result;
+  }
+
+  test("the tally, the strip oldest first, and each result from its own row", async () => {
+    const result = await listed(LIST);
+    expect(result.headline).toBe("Won 2, lost 1.");
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual?.kind).toBe("form");
+    expect(result.text).toBe(
+      "Aug 22, 2026: won against Ilya Brandt, 6-3, 3-6, 6-4. Sep 5, 2026: lost to Sam Okafor, 3-6, 6-7. Sep 28, 2026: won against Riley Marsh, 6-3, 6-4.",
+    );
+  });
+
+  test("a team list names each match's player", async () => {
+    const result = await listed(
+      LIST.map((row) => ({ ...row, player_name: "Rudy Quan" })),
+      true,
+    );
+    expect(result.text).toContain(
+      "Sep 5, 2026: Rudy Quan lost to Sam Okafor, 3-6, 6-7.",
+    );
+  });
+
+  test("not for rows with figures, rows that are not matches, or a long list", () => {
+    expect(
+      buildMatchListAnswer([{ ...LIST[0], unforced_errors: 5 }], {
+        team: false,
+      }),
+    ).toBeNull();
+    expect(
+      buildMatchListAnswer([{ opponent_name: "A", wins: 3 }], { team: false }),
+    ).toBeNull();
+    expect(
+      buildMatchListAnswer(
+        Array.from({ length: 11 }, () => LIST[0]),
+        { team: false },
+      ),
+    ).toBeNull();
   });
 });
