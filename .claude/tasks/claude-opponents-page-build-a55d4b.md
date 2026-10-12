@@ -172,7 +172,7 @@ ready).
 
 ## T12 · Team opponents loader + pure grouping with facedBy
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess) new `src/lib/data/team-opponents.ts` (pure, no Supabase import), new `src/lib/data/team-opponents-server.ts`, new `tests/team-opponents.spec.ts`; reads `src/lib/data/personal-opponents.ts` (reuse `groupPersonalOpponents`, `personalOpponentKey`, measures, season helpers), `personal-opponents-server.ts` (stats join), `roster-ids.ts` (`canonicalRosterIds`), `roster-server.ts` (`program_roster_full` via `getRosterPlayerOptions`), `member-avatars-server.ts`, `teams-server.ts` (`crestUrl`)

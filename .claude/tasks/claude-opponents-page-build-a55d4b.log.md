@@ -167,3 +167,18 @@ is the runner's. Newest entries at the bottom.
 4. Field-level errors for the team keys land in the dialog's general error line, not under the field.
 5. Convert this route to `errorResponse()` once that helper can carry `field` and non-video codes.
 6. One constant for the crest bucket name (`programs-server.ts` and `teams-server.ts`).
+
+## T12 · Team opponents loader + pure grouping with facedBy — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `src/lib/data/team-opponents.ts` (pure: `groupTeamOpponents(inputs, roster, season, viewerId?)` → `{ opponents, totals }`, composing `groupPersonalOpponents` for the team row and for each roster player's `facedBy` entry; `TeamOpponent` adds `program`, `school`, `recent[].rosterPlayerId`, `matchIds`, `editableMatchIds`, `facedBy`), `src/lib/data/team-opponents-server.ts` (`getTeamOpponents(programId, viewerId)`: cookie client only, `matches` by `program_id` with the `programs!matches_opponent_program_id_fkey` embed, stats view, roster via the `program_roster_full` RPC, photos via `getMemberAvatarUrls`; throws on a roster error rather than drawing a false day zero) and `tests/team-opponents.spec.ts` (13 tests). `personal-opponents.ts` untouched. Decisions kept: a typed school is a sibling `school` field beside `program`; a directory program outranks a typed school even on a newer match; `totals.programs` counts distinct directory programs plus distinct typed schools; `team` is selected but not exposed.
+
+**follow-ups:**
+
+1. Matches by archived roster players count as `unattributed` (`program_roster_full` omits archived profiles) — say what the count means on the page, or read archived profiles too.
+2. Matches naming no opponent are dropped silently; team totals have no `unnamed` count like the personal page's.
+3. Expose `team` (men's / women's) on `TeamOpponentProgram` if a cell or the drawer needs it.
+4. `firstName` is the first token of `display_name` — two-word first names are cut short.
+5. Both opponents loaders pass every match id to one `.in()` — chunk or use an RPC before programs reach hundreds of matches.
+6. `byDateDescending` exists privately in both pure modules.
