@@ -39,6 +39,7 @@ import {
   withoutOutOfRangePercentages,
   undocumentedDetail,
   databaseHint,
+  ignoresBigPoints,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
 import type { AskEvent, AskVisual } from "@/lib/services/ask/events";
@@ -582,6 +583,24 @@ test.describe("a plan that cannot be used is told back once", () => {
     expect(modelCalls[2].messages.at(-1)?.content).toContain(
       "The database refused that query.",
     );
+  });
+
+  test("a question about big points must read the columns that mark them", () => {
+    const all =
+      "select count(*) filter (where zone = 'T') as serve_t from ask.shots";
+    const big =
+      "select count(*) as big_point_serves from ask.points p where p.is_break_point or p.is_set_point";
+    expect(ignoresBigPoints("Where do I serve on big points?", all)).toBe(true);
+    expect(ignoresBigPoints("Where do I serve on big points?", big)).toBe(
+      false,
+    );
+    expect(
+      ignoresBigPoints(
+        "How do I do on break points?",
+        "select sum(break_points_saved) as break_points_saved from ask.match_stats where side = 'me'",
+      ),
+    ).toBe(false);
+    expect(ignoresBigPoints("Where do I serve?", all)).toBe(false);
   });
 
   test("the rounding error the planner keeps making comes back with its fix", () => {

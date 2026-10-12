@@ -601,7 +601,11 @@ export async function* askQuestion(
           ? { ok: false, reason: SCOPE_COUNT_COLUMN_REASON }
           : lostPlayer !== null
             ? { ok: false, reason: lostPlayer }
-            : guard;
+            : attempt === 0 &&
+                !step.review &&
+                ignoresBigPoints(input.question, step.plan.sql)
+              ? { ok: false, reason: BIG_POINTS_REASON }
+              : guard;
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -1072,6 +1076,27 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
 }
 
 /** What the planner is told when its last reply could not be used. */
+const BIG_POINTS_REASON =
+  "The question is about big points (break points, set points, match points), but the query reads every point. Restrict it to ask.points rows where is_break_point or is_set_point or is_match_point is true, joined to ask.shots on match_id and point_number when a shot is needed, and name the columns for what they hold (big_point_…).";
+
+/**
+ * True when the question asks about big, pressure or break points and the
+ * query never reads the columns that mark them: the answer would describe
+ * every point under a question about a few. Told back once.
+ */
+export function ignoresBigPoints(question: string, sql: string): boolean {
+  if (
+    !/\b(?:big|pressure|clutch|crucial|important|break|set|match)[ -]points?\b/i.test(
+      question,
+    )
+  ) {
+    return false;
+  }
+  return !/\bis_(?:break|set|match)_point\b|break_points?_|set_points?_/i.test(
+    sql,
+  );
+}
+
 /** How many times the planner is asked before the question is refused. */
 const MAX_PLAN_ATTEMPTS = 3;
 
