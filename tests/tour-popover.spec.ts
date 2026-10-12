@@ -26,6 +26,8 @@ type WebpackStats = { toJson(): { errors?: unknown[] } };
  *   3. Escape closes through `onSkip`, not some other path.
  *   4. On close, focus returns to what held it when the tour opened — here
  *      the anchor, which is outside React's tree, as the runner's will be.
+ *   5. Back returns a step; the spotlight hugs the step's anchor and goes
+ *      with the box.
  */
 
 let server: Server;
@@ -144,5 +146,44 @@ test("Skip tour closes through onSkip and focus returns to the anchor", async ({
   await page.getByRole("button", { name: "Skip tour" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("data-skipped", "1");
+  await expect(start).toBeFocused();
+});
+
+test("Back returns a step, and the spotlight hugs the anchor until the tour closes", async ({
+  page,
+}) => {
+  const { start, tour } = await openTour(page);
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+
+  const spotlight = page.locator("[data-tour-spotlight]");
+  const hugs = async (selector: string) => {
+    const [a, s] = await Promise.all([
+      page.locator(selector).boundingBox(),
+      spotlight.boundingBox(),
+    ]);
+    if (!a || !s) return false;
+    // 6px of breathing room on every side.
+    return (
+      Math.abs(s.x - (a.x - 6)) <= 1 &&
+      Math.abs(s.y - (a.y - 6)) <= 1 &&
+      Math.abs(s.width - (a.width + 12)) <= 1 &&
+      Math.abs(s.height - (a.height + 12)) <= 1
+    );
+  };
+  await expect.poll(() => hugs('[data-tour="upload"]')).toBe(true);
+  // The scrim is the box's spread shadow, and it takes no clicks.
+  await expect(spotlight).toHaveCSS("pointer-events", "none");
+
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Every match" })).toBeVisible();
+  await expect.poll(() => hugs('[data-tour="matches"]')).toBe(true);
+
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(tour).toContainText("1 of 3");
+  await expect(page.getByRole("button", { name: "Next" })).toBeFocused();
+  await expect.poll(() => hugs('[data-tour="upload"]')).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect(spotlight).toHaveCount(0);
   await expect(start).toBeFocused();
 });

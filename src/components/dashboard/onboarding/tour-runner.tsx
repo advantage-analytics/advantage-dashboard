@@ -16,7 +16,7 @@ import {
 /**
  * Drives a first-run report tour (design §5–§6): keeps the steps whose
  * `[data-tour]` target the report renders (`resolveSteps`), and walks
- * `TourPopover` through them. Mounts inside `MatchReportProvider`, after the
+ * `TourPopover` through them, forwards and back. Mounts inside `MatchReportProvider`, after the
  * report's parts, so a step with a `tab` can switch the view through
  * `actions.selectView` before anchoring.
  *
@@ -184,6 +184,14 @@ export function TourRunner({
     else setRun((running) => running && { ...running, index: index + 1 });
   }, [index, total, finish]);
 
+  // Back re-runs the earlier step's anchoring, view switch included.
+  const back = useCallback(() => {
+    setRun(
+      (running) =>
+        running && { ...running, index: Math.max(0, running.index - 1) },
+    );
+  }, []);
+
   // The step's target never appeared: drop it. The steps shrink around the
   // same index, which now names the next step — or nothing, when it was last.
   const skipAbsent = useCallback(
@@ -251,6 +259,7 @@ export function TourRunner({
       title={step.title}
       body={step.body}
       onNext={advance}
+      onBack={back}
       onSkip={finish}
       side={SIDE_BY_TARGET[step.target]}
     />

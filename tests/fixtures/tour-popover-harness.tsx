@@ -60,6 +60,7 @@ function Harness() {
       onNext={() =>
         setStep((s) => (s === null || s >= STEPS.length - 1 ? null : s + 1))
       }
+      onBack={() => setStep((s) => (s === null ? s : Math.max(0, s - 1)))}
       onSkip={() => {
         skipped += 1;
         document.documentElement.dataset.skipped = String(skipped);

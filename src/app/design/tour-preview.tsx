@@ -57,9 +57,9 @@ export function TourPreview() {
         Tour popover
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        One step of a first-run tour, pinned to an element on the page. Three
-        steps over fixed targets; Escape or Skip ends it and focus returns to
-        where it started.
+        One step of a first-run tour: the page dims around the element the step
+        is about and the box pins beside it. Next and Back move the spotlight;
+        Escape or the X ends it and focus returns to where it started.
       </p>
       <div className="mt-5">
         <button
@@ -93,6 +93,7 @@ export function TourPreview() {
           onNext={() =>
             setStep((s) => (s === null || s >= STEPS.length - 1 ? null : s + 1))
           }
+          onBack={() => setStep((s) => (s === null ? s : Math.max(0, s - 1)))}
           onSkip={() => setStep(null)}
         />
       ) : null}
