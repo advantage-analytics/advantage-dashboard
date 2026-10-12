@@ -61,7 +61,7 @@ export interface MatchReportActions {
    * shell player starts on the first point the list admits. The film tab
    * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
    * A no-op without a playable video — there is no Video view to open, and
-   * `/m/[token]` never has one.
+   * `/m/[token]` has one only when its link carries the video.
    */
   watchCut(cut: FilmCut, label: string): void;
   collapseInsight(): void;

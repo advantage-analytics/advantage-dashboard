@@ -32,6 +32,11 @@ import {
   sharedVideoAllowed,
 } from "@/lib/data/match-share-format";
 import type { Match } from "@/lib/data/types";
+import { matchPageKind, withStatsPublished } from "@/lib/data/match-analysis";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
 import {
   DEFAULT_BANDS,
   rowToBandSettings,
@@ -373,13 +378,15 @@ export interface SharedMatchData {
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
   /**
-   * The link also shows the Visualizations view. `points` carry their shots
+   * The link also shows the Visualizations view — its option is on AND the
+   * match is past analysis (see the `settled` note). `points` carry their shots
    * when it does, or when `videoShared` (the film room reads them too).
    */
   includesVisualizations: boolean;
   /**
    * The link carries the match video AND whoever added it may still share it
-   * (`sharedVideoAllowed`) — the page's leave to call `getSharedMatchVideo`.
+   * (`sharedVideoAllowed`) AND the match is past analysis — the page's leave
+   * to call `getSharedMatchVideo`.
    * Nothing is signed here: this loader also feeds the layout, the page
    * metadata and the Open Graph image, none of which play anything.
    */
@@ -650,7 +657,8 @@ export const getSharedMatchData = cache(
       windowSeconds,
       sharedBy,
       bandSettings,
-      videoShared,
+      videoAllowed,
+      jobs,
     ] = await Promise.all([
       getMatchStatisticsFromSupabase(matchId, admin),
       getMatchPointsFromSupabase(matchId, admin, { includeBookmarks: false }),
@@ -676,6 +684,9 @@ export const getSharedMatchData = cache(
             match: dbRow,
           })
         : Promise.resolve(false),
+      // The job's state, read as the dashboard reads it — never reaped or
+      // reconciled from here: an anonymous page view must not move a job.
+      loadMatchAnalysis(admin, [matchId]),
     ]);
 
     // A failed points read is unknown, not zero points: same as every other
@@ -717,23 +728,47 @@ export const getSharedMatchData = cache(
     );
     const summary = insight?.summary?.trim() || null;
 
+    const winner = sharedMatchWinner(dbRow.score, match.matchContext);
+
+    // Guardrails §3.3, for a reader with a link. The dashboard stops at the
+    // analysis steps while a match is in flight or failed, and never draws
+    // its views; this page has no steps to show, so it keeps to Statistics
+    // (which says there is no point-by-point data yet) and offers neither the
+    // courts nor the film. The same predicates as `matches/[matchId]/page.tsx`
+    // — a match can already hold points and a file mid-derivation, so "has
+    // points" alone would let both views through.
+    const jobAnalysis = analysisFor(jobs, {
+      id: matchId,
+      sourceProvider: match.sourceProvider,
+      verificationStatus: match.verificationStatus,
+    });
+    const statsPublished = Boolean(
+      statsResult?.statistics?.player1Stats &&
+      statsResult?.statistics?.player2Stats,
+    );
+    const settled =
+      matchPageKind({
+        ...jobAnalysis,
+        status: withStatsPublished(jobAnalysis.status, statsPublished),
+      }) !== "steps";
+    const showsVisualizations = includesVisualizations && settled;
+    const videoShared = videoAllowed && settled;
+
     // Shot rows stay on the server unless a view that reads `point.shots` is
     // on the page — Visualizations, or the Video view's point card and court.
     // Shipping every shot of a full match to the browser would otherwise be
     // most of the page's serialized payload for nothing. `shots` is optional
     // on `MatchPoint`.
     const pagePoints =
-      includesVisualizations || videoShared
+      showsVisualizations || videoShared
         ? points
         : points.map((point) => ({ ...point, shots: undefined }));
-
-    const winner = sharedMatchWinner(dbRow.score, match.matchContext);
 
     return {
       match,
       statsResult,
       points: pagePoints,
-      includesVisualizations,
+      includesVisualizations: showsVisualizations,
       videoShared,
       bandSettings,
       summary,

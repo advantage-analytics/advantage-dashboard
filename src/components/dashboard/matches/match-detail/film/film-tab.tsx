@@ -369,10 +369,16 @@ function FilmRoom({
     points,
     deps: playbackDeps,
   });
-  // "Sign in again" is no help to a reader who never signed in: on a shared
-  // link a refused renewal means the link stopped carrying the video.
+  // On a shared link a refused renewal means the link stopped carrying the
+  // video — turned off, the video taken off it, or its sharer no longer
+  // allowed. The token route answers all three with one 404, which the hook
+  // reads as "removed" ("no longer attached to the match") — false here, the
+  // file is still attached — and "Sign in again" (`denied`) is no help to a
+  // reader who never signed in. Both say what actually happened instead.
   const problem =
-    readOnly && playback.problem?.reason === "denied"
+    readOnly &&
+    (playback.problem?.reason === "removed" ||
+      playback.problem?.reason === "denied")
       ? {
           ...playback.problem,
           message:

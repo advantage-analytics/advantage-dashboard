@@ -171,7 +171,7 @@ export function TeamPoliciesCard({
               {shareVideoError}
             </span>
           ) : (
-            "On a match's public link. Staff always can; turning this off takes the video off links players made."
+            "On a match's public link. Staff always can; turning this off takes down any video a player added."
           )
         }
         control={

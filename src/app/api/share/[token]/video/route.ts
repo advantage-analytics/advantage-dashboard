@@ -22,9 +22,12 @@ import { matchVideoError } from "@/lib/match-video/types";
  * a match only for a live link whose video was added by someone who may
  * still share it, and everything below that is the same ladder (`respondWithPlayback`).
  *
- * One 404 for every refusal — a bad token, a link turned off, a link without
- * the video, a sharer who may no longer share it — so the route cannot be used
- * to learn which. No CORS header and `no-store`, as on the dashboard's route;
+ * One 404 for every refusal AT THE GATE — a bad token, a link turned off, a
+ * link without the video, a sharer who may no longer share it — so the route
+ * cannot be used to learn which. Past the gate it answers as the dashboard's
+ * route does (the metadata, an empty answer, a stale or unreachable file):
+ * those only tell a reader who already holds a link carrying the video what
+ * the page itself shows them. No CORS header and `no-store`, as on that route;
  * nothing here writes, and watching through a link does not record a view.
  *
  * Only the attachment lineage has anything to refresh. An Advantage

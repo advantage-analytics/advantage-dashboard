@@ -30,6 +30,7 @@ import {
   enableMatchShare,
   setMatchShareVideo,
   setMatchShareVisualizations,
+  type ShareActionResult,
 } from "@/app/dashboard/matches/(detail)/[matchId]/share-actions";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -357,37 +358,40 @@ export function SharePopoverPanel({
 
   // Optimistic like the ladder: the box moves at once and settles on the
   // server's answer, or steps back with the error.
-  function setVisualizations(next: boolean) {
+  function updateOption(
+    patch: Partial<MatchShareLink>,
+    save: () => Promise<ShareActionResult>,
+    failure: (result: Extract<ShareActionResult, { ok: false }>) => string,
+  ) {
     if (!link || pending) return;
     const before = link;
     setError(null);
-    setLink({ ...before, includesVisualizations: next });
+    setLink({ ...before, ...patch });
     startTransition(async () => {
-      const result = await setMatchShareVisualizations(match.id, next);
+      const result = await save();
       if (!result.ok) {
         setLink(before);
-        setError("Couldn't update the link. Try again.");
+        setError(failure(result));
       }
     });
   }
 
-  function setVideo(next: boolean) {
-    if (!link || pending) return;
-    const before = link;
-    setError(null);
-    setLink({ ...before, includesVideo: next });
-    startTransition(async () => {
-      const result = await setMatchShareVideo(match.id, next);
-      if (!result.ok) {
-        setLink(before);
-        setError(
-          result.error === "forbidden"
-            ? "Only team staff can share this match's video."
-            : "Couldn't update the link. Try again.",
-        );
-      }
-    });
-  }
+  const setVisualizations = (next: boolean) =>
+    updateOption(
+      { includesVisualizations: next },
+      () => setMatchShareVisualizations(match.id, next),
+      () => "Couldn't update the link. Try again.",
+    );
+
+  const setVideo = (next: boolean) =>
+    updateOption(
+      { includesVideo: next },
+      () => setMatchShareVideo(match.id, next),
+      (result) =>
+        result.error === "forbidden"
+          ? "Only team staff can share this match's video."
+          : "Couldn't update the link. Try again.",
+    );
 
   // Adding the video is the staff's unless the program lets players; taking
   // it off is anyone's who may share the match, so a ticked box stays live.
@@ -507,7 +511,12 @@ export function SharePopoverPanel({
         <div className="-mt-1 flex flex-col pb-0.5">
           <a
             href={buildMailtoHref(match, url)}
-            className={cn(SCOPE_ROW, ROW_HOVER, SCOPE_NAME, "no-underline")}
+            className={cn(
+              SCOPE_ROW,
+              ROW_HOVER,
+              ROW_TEXT,
+              "shrink-0 no-underline",
+            )}
           >
             <Mail
               className="size-[13px] shrink-0 text-[var(--ink-400)]"
@@ -523,8 +532,8 @@ export function SharePopoverPanel({
               className={cn(
                 SCOPE_ROW,
                 ROW_HOVER,
-                SCOPE_NAME,
-                "w-full cursor-pointer text-left",
+                ROW_TEXT,
+                "w-full shrink-0 cursor-pointer text-left",
               )}
             >
               <ArrowUpRight
@@ -580,6 +589,9 @@ export function SharePopoverPanel({
         }`}
       </>
     );
+  } else if (on) {
+    // Just turned on: the maker and date arrive with the page's next render.
+    note = "Anyone with the link can open this match report.";
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
@@ -651,7 +663,9 @@ const SCOPE_ROW =
   "flex h-8 items-center gap-2.5 rounded-[var(--radius-element)] px-2.5";
 const ROW_HOVER =
   "transition-colors duration-100 hover:bg-[var(--surface-subtle)]";
-const SCOPE_NAME = "flex-1 text-[13px] leading-[18px] text-[var(--ink-900)]";
+const ROW_TEXT = "text-[13px] leading-[18px] text-[var(--ink-900)]";
+/** A row's name, taking the width between its glyph and its control. */
+const SCOPE_NAME = `flex-1 ${ROW_TEXT}`;
 
 /** The view's glyph, the one the report's rail switcher draws for it. */
 function ScopeGlyph({ view, muted }: { view: ReportView; muted?: boolean }) {
