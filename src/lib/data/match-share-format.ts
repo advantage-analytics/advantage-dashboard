@@ -70,3 +70,15 @@ export function realTournamentName(
   if (!trimmed || trimmed === UNKNOWN_EVENT_PLACEHOLDER) return null;
   return trimmed;
 }
+
+/**
+ * What a public link shows, in words — the rail footer on `/m/[token]` and
+ * the Share popover's closing note print the same phrase, after a date, in
+ * about 220px. A link with the visualizations holds everything but the video,
+ * and the rail's own switcher already names both views, so it says what is
+ * missing rather than listing what is there ("Statistics and visualizations"
+ * wrapped the footer onto a second line).
+ */
+export function shareScopeLabel(includesVisualizations: boolean): string {
+  return includesVisualizations ? "No video" : "Statistics only";
+}

@@ -71,35 +71,39 @@ export function VizWall({
           : "@container flex flex-col gap-6"
       }
     >
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="View"
-      >
-        {(["default", "saved"] as const).map((value) => {
-          const isActive = collection === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onCollectionChange(value)}
-              className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
-                isActive ? "" : "hover:bg-[var(--surface-subtle)]"
-              }`}
-              style={{
-                border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
-                background: isActive ? "var(--surface-subtle)" : undefined,
-                color: isActive ? "var(--ink-900)" : "var(--ink-600)",
-                fontWeight: isActive ? 500 : 400,
-              }}
-            >
-              {value === "default" ? "Default" : "Saved"}
-            </button>
-          );
-        })}
-      </div>
-      {collection === "default" ? (
+      {/* No Saved collection to switch to without a band (the public share
+          page) — the default cuts stand alone. */}
+      {savedViewsBand !== undefined && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="View"
+        >
+          {(["default", "saved"] as const).map((value) => {
+            const isActive = collection === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onCollectionChange(value)}
+                className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
+                  isActive ? "" : "hover:bg-[var(--surface-subtle)]"
+                }`}
+                style={{
+                  border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
+                  background: isActive ? "var(--surface-subtle)" : undefined,
+                  color: isActive ? "var(--ink-900)" : "var(--ink-600)",
+                  fontWeight: isActive ? 500 : 400,
+                }}
+              >
+                {value === "default" ? "Default" : "Saved"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {collection === "default" || savedViewsBand === undefined ? (
         visibleTiles.length > 0 ? (
           <div
             role="list"
@@ -132,7 +136,9 @@ export function VizWall({
           <EmptyWall />
         )
       ) : null}
-      <div hidden={collection !== "saved"}>{savedViewsBand}</div>
+      {savedViewsBand !== undefined && (
+        <div hidden={collection !== "saved"}>{savedViewsBand}</div>
+      )}
     </div>
   );
 }

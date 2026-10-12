@@ -227,7 +227,11 @@ test.describe("StatisticsView has no filters", () => {
     expect(view).not.toMatch(/canFilter|match-filters\//);
 
     const share = readFileSync("src/app/m/[token]/page.tsx", "utf8");
-    expect(share).not.toMatch(/canFilter|MatchFiltersProvider|match-filters\//);
+    // The share page mounts `MatchFiltersProvider` since links can carry the
+    // Visualizations view: that view's own Filters popover reads the
+    // players' hands from its context. Nothing on the page draws or seeds
+    // the match filters themselves, and Statistics still takes none.
+    expect(share).not.toMatch(/canFilter|initialQuery|MATCH_FILTERS_PARAM/);
 
     const pending = readFileSync(
       "src/components/dashboard/loading/match-report-pending.tsx",

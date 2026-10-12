@@ -95,7 +95,10 @@ export function VizFocused({
   workspaceName,
   hasPlayableVideo = false,
   onWatchPoint,
+  readOnly = false,
 }: {
+  /** The public share page: nothing here saves (`shots-tab.tsx`). */
+  readOnly?: boolean;
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
   /** Save-dialog needs (Task 9): "Share with team" only exists in a team
@@ -404,7 +407,7 @@ export function VizFocused({
       <VizToolbar
         className="viz-vt-toolbar"
         savedViews={savedViews}
-        onSaveRequest={() => setSaveDialogOpen(true)}
+        onSaveRequest={readOnly ? undefined : () => setSaveDialogOpen(true)}
         cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
@@ -604,7 +607,9 @@ export function VizFocused({
                   className="text-micro max-w-[240px]"
                   style={{ color: "var(--ink-600)" }}
                 >
-                  Choose a view, a chart and filters — then save it.
+                  {readOnly
+                    ? "Choose a view, a chart and filters."
+                    : "Choose a view, a chart and filters — then save it."}
                 </p>
                 <button
                   type="button"
@@ -677,18 +682,20 @@ export function VizFocused({
 
       {savedViewsBand}
 
-      <SaveViewDialog
-        open={saveDialogOpen}
-        onOpenChange={setSaveDialogOpen}
-        anchorRef={cutMenuTriggerRef}
-        cut={cut}
-        chart={state.chart}
-        filters={state.filters}
-        savedViews={savedViews}
-        workspaceKind={workspaceKind}
-        workspaceName={workspaceName}
-        onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
-      />
+      {!readOnly && (
+        <SaveViewDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          anchorRef={cutMenuTriggerRef}
+          cut={cut}
+          chart={state.chart}
+          filters={state.filters}
+          savedViews={savedViews}
+          workspaceKind={workspaceKind}
+          workspaceName={workspaceName}
+          onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
+        />
+      )}
     </div>
   );
 }

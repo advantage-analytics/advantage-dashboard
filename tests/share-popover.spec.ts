@@ -41,6 +41,7 @@ const loader = createLoader({
     "@/app/dashboard/matches/(detail)/[matchId]/share-actions": {
       enableMatchShare: async () => ({ ok: true, url: null }),
       disableMatchShare: async () => ({ ok: true, url: null }),
+      setMatchShareVisualizations: async () => ({ ok: true, url: null }),
     },
   },
 });
@@ -51,7 +52,7 @@ const { SharePopoverPanel } = loader.load(
   SharePopoverPanel: React.ComponentType<{
     match: Match;
     share: {
-      link: { url: string } | null;
+      link: { url: string; includesVisualizations: boolean } | null;
       canShare: boolean;
       publicLinkOn: boolean;
       audience: unknown;
@@ -91,7 +92,7 @@ const TEAM = {
 };
 
 function render(
-  shareLink: { url: string } | null,
+  shareLink: { url: string; includesVisualizations?: boolean } | null,
   {
     canShare = true,
     audience = { kind: "personal" },
@@ -101,7 +102,12 @@ function render(
   return renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: MATCH,
-      share: { link: shareLink, canShare, audience, publicLinkOn },
+      share: {
+        link: shareLink && { includesVisualizations: false, ...shareLink },
+        canShare,
+        audience,
+        publicLinkOn,
+      },
       onClose: () => {},
     }),
   );
@@ -129,7 +135,9 @@ test("personal, private: Only you is chosen and no link of any kind is offered",
     { label: "Only you", checked: true },
     { label: "Anyone with the link", checked: false },
   ]);
-  expect(html).toContain("Links show statistics only — never the video.");
+  expect(html).toContain("Links never include the video.");
+  // The link's option belongs to the link: no box without one.
+  expect(html).not.toContain("Include visualizations");
   expect(html).not.toContain("mailto:");
   expect(html).not.toContain("/m/");
   expect(html).not.toContain("/dashboard/");
@@ -225,7 +233,7 @@ test("the email subject never carries the Unknown Event placeholder", () => {
     React.createElement(SharePopoverPanel, {
       match: { ...MATCH, tournamentName: "Unknown Event" },
       share: {
-        link: { url: PUBLIC_URL },
+        link: { url: PUBLIC_URL, includesVisualizations: false },
         canShare: true,
         publicLinkOn: true,
         audience: { kind: "personal" },
@@ -238,4 +246,23 @@ test("the email subject never carries the Unknown Event placeholder", () => {
   );
   expect(mailto).toContain("subject=Match: Ava Watson vs Mia Reid");
   expect(mailto).not.toContain("Unknown Event");
+});
+
+test("a public link offers its one option, set as the link has it", () => {
+  const off = render({ url: PUBLIC_URL, includesVisualizations: false });
+  expect(off).toContain("Include visualizations");
+  expect(off).toMatch(/<input[^>]*type="checkbox"/);
+  expect(off).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
+
+  const on = render({ url: PUBLIC_URL, includesVisualizations: true });
+  expect(on).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
+});
+
+test("a teammate who cannot publish is not offered the link's option", () => {
+  const html = render(null, {
+    canShare: false,
+    audience: TEAM,
+    publicLinkOn: true,
+  });
+  expect(html).not.toContain("Include visualizations");
 });
