@@ -12,9 +12,9 @@ import { opponentPlaysLabel } from "./opponent-style";
  * and Last match — each one grid cell holding what the eight-column table
  * spread over two or three tracks.
  *
- * Shared, not private to the team table: the personal table takes the same
- * six-column shape next, and a cell drawn twice drifts by a pixel within a
- * week. Every absence is the one `EmptyMark`, on the same x as the column's
+ * Shared, not private to either table: the team table draws them in its six
+ * columns and the personal table in its four, and a cell drawn twice drifts
+ * by a pixel within a week. Every absence is the one `EmptyMark`, on the same x as the column's
  * real values. No cell carries a `title`: clipped text truncates bare and the
  * drawer, one click away, states it in full (`reference/chrome.md`).
  */

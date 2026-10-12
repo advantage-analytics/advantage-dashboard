@@ -1,26 +1,18 @@
-import { ResultMark } from "@/components/dashboard/result-mark";
-import { ScoreLine } from "@/components/dashboard/score-line";
-import { FormTicks } from "@/components/dashboard/shared/form-ticks";
-import { LIST_TRACK_TRANSITION } from "@/components/dashboard/matches/match-list-layout";
-import { EmptyMark } from "@/components/ui/empty-mark";
 import type { PersonalOpponent } from "@/lib/data/personal-opponents";
-import { formatShortDate } from "@/lib/ui/date-format";
-import { playedSets } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
-import { opponentBackhandLabel, opponentHandLabel } from "./opponent-style";
+import {
+  OpponentLastMatchCell,
+  OpponentPlaysCell,
+  OpponentRecordCell,
+} from "./opponent-cells";
 import {
   OPPONENTS_CARD_PADDING,
-  OPPONENTS_COLUMNS,
+  OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
-  OPPONENTS_MIN_WIDTH_COMPACT,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
-  opponentsGrid,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
-
-/** How many ticks the Form cell holds — the grouping's own five-match window. */
-const FORM_SLOTS = 5;
 
 /** The row's DOM id — what ↑/↓ stepping scrolls to and Esc returns focus to. */
 export function opponentRowId(key: string): string {
@@ -29,9 +21,16 @@ export function opponentRowId(key: string): string {
 }
 
 /**
- * The personal Opponents table: one card, eight tracks, a 52px row per
+ * The personal Opponents table: one card, four tracks, a 52px row per
  * opponent (`reference/tables.md` law 9 — a hairline under the header only,
  * none between rows, and the hover wash as the row's boundary).
+ *
+ * Opponent · Plays · Record · Last match
+ *
+ * The three cells after the name are the shared ones in `opponent-cells.tsx`,
+ * the same the team table draws, so the two pages cannot drift. Four tracks
+ * fit beside the open drawer as they are (`opponents-table-layout`), so the
+ * table has one set of tracks and nothing slides shut on a row click.
  *
  * An opponent is a CONTAINER row (law 3): it peeks in the drawer rather than
  * travelling, so it carries no chevron. The whole row takes the click and the
@@ -41,15 +40,14 @@ export function opponentRowId(key: string): string {
  * click bubbles to the row, so a press is counted once.
  *
  * Every cell that can be unknown draws the one `EmptyMark`, on the same x as
- * the column's real values — a hand nobody recorded, a meeting with no score,
- * an outcome nobody is yet known to have won.
+ * the column's real values — a style nobody recorded, a meeting with no
+ * score, an outcome nobody is yet known to have won.
  */
 export function OpponentsTable({
   opponents,
   selectedKey,
   onToggle,
   empty,
-  compact = false,
 }: {
   /** The rows to draw, already chipped, filtered and sorted by the page. */
   opponents: readonly PersonalOpponent[];
@@ -68,11 +66,6 @@ export function OpponentsTable({
    * bare page.
    */
   empty?: React.ReactNode;
-  /**
-   * The drawer is open beside the table: Hand and Backhand collapse (the
-   * drawer states both), so Score stays inside the card.
-   */
-  compact?: boolean;
 }) {
   return (
     <section
@@ -80,13 +73,8 @@ export function OpponentsTable({
       className="surface-card overflow-x-auto"
       style={{ padding: OPPONENTS_CARD_PADDING }}
     >
-      <div
-        className={cn(
-          compact ? OPPONENTS_MIN_WIDTH_COMPACT : OPPONENTS_MIN_WIDTH,
-          LIST_TRACK_TRANSITION,
-        )}
-      >
-        <OpponentsTableHeader compact={compact} />
+      <div className={OPPONENTS_MIN_WIDTH}>
+        <OpponentsTableHeader />
         {opponents.length === 0 ? (
           empty
         ) : (
@@ -97,7 +85,6 @@ export function OpponentsTable({
                 opponent={opponent}
                 selected={opponent.key === selectedKey}
                 onToggle={onToggle}
-                compact={compact}
               />
             ))}
           </div>
@@ -111,19 +98,11 @@ function OpponentRow({
   opponent,
   selected,
   onToggle,
-  compact,
 }: {
   opponent: PersonalOpponent;
   selected: boolean;
-  compact: boolean;
   onToggle: (key: string, viaKeyboard: boolean) => void;
 }) {
-  const hand = opponentHandLabel(opponent.hand);
-  const backhand = opponentBackhandLabel(opponent.backhand);
-  const { lastMatch } = opponent;
-  const sets = playedSets(lastMatch.sets);
-  const grid = opponentsGrid(compact);
-
   return (
     <div
       id={opponentRowId(opponent.key)}
@@ -132,14 +111,13 @@ function OpponentRow({
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,
-        grid.className,
-        LIST_TRACK_TRANSITION,
-        "cursor-pointer hover:bg-[var(--surface-muted)]",
+        "cursor-pointer transition-[background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-muted)]",
         selected && "bg-[var(--surface-muted)]",
       )}
-      style={grid.style}
+      style={OPPONENTS_GRID_COLS}
     >
-      {/* Opponent — the name a reader scans for, and the row's one control. */}
+      {/* Opponent — the name a reader scans for, and the row's one control.
+          It truncates bare; the drawer, one click away, states it in full. */}
       <button
         type="button"
         aria-pressed={selected}
@@ -148,61 +126,15 @@ function OpponentRow({
         {opponent.name}
       </button>
 
-      {/* Hand, Backhand — the noun is in the header, the qualifier in the cell. */}
-      <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
-        {hand ?? <EmptyMark label="Hand not recorded" />}
-      </span>
-      <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
-        {backhand ?? <EmptyMark label="Backhand not recorded" />}
-      </span>
+      <OpponentPlaysCell hand={opponent.hand} backhand={opponent.backhand} />
 
-      {/* Record — the viewer's wins, then losses. An undecided meeting is in
-          neither figure, which is why the two need not sum to `played`. */}
-      <span className="tabular text-[13px] text-[var(--ink-900)]">
-        <span aria-hidden="true">
-          {opponent.wins}-{opponent.losses}
-        </span>
-        <span className="sr-only">
-          {opponent.wins} won, {opponent.losses} lost
-        </span>
-      </span>
+      <OpponentRecordCell
+        wins={opponent.wins}
+        losses={opponent.losses}
+        form={opponent.form}
+      />
 
-      {/* Form — the last five meetings, oldest at the left. */}
-      <span className="flex items-center">
-        <FormTicks form={opponent.form} slots={FORM_SLOTS} />
-      </span>
-
-      {/* Last match — the stored date, formatted here. */}
-      <span className="tabular text-[12px] whitespace-nowrap text-[var(--ink-700)]">
-        {lastMatch.date ? (
-          formatShortDate(lastMatch.date)
-        ) : (
-          <EmptyMark label="No date" />
-        )}
-      </span>
-
-      {/* Result — the glyph, or the dash on the same x when nobody is yet
-          known to have won. `ResultMark`'s own null means a level dual, which
-          a singles match cannot be, so null never reaches it. */}
-      <span className="flex items-center">
-        {lastMatch.won === null ? (
-          <EmptyMark label="No result yet" />
-        ) : (
-          <ResultMark won={lastMatch.won} />
-        )}
-      </span>
-
-      {/* Score — the shared score line, tiebreaks raised. */}
-      {sets.length > 0 ? (
-        <ScoreLine
-          sets={sets}
-          className="min-w-0 truncate text-[13px] text-[var(--ink-900)]"
-        />
-      ) : (
-        <span>
-          <EmptyMark label="No score" />
-        </span>
-      )}
+      <OpponentLastMatchCell lastMatch={opponent.lastMatch} />
     </div>
   );
 }

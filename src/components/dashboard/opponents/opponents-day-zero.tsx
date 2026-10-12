@@ -30,10 +30,10 @@ import { OpponentsToolbarStatic } from "./opponents-toolbar";
  * One sentence and one action. An opponent is not something a player adds;
  * they arrive with a match, so the action is "New match" and nothing else.
  * Below it the page's own shape at 0.32 and `inert`: the toolbar at rest and
- * the table card carrying its eight real column labels over five ghost rows.
- * The labels are the honest payload — Hand · Backhand · Record · Form says
- * what an opponent's row becomes with no figure invented — and the rows are
- * the shape of one, each value replaced by a rule.
+ * the table card carrying its four real column labels over five ghost rows.
+ * The labels are the honest payload — Plays · Record · Last match says what
+ * an opponent's row becomes with no figure invented — and the rows are the
+ * shape of one, each value replaced by a rule.
  *
  * No title row: the offer carries the page's one primary, and the title
  * returns with the first opponent.
@@ -52,18 +52,15 @@ type Rule = React.ComponentProps<typeof GhostRule>;
 /**
  * One rule per track, in `OPPONENTS_COLUMNS` order. Opponent is the fluid
  * track, so its rule is a fixed width — a percentage of a column that takes
- * the page's slack would draw a name 300px long on a wide screen. Form is the
- * five-tick strip's footprint; Result is `ResultMark`'s 14px dot.
+ * the page's slack would draw a name 300px long on a wide screen. The other
+ * three are shares of fixed tracks — the team ghost's own shares for the same
+ * three cells, since the tracks are the same widths.
  */
 const ROW_RULES: readonly Rule[] = [
   { width: "128px", tone: "200", shape: "tall" }, // Opponent — the name
-  { width: "76%" }, // Hand
-  { width: "72%" }, // Backhand
-  { width: "46%" }, // Record
-  { width: "25px" }, // Form
-  { width: "58%" }, // Last match
-  { width: "14px", shape: "dot" }, // Result
-  { width: "62%" }, // Score
+  { width: "62%" }, // Plays
+  { width: "64%" }, // Record — the figure and its ticks
+  { width: "72%" }, // Last match — date, result and score
 ];
 
 /**
@@ -107,7 +104,7 @@ function GhostRow({
 /** What the dimmed shape below the offer is, said once for a screen reader. */
 const SHAPE_DESCRIPTION: Record<OpponentsScope, string> = {
   personal:
-    "Once you have a match against a named opponent this page lists each one with their hand, backhand, your record against them, recent form and your last match. Nothing below is real data yet.",
+    "Once you have a match against a named opponent this page lists each one with how they play, your record against them and your last match. Nothing below is real data yet.",
   team: "Once the team has a match against a named opponent this page lists each one with their program, who on the roster faced them, how they play, the team's record against them and the last match. Nothing below is real data yet.",
 };
 

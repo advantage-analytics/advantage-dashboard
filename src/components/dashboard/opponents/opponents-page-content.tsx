@@ -163,9 +163,6 @@ export function OpponentsPageContent({
           opponents={visibleOpponents}
           selectedKey={selectedId}
           onToggle={toggle}
-          // Tracks follow the rail: collapsed while a row is selected, and
-          // reopening as soon as the slide-out starts.
-          compact={selectedId !== null}
           empty={
             <TableEmptyBody
               icon={Brain}

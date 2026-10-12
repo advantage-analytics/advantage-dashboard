@@ -242,3 +242,15 @@ is the runner's. Newest entries at the bottom.
 3. Move focus to the new team line after a pick.
 4. Clear a stale error line when the viewer steps away from the opponent and back.
 5. Eyes-on for `team:/dashboard/opponents?opponent=<key>` takes the staff path on the real ZZ Test Program — open the search only, never pick.
+
+## T17 · Personal Opponents table: four columns on the shared cells — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (personal skeleton on the four-track grid), empty ✓ (day-zero ghost on the same tracks; `TableEmptyBody` for an empty cut unchanged; `EmptyMark` when no hand or backhand is recorded), error ✓ (unchanged `WidgetBoundary`)
+
+**changed:** `opponents-table-layout.ts`: `OPPONENTS_COLUMNS` is Opponent · Plays · Record · Last match on `minmax(160px,1fr) 150px 100px 220px`, floor `min-w-[678px]` (630 + 3 × 16, inside the ~708px left beside the open drawer at 1440px); the personal compact template, `opponentsGrid(compact)` and the `compact` prop are deleted — nothing collapses. `opponents-table.tsx` renders the name button and the shared `OpponentPlaysCell` / `OpponentRecordCell` / `OpponentLastMatchCell`; header, skeleton and day-zero ghost follow the same constants. Team grid, team table and the Hand / Backhand filters unchanged (`trackGrid` inlined into `teamOpponentsGrid`; skeleton helpers shared, same bars). Seen on the real page through the harness: four columns, whole scores, drawer open with nothing clipped.
+
+**follow-ups:**
+
+1. At 1440px with the drawer closed, Opponent is ~530px wide and Plays sits far from the name — a capped first track with the slack moved to the last would tighten it.
+2. `OPPONENT_FORM_SLOTS` and the skeleton's 25px ticks bar state the same footprint twice.
+3. The eyes-on fixtures have one opponent with hand and backhand recorded — a left-hander or one-hander would exercise Plays and the filters on screen.

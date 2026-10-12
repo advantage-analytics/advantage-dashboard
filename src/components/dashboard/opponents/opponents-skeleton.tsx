@@ -31,7 +31,7 @@ const PENDING_ROWS = 5;
  * for either Opponents page (`scope`), so nothing moves when the rows arrive.
  *
  * What the page already knows renders as itself: the "Opponents" h1, the
- * toolbar at rest, and the column labels — eight on the personal table, six
+ * toolbar at rest, and the column labels — four on the personal table, six
  * on the team one. Only what is arriving is a
  * bar, and every bar is a `PendingBar` inside the one `PendingRegion`.
  *
@@ -102,19 +102,40 @@ export function OpponentsSkeleton({
   );
 }
 
-/** Opponent · Hand · Backhand · Record · Form · Last match · Result · Score. */
+/**
+ * Opponent · Plays · Record · Last match — the name, then the three merged
+ * cells at the footprint their real content takes (`RecordPending` and
+ * `LastMatchPending`, the same bars the team row ends on).
+ */
 function PersonalPendingCells() {
   return (
     <>
       <PendingBar className="h-3 w-32" />
-      <PendingBar className="h-3 w-[72px]" />
-      <PendingBar className="h-3 w-[68px]" />
-      <PendingBar className="h-3 w-7" />
+      <PendingBar className="h-3 w-[104px]" />
+      <RecordPending />
+      <LastMatchPending />
+    </>
+  );
+}
+
+/** The record beside its ticks: `OpponentRecordCell`'s 26px figure, then 25px. */
+function RecordPending() {
+  return (
+    <span className="flex items-center gap-2.5">
+      <PendingBar className="h-3 w-[26px]" />
       <PendingBar className="h-3 w-[25px]" />
+    </span>
+  );
+}
+
+/** The date, the result mark and the score on one line. */
+function LastMatchPending() {
+  return (
+    <span className="flex items-center gap-2.5">
       <PendingBar className="h-3 w-11" />
       <PendingBar className="size-3.5 rounded-full" />
       <PendingBar className="h-3 w-20" />
-    </>
+    </span>
   );
 }
 
@@ -137,15 +158,8 @@ function TeamPendingCells() {
         <PendingBar className="h-3 w-10" />
       </span>
       <PendingBar className="h-3 w-[104px]" />
-      <span className="flex items-center gap-2.5">
-        <PendingBar className="h-3 w-[26px]" />
-        <PendingBar className="h-3 w-[25px]" />
-      </span>
-      <span className="flex items-center gap-2.5">
-        <PendingBar className="h-3 w-11" />
-        <PendingBar className="size-3.5 rounded-full" />
-        <PendingBar className="h-3 w-20" />
-      </span>
+      <RecordPending />
+      <LastMatchPending />
     </>
   );
 }

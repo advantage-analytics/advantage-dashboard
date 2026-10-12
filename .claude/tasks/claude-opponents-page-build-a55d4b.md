@@ -243,7 +243,7 @@ ready).
 
 ## T17 · Personal Opponents table: four columns on the shared cells
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** (guess) `src/components/dashboard/opponents/opponents-table.tsx`, `opponents-table-header.tsx`, `opponents-table-layout.ts`, `opponents-skeleton.tsx`, `opponents-day-zero.tsx` (ghost table columns), `opponents-page-content.tsx` (`compact` prop removed); reuses `opponent-cells.tsx` from T13
