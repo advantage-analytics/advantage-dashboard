@@ -3,24 +3,32 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ArrowUp,
+  ArrowUpRight,
+  AtSign,
+  Check,
+  ChevronDown,
+  KeyRound,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
   SquarePen,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { AskAnswer } from "@/components/dashboard/ask/ask-answer";
 import {
-  AskComposer,
+  ASK_PLACEHOLDER,
   type AskQuotaView,
 } from "@/components/dashboard/ask/ask-composer";
+import { AskEngineMark } from "@/components/dashboard/ask/ask-engine-mark";
 import { ASK_TAG_ICON } from "@/components/dashboard/ask/ask-tag-menu";
 import type {
   AskAnswerState,
-  AskQuestion,
   AskTag,
 } from "@/components/dashboard/ask/use-ask-stream";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
 import { advButton } from "@/lib/ui/adv-button";
@@ -217,7 +225,6 @@ export function AskLayoutsPreview({
 }) {
   const current = VARIANTS.find((entry) => entry.id === variant) ?? VARIANTS[0];
   const [open, setOpen] = useState(!railClosed);
-  const [draft, setDraft] = useState<AskQuestion>({ text: "", tags: [] });
 
   return (
     <TooltipProvider>
@@ -255,18 +262,7 @@ export function AskLayoutsPreview({
                   open={open}
                   onToggle={() => setOpen((value) => !value)}
                 />
-                <Thread
-                  composer={
-                    <AskComposer
-                      value={draft}
-                      onChange={setDraft}
-                      onSubmit={() => {}}
-                      tagOptions={TAG_OPTIONS}
-                      quota={QUOTA}
-                      pending={false}
-                    />
-                  }
-                />
+                <Thread composer={<ComposerSketch />} />
               </div>
             </div>
           </div>
@@ -400,7 +396,7 @@ function ChatRail({
           icon={PanelLeftOpen}
           onClick={onToggle}
         />
-        <RailIconButton label="New question" icon={SquarePen} />
+        <RailIconButton label="New question · ⇧⌘O" icon={SquarePen} />
       </nav>
     );
   }
@@ -423,7 +419,18 @@ function ChatRail({
             className="size-3.5 text-[var(--ink-500)]"
             strokeWidth={1.5}
           />
-          New question
+          <span className="flex-1 text-left">New question</span>
+          <span aria-hidden="true" className="flex items-center gap-0.5">
+            <Kbd size="sm" variant="flat">
+              ⇧
+            </Kbd>
+            <Kbd size="sm" variant="flat">
+              ⌘
+            </Kbd>
+            <Kbd size="sm" variant="flat">
+              O
+            </Kbd>
+          </span>
         </button>
         <RailIconButton
           label="Hide earlier questions"
@@ -665,5 +672,230 @@ function RailLimit() {
       </span>
       <p className="text-[11px] text-[var(--ink-500)]">Resets on the 1st</p>
     </div>
+  );
+}
+
+// ── The composer with a model menu (a sketch: the built composer shows a
+//    static "Advantage Intelligence" label until a player can bring a model) ──
+
+type ModelId = "advantage" | "claude";
+
+/**
+ * The composer as it would read once a player can bring their own model.
+ * Same box and control row as the built composer; the engine label becomes a
+ * menu trigger. The menu is open on arrival so it can be judged, and choosing
+ * a row changes the trigger and the count — a model on the player's own key
+ * does not draw on the month's questions.
+ */
+function ComposerSketch() {
+  const [menuOpen, setMenuOpen] = useState(true);
+  const [model, setModel] = useState<ModelId>("advantage");
+  const left = QUOTA.cap - QUOTA.used;
+
+  function choose(next: ModelId) {
+    setModel(next);
+    setMenuOpen(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 pt-3 pb-2.5">
+      <p className="min-h-[39px] px-0.5 text-[13px] leading-[1.5] text-[var(--ink-400)]">
+        {ASK_PLACEHOLDER}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="-ml-1 flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] text-[var(--ink-600)]">
+          <AtSign
+            aria-hidden="true"
+            className="size-3.5 text-[var(--ink-500)]"
+            strokeWidth={1.5}
+          />
+          Tag a match or opponent
+        </span>
+
+        <div
+          className="relative"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setMenuOpen(false);
+          }}
+        >
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((value) => !value)}
+            className={cn(
+              "flex h-7 cursor-pointer items-center gap-2 rounded-[var(--radius-element)] px-2 text-[12px] text-[var(--ink-700)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
+              menuOpen && "bg-[var(--surface-subtle)] text-[var(--ink-900)]",
+            )}
+          >
+            {model === "advantage" ? (
+              <AskEngineMark />
+            ) : (
+              <ModelGlyph icon={KeyRound} />
+            )}
+            {model === "advantage" ? "Advantage Intelligence" : "Claude"}
+            <ChevronDown
+              aria-hidden="true"
+              className="size-3 text-[var(--ink-500)]"
+              strokeWidth={1.5}
+            />
+          </button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label="Model"
+              className="absolute bottom-full left-0 z-10 mb-2 flex w-[328px] flex-col rounded-[var(--radius-dropdown)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-[5px] shadow-[var(--shadow-dropdown)]"
+            >
+              <ModelGroup label="Included">
+                <ModelRow
+                  glyph={<AskEngineMark />}
+                  name="Advantage Intelligence"
+                  detail={`Reads every match you've sent. ${left} of ${QUOTA.cap} questions left this month.`}
+                  chosen={model === "advantage"}
+                  onClick={() => choose("advantage")}
+                />
+              </ModelGroup>
+
+              <ModelGroup label="Your own model">
+                <ModelRow
+                  glyph={<ModelGlyph icon={KeyRound} />}
+                  name="Claude"
+                  detail="Your Anthropic API key, added Oct 2. Billed to that account."
+                  chosen={model === "claude"}
+                  onClick={() => choose("claude")}
+                />
+                <ModelRow
+                  glyph={<ModelGlyph icon={KeyRound} />}
+                  name="ChatGPT"
+                  detail="Add an OpenAI API key to ask with it."
+                  action="Add key"
+                />
+              </ModelGroup>
+
+              <ModelGroup label="In your own assistant">
+                <ModelRow
+                  glyph={<ModelGlyph icon={Plug} />}
+                  name="Connect Advantage"
+                  detail="Add the connector to Claude or ChatGPT and ask about your matches there, on the plan you already have."
+                  external
+                />
+              </ModelGroup>
+
+              <p className="mx-[5px] mt-1 border-t border-[var(--border-hairline)] px-1.5 pt-2.5 pb-2 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                Your own model reads your match statistics, never the video.
+                Advantage Intelligence does not check its answers.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        <p className="font-mono text-[11px] text-[var(--ink-600)] tabular-nums">
+          {model === "advantage" ? `${QUOTA.used} / ${QUOTA.cap}` : "Your key"}
+        </p>
+        <button
+          type="button"
+          aria-label="Send question"
+          disabled
+          className={cn(advButton("primary", "sm"), "w-8 px-0")}
+        >
+          <ArrowUp aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A model that is not Advantage's own: a neutral glyph, never a vendor's
+ *  mark — the icon set is Lucide and the name is in the row. */
+function ModelGlyph({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-4 shrink-0 items-center justify-center rounded-[3px] bg-[var(--surface-subtle)] text-[var(--ink-600)]"
+    >
+      <Icon className="size-[11px]" strokeWidth={1.5} />
+    </span>
+  );
+}
+
+function ModelGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-col">
+      <p className="eyebrow-sm px-2.5 pt-2.5 pb-1">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function ModelRow({
+  glyph,
+  name,
+  detail,
+  chosen,
+  action,
+  external = false,
+  onClick,
+}: {
+  glyph: ReactNode;
+  name: string;
+  detail: string;
+  /** Set on rows that can be the current model. */
+  chosen?: boolean;
+  /** A row that leads to adding something first. */
+  action?: string;
+  /** A row that leaves this page. */
+  external?: boolean;
+  onClick?: () => void;
+}) {
+  const selectable = chosen !== undefined;
+  return (
+    <button
+      type="button"
+      role={selectable ? "menuitemradio" : "menuitem"}
+      aria-checked={selectable ? chosen : undefined}
+      onClick={onClick}
+      className="flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-button)] px-2.5 py-2 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
+    >
+      <span className="mt-px flex">{glyph}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[12px] font-medium text-[var(--ink-900)]">
+          {name}
+        </span>
+        <span className="text-[11px] leading-[1.45] text-[var(--ink-500)]">
+          {detail}
+        </span>
+      </span>
+      <span className="mt-0.5 flex min-w-[13px] shrink-0 justify-end">
+        {chosen && (
+          <Check
+            aria-hidden="true"
+            className="size-[13px] text-[var(--blue)]"
+            strokeWidth={2}
+          />
+        )}
+        {action && (
+          <span className="text-[11px] font-medium text-[var(--blue)]">
+            {action}
+          </span>
+        )}
+        {external && (
+          <ArrowUpRight
+            aria-hidden="true"
+            className="size-3 text-[var(--ink-400)]"
+            strokeWidth={1.5}
+          />
+        )}
+      </span>
+    </button>
   );
 }
