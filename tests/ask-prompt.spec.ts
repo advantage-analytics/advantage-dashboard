@@ -22,6 +22,7 @@ import {
 import {
   ASK_MOCK_ANSWER_TEMPLATE,
   ASK_MOCK_PLAN,
+  ASK_TEAM_MOCK_ANSWER_TEMPLATE,
   mockAskAnswerStream,
 } from "@/lib/services/ask/mock";
 import {
@@ -32,10 +33,17 @@ import {
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
   ASK_SCOPE_COUNT_COLUMN,
+  ASK_TEAM_ANSWER_EXAMPLE_REPLY,
+  ASK_TEAM_ANSWER_EXAMPLE_ROWS,
+  ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
+  ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+  ASK_TEAM_PLAN_EXAMPLE_REFUSAL,
+  ASK_TEAM_VISUAL_EXAMPLES,
   ASK_VISUAL_EXAMPLES,
   type AskPlanPromptInput,
   MAX_ASK_PROMPT_ROWS,
   MAX_ASK_PROMPT_TURNS,
+  MAX_ASK_TEAM_BREAKDOWN_ROWS,
   buildAnswerPrompt,
   buildPlanPrompt,
   renderAskPercentageBlock,
@@ -45,6 +53,7 @@ import {
   ASK_PERCENTAGE_DEFINITIONS,
   ASK_SCHEMA,
 } from "@/lib/services/ask/schema";
+import type { AskScope } from "@/lib/services/ask/scope";
 import {
   ASK_SQL_FUNCTION_ALLOWLIST,
   ASK_VIEWS,
@@ -205,7 +214,8 @@ test.describe("buildPlanPrompt", () => {
       ASK_SCHEMA.map((view) => ({
         view: view.view,
         columns: view.columns
-          .filter((column) => !column.hidden)
+          // `teamOnly` columns are the team planner's; see the team describe.
+          .filter((column) => !column.hidden && !column.teamOnly)
           .map((column) => column.name),
       })),
     );
@@ -993,6 +1003,419 @@ test.describe("isLLMConfigured", () => {
       }
       // The mock's sentence opens with a warning sign, then "No LLM provider…".
       expect(first.trim(), JSON.stringify(env)).toBe("⚠️");
+    }
+  });
+});
+
+// ── Team scope ──────────────────────────────────────────────────────────────
+
+const TEAM_SCOPE: AskScope = {
+  kind: "team",
+  programId: "eeeeeeee-0000-4000-8000-000000000005",
+  programName: "Westbrook\n College",
+};
+
+const TEAM_PLAN_INPUT: AskPlanPromptInput = {
+  today: "2026-10-11",
+  scope: TEAM_SCOPE,
+  tags: [
+    {
+      kind: "match",
+      matchId: MATCH_A,
+      opponentName: "Alex Rivera",
+      playedOn: "2026-09-14",
+      playerName: "Mara\n Sokolov",
+    },
+    { kind: "player", playerName: "Jo Reyes", matchIds: [MATCH_B, MATCH_C] },
+    { kind: "opponent", opponentName: "Sam Ortiz", matchIds: [MATCH_C] },
+  ],
+  conversation: [
+    { role: "user", content: "How is Sokolov serving?" },
+    { role: "assistant", content: "Sokolov lands most of her first serves." },
+  ],
+};
+
+/** Second-person words that would address the coach as if they were the player. */
+const SECOND_PERSON = /\b(you|your|yours)\b/i;
+
+test.describe("the personal prompts do not move when the team ones do", () => {
+  test("no scope and a personal scope build the same prompts, with no team wording", () => {
+    const personal = { kind: "personal" } as const;
+    const plan = buildPlanPrompt(PLAN_INPUT);
+    expect(buildPlanPrompt({ ...PLAN_INPUT, scope: personal })).toBe(plan);
+    const answer = buildAnswerPrompt(ANSWER_INPUT);
+    expect(buildAnswerPrompt({ ...ANSWER_INPUT, scope: personal })).toBe(
+      answer,
+    );
+    for (const prompt of [plan, answer]) {
+      expect(prompt).not.toContain("player_name");
+      expect(prompt).not.toContain("the program");
+      expect(prompt).not.toContain("THIRD PERSON");
+    }
+    expect(renderAskSchemaBlock()).toBe(renderAskSchemaBlock("personal"));
+  });
+
+  test("player_name is the one column only the team planner is shown", () => {
+    const teamOnly = ASK_SCHEMA.flatMap((view) =>
+      view.columns
+        .filter((column) => column.teamOnly)
+        .map((column) => `${view.view}.${column.name}`),
+    );
+    expect(teamOnly).toEqual(["matches.player_name"]);
+    // Last in ask.matches, as `create or replace view` appended it.
+    expect(ASK_SCHEMA[0].columns.at(-1)?.name).toBe("player_name");
+    expect(migrationColumnComments().get("matches.player_name")).toBe(
+      ASK_SCHEMA[0].columns.at(-1)?.meaning,
+    );
+  });
+});
+
+test.describe("buildPlanPrompt — team scope", () => {
+  const prompt = buildPlanPrompt(TEAM_PLAN_INPUT);
+
+  test("its schema block is every view in the program's words, with player_name", () => {
+    const block = renderAskSchemaBlock("team");
+    expect(prompt).toContain(block);
+    expect(prompt).not.toContain(renderAskSchemaBlock());
+
+    const listed: { view: string; columns: string[] }[] = [];
+    for (const line of block.split("\n")) {
+      const view = /^ask\.(\w+) — /.exec(line);
+      if (view) listed.push({ view: view[1], columns: [] });
+      const column = /^ {2}(\w+) \((\w+)\): \S/.exec(line);
+      if (column) listed[listed.length - 1].columns.push(column[1]);
+    }
+    expect(listed).toEqual(
+      ASK_SCHEMA.map((view) => ({
+        view: view.view,
+        columns: view.columns
+          .filter((column) => !column.hidden)
+          .map((column) => column.name),
+      })),
+    );
+    expect(block).toContain("  player_name (text): The player this match is");
+    for (const view of ASK_SCHEMA) {
+      expect(view.teamMeaning).toContain("program's");
+      expect(view.teamMeaning).not.toContain("viewer");
+      expect(block).toContain(`ask.${view.view} — ${view.teamMeaning}`);
+    }
+    for (const name of ["serve_rating", "return_rating"]) {
+      expect(prompt).not.toContain(name);
+    }
+    const mentioned = new Set(
+      [...prompt.matchAll(/\bask\.([a-z_]+)\b/g)].map((match) => match[1]),
+    );
+    expect([...mentioned].sort()).toEqual([...ASK_VIEWS].sort());
+  });
+
+  test("says once, near the top, that 'me' is the program's player and never the asker", () => {
+    expect(prompt).toContain("The program: Westbrook College");
+    const rule =
+      "In every view, side = 'me', i_won, i_served and mine mean THAT PLAYER — the program's player in that match — never the person asking.";
+    expect(prompt).toContain(rule);
+    expect(prompt.indexOf(rule)).toBeLessThan(prompt.indexOf("## The data"));
+    expect(prompt.split(rule)).toHaveLength(2);
+    expect(prompt).toContain(
+      'Where a column description below says "the viewer", read "the program\'s player in that match".',
+    );
+  });
+
+  test("tells the planner how one player, the team and a per-player breakdown are scoped", () => {
+    expect(prompt).toContain(
+      "filters ask.matches with player_name ilike '%name%'",
+    );
+    expect(prompt).toContain(
+      'A question about "the team", "we", "us", "our players" or naming nobody covers every match.',
+    );
+    expect(prompt).toContain(
+      "is a per-player breakdown: group by player_name, one row per player.",
+    );
+    expect(prompt).toContain(
+      `ONE ROW PER PLAYER, player_name as the first column, joined from ask.matches, where player_name is not null, ordered by the measure asked about with the best first, never more than ${MAX_ASK_TEAM_BREAKDOWN_ROWS} rows.`,
+    );
+    expect(prompt).toContain("NEVER count the matches in scope");
+    expect(prompt).toContain(ASK_SCOPE_COUNT_COLUMN);
+  });
+
+  test("says doubles have a result and no statistics", () => {
+    expect(prompt).toContain(
+      "They have a score and a result but NO statistics (has_stats is false, and no rows in the other three views). A record may count them; a statistic cannot.",
+    );
+    expect(prompt).toContain(
+      "A match with has_stats false has a result but no statistics.",
+    );
+  });
+
+  test("renders the program, the tags with whose match each is, and the conversation as a coach's", () => {
+    expect(prompt).toContain("Today's date: 2026-10-11");
+    expect(prompt).toContain(
+      `- match ${MATCH_A}: Mara Sokolov against Alex Rivera, played on 2026-09-14`,
+    );
+    expect(prompt).toContain(
+      `- player Jo Reyes: match ids ${MATCH_B}, ${MATCH_C}`,
+    );
+    expect(prompt).toContain(`- opponent Sam Ortiz: match ids ${MATCH_C}`);
+    expect(prompt).toContain("Coach: How is Sokolov serving?");
+    expect(prompt).toContain("Ask: Sokolov lands most of her first serves.");
+    expect(prompt).not.toContain("Player: ");
+
+    const bare = buildPlanPrompt({
+      today: "2026-10-11",
+      scope: TEAM_SCOPE,
+      tags: [],
+      conversation: [],
+    });
+    expect(bare).toContain(
+      "None. The question is about all of the program's matches unless it names a player",
+    );
+    expect(bare).toContain("None. This is the first question.");
+  });
+
+  test("keeps the reply contract, the SQL rules and the allowlist the personal prompt has", () => {
+    const personal = buildPlanPrompt(PLAN_INPUT);
+    for (const line of [
+      '{"scope_sql": "...", "sql": "...", "asks_for_advice": false}',
+      '{"cannot_answer": "...", "asks_for_advice": false}',
+      "- PostgreSQL. A single SELECT each; WITH and UNION are allowed. No semicolon, no comments, no parameters.",
+      "never average per-match _pct columns",
+      "its column name MUST end in _pct",
+      renderAskPercentageBlock(),
+      `Call only these functions: ${[...ASK_SQL_FUNCTION_ALLOWLIST].join(", ")}.`,
+      "ask.points.is_pressure_point is never true.",
+      "Never choose shape B only because advice was asked.",
+    ]) {
+      expect(personal, line).toContain(line);
+      expect(prompt, line).toContain(line);
+    }
+    expect(prompt).toContain(
+      "Every sum over it MUST name side — filter side = 'me' for the program's own numbers",
+    );
+  });
+
+  test("refuses another team's matches and addresses the coach about the program's", () => {
+    expect(prompt).toContain(
+      "The question is about matches that are not this program's: another team's results, a professional, an opponent's matches against other teams.",
+    );
+    expect(prompt).toContain(
+      "cannot_answer is one plain sentence to the coach, in the second person, saying what the program's matches do not record. No digits, no apology, no suggestion.",
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.cannot_answer).toMatch(
+      /^The program's matches do not record /,
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.cannot_answer).not.toMatch(/\d/);
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.asks_for_advice).toBe(true);
+  });
+
+  test("its worked examples are in the prompt and the query ones pass the guard", () => {
+    expect(prompt).toContain(JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN));
+    expect(prompt).toContain(JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_PLAYER));
+    expect(prompt).toContain(JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REFUSAL));
+    // None of the personal examples: "my second serve" is not a coach's question.
+    expect(prompt).not.toContain(JSON.stringify(ASK_PLAN_EXAMPLE_QUERY));
+    expect(prompt).not.toContain(JSON.stringify(ASK_PLAN_EXAMPLE_REFUSAL));
+
+    for (const example of [
+      ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
+      ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+    ]) {
+      expect(
+        checkAskSql({ scopeSql: example.scope_sql, sql: example.sql }),
+      ).toEqual({ ok: true });
+      expect(example.sql).toContain("s.side = 'me'");
+      expect(example.sql).toContain("select match_id from scope");
+      expect(example.sql).not.toMatch(/ as matches\b/);
+    }
+    // The breakdown: one row per player, the name first, the best first, capped.
+    expect(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN.sql).toMatch(
+      /^select m\.player_name, /,
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN.sql).toContain(
+      `group by m.player_name order by second_serve_won_pct desc nulls last limit ${MAX_ASK_TEAM_BREAKDOWN_ROWS}`,
+    );
+    // One player: found by name, compared with the team's own figure.
+    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYER.scope_sql).toContain(
+      "player_name ilike '%sokol%'",
+    );
+    expect(
+      [...ASK_TEAM_PLAN_EXAMPLE_PLAYER.sql.matchAll(/ as (\w+)/g)].map(
+        (match) => match[1],
+      ),
+    ).toEqual([
+      "first_serve_pct",
+      "team_first_serve_pct",
+      "second_serve_won_pct",
+      "team_second_serve_won_pct",
+    ]);
+  });
+});
+
+test.describe("buildAnswerPrompt — team scope", () => {
+  const prompt = buildAnswerPrompt({ ...ANSWER_INPUT, scope: TEAM_SCOPE });
+
+  test("renders the program, the question and the rows", () => {
+    expect(prompt).toContain("the tennis program Westbrook College");
+    expect(prompt).toContain('"How is my second serve against Alex?"');
+    expect(prompt).toContain("r1\n  matches: 9");
+    expect(prompt).toContain("The result is computed from 9 matches");
+  });
+
+  test("pins the third-person rule: players by name or 'the team', never 'you'", () => {
+    expect(prompt).toContain(
+      '- THIRD PERSON. The players are never "you" and their figures are never "your": name the player as the result spells them ("Sokolov won …"), or say "the team" when the result covers several players.',
+    );
+    expect(prompt).toContain(
+      "A column starting me_ is the figure of the program's player or players — never of the reader — and the matching opp_ column is their opponents' for the same measure.",
+    );
+    expect(prompt).toContain(
+      'whose first column is headed with the player\'s name when the result is about one player, or "Team" when it covers several, and whose second is the opponent\'s name or "Opponents" — never "You".',
+    );
+    expect(prompt).not.toContain("Second person, plain sentences.");
+    expect(prompt).not.toContain('the columns "You" and');
+  });
+
+  test("the no-advice rule is as absolute as the personal one, and so are the number rules", () => {
+    const personal = buildAnswerPrompt(ANSWER_INPUT);
+    expect(prompt).toContain(
+      "- NO ADVICE. No recommendation, drill, lineup, tactic, strategy, encouragement or praise.",
+    );
+    expect(prompt).toContain(
+      "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.",
+    );
+    for (const rule of [
+      "- NEVER TYPE A NUMBER.",
+      "- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE.",
+      `- THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else.`,
+      "- HEADLINE FIRST.",
+      ASK_FIGURE_LINE_SYNTAX,
+      ASK_VISUAL_LINE_SYNTAX,
+      ASK_CELL_REFERENCE_SYNTAX,
+    ]) {
+      expect(personal, rule).toContain(rule);
+      expect(prompt, rule).toContain(rule);
+    }
+    expect(prompt).not.toContain(ASK_NO_ADVICE_SENTENCE);
+    expect(buildPlanPrompt(TEAM_PLAN_INPUT)).not.toContain(
+      ASK_NO_ADVICE_SENTENCE,
+    );
+  });
+
+  test("its worked example renders through the real renderer with nothing dropped, in the third person", async () => {
+    expect(prompt).toContain(ASK_TEAM_ANSWER_EXAMPLE_REPLY);
+    expect(prompt).not.toContain(ASK_ANSWER_EXAMPLE_REPLY);
+
+    const { events, result } = await render(
+      ASK_TEAM_ANSWER_EXAMPLE_REPLY,
+      ASK_TEAM_ANSWER_EXAMPLE_ROWS,
+    );
+    expect(result.failure).toBeNull();
+    expect(result.droppedDigits).toEqual([]);
+    expect(result.droppedFigures).toEqual([]);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.headline).not.toMatch(/\d/);
+    expect(result.visual).toEqual({
+      kind: "table",
+      caption: "Second serves by player, from 14 matches.",
+      columns: ["Points won", "Second serves in"],
+      rows: [
+        { label: "Mara Sokolov", cells: ["58.4%", "137"] },
+        { label: "Jo Reyes", cells: ["51.9%", "104"] },
+        { label: "Dana Brooks", cells: ["44.7%", "85"] },
+      ],
+    });
+    expect(events.some((event) => event.type === "error")).toBe(false);
+    expect(result.text).not.toContain("\n\n");
+
+    expect(
+      ASK_TEAM_ANSWER_EXAMPLE_REPLY.replace(/\{\{[^}]*\}\}/g, ""),
+    ).not.toMatch(/\d/);
+    expect(ASK_TEAM_ANSWER_EXAMPLE_REPLY).not.toMatch(SECOND_PERSON);
+    expect(ASK_TEAM_ANSWER_EXAMPLE_REPLY).not.toMatch(
+      /\b(should|try|focus on|work on|keep it up|well done)\b/i,
+    );
+  });
+
+  test("the catalogue is the team's: every kind, none of them addressing the player", () => {
+    expect(Object.keys(ASK_TEAM_VISUAL_EXAMPLES)).toEqual([
+      ...ASK_VISUAL_KINDS,
+    ]);
+    for (const kind of ASK_VISUAL_KINDS) {
+      const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
+      expect(prompt).toContain(`### ${kind} — ${example.when}`);
+      expect(prompt).toContain(ASK_VISUAL_SYNTAX[kind]);
+      expect(prompt).toContain(example.block);
+      expect(example.block, kind).not.toMatch(SECOND_PERSON);
+      expect(example.when, kind).not.toMatch(SECOND_PERSON);
+    }
+  });
+
+  for (const kind of ASK_VISUAL_KINDS) {
+    test(`the team ${kind} example renders through the real renderer, nothing dropped`, async () => {
+      const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
+      const { events, result } = await render(
+        `Claim.\n${example.block}\n\nOne paragraph.`,
+        example.rows,
+      );
+      expect(result.failure).toBeNull();
+      expect(result.droppedDigits).toEqual([]);
+      expect(result.droppedVisuals).toEqual([]);
+      expect(result.visual?.kind).toBe(kind);
+      expect(readAskVisual(result.visual)).toEqual(result.visual);
+      expect(events.map((event) => event.type)).toEqual([
+        "headline",
+        "visual",
+        "text",
+      ]);
+      expect(example.block.replace(/\{\{[^}]*\}\}/g, "")).not.toMatch(/\d/);
+    });
+  }
+});
+
+test.describe("mock mode — team scope", () => {
+  test("the team template renders over the mock row in the third person", async () => {
+    const rows = [
+      { matches: 12, wins: 7, losses: 4, second_serve_won_pct: 48.3 },
+    ];
+    const { events, result } = renderAskAnswer(
+      mockAskAnswerStream(TEAM_SCOPE),
+      rows,
+    );
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+
+    expect(result.failure).toBeNull();
+    expect(result.droppedDigits).toEqual([]);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.figures.map((figure) => figure.value)).toEqual([
+      "7",
+      "4",
+      "48.3%",
+    ]);
+    expect(result.visual).toMatchObject({
+      kind: "table",
+      caption: "The team's record across 12 recorded matches.",
+    });
+    expect(result.text).toContain(
+      "Across 12 recorded matches the team's players have won 7 and lost 4.",
+    );
+    expect(result.text).toContain("No AI provider is configured");
+    expect(seen.some((event) => event.type === "error")).toBe(false);
+
+    expect(ASK_TEAM_MOCK_ANSWER_TEMPLATE).not.toMatch(SECOND_PERSON);
+    expect(
+      ASK_TEAM_MOCK_ANSWER_TEMPLATE.replace(/\{\{[^}]*\}\}/g, ""),
+    ).not.toMatch(/\d/);
+    // The plan is shared: it reads the views, whoever they are turned to.
+    expect(ASK_MOCK_PLAN.sql).not.toMatch(SECOND_PERSON);
+  });
+
+  test("a personal scope, or none, still streams the personal template", async () => {
+    for (const stream of [
+      mockAskAnswerStream(),
+      mockAskAnswerStream({ kind: "personal" }),
+    ]) {
+      const chunks: string[] = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      expect(chunks.join("")).toBe(ASK_MOCK_ANSWER_TEMPLATE);
     }
   });
 });

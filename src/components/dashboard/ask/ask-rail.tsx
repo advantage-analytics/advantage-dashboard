@@ -18,6 +18,11 @@ import {
 import { Kbd } from "@/components/ui/kbd";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AskConversationSummary } from "@/lib/data/ask-server";
+import {
+  PERSONAL_ASK_SCOPE,
+  askBasePath,
+  type AskScope,
+} from "@/lib/services/ask/scope";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { AskQuotaView } from "./ask-composer";
@@ -33,8 +38,13 @@ import { isMacPlatform, newQuestionKeys } from "./ask-shortcut";
 export interface AskRailProps {
   /** Null when the count could not be read — never a made-up `0 / 20`. */
   quota: AskQuotaView | null;
-  /** Earlier questions, most recently used first. */
+  /** Earlier questions asked in this scope, most recently used first. */
   conversations: AskConversationSummary[];
+  /**
+   * Whose matches the page is about: a row opens its conversation on that
+   * scope's own page. The personal page when omitted.
+   */
+  scope?: AskScope;
   /** The conversation that is open, so its row can say so. */
   activeConversationId: string | null;
   /** "New question": the button here, and the page's shortcut, run this. */
@@ -79,6 +89,7 @@ export const ASK_RAIL_STORAGE_KEY = "advantage:ask-rail";
 export function AskRail({
   quota,
   conversations,
+  scope = PERSONAL_ASK_SCOPE,
   activeConversationId,
   onNewQuestion,
   onDeleteConversation,
@@ -188,6 +199,7 @@ export function AskRail({
               {conversations.length > 0 ? (
                 <AskEarlier
                   conversations={conversations}
+                  basePath={askBasePath(scope)}
                   activeConversationId={activeConversationId}
                   onDeleteConversation={onDeleteConversation}
                   deleteDisabled={deleteDisabled}
@@ -331,13 +343,14 @@ function AskLimit({ quota }: { quota: AskQuotaView }) {
 
 function AskEarlier({
   conversations,
+  basePath,
   activeConversationId,
   onDeleteConversation,
   deleteDisabled,
 }: Pick<
   AskRailProps,
   "conversations" | "activeConversationId" | "onDeleteConversation"
-> & { deleteDisabled: boolean }) {
+> & { basePath: string; deleteDisabled: boolean }) {
   // The row being asked about. Kept after the dialog closes so its title does
   // not blank out while the dialog is still leaving.
   const [target, setTarget] = useState<AskConversationSummary | null>(null);
@@ -374,6 +387,7 @@ function AskEarlier({
               <AskEarlierRow
                 key={conversation.id}
                 conversation={conversation}
+                basePath={basePath}
                 active={conversation.id === activeConversationId}
                 deleteDisabled={deleteDisabled}
                 onDelete={() => {
@@ -426,11 +440,14 @@ function AskEarlier({
  */
 function AskEarlierRow({
   conversation,
+  basePath,
   active,
   deleteDisabled,
   onDelete,
 }: {
   conversation: AskConversationSummary;
+  /** The page this conversation belongs to (`askBasePath`). */
+  basePath: string;
   active: boolean;
   deleteDisabled: boolean;
   onDelete: () => void;
@@ -444,7 +461,7 @@ function AskEarlierRow({
       )}
     >
       <Link
-        href={`/dashboard/ask?c=${conversation.id}`}
+        href={`${basePath}?c=${conversation.id}`}
         aria-current={active ? "page" : undefined}
         className="flex h-full min-w-0 flex-1 items-center rounded-[var(--radius-element)] pr-14 pl-2"
       >

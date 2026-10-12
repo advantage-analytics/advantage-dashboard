@@ -15,7 +15,9 @@ import type { ASK_VIEWS } from "@/lib/services/ask/sql-guard";
  * those comments: change one there, in a migration, and copy it here.
  *
  * Checked against `information_schema.columns` on the live project on
- * 2026-10-11: 14 + 86 + 12 + 9 columns, in this order.
+ * 2026-10-11: 14 + 86 + 12 + 9 columns, in this order. `ask.matches.player_name`
+ * (the fifteenth, `20261012170339_ask_team_scope.sql`) was added after that
+ * check.
  *
  * Pure data: imports a type only.
  */
@@ -43,6 +45,14 @@ export interface AskColumn {
    * column; `renderAskSchemaBlock()` leaves them out.
    */
   hidden?: true;
+  /**
+   * True for a column only the TEAM planner is shown. `ask.matches.player_name`
+   * says whose match a row is, which is the whole question in a program scope
+   * and noise in a personal one: there it is the viewer's own name on every
+   * row. The view has the column in both scopes; `renderAskSchemaBlock()`
+   * lists it for a team prompt only.
+   */
+  teamOnly?: true;
 }
 
 /**
@@ -175,6 +185,11 @@ export interface AskViewSchema {
    * model will try to query.
    */
   meaning: string;
+  /**
+   * The same sentence for a program scope, where the rows are every match of
+   * the program and "me" is the program's own player in each.
+   */
+  teamMeaning: string;
   columns: readonly AskColumn[];
 }
 
@@ -183,6 +198,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
     view: "matches",
     meaning:
       "The viewer's own personal matches, one row each, already turned to the viewer: the opponent is the other player and i_won is the viewer's result.",
+    teamMeaning:
+      "Every match of the program, one row each, already turned to the program's own player in that match (player_name): the opponent is the other side and i_won is the program player's result.",
     columns: [
       {
         name: "match_id",
@@ -263,12 +280,21 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         meaning:
           "True when computed statistics exist for this match (serve, return, rally counters).",
       },
+      {
+        name: "player_name",
+        type: "text",
+        meaning:
+          "The player this match is turned to (\"me\" in the other views): in a program scope the roster player's name, one spelling per player; in a personal scope the viewer's name as stored on the match.",
+        teamOnly: true,
+      },
     ],
   },
   {
     view: "match_stats",
     meaning:
       "Per-match statistics for the viewer's own personal matches, two rows per match: side = me (the viewer) and side = opponent. Counters are whole-match totals; _pct columns are percentages 0–100 for that one match, null when the denominator is zero.",
+    teamMeaning:
+      "Per-match statistics for the program's matches, two rows per match: side = me (the program's player in that match) and side = opponent. Counters are whole-match totals; _pct columns are percentages 0–100 for that one match, null when the denominator is zero.",
     columns: [
       {
         name: "match_id",
@@ -748,6 +774,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
     view: "points",
     meaning:
       "Every point of the viewer's own personal matches, one row each, with the server and the winner already turned to the viewer (i_served, i_won).",
+    teamMeaning:
+      "Every point of the program's matches, one row each, with the server and the winner already turned to the program's player in that match (i_served, i_won).",
     columns: [
       {
         name: "match_id",
@@ -826,6 +854,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
     view: "shots",
     meaning:
       "Every recorded shot of the viewer's own personal matches, one row each, with the hitter already turned to the viewer (mine). Join to ask.points on match_id and point_number.",
+    teamMeaning:
+      "Every recorded shot of the program's matches, one row each, with the hitter already turned to the program's player in that match (mine). Join to ask.points on match_id and point_number.",
     columns: [
       {
         name: "match_id",

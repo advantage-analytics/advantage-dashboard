@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { AskQuotaView } from "@/components/dashboard/ask/ask-composer";
 import { AskRail } from "@/components/dashboard/ask/ask-rail";
 import type { AskConversationSummary } from "@/lib/data/ask-server";
+import type { AskScope } from "@/lib/services/ask/scope";
 
 /**
  * The Ask rail in a real browser, with the page stood in for by three pieces
@@ -21,8 +22,14 @@ import type { AskConversationSummary } from "@/lib/data/ask-server";
  * - `?earlier=none` no saved conversation
  * - `?busy=1`       an answer is in flight
  * - `?fail=1`       the delete is refused
+ * - `?scope=team`   the team page's rail
  */
 const params = new URLSearchParams(window.location.search);
+
+const TEAM: AskScope | undefined =
+  params.get("scope") === "team"
+    ? { kind: "team", programId: "program-1", programName: "Westbrook" }
+    : undefined;
 
 const QUOTA: AskQuotaView | null =
   params.get("quota") === "none"
@@ -72,6 +79,7 @@ function Harness() {
         <AskRail
           quota={QUOTA}
           conversations={conversations}
+          scope={TEAM}
           activeConversationId="22222222-2222-4222-8222-222222222222"
           deleteDisabled={params.get("busy") !== null}
           onNewQuestion={() => setAsked((count) => count + 1)}

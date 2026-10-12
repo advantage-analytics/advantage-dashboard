@@ -577,6 +577,7 @@ test.describe("ndjsonStreamResponse", () => {
             playedOn: "2026-09-14",
             iWon: true,
             scoreText: "6-4 6-3",
+            playerName: null,
           },
         ],
       },

@@ -3,8 +3,13 @@ import { expect, test } from "@playwright/test";
 import {
   askOpponentKey,
   buildAskTagOptions,
+  buildTeamAskTagOptions,
   type AskMatchSide,
+  type AskRosterRow,
+  type DbAskTeamMatch,
 } from "@/lib/data/ask-tags";
+import { programSide } from "@/lib/data/program-side";
+import { rosterMatchIds } from "@/lib/data/roster-ids";
 import type { DbPersonalMatch } from "@/lib/data/personal-matches-server";
 
 /**
@@ -226,6 +231,7 @@ test.describe("match options", () => {
       tournamentName: "Fall Invitational",
       scoreText: "6-4, 3-6, 7-5",
       iWon: true,
+      playerName: null,
     });
     // No score: no score text, and no outcome rather than a loss.
     expect(matches[1]).toMatchObject({ scoreText: null, iWon: null });
@@ -255,6 +261,260 @@ test.describe("match options", () => {
     expect(buildAskTagOptions([], sideOf)).toEqual({
       matches: [],
       opponents: [],
+      players: [],
     });
+  });
+});
+
+// ── Team scope ──────────────────────────────────────────────────────────────
+
+/**
+ * `buildTeamAskTagOptions()` — the same menu over a program's matches. What
+ * it guards is as quiet as the personal half: a match turned to the wrong
+ * seat offers the program's own player as an opponent, and a claimed
+ * player's two id eras split one player into two options with half the
+ * matches each.
+ */
+test.describe("team options", () => {
+  const SOKOLOV = "aaaaaaaa-0000-4000-8000-00000000000a";
+  const SOKOLOV_LOGIN = "aaaaaaaa-0000-4000-8000-0000000000a1";
+  const REYES = "bbbbbbbb-0000-4000-8000-00000000000b";
+  const COACH = "cccccccc-0000-4000-8000-00000000000c";
+  const ENTRY = "dddddddd-0000-4000-8000-00000000000d";
+
+  const ROSTER: AskRosterRow[] = [
+    // A claimed player: profile id and login differ, and both are hers.
+    {
+      player_id: SOKOLOV,
+      user_id: SOKOLOV_LOGIN,
+      display_name: "Mara  Sokolov ",
+      role: "player",
+    },
+    // Coach-managed, unclaimed.
+    {
+      player_id: REYES,
+      user_id: null,
+      display_name: "Jo Reyes",
+      role: "player",
+    },
+    // A staff seat: its id means "us", but it is nobody's player profile.
+    {
+      player_id: COACH,
+      user_id: COACH,
+      display_name: "Pat Coach",
+      role: "coach",
+    },
+  ];
+
+  function teamMatch(over: Partial<DbAskTeamMatch>): DbAskTeamMatch {
+    return {
+      ...match({
+        player1_id: SOKOLOV,
+        player1_name: "M. Sokolov",
+        player2_name: "Anna Lee",
+        created_by: COACH,
+      }),
+      event_entry_id: null,
+      ...over,
+    };
+  }
+
+  test("each match is turned to the roster's seat and named from the roster, not from what was typed", () => {
+    const options = buildTeamAskTagOptions(
+      [
+        teamMatch({ id: "first", date: "2026-09-03T15:00:00+00:00" }),
+        // The roster player in seat two: the opponent is seat one.
+        teamMatch({
+          id: "second",
+          date: "2026-09-02T15:00:00+00:00",
+          player1_id: null,
+          player1_name: "Bea Ortiz",
+          player2_id: REYES,
+          player2_name: "J Reyes",
+          score: { player1: [6, 6], player2: [4, 3] },
+        }),
+      ],
+      ROSTER,
+    );
+
+    expect(options.matches).toEqual([
+      {
+        matchId: "first",
+        opponentName: "Anna Lee",
+        playedOn: "2026-09-03",
+        iWon: true,
+        scoreText: "6-4, 6-3",
+        tournamentName: null,
+        playerName: "Mara Sokolov",
+        playerId: SOKOLOV,
+      },
+      {
+        matchId: "second",
+        opponentName: "Bea Ortiz",
+        playedOn: "2026-09-02",
+        // Seat two lost 4-6, 3-6: the result is the roster player's.
+        iWon: false,
+        scoreText: "4-6, 3-6",
+        tournamentName: null,
+        playerName: "Jo Reyes",
+        playerId: REYES,
+      },
+    ]);
+    expect(options.opponents.map((opponent) => opponent.name)).toEqual([
+      "Anna Lee",
+      "Bea Ortiz",
+    ]);
+  });
+
+  test("a claimed player's two id eras are one player with every match", () => {
+    const options = buildTeamAskTagOptions(
+      [
+        teamMatch({ id: "profile-era" }),
+        teamMatch({ id: "login-era", player1_id: SOKOLOV_LOGIN }),
+        teamMatch({ id: "reyes", player1_id: REYES, player1_name: "Jo" }),
+      ],
+      ROSTER,
+    );
+    expect(options.players).toEqual([
+      { id: SOKOLOV, name: "Mara Sokolov", matchCount: 2 },
+      { id: REYES, name: "Jo Reyes", matchCount: 1 },
+    ]);
+    expect(
+      options.matches
+        .filter((option) => option.playerId === SOKOLOV)
+        .map((option) => option.matchId)
+        .sort(),
+    ).toEqual(["login-era", "profile-era"]);
+  });
+
+  test("players are listed by match count, ties by name, and only those who have played", () => {
+    const options = buildTeamAskTagOptions(
+      [
+        teamMatch({ id: "a", player1_id: REYES }),
+        teamMatch({ id: "b", player1_id: SOKOLOV }),
+      ],
+      [
+        ...ROSTER,
+        {
+          player_id: "eeeeeeee-0000-4000-8000-00000000000e",
+          user_id: null,
+          display_name: "Never Played",
+          role: "player",
+        },
+      ],
+    );
+    expect(options.players.map((player) => player.name)).toEqual([
+      "Jo Reyes",
+      "Mara Sokolov",
+    ]);
+  });
+
+  test("a doubles line hung on a schedule entry is ours in seat one, keeps its stored label and is nobody's player option", () => {
+    const options = buildTeamAskTagOptions(
+      [
+        teamMatch({
+          id: "doubles",
+          player1_id: null,
+          player1_name: "Sokolov / Reyes",
+          player2_name: "Lee / Ortiz",
+          event_entry_id: ENTRY,
+          match_type: "Doubles",
+        }),
+      ],
+      ROSTER,
+    );
+    expect(options.matches[0]).toMatchObject({
+      matchId: "doubles",
+      opponentName: "Lee / Ortiz",
+      playerName: "Sokolov / Reyes",
+      playerId: null,
+      iWon: true,
+    });
+    expect(options.players).toEqual([]);
+  });
+
+  test("a coach's own login in the seat is still our side, named as stored, and not a player", () => {
+    const options = buildTeamAskTagOptions(
+      [teamMatch({ id: "coach-upload", player1_id: COACH })],
+      ROSTER,
+    );
+    expect(options.matches[0]).toMatchObject({
+      opponentName: "Anna Lee",
+      playerName: "M. Sokolov",
+      playerId: null,
+    });
+    expect(options.players).toEqual([]);
+  });
+
+  test("a match whose side cannot be decided is still taggable: no player, no opponent, no outcome", () => {
+    const options = buildTeamAskTagOptions(
+      [
+        teamMatch({
+          id: "unknown",
+          player1_id: "99999999-0000-4000-8000-000000000009",
+          player2_id: null,
+        }),
+      ],
+      ROSTER,
+    );
+    expect(options.matches).toEqual([
+      {
+        matchId: "unknown",
+        opponentName: null,
+        playedOn: "2026-09-01",
+        iWon: null,
+        scoreText: "6-4, 6-3",
+        tournamentName: null,
+        playerName: null,
+        playerId: null,
+      },
+    ]);
+    expect(options.opponents).toEqual([]);
+    expect(options.players).toEqual([]);
+  });
+
+  test("the side is programSide()'s, for every shape of row", () => {
+    const rosterIds = rosterMatchIds(ROSTER);
+    const rows = [
+      teamMatch({ id: "p1" }),
+      teamMatch({ id: "p2", player1_id: null, player2_id: SOKOLOV_LOGIN }),
+      teamMatch({ id: "entry", player1_id: null, event_entry_id: ENTRY }),
+      teamMatch({ id: "none", player1_id: null }),
+    ];
+    const options = buildTeamAskTagOptions(rows, ROSTER);
+    for (const row of rows) {
+      const side = programSide(row, rosterIds);
+      const option = options.matches.find((m) => m.matchId === row.id);
+      expect(option?.opponentName ?? null, row.id).toBe(
+        side === "player1"
+          ? row.player2_name
+          : side === "player2"
+            ? row.player1_name
+            : null,
+      );
+    }
+    expect(rows.map((row) => programSide(row, rosterIds))).toEqual([
+      "player1",
+      "player2",
+      "player1",
+      null,
+    ]);
+  });
+
+  test("no roster and no matches: nothing to tag", () => {
+    expect(buildTeamAskTagOptions([], [])).toEqual({
+      matches: [],
+      opponents: [],
+      players: [],
+    });
+  });
+});
+
+test.describe("personal options carry no player", () => {
+  test("playerName is null, there is no playerId, and players is empty", () => {
+    const options = buildAskTagOptions([match({})], sideOf);
+    expect(options.matches[0].playerName).toBeNull();
+    expect("playerId" in options.matches[0]).toBe(false);
+    expect(options.players).toEqual([]);
   });
 });

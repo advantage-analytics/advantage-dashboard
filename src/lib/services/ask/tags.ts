@@ -1,6 +1,7 @@
 import { type AskTagOptions, askOpponentKey } from "@/lib/data/ask-tags";
 import { formatAskCell } from "@/lib/services/ask/answer-render";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
+import { type AskScope, PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 
 /**
  * Re-resolve the tags a question arrived with against the viewer's own
@@ -17,10 +18,26 @@ import type { AskPromptTag } from "@/lib/services/ask/prompts";
  * not the viewer's refuses the whole question rather than being dropped: a
  * question answered without one of its tags is a different question.
  *
+ * A `player` tag exists in a team scope only: its id is an
+ * `AskPlayerOption.id` (the roster's canonical id) and it stands for every
+ * match of the program that player played. A personal scope has no player
+ * options, so one sent there refuses like any id that is not the viewer's.
+ *
  * Pure: options in, tags out. `tests/ask-orchestration.spec.ts` pins it.
  */
 
-export type AskTagKind = "match" | "opponent";
+export type AskTagKind = "match" | "opponent" | "player";
+
+/** Every kind a request may name; the route checks a tag's shape against it. */
+export const ASK_TAG_KINDS: readonly AskTagKind[] = [
+  "match",
+  "opponent",
+  "player",
+];
+
+function isTagKind(value: unknown): value is AskTagKind {
+  return ASK_TAG_KINDS.includes(value as AskTagKind);
+}
 
 /** A tag as `POST /api/ask` receives it. Anything else on it is ignored. */
 export interface AskTagRequest {
@@ -56,10 +73,45 @@ function matchLabel(playedOn: string | null, opponentName: string | null) {
   return `${date ?? "Undated"} · ${opponentName ?? "Opponent"}`;
 }
 
+/**
+ * The same chip in a team scope, where a match is one player's against one
+ * opponent: "Sep 14, 2026 · Mara Sokolov vs Anna Lee". A match with no player
+ * named reads as the personal chip does.
+ */
+function teamMatchLabel(
+  playedOn: string | null,
+  playerName: string | null,
+  opponentName: string | null,
+) {
+  if (!playerName) return matchLabel(playedOn, opponentName);
+  const date = playedOn ? formatAskCell("played_on", playedOn) : null;
+  return `${date ?? "Undated"} · ${playerName} vs ${opponentName ?? "Opponent"}`;
+}
+
+/** The refusal sentences, per scope. */
+const REFUSALS = {
+  personal: {
+    shape: "A tag must name a match or an opponent.",
+    match: "That match is not one of yours.",
+    opponent: "That opponent is not one of yours.",
+    player: "A tag must name a match or an opponent.",
+  },
+  team: {
+    shape: "A tag must name a match, a player or an opponent.",
+    match: "That match is not one of the program's.",
+    opponent: "That opponent is not one the program has played.",
+    player: "That player is not on the program's roster.",
+  },
+} as const;
+
 export function resolveAskTags(
   requested: readonly AskTagRequest[],
   options: AskTagOptions,
+  scope: AskScope = PERSONAL_ASK_SCOPE,
 ): AskTagResolution {
+  const team = scope.kind === "team";
+  const refusals = REFUSALS[scope.kind];
+
   if (requested.length > MAX_ASK_TAGS) {
     return {
       ok: false,
@@ -74,17 +126,17 @@ export function resolveAskTags(
 
   for (const tag of requested) {
     if (
-      (tag.kind !== "match" && tag.kind !== "opponent") ||
+      !isTagKind(tag.kind) ||
       typeof tag.id !== "string" ||
       tag.id.trim() === ""
     ) {
-      return { ok: false, reason: "A tag must name a match or an opponent." };
+      return { ok: false, reason: refusals.shape };
     }
 
     if (tag.kind === "match") {
       const option = options.matches.find((match) => match.matchId === tag.id);
       if (!option) {
-        return { ok: false, reason: "That match is not one of yours." };
+        return { ok: false, reason: refusals.match };
       }
       if (seen.has(`match:${option.matchId}`)) continue;
       seen.add(`match:${option.matchId}`);
@@ -93,13 +145,42 @@ export function resolveAskTags(
         matchId: option.matchId,
         opponentName: option.opponentName,
         playedOn: option.playedOn,
+        ...(team ? { playerName: option.playerName } : {}),
       });
       saved.push({
         kind: "match",
         id: option.matchId,
-        label: matchLabel(option.playedOn, option.opponentName),
+        label: team
+          ? teamMatchLabel(
+              option.playedOn,
+              option.playerName,
+              option.opponentName,
+            )
+          : matchLabel(option.playedOn, option.opponentName),
       });
       matchIds.add(option.matchId);
+      continue;
+    }
+
+    if (tag.kind === "player") {
+      // Looked up in the options, so a personal scope (which has none) and an
+      // id from another program's roster refuse alike.
+      const option = team
+        ? options.players.find((player) => player.id === tag.id)
+        : undefined;
+      if (!option) return { ok: false, reason: refusals.player };
+      if (seen.has(`player:${option.id}`)) continue;
+      seen.add(`player:${option.id}`);
+      const theirMatches = options.matches
+        .filter((match) => match.playerId === option.id)
+        .map((match) => match.matchId);
+      prompt.push({
+        kind: "player",
+        playerName: option.name,
+        matchIds: theirMatches,
+      });
+      saved.push({ kind: "player", id: option.id, label: option.name });
+      for (const id of theirMatches) matchIds.add(id);
       continue;
     }
 
@@ -112,7 +193,7 @@ export function resolveAskTags(
       ? options.opponents.find((opponent) => opponent.id === key)
       : undefined;
     if (!option || !key) {
-      return { ok: false, reason: "That opponent is not one of yours." };
+      return { ok: false, reason: refusals.opponent };
     }
     if (seen.has(`opponent:${key}`)) continue;
     seen.add(`opponent:${key}`);

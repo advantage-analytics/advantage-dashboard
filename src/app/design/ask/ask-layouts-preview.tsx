@@ -64,6 +64,7 @@ const VARIANTS: readonly {
 // ── Fixed inputs ────────────────────────────────────────────────────────────
 
 const TAG_OPTIONS: AskTagOptions = {
+  players: [],
   matches: [
     {
       matchId: "m-0928",
@@ -72,6 +73,7 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: false,
       scoreText: "4-6, 6-7",
       tournamentName: "Club ladder",
+      playerName: null,
     },
     {
       matchId: "m-0914",
@@ -80,6 +82,7 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: true,
       scoreText: "6-4, 3-6, 7-5",
       tournamentName: "Fall Open",
+      playerName: null,
     },
     {
       matchId: "m-0830",
@@ -88,6 +91,7 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: true,
       scoreText: "6-3, 6-4",
       tournamentName: "Club ladder",
+      playerName: null,
     },
   ],
   opponents: [

@@ -1,0 +1,67 @@
+[
+  {
+    "q": "What is our record this season?",
+    "want": "the team's wins and losses since August 1; third person, never 'you'"
+  },
+  {
+    "q": "What is each player's record?",
+    "want": "one row per player with wins and losses; a table labelled with player names"
+  },
+  {
+    "q": "How is our number one player doing this season?",
+    "want": "the planner cannot know the lineup: either a per-player breakdown or a plain refusal about lineup order, never an invented name"
+  },
+  {
+    "q": "How is Sokolov serving?",
+    "want": "player_name ilike filter; her serve figures beside the team's; named, not 'you'"
+  },
+  {
+    "q": "Why did she lose her last match?",
+    "after": 3,
+    "want": "follow-up keeps the player; me_ vs opp_ table headed with her name and the opponent's"
+  },
+  {
+    "q": "Who has the best first serve percentage on the team?",
+    "want": "per-player breakdown ordered best first, summed numerators and denominators"
+  },
+  {
+    "q": "Compare our players on return points won",
+    "want": "per-player table of return_won_pct across both serves"
+  },
+  {
+    "q": "Who double faults the most?",
+    "want": "per-player double faults, with matches played beside the count"
+  },
+  {
+    "q": "What is our doubles record?",
+    "want": "match_type Doubles only; a record, no statistics; says statistics are not recorded if asked"
+  },
+  {
+    "q": "How do we do in dual matches compared with tournaments?",
+    "want": "record by match_type"
+  },
+  {
+    "q": "Are we better on hard courts or clay?",
+    "want": "record by court_type"
+  },
+  {
+    "q": "How has the team's first serve percentage changed over the season?",
+    "want": "trend block, one row per match, oldest first"
+  },
+  {
+    "q": "How did our last five matches go?",
+    "want": "form strip of the five most recent, each with the player's name"
+  },
+  {
+    "q": "What are our strengths as a team?",
+    "want": "me_ vs opp_ diagnostic across all matches; columns Team and Opponents"
+  },
+  {
+    "q": "What should we practice this week?",
+    "want": "the factual diagnostic and the no-advice notice; no drill, no recommendation"
+  },
+  {
+    "q": "How did Stanford do against UCLA last weekend?",
+    "want": "cannot answer: another team's matches"
+  }
+]

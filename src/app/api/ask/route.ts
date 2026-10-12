@@ -1,5 +1,6 @@
 /**
  * `POST /api/ask` — one question about the signed-in player's own matches,
+ * or, with `programId`, about the matches of a program they are a member of,
  * answered as a stream (design "Route", "Error handling"; plan step 7).
  *
  * The HTTP shell around `src/lib/services/ask/ask.ts`. Everything that can be
@@ -14,9 +15,13 @@
  *   413 request_too_large       a body over 4096 bytes
  *   400 invalid_request         not a JSON object, an unknown key, an empty or
  *                               over-long question, malformed or too many
- *                               tags, a tag that is not the viewer's
- *   404 conversation_not_found  `conversationId` is not the viewer's
- *   409 no_matches              the viewer has no personal match
+ *                               tags, a `programId` that is not a uuid, a tag
+ *                               that is not in scope
+ *   403 not_a_member            `programId` is not a program the viewer
+ *                               belongs to (before anything of it is read)
+ *   404 conversation_not_found  `conversationId` is not the viewer's, or was
+ *                               asked in the other workspace
+ *   409 no_matches              the scope has no match
  *   429 ask_limit_reached       `ask_reserve_question()` refused
  *   500 internal_error          the matches could not be read, the
  *                               reservation failed, the stream did not open
@@ -32,9 +37,16 @@
  * here. Every database call rides the cookie-authenticated client; the
  * service-role client is never built.
  *
- * `no_matches` is decided from `getAskTagOptions()` — the viewer's personal
- * matches, the rows `ask.matches` holds and the same emptiness the page reads
- * as day zero. Whether a match has statistics yet is not asked here: a
+ * A team question (`programId`) is the same ladder over the program's rows.
+ * Membership is `getWorkspaceContext()`'s answer — the id must be one of the
+ * viewer's team workspaces — and it is asked here even though the database
+ * asks again (`ask.my_match_ids()` returns a non-member nothing): the route
+ * says 403 rather than "no matches". Any member may ask, whatever their role.
+ * It spends the asker's own monthly questions; there is no program quota.
+ *
+ * `no_matches` is decided from `getAskTagOptions()` — the scope's matches,
+ * the rows `ask.matches` holds and the same emptiness the page reads as day
+ * zero. Whether a match has statistics yet is not asked here: a
  * question about one that has none ends as a `no_data` event, which costs
  * nothing.
  */
@@ -45,6 +57,7 @@ import {
   isLLMConfigured,
 } from "@/lib/llm/adapter";
 import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
+import { isUuid } from "@/lib/admin/validation";
 import {
   getAskConversation,
   getAskQuota,
@@ -62,9 +75,12 @@ import {
   MAX_ASK_QUESTION_LENGTH,
   type AskEvent,
 } from "@/lib/services/ask/events";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import {
+  ASK_TAG_KINDS,
   MAX_ASK_TAGS,
   resolveAskTags,
+  type AskTagKind,
   type AskTagRequest,
 } from "@/lib/services/ask/tags";
 import {
@@ -78,6 +94,7 @@ import {
 } from "@/lib/services/match-video/http";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +106,7 @@ export const dynamic = "force-dynamic";
 /** The codes this route adds to the transport ones in `http.ts`. */
 type AskRefusalCode =
   | "unauthenticated"
+  | "not_a_member"
   | "conversation_not_found"
   | "no_matches"
   | "ask_limit_reached";
@@ -129,16 +147,19 @@ interface AskBody {
   question: string;
   tags: AskTagRequest[];
   conversationId: string | null;
+  /** The program a team question is about; null for a personal one. */
+  programId: string | null;
 }
 
 const BODY_KEYS: ReadonlySet<string> = new Set([
   "conversationId",
+  "programId",
   "question",
   "tags",
 ]);
 
 /**
- * `{ conversationId?, question, tags? }`. Unknown keys are refused by name,
+ * `{ conversationId?, programId?, question, tags? }`. Unknown keys are refused by name,
  * as every mutation body in this app is: a client that starts sending a
  * field learns on its first request that it has no effect. Keys beyond
  * `kind` and `id` on a TAG are dropped instead — a label sent with one is
@@ -166,13 +187,13 @@ function parseAskBody(value: unknown): HttpResult<AskBody> {
   for (const tag of rawTags as unknown[]) {
     if (
       !isPlainObject(tag) ||
-      (tag.kind !== "match" && tag.kind !== "opponent") ||
+      !ASK_TAG_KINDS.includes(tag.kind as AskTagKind) ||
       typeof tag.id !== "string" ||
       tag.id.trim() === ""
     ) {
       return invalid("tag_shape");
     }
-    tags.push({ kind: tag.kind, id: tag.id });
+    tags.push({ kind: tag.kind as AskTagKind, id: tag.id });
   }
 
   const rawConversation = value.conversationId ?? null;
@@ -180,9 +201,22 @@ function parseAskBody(value: unknown): HttpResult<AskBody> {
     return invalid("conversation_id_type");
   }
 
+  // Null and absent are both "a personal question". Anything else must be a
+  // uuid: it is about to be compared with the viewer's workspaces and handed
+  // to Postgres as one.
+  const rawProgram = value.programId ?? null;
+  if (rawProgram !== null && !isUuid(rawProgram)) {
+    return invalid("program_id_type");
+  }
+
   return {
     ok: true,
-    value: { question, tags, conversationId: rawConversation },
+    value: {
+      question,
+      tags,
+      conversationId: rawConversation,
+      programId: rawProgram,
+    },
   };
 }
 
@@ -272,10 +306,37 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.ok) return errorResponse(parsed.error);
   const body = parsed.value;
 
+  // The scope. A program id from the browser names a workspace; whether the
+  // viewer is in it is read here, before a row of the program is.
+  let scope: AskScope = PERSONAL_ASK_SCOPE;
+  if (body.programId !== null) {
+    const workspaces = await getWorkspaceContext().catch(() => null);
+    const program = workspaces?.available.find(
+      (workspace) =>
+        workspace.kind === "team" && workspace.id === body.programId,
+    );
+    if (!program) {
+      return errorResponse(
+        refusal(
+          "not_a_member",
+          403,
+          "You are not a member of this program.",
+          "program_not_available",
+        ),
+      );
+    }
+    scope = {
+      kind: "team",
+      programId: program.id,
+      programName: program.name,
+    };
+  }
+  const team = scope.kind === "team";
+
   // Server-derived, for this viewer — never the browser's word for it.
   let options: AskTagOptions;
   try {
-    options = await getAskTagOptions();
+    options = await getAskTagOptions(body.programId);
   } catch (error) {
     console.error("[ask] could not read the viewer's matches", {
       error: error instanceof Error ? error.message : String(error),
@@ -283,15 +344,16 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(transportError("internal_error", "matches_read"));
   }
 
-  const resolved = resolveAskTags(body.tags, options);
+  const resolved = resolveAskTags(body.tags, options, scope);
   if (!resolved.ok) {
     return errorResponse(invalidError("tag_not_resolved", resolved.reason));
   }
 
-  // Null for an id that is malformed, unknown or someone else's — all three
-  // the same answer, so the field cannot be used to probe.
+  // Null for an id that is malformed, unknown, someone else's or from the
+  // other workspace — all the same answer, so the field cannot be used to
+  // probe.
   const conversation = body.conversationId
-    ? await getAskConversation(body.conversationId)
+    ? await getAskConversation(body.conversationId, body.programId)
     : null;
   if (body.conversationId && !conversation) {
     return errorResponse(
@@ -309,8 +371,10 @@ export async function POST(request: Request): Promise<Response> {
       refusal(
         "no_matches",
         409,
-        "Add a match before you ask a question.",
-        "no_personal_match",
+        team
+          ? "Add a team match before you ask a question."
+          : "Add a match before you ask a question.",
+        team ? "no_program_match" : "no_personal_match",
       ),
     );
   }
@@ -353,6 +417,7 @@ export async function POST(request: Request): Promise<Response> {
       : [],
     conversationId: conversation?.id ?? null,
     reservation: reserved.reservation,
+    scope,
   });
 
   try {

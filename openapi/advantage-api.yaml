@@ -83,8 +83,9 @@ tags:
     description: The Focus cards' streamed one-sentence claims.
   - name: Ask
     description: >-
-      The personal Ask page — one question about the signed-in player's own
-      matches, answered as a stream of events. The route is
+      The Ask pages — one question about the signed-in player's own
+      matches, or (with `programId`) about the matches of a program they are
+      a member of, answered as a stream of events. The route is
       `src/app/api/ask/route.ts`; the orchestration is
       `src/lib/services/ask/ask.ts`.
   - name: Admin uploads
@@ -2296,24 +2297,38 @@ paths:
     post:
       tags: [Ask]
       operationId: askQuestion
-      summary: Ask one question about the player's own matches
+      summary: Ask one question about the player's own matches, or a program's
       description: |
         Plans a read-only query over the caller's personal matches, runs it,
         and streams an answer whose every figure is a cell of that query's
         result. The answer and its question are saved to a conversation —
         the one `conversationId` names, or a new one.
 
+        **Team scope.** With `programId` the question is about that
+        program's matches instead: every match of the program, each read
+        from the side of the program's own player, and answered in the third
+        person. The caller must be a member of the program (any role);
+        otherwise `403 not_a_member`. The conversation is saved to that
+        program's workspace and is still private to the member who asked; a
+        `conversationId` from the other workspace is `404`. A team question
+        spends the caller's own monthly questions — there is no separate
+        program allowance.
+
         **Before the stream.** Refusals are JSON, in this order, each
         answered before the next rung reads anything: `403 cross_origin`,
-        `401 unauthenticated`, `413 request_too_large`, `400 invalid_request`,
+        `401 unauthenticated`, `413 request_too_large`, `400 invalid_request`
+        (the body's shape), `403 not_a_member`, `400 invalid_request` (a tag
+        that is not in scope),
         `404 conversation_not_found`, `409 no_matches`, `429 ask_limit_reached`.
         Nothing is spent by a refused request. The 429 is the refusal of the
         `ask_reserve_question()` database function, which counts and reserves
         in one step; the route never compares a count itself.
 
         **Tags.** A tag is `{ kind, id }` only. Each is re-resolved against
-        the caller's own matches; any other key on a tag is ignored, and one
-        id that is not the caller's refuses the whole question.
+        the matches in scope; any other key on a tag is ignored, and one
+        id that is not in scope refuses the whole question. A `player` tag
+        exists in team scope only and stands for every match of the program
+        that roster player played.
 
         **The stream.** `200 application/x-ndjson`: one `AskEvent` JSON
         object per line, each line ended by `\n`. A completed answer is
@@ -2351,6 +2366,14 @@ paths:
                       id: anna lee
                     - kind: match
                       id: 3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f
+              team:
+                summary: A coach's question about one roster player
+                value:
+                  programId: edaf1aa0-1b2c-4d3e-8f4a-5b6c7d8e9f0a
+                  question: How is she serving this season?
+                  tags:
+                    - kind: player
+                      id: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
       responses:
         "200":
           description: >-
@@ -2370,9 +2393,10 @@ paths:
             The body is not JSON, not an object, or carries an unknown key;
             the question is missing, empty after trimming, or longer than
             1000 characters; `tags` is not an array, holds more than 10, or
-            holds one that is not `{ kind, id }`; or a tag names a match or
-            opponent that is not the caller's. `error` is the sentence the
-            composer shows.
+            holds one that is not `{ kind, id }`; `programId` is neither null
+            nor a UUID; or a tag names a match, opponent or player that is not
+            in scope (a `player` tag on a personal question included).
+            `error` is the sentence the composer shows.
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
@@ -2405,6 +2429,18 @@ paths:
                     error: That match is not one of yours.
                     code: invalid_request
                     detail: tag_not_resolved
+                programIdNotUuid:
+                  summary: A programId that is not a UUID
+                  value:
+                    error: This request is not valid.
+                    code: invalid_request
+                    detail: program_id_type
+                playerNotOnRoster:
+                  summary: Team scope — a player who is not on the roster
+                  value:
+                    error: That player is not on the program's roster.
+                    code: invalid_request
+                    detail: tag_not_resolved
         "401":
           description: No session.
           headers:
@@ -2423,8 +2459,11 @@ paths:
                     detail: no_session
         "403":
           description: >-
-            Not a request from a page this deployment served
-            (`checkSameOrigin`). Checked before the session.
+            `cross_origin`: not a request from a page this deployment served
+            (`checkSameOrigin`), checked before the session. `not_a_member`:
+            `programId` names a program the caller does not belong to (or no
+            program at all); answered before any of the program's rows are
+            read.
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
@@ -2435,10 +2474,18 @@ paths:
               examples:
                 crossOrigin:
                   $ref: "#/components/examples/CrossOrigin"
+                notAMember:
+                  summary: not_a_member
+                  value:
+                    error: You are not a member of this program.
+                    code: not_a_member
+                    detail: program_not_available
         "404":
           description: >-
-            `conversationId` is not a UUID, does not exist, or is someone
-            else's. The three are indistinguishable on purpose.
+            `conversationId` is not a UUID, does not exist, is someone
+            else's, or was asked in the other workspace (a personal
+            conversation named with a `programId`, or the reverse). All are
+            indistinguishable on purpose.
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"
@@ -2455,7 +2502,8 @@ paths:
                     detail: not_visible
         "409":
           description: >-
-            The caller has no personal match, so there is nothing to ask
+            The scope has no match — the caller has no personal match, or in
+            team scope the program has none — so there is nothing to ask
             about. Decided from the same match list the page reads as its day
             zero; a match with no statistics yet does not refuse here — a
             question about one ends as a `no_data` event.
@@ -2473,6 +2521,12 @@ paths:
                     error: Add a match before you ask a question.
                     code: no_matches
                     detail: no_personal_match
+                noTeamMatches:
+                  summary: no_matches, team scope
+                  value:
+                    error: Add a team match before you ask a question.
+                    code: no_matches
+                    detail: no_program_match
         "413":
           description: The body exceeds 4096 bytes, by `Content-Length` or as streamed.
           headers:
@@ -4629,14 +4683,15 @@ components:
     AskTag:
       type: object
       description: >-
-        Something the question is about. `id` is a match id for `match`, and
-        the opponent option's key (the normalised name) for `opponent`. Any
-        other key is ignored — a label is never read from the request.
+        Something the question is about. `id` is a match id for `match`, the
+        opponent option's key (the normalised name) for `opponent`, and the
+        roster player's id for `player` — team scope only. Any other key is
+        ignored — a label is never read from the request.
       required: [kind, id]
       properties:
         kind:
           type: string
-          enum: [match, opponent]
+          enum: [match, opponent, player]
         id:
           type: string
           minLength: 1
@@ -4647,6 +4702,14 @@ components:
       properties:
         conversationId:
           description: The conversation to append to. Omit or send null to start one.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        programId:
+          description: >-
+            The program a team question is about; the caller must be a member
+            of it. Omit or send null for a personal question.
           oneOf:
             - type: string
               format: uuid
@@ -4667,10 +4730,11 @@ components:
     AskRefusalCode:
       type: string
       description: >-
-        The `code` of a refusal before the stream: this route's own four plus
+        The `code` of a refusal before the stream: this route's own five plus
         the transport codes of `src/lib/services/match-video/http.ts`.
       enum:
         - unauthenticated
+        - not_a_member
         - cross_origin
         - invalid_request
         - request_too_large
@@ -5016,7 +5080,7 @@ components:
     AskSourceMatch:
       type: object
       description: One match the answer was computed from.
-      required: [matchId, opponentName, playedOn, iWon, scoreText]
+      required: [matchId, opponentName, playedOn, iWon, scoreText, playerName]
       properties:
         matchId:
           type: string
@@ -5036,6 +5100,14 @@ components:
             - type: boolean
             - type: "null"
         scoreText:
+          oneOf:
+            - type: string
+            - type: "null"
+        playerName:
+          description: >-
+            Team scope: the program's player this match is read from the side
+            of. Always null for a personal question, and for a team match
+            whose side is unknown. Absent from answers saved before team Ask.
           oneOf:
             - type: string
             - type: "null"
@@ -5059,6 +5131,7 @@ components:
               playedOn: "2026-09-14"
               iWon: true
               scoreText: 6-4 6-3
+              playerName: null
     AskDoneEvent:
       type: object
       description: >-

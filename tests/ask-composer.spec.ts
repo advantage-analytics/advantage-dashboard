@@ -513,3 +513,129 @@ test.describe("sending", () => {
     await expect(count(page)).not.toContainText("Resets");
   });
 });
+
+/**
+ * The team page (`?scope=team`): the same composer over a program's matches.
+ * A program's players can be tagged, a match says whose it was, and nothing
+ * the composer says is addressed to one player.
+ */
+test.describe("on the team page", () => {
+  const TEAM_LABEL = "Tag a player, match or opponent";
+  const teamMenu = (page: Page) =>
+    page.getByRole("listbox", { name: TEAM_LABEL });
+
+  test("the placeholder and the tag button speak about players, not “a match” of one's own", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await expect(question(page)).toHaveAttribute(
+      "placeholder",
+      "Ask about a player, an opponent or a stretch of the season. Type @ to tag one.",
+    );
+    await expect(page.getByRole("button", { name: TEAM_LABEL })).toBeVisible();
+    await expect(tagButton(page)).toHaveCount(0);
+  });
+
+  test("one menu: Players lead, then Opponents and Matches, and there is no second field", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await question(page).pressSequentially("@");
+
+    await expect(teamMenu(page)).toBeVisible();
+    await expect(page.getByRole("listbox")).toHaveCount(1);
+    await expect(teamMenu(page).locator("input, textarea")).toHaveCount(0);
+    await expect(teamMenu(page).getByRole("group")).toHaveCount(3);
+    await expect(
+      teamMenu(page)
+        .getByRole("group", { name: "Players" })
+        .getByRole("option"),
+    ).toHaveText([/Ana Sokolov.*2 matches$/, /Mia Dvorsky.*1 match$/]);
+    // The first group in the document is the first the arrow keys walk.
+    await expect(teamMenu(page).getByRole("group").first()).toHaveAttribute(
+      "aria-labelledby",
+      /players$/,
+    );
+    await expect(await activeOption(page)).toHaveText(/^Ana Sokolov/);
+  });
+
+  test("a match row leads with the program's player, and falls back to the opponent alone", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await question(page).pressSequentially("@");
+
+    await expect(
+      teamMenu(page)
+        .getByRole("group", { name: "Matches" })
+        .getByRole("option"),
+    ).toHaveText([
+      /Sep 28 · Ana Sokolov vs Theo Lindqvist.*Club ladder · 6-4 6-3/,
+      /Sep 14 · Mia Dvorsky vs Marcus Hale.*Fall Open · 4-6 3-6/,
+      // The seat names nobody on the roster: no player to lead with.
+      /^Aug 30, 2025 · Daniel Okafor/,
+    ]);
+  });
+
+  test("choosing a player adds a player tag, by the roster's id", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await question(page).pressSequentially("How is @mia");
+    await expect(await activeOption(page)).toHaveText(/^Mia Dvorsky/);
+    await page.keyboard.press("Enter");
+
+    await expect(chips(page)).toHaveText(["Mia Dvorsky"]);
+    expect(await draft(page)).toEqual({
+      text: "How is ",
+      tags: [{ kind: "player", id: "player-dvorsky", label: "Mia Dvorsky" }],
+    });
+  });
+
+  test("a player's name finds their matches too, and the arrows cross all three groups", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await question(page).pressSequentially("@sokolov");
+    await expect(teamMenu(page).getByRole("option")).toHaveText([
+      /^Ana Sokolov/,
+      /^Sep 28 · Ana Sokolov vs Theo Lindqvist/,
+    ]);
+    await page.keyboard.press("ArrowDown");
+    await expect(await activeOption(page)).toHaveText(/^Sep 28 · Ana Sokolov/);
+    await page.keyboard.press("Enter");
+    expect((await draft(page)).tags).toEqual([
+      {
+        kind: "match",
+        id: "match-sep-28",
+        label: "Sep 28 · Ana Sokolov vs Theo Lindqvist",
+      },
+    ]);
+  });
+
+  test("a filter that matches nothing names all three kinds", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    await question(page).pressSequentially("@zzz");
+    await expect(teamMenu(page)).toHaveText(
+      "No player, opponent or match matches “zzz”",
+    );
+  });
+});
+
+test("the personal page offers no Players group", async ({ page }) => {
+  await openFixture(page);
+
+  await question(page).pressSequentially("@");
+  await expect(tagMenu(page).getByRole("group")).toHaveCount(2);
+  await expect(
+    tagMenu(page).getByRole("group", { name: "Players" }),
+  ).toHaveCount(0);
+});

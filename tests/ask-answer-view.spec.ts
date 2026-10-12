@@ -686,3 +686,100 @@ test.describe("the visual block", () => {
     });
   }
 });
+
+/**
+ * The team page (`?scope=team`): the answer is about a program's matches, so
+ * nothing in it says "your matches", and each source says whose match it was.
+ */
+test.describe("on the team page", () => {
+  test("sources lead with the program's player; a match with none is the opponent alone", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&scope=team");
+
+    await expect(sourceLinks(page).nth(0)).toContainText(
+      "Ana Sokolov vs Theo Lindqvist",
+    );
+    await expect(sourceLinks(page).nth(1)).toContainText(
+      "Ana Sokolov vs Marcus Hale",
+    );
+    // The link is still the match's own report.
+    await expect(sourceLinks(page).nth(0)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28",
+    );
+
+    await allControl(page).click();
+    await expect(sourceLinks(page).nth(2)).toContainText(
+      "Mia Dvorsky vs Daniel Okafor",
+    );
+    // No player and no opponent: the row does not invent either.
+    await expect(sourceLinks(page).nth(3)).toContainText("Opponent");
+    await expect(sourceLinks(page).nth(3)).not.toContainText(" vs ");
+  });
+
+  test("a personal answer's sources name the opponent alone", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full");
+    await expect(sourceLinks(page).nth(0)).toContainText("Theo Lindqvist");
+    await expect(sourceLinks(page).nth(0)).not.toContainText(" vs ");
+  });
+
+  test("the status line reads the program's matches", async ({ page }) => {
+    await openFixture(page, "?case=streaming&stage=querying&scope=team");
+    await expect(page.getByRole("status")).toHaveText(
+      "Reading the program's matches",
+    );
+  });
+
+  for (const [code, title, detail] of [
+    [
+      "cannot_answer",
+      "The program's match data can't answer that",
+      "Ask covers what the program's matches recorded: results and scores, serve and return numbers, points and shots.",
+    ],
+    [
+      "no_data",
+      "No matches in that scope",
+      "None of the program's matches fit the player, match, opponent or period you asked about, so there was nothing to compute.",
+    ],
+    // Not about anyone's matches: the same in both scopes.
+    [
+      "llm_unavailable",
+      ERROR_COPY.llm_unavailable.title,
+      ERROR_COPY.llm_unavailable.detail,
+    ],
+    [
+      "answer_failed",
+      ERROR_COPY.answer_failed.title,
+      ERROR_COPY.answer_failed.detail,
+    ],
+  ] as const) {
+    test(`${code} never says “your matches”`, async ({ page }) => {
+      await openFixture(page, `?case=error&code=${code}&scope=team`);
+
+      const alert = page.getByRole("alert");
+      await expect(alert.locator("p")).toHaveText([title, detail]);
+      await expect(alert).not.toContainText(/your (own )?match/i);
+    });
+  }
+
+  test("the no-advice notice is about the program's matches", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&advice=1&scope=team");
+    await expect(signature(page)).toHaveText(
+      "Advantage Intelligence · Ask reports what the program's matches show; it does not recommend what to work on.",
+    );
+  });
+
+  test("the trend's key says Average, not Your average", async ({ page }) => {
+    await openFixture(page, "?case=full&visual=trend&scope=team");
+    await expect(visual(page)).toContainText("Average");
+    await expect(visual(page)).not.toContainText("Your average");
+
+    await openFixture(page, "?case=full&visual=trend");
+    await expect(visual(page)).toContainText("Your average");
+  });
+});

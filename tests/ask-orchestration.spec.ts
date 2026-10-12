@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { buildAskTagOptions, type AskMatchSide } from "@/lib/data/ask-tags";
+import {
+  buildAskTagOptions,
+  type AskMatchSide,
+  type AskTagOptions,
+} from "@/lib/data/ask-tags";
 import type { DbPersonalMatch } from "@/lib/data/personal-matches-server";
 import {
   ASK_CANNOT_ANSWER_MESSAGE,
@@ -10,6 +14,8 @@ import {
   ASK_NO_DATA_MESSAGE,
   ASK_SAVE_FAILED_MESSAGE,
   ASK_SCOPE_COUNT_COLUMN,
+  ASK_TEAM_CANNOT_ANSWER_MESSAGE,
+  ASK_TEAM_NO_DATA_MESSAGE,
   type AskDatabase,
   type AskModel,
   type AskQuestionInput,
@@ -33,6 +39,7 @@ import {
   ASK_NO_ADVICE_SENTENCE,
   type AskPlanQuery,
 } from "@/lib/services/ask/prompts";
+import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import { resolveAskTags, type AskResolvedTags } from "@/lib/services/ask/tags";
 
 /**
@@ -222,6 +229,7 @@ function input(
     conversation: [],
     conversationId: null,
     reservation: RESERVATION,
+    scope: PERSONAL_ASK_SCOPE,
     ...over,
   };
 }
@@ -286,6 +294,7 @@ test.describe("a completed answer", () => {
           playedOn: "2026-09-14",
           iWon: true,
           scoreText: "6-4, 6-3",
+          playerName: null,
         },
         {
           matchId: MATCH_B,
@@ -293,6 +302,7 @@ test.describe("a completed answer", () => {
           playedOn: "2026-08-02",
           iWon: null,
           scoreText: null,
+          playerName: null,
         },
       ],
     });
@@ -366,6 +376,7 @@ test.describe("a completed answer", () => {
           playedOn: "2026-09-14",
           iWon: true,
           scoreText: "6-4, 6-3",
+          playerName: null,
         },
         {
           matchId: MATCH_B,
@@ -373,6 +384,7 @@ test.describe("a completed answer", () => {
           playedOn: "2026-08-02",
           iWon: null,
           scoreText: null,
+          playerName: null,
         },
       ],
       matchIds: [MATCH_A, MATCH_B],
@@ -1512,5 +1524,367 @@ test.describe("resolveAskTags", () => {
       ok: true,
       tags: { prompt: [], saved: [], matchIds: [] },
     });
+  });
+});
+
+// ── Team scope ──────────────────────────────────────────────────────────────
+
+test.describe("a team question", () => {
+  const PROGRAM_ID = "eeeeeeee-0000-4000-8000-000000000005";
+  const TEAM = {
+    kind: "team",
+    programId: PROGRAM_ID,
+    programName: "Westbrook College",
+  } as const;
+
+  /** `ask.matches` rows as `ask_run_team_query` lists them: each says whose it is. */
+  const TEAM_RUN: AskRpcResult = {
+    data: {
+      matches: [
+        { ...MATCH_ROWS[0], player_name: "Mara Sokolov" },
+        { ...MATCH_ROWS[1], player_name: null },
+      ],
+      rows: ROWS,
+    },
+    error: null,
+  };
+
+  const TEAM_ANSWER = `The team's second serves have held up across these matches.
+FIGURE: Second-serve points won = {{r1.second_serve_won_pct}}
+
+The team's players won {{r1.second_serve_won_pct}} of second-serve points.`;
+
+  /** `fakeDb` knows the personal rpc only; this adds the team one in front of it. */
+  function teamDb(run: AskRpcResult[] = [TEAM_RUN], script: DbScript = {}) {
+    const inner = fakeDb(script);
+    let runs = 0;
+    const db: AskDatabase = {
+      rpc: async (fn, args) => {
+        if (fn !== "ask_run_team_query") return inner.db.rpc(fn, args);
+        inner.calls.push({ fn, args });
+        const answer = run[Math.min(runs, run.length - 1)];
+        runs += 1;
+        return answer;
+      },
+    };
+    return { ...inner, db };
+  }
+
+  test("runs ask_run_team_query with the program, never the personal function", async () => {
+    const { db, calls } = teamDb();
+    const { model } = fakeModel([JSON.stringify(PLAN), TEAM_ANSWER]);
+    const events = await collect(
+      askQuestion(input({ db, model, scope: TEAM })),
+    );
+
+    expect(last(events).type).toBe("done");
+    const names = calls.map((call) => call.fn);
+    expect(names).toContain("ask_run_team_query");
+    expect(names).not.toContain("ask_run_query");
+    expect(
+      calls.find((call) => call.fn === "ask_run_team_query")?.args,
+    ).toEqual({
+      p_program_id: PROGRAM_ID,
+      scope_sql: PLAN.scope_sql,
+      sql: PLAN.sql,
+    });
+  });
+
+  test("saves with p_program_id, and the sources carry each match's player", async () => {
+    const { db, saves } = teamDb();
+    const { model } = fakeModel([JSON.stringify(PLAN), TEAM_ANSWER]);
+    const events = await collect(
+      askQuestion(input({ db, model, scope: TEAM })),
+    );
+
+    const save = saves()[0];
+    expect(save.args?.p_program_id).toBe(PROGRAM_ID);
+    expect(Object.keys(save.args ?? {}).sort()).toEqual([
+      "p_answer",
+      "p_conversation_id",
+      "p_program_id",
+      "p_question",
+    ]);
+    const sources = events.find((event) => event.type === "sources");
+    expect(
+      sources?.type === "sources" &&
+        sources.matches.map((match) => match.playerName),
+    ).toEqual(["Mara Sokolov", null]);
+    expect((save.args?.p_answer as AskSavedAnswer).sources[0].playerName).toBe(
+      "Mara Sokolov",
+    );
+  });
+
+  test("plans and answers with the team prompts, naming the program", async () => {
+    const { db } = teamDb();
+    const { model, calls } = fakeModel([JSON.stringify(PLAN), TEAM_ANSWER]);
+    await collect(askQuestion(input({ db, model, scope: TEAM })));
+
+    const [plan, answer] = calls.map((call) => call.system);
+    expect(plan).toContain("The program: Westbrook College");
+    expect(plan).toContain("player_name (text)");
+    expect(answer).toContain("THIRD PERSON");
+    expect(answer).toContain("Westbrook College");
+  });
+
+  test("its refusals speak of the program's matches", async () => {
+    // Two unusable plans, then an empty scope.
+    const refused = teamDb();
+    const twice = fakeModel(["not json", "still not json"]);
+    const first = await collect(
+      askQuestion(input({ db: refused.db, model: twice.model, scope: TEAM })),
+    );
+    expect(last(first)).toEqual({
+      type: "error",
+      code: "cannot_answer",
+      error: ASK_TEAM_CANNOT_ANSWER_MESSAGE,
+    });
+    expect(refused.releases()).toHaveLength(1);
+
+    const empty = teamDb([{ data: { matches: [], rows: [] }, error: null }]);
+    const second = await collect(
+      askQuestion(
+        input({
+          db: empty.db,
+          model: fakeModel([JSON.stringify(PLAN)]).model,
+          scope: TEAM,
+        }),
+      ),
+    );
+    expect(last(second)).toEqual({
+      type: "error",
+      code: "no_data",
+      error: ASK_TEAM_NO_DATA_MESSAGE,
+    });
+    for (const message of [
+      ASK_TEAM_CANNOT_ANSWER_MESSAGE,
+      ASK_TEAM_NO_DATA_MESSAGE,
+    ]) {
+      expect(message).toMatch(/the program's match/i);
+      expect(message).not.toMatch(/\byour?\b/i);
+    }
+  });
+
+  test("mock mode answers in the third person over the team function", async () => {
+    const { db, calls } = teamDb([
+      {
+        data: {
+          matches: TEAM_RUN.data
+            ? (TEAM_RUN.data as { matches: unknown[] }).matches
+            : [],
+          rows: [
+            { matches: 12, wins: 7, losses: 4, second_serve_won_pct: 48.3 },
+          ],
+        },
+        error: null,
+      },
+    ]);
+    const { model, calls: modelCalls } = fakeModel([], false);
+    const events = await collect(
+      askQuestion(input({ db, model, scope: TEAM, reservation: null })),
+    );
+
+    expect(modelCalls).toEqual([]);
+    expect(last(events).type).toBe("done");
+    expect(calls.map((call) => call.fn)).toEqual([
+      "ask_run_team_query",
+      "ask_save_exchange",
+      "ask_quota",
+    ]);
+    const body = text(events);
+    expect(body).toContain("the team's players have won 7 and lost 4");
+    expect(body).not.toMatch(/\byou(r)?\b/i);
+  });
+
+  test("a personal question is untouched: ask_run_query, a three-argument save, no player named", async () => {
+    const { db, calls, saves } = fakeDb({
+      run: [
+        {
+          data: {
+            // The view states the viewer's own name here; it is not echoed.
+            matches: [{ ...MATCH_ROWS[0], player_name: "Me Myself" }],
+            rows: ROWS,
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(calls.find((call) => call.fn === "ask_run_query")?.args).toEqual({
+      scope_sql: PLAN.scope_sql,
+      sql: PLAN.sql,
+    });
+    expect(Object.keys(saves()[0].args ?? {}).sort()).toEqual([
+      "p_answer",
+      "p_conversation_id",
+      "p_question",
+    ]);
+    const sources = events.find((event) => event.type === "sources");
+    expect(sources?.type === "sources" && sources.matches[0].playerName).toBe(
+      null,
+    );
+    expect(modelCalls[0].system).not.toContain("player_name");
+    expect(modelCalls[0].system).not.toContain("The program:");
+  });
+});
+
+test.describe("resolveAskTags — a team scope", () => {
+  const TEAM = {
+    kind: "team",
+    programId: "eeeeeeee-0000-4000-8000-000000000005",
+    programName: "Westbrook College",
+  } as const;
+  const SOKOLOV = "99999999-0000-4000-8000-000000000007";
+  const REYES = "99999999-0000-4000-8000-000000000008";
+
+  const OPTIONS: AskTagOptions = {
+    matches: [
+      {
+        matchId: MATCH_A,
+        opponentName: "Anna Lee",
+        playedOn: "2026-09-14",
+        iWon: true,
+        scoreText: "6-4, 6-3",
+        tournamentName: null,
+        playerName: "Mara Sokolov",
+        playerId: SOKOLOV,
+      },
+      {
+        matchId: MATCH_B,
+        opponentName: "Sam Ortiz",
+        playedOn: "2026-08-02",
+        iWon: false,
+        scoreText: "3-6, 4-6",
+        tournamentName: null,
+        playerName: "Jo Reyes",
+        playerId: REYES,
+      },
+      {
+        matchId: "c0ffee00-1234-4abc-8def-0123456789ab",
+        opponentName: "Bea Ortiz",
+        playedOn: "2026-07-01",
+        iWon: true,
+        scoreText: "6-0, 6-0",
+        tournamentName: null,
+        playerName: "Mara Sokolov",
+        playerId: SOKOLOV,
+      },
+    ],
+    opponents: [
+      { id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null },
+    ],
+    players: [
+      { id: SOKOLOV, name: "Mara Sokolov", matchCount: 2 },
+      { id: REYES, name: "Jo Reyes", matchCount: 1 },
+    ],
+  };
+
+  test("a player tag stands for every match that player played, named from the roster", () => {
+    const resolved = resolveAskTags(
+      [{ kind: "player", id: SOKOLOV }],
+      OPTIONS,
+      TEAM,
+    );
+    expect(resolved).toEqual({
+      ok: true,
+      tags: {
+        prompt: [
+          {
+            kind: "player",
+            playerName: "Mara Sokolov",
+            matchIds: [MATCH_A, "c0ffee00-1234-4abc-8def-0123456789ab"],
+          },
+        ],
+        saved: [{ kind: "player", id: SOKOLOV, label: "Mara Sokolov" }],
+        matchIds: [MATCH_A, "c0ffee00-1234-4abc-8def-0123456789ab"],
+      },
+    });
+  });
+
+  test("a match tag says whose match it is, in the prompt and on the chip", () => {
+    const resolved = resolveAskTags(
+      [{ kind: "match", id: MATCH_B }],
+      OPTIONS,
+      TEAM,
+    );
+    expect(resolved.ok && resolved.tags.prompt).toEqual([
+      {
+        kind: "match",
+        matchId: MATCH_B,
+        opponentName: "Sam Ortiz",
+        playedOn: "2026-08-02",
+        playerName: "Jo Reyes",
+      },
+    ]);
+    expect(resolved.ok && resolved.tags.saved[0].label).toBe(
+      "Aug 2, 2026 · Jo Reyes vs Sam Ortiz",
+    );
+  });
+
+  test("a player who is not on this roster refuses the question, in the program's words", () => {
+    expect(
+      resolveAskTags(
+        [{ kind: "player", id: "00000000-0000-4000-8000-00000000dead" }],
+        OPTIONS,
+        TEAM,
+      ),
+    ).toEqual({
+      ok: false,
+      reason: "That player is not on the program's roster.",
+    });
+    expect(
+      resolveAskTags([{ kind: "match", id: "nope" }], OPTIONS, TEAM),
+    ).toEqual({
+      ok: false,
+      reason: "That match is not one of the program's.",
+    });
+    expect(
+      resolveAskTags([{ kind: "opponent", id: "nobody" }], OPTIONS, TEAM),
+    ).toEqual({
+      ok: false,
+      reason: "That opponent is not one the program has played.",
+    });
+  });
+
+  test("a player tag is a team tag: a personal scope refuses it even when the id is real", () => {
+    expect(resolveAskTags([{ kind: "player", id: SOKOLOV }], OPTIONS)).toEqual({
+      ok: false,
+      reason: "A tag must name a match or an opponent.",
+    });
+    // And a personal match tag keeps its personal chip and prompt shape.
+    const personal = resolveAskTags([{ kind: "match", id: MATCH_A }], OPTIONS);
+    expect(personal.ok && personal.tags.prompt[0]).toEqual({
+      kind: "match",
+      matchId: MATCH_A,
+      opponentName: "Anna Lee",
+      playedOn: "2026-09-14",
+    });
+    expect(personal.ok && personal.tags.saved[0].label).toBe(
+      "Sep 14, 2026 · Anna Lee",
+    );
+  });
+
+  test("a saved player tag is carried into a follow-up's conversation by name", () => {
+    expect(
+      conversationTurnsFromMessages([
+        {
+          role: "user",
+          content: {
+            text: "How is she serving?",
+            tags: [{ kind: "player", id: SOKOLOV, label: "Mara Sokolov" }],
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: "How is she serving? (about: player Mara Sokolov)",
+      },
+    ]);
   });
 });

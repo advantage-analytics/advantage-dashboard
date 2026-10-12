@@ -12,6 +12,7 @@ import type {
   AskVisual,
 } from "@/lib/services/ask/events";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
+import type { AskScope } from "@/lib/services/ask/scope";
 import {
   ASK_SCOPE_COUNT_COLUMN,
   type AskPlanQuery,
@@ -52,6 +53,14 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  * too; only a saved answer keeps it. Mock mode — no provider configured —
  * reserves nothing, plans with `ASK_MOCK_PLAN` and answers with the mock
  * template; the query and the renderer still run for real.
+ *
+ * Scope: `input.scope` says whose matches the question is about. A personal
+ * question runs `ask_run_query` and saves with three arguments, exactly as
+ * before team Ask existed. A team question runs `ask_run_team_query` with the
+ * program's id — which selects, and never grants: the views test membership
+ * against `auth.uid()` — is planned and answered with the team prompts, and
+ * saves with `p_program_id` so the conversation belongs to that workspace.
+ * The quota is the asker's own in both.
  *
  * Privacy: nothing here logs the question, a tag name, a row, a label or the
  * model's prose. Players may be minors (`adapter.ts`). The two log lines are
@@ -120,6 +129,8 @@ export interface AskQuestionInput {
   conversationId: string | null;
   /** From `reserveAskQuestion()`; null in mock mode. */
   reservation: AskReservation | null;
+  /** Whose matches the question is about; the route has already checked membership. */
+  scope: AskScope;
 }
 
 // ── Sentences the error events carry ─────────────────────────────────────────
@@ -127,6 +138,10 @@ export interface AskQuestionInput {
 export const ASK_CANNOT_ANSWER_MESSAGE = "Your match data can't answer that.";
 export const ASK_NO_DATA_MESSAGE =
   "None of your matches fit that question, so there was nothing to compute.";
+export const ASK_TEAM_CANNOT_ANSWER_MESSAGE =
+  "The program's match data can't answer that.";
+export const ASK_TEAM_NO_DATA_MESSAGE =
+  "None of the program's matches fit that question, so there was nothing to compute.";
 export const ASK_LLM_UNAVAILABLE_MESSAGE =
   "Ask is unavailable right now. Your question is still in the composer.";
 export const ASK_SAVE_FAILED_MESSAGE =
@@ -260,7 +275,11 @@ interface QueryResult {
 export async function* askQuestion(
   input: AskQuestionInput,
 ): AsyncGenerator<AskEvent, void, undefined> {
-  const { db, model } = input;
+  const { db, model, scope } = input;
+  const team = scope.kind === "team";
+  const cannotAnswer = team
+    ? ASK_TEAM_CANNOT_ANSWER_MESSAGE
+    : ASK_CANNOT_ANSWER_MESSAGE;
   let settled = false;
 
   const release = async () => {
@@ -296,6 +315,7 @@ export async function* askQuestion(
           today,
           tags: input.tags.prompt,
           conversation: input.conversation,
+          ...(team ? { scope } : {}),
         })
       : "";
     const messages: ChatMessage[] = [{ role: "user", content: input.question }];
@@ -305,7 +325,7 @@ export async function* askQuestion(
     let queried = false;
 
     for (let attempt = 0; attempt < 2 && result === null; attempt += 1) {
-      const step = await planOnce(model, systemPrompt, messages);
+      const step = await planOnce(model, systemPrompt, messages, cannotAnswer);
       if (!step.ok) {
         if ("unavailable" in step) {
           yield await fail("llm_unavailable", ASK_LLM_UNAVAILABLE_MESSAGE);
@@ -322,7 +342,7 @@ export async function* askQuestion(
           );
           continue;
         }
-        yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+        yield await fail("cannot_answer", cannotAnswer);
         return;
       }
 
@@ -341,7 +361,7 @@ export async function* askQuestion(
           );
           continue;
         }
-        yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+        yield await fail("cannot_answer", cannotAnswer);
         return;
       }
 
@@ -349,7 +369,7 @@ export async function* askQuestion(
         queried = true;
         yield { type: "status", stage: "querying" };
       }
-      const run = await runQuery(db, step.plan);
+      const run = await runQuery(db, step.plan, scope);
       if (!run.ok) {
         if (attempt === 0) {
           messages.push(
@@ -361,7 +381,7 @@ export async function* askQuestion(
           );
           continue;
         }
-        yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+        yield await fail("cannot_answer", cannotAnswer);
         return;
       }
       const badColumn = percentageOutOfRange(run.result.rows);
@@ -379,7 +399,7 @@ export async function* askQuestion(
           );
           continue;
         }
-        yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+        yield await fail("cannot_answer", cannotAnswer);
         return;
       }
       plan = step.plan;
@@ -390,12 +410,15 @@ export async function* askQuestion(
     }
 
     if (plan === null || result === null) {
-      yield await fail("cannot_answer", ASK_CANNOT_ANSWER_MESSAGE);
+      yield await fail("cannot_answer", cannotAnswer);
       return;
     }
 
     if (result.matches.length === 0) {
-      yield await fail("no_data", ASK_NO_DATA_MESSAGE);
+      yield await fail(
+        "no_data",
+        team ? ASK_TEAM_NO_DATA_MESSAGE : ASK_NO_DATA_MESSAGE,
+      );
       return;
     }
 
@@ -410,6 +433,7 @@ export async function* askQuestion(
             question: input.question,
             rows: result.rows,
             matchCount: result.matches.length,
+            ...(team ? { scope } : {}),
           }),
           [{ role: "user", content: ASK_ANSWER_USER_MESSAGE }],
         );
@@ -418,7 +442,7 @@ export async function* askQuestion(
         return;
       }
     } else {
-      chunks = mockAskAnswerStream();
+      chunks = mockAskAnswerStream(scope);
     }
 
     const rendered = renderAskAnswer(guardedStream(chunks), result.rows);
@@ -478,6 +502,9 @@ export async function* askQuestion(
       p_conversation_id: input.conversationId,
       p_question: savedQuestion(input.question, input.tags),
       p_answer: savedAnswer(answer, result, plan, model.configured),
+      // Named only for a team question: a personal save is the three
+      // arguments it always was.
+      ...(scope.kind === "team" ? { p_program_id: scope.programId } : {}),
     });
     if (saved.error || typeof saved.data !== "string") {
       console.error("[ask] could not save the exchange", {
@@ -508,6 +535,7 @@ async function planOnce(
   model: AskModel,
   systemPrompt: string,
   messages: ChatMessage[],
+  cannotAnswer: string,
 ): Promise<PlanStep> {
   if (!model.configured) {
     return {
@@ -542,7 +570,7 @@ async function planOnce(
   if ("cannot_answer" in parsed) {
     return {
       ok: false,
-      refusal: oneSentence(parsed.cannot_answer) || ASK_CANNOT_ANSWER_MESSAGE,
+      refusal: oneSentence(parsed.cannot_answer) || cannotAnswer,
       advice: parsed.asks_for_advice,
     };
   }
@@ -613,11 +641,19 @@ function feedback(problem: PlanProblem): string {
 async function runQuery(
   db: AskDatabase,
   plan: AskPlanQuery,
+  scope: AskScope,
 ): Promise<{ ok: true; result: QueryResult } | { ok: false; error: string }> {
-  const { data, error } = await rpc(db, "ask_run_query", {
-    scope_sql: plan.scope_sql,
-    sql: plan.sql,
-  });
+  const team = scope.kind === "team";
+  const { data, error } = team
+    ? await rpc(db, "ask_run_team_query", {
+        p_program_id: scope.programId,
+        scope_sql: plan.scope_sql,
+        sql: plan.sql,
+      })
+    : await rpc(db, "ask_run_query", {
+        scope_sql: plan.scope_sql,
+        sql: plan.sql,
+      });
   if (error) return { ok: false, error: error.message };
 
   const record = asRecord(data);
@@ -634,7 +670,7 @@ async function runQuery(
   return {
     ok: true,
     result: {
-      matches: record.matches.flatMap((row) => sourceMatch(row) ?? []),
+      matches: record.matches.flatMap((row) => sourceMatch(row, team) ?? []),
       rows: record.rows.flatMap((row): AskRow[] => {
         const cells = asRecord(row);
         return cells ? [cells] : [];
@@ -643,8 +679,12 @@ async function runQuery(
   };
 }
 
-/** One `ask.matches` row as the client's `AskSourceMatch`. */
-function sourceMatch(value: unknown): AskSourceMatch | null {
+/**
+ * One `ask.matches` row as the client's `AskSourceMatch`. `player_name` is
+ * read in a team scope only: in a personal one the view states the viewer's
+ * own name there, which is not something to print back at them.
+ */
+function sourceMatch(value: unknown, team: boolean): AskSourceMatch | null {
   const row = asRecord(value);
   if (!row || typeof row.match_id !== "string") return null;
   return {
@@ -654,6 +694,7 @@ function sourceMatch(value: unknown): AskSourceMatch | null {
     // Null stays null: a score that cannot say is not a loss.
     iWon: typeof row.i_won === "boolean" ? row.i_won : null,
     scoreText: stringOrNull(row.score_text),
+    playerName: team ? stringOrNull(row.player_name) : null,
   };
 }
 
@@ -804,6 +845,10 @@ function savedTagsAbout(tags: unknown): string {
     }
     if (record.kind === "opponent") {
       return [`opponent ${oneLine(label ?? id)}`];
+    }
+    if (record.kind === "player") {
+      // The label is the roster's name; the id is a uuid the planner cannot use.
+      return label ? [`player ${oneLine(label)}`] : [];
     }
     return [];
   });

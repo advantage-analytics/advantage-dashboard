@@ -66,6 +66,7 @@ const SOURCES: AskSourceMatch[] = [
     playedOn: "2026-09-28",
     iWon: true,
     scoreText: "6-3",
+    playerName: null,
   },
 ];
 

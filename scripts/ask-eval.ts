@@ -2,7 +2,13 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>]
+ *
+ * `--program` runs every question in TEAM scope for that program: the tag
+ * options are the program's matches and roster, the plan and answer prompts
+ * are the team ones, and the query runs through `ask_run_team_query`. The
+ * account must be a member of the program (the verifier is a coach on the ZZ
+ * Test Program). `scripts/ask-eval-team.json` is the coach's question list.
  *
  * It signs in as the eyes-on verifier account (EYES_ON_EMAIL /
  * EYES_ON_PASSWORD), builds that account's tag options, and for each question
@@ -38,6 +44,8 @@ interface EvalQuestion {
   opponents?: string[];
   /** Opponent names whose most recent match to tag as a match. */
   matches?: string[];
+  /** Roster player names to tag (team scope only; matched against the roster). */
+  players?: string[];
   /** Index of an earlier question whose exchange is the conversation so far. */
   after?: number;
   /** What a good answer does; printed beside the output for the reader. */
@@ -213,7 +221,7 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      "Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4]",
+      "Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>]",
     );
     process.exit(2);
   }
@@ -229,7 +237,11 @@ async function main() {
   const { askQuestion, conversationTurnsFromMessages } =
     await import("@/lib/services/ask/ask");
   const { resolveAskTags } = await import("@/lib/services/ask/tags");
-  const { buildAskTagOptions } = await import("@/lib/data/ask-tags");
+  const { buildAskTagOptions, buildTeamAskTagOptions } =
+    await import("@/lib/data/ask-tags");
+  const { PERSONAL_ASK_SCOPE } = await import("@/lib/services/ask/scope");
+  type AskScope = import("@/lib/services/ask/scope").AskScope;
+  type AskTagOptions = import("@/lib/data/ask-tags").AskTagOptions;
   const { getLLMStream, isLLMConfigured, createLLMObservabilityContext } =
     await import("@/lib/llm/adapter");
 
@@ -255,40 +267,80 @@ async function main() {
   }
   const viewerId = signIn.data.user.id;
 
-  const matchRows = await supabase
-    .from("matches")
-    .select(
-      "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand",
-    )
-    .eq("created_by", viewerId)
-    .is("program_id", null)
-    .order("date", { ascending: false, nullsFirst: false });
-  if (matchRows.error) throw new Error(matchRows.error.message);
-  const ids = await supabase.rpc("my_player_ids");
-  const mine: string[] = (ids.data ?? []).map((row: unknown) =>
-    typeof row === "string"
-      ? row
-      : (row as { my_player_ids: string }).my_player_ids,
-  );
-  // playerSide()'s three steps (src/lib/data/player-identity-server.ts),
-  // restated because that module imports the cookie client.
-  const options = buildAskTagOptions(matchRows.data as never, (match) => {
-    const row = match as {
-      player1_id: string | null;
-      player2_id: string | null;
-      created_by: string | null;
-    };
-    if (row.player1_id && mine.includes(row.player1_id)) return "player1";
-    if (row.player2_id && mine.includes(row.player2_id)) return "player2";
-    if (!row.player1_id && !row.player2_id && row.created_by === viewerId)
-      return "player1";
-    return null;
-  });
+  const MATCH_COLUMNS =
+    "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand";
+  const programId = arg("program") ?? null;
+  let scope: AskScope = PERSONAL_ASK_SCOPE;
+  let options: AskTagOptions;
+  if (programId) {
+    // What `getAskTagOptions(programId)` reads (src/lib/data/ask-server.ts),
+    // restated because that module imports the cookie client.
+    const [program, teamRows, roster] = await Promise.all([
+      supabase
+        .from("programs")
+        .select("school_name")
+        .eq("id", programId)
+        .maybeSingle(),
+      supabase
+        .from("matches")
+        .select(`${MATCH_COLUMNS}, event_entry_id`)
+        .eq("program_id", programId)
+        .order("date", { ascending: false, nullsFirst: false }),
+      supabase.rpc("program_roster_full", { p_program_id: programId }),
+    ]);
+    const failed = program.error ?? teamRows.error ?? roster.error;
+    if (failed) throw new Error(failed.message);
+    const programName = (program.data as { school_name?: string } | null)
+      ?.school_name;
+    if (!programName) {
+      console.error(`Program ${programId} is not readable by this account.`);
+      process.exit(2);
+    }
+    scope = { kind: "team", programId, programName };
+    options = buildTeamAskTagOptions(
+      teamRows.data as never,
+      (roster.data ?? []) as never,
+    );
+  } else {
+    options = await personalOptions();
+  }
+
+  async function personalOptions(): Promise<AskTagOptions> {
+    const matchRows = await supabase
+      .from("matches")
+      .select(MATCH_COLUMNS)
+      .eq("created_by", viewerId)
+      .is("program_id", null)
+      .order("date", { ascending: false, nullsFirst: false });
+    if (matchRows.error) throw new Error(matchRows.error.message);
+    const ids = await supabase.rpc("my_player_ids");
+    const mine: string[] = (ids.data ?? []).map((row: unknown) =>
+      typeof row === "string"
+        ? row
+        : (row as { my_player_ids: string }).my_player_ids,
+    );
+    // playerSide()'s three steps (src/lib/data/player-identity-server.ts),
+    // restated because that module imports the cookie client.
+    return buildAskTagOptions(matchRows.data as never, (match) => {
+      const row = match as {
+        player1_id: string | null;
+        player2_id: string | null;
+        created_by: string | null;
+      };
+      if (row.player1_id && mine.includes(row.player1_id)) return "player1";
+      if (row.player2_id && mine.includes(row.player2_id)) return "player2";
+      if (!row.player1_id && !row.player2_id && row.created_by === viewerId)
+        return "player1";
+      return null;
+    });
+  }
 
   const report: string[] = [
     `# Ask evaluation — ${new Date().toISOString()}`,
     "",
-    `Account: verifier · ${options.matches.length} personal matches · ${options.opponents.length} opponents`,
+    scope.kind === "team"
+      ? `Program: ${scope.programName} · ${options.matches.length} matches · ${options.players.length} players · ${options.opponents.length} opponents`
+      : `Account: verifier · ${options.matches.length} personal matches · ${options.opponents.length} opponents`,
     "",
   ];
   /**
@@ -321,12 +373,18 @@ async function main() {
         );
         return { kind: "match" as const, id: found?.matchId ?? name };
       }),
+      ...(entry.players ?? []).map((name) => {
+        const found = options.players.find(
+          (p) => p.name.toLowerCase() === name.toLowerCase(),
+        );
+        return { kind: "player" as const, id: found?.id ?? name };
+      }),
     ];
-    const resolved = resolveAskTags(requested, options);
+    const resolved = resolveAskTags(requested, options, scope);
     const lines: string[] = [`## ${index + 1}. ${entry.q}`, ""];
     if (requested.length > 0)
       lines.push(
-        `Tags: ${JSON.stringify(requested.map((t) => t.kind))} ${(entry.opponents ?? []).concat(entry.matches ?? []).join(", ")}`,
+        `Tags: ${JSON.stringify(requested.map((t) => t.kind))} ${(entry.opponents ?? []).concat(entry.matches ?? [], entry.players ?? []).join(", ")}`,
       );
     if (entry.want) lines.push(`Want: ${entry.want}`, "");
     if (!resolved.ok) {
@@ -360,7 +418,7 @@ async function main() {
           return { data: "00000000-0000-4000-8000-00000000e7a1", error: null };
         }
         const result = await supabase.rpc(fn, args);
-        if (fn === "ask_run_query") {
+        if (fn === "ask_run_query" || fn === "ask_run_team_query") {
           queries.push({
             scope: args?.scope_sql,
             sql: args?.sql,
@@ -419,6 +477,7 @@ async function main() {
         conversation,
         conversationId: null,
         reservation: null,
+        scope,
       })) {
         events.push(event as unknown as Record<string, unknown>);
       }

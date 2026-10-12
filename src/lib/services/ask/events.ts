@@ -48,6 +48,33 @@ export interface AskSourceMatch {
   playedOn: string | null;
   iWon: boolean | null;
   scoreText: string | null;
+  /**
+   * Team scope: the program's player this match is turned to
+   * (`ask.matches.player_name`). Always null in a personal scope — the
+   * viewer is not named to themselves — and for a team match whose side is
+   * unknown.
+   */
+  playerName: string | null;
+}
+
+/**
+ * `value` as an {@link AskSourceMatch}, or null when it has no match id.
+ * Written for a line of the stream and for a saved answer's opaque jsonb:
+ * every field but the id is optional, and a source saved before
+ * `playerName` existed reads back with it null.
+ */
+export function readAskSourceMatch(value: unknown): AskSourceMatch | null {
+  if (!isRecord(value) || typeof value.matchId !== "string") return null;
+  const text = (field: unknown) => (typeof field === "string" ? field : null);
+  return {
+    matchId: value.matchId,
+    opponentName: text(value.opponentName),
+    playedOn: text(value.playedOn),
+    // Null stays null: a score that cannot say is not a loss.
+    iWon: typeof value.iWon === "boolean" ? value.iWon : null,
+    scoreText: text(value.scoreText),
+    playerName: text(value.playerName),
+  };
 }
 
 /** Which step the route is on; drives the in-flight status line. */
@@ -251,6 +278,10 @@ export interface AskNoticeEvent {
  */
 export const ASK_NO_ADVICE_SENTENCE =
   "Ask reports what your matches show; it does not recommend what to work on.";
+
+/** The same notice in a team scope, where the matches are the program's. */
+export const ASK_TEAM_NO_ADVICE_SENTENCE =
+  "Ask reports what the program's matches show; it does not recommend what to work on.";
 
 /** The matches the answer was computed from. */
 export interface AskSourcesEvent {

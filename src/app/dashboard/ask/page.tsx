@@ -6,6 +6,7 @@ import {
   getAskQuota,
   getAskTagOptions,
 } from "@/lib/data/ask-server";
+import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 
 export const metadata = { title: "Ask" };
 
@@ -23,6 +24,11 @@ export const metadata = { title: "Ask" };
  * The `key` is what makes opening another conversation a fresh thread: the
  * shell holds the thread in client state, and without it a navigation from
  * one `?c=` to another would keep showing the first.
+ *
+ * The scope is personal by construction: this route reads no workspace, so
+ * it answers about the viewer's own matches whichever workspace is active.
+ * The program's page is `/dashboard/team/ask`, the same shell with a team
+ * scope.
  *
  * The reads happen in `AskContent`, inside a `WidgetBoundary`: when the
  * viewer's matches cannot be read `getAskTagOptions()` throws, and the page
@@ -55,6 +61,7 @@ async function AskContent({ searchParams }: AskRouteProps) {
   return (
     <AskPage
       key={conversation?.id ?? "new"}
+      scope={PERSONAL_ASK_SCOPE}
       tagOptions={tagOptions}
       quota={quota}
       conversations={conversations}

@@ -75,8 +75,8 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   area (`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace and role
   lookup it depends on. Webhook and cron routes are excluded from the matcher on
   purpose.
-- `/dashboard/statistics`, `/dashboard/team/statistics`,
-  `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
+- `/dashboard/statistics`, `/dashboard/team/statistics` and
+  `/dashboard/opponents` render `ComingSoonPage`. Their
   shape is not settled, so there is no implementation behind them to revive — the
   loaders in `opponents-server.ts` are the exception and are live elsewhere.
 - `/dashboard/team/schedule` is the opposite case: it renders `ComingSoonPage`

@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  ASK_NO_ADVICE_SENTENCE,
-  type AskErrorCode,
-  type AskStatusStage,
-} from "@/lib/services/ask/events";
+import type { AskErrorCode } from "@/lib/services/ask/events";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
+import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { AskSources } from "./ask-sources";
 import type { AskAnswerState } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
@@ -17,6 +15,12 @@ export interface AskAnswerProps {
    * as `"done"` with whichever fields the saved row carried.
    */
   answer: AskAnswerState;
+  /**
+   * Whose matches the answer is about: the status line, the failure copy and
+   * the footer's notice say "your matches" on the personal page and "the
+   * program's" on the team one. The personal page when omitted.
+   */
+  scope?: AskScope;
 }
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
@@ -25,43 +29,16 @@ export const ASK_FIGURE_TILES = 3;
 /** Who signs a finished answer, in its footer. */
 export const ASK_SIGNATURE = "Advantage Intelligence";
 
-/** The real step the route is on — never a percentage, never a guess. */
-const STAGE_LABEL: Record<AskStatusStage, string> = {
-  planning: "Planning the query",
-  querying: "Reading your matches",
-  writing: "Writing the answer",
-};
-
 /**
- * What the player reads when an answer fails, by the stream's `code`.
+ * What the player reads when an answer fails, by the stream's `code` — the
+ * personal page's wording; the team's is `askCopy(scope).errors`.
  *
- * Fixed here, not taken from the event's own sentence: these four are the
- * product's voice and a test pins them. Every one of them leaves the question
- * back in the composer (`use-ask-stream` restores the draft on any failure).
+ * Fixed in `ask-copy.ts`, not taken from the event's own sentence: these are
+ * the product's voice and a test pins them. Every one of them leaves the
+ * question back in the composer (`use-ask-stream` restores the draft on any
+ * failure).
  */
-export const ASK_ERROR_COPY: Record<
-  AskErrorCode,
-  { title: string; detail: string }
-> = {
-  cannot_answer: {
-    title: "Your match data can't answer that",
-    detail:
-      "Ask covers what your own matches recorded: results and scores, serve and return numbers, points and shots.",
-  },
-  no_data: {
-    title: "No matches in that scope",
-    detail:
-      "None of your matches fit the match, opponent or period you asked about, so there was nothing to compute.",
-  },
-  llm_unavailable: {
-    title: "Advantage Intelligence didn't respond",
-    detail: "Try again. Your question is kept.",
-  },
-  answer_failed: {
-    title: "The answer couldn't be completed",
-    detail: "Ask the question again.",
-  },
-};
+export const ASK_ERROR_COPY = PERSONAL_ASK_COPY.errors;
 
 /**
  * One answer from Advantage Intelligence, flush with the column's left edge:
@@ -102,24 +79,34 @@ export const ASK_ERROR_COPY: Record<
  * Keep this file's imports clear of `next/navigation` and `next/image`: it is
  * rendered by an offline component harness (`tests/ask-answer-view.spec.ts`).
  */
-export function AskAnswer({ answer }: AskAnswerProps) {
+export function AskAnswer({
+  answer,
+  scope = PERSONAL_ASK_SCOPE,
+}: AskAnswerProps) {
+  const copy = askCopy(scope);
   return (
     <div data-ask-answer="" className="flex min-w-0 flex-col gap-5">
       {answer.status === "error" ? (
-        <AnswerError error={answer.error} />
+        <AnswerError error={answer.error} copy={copy} />
       ) : (
-        <AnswerBody answer={answer} />
+        <AnswerBody answer={answer} copy={copy} />
       )}
     </div>
   );
 }
 
-function AnswerError({ error }: { error: AskAnswerState["error"] }) {
+function AnswerError({
+  error,
+  copy: { errors },
+}: {
+  error: AskAnswerState["error"];
+  copy: AskCopy;
+}) {
   // `code` is a string: a slug this build has no copy for (a newer server's,
   // or a refusal's) falls through to the sentence that came with it.
   const copy =
-    error?.code && Object.hasOwn(ASK_ERROR_COPY, error.code)
-      ? ASK_ERROR_COPY[error.code as AskErrorCode]
+    error?.code && Object.hasOwn(errors, error.code)
+      ? errors[error.code as AskErrorCode]
       : null;
   return (
     <div
@@ -128,14 +115,20 @@ function AnswerError({ error }: { error: AskAnswerState["error"] }) {
       className="flex flex-col gap-1"
     >
       <p className="text-title">
-        {copy?.title ?? error?.message ?? ASK_ERROR_COPY.answer_failed.title}
+        {copy?.title ?? error?.message ?? errors.answer_failed.title}
       </p>
       {copy && <p className="text-body">{copy.detail}</p>}
     </div>
   );
 }
 
-function AnswerBody({ answer }: { answer: AskAnswerState }) {
+function AnswerBody({
+  answer,
+  copy,
+}: {
+  answer: AskAnswerState;
+  copy: AskCopy;
+}) {
   const paragraphs = answer.body
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
@@ -168,7 +161,12 @@ function AnswerBody({ answer }: { answer: AskAnswerState }) {
         </ul>
       )}
 
-      {answer.visual && <AskVisualBlock visual={answer.visual} />}
+      {answer.visual && (
+        <AskVisualBlock
+          visual={answer.visual}
+          trendAverageLabel={copy.trendAverage}
+        />
+      )}
 
       {paragraphs.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -188,7 +186,7 @@ function AnswerBody({ answer }: { answer: AskAnswerState }) {
 
       {answer.status === "streaming" && (
         <p role="status" className="text-body-sm">
-          {answer.stage ? STAGE_LABEL[answer.stage] : "Sending your question"}
+          {answer.stage ? copy.stage[answer.stage] : "Sending your question"}
         </p>
       )}
 
@@ -199,7 +197,7 @@ function AnswerBody({ answer }: { answer: AskAnswerState }) {
             <p data-ask-signature="" className="text-micro max-w-[60ch]">
               {/* `text-micro` is unlayered and would beat a colour utility. */}
               <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
-              {answer.noAdvice && ` · ${ASK_NO_ADVICE_SENTENCE}`}
+              {answer.noAdvice && ` · ${copy.noAdvice}`}
             </p>
           )}
         </div>

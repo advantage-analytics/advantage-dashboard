@@ -9,6 +9,7 @@ import {
   type AskQuestion,
 } from "@/components/dashboard/ask/use-ask-stream";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
+import type { AskScope } from "@/lib/services/ask/scope";
 
 /**
  * The Ask composer in a real browser, with the thread stood in for by two
@@ -20,10 +21,18 @@ import type { AskTagOptions } from "@/lib/data/ask-tags";
  * - `?quota=none` the count could not be read
  * - `?pending=1`  an answer is in flight
  * - `?text=<s>`   the draft the composer opens with
+ * - `?scope=team` the team page: a program's players can be tagged, and each
+ *                 match names the program's own player
  */
 const params = new URLSearchParams(window.location.search);
 
-const TAG_OPTIONS: AskTagOptions = {
+const TEAM: AskScope | undefined =
+  params.get("scope") === "team"
+    ? { kind: "team", programId: "program-1", programName: "Westbrook" }
+    : undefined;
+
+const PERSONAL_TAG_OPTIONS: AskTagOptions = {
+  players: [],
   opponents: [
     {
       id: "theo lindqvist",
@@ -47,6 +56,7 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: true,
       scoreText: "6-4 6-3",
       tournamentName: "Club ladder",
+      playerName: null,
     },
     {
       matchId: "match-sep-14",
@@ -55,6 +65,7 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: false,
       scoreText: "4-6 3-6",
       tournamentName: "Fall Open",
+      playerName: null,
     },
     {
       matchId: "match-last-year",
@@ -63,9 +74,26 @@ const TAG_OPTIONS: AskTagOptions = {
       iWon: null,
       scoreText: null,
       tournamentName: null,
+      playerName: null,
     },
   ],
 };
+
+// A program's season: two players, and whose match each one was. The last
+// match's seat names nobody on the roster, so it reads as a personal one.
+const TEAM_TAG_OPTIONS: AskTagOptions = {
+  players: [
+    { id: "player-sokolov", name: "Ana Sokolov", matchCount: 2 },
+    { id: "player-dvorsky", name: "Mia Dvorsky", matchCount: 1 },
+  ],
+  opponents: PERSONAL_TAG_OPTIONS.opponents,
+  matches: PERSONAL_TAG_OPTIONS.matches.map((match, index) => ({
+    ...match,
+    playerName: ["Ana Sokolov", "Mia Dvorsky", null][index] ?? null,
+  })),
+};
+
+const TAG_OPTIONS = TEAM ? TEAM_TAG_OPTIONS : PERSONAL_TAG_OPTIONS;
 
 const QUOTA: AskQuotaView | null =
   params.get("quota") === "none"
@@ -94,6 +122,7 @@ function Harness() {
           setDraft(EMPTY_ASK_QUESTION);
         }}
         tagOptions={TAG_OPTIONS}
+        scope={TEAM}
         quota={QUOTA}
         pending={params.get("pending") !== null}
       />

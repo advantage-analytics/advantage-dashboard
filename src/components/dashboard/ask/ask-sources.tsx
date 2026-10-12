@@ -8,6 +8,7 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { ScoreLineSet } from "@/lib/ui/score-format";
+import { askMatchPlayers } from "./ask-tag-menu";
 
 /** How many matches show before "All N" is pressed. */
 export const ASK_SOURCES_SHOWN = 2;
@@ -103,7 +104,7 @@ function SourceRow({
       >
         <SourceResult iWon={match.iWon} />
         <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
-          {match.opponentName ?? "Opponent"}
+          {askMatchPlayers(match)}
         </span>
         {sets ? (
           <ScoreLine
@@ -147,7 +148,9 @@ export interface AskSourcesProps {
  * "Computed from N matches": the record rows an answer stands on.
  *
  * Each row is the outcome as a mark (never the word), the opponent, the score
- * and the date, and it opens that match's report. The first two show; "All N"
+ * and the date, and it opens that match's report. A team answer's rows lead
+ * with the program's own player ("Sokolov vs Dvorsky"): the mark and the
+ * score are that player's, and the opponent alone would not say whose. The first two show; "All N"
  * opens the rest in place, under the same heading, so the answer above does
  * not move.
  *

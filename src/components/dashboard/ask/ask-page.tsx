@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteAskConversation } from "@/app/dashboard/ask/actions";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
@@ -10,8 +11,15 @@ import type {
   AskQuota,
 } from "@/lib/data/ask-server";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
+import {
+  askBasePath,
+  askScopeProgramId,
+  type AskScope,
+} from "@/lib/services/ask/scope";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { AskAnswer } from "./ask-answer";
+import { askCopy, askDayZeroCopy } from "./ask-copy";
 import { AskComposer, type AskQuotaView } from "./ask-composer";
 import {
   ASK_COLUMN,
@@ -26,15 +34,25 @@ import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
 import { useAskStream, type AskExchange } from "./use-ask-stream";
 
 /**
- * The personal Ask page, as a chat: earlier questions in a rail on the left,
- * and beside it a thread with the player's prompts on the right and the
- * answers on the left.
+ * The Ask page, as a chat: earlier questions in a rail on the left, and
+ * beside it a thread with the asker's prompts on the right and the answers on
+ * the left.
+ *
+ * One page for two scopes (`AskScope`). Personal is a player asking about
+ * their own matches at `/dashboard/ask`. Team is any member of a program —
+ * owner, coach, staff or player — asking about the program's matches at
+ * `/dashboard/team/ask`; the answers name players in the third person. The
+ * scope decides four things and nothing else: which page the URLs point at
+ * (`askBasePath`), whether the request names a program, what can be tagged
+ * (a team has players), and the sentences that would otherwise say "your
+ * matches" (`ask-copy.ts`). The question limit and the list of earlier
+ * questions are the asker's own in both.
  *
  * Three states, decided here and nowhere else:
  *
- * - **no personal match** — the day-zero offer and nothing to type into. A
- *   composer on an account with nothing to ask about would only ever refuse.
- *   No rail either.
+ * - **no match in scope** — the day-zero offer and nothing to type into. A
+ *   composer with nothing to ask about would only ever refuse. No rail
+ *   either.
  * - **matches, no thread** — nothing asked yet, or "New question" pressed:
  *   the title, one line, and the composer in the upper part of the page.
  * - **a thread** — saved (`?c=<id>`, loaded by the route) or asked in this
@@ -68,6 +86,14 @@ import { useAskStream, type AskExchange } from "./use-ask-stream";
  * anything, and a follow-up sent to it could not be saved.
  */
 export interface AskPageProps {
+  /** Whose matches are asked about, and so which page this is. */
+  scope: AskScope;
+  /**
+   * Team scope only: `canUploadForProgram()` for this viewer, so the day-zero
+   * offer never shows a button that refuses on the next page. Not read on
+   * the personal page, where the viewer can always send their own match.
+   */
+  canUpload?: boolean;
   /** What can be tagged. No matches here is the page's day zero. */
   tagOptions: AskTagOptions;
   /** Null when the count could not be read. */
@@ -79,25 +105,56 @@ export interface AskPageProps {
 }
 
 export function AskPage(props: AskPageProps) {
-  if (props.tagOptions.matches.length === 0) return <AskDayZero />;
+  if (props.tagOptions.matches.length === 0) {
+    return (
+      <AskDayZero scope={props.scope} canUpload={props.canUpload ?? false} />
+    );
+  }
   return <AskThread {...props} />;
 }
 
 /**
- * No personal match yet. The same offer Home and Matches make — one sentence,
- * the pair of ways in (both to `/dashboard/matches/new`), the conditions —
- * with this page's own sentence. No composer and no rail: there is nothing to
- * ask about, nothing tagged and no count worth showing, and a dimmed mock-up
- * of a thread would be an invented answer.
+ * No match in scope yet. The same offer Home and Matches make — one sentence,
+ * the way in, the conditions — with this page's own sentence. No composer and
+ * no rail: there is nothing to ask about, nothing tagged and no count worth
+ * showing, and a dimmed mock-up of a thread would be an invented answer.
+ *
+ * Personal: the offer's own pair, both to `/dashboard/matches/new`.
+ *
+ * Team: one primary to `/dashboard/team/upload`, for a member who may send
+ * video there. No "Import instead" beside it — that route has no source
+ * preselect, so a second button would open the same step as the first. A
+ * member who may not upload gets no button (`null`, not omitted: the offer's
+ * default pair fills in for `undefined` only) and a line saying who does.
  */
-function AskDayZero() {
+function AskDayZero({
+  scope,
+  canUpload,
+}: {
+  scope: AskScope;
+  canUpload: boolean;
+}) {
+  const isTeam = scope.kind === "team";
+  const { headline, conditions } = askDayZeroCopy(scope, canUpload);
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-6">
         <h1 className="sr-only">Ask</h1>
         <DayZeroOffer
-          headline="Send a match, then ask anything about it."
-          headlineMeasure="24ch"
+          headline={headline}
+          // The team's sentence is longer; both break once.
+          headlineMeasure={isTeam ? "30ch" : "24ch"}
+          actions={
+            !isTeam ? undefined : canUpload ? (
+              <Link
+                href="/dashboard/team/upload"
+                className={advButton("primary")}
+              >
+                Send match video
+              </Link>
+            ) : null
+          }
+          conditions={conditions}
         />
       </div>
     </div>
@@ -105,15 +162,19 @@ function AskDayZero() {
 }
 
 function AskThread({
+  scope,
   tagOptions,
   quota,
   conversations,
   conversation,
 }: AskPageProps) {
   const router = useRouter();
+  const basePath = askBasePath(scope);
+  const copy = askCopy(scope);
   const { state, setDraft, ask, reset } = useAskStream({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
+    programId: askScopeProgramId(scope),
   });
 
   // The conversation a first answer just created, for "Earlier questions".
@@ -154,7 +215,7 @@ function AskThread({
     window.history.replaceState(
       null,
       "",
-      `/dashboard/ask?c=${encodeURIComponent(outcome.conversationId)}`,
+      `${basePath}?c=${encodeURIComponent(outcome.conversationId)}`,
     );
     setCreated({
       summary: {
@@ -167,11 +228,11 @@ function AskThread({
   }
 
   async function deleteConversation(id: string) {
-    const result = await deleteAskConversation(id);
+    const result = await deleteAskConversation(id, scope.kind);
     if (!result.ok) return false;
     if (id === state.conversationId) {
       reset();
-      router.replace("/dashboard/ask");
+      router.replace(basePath);
     }
     return true;
   }
@@ -185,7 +246,7 @@ function AskThread({
     reset();
     // Already at the bare URL when nothing was saved; a push would only add
     // a history entry that goes nowhere.
-    if (window.location.search !== "") router.push("/dashboard/ask");
+    if (window.location.search !== "") router.push(basePath);
     requestAnimationFrame(() =>
       composerBox.current?.querySelector("textarea")?.focus(),
     );
@@ -231,6 +292,7 @@ function AskThread({
         onChange={setDraft}
         onSubmit={send}
         tagOptions={tagOptions}
+        scope={scope}
         quota={quotaView}
         pending={state.inFlight}
       />
@@ -243,6 +305,7 @@ function AskThread({
         <AskRail
           quota={quotaView}
           conversations={listed}
+          scope={scope}
           activeConversationId={state.conversationId}
           onNewQuestion={newQuestion}
           onDeleteConversation={deleteConversation}
@@ -256,7 +319,11 @@ function AskThread({
           <div className={cn(ASK_SCROLL, ASK_GUTTER, "pt-7 pb-4")}>
             <div className={cn(ASK_COLUMN, "flex flex-col gap-8")}>
               {state.exchanges.map((exchange) => (
-                <AskExchangeView key={exchange.id} exchange={exchange} />
+                <AskExchangeView
+                  key={exchange.id}
+                  exchange={exchange}
+                  scope={scope}
+                />
               ))}
               <div ref={end} aria-hidden="true" />
             </div>
@@ -268,13 +335,7 @@ function AskThread({
           </div>
         </>
       ) : (
-        <AskIntro
-          lead={
-            <p className="text-body-sm">
-              Answers are computed from your own matches.
-            </p>
-          }
-        >
+        <AskIntro lead={<p className="text-body-sm">{copy.lead}</p>}>
           {composer}
         </AskIntro>
       )}
@@ -283,16 +344,22 @@ function AskThread({
 }
 
 /**
- * One exchange: the player's prompt against the right edge, what came back
+ * One exchange: the asker's prompt against the right edge, what came back
  * on the left. Both in the same column, so an answer's left edge is the
  * column's.
  */
-function AskExchangeView({ exchange }: { exchange: AskExchange }) {
+function AskExchangeView({
+  exchange,
+  scope,
+}: {
+  exchange: AskExchange;
+  scope: AskScope;
+}) {
   const { question, answer } = exchange;
   return (
     <article className="flex flex-col gap-8">
       <AskPrompt text={question.text} tags={question.tags} />
-      <AskAnswer answer={answer} />
+      <AskAnswer answer={answer} scope={scope} />
     </article>
   );
 }

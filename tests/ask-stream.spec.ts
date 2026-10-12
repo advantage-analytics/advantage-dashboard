@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   ASK_INTERRUPTED_MESSAGE,
   ASK_REFUSAL_FALLBACK,
+  askRequestBody,
   askThreadReducer,
   emptyAskThread,
   exchangesFromMessages,
@@ -43,6 +44,7 @@ const SOURCE = {
   playedOn: "2026-09-14",
   iWon: true,
   scoreText: "6-4 6-3",
+  playerName: null,
 };
 
 const VISUAL: AskVisual = {
@@ -237,6 +239,100 @@ test.describe("a streamed answer", () => {
       emptyAskThread({ conversationId: "conversation-1" }),
     );
     expect(sent[0].body).toMatchObject({ conversationId: "conversation-1" });
+  });
+
+  test("a personal question's body carries no `programId` — the bytes it always was", () => {
+    const body = askRequestBody({ conversationId: null, question: QUESTION });
+    expect(JSON.stringify(body)).toBe(
+      JSON.stringify({
+        question: QUESTION.text,
+        tags: [{ kind: "opponent", id: "marcus hale" }],
+      }),
+    );
+    // Null is the personal page too, and is left out rather than sent.
+    expect(
+      JSON.stringify(
+        askRequestBody({
+          conversationId: "conversation-1",
+          question: QUESTION,
+          programId: null,
+        }),
+      ),
+    ).toBe(
+      JSON.stringify({
+        conversationId: "conversation-1",
+        question: QUESTION.text,
+        tags: [{ kind: "opponent", id: "marcus hale" }],
+      }),
+    );
+  });
+
+  test("a team question names its program, and a player tag goes as kind and id", async () => {
+    const question: AskQuestion = {
+      text: "  How is Mia serving?  ",
+      tags: [{ kind: "player", id: "player-dvorsky", label: "Mia Dvorsky" }],
+    };
+    expect(
+      askRequestBody({
+        conversationId: null,
+        question,
+        programId: "program-1",
+      }),
+    ).toEqual({
+      programId: "program-1",
+      question: "How is Mia serving?",
+      tags: [{ kind: "player", id: "player-dvorsky" }],
+    });
+
+    // And that is what reaches the route.
+    const bytes = await wire(ANSWER);
+    const sent: unknown[] = [];
+    await streamAsk(
+      { conversationId: "conversation-1", question, programId: "program-1" },
+      () => {},
+      {
+        fetch: (async (_url: RequestInfo | URL, init?: RequestInit) => {
+          sent.push(JSON.parse(String(init?.body)));
+          return new Response(chunked(bytes, [64]), { status: 200 });
+        }) as typeof fetch,
+      },
+    );
+    expect(sent).toEqual([
+      {
+        conversationId: "conversation-1",
+        programId: "program-1",
+        question: "How is Mia serving?",
+        tags: [{ kind: "player", id: "player-dvorsky" }],
+      },
+    ]);
+  });
+
+  test("a team answer's sources keep the program's player; a personal one's read null", () => {
+    expect(
+      parseAskEvent(
+        JSON.stringify({
+          type: "sources",
+          matches: [
+            { ...SOURCE, playerName: "Mia Dvorsky" },
+            // As a personal answer, or one saved before team scope, has it.
+            { matchId: "match-2", opponentName: "Theo Lindqvist" },
+          ],
+        }),
+      ),
+    ).toEqual({
+      type: "sources",
+      matches: [
+        { ...SOURCE, playerName: "Mia Dvorsky" },
+        {
+          matchId: "match-2",
+          opponentName: "Theo Lindqvist",
+          playedOn: null,
+          iWon: null,
+          scoreText: null,
+          playerName: null,
+        },
+      ],
+    });
   });
 
   test("a `visual` and a `notice` fold into the answer", async () => {
@@ -570,6 +666,28 @@ test.describe("the thread", () => {
 });
 
 test.describe("a saved conversation", () => {
+  test("a saved player tag reopens as one, named by its kind when it has no label", () => {
+    const [exchange] = exchangesFromMessages([
+      {
+        id: "m1",
+        role: "user",
+        content: {
+          text: "How is Mia serving?",
+          tags: [
+            { kind: "player", id: "player-dvorsky", label: "Mia Dvorsky" },
+            { kind: "player", id: "player-sokolov" },
+            // Not a kind, and not a property of an object either.
+            { kind: "toString", id: "x", label: "Nope" },
+          ],
+        },
+      },
+    ]);
+    expect(exchange.question.tags).toEqual([
+      { kind: "player", id: "player-dvorsky", label: "Mia Dvorsky" },
+      { kind: "player", id: "player-sokolov", label: "Player" },
+    ]);
+  });
+
   test("pairs each question with the answer after it", () => {
     const exchanges = exchangesFromMessages([
       {

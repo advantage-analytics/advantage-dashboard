@@ -51,6 +51,7 @@ const OPTIONS: AskTagOptions = {
       iWon: true,
       scoreText: "6-4 6-3",
       tournamentName: null,
+      playerName: null,
     },
     {
       matchId: MATCH_B,
@@ -59,15 +60,39 @@ const OPTIONS: AskTagOptions = {
       iWon: false,
       scoreText: "3-6 4-6",
       tournamentName: null,
+      playerName: null,
     },
   ],
   opponents: [
     { id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null },
     { id: "bea ortiz", name: "Bea Ortiz", matchCount: 1, hand: "left" },
   ],
+  players: [],
 };
 
-const NO_MATCHES: AskTagOptions = { matches: [], opponents: [] };
+const NO_MATCHES: AskTagOptions = { matches: [], opponents: [], players: [] };
+
+const PROGRAM_ID = "eeeeeeee-0000-4000-8000-000000000005";
+const OTHER_PROGRAM_ID = "ffffffff-0000-4000-8000-000000000006";
+const PLAYER_ID = "99999999-0000-4000-8000-000000000007";
+
+/** What the team loader answers: the program's matches, each with its player. */
+const TEAM_OPTIONS: AskTagOptions = {
+  matches: [
+    {
+      matchId: MATCH_A,
+      opponentName: "Anna Lee",
+      playedOn: "2026-09-14",
+      iWon: true,
+      scoreText: "6-4 6-3",
+      tournamentName: null,
+      playerName: "Mara Sokolov",
+      playerId: PLAYER_ID,
+    },
+  ],
+  opponents: [{ id: "anna lee", name: "Anna Lee", matchCount: 1, hand: null }],
+  players: [{ id: PLAYER_ID, name: "Mara Sokolov", matchCount: 1 }],
+};
 
 const LIMIT_ERROR = {
   code: "54000",
@@ -85,6 +110,10 @@ interface World {
   signedIn: boolean;
   configured: boolean;
   options: AskTagOptions | Error;
+  /** What `getAskTagOptions(programId)` answers for a team question. */
+  teamOptions: AskTagOptions;
+  /** The viewer's workspaces, as `getWorkspaceContext()` lists them; null when it cannot say. */
+  workspaces: { id: string; kind: "personal" | "team"; name: string }[] | null;
   /** What `getAskConversation()` answers for any id. */
   conversation: unknown;
   quota: { used: number; cap: number; resetsOn: string } | null;
@@ -107,6 +136,11 @@ function world(overrides: Partial<World> = {}): World {
     signedIn: true,
     configured: false,
     options: OPTIONS,
+    teamOptions: TEAM_OPTIONS,
+    workspaces: [
+      { id: USER_ID, kind: "personal", name: "Personal" },
+      { id: PROGRAM_ID, kind: "team", name: "Westbrook College" },
+    ],
     conversation: null,
     quota: null,
     rpc: {
@@ -129,6 +163,24 @@ function world(overrides: Partial<World> = {}): World {
               played_on: "2026-09-14",
               i_won: true,
               score_text: "6-4 6-3",
+            },
+          ],
+          rows: [
+            { matches: 2, wins: 1, losses: 1, second_serve_won_pct: 55.5 },
+          ],
+        },
+        error: null,
+      }),
+      ask_run_team_query: () => ({
+        data: {
+          matches: [
+            {
+              match_id: MATCH_A,
+              opponent_name: "Anna Lee",
+              played_on: "2026-09-14",
+              i_won: true,
+              score_text: "6-4 6-3",
+              player_name: "Mara Sokolov",
             },
           ],
           rows: [
@@ -192,18 +244,39 @@ function loadRoute(state: World) {
       },
     },
     "@/lib/data/ask-server": {
-      getAskTagOptions: async () => {
-        calls.loaders.push("getAskTagOptions");
+      getAskTagOptions: async (programId: string | null = null) => {
+        calls.loaders.push(
+          programId ? `getAskTagOptions:${programId}` : "getAskTagOptions",
+        );
         if (state.options instanceof Error) throw state.options;
-        return state.options;
+        return programId ? state.teamOptions : state.options;
       },
-      getAskConversation: async (id: string) => {
-        calls.loaders.push(`getAskConversation:${id}`);
+      getAskConversation: async (
+        id: string,
+        programId: string | null = null,
+      ) => {
+        calls.loaders.push(
+          programId
+            ? `getAskConversation:${id}:${programId}`
+            : `getAskConversation:${id}`,
+        );
         return state.conversation;
       },
       getAskQuota: async () => {
         calls.loaders.push("getAskQuota");
         return state.quota;
+      },
+    },
+    "@/lib/workspace/active-workspace-server": {
+      getWorkspaceContext: async () => {
+        calls.loaders.push("getWorkspaceContext");
+        return state.workspaces
+          ? {
+              active: state.workspaces[0],
+              available: state.workspaces,
+              viewer: { id: USER_ID },
+            }
+          : null;
       },
     },
     "@/lib/site-url": { siteUrl: () => "http://localhost" },
@@ -744,5 +817,175 @@ test.describe("POST /api/ask · the answer", () => {
     expect(calls.rpc[1].args).toEqual({ usage_id: USAGE_ID });
     // Abandoned at its first step: the provider was never called.
     expect(calls.llm).toBe(0);
+  });
+});
+
+// ── Team scope ──────────────────────────────────────────────────────────────
+
+test.describe("POST /api/ask · a team question (programId)", () => {
+  const TEAM_QUESTION = { ...QUESTION, programId: PROGRAM_ID };
+
+  test("the body allows exactly conversationId, programId, question and tags", async () => {
+    const { route } = loadRoute(world());
+    const response = await route.POST(post({ ...QUESTION, program: "x" }));
+    expect(response.status).toBe(400);
+    expect((await refused(response)).detail).toBe("unexpected_field:program");
+
+    const source = readFileSync(ROUTE, "utf8");
+    const keys = /const BODY_KEYS[^=]*= new Set\(\[([^\]]*)\]\)/.exec(source);
+    expect(
+      [...(keys?.[1] ?? "").matchAll(/"(\w+)"/g)].map((match) => match[1]),
+    ).toEqual(["conversationId", "programId", "question", "tags"]);
+  });
+
+  test("400 invalid_request — a programId that is not a uuid, before any workspace is read", async () => {
+    for (const programId of ["zz-test", "", 7, {}, PROGRAM_ID.slice(1)]) {
+      const { route, calls } = loadRoute(world());
+      const response = await route.POST(post({ ...QUESTION, programId }));
+      expect(response.status, JSON.stringify(programId)).toBe(400);
+      const body = await refused(response);
+      expect(body.code).toBe("invalid_request");
+      expect(body.detail).toBe("program_id_type");
+      expect(calls.loaders).toEqual([]);
+      expect(calls.rpc).toEqual([]);
+    }
+  });
+
+  test("a null programId is a personal question", async () => {
+    const { route, calls } = loadRoute(world());
+    const response = await route.POST(post({ ...QUESTION, programId: null }));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(calls.loaders).toEqual(["getAskTagOptions"]);
+    expect(rpcNames(calls)).toContain("ask_run_query");
+    expect(rpcNames(calls)).not.toContain("ask_run_team_query");
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange");
+    expect(Object.keys(saved?.args as object)).not.toContain("p_program_id");
+  });
+
+  test("403 not_a_member — a program that is not one of the viewer's, before any of it is read", async () => {
+    const cases: Partial<World>[] = [
+      // A program the viewer does not belong to.
+      {},
+      // The id of the viewer's PERSONAL workspace is not a program.
+      {
+        workspaces: [{ id: OTHER_PROGRAM_ID, kind: "personal", name: "Me" }],
+      },
+      // The workspaces could not be read: refuse, never assume.
+      { workspaces: null },
+    ];
+    for (const overrides of cases) {
+      const { route, calls } = loadRoute(world(overrides));
+      const response = await route.POST(
+        post({ ...QUESTION, programId: OTHER_PROGRAM_ID }),
+      );
+      expect(response.status).toBe(403);
+      expect((await refused(response)).code).toBe("not_a_member");
+      expect(calls.loaders).toEqual(["getWorkspaceContext"]);
+      expect(calls.rpc).toEqual([]);
+      expect(calls.llm).toBe(0);
+    }
+  });
+
+  test("a member's question reads the program's options, runs the team function and saves to the program", async () => {
+    const { route, calls } = loadRoute(world());
+    const response = await route.POST(
+      post({ ...TEAM_QUESTION, tags: [{ kind: "player", id: PLAYER_ID }] }),
+    );
+    expect(response.status).toBe(200);
+    const stream = await events(response);
+
+    expect(calls.loaders).toEqual([
+      "getWorkspaceContext",
+      `getAskTagOptions:${PROGRAM_ID}`,
+    ]);
+    expect(rpcNames(calls)).toEqual([
+      "ask_run_team_query",
+      "ask_save_exchange",
+      "ask_quota",
+    ]);
+    expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });
+    expect(calls.rpc[1].args).toMatchObject({
+      p_program_id: PROGRAM_ID,
+      p_question: {
+        text: QUESTION.question,
+        tags: [{ kind: "player", id: PLAYER_ID, label: "Mara Sokolov" }],
+      },
+    });
+    expect(stream.at(-2)).toMatchObject({
+      type: "sources",
+      matches: [{ matchId: MATCH_A, playerName: "Mara Sokolov" }],
+    });
+    // Mock mode's team wording: nobody is "you".
+    const body = stream
+      .flatMap((event) => (event.type === "text" ? [event.delta] : []))
+      .join("");
+    expect(body).toContain("the team's players");
+  });
+
+  test("400 invalid_request — a player tag on a personal question, and one that is not on the roster", async () => {
+    const personal = loadRoute(world());
+    const first = await personal.route.POST(
+      post({ ...QUESTION, tags: [{ kind: "player", id: PLAYER_ID }] }),
+    );
+    expect(first.status).toBe(400);
+    expect((await refused(first)).error).toBe(
+      "A tag must name a match or an opponent.",
+    );
+
+    const team = loadRoute(world());
+    const second = await team.route.POST(
+      post({
+        ...TEAM_QUESTION,
+        tags: [{ kind: "player", id: OTHER_PROGRAM_ID }],
+      }),
+    );
+    expect(second.status).toBe(400);
+    expect((await refused(second)).error).toBe(
+      "That player is not on the program's roster.",
+    );
+    expect(team.calls.rpc).toEqual([]);
+  });
+
+  test("404 conversation_not_found — the conversation is looked up in the program's workspace", async () => {
+    const { route, calls } = loadRoute(world({ conversation: null }));
+    const response = await route.POST(
+      post({ ...TEAM_QUESTION, conversationId: CONVERSATION_ID }),
+    );
+    expect(response.status).toBe(404);
+    expect((await refused(response)).code).toBe("conversation_not_found");
+    expect(calls.loaders).toContain(
+      `getAskConversation:${CONVERSATION_ID}:${PROGRAM_ID}`,
+    );
+    expect(calls.rpc).toEqual([]);
+  });
+
+  test("409 no_matches — a program with no match, in the team's words", async () => {
+    const { route, calls } = loadRoute(world({ teamOptions: NO_MATCHES }));
+    const response = await route.POST(post(TEAM_QUESTION));
+    expect(response.status).toBe(409);
+    const body = await refused(response);
+    expect(body.code).toBe("no_matches");
+    expect(body.error).toBe("Add a team match before you ask a question.");
+    expect(calls.rpc).toEqual([]);
+  });
+
+  test("a team question spends the asker's own month: the same reservation, the same 429", async () => {
+    const spent = loadRoute(
+      world({
+        configured: true,
+        rpc: {
+          ...world().rpc,
+          ask_reserve_question: () => ({ data: null, error: LIMIT_ERROR }),
+        },
+      }),
+    );
+    const response = await spent.route.POST(post(TEAM_QUESTION));
+    expect(response.status).toBe(429);
+    expect((await refused(response)).code).toBe("ask_limit_reached");
+    // No argument: the count is per user, whatever the workspace.
+    expect(spent.calls.rpc).toEqual([
+      { fn: "ask_reserve_question", args: undefined },
+    ]);
   });
 });

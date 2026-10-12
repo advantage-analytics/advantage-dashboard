@@ -4,6 +4,7 @@ import {
   ASK_VISUAL_LINE_PREFIX,
 } from "@/lib/services/ask/answer-render";
 import type { AskPlanQuery } from "@/lib/services/ask/prompts";
+import type { AskScope } from "@/lib/services/ask/scope";
 
 /**
  * What Ask runs on when no LLM provider is configured (design "Route → Mock
@@ -67,7 +68,28 @@ Across {{r1.matches}} recorded matches you have won {{r1.wins}} and lost {{r1.lo
 
 This is a sample answer. No AI provider is configured, so your question was not read; the figures above are still computed from your own matches.`;
 
-/** {@link ASK_MOCK_ANSWER_TEMPLATE} as the stream `renderAskAnswer()` takes. */
-export async function* mockAskAnswerStream(): AsyncIterable<string> {
-  yield ASK_MOCK_ANSWER_TEMPLATE;
+/**
+ * The same answer for a team scope. {@link ASK_MOCK_PLAN} is scope-neutral —
+ * it reads the views, and the views are the program's when the question is —
+ * so only the wording changes: third person, the team's record.
+ */
+export const ASK_TEAM_MOCK_ANSWER_TEMPLATE = `Here is the team's record and how its second serves have held up across every match the program has recorded.
+${ASK_FIGURE_LINE_PREFIX} Wins = {{r1.wins}}
+${ASK_FIGURE_LINE_PREFIX} Losses = {{r1.losses}}
+${ASK_FIGURE_LINE_PREFIX} Second-serve points won = {{r1.second_serve_won_pct}}
+${ASK_VISUAL_LINE_PREFIX} table ${ASK_VISUAL_FIELD_SEPARATOR} The team's record across {{r1.matches}} recorded matches.
+COLUMNS: Matches ${ASK_VISUAL_FIELD_SEPARATOR} Wins ${ASK_VISUAL_FIELD_SEPARATOR} Losses
+ROW: All matches ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.matches}} ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.wins}} ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.losses}}
+
+Across {{r1.matches}} recorded matches the team's players have won {{r1.wins}} and lost {{r1.losses}}. They won {{r1.second_serve_won_pct}} of the points played on their second serves.
+
+This is a sample answer. No AI provider is configured, so the question was not read; the figures above are still computed from the program's own matches.`;
+
+/** The mock template for a scope, as the stream `renderAskAnswer()` takes. */
+export async function* mockAskAnswerStream(
+  scope?: AskScope,
+): AsyncIterable<string> {
+  yield scope?.kind === "team"
+    ? ASK_TEAM_MOCK_ANSWER_TEMPLATE
+    : ASK_MOCK_ANSWER_TEMPLATE;
 }

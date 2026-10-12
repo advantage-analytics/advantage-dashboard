@@ -16,7 +16,14 @@ const percent = (n: number, of: number) => `${(n / of) * 100}%`;
  * The drawing is hidden from assistive technology; the list under it carries
  * every point in words.
  */
-export function TrendVisual({ visual }: { visual: AskTrendVisual }) {
+export function TrendVisual({
+  visual,
+  averageLabel = "Your average",
+}: {
+  visual: AskTrendVisual;
+  /** The key's name for the dashed rule. The team page says "Average". */
+  averageLabel?: string;
+}) {
   const { points } = visual;
   const geometry = trendGeometry(points.map((point) => point.value.value));
   const last = points.length - 1;
@@ -27,7 +34,7 @@ export function TrendVisual({ visual }: { visual: AskTrendVisual }) {
       <VisualKey
         items={[
           { label: "Each match", color: "var(--viz-you)" },
-          { label: "Your average", color: "var(--viz-opp-mid)", dashed: true },
+          { label: averageLabel, color: "var(--viz-opp-mid)", dashed: true },
         ]}
       />
       <div className="flex flex-col gap-1">

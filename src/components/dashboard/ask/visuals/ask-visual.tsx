@@ -18,14 +18,25 @@ import { TrendVisual } from "./trend-visual";
  * `next/navigation` or `next/image`: the blocks render inside `AskAnswer`,
  * which an offline harness bundles (`tests/ask-answer-view.spec.ts`).
  */
-export function AskVisualBlock({ visual }: { visual: AskVisual }) {
+export function AskVisualBlock({
+  visual,
+  trendAverageLabel,
+}: {
+  visual: AskVisual;
+  /**
+   * The trend block's key for its dashed mean: "Your average" on the personal
+   * page, "Average" on the team one, where the series may be any player's.
+   * The block's own default when omitted.
+   */
+  trendAverageLabel?: string;
+}) {
   switch (visual.kind) {
     case "bars":
       return <BarsVisual visual={visual} />;
     case "table":
       return <TableVisual visual={visual} />;
     case "trend":
-      return <TrendVisual visual={visual} />;
+      return <TrendVisual visual={visual} averageLabel={trendAverageLabel} />;
     case "split":
       return <SplitVisual visual={visual} />;
     case "serve":

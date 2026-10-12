@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, GalleryHorizontalEnd } from "lucide-react";
+import { Brain, GalleryHorizontalEnd, UserRound } from "lucide-react";
 import {
   ChosenCheck,
   FloatMenu,
@@ -9,14 +9,18 @@ import {
 import type {
   AskMatchOption,
   AskOpponentOption,
+  AskPlayerOption,
   AskTagOptions,
 } from "@/lib/data/ask-tags";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { cn } from "@/lib/utils";
+import { PERSONAL_ASK_COPY, askCopy } from "./ask-copy";
 import type { AskTag } from "./use-ask-stream";
 
 /**
  * What `@` opens in the Ask composer: the player's opponents and matches, in
- * that order, narrowed by whatever follows the `@`.
+ * that order, narrowed by whatever follows the `@`. On the team page the
+ * program's players lead, in the same menu — one list, one place to type.
  *
  * A listbox, not a menu. Focus never enters it — the player is still typing
  * their question — so the composer's textarea owns the keyboard and names the
@@ -26,7 +30,9 @@ import type { AskTag } from "./use-ask-stream";
  * (a `<button role="menuitem">` that takes focus), so they copy its geometry
  * the way `settings/teams/conference-select.tsx` does.
  *
- * Two groups and no third. The artboard's "Groups" ("Left-handed opponents",
+ * Opponents and matches, and players where there is a roster to name
+ * (`AskTagOptions.players` is empty on the personal page, so that group is
+ * never drawn there). The artboard's "Groups" ("Left-handed opponents",
  * "Last 5 matches") is left out by decision: a period or a handedness is said
  * in words and the query handles it.
  *
@@ -73,6 +79,8 @@ export interface AskTagRow {
 }
 
 export interface AskTagRows {
+  /** The program's players. Always empty on the personal page. */
+  players: AskTagRow[];
   opponents: AskTagRow[];
   matches: AskTagRow[];
 }
@@ -82,6 +90,7 @@ export interface AskTagRows {
  * is a place to type a name into, not a list to scroll; the newest matches and
  * the most-played opponents lead, and typing reaches the rest.
  */
+export const ASK_TAG_PLAYER_ROWS = 5;
 export const ASK_TAG_OPPONENT_ROWS = 5;
 export const ASK_TAG_MATCH_ROWS = 8;
 
@@ -98,8 +107,20 @@ function playedOnLabel(playedOn: string | null, currentYear: string | null) {
   });
 }
 
+function matchCountLabel(matchCount: number) {
+  return `${matchCount} ${matchCount === 1 ? "match" : "matches"}`;
+}
+
+function playerRow(option: AskPlayerOption): AskTagRow {
+  return {
+    tag: { kind: "player", id: option.id, label: option.name },
+    name: option.name,
+    meta: matchCountLabel(option.matchCount),
+  };
+}
+
 function opponentRow(option: AskOpponentOption): AskTagRow {
-  const count = `${option.matchCount} ${option.matchCount === 1 ? "match" : "matches"}`;
+  const count = matchCountLabel(option.matchCount);
   const hand =
     option.hand === "left"
       ? "Left-handed"
@@ -113,10 +134,21 @@ function opponentRow(option: AskOpponentOption): AskTagRow {
   };
 }
 
+/**
+ * Who played a match, as its tag and its source row both say it. A team's
+ * match leads with the program's own player — "Sokolov vs Dvorsky" — because
+ * a coach reading a list of opponents cannot tell whose match each one was.
+ * A personal match has no `playerName` and is named by the opponent alone.
+ */
+export function askMatchPlayers(
+  match: Pick<AskMatchOption, "playerName" | "opponentName">,
+): string {
+  const opponent = match.opponentName ?? "Opponent";
+  return match.playerName ? `${match.playerName} vs ${opponent}` : opponent;
+}
+
 function matchRow(option: AskMatchOption, currentYear: string | null) {
-  const name = `${playedOnLabel(option.playedOn, currentYear)} · ${
-    option.opponentName ?? "Opponent"
-  }`;
+  const name = `${playedOnLabel(option.playedOn, currentYear)} · ${askMatchPlayers(option)}`;
   return {
     row: {
       tag: { kind: "match", id: option.matchId, label: name },
@@ -125,7 +157,8 @@ function matchRow(option: AskMatchOption, currentYear: string | null) {
         .filter(Boolean)
         .join(" · "),
     } satisfies AskTagRow,
-    // The tournament is searchable too: "@fall open" finds the match.
+    // The tournament is searchable too: "@fall open" finds the match. So is
+    // the team's player, who is part of the name.
     haystack: `${name} ${option.tournamentName ?? ""}`.toLowerCase(),
   };
 }
@@ -143,6 +176,10 @@ export function askTagRows(options: AskTagOptions, query: string): AskTagRows {
     null;
 
   return {
+    players: options.players
+      .filter((option) => option.name.toLowerCase().includes(needle))
+      .slice(0, ASK_TAG_PLAYER_ROWS)
+      .map(playerRow),
     opponents: options.opponents
       .filter((option) => option.name.toLowerCase().includes(needle))
       .slice(0, ASK_TAG_OPPONENT_ROWS)
@@ -155,9 +192,9 @@ export function askTagRows(options: AskTagOptions, query: string): AskTagRows {
   };
 }
 
-/** Opponents, then matches — the order the arrow keys walk. */
+/** Players, opponents, then matches — the order the arrow keys walk. */
 export function flatAskTagRows(rows: AskTagRows): AskTagRow[] {
-  return [...rows.opponents, ...rows.matches];
+  return [...rows.players, ...rows.opponents, ...rows.matches];
 }
 
 export function askTagKey(tag: Pick<AskTag, "kind" | "id">): string {
@@ -166,11 +203,16 @@ export function askTagKey(tag: Pick<AskTag, "kind" | "id">): string {
 
 /** The glyph each kind of tag carries: in the menu, on a chip, in the rail. */
 export const ASK_TAG_ICON = {
+  player: UserRound,
   opponent: Brain,
   match: GalleryHorizontalEnd,
 } as const;
 
-const ASK_TAG_KIND_LABEL = { opponent: "Opponent", match: "Match" } as const;
+const ASK_TAG_KIND_LABEL = {
+  player: "Player",
+  opponent: "Opponent",
+  match: "Match",
+} as const;
 
 /**
  * The line under a tag's name in the rail: what kind of thing it is, then
@@ -184,7 +226,10 @@ const ASK_TAG_KIND_LABEL = { opponent: "Opponent", match: "Match" } as const;
 export function askTagMeta(options: AskTagOptions, tag: AskTag): string {
   const kind = ASK_TAG_KIND_LABEL[tag.kind];
   let detail = "";
-  if (tag.kind === "opponent") {
+  if (tag.kind === "player") {
+    const option = options.players.find((other) => other.id === tag.id);
+    if (option) detail = playerRow(option).meta;
+  } else if (tag.kind === "opponent") {
     const option = options.opponents.find((other) => other.id === tag.id);
     if (option) detail = opponentRow(option).meta;
   } else {
@@ -196,12 +241,15 @@ export function askTagMeta(options: AskTagOptions, tag: AskTag): string {
 
 // ── The menu ────────────────────────────────────────────────────────────────
 
-export const ASK_TAG_MENU_LABEL = "Tag a match or opponent";
+/** The personal page's label; the team's is `askCopy(scope).tagMenuLabel`. */
+export const ASK_TAG_MENU_LABEL = PERSONAL_ASK_COPY.tagMenuLabel;
 
 export interface AskTagMenuProps {
   open: boolean;
   /** Radix asking to close: Escape, or a press outside the menu. */
   onOpenChange: (open: boolean) => void;
+  /** Whose matches are being tagged: the label and the empty line follow it. */
+  scope?: AskScope;
   /** The "Tag a match or opponent" button the menu opens above. */
   trigger: React.ReactElement;
   /** Id of the listbox, for the textarea's `aria-controls`. */
@@ -221,6 +269,7 @@ export interface AskTagMenuProps {
 export function AskTagMenu({
   open,
   onOpenChange,
+  scope = PERSONAL_ASK_SCOPE,
   trigger,
   listId,
   rows,
@@ -231,17 +280,25 @@ export function AskTagMenu({
   onChoose,
   chosen,
 }: AskTagMenuProps) {
+  const copy = askCopy(scope);
+  // In `flatAskTagRows` order: each group's offset is the rows before it.
   const groups = [
+    {
+      title: "Players",
+      rows: rows.players,
+      offset: 0,
+      icon: ASK_TAG_ICON.player,
+    },
     {
       title: "Opponents",
       rows: rows.opponents,
-      offset: 0,
+      offset: rows.players.length,
       icon: ASK_TAG_ICON.opponent,
     },
     {
       title: "Matches",
       rows: rows.matches,
-      offset: rows.opponents.length,
+      offset: rows.players.length + rows.opponents.length,
       icon: ASK_TAG_ICON.match,
     },
   ].filter((group) => group.rows.length > 0);
@@ -253,7 +310,7 @@ export function AskTagMenu({
       trigger={trigger}
       role="listbox"
       listId={listId}
-      label={ASK_TAG_MENU_LABEL}
+      label={copy.tagMenuLabel}
       // Above the composer: it sits at the foot of the thread, and a menu
       // opening downward there would open off the page.
       side="top"
@@ -272,9 +329,7 @@ export function AskTagMenu({
           role="presentation"
           className="px-2.5 py-[7px] text-[12px] text-[var(--ink-500)]"
         >
-          {query.trim()
-            ? `No opponent or match matches “${query.trim()}”`
-            : "No opponents or matches to tag"}
+          {query.trim() ? copy.tagNoMatch(query.trim()) : copy.tagEmpty}
         </p>
       ) : (
         groups.map((group) => {

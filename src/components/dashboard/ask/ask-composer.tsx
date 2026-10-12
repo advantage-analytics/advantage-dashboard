@@ -6,11 +6,12 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
+import { PERSONAL_ASK_COPY, askCopy } from "./ask-copy";
 import {
   ASK_TAG_ICON,
-  ASK_TAG_MENU_LABEL,
   AskTagMenu,
   askTagKey,
   askTagRows,
@@ -38,16 +39,21 @@ export interface AskComposerProps {
   onChange: (value: AskQuestion) => void;
   /** Send `value`. Only called when there is something to send and room to. */
   onSubmit: () => void;
-  /** What `@` can tag: the viewer's personal matches and their opponents. */
+  /**
+   * What `@` can tag: the scope's matches and their opponents, and on the
+   * team page the program's players.
+   */
   tagOptions: AskTagOptions;
+  /** Whose matches are being asked about; the personal page when omitted. */
+  scope?: AskScope;
   /** Null when the count could not be read; the route still decides. */
   quota: AskQuotaView | null;
   /** An answer is in flight. */
   pending: boolean;
 }
 
-export const ASK_PLACEHOLDER =
-  "Ask about a match, an opponent or a stretch of the season. Type @ to tag one.";
+/** The personal page's placeholder; the team's is `askCopy(scope).placeholder`. */
+export const ASK_PLACEHOLDER = PERSONAL_ASK_COPY.placeholder;
 
 /** `2026-11-01` → `Nov 1`; null for a date that cannot be read. */
 function resetDateLabel(resetsOn: string | null): string | null {
@@ -97,9 +103,11 @@ export function AskComposer({
   onChange,
   onSubmit,
   tagOptions,
+  scope = PERSONAL_ASK_SCOPE,
   quota,
   pending,
 }: AskComposerProps) {
+  const copy = askCopy(scope);
   const inputId = useId();
   const listId = useId();
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -342,7 +350,7 @@ export function AskComposer({
           id={inputId}
           rows={2}
           value={value.text}
-          placeholder={ASK_PLACEHOLDER}
+          placeholder={copy.placeholder}
           onChange={onTextChange}
           onSelect={onCaretMove}
           onKeyDown={onKeyDown}
@@ -363,6 +371,7 @@ export function AskComposer({
               if (!next) dismiss();
             }}
             listId={listId}
+            scope={scope}
             rows={rows}
             query={token?.query ?? ""}
             activeIndex={activeIndex}
@@ -388,7 +397,7 @@ export function AskComposer({
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
-                {ASK_TAG_MENU_LABEL}
+                {copy.tagMenuLabel}
               </button>
             }
           />

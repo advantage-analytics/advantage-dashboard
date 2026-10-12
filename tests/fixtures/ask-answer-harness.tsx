@@ -9,6 +9,7 @@ import {
   type AskVisual,
   type AskVisualKind,
 } from "@/lib/services/ask/events";
+import type { AskScope } from "@/lib/services/ask/scope";
 
 /**
  * One Ask answer in a real browser, in whichever state the query string
@@ -29,8 +30,21 @@ import {
  *   block; `&visual=empty-split|empty-serve|flat-trend` are the degenerate
  *   ones (every count zero, every value equal)
  * - `&advice=1`        the question asked for advice (`noAdvice`)
+ * - `&scope=team`      the team page: the answer is about a program's
+ *                      matches, and each source names the program's player
  */
 const params = new URLSearchParams(window.location.search);
+
+const TEAM: AskScope | undefined =
+  params.get("scope") === "team"
+    ? { kind: "team", programId: "program-1", programName: "Westbrook" }
+    : undefined;
+
+// The program's own player on each match — team scope only. The last match
+// is one whose seat names nobody on the roster.
+const PLAYERS: (string | null)[] = TEAM
+  ? ["Ana Sokolov", "Ana Sokolov", "Mia Dvorsky", null]
+  : [];
 
 const SOURCES: AskSourceMatch[] = [
   {
@@ -39,6 +53,7 @@ const SOURCES: AskSourceMatch[] = [
     playedOn: "2026-09-28",
     iWon: true,
     scoreText: "6-4, 6-3",
+    playerName: PLAYERS[0] ?? null,
   },
   {
     matchId: "match-sep-14",
@@ -46,6 +61,7 @@ const SOURCES: AskSourceMatch[] = [
     playedOn: "2026-09-14",
     iWon: false,
     scoreText: "4-6, 3-6",
+    playerName: PLAYERS[1] ?? null,
   },
   {
     // Stopped at a set all: the score decides nobody.
@@ -54,6 +70,7 @@ const SOURCES: AskSourceMatch[] = [
     playedOn: "2025-08-30",
     iWon: null,
     scoreText: "6-4, 3-6",
+    playerName: PLAYERS[2] ?? null,
   },
   {
     matchId: "match-unscored",
@@ -61,6 +78,7 @@ const SOURCES: AskSourceMatch[] = [
     playedOn: null,
     iWon: null,
     scoreText: null,
+    playerName: PLAYERS[3] ?? null,
   },
 ];
 
@@ -242,6 +260,6 @@ function answerFor(name: string): AskAnswerState {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <AskAnswer answer={answerFor(params.get("case") ?? "full")} />,
+  <AskAnswer answer={answerFor(params.get("case") ?? "full")} scope={TEAM} />,
 );
 document.documentElement.dataset.hydrated = "true";

@@ -37,17 +37,25 @@ import {
   type AskSourceMatch,
   type AskStatusStage,
   type AskVisual,
+  readAskSourceMatch,
   readAskVisual,
 } from "@/lib/services/ask/events";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
-export type AskTagKind = "match" | "opponent";
+/** `player` is the team page's alone: a program's player, by roster id. */
+export type AskTagKind = "match" | "opponent" | "player";
+
+const TAG_KIND_FALLBACK: Record<AskTagKind, string> = {
+  match: "Match",
+  opponent: "Opponent",
+  player: "Player",
+};
 
 /**
- * One tagged match or opponent. `kind` and `id` are what the route is sent
- * and re-resolves against the viewer's own matches; `label` is only ever
- * drawn, never trusted by the server.
+ * One tagged match, opponent or player. `kind` and `id` are what the route is
+ * sent and re-resolves against the matches the scope can read; `label` is
+ * only ever drawn, never trusted by the server.
  */
 export interface AskTag {
   kind: AskTagKind;
@@ -322,21 +330,9 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-function readSourceMatch(value: unknown): AskSourceMatch | null {
-  if (!isRecord(value) || typeof value.matchId !== "string") return null;
-  return {
-    matchId: value.matchId,
-    opponentName: stringOrNull(value.opponentName),
-    playedOn: stringOrNull(value.playedOn),
-    // Null stays null: a score that cannot say is not a loss.
-    iWon: typeof value.iWon === "boolean" ? value.iWon : null,
-    scoreText: stringOrNull(value.scoreText),
-  };
-}
-
 function readSourceMatches(value: unknown): AskSourceMatch[] | null {
   if (!Array.isArray(value)) return null;
-  return value.flatMap((row) => readSourceMatch(row) ?? []);
+  return value.flatMap((row) => readAskSourceMatch(row) ?? []);
 }
 
 /**
@@ -515,14 +511,27 @@ export interface AskRequest {
   /** Omitted for the first question of a conversation. */
   conversationId: string | null;
   question: AskQuestion;
+  /**
+   * The program a team question is about (`askScopeProgramId(scope)`); null
+   * or absent on the personal page. The route re-checks membership — this
+   * only says which of the asker's scopes the page was.
+   */
+  programId?: string | null;
 }
 
-/** The request body `POST /api/ask` reads: tags go as `kind` and `id` only. */
+/**
+ * The request body `POST /api/ask` reads: tags go as `kind` and `id` only.
+ *
+ * `programId` is sent for a team question and left out of a personal one
+ * altogether — not sent as null — so the personal page's request is the same
+ * bytes it was before team scope existed.
+ */
 export function askRequestBody(request: AskRequest) {
   return {
     ...(request.conversationId
       ? { conversationId: request.conversationId }
       : {}),
+    ...(request.programId ? { programId: request.programId } : {}),
     question: request.question.text.trim(),
     tags: request.question.tags.map(({ kind, id }) => ({ kind, id })),
   };
@@ -585,16 +594,12 @@ function readTags(value: unknown): AskTag[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((tag): AskTag[] => {
     if (!isRecord(tag) || typeof tag.id !== "string") return [];
-    if (tag.kind !== "match" && tag.kind !== "opponent") return [];
+    if (typeof tag.kind !== "string") return [];
+    if (!Object.hasOwn(TAG_KIND_FALLBACK, tag.kind)) return [];
+    const kind = tag.kind as AskTagKind;
     const label = stringOrNull(tag.label)?.trim();
     // A tag saved without a label is still a tag; it is named by its kind.
-    return [
-      {
-        kind: tag.kind,
-        id: tag.id,
-        label: label || (tag.kind === "match" ? "Match" : "Opponent"),
-      },
-    ];
+    return [{ kind, id: tag.id, label: label || TAG_KIND_FALLBACK[kind] }];
   });
 }
 
@@ -717,6 +722,8 @@ export interface AskStream {
 export function useAskStream(initial: {
   conversationId: string | null;
   messages: readonly SavedAskMessage[];
+  /** The team page's program; null or absent on the personal page. */
+  programId?: string | null;
 }): AskStream {
   const [state, dispatch] = useReducer(askThreadReducer, initial, (seed) =>
     emptyAskThread({
@@ -725,6 +732,8 @@ export function useAskStream(initial: {
     }),
   );
   const flight = useRef<AbortController | null>(null);
+  // The scope is the page's and never changes under a mounted thread.
+  const programId = initial.programId ?? null;
 
   // A stream left open by a closed page would keep reading into nothing.
   useEffect(() => () => flight.current?.abort(), []);
@@ -743,10 +752,10 @@ export function useAskStream(initial: {
     nextExchange += 1;
     dispatch({ type: "asked", id: `asked-${nextExchange}`, question: draft });
 
-    return streamAsk({ conversationId, question: draft }, dispatch, {
+    return streamAsk({ conversationId, question: draft, programId }, dispatch, {
       signal: controller.signal,
     });
-  }, [conversationId, draft, inFlight]);
+  }, [conversationId, draft, inFlight, programId]);
 
   const reset = useCallback(() => {
     flight.current?.abort();

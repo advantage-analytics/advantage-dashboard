@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Server actions for the personal Ask page.
+ * Server actions for the Ask page, personal and team.
  *
  * The caller is whoever the session cookie says, never an id from the
  * client, and every call goes through the cookie-authenticated server client
@@ -12,7 +12,20 @@
 
 import { revalidatePath } from "next/cache";
 import { isUuid } from "@/lib/admin/validation";
+import type { AskScope, askBasePath } from "@/lib/services/ask/scope";
 import { createClient } from "@/lib/supabase/server";
+
+/**
+ * The two pages a delete can have been made from. Spelled out here rather
+ * than taken from the caller: a server action's arguments are whatever the
+ * client sent, and `revalidatePath` must never be handed one of them. The
+ * type ties the two strings to `askBasePath()`, so a renamed route is a type
+ * error here rather than a list that quietly stops refreshing.
+ */
+const ASK_PATH: Record<AskScope["kind"], ReturnType<typeof askBasePath>> = {
+  personal: "/dashboard/ask",
+  team: "/dashboard/team/ask",
+};
 
 export type AskActionResult =
   { ok: true } | { ok: false; error: "invalid" | "forbidden" | "failed" };
@@ -27,9 +40,15 @@ export type AskActionResult =
  *
  * It never touches `ask_usage`: a deleted conversation's questions stay
  * counted against the month.
+ *
+ * `scopeKind` says which page's list to re-read and nothing else — it grants
+ * nothing and scopes nothing. The conversation is the caller's own whichever
+ * page it was asked from, and anything that is not exactly `"team"` is read
+ * as the personal page.
  */
 export async function deleteAskConversation(
   conversationId: string,
+  scopeKind: AskScope["kind"] = "personal",
 ): Promise<AskActionResult> {
   if (!isUuid(conversationId)) return { ok: false, error: "invalid" };
 
@@ -49,6 +68,6 @@ export async function deleteAskConversation(
     return { ok: false, error: "failed" };
   }
 
-  revalidatePath("/dashboard/ask");
+  revalidatePath(scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal);
   return { ok: true };
 }

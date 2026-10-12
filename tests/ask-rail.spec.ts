@@ -609,3 +609,30 @@ test.describe("deleting an earlier question", () => {
     }
   });
 });
+
+test.describe("on the team page", () => {
+  test("every earlier question opens on the team page, never the personal one", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team");
+
+    const links = await rail(page).getByRole("link").all();
+    expect(links).toHaveLength(4);
+    for (const link of links) {
+      await expect(link).toHaveAttribute(
+        "href",
+        /^\/dashboard\/team\/ask\?c=[0-9a-f-]{36}$/,
+      );
+    }
+  });
+
+  test("the rail's own words are unchanged: the questions and the limit are still the asker's", async ({
+    page,
+  }) => {
+    await openFixture(page, "?scope=team&earlier=none");
+
+    await expect(rail(page)).toContainText("Questions you ask are kept here.");
+    await expect(newQuestion(page)).toBeVisible();
+    await expect(limit(page)).toBeVisible();
+  });
+});
