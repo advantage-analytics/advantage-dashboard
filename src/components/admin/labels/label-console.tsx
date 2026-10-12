@@ -2013,14 +2013,14 @@ export function LabelConsole({
   const checkOpenPoint = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous open flag, as the header's flag does.
   const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
-  // The marks, the set that doesn't add up and every amber slot between the
-  // rows, as the rail's header steps them (`slotStops`).
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
     () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
     [operable, points, session.adScoring],
   );
+  // The marks, the set that doesn't add up and every amber slot between the
+  // rows, as the rail's header steps them.
   const openMarks = useMemo(() => {
     const slots: readonly FlagStop[] = slotJumpStops;
     if (!liveMarks) return slots;
