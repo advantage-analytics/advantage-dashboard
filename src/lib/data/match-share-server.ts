@@ -31,6 +31,13 @@ import {
   sharedMatchWinner,
 } from "@/lib/data/match-share-format";
 import type { Match } from "@/lib/data/types";
+import {
+  DEFAULT_BANDS,
+  rowToBandSettings,
+  type BandSettings,
+  type BandSettingsDbRow,
+} from "@/lib/data/viz-bands";
+import { BAND_COLUMNS } from "@/lib/data/viz-bands-write";
 
 /**
  * Public read-only match links (`/m/[token]`).
@@ -55,6 +62,10 @@ import type { Match } from "@/lib/data/types";
  * shared by a coach falls to the roster seat, exactly as the coach sees it.
  * The columns are read as stored and never reordered (guardrails §4).
  *
+ * A link carries the Statistics view always and the Visualizations view when
+ * its maker left that on (`include_visualizations`); the shot rows the court
+ * charts read are sent only then. Never the video.
+ *
  * What the public page does NOT get: point bookmarks (they carry teammates'
  * user ids), the viewer's averages and KPI history (an anonymous reader has
  * no baseline), and nothing from `processing_jobs` beyond the analysed window
@@ -71,6 +82,8 @@ export interface SharePerson {
 export interface MatchShareLink {
   /** The absolute public URL, from `siteUrl()` — the one to copy and mail. */
   url: string;
+  /** The link also shows the Visualizations view (`include_visualizations`). */
+  includesVisualizations: boolean;
   /**
    * Who turned the link on and when ("Sep 26"), for the popover's closing
    * note. Null right after the viewer turns it on — the action hands back
@@ -241,7 +254,7 @@ export async function getMatchShareState(
     await Promise.all([
       supabase
         .from("match_share_links")
-        .select("token, created_by, created_at")
+        .select("token, created_by, created_at, include_visualizations")
         .eq("match_id", matchId)
         .maybeSingle(),
       supabase.rpc("can_share_match", { p_match_id: matchId }),
@@ -285,6 +298,8 @@ export async function getMatchShareState(
     link: token
       ? {
           url: matchShareUrl(token),
+          includesVisualizations:
+            linkResult.data?.include_visualizations === true,
           madeBy,
           madeOn: createdAt ? shortDate(createdAt) : null,
         }
@@ -331,6 +346,18 @@ export interface SharedMatchData {
   match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
+  /**
+   * The link also shows the Visualizations view. `points` carry their shots
+   * only when it does.
+   */
+  includesVisualizations: boolean;
+  /**
+   * The depth/contact bands the Visualizations view buckets by: the ones the
+   * match's own workspace follows (its program's, or the sharer's personal
+   * ones), so the public court reads as the sharer's does. `DEFAULT_BANDS`
+   * when that workspace never saved any, or the link has no visualizations.
+   */
+  bandSettings: BandSettings;
   /** The sharer's insight summary, already `sides.pick`ed; null when none. */
   summary: string | null;
   /**
@@ -406,6 +433,29 @@ async function resolveSharerIds(
 }
 
 /**
+ * The bands of the workspace a shared match lives in — `viz_band_settings`
+ * is keyed by `Workspace.id`, the program's id for a team match and the
+ * user's own for a personal one. Any miss is `DEFAULT_BANDS`, as in
+ * `getBandSettings`.
+ */
+async function resolveSharedBands(
+  admin: SupabaseClient,
+  accountId: string | null,
+): Promise<BandSettings> {
+  if (!accountId) return DEFAULT_BANDS;
+  const { data, error } = await admin
+    .from("viz_band_settings")
+    .select(BAND_COLUMNS)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (error) {
+    logShareError("read the shared match's bands", error, { accountId });
+    return DEFAULT_BANDS;
+  }
+  return rowToBandSettings((data as BandSettingsDbRow | null) ?? null);
+}
+
+/**
  * The match behind a share token, or null. `cache()`d so `page.tsx`,
  * `generateMetadata` and `opengraph-image.tsx` share one read per request.
  */
@@ -416,7 +466,7 @@ export const getSharedMatchData = cache(
 
     const { data: link, error: linkError } = await admin
       .from("match_share_links")
-      .select("match_id, created_by, created_at")
+      .select("match_id, created_by, created_at, include_visualizations")
       .eq("token", token)
       .maybeSingle();
     if (linkError) {
@@ -447,6 +497,7 @@ export const getSharedMatchData = cache(
       (id): id is string => id != null,
     );
     const sharerUserId = (link.created_by as string | null) ?? null;
+    const includesVisualizations = link.include_visualizations === true;
     const [
       statsResult,
       points,
@@ -455,6 +506,7 @@ export const getSharedMatchData = cache(
       profileResult,
       windowSeconds,
       sharedBy,
+      bandSettings,
     ] = await Promise.all([
       getMatchStatisticsFromSupabase(matchId, admin),
       getMatchPointsFromSupabase(matchId, admin, { includeBookmarks: false }),
@@ -471,6 +523,9 @@ export const getSharedMatchData = cache(
           }),
       resolveAnalysedWindowSeconds(dbRow),
       resolveSharedBy(admin, sharerUserId, link.created_at as string),
+      includesVisualizations
+        ? resolveSharedBands(admin, dbRow.program_id ?? sharerUserId)
+        : Promise.resolve(DEFAULT_BANDS),
     ]);
 
     // A failed points read is unknown, not zero points: same as every other
@@ -512,11 +567,14 @@ export const getSharedMatchData = cache(
     );
     const summary = insight?.summary?.trim() || null;
 
-    // Shot rows stay on the server. Only the Video and Visualizations views
-    // read `point.shots`, and the public page renders neither — shipping
-    // every shot of a full match to the browser would be most of the page's
-    // serialized payload for nothing. `shots` is optional on `MatchPoint`.
-    const pagePoints = points.map((point) => ({ ...point, shots: undefined }));
+    // Shot rows stay on the server unless the link carries the
+    // Visualizations view, the one public view that reads `point.shots` —
+    // shipping every shot of a full match to the browser would otherwise be
+    // most of the page's serialized payload for nothing. `shots` is optional
+    // on `MatchPoint`.
+    const pagePoints = includesVisualizations
+      ? points
+      : points.map((point) => ({ ...point, shots: undefined }));
 
     const winner = sharedMatchWinner(dbRow.score, match.matchContext);
 
@@ -524,6 +582,8 @@ export const getSharedMatchData = cache(
       match,
       statsResult,
       points: pagePoints,
+      includesVisualizations,
+      bandSettings,
       summary,
       sharedBy,
       winner,

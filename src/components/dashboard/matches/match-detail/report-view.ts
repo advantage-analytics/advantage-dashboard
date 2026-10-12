@@ -30,13 +30,25 @@ export function isReportView(value: unknown): value is ReportView {
  * error. `fallback` is the reader's "Match report opens at" preference
  * (Settings › Preferences), Statistics when there is none. Mirrors
  * `parseMatchTab`.
+ *
+ * `allowed` is for a report that does not offer every view — the public share
+ * page (`/m/[token]`), whose link carries Statistics and perhaps
+ * Visualizations. A view outside it reads as `fallback` too, so a pasted
+ * `?tab=film` opens the report rather than an empty pane.
  */
 export function parseReportView(
   value: string | null | undefined,
   fallback: ReportView = "statistics",
+  allowed?: readonly ReportView[],
 ): ReportView {
-  return isReportView(value) ? value : fallback;
+  if (!isReportView(value)) return fallback;
+  return !allowed || allowed.includes(value) ? value : fallback;
 }
+
+/** Every view, in rail order — what a report offers unless told otherwise. */
+export const ALL_REPORT_VIEWS: readonly ReportView[] = REPORT_VIEWS.map(
+  (view) => view.value,
+);
 
 /**
  * The active view → the query string, carrying every other parameter through

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  ALL_REPORT_VIEWS,
   parseReportView,
   reportViewQuery,
   type ReportView,
@@ -154,6 +155,12 @@ export interface MatchReportMeta {
    * `/dashboard`.
    */
   readOnly: boolean;
+  /**
+   * The views this report offers, in rail order. All three under
+   * `/dashboard`; on `/m/[token]` only what the link carries. The rail
+   * switcher draws these rows and `?tab=` cannot open anything else.
+   */
+  views: readonly ReportView[];
 }
 
 export interface MatchReportContextValue {
@@ -174,8 +181,10 @@ export function useMatchReport(): MatchReportContextValue {
 
 export interface MatchReportProviderProps extends Omit<
   MatchReportMeta,
-  "readOnly" | "statsUnavailable" | "foldUnreconciled"
+  "readOnly" | "statsUnavailable" | "foldUnreconciled" | "views"
 > {
+  /** See `MatchReportMeta.views`. Defaults to every view. */
+  views?: readonly ReportView[];
   /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
   statsUnavailable?: boolean;
   /** See `MatchReportMeta.foldUnreconciled`. Defaults to `false`. */
@@ -207,13 +216,14 @@ export function MatchReportProvider({
   canEditBands,
   unit,
   readOnly = false,
+  views = ALL_REPORT_VIEWS,
   defaultView = "statistics",
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // Anything that is not a known view reads as the default, never an error.
-  const view = parseReportView(searchParams.get("tab"), defaultView);
+  const view = parseReportView(searchParams.get("tab"), defaultView, views);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
@@ -282,6 +292,7 @@ export function MatchReportProvider({
       canEditBands,
       unit,
       readOnly,
+      views,
     }),
     [
       matchId,
@@ -300,6 +311,7 @@ export function MatchReportProvider({
       canEditBands,
       unit,
       readOnly,
+      views,
     ],
   );
 

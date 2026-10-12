@@ -5,6 +5,7 @@ import {
   realTournamentName,
   sharedMatchPair,
   sharedMatchWinner,
+  shareScopeLabel,
 } from "@/lib/data/match-share-format";
 
 /**
@@ -69,4 +70,9 @@ test("the Unknown Event placeholder reads as no tournament", () => {
   expect(realTournamentName(" Spring Invitational ")).toBe(
     "Spring Invitational",
   );
+});
+
+test("a link's scope is named the same way wherever it is printed", () => {
+  expect(shareScopeLabel(false)).toBe("Statistics only");
+  expect(shareScopeLabel(true)).toBe("No video");
 });

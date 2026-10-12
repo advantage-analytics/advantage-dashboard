@@ -1,12 +1,14 @@
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import type { SharedBy } from "@/lib/data/match-share-server";
+import { shareScopeLabel } from "@/lib/data/match-share-format";
 
 /**
  * The foot of the shared report's rail (`/m/[token]`): who shared this, when,
  * and what the share covers.
  *
  * One block beside one mark: the sharer's avatar, then two lines —
- * "Shared from Advantage by <name>" over "<date> · Statistics only". The
+ * "Shared from Advantage by <name>" over "<date> · Statistics only" (or
+ * "No video", when the link carries the visualizations too). The
  * scope sits on the date line because it is a fact about the share, like
  * the date, not a caption about the person. It was a separate lock line
  * under the block; indented and wrapping at the rail's 300px, it read as a
@@ -16,7 +18,14 @@ import type { SharedBy } from "@/lib/data/match-share-server";
  * With no sharer to name — account gone, or a profile with no name — the
  * product stands alone, and the scope still says what the page holds.
  */
-export function SharedByFooter({ sharedBy }: { sharedBy: SharedBy | null }) {
+export function SharedByFooter({
+  sharedBy,
+  includesVisualizations,
+}: {
+  sharedBy: SharedBy | null;
+  includesVisualizations: boolean;
+}) {
+  const scope = shareScopeLabel(includesVisualizations);
   return (
     <div className="flex items-center gap-2.5 border-t border-[var(--border-hairline)] px-5 pt-4 pb-[18px]">
       {sharedBy ? (
@@ -43,9 +52,7 @@ export function SharedByFooter({ sharedBy }: { sharedBy: SharedBy | null }) {
           )}
         </span>
         <span className="text-micro text-[var(--ink-500)]">
-          {sharedBy
-            ? `${sharedBy.sharedOn} · Statistics only`
-            : "Statistics only"}
+          {sharedBy ? `${sharedBy.sharedOn} · ${scope}` : scope}
         </span>
       </div>
     </div>

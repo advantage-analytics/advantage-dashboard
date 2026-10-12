@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { FloatMenuDivider } from "@/components/ui/float-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AccessOption,
   SECONDARY_BUTTON,
@@ -28,6 +29,7 @@ import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import {
   disableMatchShare,
   enableMatchShare,
+  setMatchShareVisualizations,
 } from "@/app/dashboard/matches/(detail)/[matchId]/share-actions";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -37,7 +39,10 @@ import type {
   MatchShareState,
   SharePerson,
 } from "@/lib/data/match-share-server";
-import { realTournamentName } from "@/lib/data/match-share-format";
+import {
+  realTournamentName,
+  shareScopeLabel,
+} from "@/lib/data/match-share-format";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
@@ -226,9 +231,13 @@ export function ShareRailTrigger({
  *
  * Below a hairline sits whatever the chosen rung can hand out — nothing for
  * "Only you", the `/dashboard` URL for a team (members sign in to open it),
- * the public link plus Email and More options for "Anyone" — and under a
- * second hairline one closing sentence: who made the link and when, or that
- * links carry statistics only.
+ * the public link, Email and More options, and what the link includes for
+ * "Anyone" — and under a second hairline one closing sentence: who made the
+ * link and when, or that links never carry the video.
+ *
+ * "Include visualizations" is the link's one option: Statistics are always on
+ * it, and the court charts ride along unless the box is cleared. It edits the
+ * link in place — the URL already handed out keeps working either way.
  *
  * Choosing the public rung turns the link on at once (optimistic, settling on
  * the server's answer). Stepping back down asks first, in place of the link
@@ -306,7 +315,30 @@ export function SharePopoverPanel({
         setError("Couldn't update sharing. Try again.");
         return;
       }
-      setLink(result.url ? { url: result.url } : null);
+      setLink(
+        result.url
+          ? {
+              url: result.url,
+              includesVisualizations: result.includesVisualizations,
+            }
+          : null,
+      );
+    });
+  }
+
+  // Optimistic like the ladder: the box moves at once and settles on the
+  // server's answer, or steps back with the error.
+  function setVisualizations(next: boolean) {
+    if (!link || pending) return;
+    const before = link;
+    setError(null);
+    setLink({ ...before, includesVisualizations: next });
+    startTransition(async () => {
+      const result = await setMatchShareVisualizations(match.id, next);
+      if (!result.ok) {
+        setLink(before);
+        setError("Couldn't update the link. Try again.");
+      }
     });
   }
 
@@ -389,6 +421,23 @@ export function SharePopoverPanel({
             </button>
           )}
         </div>
+        {/* A form row (DS › Checkbox): the label carries the sentence and
+            toggles the box. */}
+        <label className="flex cursor-pointer items-start gap-2 pt-0.5">
+          <Checkbox
+            checked={link.includesVisualizations}
+            onChange={setVisualizations}
+            className="mt-px"
+          />
+          <span className="flex min-w-0 flex-col gap-px">
+            <span className="text-[12px] leading-[16px] text-[var(--ink-700)]">
+              Include visualizations
+            </span>
+            <span className="text-micro leading-[15px] text-[var(--ink-500)]">
+              Serve, return and rally court charts
+            </span>
+          </span>
+        </label>
       </ActionBlock>
     );
   } else if (team?.teamUrl && (locked || !isPublic)) {
@@ -427,13 +476,13 @@ export function SharePopoverPanel({
         />
         {`Made ${link.madeOn ? `${link.madeOn} ` : ""}by ${
           link.madeBy.isViewer ? "you" : link.madeBy.name
-        } · Statistics only`}
+        } · ${shareScopeLabel(link.includesVisualizations)}`}
       </>
     );
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
-    note = "Links show statistics only — never the video.";
+    note = "Links never include the video.";
   }
 
   return (

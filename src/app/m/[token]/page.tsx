@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import nextDynamic from "next/dynamic";
 import Link from "next/link";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
 import { JoinPane } from "@/components/join/join-pane";
@@ -12,6 +13,9 @@ import {
   MatchReportSpacer,
   MatchReportWhen,
 } from "@/components/dashboard/matches/match-detail/match-report";
+import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
+import type { ReportView } from "@/components/dashboard/matches/match-detail/report-view";
+import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import {
   MatchReportTitle,
@@ -20,8 +24,10 @@ import {
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { SharedByFooter } from "@/components/public/shared-by-footer";
-import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
-import { MatchReportPending } from "@/components/dashboard/loading/match-report-pending";
+import {
+  MatchReportPending,
+  VisualizationsPanePending,
+} from "@/components/dashboard/loading/match-report-pending";
 import { getSharedMatchData } from "@/lib/data/match-share-server";
 import { readShareToken } from "@/lib/data/match-share-format";
 import { formatScoreText, playedSets } from "@/lib/ui/score-format";
@@ -33,9 +39,15 @@ import { formatScoreText, playedSets } from "@/lib/ui/score-format";
  * from the same parts — the rail scoreboard, the title row, the Statistics
  * view — under `MatchReportProvider readOnly`. What is left out is everything
  * that acts or leads back into the app: Share, Compare, the More menu (review
- * score, delete), the view switcher, the Visualizations and Video views
- * (the video is a short-lived signed URL, and bookmarks write), and the
- * awaiting-analysis progress with its retry. A match still analysing draws
+ * score, delete), the Video view (the video is a short-lived signed URL, and
+ * bookmarks write), and the awaiting-analysis progress with its retry.
+ *
+ * The Visualizations view is on the page when the link's maker left it on
+ * (`includesVisualizations`), and the rail then grows the view switcher with
+ * those two rows. It is the dashboard's `ShotsTab` under `readOnly`: the
+ * default cuts, filters and the fullscreen viewer, with nothing a workspace
+ * owns (saved views, band editing). A link without it has one view and no
+ * switcher, as before. A match still analysing draws
  * the scoreboard and an empty Statistics view rather than a pipeline state.
  *
  * `force-dynamic`: the answer depends on a row that is deleted the moment the
@@ -44,6 +56,19 @@ import { formatScoreText, playedSets } from "@/lib/ui/score-format";
  * `robots: noindex` — a share link is for the people it was sent to.
  */
 export const dynamic = "force-dynamic";
+
+// Code-split as on the dashboard page: a reader who stays on Statistics, or
+// whose link has no visualizations, never fetches the court.
+const ShotsTab = nextDynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/shots/shots-tab").then(
+      (m) => m.ShotsTab,
+    ),
+  { loading: () => <VisualizationsPanePending /> },
+);
+
+const STATISTICS_ONLY: readonly ReportView[] = ["statistics"];
+const WITH_VISUALIZATIONS: readonly ReportView[] = ["statistics", "shots"];
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -100,7 +125,15 @@ export default async function SharedMatchPage({ params }: PageProps) {
     );
   }
 
-  const { match, statsResult, points, summary, sharedBy } = data;
+  const {
+    match,
+    statsResult,
+    points,
+    summary,
+    sharedBy,
+    includesVisualizations,
+    bandSettings,
+  } = data;
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
   const statsPublished = Boolean(p1 && p2);
@@ -117,44 +150,61 @@ export default async function SharedMatchPage({ params }: PageProps) {
           Suspense boundary above it on a page that is not itself a client
           component. */}
       <Suspense fallback={<MatchReportPending view="statistics" />}>
-        <MatchReportProvider
-          matchId={match.id}
-          summary={summary}
-          canCompare={false}
-          isDerived={isDerived}
-          statsPublished={statsPublished}
-          hasPlayableVideo={false}
-          savedViews={[]}
-          workspaceRole="player"
-          workspaceKind="personal"
-          workspaceName=""
-          bandSettings={DEFAULT_BANDS}
-          canEditBands={false}
-          unit="ft"
-          defaultView="statistics"
-          readOnly
-        >
-          <MatchReportFrame>
-            <MatchReportRail>
-              <MatchReportScoreboard />
-              <MatchReportSpacer />
-              <SharedByFooter sharedBy={sharedBy} />
-            </MatchReportRail>
+        {/* The Visualizations view's filters read hands and serve order from
+            this context, as on the dashboard. Nothing here seeds or draws
+            the match filters themselves — those live on the Video view. */}
+        <MatchFiltersProvider>
+          <MatchReportProvider
+            matchId={match.id}
+            summary={summary}
+            canCompare={false}
+            isDerived={isDerived}
+            statsPublished={statsPublished}
+            hasPlayableVideo={false}
+            savedViews={[]}
+            workspaceRole="player"
+            workspaceKind="personal"
+            workspaceName=""
+            bandSettings={bandSettings}
+            views={
+              includesVisualizations ? WITH_VISUALIZATIONS : STATISTICS_ONLY
+            }
+            canEditBands={false}
+            unit="ft"
+            defaultView="statistics"
+            readOnly
+          >
+            <MatchReportFrame>
+              <MatchReportRail>
+                <MatchReportScoreboard />
+                {includesVisualizations && <MatchReportViewSwitcher />}
+                <MatchReportSpacer />
+                <SharedByFooter
+                  sharedBy={sharedBy}
+                  includesVisualizations={includesVisualizations}
+                />
+              </MatchReportRail>
 
-            <MatchReportPane>
-              <MatchReportTitleRow>
-                <div className="min-w-0">
-                  <MatchReportTitle />
-                  <MatchReportFacts />
-                </div>
-              </MatchReportTitleRow>
+              <MatchReportPane>
+                <MatchReportTitleRow>
+                  <div className="min-w-0">
+                    <MatchReportTitle />
+                    <MatchReportFacts />
+                  </div>
+                </MatchReportTitleRow>
 
-              <MatchReportWhen view="statistics">
-                <StatisticsView />
-              </MatchReportWhen>
-            </MatchReportPane>
-          </MatchReportFrame>
-        </MatchReportProvider>
+                <MatchReportWhen view="statistics">
+                  <StatisticsView />
+                </MatchReportWhen>
+                {includesVisualizations && (
+                  <MatchReportWhen view="shots">
+                    <ShotsTab />
+                  </MatchReportWhen>
+                )}
+              </MatchReportPane>
+            </MatchReportFrame>
+          </MatchReportProvider>
+        </MatchFiltersProvider>
       </Suspense>
     </MatchDataProvider>
   );

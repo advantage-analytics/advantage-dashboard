@@ -252,6 +252,58 @@ test.describe("match_share_links RLS (live)", () => {
     await removeLink();
   });
 
+  test("what a link includes: sharers can change that one column, nobody can change the token, and a member changes nothing", async () => {
+    const insert = await creator.client.from("match_share_links").insert({
+      match_id: matchId,
+      token: `${MARK}-opts`,
+      created_by: creator.userId,
+    });
+    expect(insert.error).toBeNull();
+
+    const read = async () =>
+      (
+        await creator.client
+          .from("match_share_links")
+          .select("token, include_visualizations")
+          .eq("match_id", matchId!)
+          .single()
+      ).data;
+    // A link made without asking stays statistics-only.
+    expect((await read())?.include_visualizations).toBe(false);
+
+    for (const s of [seated, staff]) {
+      const on = await s.client
+        .from("match_share_links")
+        .update({ include_visualizations: true })
+        .eq("match_id", matchId!);
+      expect(on.error).toBeNull();
+      expect((await read())?.include_visualizations).toBe(true);
+      await creator.client
+        .from("match_share_links")
+        .update({ include_visualizations: false })
+        .eq("match_id", matchId!);
+    }
+
+    // The column grant, not the policy: even a sharer cannot re-key a link.
+    const rekey = await creator.client
+      .from("match_share_links")
+      .update({ token: `${MARK}-rekeyed` })
+      .eq("match_id", matchId!);
+    expect(rekey.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+    expect((await read())?.token).toBe(`${MARK}-opts`);
+
+    for (const s of [member, stranger]) {
+      const update = await s.client
+        .from("match_share_links")
+        .update({ include_visualizations: true })
+        .eq("match_id", matchId!);
+      expect(update.error).toBeNull();
+      expect((await read())?.include_visualizations).toBe(false);
+    }
+
+    await removeLink();
+  });
+
   test("an anonymous client reads nothing", async () => {
     const anon = createClient(SUPABASE_URL!, ANON_KEY!);
     const { data, error } = await anon

@@ -11,16 +11,21 @@ import { ReportPaneEmpty } from "@/components/dashboard/matches/match-detail/rep
  * per-player `EmptySubjectRow` still handles the one-player case.
  */
 export function VizEmpty() {
-  const { actions } = useMatchReport();
+  const { actions, meta } = useMatchReport();
   return (
     <ReportPaneEmpty
       testId="viz-empty"
       heading="Nothing to plot yet"
       body="Serve and return placement is drawn from the points in a match. They arrive with a video analysed by Advantage Intelligence or a SwingVision export."
-      action={{
-        label: "Open the Video tab",
-        onClick: () => actions.selectView("film"),
-      }}
+      // The public share page has no Video view to open.
+      action={
+        meta.readOnly
+          ? undefined
+          : {
+              label: "Open the Video tab",
+              onClick: () => actions.selectView("film"),
+            }
+      }
     />
   );
 }
