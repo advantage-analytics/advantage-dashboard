@@ -23,9 +23,12 @@ import {
   type AskRow,
   formatAskCell,
   citesSameCellAsRange,
+  citesScopeTotalPerRow,
+  labelNamesAnotherRow,
   recitesOneCell,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
+import { uniqueRowLabelTokens } from "@/lib/services/ask/facts";
 import {
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
@@ -1910,5 +1913,287 @@ test.describe("a sentence that cites one cell as both ends of a range", () => {
     expect(text).toBe("");
     expect(result.headline).toBe("Your first serve changed.");
     expect(result.failure).toBeNull();
+  });
+});
+
+// ── The scope total given to each row ───────────────────────────────────────
+
+test.describe("the scope's match total cited once per row", () => {
+  const SURFACES: AskRow[] = [
+    { surface: "Clay", win_pct: 16.7, group_matches: 6, matches_in_scope: 18 },
+    { surface: "Hard", win_pct: 75, group_matches: 12, matches_in_scope: 18 },
+  ];
+
+  async function run(chunks: string[], rows: AskRow[] = SURFACES) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+    return {
+      result,
+      text: seen
+        .flatMap((event) => (event.type === "text" ? [event.delta] : []))
+        .join(""),
+    };
+  }
+
+  test("citesScopeTotalPerRow: the scope cell twice, whichever rows it is read from", () => {
+    expect(
+      citesScopeTotalPerRow(
+        "{{r1.matches_in_scope}} matches on clay and {{r2.matches_in_scope}} matches on hard courts.",
+      ),
+    ).toBe(true);
+    expect(
+      citesScopeTotalPerRow(
+        "{{r1.matches_in_scope}} on clay and {{ r1.matches_in_scope }} on hard.",
+      ),
+    ).toBe(true);
+    expect(
+      citesScopeTotalPerRow(
+        "You played {{r1.group_matches}} on clay and {{r2.group_matches}} on hard, out of {{r1.matches_in_scope}}.",
+      ),
+    ).toBe(false);
+  });
+
+  test("drops the body sentence: '18 matches on clay and 18 matches on hard courts'", async () => {
+    const { result, text } = await run([
+      "You win more often on hard courts.\n\n",
+      "You played {{r1.matches_in_scope}} matches on clay and {{r2.matches_in_scope}} matches on hard courts. ",
+      "You played {{r1.group_matches}} on clay and {{r2.group_matches}} on hard, out of {{r1.matches_in_scope}} matches.",
+    ]);
+    expect(text).toBe(
+      "You played 6 on clay and 12 on hard, out of 18 matches.",
+    );
+    expect(result.droppedSentences).toBe(1);
+    expect(result.failure).toBeNull();
+  });
+
+  test("a caption that does it falls back to the plain count; the chart stays", async () => {
+    const { result } = await run([
+      "You win more often on hard courts.\n",
+      "CHART: table | From {{r1.matches_in_scope}} matches on clay and {{r2.matches_in_scope}} matches on hard courts.\n",
+      "COLUMNS: Win percentage\n",
+      "ROW: Clay | {{r1.win_pct}}\n",
+      "ROW: Hard | {{r2.win_pct}}\n",
+    ]);
+    expect(result.visual).toEqual({
+      kind: "table",
+      caption: "From 18 matches.",
+      columns: ["Win percentage"],
+      rows: [
+        { label: "Clay", cells: ["16.7%"] },
+        { label: "Hard", cells: ["75%"] },
+      ],
+    });
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.droppedSentences).toBe(1);
+  });
+
+  test("with a per-row count in the result, a caption that names one row beside the scope total falls back too", async () => {
+    const pinned = await run([
+      "Headline.\nCHART: table | Clay, from {{r1.matches_in_scope}} matches.\nCOLUMNS: Win percentage\nROW: Clay | {{r1.win_pct}}\n",
+    ]);
+    expect(pinned.result.visual).toMatchObject({ caption: "From 18 matches." });
+
+    // No per-row count column: the caption stands.
+    const bare = await run(
+      [
+        "Headline.\nCHART: table | Clay, from {{r1.matches_in_scope}} matches.\nCOLUMNS: Win percentage\nROW: Clay | {{r1.win_pct}}\n",
+      ],
+      SURFACES.map(({ group_matches: _own, ...row }) => row),
+    );
+    expect(bare.result.visual).toMatchObject({
+      caption: "Clay, from 18 matches.",
+    });
+
+    // A caption that names no row stands.
+    const plain = await run([
+      "Headline.\nCHART: table | By surface, from {{r1.matches_in_scope}} matches.\nCOLUMNS: Win percentage\nROW: Clay | {{r1.win_pct}}\n",
+    ]);
+    expect(plain.result.visual).toMatchObject({
+      caption: "By surface, from 18 matches.",
+    });
+  });
+
+  test("the headline is never dropped: the spans are cut out of it", async () => {
+    const { result } = await run([
+      "You played {{r1.matches_in_scope}} matches on clay and {{r2.matches_in_scope}} matches on hard courts.\n\nThe body.",
+    ]);
+    expect(result.headline).toBe("You played on clay and on hard courts.");
+    expect(result.droppedSentences).toBe(1);
+  });
+
+  test("a one-row result is left alone: there the total is that row's", async () => {
+    const { text, result } = await run(
+      [
+        "Headline.\n\nFrom {{r1.matches_in_scope}} matches, all {{r1.matches_in_scope}} of them on clay.",
+      ],
+      [SURFACES[0]],
+    );
+    expect(text).toBe("From 18 matches, all 18 of them on clay.");
+    expect(result.droppedSentences).toBe(0);
+  });
+});
+
+// ── A label that names one row beside another row's cells ───────────────────
+
+test.describe("a label that names one row and cites another", () => {
+  const HANDS: AskRow[] = [
+    { opponent_hand: "right", second_serve_won_pct: 54.6, win_pct: 60 },
+    { opponent_hand: "left", second_serve_won_pct: 40, win_pct: 40 },
+  ];
+  const tokens = uniqueRowLabelTokens(HANDS);
+
+  async function run(chunks: string[], rows: AskRow[] = HANDS) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    for await (const _event of events) {
+      // drained
+    }
+    return result;
+  }
+
+  test("labelNamesAnotherRow: a unique row word in the label, every cell from other rows", () => {
+    expect(
+      labelNamesAnotherRow(
+        " Second-serve win percentage against left-handers ",
+        " {{r1.second_serve_won_pct}}",
+        HANDS,
+        tokens,
+      ),
+    ).toBe(true);
+    // The right row.
+    expect(
+      labelNamesAnotherRow(
+        "Against left-handers",
+        "{{r2.second_serve_won_pct}}",
+        HANDS,
+        tokens,
+      ),
+    ).toBe(false);
+    // Names both rows, cites one of them.
+    expect(
+      labelNamesAnotherRow(
+        "Left against right",
+        "{{r1.win_pct}}",
+        HANDS,
+        tokens,
+      ),
+    ).toBe(false);
+    // Names no row.
+    expect(
+      labelNamesAnotherRow("Win percentage", "{{r1.win_pct}}", HANDS, tokens),
+    ).toBe(false);
+    // Whole words only: "leftover" is not "left".
+    expect(
+      labelNamesAnotherRow("Leftover points", "{{r1.win_pct}}", HANDS, tokens),
+    ).toBe(false);
+    // The scope total belongs to no row.
+    expect(
+      labelNamesAnotherRow(
+        "Matches against left-handers",
+        "{{r1.matches_in_scope}}",
+        [
+          { ...HANDS[0], matches_in_scope: 15 },
+          { ...HANDS[1], matches_in_scope: 15 },
+        ],
+        tokens,
+      ),
+    ).toBe(false);
+  });
+
+  test("a cell only the first row holds — the server's summary cells — is never judged", () => {
+    const rows: AskRow[] = [
+      {
+        played_on: "2026-02-07",
+        opponent_name: "Sam Ortiz",
+        aces: 1,
+        high_aces: 9,
+      },
+      { played_on: "2026-03-07", opponent_name: "Marek Dvorsky", aces: 9 },
+    ];
+    expect(
+      labelNamesAnotherRow(
+        "Most aces, against Dvorsky",
+        "{{r1.high_aces}}",
+        rows,
+        uniqueRowLabelTokens(rows),
+      ),
+    ).toBe(false);
+  });
+
+  test("drops the figure: 'against left-handers = 54.6%' over the right-handers row", async () => {
+    const result = await run([
+      "Your second serve differs by opponent hand.\n",
+      "FIGURE: Second-serve win percentage against left-handers = {{r1.second_serve_won_pct}}\n",
+      "FIGURE: Second-serve win percentage against right-handers = {{r1.second_serve_won_pct}}\n",
+      "\nThe body.",
+    ]);
+    expect(result.figures).toEqual([
+      {
+        label: "Second-serve win percentage against right-handers",
+        value: "54.6%",
+      },
+    ]);
+    expect(result.droppedFigures).toEqual([
+      "FIGURE: Second-serve win percentage against left-handers = {{r1.second_serve_won_pct}}",
+    ]);
+    expect(result.failure).toBeNull();
+    expect(result.text).toBe("The body.");
+  });
+
+  test("drops the table row whose label names another row, and keeps the others", async () => {
+    const result = await run([
+      "Your second serve differs by opponent hand.\n",
+      "CHART: table | Second-serve points won by opponent hand.\n",
+      "COLUMNS: Points won\n",
+      "ROW: Left-handers | {{r1.second_serve_won_pct}}\n",
+      "ROW: Right-handers | {{r1.second_serve_won_pct}}\n",
+      "\nThe body.",
+    ]);
+    expect(result.visual).toMatchObject({
+      kind: "table",
+      rows: [{ label: "Right-handers", cells: ["54.6%"] }],
+    });
+    expect(result.droppedVisualRows).toBe(1);
+  });
+
+  test("a table with one column per row — the label names a measure — is untouched", async () => {
+    const result = await run([
+      "Your second serve differs by opponent hand.\n",
+      "CHART: table | By opponent hand.\n",
+      "COLUMNS: Left-handers | Right-handers\n",
+      "ROW: Second-serve points won | {{r2.second_serve_won_pct}} | {{r1.second_serve_won_pct}}\n",
+      "ROW: Win percentage | {{r2.win_pct}} | {{r1.win_pct}}\n",
+    ]);
+    expect(result.visual).toMatchObject({
+      rows: [
+        { label: "Second-serve points won", cells: ["40%", "54.6%"] },
+        { label: "Win percentage", cells: ["40%", "60%"] },
+      ],
+    });
+    expect(result.droppedVisualRows).toBe(0);
+  });
+
+  test("an equals sign before the separator of a table row is the slip, not part of the label", async () => {
+    const result = await run([
+      "Headline.\nCHART: table | By hand.\nCOLUMNS: Points won | Win percentage\nROW: Right-handers = | {{r1.second_serve_won_pct}} | {{r1.win_pct}}\n",
+    ]);
+    expect(result.visual).toMatchObject({
+      rows: [{ label: "Right-handers", cells: ["54.6%", "60%"] }],
+    });
+  });
+
+  test("a split's rows are parts of one whole and are not judged row by row", async () => {
+    const rows: AskRow[] = [
+      { opponent_hand: "right", wins: 6 },
+      { opponent_hand: "left", wins: 2 },
+    ];
+    const result = await run(
+      [
+        "Wins by hand.\nCHART: split | Wins by opponent hand.\nROW: Left | {{r1.wins}}\nROW: Right | {{r2.wins}}\n",
+      ],
+      rows,
+    );
+    expect(result.visual?.kind).toBe("split");
+    expect(result.droppedVisualRows).toBe(0);
   });
 });

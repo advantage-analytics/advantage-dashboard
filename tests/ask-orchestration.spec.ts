@@ -609,13 +609,15 @@ test.describe("the rows the answer step is given", () => {
     });
     const { model, calls } = fakeModel([
       JSON.stringify(PLAN),
-      `Even sets.\nFIGURE: First set = {{r1.points_won_pct}}\n\nFrom {{r2.${ASK_SCOPE_COUNT_COLUMN}}} matches, {{r1.${ASK_SCOPE_COUNT_COLUMN}}} in the first row too.`,
+      `Even sets.\nFIGURE: First set = {{r1.points_won_pct}}\n\nFrom {{r2.${ASK_SCOPE_COUNT_COLUMN}}} matches. {{r1.${ASK_SCOPE_COUNT_COLUMN}}} in the first row too.`,
     ]);
 
     const events = await collect(askQuestion(input({ db, model })));
 
     expect(last(events).type).toBe("done");
-    expect(text(events)).toBe("From 2 matches, 2 in the first row too.");
+    // Two sentences: one that cited the total twice would be read as the
+    // total given to each row, and dropped.
+    expect(text(events)).toBe("From 2 matches. 2 in the first row too.");
     expect(calls[1].system).toContain(`  ${ASK_SCOPE_COUNT_COLUMN}: 2\n`);
     expect(calls[1].system).not.toContain(`${ASK_SCOPE_COUNT_COLUMN}: 99`);
     expect(calls[1].system).toContain("The result is computed from 2 matches");
@@ -2450,5 +2452,37 @@ test.describe("a result in date order", () => {
       "They started at 24 on Feb 7, 2026 and ended at 5 on Sep 28, 2026, with a high of 57.",
     );
     expect(last(events).type).toBe("done");
+  });
+});
+
+test.describe("per-match rows the query returned newest first", () => {
+  test("are turned round before the answer step and the renderer read them", async () => {
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              { played_on: "2026-09-19", i_won: true },
+              { played_on: "2026-06-27", i_won: false },
+              { played_on: "2026-04-11", i_won: false },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      "Three matches.\nCHART: form | Your matches, oldest first.\nPLOT: i_won\n\nThe first was on {{r1.played_on}}.",
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(modelCalls[1].system).toContain('r1\n  played_on: "2026-04-11"');
+    expect(events.find((event) => event.type === "visual")).toMatchObject({
+      visual: { kind: "form", results: [false, false, true] },
+    });
+    expect(text(events)).toBe("The first was on Apr 11, 2026.");
   });
 });

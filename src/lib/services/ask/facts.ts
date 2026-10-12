@@ -362,6 +362,65 @@ function labelColumn(rows: readonly AskRow[]): string | null {
   return Object.keys(first).find(isLabel) ?? null;
 }
 
+/** A label word shorter than this identifies nothing ("vs", "de"). */
+const MIN_LABEL_TOKEN_LENGTH = 3;
+
+/**
+ * The words that identify exactly ONE row of a labelled result: each
+ * whole-word token of a row's label value that no other row's label holds,
+ * lowercased, mapped to that row's index. "left" → the left-handers row,
+ * "nguyen" → his; "court" in "Hard Court" and "Clay Court" identifies
+ * neither and is left out. Empty for a result of one row, of more than
+ * twenty, or with no label column.
+ *
+ * `answer-render.ts` uses it to catch a figure or table row whose label names
+ * one row while every cell it cites comes from another.
+ */
+export function uniqueRowLabelTokens(
+  rows: readonly AskRow[],
+): Map<string, number> {
+  const unique = new Map<string, number>();
+  if (rows.length < 2 || rows.length > MAX_LABELLED_ROWS) return unique;
+  const label = labelColumn(rows);
+  if (label === null) return unique;
+  const shared = new Set<string>();
+  rows.forEach((row, index) => {
+    const value = row[label];
+    if (typeof value !== "string") return;
+    const tokens = new Set(
+      value
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((token) => token.length >= MIN_LABEL_TOKEN_LENGTH),
+    );
+    for (const token of tokens) {
+      if (shared.has(token)) continue;
+      if (unique.has(token)) {
+        unique.delete(token);
+        shared.add(token);
+      } else {
+        unique.set(token, index);
+      }
+    }
+  });
+  return unique;
+}
+
+/** The column holding each row's own match count (`group_matches`, `player_matches`), or null. */
+export function perRowCountColumn(rows: readonly AskRow[]): string | null {
+  const first = rows[0];
+  if (!first || rows.length < 2) return null;
+  return (
+    Object.keys(first).find(
+      (column) =>
+        column !== SCOPE_COUNT_COLUMN &&
+        MATCH_COUNT_COLUMN.test(column) &&
+        !TOTAL_COUNT_COLUMN.test(column) &&
+        rows.every((row) => isNumber(row[column])),
+    ) ?? null
+  );
+}
+
 /** The column that dates each row, or null: every value an ISO date or month, at least two of them. */
 function dateColumn(rows: readonly AskRow[]): string | null {
   const first = rows[0];
@@ -643,6 +702,98 @@ function countStatements(
   return statements;
 }
 
+/**
+ * Words that make two column names the same measure for different parts of
+ * one thing: serve direction, rally length, first and second serve, wing,
+ * result. `big_point_serves_t`, `…_body` and `…_wide` are siblings.
+ */
+export const ASK_SIBLING_WORDS: readonly (readonly string[])[] = [
+  ["t", "body", "wide"],
+  ["short", "medium", "long"],
+  ["first", "second"],
+  ["forehand", "backhand"],
+  ["wins", "losses"],
+  ["won", "lost"],
+  ["hard", "clay", "grass"],
+  ["deuce", "ad"],
+];
+
+const MAX_SIBLING_STATEMENTS = 4;
+
+/**
+ * A one-row result's sibling columns, ranked: which of the T, body and wide
+ * counts is highest, whether long rallies or short ones were won more. The
+ * model ranks these itself otherwise — "served wide most often" above T 65,
+ * wide 64 — and they are not a pair by the naming convention.
+ */
+function siblingStatements(row: AskRow): string[] {
+  const columns = Object.keys(row).filter(comparable);
+  const have = new Set(columns);
+  const seen = new Set<string>();
+  const statements: string[] = [];
+  for (const column of columns) {
+    const parts = column.split("_");
+    for (const [at, part] of parts.entries()) {
+      const family = ASK_SIBLING_WORDS.find((words) => words.includes(part));
+      if (!family) continue;
+      const group = family
+        .map((word) =>
+          [...parts.slice(0, at), word, ...parts.slice(at + 1)].join("_"),
+        )
+        .filter((name) => have.has(name) && isNumber(row[name]));
+      if (group.length < 2) continue;
+      const key = [...group].sort().join("\u0000");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cells = group.map((name) => ({
+        name,
+        value: printed(row[name] as number),
+      }));
+      const high = Math.max(...cells.map((cell) => cell.value));
+      const low = Math.min(...cells.map((cell) => cell.value));
+      const shown = listed(
+        cells.map((cell) => `r1.${cell.name} (${cell.value})`),
+      );
+      if (high === low) {
+        statements.push(`${shown} are EQUAL.`);
+        continue;
+      }
+      const where = (value: number) => {
+        const names = cells
+          .filter((cell) => cell.value === value)
+          .map((cell) => `r1.${cell.name}`);
+        return names.length === 1 ? names[0] : `TIED between ${listed(names)}`;
+      };
+      statements.push(
+        cells.length === 2
+          ? `r1.${cells[0].name} (${cells[0].value}) is ${cells[0].value > cells[1].value ? "HIGHER" : "LOWER"} than r1.${cells[1].name} (${cells[1].value}).`
+          : `Among ${shown}: HIGHEST is ${where(high)}; LOWEST is ${where(low)}.`,
+      );
+    }
+  }
+  return statements.slice(0, MAX_SIBLING_STATEMENTS);
+}
+
+/**
+ * Per-match rows oldest first. The plan prompts ask for that order and the
+ * trend line and the win/loss strip are drawn in it, under a caption that
+ * says "oldest first"; a query that returned the newest first is turned
+ * round. Only an exactly descending result is touched — rows in any other
+ * order were ranked by something else and are left as the query gave them.
+ */
+export function oldestFirst(rows: readonly AskRow[]): AskRow[] {
+  const date = dateColumn(rows);
+  if (date === null) return [...rows];
+  let fell = false;
+  for (let index = 1; index < rows.length; index += 1) {
+    const before = String(rows[index - 1][date]);
+    const after = String(rows[index][date]);
+    if (after > before) return [...rows];
+    if (after < before) fell = true;
+  }
+  return fell ? [...rows].reverse() : [...rows];
+}
+
 /** A one-row result: the cells with no figure, and that there is no second group. */
 function singleRowStatements(row: AskRow, label: string | null): string[] {
   const statements: string[] = [];
@@ -683,10 +834,12 @@ export function computeAskFacts(rows: readonly AskRow[]): string[] {
   const counts = countStatements(rows, label);
   if (rows.length === 1) {
     // The one-group statement leads: it changes what the whole answer may say.
-    return [...singleRowStatements(rows[0], label), ...counts, ...pairs].slice(
-      0,
-      MAX_ASK_FACT_STATEMENTS,
-    );
+    return [
+      ...singleRowStatements(rows[0], label),
+      ...counts,
+      ...siblingStatements(rows[0]),
+      ...pairs,
+    ].slice(0, MAX_ASK_FACT_STATEMENTS);
   }
 
   const date = dateColumn(rows);

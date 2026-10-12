@@ -6,8 +6,11 @@ import {
   comparedPairs,
   computeAskFacts,
   equalBaselineColumns,
+  oldestFirst,
+  perRowCountColumn,
   renderAskFactsBlock,
   scopeIsNarrowed,
+  uniqueRowLabelTokens,
   withOrderSummary,
   withoutColumns,
 } from "@/lib/services/ask/facts";
@@ -519,5 +522,171 @@ test.describe("computeAskFacts — one row's own count against the scope total",
       "r1.group_matches (3) is how many matches this row covers. matches_in_scope (10) counts every match that was looked at, not this row's: never give it as the number of matches behind this row's figures.",
     );
     expect(facts[0]).toContain('ONLY ONE GROUP HAS FIGURES: r1 "Tournament".');
+  });
+});
+
+test.describe("uniqueRowLabelTokens — the words that identify exactly one row", () => {
+  test("a word of one row's label only; a word several rows share identifies none", () => {
+    expect(
+      uniqueRowLabelTokens([
+        { court_type: "Indoor Hard Court", win_pct: 100 },
+        { court_type: "Outdoor Hard Court", win_pct: 71.4 },
+        { court_type: "Clay Court", win_pct: 20 },
+      ]),
+    ).toEqual(
+      new Map([
+        ["indoor", 0],
+        ["outdoor", 1],
+        ["clay", 2],
+      ]),
+    );
+  });
+
+  test("lowercased whole words, names split, two-letter words left out", () => {
+    expect(
+      uniqueRowLabelTokens([
+        { player_name: "Emon van Loben Sels", aces: 1 },
+        { player_name: "Rudy Quan", aces: 2 },
+        { opponent_hand: "left" },
+      ]),
+    ).toEqual(
+      new Map([
+        ["emon", 0],
+        ["van", 0],
+        ["loben", 0],
+        ["sels", 0],
+        ["rudy", 1],
+        ["quan", 1],
+      ]),
+    );
+    expect([
+      ...uniqueRowLabelTokens([
+        { opponent_hand: "left" },
+        { opponent_hand: "right" },
+      ]),
+    ]).toEqual([
+      ["left", 0],
+      ["right", 1],
+    ]);
+  });
+
+  test("rows that repeat a label, one row, no label column, or too many rows: nothing", () => {
+    expect(
+      uniqueRowLabelTokens([
+        { opponent_name: "Ilya Brandt", aces: 1 },
+        { opponent_name: "Ilya Brandt", aces: 2 },
+      ]).size,
+    ).toBe(0);
+    expect(uniqueRowLabelTokens([{ court_type: "Hard" }]).size).toBe(0);
+    expect(uniqueRowLabelTokens([{ aces: 1 }, { aces: 2 }]).size).toBe(0);
+    expect(
+      uniqueRowLabelTokens(
+        Array.from({ length: 21 }, (_, n) => ({ opponent_name: `Player${n}` })),
+      ).size,
+    ).toBe(0);
+  });
+
+  test("perRowCountColumn: a row's own match count, never a total or the scope column", () => {
+    expect(
+      perRowCountColumn([
+        { court_type: "Hard", group_matches: 12, matches_in_scope: 18 },
+        { court_type: "Clay", group_matches: 6, matches_in_scope: 18 },
+      ]),
+    ).toBe("group_matches");
+    expect(
+      perRowCountColumn([
+        { court_type: "Hard", all_matches: 18, matches_in_scope: 18 },
+        { court_type: "Clay", all_matches: 18, matches_in_scope: 18 },
+      ]),
+    ).toBeNull();
+    expect(perRowCountColumn([{ group_matches: 3 }])).toBeNull();
+  });
+});
+
+test.describe("computeAskFacts — sibling columns of a one-row result", () => {
+  test("ranks the T, body and wide counts — 'served wide most often' above T 65, wide 64", () => {
+    expect(
+      computeAskFacts([
+        {
+          big_points_total: 175,
+          big_point_serves_t: 65,
+          big_point_serves_body: 46,
+          big_point_serves_wide: 64,
+        },
+      ]),
+    ).toEqual([
+      "Among r1.big_point_serves_t (65), r1.big_point_serves_body (46) and r1.big_point_serves_wide (64): HIGHEST is r1.big_point_serves_t; LOWEST is r1.big_point_serves_body.",
+    ]);
+  });
+
+  test("two siblings read as a pair; three with a tie say so; equal ones are EQUAL", () => {
+    expect(
+      computeAskFacts([
+        { long_rally_won_pct: 62.4, short_rally_won_pct: 48.3 },
+      ]),
+    ).toEqual([
+      "r1.short_rally_won_pct (48.3) is LOWER than r1.long_rally_won_pct (62.4).",
+    ]);
+    expect(computeAskFacts([{ wins: 10, losses: 7, unknown: 0 }])).toEqual([
+      "r1.wins (10) is HIGHER than r1.losses (7).",
+    ]);
+    expect(
+      computeAskFacts([{ serve_t: 9, serve_body: 4, serve_wide: 9 }]),
+    ).toEqual([
+      "Among r1.serve_t (9), r1.serve_body (4) and r1.serve_wide (9): HIGHEST is TIED between r1.serve_t and r1.serve_wide; LOWEST is r1.serve_body.",
+    ]);
+    expect(
+      computeAskFacts([{ first_serve_pct: 60, second_serve_pct: 60 }]),
+    ).toEqual([
+      "r1.first_serve_pct (60) and r1.second_serve_pct (60) are EQUAL.",
+    ]);
+  });
+
+  test("a missing sibling is left out, and a lone one says nothing", () => {
+    expect(
+      computeAskFacts([{ serve_t: 9, serve_body: null, serve_wide: 4 }]),
+    ).toEqual([
+      "There is no figure for r1.serve_body: it cannot be stated, and nothing can be called higher or lower than it.",
+      "r1.serve_t (9) is HIGHER than r1.serve_wide (4).",
+    ]);
+    expect(computeAskFacts([{ first_serve_pct: 60, aces: 3 }])).toEqual([]);
+  });
+
+  test("only one-row results: rows of a breakdown are ranked by row, not by column", () => {
+    const facts = computeAskFacts([
+      { player_name: "A", wins: 4, losses: 2 },
+      { player_name: "B", wins: 1, losses: 3 },
+    ]);
+    expect(facts.some((fact) => fact.includes("r1.wins (4) is HIGHER"))).toBe(
+      false,
+    );
+  });
+});
+
+test.describe("oldestFirst — per-match rows in the order they are drawn", () => {
+  const ASC = [
+    { played_on: "2026-04-11", i_won: true },
+    { played_on: "2026-06-27", i_won: false },
+    { played_on: "2026-09-19", i_won: true },
+  ];
+
+  test("turns a newest-first result round", () => {
+    expect(oldestFirst([...ASC].reverse())).toEqual(ASC);
+  });
+
+  test("leaves oldest-first rows, rows in any other order, and undated rows as they are", () => {
+    expect(oldestFirst(ASC)).toEqual(ASC);
+    const ranked = [ASC[1], ASC[2], ASC[0]];
+    expect(oldestFirst(ranked)).toEqual(ranked);
+    const same = [
+      { played_on: "2026-04-11", aces: 1 },
+      { played_on: "2026-04-11", aces: 2 },
+    ];
+    expect(oldestFirst(same)).toEqual(same);
+    const labelled = [
+      { court_type: "Hard", win_pct: 70 },
+      { court_type: "Clay", win_pct: 20 },
+    ];
+    expect(oldestFirst(labelled)).toEqual(labelled);
   });
 });

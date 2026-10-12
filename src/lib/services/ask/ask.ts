@@ -13,6 +13,7 @@ import type {
 } from "@/lib/services/ask/events";
 import {
   equalBaselineColumns,
+  oldestFirst,
   scopeIsNarrowed,
   withOrderSummary,
   withoutColumns,
@@ -491,7 +492,9 @@ export async function* askQuestion(
       // Every baseline equal to the figure it is compared with, over a scope
       // narrower than all matches: the baseline was summed over scope. Sent
       // back once; the second time the baseline columns are left out.
-      let rows = run.result.rows;
+      // Per-match rows the query returned newest first are turned round:
+      // the trend and the win/loss strip are drawn oldest first.
+      let rows = oldestFirst(run.result.rows);
       const narrowed = scopeIsNarrowed(step.plan.scope_sql);
       // Over every match, an all-matches baseline is the figure a second
       // time by definition: one equal pair is enough, and there is nothing

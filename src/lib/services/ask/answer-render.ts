@@ -1,4 +1,8 @@
 import {
+  perRowCountColumn,
+  uniqueRowLabelTokens,
+} from "@/lib/services/ask/facts";
+import {
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
   type AskErrorEvent,
@@ -348,8 +352,9 @@ export interface AskAnswerResult {
   /**
    * Body sentences left out because they cited one cell as both ends of a
    * range ("from 54.2% … to 54.2%") or recited one cell three times or more,
-   * plus a headline that had such a range cut out of it. A count only —
-   * never model text.
+   * plus a headline that had such a range cut out of it, and a sentence,
+   * headline span or caption that gave the scope's match total to more than
+   * one row (`citesScopeTotalPerRow()`). A count only — never model text.
    */
   droppedSentences: number;
   /** Why the stream ended with an `error` event; null when it did not. */
@@ -1395,6 +1400,81 @@ function splitSentences(
   return { sentences, rest };
 }
 
+// ── The scope total given to each row, and a label that names another row ───
+
+/** The column the server adds to every row. Spelt here because `prompts.ts`, which names it, imports this module. */
+const SCOPE_TOTAL_COLUMN = "matches_in_scope";
+
+const SCOPE_TOTAL_REFERENCE = new RegExp(
+  String.raw`\{\{\s*r\d+\.${SCOPE_TOTAL_COLUMN}\s*\}\}`,
+  "g",
+);
+
+/**
+ * Whether a sentence or caption cites the scope's match total more than
+ * once. Over a result of several rows that is wrong by construction: the
+ * total is one number for all of them, so "18 matches on clay and 18 matches
+ * on hard courts" has pinned it on each.
+ */
+export function citesScopeTotalPerRow(text: string): boolean {
+  return (text.match(SCOPE_TOTAL_REFERENCE)?.length ?? 0) > 1;
+}
+
+/** "… from {{r1.matches_in_scope}} matches": the span cut out of a headline, which is never dropped. */
+const SCOPE_TOTAL_SPAN = new RegExp(
+  String.raw`\s*(?:\b(?:from|across|over|in|of)\s+)?(?:\b(?:all|the)\s+)?\{\{\s*r\d+\.${SCOPE_TOTAL_COLUMN}\s*\}\}(?:\s+match(?:es)?\b)?`,
+  "gi",
+);
+
+/** The caption a block falls back to when its own gave the scope total to a row. */
+const SCOPE_TOTAL_CAPTION = `From {{r1.${SCOPE_TOTAL_COLUMN}}} matches.`;
+
+const REFERENCE_ROW_AND_COLUMN =
+  /\{\{\s*r(\d+)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+function labelWords(label: string): string[] {
+  return label
+    .replace(REFERENCE_ROW_AND_COLUMN, " ")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== "");
+}
+
+/**
+ * Whether a label names one row of the result while every cell beside it
+ * comes from other rows: "Second-serve points won against left-handers =
+ * {{r2.second_serve_won_pct}}" where r2 is the right-handers row.
+ *
+ * `tokens` is `uniqueRowLabelTokens()`: only a word that identifies exactly
+ * one row counts as naming it. Nothing is judged when the label names no
+ * row, when the cells cite none, or when a cited column is not a column of
+ * every row (the summary cells the server puts on the first row belong to
+ * no one row).
+ */
+export function labelNamesAnotherRow(
+  label: string,
+  cells: string,
+  rows: readonly AskRow[],
+  tokens: ReadonlyMap<string, number>,
+): boolean {
+  if (tokens.size === 0) return false;
+  const named = new Set<number>();
+  for (const word of labelWords(label)) {
+    const row = tokens.get(word);
+    if (row !== undefined) named.add(row);
+  }
+  if (named.size === 0) return false;
+  const cited = new Set<number>();
+  for (const match of cells.matchAll(REFERENCE_ROW_AND_COLUMN)) {
+    const column = match[2];
+    if (column === SCOPE_TOTAL_COLUMN) continue;
+    if (!rows.every((row) => column in row)) return false;
+    cited.add(Number(match[1]) - 1);
+  }
+  if (cited.size === 0) return false;
+  return ![...cited].some((row) => named.has(row));
+}
+
 /** The lines the sentence filter never reads: figure lines and block lines. */
 const STRUCTURAL_PREFIXES = [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES];
 
@@ -1404,7 +1484,14 @@ const STRUCTURAL_PREFIXES = [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES];
  * or more (`recitesOneCell()`). Deliberately narrow: a figure or block line
  * is never touched, the headline — the first line — only loses the range
  * itself, and a sentence is dropped only for the IDENTICAL reference, never
- * for two cells that happen to hold the same value. A dropped sentence keeps
+ * for two cells that happen to hold the same value.
+ *
+ * Two more faults are caught on the same pass, both over a result of several
+ * rows. The scope's match total cited more than once in one sentence or
+ * caption has been given to each row: the sentence is dropped, a caption
+ * falls back to "From N matches.", a headline loses the spans. And a figure
+ * or table row whose label names one row while its cells come from another
+ * (`labelNamesAnotherRow()`) is left out. A dropped sentence keeps
  * any paragraph break that followed it.
  *
  * The body is passed on a sentence at a time rather than a chunk at a time,
@@ -1412,15 +1499,97 @@ const STRUCTURAL_PREFIXES = [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES];
  */
 async function* dropSameCellRanges(
   chunks: AsyncIterable<string>,
+  rows: readonly AskRow[],
   result: AskAnswerResult,
 ): AsyncGenerator<string, void, undefined> {
   let buffer = "";
   let headlineSeen = false;
+  /** The kind of the block whose lines are arriving, as its `CHART:` line wrote it. */
+  let blockKind = "";
+  const severalRows = rows.length > 1;
+  const rowTokens = uniqueRowLabelTokens(rows);
+  const ownCounts = perRowCountColumn(rows) !== null;
+
+  /**
+   * A figure or block line, checked for the two faults a line of its own can
+   * hold: a caption that gives the scope total to a row, and a label that
+   * names one row beside another row's cells. Returns "" for a line left out.
+   */
+  const structural = (text: string): string => {
+    const start = text.trimStart();
+    const end = /\s*$/.exec(text)?.[0] ?? "";
+    if (start.startsWith(ASK_VISUAL_LINE_PREFIX)) {
+      const body = start.slice(ASK_VISUAL_LINE_PREFIX.length);
+      const cut = body.indexOf(ASK_VISUAL_FIELD_SEPARATOR);
+      blockKind = (cut === -1 ? body : body.slice(0, cut)).trim().toLowerCase();
+      if (cut === -1 || !severalRows) return text;
+      const caption = body.slice(cut + 1);
+      const namesRow = labelWords(caption).some((word) => rowTokens.has(word));
+      SCOPE_TOTAL_REFERENCE.lastIndex = 0;
+      const pinned =
+        citesScopeTotalPerRow(caption) ||
+        (ownCounts && namesRow && SCOPE_TOTAL_REFERENCE.test(caption));
+      SCOPE_TOTAL_REFERENCE.lastIndex = 0;
+      if (!pinned) return text;
+      result.droppedSentences += 1;
+      return `${ASK_VISUAL_LINE_PREFIX}${body.slice(0, cut)}${ASK_VISUAL_FIELD_SEPARATOR} ${SCOPE_TOTAL_CAPTION}${end}`;
+    }
+    if (start.startsWith(ASK_FIGURE_LINE_PREFIX)) {
+      const body = start.slice(ASK_FIGURE_LINE_PREFIX.length);
+      const cut = body.indexOf(ASK_FIGURE_LINE_SEPARATOR);
+      if (cut === -1) return text;
+      if (
+        !labelNamesAnotherRow(
+          body.slice(0, cut),
+          body.slice(cut + 1),
+          rows,
+          rowTokens,
+        )
+      ) {
+        return text;
+      }
+      result.droppedFigures.push(start.trimEnd());
+      return "";
+    }
+    if (
+      start.startsWith(ASK_VISUAL_ROW_PREFIX) &&
+      (blockKind === "table" || blockKind === "bars")
+    ) {
+      const body = start.slice(ASK_VISUAL_ROW_PREFIX.length);
+      // "ROW: Total points won = | …": an equals sign AND a separator after
+      // the label. The sign is the slip; left in, it prints in the label.
+      const stray = /^([^|=]*?)\s*=\s*\|/.exec(body);
+      if (stray) {
+        return structural(
+          `${text.slice(0, text.length - start.length)}${ASK_VISUAL_ROW_PREFIX}${stray[1]} ${ASK_VISUAL_FIELD_SEPARATOR}${body.slice(stray[0].length)}`,
+        );
+      }
+      const cut = body.search(/[|=]/);
+      if (cut === -1) return text;
+      if (
+        !labelNamesAnotherRow(
+          body.slice(0, cut),
+          body.slice(cut + 1),
+          rows,
+          rowTokens,
+        )
+      ) {
+        return text;
+      }
+      result.droppedVisualRows += 1;
+      return "";
+    }
+    return text;
+  };
 
   const kept = (sentences: readonly string[]): string =>
     sentences
       .map((sentence) => {
-        if (!citesSameCellAsRange(sentence) && !recitesOneCell(sentence)) {
+        if (
+          !citesSameCellAsRange(sentence) &&
+          !recitesOneCell(sentence) &&
+          !(severalRows && citesScopeTotalPerRow(sentence))
+        ) {
           return sentence;
         }
         result.droppedSentences += 1;
@@ -1434,14 +1603,22 @@ async function* dropSameCellRanges(
     if (text.trim() === "") return text;
     if (!headlineSeen) {
       headlineSeen = true;
-      // The headline is never dropped; a same-cell range in it is cut out.
-      if (!SAME_CELL_SPAN.test(text)) return text;
-      result.droppedSentences += 1;
-      return text.replace(SAME_CELL_SPAN, "");
+      // The headline is never dropped; a same-cell range in it is cut out,
+      // and so is the scope total when it was given to more than one row.
+      let headline = text;
+      if (SAME_CELL_SPAN.test(headline)) {
+        result.droppedSentences += 1;
+        headline = headline.replace(SAME_CELL_SPAN, "");
+      }
+      if (severalRows && citesScopeTotalPerRow(headline)) {
+        result.droppedSentences += 1;
+        headline = headline.replace(SCOPE_TOTAL_SPAN, "");
+      }
+      return headline;
     }
     const start = text.trimStart();
     if (STRUCTURAL_PREFIXES.some((prefix) => start.startsWith(prefix))) {
-      return text;
+      return structural(text);
     }
     return kept(splitSentences(text, true).sentences);
   };
@@ -1489,7 +1666,7 @@ async function* render(
   const lines = createLineStage(result, tokens, rows);
   let pending = "";
 
-  for await (const chunk of dropSameCellRanges(chunks, result)) {
+  for await (const chunk of dropSameCellRanges(chunks, rows, result)) {
     const step = substitute(pending + chunk, rows, result, tokens, false);
     pending = step.rest;
     yield* lines.push(step.out, false);
