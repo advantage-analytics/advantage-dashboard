@@ -287,3 +287,19 @@ is the runner's. Newest entries at the bottom.
 
 1. `ask.my_stat_rows()` returns the percentages view's row type, so that view cannot be dropped without dropping the function first (adding columns to it is fine).
 2. The header of `20261011215730_ask_run_query.sql` still records P1 as failing; that was true when it was written and this entry supersedes it.
+
+## Change outside the queue · Ask as a chat: left rail, prompts on the right — done
+
+**gate:** mechanical PASS (full lint, typecheck and test suite). No completion review: this was not a queue task. Built in session on 2026-10-11 at the author's instruction, after the author picked "1 · By month" from the mockups at `/design/ask`.
+
+**changed:** `ask-frame.tsx` is now a left rail slot beside the thread, sized to the page area with two independent scrollers. `ask-rail.tsx` is the left rail: "New question" with its shortcut keycaps, a collapse toggle (persisted in `localStorage`), earlier questions grouped by month with the date giving way to delete on hover, and the month's limit at the foot. `ask-page.tsx` draws prompts on the right (`ask-prompt.tsx`) and answers on the left, drops the title row inside a thread, and wires ⇧⌘O / Ctrl+Shift+O to "New question". New pure modules `ask-earlier.ts` and `ask-shortcut.ts`, each with a spec; `tests/ask-rail.spec.ts` rewritten (31 cases). `loading.tsx` matches the new frame. The right rail's "Tagged in this question" section is gone: tags show as chips in the composer and labels under each prompt. `src/app/design/ask/` holds the mockups, including a model-menu sketch that is NOT built.
+
+**widget-states (runner, at commit):** loading ✓ (skeleton of the new frame); empty ✓ (an empty rail says "Questions you ask are kept here.", the limit foot is omitted when the quota could not be read, day zero unchanged); error ✓ (a failed delete keeps the row and says so).
+
+**follow-ups:**
+
+1. Not seen inside the real signed-in dashboard shell — only through a temporary unauthenticated route with a stub shell. The frame sets its own height from `--header-h`; confirm it fits the real shell.
+2. `loading.tsx` always draws the no-thread layout with the rail open, so opening a saved thread or a stored-closed rail shows a brief mismatch.
+3. One new lint warning, `react-hooks/set-state-in-effect` in `ask-rail.tsx` (the mount effect that reads the stored rail state).
+4. `askTagMeta` in `ask-tag-menu.tsx` has no caller now.
+5. T12–T15's log entries above describe the right-rail layout this replaces.

@@ -280,12 +280,12 @@ function DashboardRailStub() {
       aria-hidden="true"
       className="flex w-16 shrink-0 flex-col items-center gap-3 border-r border-[var(--border-hairline)] py-4"
     >
-      <span className="size-7 rounded-[var(--radius-element)] bg-[var(--surface-skeleton)]" />
+      <span className="size-7 rounded-[var(--radius-element)] bg-[var(--ink-100)]" />
       <span className="mt-3 size-5 rounded-[var(--radius-button)] bg-[var(--surface-subtle)]" />
       <span className="size-5 rounded-[var(--radius-button)] bg-[var(--surface-subtle)]" />
       <span className="size-5 rounded-[var(--radius-button)] bg-[var(--surface-subtle)]" />
       <span className="size-5 rounded-[var(--radius-button)] bg-[var(--surface-subtle)]" />
-      <span className="size-5 rounded-[var(--radius-button)] bg-[var(--surface-skeleton)]" />
+      <span className="size-5 rounded-[var(--radius-button)] bg-[var(--ink-100)]" />
     </div>
   );
 }

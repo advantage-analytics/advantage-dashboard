@@ -1,36 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type Ref } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  SquarePen,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
   ConfirmDialog,
   ConfirmProse,
   Em,
 } from "@/components/ui/confirm-dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AskConversationSummary } from "@/lib/data/ask-server";
-import type { AskTagOptions } from "@/lib/data/ask-tags";
+import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { AskQuotaView } from "./ask-composer";
-import { ASK_TAG_ICON, askTagKey, askTagMeta } from "./ask-tag-menu";
-import type { AskTag } from "./use-ask-stream";
+import { askDayLabel, askMonthGroups } from "./ask-earlier";
+import {
+  ASK_RAIL,
+  ASK_RAIL_CLOSED,
+  ASK_RAIL_OPEN,
+  ASK_SCROLL,
+} from "./ask-frame";
+import { isMacPlatform, newQuestionKeys } from "./ask-shortcut";
 
 export interface AskRailProps {
-  /**
-   * "Tagged in this question": the draft's tags while there are any,
-   * otherwise the last question's. Empty when neither has one.
-   */
-  tags: AskTag[];
-  /** What can be tagged, for the line under each tag's name. */
-  tagOptions: AskTagOptions;
   /** Null when the count could not be read — never a made-up `0 / 20`. */
   quota: AskQuotaView | null;
-  /** "Earlier questions", most recently used first. */
+  /** Earlier questions, most recently used first. */
   conversations: AskConversationSummary[];
   /** The conversation that is open, so its row can say so. */
   activeConversationId: string | null;
+  /** "New question": the button here, and the page's shortcut, run this. */
+  onNewQuestion: () => void;
   /**
    * Delete one conversation. Resolves true once it is gone and false when it
    * could not be deleted; the list is the caller's, so a deleted row leaves
@@ -45,146 +53,281 @@ export interface AskRailProps {
   deleteDisabled?: boolean;
 }
 
+/** Where the viewer's choice of open or closed is kept, per device. */
+export const ASK_RAIL_STORAGE_KEY = "advantage:ask-rail";
+
 /**
- * The Ask page's right rail: what the question is tagged with, how much of
- * the month's allowance is spent, and the conversations saved so far.
+ * The Ask page's left rail: "New question", the questions asked so far by
+ * month, and what is left of the month's allowance at the foot.
  *
- * Each section is absent when it has nothing to say — no tag, a count that
- * could not be read, no saved conversation — rather than drawn empty: the
- * rail is context for the thread, and a heading over nothing is not context.
+ * It is the `<nav>` itself, width included, because open or closed is the
+ * viewer's own choice: 280px open, a 52px strip of two icon buttons closed.
+ * The choice lives in this component's state and in `localStorage`. It
+ * renders open on the server and on first paint — the stored value is read
+ * in an effect, so the two renders agree — and it changes on a click only;
+ * nothing here opens under a passing cursor.
  *
- * The page shell owns the `<aside>`, its 340px width and its hairline; this
- * renders only what goes inside. The delete arrives as a prop, not an
- * imported server action, and the links are `next/link`: keep this file's
- * imports clear of `next/navigation`, because it is rendered by an offline
- * component harness (`tests/ask-rail.spec.ts`).
+ * The list is the only part that scrolls: the head and the limit stay put.
+ * An empty list says so in one line; a count that could not be read drops
+ * the foot rather than print numbers nobody measured.
+ *
+ * "New question" and the delete arrive as props, not an imported router or
+ * server action, and the links are `next/link`: keep this file's imports
+ * clear of `next/navigation`, because it is rendered by an offline component
+ * harness (`tests/ask-rail.spec.ts`).
  */
 export function AskRail({
-  tags,
-  tagOptions,
   quota,
   conversations,
   activeConversationId,
+  onNewQuestion,
   onDeleteConversation,
   deleteDisabled = false,
 }: AskRailProps) {
+  const [open, setOpen] = useState(true);
+  // The width eases only once the viewer has toggled it: the stored choice
+  // arriving after first paint should land, not perform.
+  const [toggled, setToggled] = useState(false);
+  const [mac, setMac] = useState(true);
+
+  useEffect(() => {
+    setMac(isMacPlatform(navigator.platform || navigator.userAgent));
+    try {
+      if (localStorage.getItem(ASK_RAIL_STORAGE_KEY) === "closed") {
+        setOpen(false);
+      }
+    } catch {
+      // Private mode or blocked storage — open is a fine default.
+    }
+  }, []);
+
+  // A toggle from the keyboard unmounts the button that had focus; hand it
+  // to the button that replaced it. Not after a pointer click: there, focus
+  // landing on the new button would only raise its tooltip.
+  const toggleButton = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    toggleButton.current?.focus();
+  }, [open]);
+
+  function toggle(event: MouseEvent<HTMLButtonElement>) {
+    refocus.current = event.detail === 0;
+    const next = !open;
+    setOpen(next);
+    setToggled(true);
+    try {
+      localStorage.setItem(ASK_RAIL_STORAGE_KEY, next ? "open" : "closed");
+    } catch {
+      // A per-device convenience, never load-bearing.
+    }
+  }
+
+  const keys = newQuestionKeys(mac);
+  const keyShortcuts = mac ? "Meta+Shift+O" : "Control+Shift+O";
+
   return (
     <TooltipProvider>
-      {tags.length > 0 && (
-        <section data-ask-rail="tags" className="flex flex-col gap-0.5">
-          <h2 className="eyebrow-sm pb-2">Tagged in this question</h2>
-          <ul className="flex flex-col gap-0.5">
-            {tags.map((tag) => {
-              const Icon = ASK_TAG_ICON[tag.kind];
-              return (
-                <li
-                  key={askTagKey(tag)}
-                  className="flex min-h-[38px] items-center gap-2.5"
+      <nav
+        aria-label="Earlier questions"
+        data-ask-rail={open ? "open" : "closed"}
+        className={cn(
+          ASK_RAIL,
+          open ? ASK_RAIL_OPEN : ASK_RAIL_CLOSED,
+          toggled &&
+            "transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
+        )}
+      >
+        {open ? (
+          // Laid out at the open width whatever the nav measures, so nothing
+          // rewraps while the width eases.
+          <div className={cn("flex min-h-0 flex-1 flex-col", ASK_RAIL_OPEN)}>
+            <div className="flex items-center gap-1.5 px-3 pt-3 pb-2">
+              <button
+                type="button"
+                onClick={onNewQuestion}
+                aria-keyshortcuts={keyShortcuts}
+                className={cn(
+                  advButton("ghost", "sm"),
+                  "min-w-0 flex-1 justify-start gap-2 px-2.5",
+                )}
+              >
+                <SquarePen
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-[var(--ink-500)]"
+                  strokeWidth={1.5}
+                />
+                <span className="flex-1 text-left">New question</span>
+                <span
+                  aria-hidden="true"
+                  data-ask-keys=""
+                  className="flex items-center gap-0.5"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="flex size-[22px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[var(--ink-600)]"
-                  >
-                    <Icon className="size-[13px]" strokeWidth={1.5} />
-                  </span>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="text-[12px] font-medium text-[var(--ink-900)]">
-                      {tag.label}
-                    </span>
-                    <span className="text-[11px] text-[var(--ink-500)] tabular-nums">
-                      {askTagMeta(tagOptions, tag)}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+                  {keys.map((key) => (
+                    <Kbd key={key} size="sm" variant="flat">
+                      {key}
+                    </Kbd>
+                  ))}
+                </span>
+              </button>
+              <RailIconButton
+                ref={toggleButton}
+                label="Hide earlier questions"
+                icon={PanelLeftClose}
+                side="bottom"
+                expanded
+                onClick={toggle}
+              />
+            </div>
 
-      {quota && <AskLimit quota={quota} />}
+            <div
+              data-ask-rail-list=""
+              className={cn(ASK_SCROLL, "flex flex-col gap-5 px-3 pt-2 pb-4")}
+            >
+              {conversations.length > 0 ? (
+                <AskEarlier
+                  conversations={conversations}
+                  activeConversationId={activeConversationId}
+                  onDeleteConversation={onDeleteConversation}
+                  deleteDisabled={deleteDisabled}
+                />
+              ) : (
+                <p data-ask-rail-empty="" className="text-body-sm px-2">
+                  Questions you ask are kept here.
+                </p>
+              )}
+            </div>
 
-      {conversations.length > 0 && (
-        <AskEarlier
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onDeleteConversation={onDeleteConversation}
-          deleteDisabled={deleteDisabled}
-        />
-      )}
+            {quota && <AskLimit quota={quota} />}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex flex-1 flex-col items-center gap-1 py-3",
+              ASK_RAIL_CLOSED,
+            )}
+          >
+            <RailIconButton
+              ref={toggleButton}
+              label="Show earlier questions"
+              icon={PanelLeftOpen}
+              expanded={false}
+              onClick={toggle}
+            />
+            <RailIconButton
+              label="New question"
+              shortcut={keys.join(mac ? "" : " ")}
+              keyShortcuts={keyShortcuts}
+              icon={SquarePen}
+              onClick={onNewQuestion}
+            />
+          </div>
+        )}
+      </nav>
     </TooltipProvider>
+  );
+}
+
+function RailIconButton({
+  ref,
+  label,
+  shortcut,
+  keyShortcuts,
+  icon: Icon,
+  side = "right",
+  expanded,
+  onClick,
+}: {
+  ref?: Ref<HTMLButtonElement>;
+  label: string;
+  /** Beside the label in the tooltip. */
+  shortcut?: string;
+  keyShortcuts?: string;
+  icon: LucideIcon;
+  side?: "right" | "bottom";
+  /** Set on the pair that opens and closes the rail. */
+  expanded?: boolean;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <ChromeTooltip label={label} shortcut={shortcut} side={side}>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={label}
+        aria-expanded={expanded}
+        aria-keyshortcuts={keyShortcuts}
+        onClick={onClick}
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+      >
+        <Icon aria-hidden="true" className="size-[15px]" strokeWidth={1.5} />
+      </button>
+    </ChromeTooltip>
   );
 }
 
 // ── The limit ───────────────────────────────────────────────────────────────
 
 /**
- * The month's allowance: what is left as the headline, one unit per question
- * as the picture, and the count beside when it comes back.
+ * The month's allowance, at the foot of the rail where it is always in reach
+ * and never between the player and an answer: what is left as the sentence,
+ * the count beside it, and one segment per question as the picture.
  *
- * The meter is one image to a screen reader — twenty squares read one by one
- * say nothing — and its label is the sentence the squares draw. A count past
- * the cap is drawn as a full meter and "0 questions left", never a negative.
+ * The meter is one image to a screen reader — twenty segments read one by one
+ * say nothing — and its label is the sentence the segments draw, so the count
+ * beside it is hidden from one. A count past the cap is drawn as a full meter
+ * and "0 questions left", never a negative.
  *
  * "Resets on the 1st" is the rule, not a computed date: the allowance is per
- * calendar month. Capitalised because a line joined by middots is sentence
- * case per segment (`reference/primitives.md`, "Copy conventions").
+ * calendar month.
  */
 function AskLimit({ quota }: { quota: AskQuotaView }) {
   const used = Math.min(Math.max(quota.used, 0), quota.cap);
   const left = quota.cap - used;
 
   return (
-    <section data-ask-rail="limit" className="flex flex-col gap-2.5">
-      <h2 className="eyebrow-sm">Questions this month</h2>
-      <p data-ask-left="" className="text-title-lg tabular-nums">
-        {left} {left === 1 ? "question" : "questions"} left
-      </p>
+    <div
+      data-ask-rail="limit"
+      className="flex flex-col gap-2 border-t border-[var(--border-hairline)] px-5 pt-3.5 pb-4"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <p
+          data-ask-left=""
+          className="text-[12px] text-[var(--ink-900)] tabular-nums"
+        >
+          {left} {left === 1 ? "question" : "questions"} left
+        </p>
+        <p
+          data-ask-count=""
+          aria-hidden="true"
+          className="font-mono text-[10px] text-[var(--ink-500)] tabular-nums"
+        >
+          {used} / {quota.cap}
+        </p>
+      </div>
       <span
         role="img"
         aria-label={`${used} of ${quota.cap} questions used`}
-        className="flex flex-wrap gap-[3px]"
+        className="flex gap-[3px]"
       >
         {Array.from({ length: quota.cap }, (_, index) => (
           <span
             key={index}
             data-ask-unit={index < used ? "used" : "left"}
             className={cn(
-              "size-2 rounded-[2px]",
-              index < used
-                ? "bg-[var(--blue)]"
-                : "shadow-[inset_0_0_0_1px_var(--ink-300)]",
+              "h-1 flex-1 rounded-[1px]",
+              index < used ? "bg-[var(--blue)]" : "bg-[var(--ink-100)]",
             )}
           />
         ))}
       </span>
-      {/* The meter above already says this to a screen reader. */}
-      <p
-        data-ask-count=""
-        aria-hidden="true"
-        className="font-mono text-[11px] text-[var(--ink-600)] tabular-nums"
-      >
-        {used} / {quota.cap}
-        {" · Resets on the 1st"}
-      </p>
-    </section>
+      <p className="text-[11px] text-[var(--ink-500)]">Resets on the 1st</p>
+    </div>
   );
 }
 
 // ── Earlier questions ───────────────────────────────────────────────────────
-
-/** `2026-09-28T…` → `Sep 28`, with the year when it is not `currentYear`. */
-function askedOnLabel(updatedAt: string, currentYear: string | null) {
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return null;
-  // UTC, so the server's render and the browser's agree on the day.
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: updatedAt.slice(0, 4) === currentYear ? undefined : "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function AskEarlier({
   conversations,
@@ -202,10 +345,6 @@ function AskEarlier({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The list arrives newest first, so its first row names "this year": an
-  // older conversation carries its year and the rest stay short.
-  const currentYear = conversations[0]?.updatedAt.slice(0, 4) ?? null;
-
   async function confirmDelete() {
     if (!target || pending) return;
     setPending(true);
@@ -222,62 +361,31 @@ function AskEarlier({
   }
 
   return (
-    <section data-ask-rail="earlier" className="flex flex-col gap-0.5">
-      <h2 className="eyebrow-sm pb-2">Earlier questions</h2>
-      <ul className="flex flex-col gap-0.5">
-        {conversations.map((conversation) => {
-          const active = conversation.id === activeConversationId;
-          const askedOn = askedOnLabel(conversation.updatedAt, currentYear);
-          return (
-            <li
-              key={conversation.id}
-              className={cn(
-                "group -mx-2 flex h-9 items-center rounded-[var(--radius-element)] pr-1 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
-                active && "bg-[var(--surface-subtle)]",
-              )}
-            >
-              <Link
-                href={`/dashboard/ask?c=${conversation.id}`}
-                aria-current={active ? "page" : undefined}
-                className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-[var(--radius-element)] pr-1 pl-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
-                  {conversation.title}
-                </span>
-                {askedOn && (
-                  <time
-                    dateTime={conversation.updatedAt}
-                    className="shrink-0 font-mono text-[10px] text-[var(--ink-500)] tabular-nums"
-                  >
-                    {askedOn}
-                  </time>
-                )}
-              </Link>
-              <ChromeTooltip label="Delete" side="top">
-                <button
-                  type="button"
-                  aria-label={`Delete ${conversation.title}`}
-                  disabled={deleteDisabled}
-                  onClick={() => {
-                    setTarget(conversation);
-                    setError(null);
-                    setOpen(true);
-                  }}
-                  // Revealed by the row: under the pointer, or once focus is
-                  // anywhere in it. Always there on a screen with no hover.
-                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] opacity-0 transition-[opacity,color] duration-200 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-[var(--danger)] disabled:cursor-default disabled:text-[var(--text-disabled)] [@media(hover:none)]:opacity-100"
-                >
-                  <Trash2
-                    className="size-3.5"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                </button>
-              </ChromeTooltip>
-            </li>
-          );
-        })}
-      </ul>
+    <>
+      {askMonthGroups(conversations).map((group) => (
+        <section
+          key={group.key}
+          data-ask-month={group.key}
+          className="flex flex-col gap-0.5"
+        >
+          <h2 className="eyebrow-sm px-2 pb-1.5">{group.label}</h2>
+          <ul className="flex flex-col gap-0.5">
+            {group.rows.map((conversation) => (
+              <AskEarlierRow
+                key={conversation.id}
+                conversation={conversation}
+                active={conversation.id === activeConversationId}
+                deleteDisabled={deleteDisabled}
+                onDelete={() => {
+                  setTarget(conversation);
+                  setError(null);
+                  setOpen(true);
+                }}
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
 
       <ConfirmDialog
         open={open}
@@ -303,6 +411,79 @@ function AskEarlier({
           </ConfirmProse>
         )}
       </ConfirmDialog>
-    </section>
+    </>
+  );
+}
+
+/**
+ * One line: the question, its date at the edge. Under the pointer, or once
+ * focus is anywhere in the row, the date fades and delete takes its place —
+ * the same 48px, so nothing in the row moves. On a screen with no hover the
+ * delete is simply there.
+ *
+ * The edge sits over the link's right padding and lets a click through to
+ * it, so the whole row opens the conversation except the button itself.
+ */
+function AskEarlierRow({
+  conversation,
+  active,
+  deleteDisabled,
+  onDelete,
+}: {
+  conversation: AskConversationSummary;
+  active: boolean;
+  deleteDisabled: boolean;
+  onDelete: () => void;
+}) {
+  const askedOn = askDayLabel(conversation.updatedAt);
+  return (
+    <li
+      className={cn(
+        "group relative flex h-9 items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
+        active && "bg-[var(--surface-subtle)]",
+      )}
+    >
+      <Link
+        href={`/dashboard/ask?c=${conversation.id}`}
+        aria-current={active ? "page" : undefined}
+        className="flex h-full min-w-0 flex-1 items-center rounded-[var(--radius-element)] pr-14 pl-2"
+      >
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[12px]",
+            active
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-700)]",
+          )}
+        >
+          {conversation.title}
+        </span>
+      </Link>
+      <span className="pointer-events-none absolute inset-y-0 right-1 flex w-12 items-center justify-end">
+        {askedOn && (
+          <time
+            dateTime={conversation.updatedAt}
+            className="pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-0"
+          >
+            {askedOn}
+          </time>
+        )}
+        <ChromeTooltip label="Delete" side="top">
+          <button
+            type="button"
+            aria-label={`Delete ${conversation.title}`}
+            disabled={deleteDisabled}
+            onClick={onDelete}
+            className="pointer-events-auto absolute right-0 flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-500)] opacity-0 transition-[opacity,color,background-color] duration-200 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[var(--surface-card)] hover:text-[var(--danger)] disabled:cursor-default disabled:text-[var(--text-disabled)] disabled:hover:bg-transparent [@media(hover:none)]:opacity-100"
+          >
+            <Trash2
+              className="size-[13px]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </button>
+        </ChromeTooltip>
+      </span>
+    </li>
   );
 }

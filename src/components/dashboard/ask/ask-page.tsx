@@ -10,29 +10,40 @@ import type {
   AskQuota,
 } from "@/lib/data/ask-server";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
-import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { AskAnswer } from "./ask-answer";
 import { AskComposer, type AskQuotaView } from "./ask-composer";
-import { ASK_COLUMN, AskFrame } from "./ask-frame";
+import {
+  ASK_COLUMN,
+  ASK_GUTTER,
+  ASK_SCROLL,
+  AskFrame,
+  AskIntro,
+} from "./ask-frame";
+import { AskPrompt } from "./ask-prompt";
 import { AskRail } from "./ask-rail";
+import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
 import { useAskStream, type AskExchange } from "./use-ask-stream";
 
 /**
- * The personal Ask page: a thread of questions and answers, the composer, and
- * a right rail.
+ * The personal Ask page, as a chat: earlier questions in a rail on the left,
+ * and beside it a thread with the player's prompts on the right and the
+ * answers on the left.
  *
  * Three states, decided here and nowhere else:
  *
  * - **no personal match** — the day-zero offer and nothing to type into. A
  *   composer on an account with nothing to ask about would only ever refuse.
- * - **matches, nothing asked** — the composer alone under the title.
+ *   No rail either.
+ * - **matches, no thread** — nothing asked yet, or "New question" pressed:
+ *   the title, one line, and the composer in the upper part of the page.
  * - **a thread** — saved (`?c=<id>`, loaded by the route) or asked in this
- *   visit; the composer drops to the foot of the column and stays in view.
+ *   visit; the thread scrolls and the composer stays at its foot. The title
+ *   is still the page's one `<h1>`, kept for a screen reader only.
  *
- * The composer, the answer and the rail are their own files and this shell
- * hands them props; it owns the layout, the thread (`useAskStream`) and the
- * URL.
+ * The composer, the answer, the prompt and the rail are their own files and
+ * this shell hands them props; it owns the layout, the thread
+ * (`useAskStream`), the URL and the "New question" shortcut.
  *
  * ── The URL ─────────────────────────────────────────────────────────────────
  * The route renders this with `key={conversation?.id ?? "new"}`, so opening
@@ -41,7 +52,9 @@ import { useAskStream, type AskExchange } from "./use-ask-stream";
  * answer is already on screen, and a navigation would re-render the route,
  * change that key and rebuild the thread from the saved row under the
  * reader. "New question" is the opposite case — it clears the thread here and
- * then navigates, so the server drops `?c=` and re-reads the list.
+ * then navigates, so the server drops `?c=` and re-reads the list. The rail
+ * owns its button; ⇧⌘O (Ctrl+Shift+O off a Mac) runs the same handler from
+ * anywhere on the page, except while an answer is arriving.
  *
  * ── Deleting a conversation ─────────────────────────────────────────────────
  * The rail's row action calls `deleteAskConversation`, which revalidates this
@@ -163,21 +176,48 @@ function AskThread({
     return true;
   }
 
+  // Where the composer is, so "New question" can put the caret in it: with
+  // no thread open the button changes nothing else on screen, and a control
+  // that visibly does nothing reads as broken.
+  const composerBox = useRef<HTMLDivElement>(null);
+
   function newQuestion() {
     reset();
     // Already at the bare URL when nothing was saved; a push would only add
     // a history entry that goes nowhere.
     if (window.location.search !== "") router.push("/dashboard/ask");
+    requestAnimationFrame(() =>
+      composerBox.current?.querySelector("textarea")?.focus(),
+    );
   }
+
+  // ⇧⌘O / Ctrl+Shift+O. The listener is registered once and reads the
+  // latest handler and flight state through a ref, so it never acts on a
+  // stale thread.
+  const shortcut = useRef({ run: newQuestion, inFlight: state.inFlight });
+  useEffect(() => {
+    shortcut.current = { run: newQuestion, inFlight: state.inFlight };
+  });
+  useEffect(() => {
+    const mac = isMacPlatform(navigator.platform || navigator.userAgent);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.repeat || !isNewQuestionShortcut(event, mac)) return;
+      // Ours either way: the browser's own use of the chord must not fire
+      // while this page declines it.
+      event.preventDefault();
+      if (shortcut.current.inFlight) return;
+      shortcut.current.run();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const quotaView: AskQuotaView | null = state.usage
     ? { ...state.usage, resetsOn: quota?.resetsOn ?? null }
     : quota;
 
-  const title = conversation?.title ?? state.exchanges[0]?.question.text;
-
   const composer = (
-    <div className="flex flex-col gap-2">
+    <div ref={composerBox} className="flex flex-col gap-2">
       {state.refusal && (
         <p
           role="alert"
@@ -201,97 +241,57 @@ function AskThread({
     <AskFrame
       rail={
         <AskRail
-          tags={
-            state.draft.tags.length > 0
-              ? state.draft.tags
-              : (state.exchanges.at(-1)?.question.tags ?? [])
-          }
-          tagOptions={tagOptions}
           quota={quotaView}
           conversations={listed}
           activeConversationId={state.conversationId}
+          onNewQuestion={newQuestion}
           onDeleteConversation={deleteConversation}
           deleteDisabled={state.inFlight}
         />
       }
     >
-      <div className="flex flex-wrap items-end gap-2.5">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-display">Ask</h1>
-          <div className="mt-[9px] flex h-[18px] items-baseline">
-            <span className="text-body-sm truncate">
-              {hasThread && title
-                ? title
-                : "Answers are computed from your own matches."}
-            </span>
-          </div>
-        </div>
-        {/* Offered once there is a thread to leave; before that it would be a
-            button that does nothing. */}
-        {hasThread && (
-          <button
-            type="button"
-            onClick={newQuestion}
-            className={advButton("ghost")}
-          >
-            New question
-          </button>
-        )}
-      </div>
-
       {hasThread ? (
         <>
-          <div className={cn(ASK_COLUMN, "flex flex-col gap-7")}>
-            {state.exchanges.map((exchange) => (
-              <AskExchangeView key={exchange.id} exchange={exchange} />
-            ))}
-            <div ref={end} aria-hidden="true" />
+          <h1 className="sr-only">Ask</h1>
+          <div className={cn(ASK_SCROLL, ASK_GUTTER, "pt-7 pb-4")}>
+            <div className={cn(ASK_COLUMN, "flex flex-col gap-8")}>
+              {state.exchanges.map((exchange) => (
+                <AskExchangeView key={exchange.id} exchange={exchange} />
+              ))}
+              <div ref={end} aria-hidden="true" />
+            </div>
           </div>
-          {/* The composer rides the foot of the scroll area, on the page's own
-              white so the thread passes under it cleanly. */}
-          <div
-            className={cn(
-              ASK_COLUMN,
-              "sticky bottom-0 mt-auto bg-[var(--surface-card)] pt-3 pb-8",
-            )}
-          >
-            {composer}
+          {/* Outside the scroller, so it holds the foot of the thread area
+              while the thread moves above it. */}
+          <div className={cn(ASK_GUTTER, "shrink-0 pt-3 pb-6")}>
+            <div className={ASK_COLUMN}>{composer}</div>
           </div>
         </>
       ) : (
-        <div className={cn(ASK_COLUMN, "pb-8")}>{composer}</div>
+        <AskIntro
+          lead={
+            <p className="text-body-sm">
+              Answers are computed from your own matches.
+            </p>
+          }
+        >
+          {composer}
+        </AskIntro>
       )}
     </AskFrame>
   );
 }
 
-/** One question and what came back. The question is the shell's to draw. */
+/**
+ * One exchange: the player's prompt against the right edge, what came back
+ * on the left. Both in the same column, so an answer's left edge is the
+ * column's.
+ */
 function AskExchangeView({ exchange }: { exchange: AskExchange }) {
   const { question, answer } = exchange;
   return (
-    <article className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        {/* `text-data` is unlayered and would beat a `font-medium` utility,
-            so the weight is set inline. */}
-        <h2
-          className="text-data whitespace-pre-wrap"
-          style={{ fontWeight: 500 }}
-        >
-          {question.text}
-        </h2>
-        {question.tags.length > 0 && (
-          <ul aria-label="Tagged" className="flex flex-wrap gap-1.5">
-            {question.tags.map((tag) => (
-              <li
-                key={`${tag.kind}:${tag.id}`}
-                className="flex h-[22px] items-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] px-2 text-[12px] text-[var(--ink-700)]"
-              >
-                {tag.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+    <article className="flex flex-col gap-8">
+      <AskPrompt text={question.text} tags={question.tags} />
       <AskAnswer answer={answer} />
     </article>
   );
