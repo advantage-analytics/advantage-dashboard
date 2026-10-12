@@ -32,3 +32,21 @@ export function opponentBackhandLabel(
   if (value === "two-handed" || value === "2-handed") return "Two-handed";
   return null;
 }
+
+/**
+ * Hand and backhand as the team table's one "Plays" cell words them: "Right ·
+ * Two-handed". The column header carries the noun, so the hand drops its
+ * "-handed"; the backhand keeps it, or "Two" would say nothing. Either half
+ * alone is the whole cell ("Left", "One-handed"); null when neither is known,
+ * which the cell draws as the em dash.
+ */
+export function opponentPlaysLabel(
+  hand: string | null | undefined,
+  backhand: string | null | undefined,
+): string | null {
+  const parts = [
+    opponentHandLabel(hand)?.replace("-handed", ""),
+    opponentBackhandLabel(backhand),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}

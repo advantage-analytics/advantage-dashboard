@@ -32,9 +32,11 @@ import {
   type AttachLine,
 } from "@/lib/schedule/attach-line-state";
 import { canonicalRosterIds } from "@/lib/data/roster-ids";
+import { crestUrl } from "@/lib/data/teams-server";
 import type {
   LineOffer,
   MatchDraft,
+  OpponentTeamProgram,
 } from "@/components/dashboard/matches/new-match-wizard/types";
 import {
   DRAFT_TARGET_SELECT,
@@ -325,6 +327,24 @@ export interface OpponentPlayed {
   backhand: string | null;
   /** Their pooled identity, when a match recorded one. */
   playerId: string | null;
+  /**
+   * Their team as that most recent match recorded it: a program we know, or
+   * the school as typed — never both, and both null when it named neither.
+   * A program this viewer cannot read (a custom org they are not in) comes
+   * back as null rather than as an id with nothing to draw.
+   */
+  opponentProgram: OpponentTeamProgram | null;
+  opponentSchool: string | null;
+}
+
+/** `matches.opponent_program_id`'s program, as the embed below selects it. */
+interface OpponentProgramEmbed {
+  id: string;
+  school_name: string;
+  school_abbrev: string | null;
+  crest_path: string | null;
+  conference: string | null;
+  division: string | null;
 }
 
 /**
@@ -342,7 +362,9 @@ export async function opponentsPlayed(
   const query = supabase
     .from("matches")
     .select(
-      "player2_name, date, opponent_hand, opponent_backhand, opponent_player_id",
+      // The embed names its FK: `matches` points at `programs` twice
+      // (`program_id` too), and PostgREST refuses an ambiguous one.
+      "player2_name, date, opponent_hand, opponent_backhand, opponent_player_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division)",
     )
     .order("date", { ascending: false })
     .limit(400);
@@ -352,12 +374,17 @@ export async function opponentsPlayed(
       : await query.eq("created_by", scope.actorId).is("program_id", null);
 
   const byName = new Map<string, OpponentPlayed>();
-  for (const row of (data ?? []) as {
+  // The crest key of each row's program, resolved to a URL after the fold so
+  // only the rows that are kept cost a `crestUrl()` call.
+  const crestPaths = new Map<OpponentPlayed, string>();
+  for (const row of (data ?? []) as unknown as {
     player2_name: string | null;
     date: string;
     opponent_hand: string | null;
     opponent_backhand: string | null;
     opponent_player_id: string | null;
+    opponent_school?: string | null;
+    opponent_program?: OpponentProgramEmbed | OpponentProgramEmbed[] | null;
   }[]) {
     const name = (row.player2_name ?? "").trim();
     const key = normalizedPersonName(name);
@@ -368,15 +395,42 @@ export async function opponentsPlayed(
       continue;
     }
     // Rows arrive newest first, so the first sighting is the latest match.
-    byName.set(key, {
+    // A to-one embed is an object; tolerate the array an untyped client may
+    // hand back.
+    const program =
+      (Array.isArray(row.opponent_program)
+        ? row.opponent_program[0]
+        : row.opponent_program) ?? null;
+    const played: OpponentPlayed = {
       name,
       matches: 1,
       lastDate: row.date.slice(0, 10),
       hand: row.opponent_hand,
       backhand: row.opponent_backhand,
       playerId: row.opponent_player_id,
-    });
+      opponentProgram: program
+        ? {
+            id: program.id,
+            schoolName: program.school_name,
+            shortCode: program.school_abbrev,
+            crestUrl: null,
+            conference: program.conference,
+            division: program.division,
+          }
+        : null,
+      // Either/or on the row; a program outranks a school here too, so a
+      // caller never has to break the tie.
+      opponentSchool: program ? null : row.opponent_school?.trim() || null,
+    };
+    if (program?.crest_path) crestPaths.set(played, program.crest_path);
+    byName.set(key, played);
   }
+  await Promise.all(
+    [...crestPaths].map(async ([played, path]) => {
+      if (played.opponentProgram)
+        played.opponentProgram.crestUrl = await crestUrl(path);
+    }),
+  );
   return [...byName.values()];
 }
 

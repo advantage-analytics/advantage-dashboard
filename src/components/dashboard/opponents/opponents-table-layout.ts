@@ -1,53 +1,99 @@
 import type { CSSProperties } from "react";
 
 /**
- * The personal Opponents table's tracks and page frame, shared by the populated
- * table, the loading skeleton and the day-zero ghost table — a ghost table
- * never restates its own geometry (`reference/tables.md` → Table page states).
+ * The Opponents tables' tracks and page frame — the personal table first, the
+ * team table under its own heading below — shared by the populated table, the
+ * loading skeleton and the day-zero ghost table: a ghost table never restates
+ * its own geometry (`reference/tables.md` → Table page states).
  *
- * Opponent · Hand · Backhand · Record · Form · Last match · Result · Score
+ * Personal: Opponent · Plays · Record · Last match
  *
  * No JSX here, so the skeleton and the day zero can import the grid without
  * pulling the table's client code with it.
  */
 
 // Deviation from Data Table law 1 (2026-10-02, "the last column takes the slack"): the frame (`project/Main.dc.html`) puts the one fluid track FIRST, on Opponent, by the author's instruction.
-// Last match is 96px, not the frame's 72px: at 72 the header truncated to "LAST MAT…" and a date carrying its year ("Jan 31, 2025") ran into Result.
-export const OPPONENTS_GRID_TEMPLATE =
-  "minmax(150px,1fr) minmax(92px,92px) minmax(92px,92px) 56px 72px 96px 60px 116px";
-
 /**
- * The tracks beside the open drawer: Hand and Backhand collapsed to nothing —
- * the drawer states both under the name — so Score stays inside the card at
- * 1440 with the sidebar open. Same `minmax()` shape per track as the resting
- * template, so the browser can interpolate the shift (the Matches table's
- * `TEAM_LIST_GRID_COLS_COMPACT` arrangement).
+ * Four tracks, the team table's own widths for the three merged cells
+ * (`opponent-cells.tsx`): Plays 150px ("Right · Two-handed"), Record 100px
+ * (the figure beside its five ticks), Last match 220px (date · result ·
+ * score, a three-set score with a tiebreak whole).
+ *
+ * Nothing collapses beside the drawer, because the floor fits either way:
+ * 160 + 150 + 100 + 220 = 630px of minimums, plus three 16px gaps = 678px.
+ * At 1440 with the 232px sidebar the column is 1208px, less its 2 × 56px
+ * padding and the card's 2 × 24px inset = 1048px inside the card; the 340px
+ * drawer leaves 708px. 678 ≤ 708, so the open drawer only takes Opponent's
+ * slack (530px → 190px) and the score is never clipped.
  */
-export const OPPONENTS_GRID_TEMPLATE_COMPACT =
-  "minmax(150px,1fr) minmax(0px,0px) minmax(0px,0px) 56px 72px 96px 60px 116px";
+export const OPPONENTS_GRID_TEMPLATE = "minmax(160px,1fr) 150px 100px 220px";
 
 export const OPPONENTS_GRID_COLS = {
   gridTemplateColumns: OPPONENTS_GRID_TEMPLATE,
 } as const;
 
+/* ── The team table ──────────────────────────────────────────────────────── */
+
 /**
- * The live table's tracks, which compact beside the drawer. Two custom
- * properties and a class rather than one inline `gridTemplateColumns`: the
- * drawer only renders at `lg`, so the collapse must be a breakpoint rule, and
- * an inline style cannot carry one. Spread `style` on the element that takes
- * `className`.
+ * Opponent · Program · Faced by · Plays · Record · Last match
+ *
+ * Six tracks at rest, one line per row. As on the personal table the one fluid
+ * track is the first, Opponent; Program is bounded (120–180px) so a long
+ * school name truncates instead of pushing Faced by off its x.
  */
-export function opponentsGrid(compact: boolean) {
+export const TEAM_OPPONENTS_GRID_TEMPLATE =
+  "minmax(160px,1fr) minmax(120px,180px) 124px 150px 100px 220px";
+
+/**
+ * Beside the open drawer Program and Plays slide shut — the drawer states both
+ * under the name — and the other four keep their order and content. The same
+ * six tracks, so the browser can interpolate the shift.
+ */
+export const TEAM_OPPONENTS_GRID_TEMPLATE_COMPACT =
+  "minmax(160px,1fr) minmax(0px,0px) 124px 0px 100px 220px";
+
+export const TEAM_OPPONENTS_GRID_COLS = {
+  gridTemplateColumns: TEAM_OPPONENTS_GRID_TEMPLATE,
+} as const;
+
+/**
+ * The live team table's tracks as the class and custom properties that switch
+ * between resting and compact. Two custom properties and a class rather than
+ * one inline `gridTemplateColumns`: the drawer only renders at `lg`, so the
+ * collapse must be a breakpoint rule, and an inline style cannot carry one.
+ * Spread `style` on the element that takes `className`.
+ */
+export function teamOpponentsGrid(compact: boolean) {
   return {
     className: compact
       ? "[grid-template-columns:var(--opp-cols)] lg:[grid-template-columns:var(--opp-cols-compact)]"
       : "[grid-template-columns:var(--opp-cols)]",
     style: {
-      "--opp-cols": OPPONENTS_GRID_TEMPLATE,
-      "--opp-cols-compact": OPPONENTS_GRID_TEMPLATE_COMPACT,
+      "--opp-cols": TEAM_OPPONENTS_GRID_TEMPLATE,
+      "--opp-cols-compact": TEAM_OPPONENTS_GRID_TEMPLATE_COMPACT,
     } as CSSProperties,
   };
 }
+
+/** One header label per team track, in track order. */
+export const TEAM_OPPONENTS_COLUMNS = [
+  "Opponent",
+  "Program",
+  "Faced by",
+  "Plays",
+  "Record",
+  "Last match",
+] as const;
+
+/** The team tracks' floor: 874px of minimums plus five 16px gaps. */
+export const TEAM_OPPONENTS_MIN_WIDTH = "min-w-[954px]";
+
+/** The floor beside the open drawer: 604px of minimums plus the same gaps. */
+export const TEAM_OPPONENTS_MIN_WIDTH_COMPACT =
+  "min-w-[954px] lg:min-w-[684px]";
+
+/** Which of the two tables a shared piece — header, skeleton, ghost — draws. */
+export type OpponentsScope = "personal" | "team";
 
 /** The row's grid and its 16px column gap; header, rows and ghost rows alike. */
 export const OPPONENTS_ROW_FRAME = "grid items-center gap-x-4";
@@ -55,28 +101,20 @@ export const OPPONENTS_ROW_FRAME = "grid items-center gap-x-4";
 /** One header label per track, in track order. */
 export const OPPONENTS_COLUMNS = [
   "Opponent",
-  "Hand",
-  "Backhand",
+  "Plays",
   "Record",
-  "Form",
   "Last match",
-  "Result",
-  "Score",
 ] as const;
 
 /** The table card's inset: 2px above the header, 24px sides, 6px under the rows. */
 export const OPPONENTS_CARD_PADDING = "2px 24px 6px";
 
 /**
- * The tracks' own floor — 734px of minimums plus seven 16px gaps — so the card
- * scrolls rather than crushing a track. The frame writes 720px, which is
- * narrower than the tracks it holds and lets the last column spill past the
- * card's right inset.
+ * The tracks' own floor — 630px of minimums plus three 16px gaps (the
+ * arithmetic is on `OPPONENTS_GRID_TEMPLATE`) — so a narrow window scrolls the
+ * card rather than crushing a track. The same floor with the drawer open.
  */
-export const OPPONENTS_MIN_WIDTH = "min-w-[846px]";
-
-/** The floor beside the open drawer: 550px of minimums plus the same gaps. */
-export const OPPONENTS_MIN_WIDTH_COMPACT = "min-w-[846px] lg:min-w-[662px]";
+export const OPPONENTS_MIN_WIDTH = "min-w-[678px]";
 
 /** A 52px row, washed on an 8px-inset rounded box: 24px card inset − 16px. */
 export const OPPONENTS_ROW_BOX =

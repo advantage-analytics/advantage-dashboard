@@ -167,6 +167,12 @@ function harness(role = "owner", admin = true, personal = false) {
       if (name === "@/lib/supabase/server")
         return { createClient: deps.createClient };
       if (name === "@/lib/data/person-name") return person;
+      // `crestUrl()` opens the cookie client; the URL is a function of the key.
+      if (name === "@/lib/data/teams-server")
+        return {
+          crestUrl: async (path: string | null) =>
+            path ? `https://cdn.test/${path}` : null,
+        };
       if (name === "@/lib/data/opponents-server") return opponents;
       if (name === "@/lib/data/roster-ids") return roster;
       if (name === "@/lib/schedule/attach-line-state") return attach;
@@ -195,6 +201,99 @@ test("non-member admin history and style use the explicit program and fresh auth
   expect(h.calls.filter((c) => c.startsWith("admin-guard"))).toHaveLength(3);
   expect(h.calls.filter((c) => c === "service:matches")).toHaveLength(3);
   expect(h.workspace.active.id).toBe("active");
+});
+
+test("opponentsPlayed carries each opponent's team from their most recent match", async () => {
+  const h = harness();
+  const base = { program_id: target, created_by: "actor" };
+  // Newest first, as the query orders them.
+  h.tables.matches = [
+    {
+      ...base,
+      player2_name: "Riley Rival",
+      date: "2026-09-20",
+      opponent_school: null,
+      opponent_program: {
+        id: "program-1",
+        school_name: "Meridian State",
+        school_abbrev: "MSU",
+        crest_path: "meridian/crest.png",
+        conference: "Big Sky",
+        division: "D1",
+      },
+    },
+    // An older match against the same name, with a different answer: ignored.
+    {
+      ...base,
+      player2_name: "riley  rival",
+      date: "2026-09-01",
+      opponent_school: "Somewhere Else",
+      opponent_program: null,
+    },
+    {
+      ...base,
+      player2_name: "Casey Club",
+      date: "2026-08-30",
+      opponent_school: " Valley Tennis Club ",
+      opponent_program: null,
+    },
+    // A program with no crest, and one the viewer cannot read (null embed).
+    {
+      ...base,
+      player2_name: "Nico Nocrest",
+      date: "2026-08-20",
+      opponent_school: null,
+      opponent_program: {
+        id: "program-2",
+        school_name: "Ridgeline",
+        school_abbrev: null,
+        crest_path: null,
+        conference: null,
+        division: "D3",
+      },
+    },
+    {
+      ...base,
+      player2_name: "Pat Plain",
+      date: "2026-08-10",
+      opponent_school: null,
+      opponent_program: null,
+    },
+  ];
+
+  expect(await h.actions.opponentsPlayed(adminScope)).toMatchObject([
+    {
+      name: "Riley Rival",
+      matches: 2,
+      opponentProgram: {
+        id: "program-1",
+        schoolName: "Meridian State",
+        shortCode: "MSU",
+        crestUrl: "https://cdn.test/meridian/crest.png",
+        conference: "Big Sky",
+        division: "D1",
+      },
+      opponentSchool: null,
+    },
+    {
+      name: "Casey Club",
+      opponentProgram: null,
+      opponentSchool: "Valley Tennis Club",
+    },
+    {
+      name: "Nico Nocrest",
+      opponentProgram: {
+        id: "program-2",
+        schoolName: "Ridgeline",
+        shortCode: null,
+        crestUrl: null,
+        conference: null,
+        division: "D3",
+      },
+      opponentSchool: null,
+    },
+    { name: "Pat Plain", opponentProgram: null, opponentSchool: null },
+  ]);
 });
 
 test("forged admin mode and cross-program dashboard requests refuse before privileged reads", async () => {

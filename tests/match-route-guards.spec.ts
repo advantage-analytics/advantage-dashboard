@@ -48,6 +48,7 @@ function harness(
     match?: Record<string, unknown> | null;
     jobs?: Read;
     roster?: Read;
+    program?: Read;
   } = {},
 ) {
   const calls: string[] = [];
@@ -68,6 +69,9 @@ function harness(
         }
         if (table === "matches") {
           return { data: scenario.match ?? personalMatch, error: null };
+        }
+        if (table === "programs") {
+          return scenario.program ?? { data: null, error: null };
         }
         return { data: null, error: null };
       },
@@ -280,4 +284,70 @@ test("PATCH answers 500 when the roster read fails, not the off-roster 400", asy
   expect(response.status).toBe(500);
   expect(response.body).toEqual({ error: "Could not load the roster" });
   expect(h.calls).not.toContain("update:matches");
+});
+
+/* ------------------------------------------------ the opponent's team */
+
+const OPPONENT_PROGRAM = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+const teamRow = { ...personalMatch, program_id: PROGRAM_ID };
+
+test("PATCH answers 422 with a code for a program that is not in the directory", async () => {
+  const h = harness({ match: teamRow });
+  const response = await h.PATCH({
+    opponent_program_id: OPPONENT_PROGRAM,
+    opponent_school: null,
+  });
+  expect(response.status).toBe(422);
+  expect(response.body).toMatchObject({
+    code: "opponent_program_not_found",
+    field: "opponent_program_id",
+  });
+  expect(h.calls).toContain("from:programs");
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH answers 500, not a refusal, when the program read fails", async () => {
+  const h = harness({
+    match: teamRow,
+    program: { data: null, error: { message: RAW } },
+  });
+  const response = await h.PATCH({ opponent_program_id: OPPONENT_PROGRAM });
+  expect(response.status).toBe(500);
+  expect(response.body).toEqual({ error: "Could not check their team" });
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH saves a program the directory holds", async () => {
+  const h = harness({
+    match: teamRow,
+    program: { data: { id: OPPONENT_PROGRAM }, error: null },
+  });
+  const response = await h.PATCH({
+    opponent_program_id: OPPONENT_PROGRAM,
+    opponent_school: null,
+  });
+  expect(response.status).toBe(200);
+  expect(h.calls).toContain("update:matches");
+});
+
+test("PATCH refuses both team keys set as a 400 with the field and a code", async () => {
+  const h = harness({ match: teamRow });
+  const response = await h.PATCH({
+    opponent_program_id: OPPONENT_PROGRAM,
+    opponent_school: "Meridian State",
+  });
+  expect(response.status).toBe(400);
+  expect(response.body).toMatchObject({
+    field: "opponent_school",
+    code: "opponent_team_exclusive",
+  });
+  expect(h.calls).not.toContain("from:programs");
+  expect(h.calls).not.toContain("update:matches");
+});
+
+test("PATCH that does not name the team never reads the directory", async () => {
+  const h = harness({ match: teamRow });
+  const response = await h.PATCH({ player2_name: "Goodman" });
+  expect(response.status).toBe(200);
+  expect(h.calls).not.toContain("from:programs");
 });

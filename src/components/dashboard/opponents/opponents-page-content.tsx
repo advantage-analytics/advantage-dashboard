@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Brain, Filter as FilterIcon } from "lucide-react";
-import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
+import { Brain } from "lucide-react";
+import { useRowSelection } from "@/components/dashboard/schedule/use-row-selection";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
-import type { PersonalOpponent } from "@/lib/data/personal-opponents";
 import type { PersonalOpponentsData } from "@/lib/data/personal-opponents-server";
 import { cn } from "@/lib/utils";
+import { opponentNameButton } from "./opponent-cells";
 import { OpponentDrawer } from "./opponent-drawer";
+import { OpponentsFilterStrip } from "./opponents-filter-strip";
 import { OpponentsTable, opponentRowId } from "./opponents-table";
 import {
   OPPONENTS_PAGE_COLUMN,
@@ -23,6 +24,7 @@ import {
   emptyOpponentCut,
   hasOpponentFilters,
   NO_OPPONENT_FILTERS,
+  personalOpponentsSubline,
   RESTING_OPPONENT_CUT,
   type OpponentCut,
 } from "./opponents-views";
@@ -36,17 +38,18 @@ import {
  * loader already sent) and which opponent is selected.
  *
  * ── The selection ───────────────────────────────────────────────────────────
- * The roster's model (`team/roster-view.tsx`), on the shared rail: a row click
- * opens the peek drawer beside the column, so the table reflows; re-clicking
- * the selected row, Esc or the X closes it; ↑/↓ step through
- * `visibleOpponents`; and the choice mirrors into `?opponent=<group key>`.
- * `selectedKey` is the row that is washed, `drawerKey` the record the drawer
- * is drawing — they part for the 200ms of the slide-out, when nothing is
- * selected and the drawer still needs somebody to show.
+ * The shared peek-drawer model, `useRowSelection` (`schedule/`): a row click
+ * opens the drawer beside the column, so the table reflows; re-clicking the
+ * selected row, Esc or the X closes it; ↑/↓ step through `visibleOpponents`;
+ * and the choice mirrors into `?opponent=<group key>`. `selectedId` is the
+ * row that is washed, `drawerId` the record the drawer is drawing — they part
+ * for the 200ms of the slide-out, when nothing is selected and the drawer
+ * still needs somebody to show.
  *
- * Esc and the arrows are a window listener, so they work wherever focus is;
- * it stands down for fields, open menus and modal dialogs, and tells the
- * drawer's own `role="dialog"` from those by `DRAWER_ATTR`.
+ * Esc and the arrows are the hook's window listener, so they work wherever
+ * focus is; it stands down for fields, open menus, modal dialogs and this
+ * page's toolbar, and tells the drawer's own `role="dialog"` from those by
+ * `DRAWER_ATTR`.
  */
 export function OpponentsPageContent({
   opponents,
@@ -56,22 +59,6 @@ export function OpponentsPageContent({
   /** `?opponent=` from the URL, or null. Ignored unless it names a listed row. */
   initialSelectedKey?: string | null;
 }) {
-  // A deep link is the one case that lands open — and only on a row the
-  // resting cut actually lists.
-  const landOn = () =>
-    initialSelectedKey !== null &&
-    applyOpponentCut(opponents, RESTING_OPPONENT_CUT).visible.some(
-      (o) => o.key === initialSelectedKey,
-    )
-      ? initialSelectedKey
-      : null;
-
-  const [selectedKey, setSelectedKey] = useState<string | null>(landOn);
-  const [drawerKey, setDrawerKey] = useState<string | null>(landOn);
-  // Slid shut but still mounted: the drawer holds a record nothing selects.
-  const closing = drawerKey !== null && selectedKey === null;
-  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cut, setCut] = useState<OpponentCut>(RESTING_OPPONENT_CUT);
 
   /**
@@ -87,144 +74,60 @@ export function OpponentsPageContent({
     () => applyOpponentCut(opponents, cut),
     [opponents, cut],
   );
+  const visibleKeys = useMemo(
+    () => visibleOpponents.map((o) => o.key),
+    [visibleOpponents],
+  );
+
+  // A deep link is the one case that lands open — and only on a row the
+  // resting cut actually lists, which is what `ids` holds on the first render.
+  const {
+    selectedId,
+    drawerId,
+    closing,
+    openedByKeyboard,
+    index,
+    total,
+    toggle,
+    step,
+    close,
+    finishClose,
+  } = useRowSelection({
+    ids: visibleKeys,
+    initialId: initialSelectedKey,
+    param: "opponent",
+    rowId: opponentRowId,
+    focusTarget: opponentNameButton,
+  });
 
   // Looked up in every opponent, not the visible ones: when a cut hides the
   // selected row the drawer still has its record to draw while it slides out.
-  const drawerOpponent = drawerKey
-    ? (opponents.find((o) => o.key === drawerKey) ?? null)
+  // An opponent gone from the data itself draws nothing, and the hook lets go
+  // of the id.
+  const drawerOpponent = drawerId
+    ? (opponents.find((o) => o.key === drawerId) ?? null)
     : null;
-  const drawerIndex = visibleOpponents.findIndex((o) => o.key === drawerKey);
-
-  const finishClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setDrawerKey(null);
-  }, []);
-
-  const select = useCallback((key: string, viaKeyboard: boolean) => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setSelectedKey(key);
-    setDrawerKey(key);
-    setOpenedByKeyboard(viaKeyboard);
-    syncUrl(key);
-  }, []);
-
-  const close = useCallback(
-    (returnFocusTo: string | null) => {
-      setSelectedKey(null);
-      syncUrl(null);
-      // `onAnimationEnd` normally finishes this; the timer covers reduced
-      // motion, where no animation runs, and is harmless when both fire.
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-      closeTimer.current = setTimeout(finishClose, 240);
-      if (returnFocusTo) {
-        document
-          .getElementById(opponentRowId(returnFocusTo))
-          ?.querySelector("button")
-          ?.focus();
-      }
-    },
-    [finishClose],
-  );
-
-  const toggle = useCallback(
-    (opponent: PersonalOpponent, viaKeyboard: boolean) => {
-      if (selectedKey === opponent.key) {
-        close(viaKeyboard ? opponent.key : null);
-      } else {
-        select(opponent.key, viaKeyboard);
-      }
-    },
-    [selectedKey, select, close],
-  );
-
-  const step = useCallback(
-    (direction: 1 | -1) => {
-      if (!selectedKey) return;
-      const index = visibleOpponents.findIndex((o) => o.key === selectedKey);
-      const next = visibleOpponents[index + direction];
-      if (!next) return;
-      select(next.key, true);
-      document
-        .getElementById(opponentRowId(next.key))
-        ?.scrollIntoView({ block: "nearest" });
-    },
-    [visibleOpponents, selectedKey, select],
-  );
 
   /**
    * Every chip, filter and sort change comes through here. A cut that no
    * longer lists the selected opponent closes the drawer in the same event —
    * left open, it would describe a row the table is not showing, and ↑/↓
-   * would have nowhere to step from.
+   * would have nowhere to step from. The close comes BEFORE the cut so the
+   * drawer is already sliding out when the shorter list arrives, and the hook
+   * lets the slide-out finish instead of dropping the drawer on the spot.
    */
   const applyCut = (patch: Partial<OpponentCut>) => {
     const next = { ...cut, ...patch };
-    setCut(next);
     if (
-      selectedKey &&
+      selectedId &&
       !applyOpponentCut(opponents, next).visible.some(
-        (o) => o.key === selectedKey,
+        (o) => o.key === selectedId,
       )
     ) {
       close(null);
     }
+    setCut(next);
   };
-
-  // The opponent the drawer showed is gone from the data itself — a refresh
-  // after their last match was deleted. Adjusted during render rather than in
-  // an effect, so nothing paints a drawer for a record that no longer exists.
-  if (drawerKey && !drawerOpponent) {
-    setSelectedKey(null);
-    setDrawerKey(null);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedKey) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        if (target.closest("input, textarea, select, [contenteditable=true]"))
-          return;
-        if (
-          target.closest(
-            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
-          )
-        )
-          return;
-        if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close(selectedKey);
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        step(1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        step(-1);
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedKey, close, step]);
 
   const filtered = hasOpponentFilters(cut.filters);
   const clearFilters = () => applyCut({ filters: NO_OPPONENT_FILTERS });
@@ -234,7 +137,7 @@ export function OpponentsPageContent({
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={cn(OPPONENTS_PAGE_COLUMN, OPPONENTS_PAGE_GAP)}>
-        <OpponentsTitleRow totals={totals} />
+        <OpponentsTitleRow subline={personalOpponentsSubline(totals)} />
         <OpponentsToolbar
           view={cut.view}
           onViewChange={(view) => applyCut({ view })}
@@ -246,51 +149,21 @@ export function OpponentsPageContent({
           totalCount={inView}
         />
 
-        {/* The panel closes on apply; this states the cut in words —
-            "Left-handed · Two-handed · 3 of 10 · Clear filter". Never chips,
-            never a badge (Data Table law 6). */}
         {filtered ? (
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-            style={{ background: "var(--surface-subtle)" }}
-          >
-            <FilterIcon
-              className="size-[13px] shrink-0"
-              strokeWidth={1.5}
-              style={{ color: "var(--ink-500)" }}
-              aria-hidden="true"
-            />
-            <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-              {describeOpponentFilters(cut.filters)}
-            </span>
-            <span
-              className="size-[3px] rounded-full"
-              style={{ background: "var(--ink-300)" }}
-              aria-hidden="true"
-            />
-            <span className="text-micro tabular">
-              {shown} of {inView}
-            </span>
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="cursor-pointer rounded-sm text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              Clear filter
-            </button>
-          </div>
+          <OpponentsFilterStrip
+            description={describeOpponentFilters(cut.filters)}
+            shown={shown}
+            inView={inView}
+            onClear={clearFilters}
+          />
         ) : null}
 
         {/* A cut that leaves nothing keeps the card and its header row and
             says so in the body; the title row, chips and footer do not move. */}
         <OpponentsTable
           opponents={visibleOpponents}
-          selectedKey={selectedKey}
+          selectedKey={selectedId}
           onToggle={toggle}
-          // Tracks follow the rail: collapsed while a row is selected, and
-          // reopening as soon as the slide-out starts.
-          compact={selectedKey !== null}
           empty={
             <TableEmptyBody
               icon={Brain}
@@ -328,8 +201,8 @@ export function OpponentsPageContent({
       {drawerOpponent && (
         <OpponentDrawer
           opponent={drawerOpponent}
-          index={Math.max(drawerIndex, 0)}
-          total={Math.max(visibleOpponents.length, 1)}
+          index={Math.max(index, 0)}
+          total={Math.max(total, 1)}
           closing={closing}
           autoFocus={openedByKeyboard}
           onPrev={() => step(-1)}
@@ -340,20 +213,4 @@ export function OpponentsPageContent({
       )}
     </div>
   );
-}
-
-/**
- * Mirror the selection into `?opponent=` without a navigation.
- *
- * `history.replaceState` rather than `router.replace`: the App Router treats
- * the latter as a navigation and re-renders from the server, which for a click
- * on a row is a round trip to change one query string. The native call is one
- * the router listens to, so `useSearchParams` elsewhere still sees it.
- */
-function syncUrl(key: string | null) {
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  if (key) url.searchParams.set("opponent", key);
-  else url.searchParams.delete("opponent");
-  window.history.replaceState(window.history.state, "", url);
 }
