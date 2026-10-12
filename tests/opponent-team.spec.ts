@@ -13,6 +13,7 @@ import {
   opponentTeamFromHistory,
   opponentTeamIsEmpty,
   opponentTeamUpdate,
+  rankOpponentTeams,
 } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import { redactForPlayer, searchPrograms } from "@/lib/data/programs-server";
 
@@ -436,5 +437,38 @@ test.describe("searchPrograms — id, abbreviation and crest", () => {
     });
     expect(redacted).not.toHaveProperty("ownerDisplay");
     expect(redacted).not.toHaveProperty("status");
+  });
+});
+
+test.describe("rankOpponentTeams — the team's own squad first", () => {
+  const rows = [
+    { id: "a", team: "womens" },
+    { id: "b", team: "mens" },
+    { id: "c", team: "womens" },
+    { id: "d", team: "mens" },
+  ];
+
+  test("a men's team sees men's programs first, each half in search order", () => {
+    expect(rankOpponentTeams(rows, "mens").map((r) => r.id)).toEqual([
+      "b",
+      "d",
+      "a",
+      "c",
+    ]);
+  });
+
+  test("nothing is removed", () => {
+    expect(rankOpponentTeams(rows, "womens")).toHaveLength(rows.length);
+  });
+
+  test("a co-ed or unset squad leaves the order alone", () => {
+    for (const squad of ["coed", null, undefined]) {
+      expect(rankOpponentTeams(rows, squad).map((r) => r.id)).toEqual([
+        "a",
+        "b",
+        "c",
+        "d",
+      ]);
+    }
   });
 });

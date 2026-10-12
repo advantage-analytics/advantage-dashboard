@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
+import { rankOpponentTeams } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useProgramSearch } from "@/components/dashboard/schedule/static/use-program-search";
 import {
   FloatMenuDivider,
@@ -113,9 +115,13 @@ export function OpponentTeamField({
   const typed = term.trim();
   // A row the enrichment read could not give an id cannot be pointed at as a
   // program, so it is not offered as one — the as-typed row covers it.
-  const results = useProgramSearch(searching ? term : "")
-    .filter((row) => Boolean(row.id))
-    .slice(0, MAX_RESULTS);
+  // The team's own squad first, before the cut — otherwise a same-squad row
+  // the search ranked seventh would be the one dropped.
+  const { active: workspace } = useWorkspace();
+  const results = rankOpponentTeams(
+    useProgramSearch(searching ? term : "").filter((row) => Boolean(row.id)),
+    workspace.team,
+  ).slice(0, MAX_RESULTS);
   const ready = typed.length >= 2;
   // Directory rows, then the as-typed row.
   const rowCount = ready ? results.length + 1 : 0;

@@ -122,3 +122,24 @@ export function opponentTeamFromHistory(
   }
   return current.opponentTeamSource === "history" ? EMPTY_OPPONENT_TEAM : null;
 }
+
+/**
+ * Directory results with the searching team's own squad first.
+ *
+ * A college is two directory rows — men's and women's — and a search for the
+ * school returns both, so the wrong one is an easy pick. The other squad is
+ * moved down, never removed: teams do play across squads and types. A stable
+ * partition, so the search's own order (prefix hits first) holds inside each
+ * half. A team with no single squad (co-ed, or never said) gets the list as
+ * it came.
+ */
+export function rankOpponentTeams<T extends { team: string | null }>(
+  rows: readonly T[],
+  squad: string | null | undefined,
+): T[] {
+  if (squad !== "mens" && squad !== "womens") return [...rows];
+  return [
+    ...rows.filter((row) => row.team === squad),
+    ...rows.filter((row) => row.team !== squad),
+  ];
+}
