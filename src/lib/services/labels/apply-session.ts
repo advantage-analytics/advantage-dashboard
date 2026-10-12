@@ -35,6 +35,7 @@ import {
   vendorShotFacts,
   type AppliedPointRow,
 } from "./apply";
+import { chunksOf } from "./chunks";
 import { labelScores } from "./score";
 import {
   enteredScore,
@@ -58,11 +59,7 @@ export interface LabelApplyBackup {
   matchStats: Row[];
 }
 
-function chunks<T>(rows: readonly T[], size = CHUNK): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
-  return out;
-}
+const chunks = <T>(rows: readonly T[]): T[][] => chunksOf(rows, CHUNK);
 
 // ── Reads ────────────────────────────────────────────────────────────────────
 

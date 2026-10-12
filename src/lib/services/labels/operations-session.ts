@@ -37,6 +37,7 @@ import {
   syncEndingAfterShotChange,
   type LabelPointEndingSynced,
 } from "./ending-session";
+import { chunksOf } from "./chunks";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   applyShotsRemoved,
@@ -198,11 +199,7 @@ export async function writeShotSwaps(
  */
 const ID_CHUNK = 100;
 export function idChunks(ids: readonly string[]): string[][] {
-  const chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += ID_CHUNK) {
-    chunks.push(ids.slice(i, i + ID_CHUNK));
-  }
-  return chunks;
+  return chunksOf(ids, ID_CHUNK);
 }
 
 /** `points` each with its strokes from `shots`, matched on `labelPointId`. */

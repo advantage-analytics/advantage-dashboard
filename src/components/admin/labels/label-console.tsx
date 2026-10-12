@@ -1563,40 +1563,11 @@ export function LabelConsole({
       refuse(plan.error);
       return;
     }
-    const shotsBefore = shotSwapsOf(before.shots);
     await runOperation(
-      (rows) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
-          plan.shots,
-        ),
+      (rows) => pointMoved(rows, pointId, plan),
       () => operations.movePoint(pointId, to, switchServer),
-      (rows, result) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({
-            ...p,
-            status: result.status,
-            server: result.server,
-            setNumber: result.setNumber,
-            gameNumber: result.gameNumber,
-            winner: result.winner,
-            endedBy: result.endedBy,
-          })),
-          result.shots,
-        ),
-      (rows) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({
-            ...p,
-            setNumber: before.setNumber,
-            gameNumber: before.gameNumber,
-            server: before.server,
-            status: before.status,
-            winner: before.winner,
-            endedBy: before.endedBy,
-          })),
-          shotsBefore,
-        ),
+      (rows, result) => pointMoveSettled(rows, pointId, result),
+      (rows) => pointMovePutBack(rows, before),
     );
   }
 
@@ -1655,30 +1626,13 @@ export function LabelConsole({
       );
       if ("error" in plan) return refuse(plan.error);
       steps.push({ before, plan });
-      rows = applyShotSwaps(
-        replacePoint(rows, id, (p) => applyPointMove(p, plan.write)),
-        plan.shots,
-      );
+      rows = pointMoved(rows, id, plan);
     }
     type Step = (typeof steps)[number];
     const moved = (current: LabelPoint[], { before, plan }: Step) =>
-      applyShotSwaps(
-        replacePoint(current, before.id, (p) => applyPointMove(p, plan.write)),
-        plan.shots,
-      );
+      pointMoved(current, before.id, plan);
     const putBack = (current: LabelPoint[], { before }: Step) =>
-      applyShotSwaps(
-        replacePoint(current, before.id, (p) => ({
-          ...p,
-          setNumber: before.setNumber,
-          gameNumber: before.gameNumber,
-          server: before.server,
-          status: before.status,
-          winner: before.winner,
-          endedBy: before.endedBy,
-        })),
-        shotSwapsOf(before.shots),
-      );
+      pointMovePutBack(current, before);
     setPoints((current) => steps.reduce(moved, current));
     dispatchSave({ type: "start" });
     for (const [i, { before }] of steps.entries()) {
@@ -1688,20 +1642,7 @@ export function LabelConsole({
         dispatchSave({ type: "failure", message: result.error });
         return;
       }
-      setPoints((current) =>
-        applyShotSwaps(
-          replacePoint(current, before.id, (p) => ({
-            ...p,
-            status: result.status,
-            server: result.server,
-            setNumber: result.setNumber,
-            gameNumber: result.gameNumber,
-            winner: result.winner,
-            endedBy: result.endedBy,
-          })),
-          result.shots,
-        ),
-      );
+      setPoints((current) => pointMoveSettled(current, before.id, result));
     }
     dispatchSave({ type: "success", at: Date.now() });
   }
@@ -1764,7 +1705,14 @@ export function LabelConsole({
    * rows, and the game's server. Every other edit is written at once.
    */
   function requestPatchShot(shotId: string, patch: LabelShotPatch) {
-    if (operations && "hitter" in patch && Object.keys(patch).length === 1) {
+    // A draft stroke's add is still in flight: the server would switch the
+    // saved rows and not it, so its edit goes alone.
+    if (
+      operations &&
+      !shotId.startsWith(PENDING_SHOT_PREFIX) &&
+      "hitter" in patch &&
+      Object.keys(patch).length === 1
+    ) {
       const follow = planServeHitterFollow(
         points,
         shotId,
@@ -2566,6 +2514,57 @@ function replacePoint(
   change: (point: LabelPoint) => LabelPoint,
 ): LabelPoint[] {
   return points.map((point) => (point.id === pointId ? change(point) : point));
+}
+
+/** A planned point move (`planPointMove`), as the rows take it at once. */
+function pointMoved(
+  rows: readonly LabelPoint[],
+  pointId: string,
+  plan: Extract<PlannedPointMove, { ok: true }>,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
+    plan.shots,
+  );
+}
+
+/** The move as the server wrote it: the last word over `pointMoved`. */
+function pointMoveSettled(
+  rows: readonly LabelPoint[],
+  pointId: string,
+  result: Extract<LabelMovePointResult, { ok: true }>,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, pointId, (p) => ({
+      ...p,
+      status: result.status,
+      server: result.server,
+      setNumber: result.setNumber,
+      gameNumber: result.gameNumber,
+      winner: result.winner,
+      endedBy: result.endedBy,
+    })),
+    result.shots,
+  );
+}
+
+/** A move undone: the point's columns and its strokes' hitters as `before` had them. */
+function pointMovePutBack(
+  rows: readonly LabelPoint[],
+  before: LabelPoint,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, before.id, (p) => ({
+      ...p,
+      setNumber: before.setNumber,
+      gameNumber: before.gameNumber,
+      server: before.server,
+      status: before.status,
+      winner: before.winner,
+      endedBy: before.endedBy,
+    })),
+    shotSwapsOf(before.shots),
+  );
 }
 
 /**

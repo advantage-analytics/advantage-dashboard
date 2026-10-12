@@ -232,7 +232,9 @@ export async function writeLabelPointSplit(params: {
     const { error: serveError } = await supabase
       .from("label_shots")
       .update({ stroke: serve.stroke, status })
-      .eq("id", serve.id);
+      .eq("id", serve.id)
+      // The move above just put it on the new point: never a row elsewhere.
+      .eq("label_point_id", inserted.id);
     if (serveError) {
       return { error: `Could not renumber the serve: ${serveError.message}` };
     }
