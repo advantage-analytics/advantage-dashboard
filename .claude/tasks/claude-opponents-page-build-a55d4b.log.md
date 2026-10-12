@@ -254,3 +254,9 @@ is the runner's. Newest entries at the bottom.
 1. At 1440px with the drawer closed, Opponent is ~530px wide and Plays sits far from the name — a capped first track with the slack moved to the last would tighten it.
 2. `OPPONENT_FORM_SLOTS` and the skeleton's 25px ticks bar state the same footprint twice.
 3. The eyes-on fixtures have one opponent with hand and backhand recorded — a left-hander or one-hander would exercise Plays and the filters on screen.
+
+## T18 · Finish: TEAM_NAV flag, nav tests, search palette, AGENTS.md, page comment, npm run map — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `src/lib/dashboard/nav.ts`: `TEAM_NAV`'s Opponents entry loses `comingSoon`; the comment says both workspaces' pages are built. `tests/nav-icons.spec.ts`: the `splitByWorkspace` allowlist is gone and the file-text rule applies to every route. `tests/search-palette-pages.spec.ts`: Opponents is expected in both workspaces' shortcuts, and the team live-rail list now includes it. `AGENTS.md` Routes: only the four Statistics / Ask routes render `ComingSoonPage`; a new bullet says Opponents is built in both workspaces and names both loaders. `page.tsx`'s doc comment already described both products (no edit). `npm run map`: already current.

@@ -257,7 +257,7 @@ ready).
 
 ## T18 · Finish: TEAM_NAV flag, nav tests, search palette, AGENTS.md, page comment, npm run map
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T13, T14, T15
 - **files:** (guess) `src/lib/dashboard/nav.ts` (~93–135), `tests/nav-icons.spec.ts` (~35–90), `tests/search-palette-pages.spec.ts` (~50–90), `AGENTS.md` (Routes paragraph ~77–84), `src/app/dashboard/opponents/page.tsx` (doc comment), `MAP.md`
