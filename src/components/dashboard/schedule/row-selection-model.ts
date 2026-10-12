@@ -53,6 +53,33 @@ export function initialRowSelection(
   };
 }
 
+export interface RowSelectionPosition {
+  /** `drawerId`'s position among the visible `ids`, or -1. */
+  index: number;
+  /** How many rows are visible — the drawer counter's denominator. */
+  total: number;
+  canPrev: boolean;
+  canNext: boolean;
+}
+
+/**
+ * Where the drawer stands among the visible rows. Read off `drawerId`, not
+ * `selectedId`, so the counter and the prev/next buttons hold their values
+ * while the slide-out plays instead of blanking the moment a close starts.
+ */
+export function rowSelectionPosition(
+  state: Pick<RowSelectionState, "drawerId">,
+  ids: readonly string[],
+): RowSelectionPosition {
+  const index = state.drawerId ? ids.indexOf(state.drawerId) : -1;
+  return {
+    index,
+    total: ids.length,
+    canPrev: index > 0,
+    canNext: index >= 0 && index < ids.length - 1,
+  };
+}
+
 export function rowSelectionReducer(
   state: RowSelectionState,
   action: RowSelectionAction,

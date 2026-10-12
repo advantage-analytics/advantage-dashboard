@@ -117,7 +117,7 @@ ready).
 
 ## T8 · Offline spec for the row-selection model
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** (guess) new `tests/row-selection-model.spec.ts`; reads `src/components/dashboard/schedule/row-selection-model.ts`

@@ -97,3 +97,16 @@ is the runner's. Newest entries at the bottom.
 2. `close()` with nothing open still sets `closing` for 240ms — could be a no-op in the model.
 3. `team/roster-view.tsx` and the Matches page keep their own copies and lack the `data-row-keys` guard — a separate branch.
 4. `schedule/README.md` could mention `row-selection-model.ts`.
+
+## T8 · Offline spec for the row-selection model — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** New `tests/row-selection-model.spec.ts` (30 tests, pure import): toggle, close → finishClose, stepping over a filtered order and stopping at both ends, `cutHid` clearing a hidden selection and standing down while closing, initial state from `(ids, initialId)`, `openedByKeyboard` after keyboard and pointer actions, same-object identity on no-op transitions, and position derived from `drawerId` during a close. To make position testable, `row-selection-model.ts` gains the pure selector `rowSelectionPosition(state, ids)` and `use-row-selection.ts` calls it (same expressions, moved).
+
+**follow-ups:**
+
+1. Make `close` an identity no-op when nothing is selected or open.
+2. Make `finishClose` stand down unless `closing` is true (a stray `onClosed` can leave a selected row with no drawer).
+3. Decide whether `step` from a selection not in `ids` should be a no-op in both directions (today ↓ lands on the first row, ↑ does nothing).
+4. `use-row-selection.ts`'s DOM side (key-guard selectors, URL mirror, focus return) has no direct test.

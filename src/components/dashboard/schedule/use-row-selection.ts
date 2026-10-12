@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
 import {
   initialRowSelection,
+  rowSelectionPosition,
   rowSelectionReducer,
   type RowSelectionAction,
   type RowSelectionState,
@@ -229,17 +230,12 @@ export function useRowSelection({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedId, close, step]);
 
-  const index = drawerId ? ids.indexOf(drawerId) : -1;
-
   return {
     selectedId,
     drawerId,
     closing,
     openedByKeyboard,
-    index,
-    total: ids.length,
-    canPrev: index > 0,
-    canNext: index >= 0 && index < ids.length - 1,
+    ...rowSelectionPosition(reconciled, ids),
     toggle,
     select,
     close,
