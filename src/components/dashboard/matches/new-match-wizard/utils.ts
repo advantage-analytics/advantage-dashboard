@@ -625,6 +625,12 @@ export function loadFormDataFromStorage(workspaceKey: string): FormData | null {
     const {
       adScoring: _adScoring,
       playOnLets: _playOnLets,
+      // The opponent's team goes too: the field only shows in a team
+      // workspace, so one carried into a personal upload would be saved with
+      // nothing on screen to show or clear it.
+      opponentTeamProgram: _opponentTeamProgram,
+      opponentTeamSchool: _opponentTeamSchool,
+      opponentTeamSource: _opponentTeamSource,
       ...rest
     } = formData;
     return rest as FormData;

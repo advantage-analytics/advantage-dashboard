@@ -1162,7 +1162,9 @@ export function EditMatchDialog({
             playerNote={styleNote(player, playerPrefill)}
             opponentNote={styleNote(opponent, opponentPrefill)}
             opponentTeam={
-              match.program_id && workspace.active.kind === "team"
+              match.program_id &&
+              workspace.active.kind === "team" &&
+              match.program_id === workspace.active.id
                 ? {
                     ...opponentTeam,
                     onChange: (next) => {
