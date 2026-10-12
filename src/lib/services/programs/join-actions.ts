@@ -6,8 +6,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateEmail, validatePassword } from "@/lib/auth/error-messages";
-import { emailOrigin } from "@/lib/site-url";
+import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import {
   expiredInviteNudgeEmail,
@@ -560,126 +559,6 @@ export async function acceptJoinLink(token: string): Promise<JoinActionResult> {
     supabase.auth.getUser(),
   ]);
   return finishJoinLink(token, outcome, user?.id);
-}
-
-export type JoinLinkSignUpResult =
-  | JoinActionResult
-  /**
-   * A sign-in link is on its way. `email` is the address it went to,
-   * lowercased, for the screen to print back.
-   */
-  | { ok: true; status: "confirm_email"; email: string };
-
-/**
- * No session, holding a join link. Mail a sign-in link; join after it.
- *
- * Differs from `createAccountAndAccept` in the one way that matters: the
- * address comes from the FORM. An invitation token was mailed to one address,
- * so holding it proves control of that address, and the invite path may set a
- * password and confirm the account on the spot. A join link was mailed to
- * nobody — it was pasted into a group chat — so a typed address proves
- * nothing. Two things follow.
- *
- * It must not confirm the account itself (`email_confirm: true`): anyone
- * could type a teammate's address, and `_ensure_program_player_row` would
- * hand them that teammate's roster row — and with it, through
- * `matches.player1_id`, every match on it.
- *
- * And it must not take a PASSWORD either. With `signUp(email, password)` the
- * person holding the link chooses the credential and the mailbox owner's
- * click on the confirmation only activates it: the teammate confirms, joins,
- * claims their row — into an account somebody else can sign in to. So this
- * path is passwordless. `signInWithOtp` mails a one-time link to the address;
- * whoever opens it IS the mailbox owner, lands on `/confirm?next=/join/<token>`
- * signed in, and the link renders `link_ready` for one click. They can set a
- * password later from account settings, as themselves.
- *
- * The same call serves an address that already has an account — it gets a
- * sign-in link instead of a first one — so there is one answer for both and
- * nothing here says which, which is what keeps a link pasted into a group
- * chat from being a way to probe addresses against `users`.
- * `accept_program_join_link` still refuses an unconfirmed address
- * (`unconfirmed`) from the other side.
- */
-export async function createAccountAndJoinByLink(
-  token: string,
-  input: {
-    email: string;
-    firstName: string;
-    lastName: string;
-  },
-): Promise<JoinLinkSignUpResult> {
-  // Re-resolved at submit, so the answer is the one the page would give now:
-  // the team may have filled or the link been turned off while the form was
-  // open, and each of those has its own sentence rather than one shrug.
-  const state = await resolveJoinState(token);
-  if (state.kind !== "link_sign_up") {
-    switch (state.kind) {
-      case "link_full":
-        return {
-          ok: false,
-          error: `${state.programName} is full. Ask a coach to free a seat, then open this link again.`,
-        };
-      case "not_found":
-        return {
-          ok: false,
-          error:
-            "That link isn't valid any more. Ask whoever shared it for a new one.",
-        };
-      default:
-        // A session appeared under the form (another tab signed in): the page
-        // now renders the one-click screen, so reload is the honest answer.
-        return {
-          ok: false,
-          error: "You're signed in now — reload this page to join.",
-        };
-    }
-  }
-
-  const email = input.email.trim().toLowerCase();
-  const emailProblem = validateEmail(email);
-  if (emailProblem) return { ok: false, error: emailProblem };
-
-  const firstName = input.firstName.trim();
-  const lastName = input.lastName.trim();
-  if (!firstName) return { ok: false, error: "Add your first name." };
-
-  const supabase = await createClient();
-  const fullName = [firstName, lastName].filter(Boolean).join(" ");
-
-  const { error: otpError } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      shouldCreateUser: true,
-      // Applied on user CREATION only and dropped for an existing account —
-      // which is right: a typed name must not rename somebody's account.
-      // `handle_new_user` reads `full_name` only; nothing trust-bearing may
-      // ride in metadata (see `createAccountAndAccept`).
-      data: { full_name: fullName },
-      // `emailOrigin()`, NOT `requestOrigin()`. This mail goes to whatever
-      // address was typed — which on a link pasted into a group chat may be
-      // somebody else's — so its link must never be built from the caller's
-      // `host` headers. `sendClaimOtp` may use the request origin because it
-      // mails the requester's own address; this path cannot assume that.
-      // The cost is that a dev worktree confirms on the configured origin
-      // rather than its own port.
-      emailRedirectTo: `${emailOrigin()}/confirm?next=${encodeURIComponent(joinHref(token))}`,
-    },
-  });
-
-  if (otpError) {
-    // Message only. Supabase's per-address and per-IP OTP limits surface
-    // here; the sentence does not say which, or anything about the address.
-    console.error("[join] could not send the sign-in link", {
-      message: otpError.message,
-    });
-    return {
-      ok: false,
-      error: "We couldn't send that email. Wait a minute and try again.",
-    };
-  }
-
-  return { ok: true, status: "confirm_email", email };
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import {
   finishGuardianOnboarding,
   finishOnboarding,
+  saveNameThenJoin,
   type OnboardingChoice,
 } from "./actions";
 import {
@@ -211,10 +212,27 @@ function IconCardOption<T extends string>({
   );
 }
 
-export function OnboardingFlow() {
+/**
+ * The name step alone, for an account about to join a program by link.
+ *
+ * `next` is the join link to return to and `programName` whose it is. The two
+ * names prefill the fields when the coach already has this person on the
+ * roster under their address: the one case where the fields do not open
+ * empty, because the name was typed by someone who knows them rather than
+ * read off an OAuth profile. The person can correct it, and the correction
+ * goes to their own profile, never to the coach's roster row.
+ */
+export interface JoinNameStep {
+  next: string;
+  programName: string;
+  firstName: string;
+  lastName: string;
+}
+
+export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
   const [step, setStep] = useState<Step>(1);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState(join?.firstName ?? "");
+  const [lastName, setLastName] = useState(join?.lastName ?? "");
   const [persona, setPersona] = useState<Persona | null>(null);
   const [college, setCollege] = useState<CollegeAnswer | null>(null);
   const [playerName, setPlayerName] = useState("");
@@ -279,6 +297,19 @@ export function OnboardingFlow() {
   const continueFromName = () => {
     if (!nameReady) return;
     setError(null);
+    if (join) {
+      // The whole flow, for a joiner: save the name and go back to the link.
+      // Every later step is a question the join already answers.
+      startTransition(async () => {
+        const result = await saveNameThenJoin({
+          firstName,
+          lastName,
+          next: join.next,
+        });
+        if (result && !result.ok) setError(result.error);
+      });
+      return;
+    }
     turnTo(2);
   };
 
@@ -470,7 +501,9 @@ export function OnboardingFlow() {
             >
               <ClaimHeading
                 gap={8}
-                step={stepLabel(1, persona)}
+                step={
+                  join ? `Joining ${join.programName}` : stepLabel(1, persona)
+                }
                 title="What should we call you?"
                 body="Coaches and teammates see this name on every match you send. Type it the way you want it read."
                 bodyMax="52ch"
@@ -519,10 +552,10 @@ export function OnboardingFlow() {
               <ClaimActions gap={16}>
                 <button
                   type="submit"
-                  disabled={!nameReady}
+                  disabled={!nameReady || (join !== undefined && isPending)}
                   className={CLAIM_BUTTON}
                 >
-                  Continue
+                  {join && isPending ? "Saving…" : "Continue"}
                 </button>
                 <span className={CLAIM_MICRO}>
                   Capitalized as you leave the field — &quot;marcus reid&quot;

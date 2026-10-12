@@ -282,14 +282,20 @@ test("roster preserves profile IDs, safety-arm exclusions and actor's own staff 
   });
 });
 
-for (const status of ["claim_pending", "suspended", "unclaimed"]) {
-  test(`${status} remains visible but cannot send video; custom tier stays reduced`, async () => {
+// The console uploads for teams that are not approved yet; only a suspension
+// stops it. See `adminCanUploadFor()`.
+for (const [status, canSubmitVideo] of [
+  ["claim_pending", true],
+  ["unclaimed", true],
+  ["suspended", false],
+] as const) {
+  test(`${status} remains visible and ${canSubmitVideo ? "can" : "cannot"} send video; custom tier stays reduced`, async () => {
     const h = harness();
     Object.assign(h.tables.programs[0], { status, org_type: "club" });
     expect(await getAdminUploadContext(PROGRAM, h.deps)).toMatchObject({
       ok: true,
       context: {
-        workspace: { programStatus: status, canSubmitVideo: false },
+        workspace: { programStatus: status, canSubmitVideo },
         videoAllowance: { capSeconds: 7200, accountType: "program" },
       },
     });

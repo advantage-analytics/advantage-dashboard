@@ -35,6 +35,7 @@ import {
   uploadEligibility,
   type RosterIdentity,
 } from "@/lib/workspace/upload-eligibility";
+import { adminUploadApproval } from "@/lib/admin/uploads/approval";
 import {
   billingWorkspaceFor,
   explainVideoRefusal,
@@ -266,6 +267,12 @@ export async function handleUploadUrl(
     athlete: athleteOnRow(match, userId),
     roster,
     attachesToLine: match.event_entry_id !== null,
+    // The console uploads for teams that are not approved yet; only a
+    // suspension stops it (`adminCanUploadFor()`). Undefined for everyone
+    // else, so the dashboard path reads the workspace's own status as before.
+    approval: adminVideo
+      ? adminUploadApproval(adminVideo.workspace.programStatus)
+      : undefined,
   });
 
   if (!eligibility.ok) {

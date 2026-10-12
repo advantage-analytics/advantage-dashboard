@@ -223,6 +223,13 @@ export interface RosterInvite {
    * their own invitations, and a row must not credit somebody else's.
    */
   invitedBy: string | null;
+  /**
+   * `program_invites.player_id` — the roster row this invitation claims, or
+   * null for someone new. Resend hands it back to `inviteMember`; dropped, the
+   * RPC takes the address for a stranger's and refuses it as a duplicate of
+   * the row it was sent to.
+   */
+  playerId: string | null;
 }
 
 export interface RosterData {
@@ -372,7 +379,7 @@ export const getRosterData = cache(async function getRosterData(
     supabase.rpc("program_seat_usage", { p_program_id: programId }),
     supabase
       .from("program_invites")
-      .select("id, email, role, created_at, invited_by")
+      .select("id, email, role, created_at, invited_by, player_id")
       .eq("program_id", programId)
       .is("accepted_at", null)
       .order("created_at", { ascending: false }),
@@ -686,6 +693,7 @@ export const getRosterData = cache(async function getRosterData(
       role: row.role as MemberRole,
       invitedOn: shortDate(row.created_at as string),
       invitedBy: (row.invited_by as string | null) ?? null,
+      playerId: (row.player_id as string | null) ?? null,
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
     uploadPolicy:

@@ -121,9 +121,11 @@ export type JoinState =
     }
   /**
    * A live join link and nobody signed in. Unlike `sign_up`, no address is
-   * known — the link was addressed to nobody — so the form asks for one, and
-   * an existing account is offered sign-in rather than a password box (see
-   * `createAccountAndJoinByLink`).
+   * known — the link was addressed to nobody — so this screen takes none. It
+   * sends the person to `/sign-up` or `/login` with `?next=` back to the link,
+   * and they return as `link_ready`. The account is confirmed by the mailbox
+   * owner's click on the ordinary sign-up mail, as for any other account;
+   * `accept_program_join_link` still refuses an unconfirmed address.
    */
   | {
       kind: "link_sign_up";

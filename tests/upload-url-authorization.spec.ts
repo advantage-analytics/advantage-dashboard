@@ -618,6 +618,34 @@ for (const member of [false, true]) {
   });
 }
 
+// Approval is the dashboard's gate, not the console's: an administrator
+// uploads for a team nobody has approved yet. Only a suspension refuses.
+for (const [programStatus, status] of [
+  ["unclaimed", 200],
+  ["claim_pending", 200],
+  ["suspended", 403],
+] as const) {
+  test(`console upload for a ${programStatus} program answers ${status}`, async () => {
+    const h = harness({
+      match: match({ created_by: OTHER_USER }),
+      workspaces: [personal()],
+    });
+    h.deps.authorizeAdminVideo = async () => ({
+      jobId: "admin-job",
+      matchId: "22222222-2222-4222-8222-222222222222",
+      programId: PROGRAM,
+      workspace: team({
+        role: "owner",
+        programStatus,
+        canSubmitVideo: programStatus !== "suspended",
+      }),
+      roster: ROSTER,
+    });
+    h.deps.recordBlobName = async () => ({ error: null });
+    expect((await call(h)).status).toBe(status);
+  });
+}
+
 test("console upload discovery refuses revoked admin and wrong-program authorization", async () => {
   const denied = harness({});
   denied.deps.authorizeAdminVideo = async () => {

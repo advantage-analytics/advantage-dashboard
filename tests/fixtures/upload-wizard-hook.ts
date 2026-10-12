@@ -10,6 +10,7 @@ import * as opponentTeam from "@/components/dashboard/matches/new-match-wizard/o
 import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
 import { buildMatchData } from "@/components/dashboard/matches/new-match-wizard/utils";
 import * as scoreFormat from "@/lib/ui/score-format";
+import * as adminApproval from "@/lib/admin/uploads/approval";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
@@ -372,6 +373,8 @@ export function uploadWizardHarness(
       SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE:
         "Submission response was interrupted. Check this operation before retrying with the same file.",
     },
+    // Pure: the console's own answer to "is this team uploadable".
+    "@/lib/admin/uploads/approval": adminApproval,
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {

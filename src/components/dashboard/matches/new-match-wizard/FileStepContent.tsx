@@ -16,7 +16,7 @@
  * beside a 7 GB file otherwise reads as "sent".
  */
 
-import { memo, useEffect, useId, useRef } from "react";
+import { memo, useId } from "react";
 import {
   FileSpreadsheet,
   Film,
@@ -43,6 +43,11 @@ import {
   noteStripCls,
   warningStripCls,
 } from "./styles";
+import {
+  CheckedFileRow,
+  VideoFileLead,
+  videoFileFacts,
+} from "./CheckedFileRow";
 import { NoticeText } from "./NoticeText";
 import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
@@ -129,53 +134,6 @@ function extensionList(acceptString: string): string {
     .filter((s) => s.startsWith("."))
     .map((s) => s.slice(1).toUpperCase())
     .join(" · ");
-}
-
-/**
- * A still from the file, as the row's 40px lead.
- *
- * Its own object URL rather than the trim step's: that one is created when the
- * player mounts, two steps from here. A few seconds in rather than frame zero,
- * which on a phone recording is usually the ground.
- */
-function VideoStill({
-  file,
-  durationSeconds,
-}: {
-  file: File;
-  durationSeconds: number;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-  // URL created and revoked in the same effect, src set from it — see the
-  // same note in TrimStepContent: a memoised URL revoked from a cleanup is
-  // dead by the time development's second effect run looks for it.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const url = URL.createObjectURL(file);
-    el.src = url;
-    return () => {
-      // Detach before revoking — Safari otherwise keeps the handle alive.
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
-      URL.revokeObjectURL(url);
-    };
-  }, [file]);
-  const at = Math.min(5, durationSeconds * 0.05) || 0.001;
-  return (
-    <video
-      ref={ref}
-      muted
-      playsInline
-      preload="metadata"
-      aria-hidden="true"
-      onLoadedMetadata={(e) => {
-        if (e.currentTarget.currentTime === 0) e.currentTarget.currentTime = at;
-      }}
-      className="size-10 object-cover opacity-90"
-    />
-  );
 }
 
 /**
@@ -354,17 +312,7 @@ function FileStepContentImpl({
         ? "read"
         : "ready";
 
-  const videoFacts = probe
-    ? [
-        formatTimecode(probe.durationSeconds),
-        formatResolution(probe.width, probe.height),
-        formatProbeFps(probe),
-        uploadedFile?.size,
-        "checked",
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const videoFacts = videoFileFacts(probe, uploadedFile?.size, "checked");
 
   // What row 1 of the requirements reports once a video has passed the check.
   // Nothing for a refused file: the wizard holds no probe for one, and the red
@@ -511,50 +459,40 @@ function FileStepContentImpl({
           {/* A checked file becomes a step-1 field: 40px lead, 14px name, mono
               facts in the subline. Replace is the quiet blue action; remove is
               a 28px icon square named by its label. */}
-          <div className="flex items-center gap-4 border-b border-[var(--border-hairline)] pb-4">
-            <span
-              className={`inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)] ${
-                isVideo ? "bg-[var(--ink-900)]" : ""
-              }`}
-            >
-              {isVideo ? (
-                uploadedFile?.file ? (
-                  <VideoStill
-                    file={uploadedFile.file}
-                    durationSeconds={probe?.durationSeconds ?? 0}
-                  />
-                ) : (
-                  <Film
-                    className="size-4 text-white/70"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )
-              ) : selectedProvider === "swing-vision" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src="/providers/swingvision-icon.png"
-                  alt=""
-                  className="size-10"
+          <CheckedFileRow
+            ruled
+            lead={
+              isVideo ? (
+                <VideoFileLead
+                  file={uploadedFile?.file}
+                  durationSeconds={probe?.durationSeconds ?? 0}
                 />
               ) : (
-                <FileSpreadsheet
-                  className="size-5 text-[var(--ink-500)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              )}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-[14px] leading-5 text-[var(--ink-900)]">
-                {uploadedFile?.name}
-              </span>
-              <span className="mono tabular text-micro leading-4">
-                {isVideo
-                  ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
-                  : `${extension} · ${uploadedFile?.size} · ${exportStatus}`}
-              </span>
-            </span>
+                <span className="inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)]">
+                  {selectedProvider === "swing-vision" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src="/providers/swingvision-icon.png"
+                      alt=""
+                      className="size-10"
+                    />
+                  ) : (
+                    <FileSpreadsheet
+                      className="size-5 text-[var(--ink-500)]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              )
+            }
+            name={uploadedFile?.name}
+            facts={
+              isVideo
+                ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
+                : `${extension} · ${uploadedFile?.size} · ${exportStatus}`
+            }
+          >
             <button
               type="button"
               onClick={browse}
@@ -575,7 +513,7 @@ function FileStepContentImpl({
               />
             </button>
             {input}
-          </div>
+          </CheckedFileRow>
 
           {/* A caution takes the place of the note below rather than stacking
               on it: one strip under the file, and the yellow one is the one

@@ -334,6 +334,27 @@ to put a testable seam.
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
 
+> **A reviewed exception, added 2026-10-11: the admin console uploads for
+> teams that are not approved, from `claude/admin-upload-approval-e3051c`.**
+> This supersedes two phrases in the entry above: `admin_video_access` no
+> longer requires "program active", and the console workspace's
+> `canSubmitVideo` no longer comes from the `program.status === "active"`
+> rule. Approval gates what a program's own members may spend; an
+> administrator uploading on a team's behalf is the reviewer, so the console
+> accepts an `unclaimed` or `claim_pending` program and refuses only
+> `suspended`. The rule is `adminCanUploadFor()` / `adminUploadApproval()` in
+> `src/lib/admin/uploads/approval.ts` — a deliberate, console-only fork of the
+> claim-state rule, mirrored in SQL as `status <> 'suspended'` by migration
+> `20261012020333` across the eight admin upload functions. On the frozen
+> list, `jobs/handler.ts` and `upload-url/handler.ts` each gain one argument:
+> `uploadEligibility()` is still called unchanged but is handed
+> `approval: adminUploadApproval(…)` when `adminVideo` is set, and `undefined`
+> otherwise, so the dashboard path reads the workspace's own status exactly as
+> before. Nothing the pipeline sends, bills or computes changes, and the spend
+> still lands on the target program's own ledger. Not covered: an automatic
+> retry (`resubmit-job.ts`) of a console job for an unapproved team still
+> prices through the `status === "active"` rule and is refused.
+
 > **A reviewed exception, added 2026-09-27: input-rejected retries and the
 > frame-rate warning, from `claude/match-analysis-failure-retry-8769f3`**
 > (tasks T1–T3 in its queue). Both touches are a refusal or a constant, never a
