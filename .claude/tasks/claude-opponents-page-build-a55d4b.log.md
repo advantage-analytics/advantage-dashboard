@@ -228,3 +228,17 @@ is the runner's. Newest entries at the bottom.
 1. Run the spec once against a non-production project (export the three Supabase keys for it) — the only way it executes.
 2. Consider a `program_audit_log` row from the function, as `add_self_as_program_player` writes.
 3. `contribute_opponent_player` gates on the schedule helper; the same role-vs-`events_policy` reasoning may apply there.
+
+## T15 · Drawer "No team · Add their team": staff set every match, players their own — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (an optimistic team line with "Saving…" until the refresh), empty ✓ ("No team" alone when the viewer cannot act), error ✓ (inline line for a refusal, a failure, or a partial save; the action returns)
+
+**changed:** New `src/components/dashboard/opponents/add-opponent-team.ts` (pure `teamWriteMode`, `canAddTeam`, `describeApplies`, `buildTeamPatch`, `chunkMatchIds`, `describeUnsaved`, and the one write function `applyOpponentTeam` with the browser client imported lazily) and `tests/add-opponent-team.spec.ts` (22 tests). `team-opponent-drawer.tsx` gates the button on no team + (`isProgramStaff` or the viewer recorded a match) and reuses `OpponentTeamField`'s search; staff call `set_opponent_team` over all the opponent's matches (chunks of 200, stopping at the first failure), players update the matches they recorded. `OpponentTeamField` gains optional `lead` and `searchNote` (wizard and edit dialog pass neither). Verified on screen through a throwaway route with intercepted requests, since deleted; no live write was made. Deviations kept: singular copy for one match; error text in `--danger-hover`; a typed-school opponent shows no action.
+
+**follow-ups:**
+
+1. Let staff change or upgrade an existing team from the drawer — the action disappears once any team is set, including after a partial save.
+2. Filter the viewer's own program out of the search; picking it returns the generic error (the RPC refuses it with 22023).
+3. Move focus to the new team line after a pick.
+4. Clear a stale error line when the viewer steps away from the opponent and back.
+5. Eyes-on for `team:/dashboard/opponents?opponent=<key>` takes the staff path on the real ZZ Test Program — open the search only, never pick.

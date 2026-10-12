@@ -63,6 +63,12 @@ const ROW_CLS =
  * opponent drawer can each hold the value their own way. It lives under a name
  * and never in a column of its own — the caller mounts it inside the name cell.
  *
+ * Two optional slots, both for the opponent drawer, where a pick is a write
+ * rather than a form value: `lead` is the words the link finishes ("No team ·
+ * Add their team") and belongs to the link state alone, and `searchNote` is a
+ * line between the search input and its menu saying what a pick will change.
+ * The menu hangs under the note, so the note is never behind it.
+ *
  * Design: Team Opponents → "Giving an opponent a team".
  */
 export function OpponentTeamField({
@@ -72,6 +78,8 @@ export function OpponentTeamField({
   onChange,
   opponentFirstName,
   readOnly = false,
+  lead,
+  searchNote,
   className,
 }: {
   /** The directory program, when the team is one. */
@@ -85,6 +93,10 @@ export function OpponentTeamField({
   opponentFirstName?: string;
   /** Read back only — the same as a `"line"` value, for any other reason. */
   readOnly?: boolean;
+  /** Text the "Add their team" link finishes; the link state only. */
+  lead?: React.ReactNode;
+  /** A line under the search input, above its menu; the search state only. */
+  searchNote?: React.ReactNode;
   className?: string;
 }) {
   const [searching, setSearching] = useState(false);
@@ -97,6 +109,7 @@ export function OpponentTeamField({
   // already went where the person sent it.
   const restoreFocus = useRef(false);
   const listId = useId();
+  const noteId = useId();
 
   const typed = term.trim();
   // A row the enrichment read could not give an id cannot be pointed at as a
@@ -162,59 +175,72 @@ export function OpponentTeamField({
             if (!next) dismiss();
           }}
         >
+          {/* The anchor is the input AND the note, so the menu opens under
+              both — the note is read before a row is picked, not behind it. */}
           <PopoverAnchor asChild>
-            <span className="relative flex w-[200px] max-w-full items-center">
-              <Search
-                className="pointer-events-none absolute left-0 size-3 text-[var(--ink-500)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <input
-                ref={inputRef}
-                autoFocus
-                value={term}
-                placeholder="Search schools"
-                aria-label="Their team"
-                role="combobox"
-                aria-autocomplete="list"
-                // True for as long as the search is on screen: the menu under
-                // it is (a hint, then rows), and the wizard's own Escape
-                // handler stands down for an expanded control.
-                aria-expanded="true"
-                aria-controls={listId}
-                aria-activedescendant={
-                  rowCount > 0 ? `${listId}-${activeIndex}` : undefined
-                }
-                // The underline going 2px blue is the focus mark; a ring
-                // would be a second one. See `advField()` and `focus.css`.
-                data-focus-ring="none"
-                autoComplete="off"
-                onChange={(e) => {
-                  setTerm(e.target.value);
-                  setActive(0);
-                }}
-                onBlur={close}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dismiss();
-                  } else if (e.key === "ArrowDown" && rowCount > 0) {
-                    e.preventDefault();
-                    setActive((activeIndex + 1) % rowCount);
-                  } else if (e.key === "ArrowUp" && rowCount > 0) {
-                    e.preventDefault();
-                    setActive((activeIndex - 1 + rowCount) % rowCount);
-                  } else if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (rowCount > 0) pickRow(activeIndex);
+            <span className="flex max-w-full flex-col items-start gap-1.5">
+              <span className="relative flex w-[200px] max-w-full items-center">
+                <Search
+                  className="pointer-events-none absolute left-0 size-3 text-[var(--ink-500)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <input
+                  ref={inputRef}
+                  autoFocus
+                  value={term}
+                  placeholder="Search schools"
+                  aria-label="Their team"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  // True for as long as the search is on screen: the menu under
+                  // it is (a hint, then rows), and the wizard's own Escape
+                  // handler stands down for an expanded control.
+                  aria-expanded="true"
+                  aria-controls={listId}
+                  aria-describedby={searchNote ? noteId : undefined}
+                  aria-activedescendant={
+                    rowCount > 0 ? `${listId}-${activeIndex}` : undefined
                   }
-                }}
-                className={cn(
-                  advField("underline"),
-                  "h-7 w-full pl-[18px] text-[12px] outline-none",
-                )}
-              />
+                  // The underline going 2px blue is the focus mark; a ring
+                  // would be a second one. See `advField()` and `focus.css`.
+                  data-focus-ring="none"
+                  autoComplete="off"
+                  onChange={(e) => {
+                    setTerm(e.target.value);
+                    setActive(0);
+                  }}
+                  onBlur={close}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      dismiss();
+                    } else if (e.key === "ArrowDown" && rowCount > 0) {
+                      e.preventDefault();
+                      setActive((activeIndex + 1) % rowCount);
+                    } else if (e.key === "ArrowUp" && rowCount > 0) {
+                      e.preventDefault();
+                      setActive((activeIndex - 1 + rowCount) % rowCount);
+                    } else if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (rowCount > 0) pickRow(activeIndex);
+                    }
+                  }}
+                  className={cn(
+                    advField("underline"),
+                    "h-7 w-full pl-[18px] text-[12px] outline-none",
+                  )}
+                />
+              </span>
+              {searchNote ? (
+                <span
+                  id={noteId}
+                  className="tabular text-[11px] leading-[1.4] text-[var(--ink-500)]"
+                >
+                  {searchNote}
+                </span>
+              ) : null}
             </span>
           </PopoverAnchor>
           <PopoverContent
@@ -310,15 +336,22 @@ export function OpponentTeamField({
 
   if (!name) {
     if (locked) return null;
-    return (
+    const link = (
       <button
         ref={triggerRef}
         type="button"
         onClick={open}
-        className={cn(LINK_CLS, "self-start", className)}
+        className={cn(LINK_CLS, !lead && cn("self-start", className))}
       >
         Add their team
       </button>
+    );
+    if (!lead) return link;
+    return (
+      <span className={cn("text-[12px] text-[var(--ink-600)]", className)}>
+        {lead}
+        {link}
+      </span>
     );
   }
 

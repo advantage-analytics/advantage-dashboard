@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
+import {
+  OpponentTeamField,
+  type OpponentTeamChange,
+} from "@/components/dashboard/matches/opponent-team-field";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { Chip } from "@/components/dashboard/schedule/static/chip";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -16,6 +21,7 @@ import {
 } from "@/components/dashboard/shared/drawer-stat-chart";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { RECENT_MATCH_GRID_WITH_FACE } from "@/components/dashboard/team/player-drawer-layout";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { ChosenCheck, FloatMenu } from "@/components/ui/float-menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -30,6 +36,11 @@ import { advButton } from "@/lib/ui/adv-button";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { playedSets } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
+import {
+  applyOpponentTeam,
+  describeApplies,
+  teamWriteMode,
+} from "./add-opponent-team";
 import {
   RECENT_ROWS,
   opponentDrawerFooter,
@@ -61,6 +72,17 @@ const FACE_18 = "size-[18px] text-[8px]";
  * and the close. No ⋯ — an opponent has nothing to edit or remove — so the
  * header holds navigation, position and dismissal only (`reference/tables.md`
  * → Peek Drawer).
+ *
+ * ── The one thing it writes ─────────────────────────────────────────────────
+ * An opponent nobody has placed reads "No team", and whoever can fix that gets
+ * "Add their team" beside it: the wizard's own directory search
+ * (`OpponentTeamField`), with a line under it saying how many matches a pick
+ * changes. Staff set it on every match against the opponent; a player on the
+ * ones they recorded; a player who recorded none sees "No team" and no
+ * control. Who, how many and both writes are `add-opponent-team.ts` — this
+ * file holds no Supabase call. A pick shows at once, the loader's answer
+ * replaces it after `router.refresh()`, and a refusal puts the line back with
+ * the reason under it.
  *
  * Body, top to bottom: identity (the name, where they play, how they play,
  * the team's record) → **Faced by** → the stat block → three recent matches,
@@ -125,6 +147,13 @@ export function TeamOpponentDrawer({
   const choose = (playerId: string | null) =>
     setChoice({ opponentKey: opponent.key, playerId });
 
+  const router = useRouter();
+  const workspace = useWorkspace();
+  // The team being set, tagged with the opponent it was picked for — the same
+  // rule as `choice`, so a pick never shows on the next opponent's drawer.
+  const [teamWrite, setTeamWrite] = useState<TeamWrite | null>(null);
+  const write = teamWrite?.opponentKey === opponent.key ? teamWrite : null;
+
   const scope = opponentScope(opponent, chosenId);
   const active =
     scope.measures.find((m) => m.key === activeKey) ?? scope.measures[0];
@@ -155,8 +184,46 @@ export function TeamOpponentDrawer({
 
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
-  const team = opponentTeamLine(opponent);
   const firstName = opponentFirstName(opponent.name);
+  const savedTeam = opponentTeamLine(opponent);
+  // What the loader says wins. Until it has an answer, a pick that is saving
+  // or has saved stands in for it; one that was refused does not.
+  const team =
+    savedTeam.kind === "none" && write && write.status !== "refused"
+      ? opponentTeamLine(write.choice)
+      : savedTeam;
+  const writeMode = teamWriteMode(
+    workspace.active,
+    opponent.editableMatchIds.length,
+  );
+  const canAdd = opponent.program === null && writeMode !== null;
+
+  const pickTeam = async (next: OpponentTeamChange) => {
+    if (!writeMode) return;
+    const opponentKey = opponent.key;
+    setTeamWrite({ opponentKey, choice: next, status: "saving", error: null });
+    const result = await applyOpponentTeam({
+      mode: writeMode,
+      programId: workspace.active.id,
+      matchIds: opponent.matchIds,
+      editableMatchIds: opponent.editableMatchIds,
+      choice: next,
+    });
+    // Only this pick's own outcome lands: a newer pick, on this opponent or
+    // another, is not overwritten by an older one finishing late.
+    setTeamWrite((current) =>
+      current?.opponentKey === opponentKey && current.choice === next
+        ? {
+            opponentKey,
+            choice: next,
+            status: result.saved > 0 ? "saved" : "refused",
+            error: result.error,
+          }
+        : current,
+    );
+    // Anything that saved made the Program cell and this line stale.
+    if (result.saved > 0) router.refresh();
+  };
   const allMatchesHref = opponentMatchesHref(opponent.name);
   const footer = opponentDrawerFooter({
     nav: TEAM_NAV,
@@ -229,18 +296,26 @@ export function TeamOpponentDrawer({
                 typed are both a team and both get the crest; only an opponent
                 nobody has placed reads "No team". The school name wraps. */}
             {team.kind === "none" ? (
-              <span className="text-[12px] text-[var(--ink-600)]">
-                No team{" · "}
-                {/* T15 wires this: the directory search popover, and the gate
-                    on who may set a team. Until then it is the line's text and
-                    opens nothing. */}
-                <button
-                  type="button"
-                  className="cursor-pointer rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                >
-                  Add their team
-                </button>
-              </span>
+              canAdd && writeMode ? (
+                // "No team · Add their team" → the wizard's directory search,
+                // with what a pick will change on the line under it.
+                <OpponentTeamField
+                  lead={"No team · "}
+                  searchNote={describeApplies(
+                    writeMode,
+                    opponent.editableMatchIds.length,
+                    opponent.matchIds.length,
+                    firstName,
+                  )}
+                  onChange={pickTeam}
+                />
+              ) : (
+                // Nothing this viewer could change: the fact, and no control —
+                // not a disabled one.
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  No team
+                </span>
+              )
             ) : (
               <span className="mt-1 mb-0.5 grid grid-cols-[26px_minmax(0,1fr)] items-start gap-2.5">
                 <ProgramCrest
@@ -260,9 +335,27 @@ export function TeamOpponentDrawer({
                       {team.detail}
                     </span>
                   ) : null}
+                  {write?.status === "saving" ? (
+                    <span
+                      role="status"
+                      className="text-[11px] leading-[1.3] text-[var(--ink-500)]"
+                    >
+                      Saving…
+                    </span>
+                  ) : null}
                 </span>
               </span>
             )}
+            {/* Why a pick did not land, or how much of it did not. */}
+            {write?.error ? (
+              <span
+                role="alert"
+                className="tabular text-[11px] leading-[1.4]"
+                style={{ color: "var(--danger-hover)" }}
+              >
+                {write.error}
+              </span>
+            ) : null}
 
             {/* "Right-handed · Two-handed backhand" — a fact nobody recorded
                 is the one dash, never a guess. */}
@@ -451,6 +544,17 @@ export function TeamOpponentDrawer({
       </div>
     </PeekDrawerFrame>
   );
+}
+
+/** A team pick on its way to the database, and how that went. */
+interface TeamWrite {
+  /** The opponent the pick was made on. */
+  opponentKey: string;
+  choice: OpponentTeamChange;
+  /** `refused` is nothing saved; `saved` is at least one match changed. */
+  status: "saving" | "saved" | "refused";
+  /** The sentence to show; null while saving and when every match saved. */
+  error: string | null;
 }
 
 /** One roster player's 18px face: their photo, or their initials. */

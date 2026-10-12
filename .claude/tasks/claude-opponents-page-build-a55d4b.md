@@ -216,7 +216,7 @@ ready).
 
 ## T15 · Drawer "No team · Add their team": staff set every match, players their own
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T14, T10, T19
 - **files:** (guess) `src/components/dashboard/opponents/team-opponent-drawer.tsx`, new `src/components/dashboard/opponents/add-opponent-team.ts` (pure copy/patch helpers + the two write paths, no JSX), reuses `matches/opponent-team-field.tsx`'s search popover; `tests/add-opponent-team.spec.ts`; reads `src/lib/workspace/types.ts` (`isProgramStaff`)
