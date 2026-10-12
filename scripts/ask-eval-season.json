@@ -1,0 +1,72 @@
+[
+  {
+    "q": "How has my first serve percentage changed this season?",
+    "want": "trend block rising from the mid 50s to the high 60s across 2026"
+  },
+  {
+    "q": "How do I do against left-handers compared with right-handers?",
+    "want": "second-serve points won far lower vs left-handers (about 40% vs 56%); record 2-3 vs 6-3"
+  },
+  {
+    "q": "Why do I keep losing to Marek Dvorsky?",
+    "opponents": ["Marek Dvorsky"],
+    "want": "0-3; break points converted about 16% vs 53% elsewhere; short rallies lost"
+  },
+  {
+    "q": "Tell me how to beat this opponent",
+    "opponents": ["Marek Dvorsky"],
+    "want": "the factual diagnostic for Dvorsky plus the no-advice notice"
+  },
+  {
+    "q": "Am I better on hard courts or clay?",
+    "want": "7-2 on hard, 1-4 on clay"
+  },
+  {
+    "q": "Do I win more long rallies or short ones?",
+    "want": "long about 63%, medium about 55%, short about 47%"
+  },
+  {
+    "q": "What are my strengths this season?",
+    "want": "long rallies; record on hard; first serve improving"
+  },
+  {
+    "q": "What should I work on?",
+    "want": "second serve vs left-handers, break-point conversion, short rallies; notice"
+  },
+  { "q": "What is my record this year?", "want": "8-6 with a form strip" },
+  { "q": "Which opponent gives me the most trouble?", "want": "Dvorsky 0-3" },
+  {
+    "q": "How did my last five matches go?",
+    "want": "the five most recent, in order"
+  },
+  {
+    "q": "How do I do on break points?",
+    "want": "converted and saved across the season, me vs opponents"
+  },
+  {
+    "q": "Compare my three matches against Ilya Brandt",
+    "opponents": ["Ilya Brandt"],
+    "want": "one row per match: date, result, key numbers"
+  },
+  {
+    "q": "How was my serve in August?",
+    "want": "the two August matches; first and second serve numbers vs the season"
+  },
+  {
+    "q": "Did my unforced errors go down over the season?",
+    "want": "trend or per-match table of unforced errors"
+  },
+  {
+    "q": "And against right-handers?",
+    "after": 3,
+    "want": "follow-up keeps the subject of the earlier turn sensibly or asks about right-handers generally"
+  },
+  {
+    "q": "Where do I serve on big points?",
+    "want": "serve direction on break points from shots and points, or says what is recorded"
+  },
+  {
+    "q": "What happened in my three-set matches?",
+    "want": "record in three-setters and how the deciding sets went"
+  }
+]
