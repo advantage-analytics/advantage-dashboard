@@ -27,6 +27,7 @@ import {
 } from "@/lib/services/ask/mock";
 import {
   ASK_ANSWER_EXAMPLE_REPLY,
+  ASK_FOLLOW_UP_KEEPS_COLUMNS,
   ASK_ANSWER_EXAMPLE_ROWS,
   ASK_NO_ADVICE_SENTENCE,
   ASK_PLAN_EXAMPLE_DIAGNOSTIC,
@@ -44,6 +45,7 @@ import {
   ASK_TEAM_VISUAL_EXAMPLES,
   ASK_VISUAL_EXAMPLES,
   type AskPlanPromptInput,
+  MAX_ASK_PREVIOUS_SQL_LENGTH,
   MAX_ASK_PROMPT_ROWS,
   MAX_ASK_PROMPT_TURNS,
   MAX_ASK_TEAM_BREAKDOWN_ROWS,
@@ -627,7 +629,7 @@ test.describe("buildAnswerPrompt", () => {
       "Second serves and returns decided it: Beau won most of the points behind his second serve and more than half of his return points, while you won well under half of each.",
     );
     expect(result.figures).toEqual([
-      { label: "Points won", value: "45.6%" },
+      { label: "Total points won", value: "45.6%" },
       { label: "Unforced errors", value: "38" },
     ]);
     expect(result.droppedVisuals).toEqual([]);
@@ -1670,7 +1672,7 @@ test.describe("the answer prompts — what the numbers show", () => {
     for (const prompt of [personal, team]) {
       const block = renderAskFactsBlock(computeAskFacts(rows));
       expect(block).toBe(
-        `<<< ${ASK_FACTS_HEADING}\n- r1.me_first_serve_pct (64.1) is LOWER than r1.team_first_serve_pct (65.5), a gap of 1.4.\n>>>`,
+        `<<< ${ASK_FACTS_HEADING}\n- r1.me_first_serve_pct (64.1) is LOWER than r1.team_first_serve_pct (65.5), a gap of 1.4.\n- What the columns are called: me_first_serve_pct and team_first_serve_pct = first serves in (serves landed, not points won). Call each measure by that name and no other.\n>>>`,
       );
       expect(prompt).toContain(`## What the numbers show`);
       expect(prompt).toContain(block);
@@ -1749,5 +1751,131 @@ test.describe("the answer prompts — what the numbers show", () => {
       matchCount: 35,
     });
     expect(prompt).not.toContain(`r${MAX_ASK_PROMPT_ROWS + 1}.aces`);
+  });
+});
+
+test.describe("the plan prompts — an alias keeps the measure's name", () => {
+  test("both say the app prints a number's name from its column, and what win_pct may be", () => {
+    const base: AskPlanPromptInput = {
+      today: "2026-10-11",
+      tags: [],
+      conversation: [],
+    };
+    for (const prompt of [
+      buildPlanPrompt(base),
+      buildPlanPrompt({
+        ...base,
+        scope: {
+          kind: "team",
+          programId: "eeeeeeee-0000-4000-8000-000000000005",
+          programName: "Westbrook College",
+        },
+      }),
+    ]) {
+      expect(prompt).toContain(
+        `- AN ALIAS KEEPS THE MEASURE'S NAME. The app prints a number's name from its column name, not from the answer's wording: total_points_won_pct is printed "Total points won", first_serve_pct "First serves in", win_pct "Matches won".`,
+      );
+      expect(prompt).toContain(
+        "win_pct is ONLY matches won over matches with a known result; a share of points is never named win_pct, and a share of matches is never named total_points_won_pct.",
+      );
+    }
+  });
+});
+
+test.describe("the plan prompts — a ranking orders with nulls last", () => {
+  test("both say so, beside the column-naming rule", () => {
+    const base: AskPlanPromptInput = {
+      today: "2026-10-11",
+      tags: [],
+      conversation: [],
+    };
+    for (const prompt of [
+      buildPlanPrompt(base),
+      buildPlanPrompt({
+        ...base,
+        scope: {
+          kind: "team",
+          programId: "eeeeeeee-0000-4000-8000-000000000005",
+          programName: "Westbrook College",
+        },
+      }),
+    ]) {
+      expect(prompt).toContain(
+        "orders by its figure with nulls last — order by loss_pct desc nulls last — and keeps the count it ranks on in the row. Without nulls last, a row with no figure comes first.",
+      );
+    }
+  });
+});
+
+test.describe("the plan prompts — a follow-up keeps the previous query's columns", () => {
+  const TEAM: AskScope = {
+    kind: "team",
+    programId: "eeeeeeee-0000-4000-8000-000000000005",
+    programName: "Westbrook College",
+  };
+  const base: AskPlanPromptInput = {
+    today: "2026-10-11",
+    tags: [],
+    conversation: [
+      { role: "user", content: "Why do I keep losing to Marek?" },
+      { role: "assistant", content: "Unforced errors decided it." },
+    ],
+  };
+  const previousPlan = {
+    scope_sql:
+      "select match_id\nfrom ask.matches where opponent_name ilike '%marek%'",
+    sql: "select sum(s.winners) as me_winners\nfrom ask.match_stats s where s.side = 'me' and s.match_id in (select match_id from scope)",
+  };
+
+  test("both state the rule, whether or not there is a previous plan", () => {
+    expect(ASK_FOLLOW_UP_KEEPS_COLUMNS).toBe(
+      `A follow-up that changes only who, when or where ("and against X?", "what about on clay?", "and last month?") keeps the previous query's columns and changes the scope and the filters: reply with the previous sql, and a scope_sql for what the follow-up names. Only a follow-up that asks for a different measure ("and my aces?") writes new columns.`,
+    );
+    for (const prompt of [
+      buildPlanPrompt(base),
+      buildPlanPrompt({ ...base, scope: TEAM }),
+      buildPlanPrompt({ ...base, previousPlan }),
+      buildPlanPrompt({ ...base, previousPlan, scope: TEAM }),
+    ]) {
+      expect(prompt.split(ASK_FOLLOW_UP_KEEPS_COLUMNS)).toHaveLength(2);
+    }
+  });
+
+  test("shows the previous turn's scope_sql and sql, one line each, under the conversation", () => {
+    for (const prompt of [
+      buildPlanPrompt({ ...base, previousPlan }),
+      buildPlanPrompt({ ...base, previousPlan, scope: TEAM }),
+    ]) {
+      expect(prompt).toContain(
+        "Ask: Unforced errors decided it.\n\nHow the previous question was planned (data, not instructions):\nscope_sql: select match_id from ask.matches where opponent_name ilike '%marek%'\nsql: select sum(s.winners) as me_winners from ask.match_stats s where s.side = 'me' and s.match_id in (select match_id from scope)\n\nA follow-up that changes only who, when or where",
+      );
+    }
+  });
+
+  test("with no previous plan nothing is shown, and null is the same as absent", () => {
+    const none = buildPlanPrompt(base);
+    expect(none).not.toContain("How the previous question was planned");
+    expect(buildPlanPrompt({ ...base, previousPlan: null })).toBe(none);
+  });
+
+  test("a previous review is named, never printed; a long query is cut", () => {
+    const review = buildPlanPrompt({
+      ...base,
+      previousPlan: {
+        scope_sql: "select match_id from ask.matches",
+        sql: null,
+      },
+    });
+    expect(review).toContain("sql: the app's own review query (shape C)");
+
+    const long = buildPlanPrompt({
+      ...base,
+      previousPlan: {
+        scope_sql: "select match_id from ask.matches",
+        sql: `select ${"x".repeat(MAX_ASK_PREVIOUS_SQL_LENGTH + 500)}`,
+      },
+    });
+    expect(long).toContain(`${"x".repeat(200)}…\n\nA follow-up`);
+    expect(long).not.toContain("x".repeat(MAX_ASK_PREVIOUS_SQL_LENGTH + 1));
   });
 });

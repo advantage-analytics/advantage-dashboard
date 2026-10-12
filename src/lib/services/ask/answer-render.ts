@@ -1,7 +1,16 @@
 import {
+  type AskSiblingRanking,
   perRowCountColumn,
+  rowLabelColumn,
+  siblingRankings,
+  singleRowOwnCount,
   uniqueRowLabelTokens,
 } from "@/lib/services/ask/facts";
+import {
+  type AskResolvedMeasure,
+  askMeasure,
+  askMeasureFullLabel,
+} from "@/lib/services/ask/measures";
 import {
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
@@ -357,6 +366,11 @@ export interface AskAnswerResult {
    * one row (`citesScopeTotalPerRow()`). A count only — never model text.
    */
   droppedSentences: number;
+  /**
+   * Figure and row labels replaced by the server's own name for the measure
+   * their cells hold (`canonicalLabel()`). A count only.
+   */
+  renamedLabels: number;
   /** Why the stream ended with an `error` event; null when it did not. */
   failure: AskAnswerFailure | null;
 }
@@ -1017,8 +1031,19 @@ function parseBlock(
         if (!bodyCount.ok) return drop(bodyCount.reason, kind, "the body cell");
         const wide = number(fields[3], isCount);
         if (!wide.ok) return drop(wide.reason, kind, "the wide cell");
+        // "All serves" is the prompt example's label; over cells that are not
+        // the whole-match direction counts (serves on break points, say) it
+        // would misname the court, so it falls back to the neutral word.
+        const wholeMatch = fields.slice(1).every((field) => {
+          const cell = readCell(field, tokens);
+          return cell.ok && /^serve_(?:t|body|wide)$/.test(cell.token.column);
+        });
+        const courtLabel =
+          /^all serves$/i.test(rowLabel.labels[0].trim()) && !wholeMatch
+            ? "Serves"
+            : rowLabel.labels[0];
         out.courts.push({
-          label: rowLabel.labels[0],
+          label: courtLabel,
           t: t.number,
           body: bodyCount.number,
           wide: wide.number,
@@ -1108,6 +1133,16 @@ function createLineStage(
     );
     const failure = labelRead.failure ?? valueRead.failure;
     if (failure) {
+      // A figure that names a row or column the result does not have is
+      // left out on its own, as a block is: one mistyped column name in a
+      // figure line is not worth the whole answer. In the headline or the
+      // body the same slip still fails it — there the sentence needs it.
+      if (failure.kind === "missing_column" || failure.kind === "missing_row") {
+        result.droppedFigures.push(
+          `${ASK_FIGURE_LINE_PREFIX} (a reference the result does not have)`,
+        );
+        return;
+      }
       result.failure = failure;
       return;
     }
@@ -1475,6 +1510,148 @@ export function labelNamesAnotherRow(
   return ![...cited].some((row) => named.has(row));
 }
 
+// ── The measure's own name ──────────────────────────────────────────────────
+
+/**
+ * The measure every cell beside a label holds, when they all hold the same
+ * one and its name is known (`measures.ts`); null otherwise. The scope total
+ * is no measure.
+ */
+function measureOfCells(cells: string): AskResolvedMeasure[] | null {
+  const found: AskResolvedMeasure[] = [];
+  for (const match of cells.matchAll(REFERENCE_ROW_AND_COLUMN)) {
+    if (match[2] === SCOPE_TOTAL_COLUMN) return null;
+    const measure = askMeasure(match[2]);
+    if (!measure) return null;
+    found.push(measure);
+  }
+  if (found.length === 0) return null;
+  return found.every((measure) => measure.key === found[0].key) ? found : null;
+}
+
+/**
+ * The label the server gives a figure, or a table or bars row, in place of
+ * the model's — or null to leave the model's alone.
+ *
+ * The model cites the right cell and then names it wrongly: "Hard court win
+ * percentage" over the share of points won. Where the column name says which
+ * measure a cell holds, the name is the dictionary's.
+ *
+ * - A FIGURE: the measure's name, with what its prefix says ("…, opponent",
+ *   "…, all matches"). When the model's label named the row its cell comes
+ *   from, that row's own label follows as a reference into the result
+ *   ("Total points won, Hard Court") — never the model's spelling of it.
+ * - A ROW: the measure's bare name, since the column headings say whose.
+ *   A row label that names a row of the result ("Rudy Quan", "Left") is a
+ *   row label, not a measure, and is left alone.
+ *
+ * A planner alias the dictionary cannot place keeps the model's label.
+ */
+export function canonicalLabel(
+  kind: "figure" | "row",
+  label: string,
+  cells: string,
+  rows: readonly AskRow[],
+  tokens: ReadonlyMap<string, number>,
+): string | null {
+  const measures = measureOfCells(cells);
+  if (!measures) return null;
+  const named = new Set<number>();
+  for (const word of labelWords(label)) {
+    const row = tokens.get(word);
+    if (row !== undefined) named.add(row);
+  }
+  if (kind === "row") return named.size > 0 ? null : measures[0].label;
+
+  const sameQualifier = measures.every(
+    (measure) => measure.qualifier === measures[0].qualifier,
+  );
+  let text = sameQualifier
+    ? askMeasureFullLabel(measures[0])
+    : measures[0].label;
+  const cited = new Set(
+    [...cells.matchAll(REFERENCE_ROW_AND_COLUMN)].map(
+      (match) => Number(match[1]) - 1,
+    ),
+  );
+  const column = rowLabelColumn(rows);
+  if (cited.size === 1 && column !== null) {
+    const [row] = cited;
+    if (named.has(row) && typeof rows[row]?.[column] === "string") {
+      text += `, ${ASK_CELL_REFERENCE_OPEN}r${row + 1}.${column}${ASK_CELL_REFERENCE_CLOSE}`;
+    }
+  }
+  return text;
+}
+
+// ── A superlative about serve directions or rally lengths ───────────────────
+
+const MOST_WORD = /\b(?:most|highest|largest|biggest|majority)\b/i;
+const LEAST_WORD = /\b(?:least|fewest|lowest|smallest)\b/i;
+
+/** A family word as prose writes it: the T is a capital letter, the rest whole words. */
+function siblingWord(word: string): RegExp {
+  return word === "t" ? /\bT\b/ : new RegExp(`\\b${word}\\b`, "i");
+}
+
+/** How a family word reads in a sentence the server writes. */
+function siblingName(word: string): string {
+  return word === "t" ? "the T" : word === "body" ? "the body" : word;
+}
+
+/**
+ * The ranking a sentence gets wrong, or null. Deliberately narrow: the
+ * sentence must name at least two words of the family (T, body, wide; short,
+ * medium, long), and then
+ *
+ * - a "most"/"highest" with the word that IS highest absent from everything
+ *   before the sentence's first "least"/"lowest" — "you serve wide most
+ *   often and body least" over T 38.7, wide 34.8 — or
+ * - a "least"/"lowest" with the word that is lowest absent from the sentence
+ *
+ * is a superlative given to the wrong one. A sentence that names the right
+ * word anywhere in reach is left alone.
+ */
+export function misranksSiblings(
+  sentence: string,
+  rankings: readonly AskSiblingRanking[],
+): AskSiblingRanking | null {
+  const text = sentence.replace(REFERENCE_ROW_AND_COLUMN, " ");
+  for (const ranking of rankings) {
+    const named = ranking.words.filter((word) => siblingWord(word).test(text));
+    if (named.length < 2) continue;
+    const most = MOST_WORD.exec(text);
+    const least = LEAST_WORD.exec(text);
+    if (most) {
+      const reach =
+        least && least.index > most.index ? text.slice(0, least.index) : text;
+      if (!siblingWord(ranking.highest).test(reach)) return ranking;
+    }
+    if (least && !siblingWord(ranking.lowest).test(text)) return ranking;
+  }
+  return null;
+}
+
+/** The headline the server writes in place of one that misranked a family. */
+export function siblingHeadline(ranking: AskSiblingRanking): string {
+  const names = ranking.words.map(siblingName);
+  const list =
+    names.length <= 1
+      ? (names[0] ?? "")
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `Of ${list}, the highest figure is ${siblingName(ranking.highest)} and the lowest is ${siblingName(ranking.lowest)}.`;
+}
+
+/** The slot of a serve row a direction label belongs in: T, body, wide. -1 for anything else. */
+function serveZone(label: string): number {
+  const word = label
+    .toLowerCase()
+    .replace(/\b(?:zone|serves?|the|down|to|out)\b/g, " ")
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+  return ["t", "body", "wide"].indexOf(word);
+}
+
 /** The lines the sentence filter never reads: figure lines and block lines. */
 const STRUCTURAL_PREFIXES = [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES];
 
@@ -1504,9 +1681,42 @@ async function* dropSameCellRanges(
 ): AsyncGenerator<string, void, undefined> {
   let buffer = "";
   let headlineSeen = false;
+  /** Whether anything passed on so far cites a cell other than the match count. */
+  let cited = false;
   /** The kind of the block whose lines are arriving, as its `CHART:` line wrote it. */
   let blockKind = "";
+  /**
+   * The canonical labels already given in the figures and in the block: a
+   * second cell of the same measure (the count beside its percentage) keeps
+   * the model's own label, so two lines never print under one name.
+   */
+  const figureNames = new Set<string>();
+  let rowNames = new Set<string>();
+  const once = (used: Set<string>, named: string | null): string | null => {
+    if (named === null || used.has(named)) return null;
+    used.add(named);
+    return named;
+  };
   const severalRows = rows.length > 1;
+  const rankings = siblingRankings(rows);
+  /**
+   * A one-row result that carries its own match count (3 tournament matches
+   * of the 10 looked at): its figures come from that many matches. A
+   * sentence or caption that cites only the scope total has given the row
+   * the wrong count, and the reference is turned to the row's own.
+   */
+  const ownCount = singleRowOwnCount(rows);
+  const ownCounted = (text: string): string => {
+    if (ownCount === null || text.includes(`.${ownCount}`)) return text;
+    SCOPE_TOTAL_REFERENCE.lastIndex = 0;
+    if (!SCOPE_TOTAL_REFERENCE.test(text)) return text;
+    SCOPE_TOTAL_REFERENCE.lastIndex = 0;
+    result.renamedLabels += 1;
+    return text.replace(
+      SCOPE_TOTAL_REFERENCE,
+      `${ASK_CELL_REFERENCE_OPEN}r1.${ownCount}${ASK_CELL_REFERENCE_CLOSE}`,
+    );
+  };
   const rowTokens = uniqueRowLabelTokens(rows);
   const ownCounts = perRowCountColumn(rows) !== null;
 
@@ -1522,7 +1732,9 @@ async function* dropSameCellRanges(
       const body = start.slice(ASK_VISUAL_LINE_PREFIX.length);
       const cut = body.indexOf(ASK_VISUAL_FIELD_SEPARATOR);
       blockKind = (cut === -1 ? body : body.slice(0, cut)).trim().toLowerCase();
-      if (cut === -1 || !severalRows) return text;
+      rowNames = new Set<string>();
+      if (cut === -1) return text;
+      if (!severalRows) return ownCounted(text);
       const caption = body.slice(cut + 1);
       const namesRow = labelWords(caption).some((word) => rowTokens.has(word));
       SCOPE_TOTAL_REFERENCE.lastIndex = 0;
@@ -1546,7 +1758,19 @@ async function* dropSameCellRanges(
           rowTokens,
         )
       ) {
-        return text;
+        const named = once(
+          figureNames,
+          canonicalLabel(
+            "figure",
+            body.slice(0, cut),
+            body.slice(cut + 1),
+            rows,
+            rowTokens,
+          ),
+        );
+        if (named === null || named === body.slice(0, cut).trim()) return text;
+        result.renamedLabels += 1;
+        return `${text.slice(0, text.length - start.length)}${ASK_FIGURE_LINE_PREFIX} ${named} ${ASK_FIGURE_LINE_SEPARATOR}${body.slice(cut + 1)}`;
       }
       result.droppedFigures.push(start.trimEnd());
       return "";
@@ -1574,10 +1798,57 @@ async function* dropSameCellRanges(
           rowTokens,
         )
       ) {
-        return text;
+        const named = once(
+          rowNames,
+          canonicalLabel(
+            "row",
+            body.slice(0, cut),
+            body.slice(cut + 1),
+            rows,
+            rowTokens,
+          ),
+        );
+        if (named === null || named === body.slice(0, cut).trim()) return text;
+        result.renamedLabels += 1;
+        return `${text.slice(0, text.length - start.length)}${ASK_VISUAL_ROW_PREFIX} ${named} ${body.slice(cut)}`;
       }
       result.droppedVisualRows += 1;
       return "";
+    }
+    if (start.startsWith(ASK_VISUAL_ROW_PREFIX) && blockKind === "serve") {
+      // A serve row's cells are T, body, wide by POSITION. Over a result of
+      // one row per direction the model writes them in the result's order —
+      // T, Wide, Body — and the body slot prints the wide figure. When each
+      // cell cites a row whose label is one of the three, they are put in
+      // their own slots.
+      const fields = start
+        .slice(ASK_VISUAL_ROW_PREFIX.length)
+        .trimEnd()
+        .split(ASK_VISUAL_FIELD_SEPARATOR);
+      const column = rowLabelColumn(rows);
+      if (fields.length !== 4 || column === null) return text;
+      const slots: (string | undefined)[] = [undefined, undefined, undefined];
+      for (const field of fields.slice(1)) {
+        const cited = [...field.matchAll(REFERENCE_ROW_AND_COLUMN)];
+        if (cited.length !== 1) return text;
+        const value = rows[Number(cited[0][1]) - 1]?.[column];
+        const zone = typeof value === "string" ? serveZone(value) : -1;
+        if (zone === -1 || slots[zone] !== undefined) return text;
+        slots[zone] = field.trim();
+      }
+      return `${text.slice(0, text.length - start.length)}${ASK_VISUAL_ROW_PREFIX}${fields[0]}${ASK_VISUAL_FIELD_SEPARATOR} ${slots.join(` ${ASK_VISUAL_FIELD_SEPARATOR} `)}${end}`;
+    }
+    if (start.startsWith(ASK_VISUAL_PLOT_PREFIX) && blockKind === "form") {
+      // "PLOT: i_van": a form block plots one true-or-false column, and a
+      // result that has exactly one can only mean that one.
+      const column = start.slice(ASK_VISUAL_PLOT_PREFIX.length).trim();
+      const first = rows[0] ?? {};
+      if (column in first) return text;
+      const booleans = Object.keys(first).filter((name) =>
+        rows.some((row) => typeof row[name] === "boolean"),
+      );
+      if (booleans.length !== 1) return text;
+      return `${text.slice(0, text.length - start.length)}${ASK_VISUAL_PLOT_PREFIX} ${booleans[0]}${end}`;
     }
     return text;
   };
@@ -1588,9 +1859,10 @@ async function* dropSameCellRanges(
         if (
           !citesSameCellAsRange(sentence) &&
           !recitesOneCell(sentence) &&
-          !(severalRows && citesScopeTotalPerRow(sentence))
+          !(severalRows && citesScopeTotalPerRow(sentence)) &&
+          misranksSiblings(sentence, rankings) === null
         ) {
-          return sentence;
+          return ownCounted(sentence);
         }
         result.droppedSentences += 1;
         const space = /\s*$/.exec(sentence)?.[0] ?? "";
@@ -1614,7 +1886,15 @@ async function* dropSameCellRanges(
         result.droppedSentences += 1;
         headline = headline.replace(SCOPE_TOTAL_SPAN, "");
       }
-      return headline;
+      // A superlative given to the wrong serve direction or rally length:
+      // the headline cannot be dropped, so the server states the ranking.
+      const misranked = misranksSiblings(headline, rankings);
+      if (misranked !== null) {
+        result.droppedSentences += 1;
+        const end = /\s*$/.exec(headline)?.[0] ?? "";
+        return `${siblingHeadline(misranked)}${end}`;
+      }
+      return ownCounted(headline);
     }
     const start = text.trimStart();
     if (STRUCTURAL_PREFIXES.some((prefix) => start.startsWith(prefix))) {
@@ -1644,9 +1924,63 @@ async function* dropSameCellRanges(
       out += kept(split.sentences);
       buffer = split.rest;
     }
-    if (out !== "") yield out;
+    if (out !== "") {
+      cited = cited || citesAMeasure(out);
+      yield out;
+    }
   }
-  if (buffer !== "") yield line(buffer);
+  const last = buffer === "" ? "" : line(buffer);
+  if (last !== "") {
+    cited = cited || citesAMeasure(last);
+    yield last;
+  }
+  // An answer that cites no cell of the result but the match count has told
+  // the reader nothing ("Your break points figures are recorded across
+  // eighteen matches."). For a one-row result the server adds the figures
+  // itself, each under the measure's own name.
+  if (!cited && headlineSeen && rows.length === 1) {
+    const stated = statedFigures(rows[0]);
+    if (stated !== "") {
+      result.renamedLabels += 1;
+      yield `\n\n${stated}`;
+    }
+  }
+}
+
+/** Whether text cites any cell other than the scope's match count. */
+function citesAMeasure(text: string): boolean {
+  for (const match of text.matchAll(REFERENCE_ROW_AND_COLUMN)) {
+    if (match[2] !== SCOPE_TOTAL_COLUMN) return true;
+  }
+  return false;
+}
+
+/** At most this many figures are stated for an answer that cited none. */
+const MAX_STATED_FIGURES = 4;
+
+/**
+ * A one-row result's known measures as plain sentences of references:
+ * "Break points saved: {{r1.break_points_saved_pct}}." Only columns whose
+ * name the dictionary places and whose cell holds a number, one per measure
+ * and qualifier; "" when there is none.
+ */
+export function statedFigures(row: AskRow): string {
+  const seen = new Set<string>();
+  const sentences: string[] = [];
+  for (const [column, value] of Object.entries(row)) {
+    if (typeof value !== "number") continue;
+    const measure = askMeasure(column);
+    if (!measure) continue;
+    const label = askMeasureFullLabel(measure);
+    const key = `${label}${isPercentColumn(column) ? " %" : ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sentences.push(
+      `${label}: ${ASK_CELL_REFERENCE_OPEN}r1.${column}${ASK_CELL_REFERENCE_CLOSE}.`,
+    );
+    if (sentences.length === MAX_STATED_FIGURES) break;
+  }
+  return sentences.join(" ");
 }
 
 function failed(): AskErrorEvent {
@@ -1718,6 +2052,7 @@ export function renderAskAnswer(
     droppedVisuals: [],
     droppedVisualRows: 0,
     droppedSentences: 0,
+    renamedLabels: 0,
     failure: null,
   };
   return { events: render(chunks, rows, result), result };

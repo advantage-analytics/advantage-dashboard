@@ -217,6 +217,16 @@ function required(name: string): string {
   return value;
 }
 
+/** The plan of the last query that ran without a database error, as a saved answer records it. */
+function lastPlan(
+  queries: readonly { scope: unknown; sql: unknown; error: unknown }[],
+): { sql?: string; scopeSql?: string } {
+  const ran = [...queries].reverse().find((query) => !query.error);
+  return ran && typeof ran.sql === "string" && typeof ran.scope === "string"
+    ? { sql: ran.sql, scopeSql: ran.scope }
+    : {};
+}
+
 async function main() {
   const out = arg("out");
   if (!out) {
@@ -234,8 +244,11 @@ async function main() {
     .map((part) => Number(part.trim()) - 1);
 
   // Imported after the environment is settled: the adapter reads it.
-  const { askQuestion, conversationTurnsFromMessages } =
-    await import("@/lib/services/ask/ask");
+  const {
+    askQuestion,
+    conversationTurnsFromMessages,
+    previousPlanFromMessages,
+  } = await import("@/lib/services/ask/ask");
   const { resolveAskTags } = await import("@/lib/services/ask/tags");
   const { buildAskTagOptions, buildTeamAskTagOptions } =
     await import("@/lib/data/ask-tags");
@@ -352,7 +365,7 @@ async function main() {
    */
   const transcripts: ({
     question: { text: string; tags: unknown };
-    answer: { headline: string; body: string };
+    answer: { headline: string; body: string; sql?: string; scopeSql?: string };
   } | null)[] = [];
 
   for (const [index, entry] of questions.entries()) {
@@ -475,6 +488,11 @@ async function main() {
         question: entry.q,
         tags: resolved.tags,
         conversation,
+        previousPlan: prior
+          ? previousPlanFromMessages([
+              { role: "assistant", content: prior.answer },
+            ])
+          : null,
         conversationId: null,
         reservation: null,
         scope,
@@ -560,7 +578,11 @@ async function main() {
       headline
         ? {
             question: { text: entry.q, tags: resolved.tags.saved },
-            answer: { headline, body: body.trim() },
+            answer: {
+              headline,
+              body: body.trim(),
+              ...lastPlan(queries),
+            },
           }
         : null,
     );

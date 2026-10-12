@@ -24,9 +24,13 @@ import {
   formatAskCell,
   citesSameCellAsRange,
   citesScopeTotalPerRow,
+  canonicalLabel,
   labelNamesAnotherRow,
+  misranksSiblings,
   recitesOneCell,
   renderAskAnswer,
+  siblingHeadline,
+  statedFigures,
 } from "@/lib/services/ask/answer-render";
 import { uniqueRowLabelTokens } from "@/lib/services/ask/facts";
 import {
@@ -242,7 +246,7 @@ test.describe("renderAskAnswer — shape", () => {
         type: "headline",
         text: "Your second serve holds up better this season.",
       },
-      { type: "figure", label: "Second serve points won", value: "54.6%" },
+      { type: "figure", label: "Second-serve points won", value: "54.6%" },
       { type: "figure", label: "Matches", value: "9" },
       { type: "figure", label: "Last played", value: "Sep 14, 2026" },
     ]);
@@ -255,7 +259,7 @@ test.describe("renderAskAnswer — shape", () => {
     expect(result).toEqual({
       headline: "Your second serve holds up better this season.",
       figures: [
-        { label: "Second serve points won", value: "54.6%" },
+        { label: "Second-serve points won", value: "54.6%" },
         { label: "Matches", value: "9" },
         { label: "Last played", value: "Sep 14, 2026" },
       ],
@@ -268,6 +272,7 @@ test.describe("renderAskAnswer — shape", () => {
       droppedVisuals: [],
       droppedVisualRows: 0,
       droppedSentences: 0,
+      renamedLabels: 1,
       failure: null,
     });
   });
@@ -285,7 +290,7 @@ test.describe("renderAskAnswer — shape", () => {
     expect(events.filter((event) => event.type === "figure")).toEqual([
       { type: "figure", label: "One", value: "9" },
       { type: "figure", label: "Two", value: "4" },
-      { type: "figure", label: "Three", value: "1,204" },
+      { type: "figure", label: "Total points", value: "1,204" },
     ]);
     expect(body(events)).toBe("Body.");
     expect(result.droppedFigures).toEqual(["FIGURE: Four = 512"]);
@@ -821,6 +826,22 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     });
   });
 
+  test('serve: the example\'s "All serves" label is not kept over other cells', async () => {
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: serve | Where your break point serves went.\n" +
+          "ROW: All serves | {{r1.bp_serves_t}} | {{r1.bp_serves_body}} | {{r1.bp_serves_wide}}\n",
+      ],
+      [{ bp_serves_t: 5, bp_serves_body: 2, bp_serves_wide: 4 }],
+    );
+
+    expect(visualOf(events)).toMatchObject({
+      kind: "serve",
+      courts: [{ label: "Serves" }],
+    });
+  });
+
   test("form: one result per row, an unknown result skipped, oldest first", async () => {
     const { events } = await render(
       [
@@ -1114,12 +1135,12 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       baselineLabel: "B",
       rows: [
         {
-          label: "Saved",
+          label: "First serves in",
           subject: { value: 58.2, text: "58.2%" },
           baseline: { value: 61.4, text: "61.4%" },
         },
         {
-          label: "Won",
+          label: "Second-serve points won",
           subject: { value: 41.2, text: "41.2%" },
           baseline: { value: 52.8, text: "52.8%" },
         },
@@ -1272,7 +1293,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     expect(
       bars.result.visual?.kind === "bars" &&
         bars.result.visual.rows.map((row) => row.label),
-    ).toEqual(["First serves in", "Second"]);
+    ).toEqual(["First serves in", "Second-serve points won"]);
 
     const split = await render(
       [
@@ -1287,7 +1308,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     ]);
   });
 
-  test("a bad reference in the headline or a FIGURE line still fails the answer, whatever the block tolerates", async () => {
+  test("a bad reference in the headline or the body still fails the answer; in a FIGURE line it drops that figure alone", async () => {
     const block =
       "CHART: table | Caption.\nCOLUMNS: You | Opponent\nROW: Winners | {{r1.winners}} | {{r1.forced}}\nROW: Aces | {{r1.aces}} | {{r1.forced}}\n\nBody.";
     const headline = await render([`Claim {{r1.nope}}.\n${block}`], COMPARISON);
@@ -1296,7 +1317,24 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       [`Claim.\nFIGURE: Aces = {{r1.nope}}\n${block}`],
       COMPARISON,
     );
-    expect(figure.result.failure?.kind).toBe("missing_column");
+    // One mistyped column in a figure line is not worth the whole answer.
+    expect(figure.result.failure).toBeNull();
+    expect(figure.result.figures).toEqual([]);
+    expect(figure.result.droppedFigures).toEqual([
+      "FIGURE: (a reference the result does not have)",
+    ]);
+    expect(figure.result.visual?.kind).toBe("table");
+    const text = await render(
+      [`Claim.\n\nYou hit {{r1.nope}} aces.`],
+      COMPARISON,
+    );
+    expect(text.result.failure?.kind).toBe("missing_column");
+    // A malformed reference in a figure is still a failure: that is not a slip of one name.
+    const malformed = await render(
+      [`Claim.\nFIGURE: Aces = {{aces}}\n\nBody.`],
+      COMPARISON,
+    );
+    expect(malformed.result.failure?.kind).toBe("malformed_reference");
   });
 
   test("an empty table cell reads as an em dash, and a trailing separator after a full row is ignored", async () => {
@@ -1312,7 +1350,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       caption: "Caption.",
       columns: ["Count", "Share"],
       rows: [
-        { label: "Faced", cells: ["8", "—"] },
+        { label: "Winners", cells: ["8", "—"] },
         { label: "Saved", cells: ["11", "58.2%"] },
       ],
     });
@@ -1326,7 +1364,9 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       COMPARISON,
     );
     expect(result.failure).toBeNull();
-    expect(result.figures).toEqual([{ label: "Points won", value: "58.2%" }]);
+    expect(result.figures).toEqual([
+      { label: "First serves in", value: "58.2%" },
+    ]);
     expect(result.droppedFigures).toEqual([
       "FIGURE: Winners = 8",
       "FIGURE: Forced errors = 11",
@@ -1340,11 +1380,11 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     // The same value under a different label is a different measure and stays.
     const kept = await render(
       [
-        "Claim.\nFIGURE: Aces = {{r1.winners}}\nCHART: split | Caption.\nROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}\n\nBody.",
+        "Claim.\nFIGURE: Aces = {{r1.forced}}\nCHART: split | Caption.\nROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}\n\nBody.",
       ],
       COMPARISON,
     );
-    expect(kept.result.figures).toEqual([{ label: "Aces", value: "8" }]);
+    expect(kept.result.figures).toEqual([{ label: "Aces", value: "11" }]);
   });
 
   test("a '=' in a ROW label that is not followed by a cell is left alone, and a cell with words beside it is still malformed", async () => {
@@ -1848,14 +1888,14 @@ test.describe("a sentence that cites one cell as both ends of a range", () => {
   test("never touches a figure line or a block line", async () => {
     const { result, text } = await run([
       "The first serve changed.\n",
-      "FIGURE: From first to last = {{r1.first_serve_pct}}\n",
+      "FIGURE: From first to last = {{r2.first_serve_pct}}\n",
       "CHART: table | From {{r1.first_serve_pct}} to {{r1.first_serve_pct}}.\n",
       "COLUMNS: Value\n",
       "ROW: From start to end | {{r1.first_serve_pct}}\n",
       "\nThe body.",
     ]);
     expect(result.figures).toEqual([
-      { label: "From first to last", value: "54.2%" },
+      { label: "First serves in", value: "68%" },
     ]);
     expect(result.visual?.kind).toBe("table");
     expect(text).toBe("The body.");
@@ -2022,15 +2062,48 @@ test.describe("the scope's match total cited once per row", () => {
     expect(result.droppedSentences).toBe(1);
   });
 
-  test("a one-row result is left alone: there the total is that row's", async () => {
+  test("a one-row result with no count of its own is left alone: there the total is that row's", async () => {
+    const { group_matches: _own, ...alone } = SURFACES[0];
     const { text, result } = await run(
       [
-        "Headline.\n\nFrom {{r1.matches_in_scope}} matches, all {{r1.matches_in_scope}} of them on clay.",
+        "Headline.\n\nFrom {{r1.matches_in_scope}} matches, all {{r1.matches_in_scope}} of them on clay, {{r1.win_pct}} won.",
       ],
-      [SURFACES[0]],
+      [alone],
     );
-    expect(text).toBe("From 18 matches, all 18 of them on clay.");
+    expect(text).toBe("From 18 matches, all 18 of them on clay, 16.7% won.");
     expect(result.droppedSentences).toBe(0);
+  });
+
+  test("a one-row result with its own count: a sentence or caption citing only the scope total is turned to the row's count", async () => {
+    // "…a total points won percentage of 51.9% across those 10 matches": 3 were tournaments.
+    const tournament: AskRow[] = [
+      {
+        match_type: "Tournament",
+        win_pct: 66.7,
+        total_points_won_pct: 51.9,
+        match_count: 3,
+        matches_in_scope: 10,
+      },
+    ];
+    const { text, result } = await run(
+      [
+        "The team won most of its tournament matches, from {{r1.matches_in_scope}} matches.\n",
+        "CHART: table | Tournament play, from {{r1.matches_in_scope}} matches.\nCOLUMNS: Value\nROW: Matches won | {{r1.win_pct}}\n\n",
+        "Tournament matches account for {{r1.match_count}} of the {{r1.matches_in_scope}} looked at. ",
+        "The team won {{r1.total_points_won_pct}} of points across those {{r1.matches_in_scope}} matches.",
+      ],
+      tournament,
+    );
+    expect(result.headline).toBe(
+      "The team won most of its tournament matches, from 3 matches.",
+    );
+    expect(result.visual).toMatchObject({
+      caption: "Tournament play, from 3 matches.",
+    });
+    // The sentence that sets the two counts side by side is right as written.
+    expect(text).toBe(
+      "Tournament matches account for 3 of the 10 looked at. The team won 51.9% of points across those 3 matches.",
+    );
   });
 });
 
@@ -2129,7 +2202,7 @@ test.describe("a label that names one row and cites another", () => {
     ]);
     expect(result.figures).toEqual([
       {
-        label: "Second-serve win percentage against right-handers",
+        label: "Second-serve points won, right",
         value: "54.6%",
       },
     ]);
@@ -2167,7 +2240,7 @@ test.describe("a label that names one row and cites another", () => {
     expect(result.visual).toMatchObject({
       rows: [
         { label: "Second-serve points won", cells: ["40%", "54.6%"] },
-        { label: "Win percentage", cells: ["40%", "60%"] },
+        { label: "Matches won", cells: ["40%", "60%"] },
       ],
     });
     expect(result.droppedVisualRows).toBe(0);
@@ -2195,5 +2268,494 @@ test.describe("a label that names one row and cites another", () => {
     );
     expect(result.visual?.kind).toBe("split");
     expect(result.droppedVisualRows).toBe(0);
+  });
+});
+
+// ── The measure's own name ──────────────────────────────────────────────────
+
+test.describe("a label for a known measure is the server's, not the model's", () => {
+  const SURFACES: AskRow[] = [
+    {
+      court_surface: "Hard Court",
+      total_points_won_pct: 53.8,
+      win_pct: 75,
+      group_matches: 12,
+    },
+    {
+      court_surface: "Clay Court",
+      total_points_won_pct: 49.5,
+      win_pct: 16.7,
+      group_matches: 6,
+    },
+  ];
+  const tokens = uniqueRowLabelTokens(SURFACES);
+
+  async function run(chunks: string[], rows: AskRow[] = SURFACES) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    for await (const _event of events) {
+      // drained
+    }
+    return result;
+  }
+
+  test("'Hard court win percentage' over total points won becomes 'Total points won, Hard Court'", async () => {
+    const result = await run([
+      "You do better on hard courts.\n",
+      "FIGURE: Hard court win percentage = {{r1.total_points_won_pct}}\n",
+      "FIGURE: Clay court win percentage = {{r2.total_points_won_pct}}\n",
+      "FIGURE: Hard court match wins = {{r1.win_pct}}\n",
+      "\nThe body.",
+    ]);
+    expect(result.figures).toEqual([
+      { label: "Total points won, Hard Court", value: "53.8%" },
+      { label: "Total points won, Clay Court", value: "49.5%" },
+      { label: "Matches won, Hard Court", value: "75%" },
+    ]);
+    expect(result.renamedLabels).toBe(3);
+    expect(result.droppedDigits).toEqual([]);
+  });
+
+  test("canonicalLabel, figure: the measure's name, what its prefix says, and the row only when the label named it", () => {
+    const one: AskRow[] = [
+      { me_first_serve_pct: 60, opp_first_serve_pct: 65, all_aces: 3 },
+    ];
+    const none = new Map<string, number>();
+    expect(
+      canonicalLabel(
+        "figure",
+        " Serve accuracy ",
+        " {{r1.me_first_serve_pct}}",
+        one,
+        none,
+      ),
+    ).toBe("First serves in");
+    expect(
+      canonicalLabel(
+        "figure",
+        "His serve",
+        "{{r1.opp_first_serve_pct}}",
+        one,
+        none,
+      ),
+    ).toBe("First serves in, opponent");
+    expect(canonicalLabel("figure", "Aces", "{{r1.all_aces}}", one, none)).toBe(
+      "Aces, all matches",
+    );
+    expect(
+      canonicalLabel(
+        "figure",
+        "Points won on clay",
+        "{{r2.total_points_won_pct}}",
+        SURFACES,
+        tokens,
+      ),
+    ).toBe("Total points won, {{r2.court_surface}}");
+    // The label named no row: the row is not guessed.
+    expect(
+      canonicalLabel(
+        "figure",
+        "Points won",
+        "{{r2.total_points_won_pct}}",
+        SURFACES,
+        tokens,
+      ),
+    ).toBe("Total points won");
+    // No digit and no middot in anything the dictionary can print.
+    expect(
+      canonicalLabel(
+        "figure",
+        "x",
+        "{{r1.start_prev5_first_serve_pct}}",
+        one,
+        none,
+      ),
+    ).toBe("First serves in, first match, previous five");
+  });
+
+  test("an alias the dictionary cannot place, the scope total, and two unlike measures keep the model's label", () => {
+    const rows: AskRow[] = [
+      { big_point_serve_t_pct: 37.1, aces: 2, winners: 9, matches_in_scope: 4 },
+    ];
+    const none = new Map<string, number>();
+    expect(
+      canonicalLabel(
+        "figure",
+        "T on big points",
+        "{{r1.big_point_serve_t_pct}}",
+        rows,
+        none,
+      ),
+    ).toBeNull();
+    expect(
+      canonicalLabel(
+        "figure",
+        "Matches",
+        "{{r1.matches_in_scope}}",
+        rows,
+        none,
+      ),
+    ).toBeNull();
+    expect(
+      canonicalLabel(
+        "row",
+        "Attack",
+        "{{r1.aces}} | {{r1.winners}}",
+        rows,
+        none,
+      ),
+    ).toBeNull();
+    expect(canonicalLabel("figure", "Nothing", "none", rows, none)).toBeNull();
+  });
+
+  test("a table or bars row whose cells are all one measure takes the measure's bare name", async () => {
+    const rows: AskRow[] = [
+      {
+        me_total_points_won_pct: 48.7,
+        opp_total_points_won_pct: 51.3,
+        first_serve_pct: 65.8,
+        all_first_serve_pct: 62.2,
+      },
+    ];
+    const table = await run(
+      [
+        "Headline.\nCHART: table | You against the opponent.\nCOLUMNS: You | Opponent\nROW: Win rate | {{r1.me_total_points_won_pct}} | {{r1.opp_total_points_won_pct}}\n",
+      ],
+      rows,
+    );
+    expect(table.visual).toMatchObject({
+      rows: [{ label: "Total points won", cells: ["48.7%", "51.3%"] }],
+    });
+    const bars = await run(
+      [
+        "Headline.\nCHART: bars | August against all matches.\nSERIES: August | All matches\nROW: First serve percentage | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\n",
+      ],
+      rows,
+    );
+    expect(bars.visual).toMatchObject({
+      rows: [{ label: "First serves in" }],
+    });
+  });
+
+  test("a row labelled with a row of the result is a row label and is left alone", async () => {
+    const result = await run([
+      "Headline.\nCHART: table | By surface.\nCOLUMNS: Total points won\nROW: Hard | {{r1.total_points_won_pct}}\nROW: Clay | {{r2.total_points_won_pct}}\n",
+    ]);
+    expect(result.visual).toMatchObject({
+      rows: [
+        { label: "Hard", cells: ["53.8%"] },
+        { label: "Clay", cells: ["49.5%"] },
+      ],
+    });
+    expect(result.renamedLabels).toBe(0);
+  });
+
+  test("a figure renamed to the label of a row already in the block is the same number twice, and is dropped", async () => {
+    const rows: AskRow[] = [{ me_winners: 15, opp_winners: 24 }];
+    const result = await run(
+      [
+        "Headline.\nFIGURE: Your winners = {{r1.me_winners}}\nCHART: table | Winners.\nCOLUMNS: You | Opponent\nROW: Winners hit | {{r1.me_winners}} | {{r1.opp_winners}}\n",
+      ],
+      rows,
+    );
+    expect(result.figures).toEqual([]);
+    expect(result.visual).toMatchObject({ rows: [{ label: "Winners" }] });
+  });
+});
+
+test.describe("labels and plots the server can only read one way", () => {
+  async function run(chunks: string[], rows: AskRow[]) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    for await (const _event of events) {
+      // drained
+    }
+    return result;
+  }
+
+  test("a count and its percentage share a name: the second keeps the model's label, so no two rows print alike", async () => {
+    const rows: AskRow[] = [
+      { break_points_saved: 67, break_points_saved_pct: 58.8 },
+    ];
+    const result = await run(
+      [
+        "Headline.\nFIGURE: Saved = {{r1.break_points_saved}}\nFIGURE: Save rate = {{r1.break_points_saved_pct}}\nCHART: table | Break points.\nCOLUMNS: Value\nROW: Saved count | {{r1.break_points_saved}}\nROW: Saved share | {{r1.break_points_saved_pct}}\n",
+      ],
+      rows,
+    );
+    expect(result.visual).toMatchObject({
+      rows: [
+        { label: "Break points saved", cells: ["67"] },
+        { label: "Saved share", cells: ["58.8%"] },
+      ],
+    });
+    // The first figure repeats the block's first row and is dropped; the
+    // second keeps the model's label.
+    expect(result.figures).toEqual([{ label: "Save rate", value: "58.8%" }]);
+  });
+
+  test("a form block's mistyped PLOT column is read as the result's one true-or-false column", async () => {
+    const rows: AskRow[] = [
+      {
+        played_on: "2026-09-25",
+        player_name: "Emon van Loben Sels",
+        i_won: false,
+      },
+      { played_on: "2026-09-26", player_name: "Rudy Quan", i_won: true },
+    ];
+    const fixed = await run(
+      [
+        "Headline.\nCHART: form | The matches, oldest first.\nPLOT: i_van\n\nBody.",
+      ],
+      rows,
+    );
+    expect(fixed.visual).toMatchObject({
+      kind: "form",
+      results: [false, true],
+    });
+    expect(fixed.droppedVisuals).toEqual([]);
+
+    // Two true-or-false columns: nothing is guessed, and the block drops as before.
+    const unsure = await run(
+      [
+        "Headline.\nCHART: form | The matches, oldest first.\nPLOT: i_van\n\nBody.",
+      ],
+      rows.map((row) => ({ ...row, served_first: true })),
+    );
+    expect(unsure.visual).toBeNull();
+    expect(unsure.droppedVisuals).toHaveLength(1);
+  });
+});
+
+test.describe("a serve block over one row per direction", () => {
+  const ZONES: AskRow[] = [
+    { serve_zone: "T", serve_zone_pct: 37.1, big_points: 65 },
+    { serve_zone: "Wide", serve_zone_pct: 36.6, big_points: 64 },
+    { serve_zone: "Body", serve_zone_pct: 26.3, big_points: 46 },
+  ];
+
+  async function run(chunks: string[], rows: AskRow[]) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    for await (const _event of events) {
+      // drained
+    }
+    return result;
+  }
+
+  test("cells written in the result's order are put in the T, body and wide slots their rows name", async () => {
+    const result = await run(
+      [
+        "Headline.\nCHART: serve | Where your serves went on big points.\nROW: Big points | {{r1.big_points}} | {{r2.big_points}} | {{r3.big_points}}\n",
+      ],
+      ZONES,
+    );
+    expect(result.visual).toMatchObject({
+      kind: "serve",
+      courts: [
+        {
+          label: "Big points",
+          t: { value: 65 },
+          body: { value: 46 },
+          wide: { value: 64 },
+        },
+      ],
+    });
+  });
+
+  test("cells that are not one per direction are left as written", async () => {
+    const one: AskRow[] = [{ serve_t: 13, serve_body: 8, serve_wide: 18 }];
+    const result = await run(
+      [
+        "Headline.\nCHART: serve | Where your serves went.\nROW: All serves | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}\n",
+      ],
+      one,
+    );
+    expect(result.visual).toMatchObject({
+      courts: [{ t: { value: 13 }, body: { value: 8 }, wide: { value: 18 } }],
+    });
+    // Two cells from the same direction: nothing is guessed.
+    const twice = await run(
+      [
+        "Headline.\nCHART: serve | Where your serves went.\nROW: Big points | {{r1.big_points}} | {{r1.big_points}} | {{r3.big_points}}\n",
+      ],
+      ZONES,
+    );
+    expect(twice.visual).toMatchObject({
+      courts: [{ t: { value: 65 }, body: { value: 65 }, wide: { value: 46 } }],
+    });
+  });
+});
+
+test.describe("a superlative given to the wrong serve direction or rally length", () => {
+  const BREAK_POINTS: AskRow[] = [
+    {
+      break_point_serve_t_pct: 38.7,
+      break_point_serve_body_pct: 26.5,
+      break_point_serve_wide_pct: 34.8,
+      break_point_serves_total: 155,
+    },
+  ];
+  const ranking = {
+    words: ["t", "body", "wide"],
+    highest: "t",
+    lowest: "body",
+  };
+
+  async function run(chunks: string[], rows: AskRow[] = BREAK_POINTS) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+    return {
+      result,
+      text: seen
+        .flatMap((event) => (event.type === "text" ? [event.delta] : []))
+        .join(""),
+    };
+  }
+
+  test("misranksSiblings: 'most' without the highest word in reach, or 'least' without the lowest", () => {
+    expect(
+      misranksSiblings(
+        "You serve wide most often and body serves least on break points.",
+        [ranking],
+      ),
+    ).toEqual(ranking);
+    expect(
+      misranksSiblings("Wide serves are the fewest, with the T next.", [
+        ranking,
+      ]),
+    ).toEqual(ranking);
+    // The right word in reach: left alone, however it is phrased.
+    for (const fine of [
+      "You serve to the T most often, with wide close behind and the body least.",
+      "The T and wide take the most serves; the body takes the fewest.",
+      "You went to the T on {{r1.break_point_serve_t_pct}} and wide on {{r1.break_point_serve_wide_pct}}.",
+      "Most of your serves on break points were recorded.",
+      "Your body language was at its lowest.",
+    ]) {
+      expect(misranksSiblings(fine, [ranking]), fine).toBeNull();
+    }
+    // A lower-case t is not the T.
+    expect(
+      misranksSiblings("You hit wide most, then body.", [ranking]),
+    ).toEqual(ranking);
+    expect(misranksSiblings("You serve wide most often.", [])).toBeNull();
+  });
+
+  test("a headline that does it is replaced by the server's own statement of the ranking", async () => {
+    const { result } = await run([
+      "You serve wide most often and body serves least on break points.\n\nThese figures cover the matches.",
+    ]);
+    expect(siblingHeadline(ranking)).toBe(
+      "Of the T, the body and wide, the highest figure is the T and the lowest is the body.",
+    );
+    expect(result.headline).toBe(siblingHeadline(ranking));
+    expect(result.droppedSentences).toBe(1);
+    expect(result.text).toBe("These figures cover the matches.");
+  });
+
+  test("a body sentence that does it is dropped; a right one stays", async () => {
+    const { text, result } = await run([
+      "Your serve direction on break points.\n\n",
+      "You went wide most often and to the body least. ",
+      "You went to the T most often, {{r1.break_point_serve_t_pct}} of the time.",
+    ]);
+    expect(text).toBe("You went to the T most often, 38.7% of the time.");
+    expect(result.droppedSentences).toBe(1);
+  });
+
+  test("a result of several rows, or one whose directions tie, is not checked", async () => {
+    const tie = await run(
+      ["You serve wide most often and body least.\n\nBody."],
+      [{ serve_t: 9, serve_body: 4, serve_wide: 9 }],
+    );
+    expect(tie.result.headline).toBe(
+      "You serve wide most often and body least.",
+    );
+    const several = await run(
+      ["You serve wide most often and body least.\n\nBody."],
+      [
+        { serve_zone: "T", serve_t: 9, serve_body: 4, serve_wide: 2 },
+        { serve_zone: "Wide", serve_t: 1, serve_body: 4, serve_wide: 2 },
+      ],
+    );
+    expect(several.result.droppedSentences).toBe(0);
+  });
+});
+
+test.describe("an answer that cites no cell but the match count", () => {
+  const BREAKS: AskRow[] = [
+    {
+      break_points_saved_pct: 58.8,
+      break_points_converted_pct: 42.1,
+      matches_in_scope: 18,
+    },
+  ];
+
+  async function run(chunks: string[], rows: AskRow[] = BREAKS) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), rows);
+    for await (const _event of events) {
+      // drained
+    }
+    return result;
+  }
+
+  test("statedFigures: a one-row result's known measures as sentences of references", () => {
+    expect(statedFigures(BREAKS[0])).toBe(
+      "Break points saved: {{r1.break_points_saved_pct}}. Break points converted: {{r1.break_points_converted_pct}}.",
+    );
+    expect(
+      statedFigures({
+        me_winners: 15,
+        opp_winners: 24,
+        break_points_saved: 67,
+        break_points_saved_pct: 58.8,
+        odd_rate: 3,
+        aces: null,
+      }),
+    ).toBe(
+      "Winners: {{r1.me_winners}}. Winners, opponent: {{r1.opp_winners}}. Break points saved: {{r1.break_points_saved}}. Break points saved: {{r1.break_points_saved_pct}}.",
+    );
+    expect(statedFigures({ odd_rate: 3, matches_in_scope: 4 })).toBe("");
+  });
+
+  test("gets the result's figures stated by the server, under the measures' own names", async () => {
+    // "Your break points saved and break points converted figures are
+    // recorded across eighteen matches." — and not one of them given.
+    const result = await run([
+      "Your break point figures are recorded.\n\nThese figures come from {{r1.matches_in_scope}} matches.",
+    ]);
+    expect(result.text).toBe(
+      "These figures come from 18 matches.\n\nBreak points saved: 58.8%. Break points converted: 42.1%.",
+    );
+    expect(result.failure).toBeNull();
+    expect(result.droppedDigits).toEqual([]);
+
+    const bare = await run(["Your break point figures are recorded."]);
+    expect(bare.text).toBe(
+      "Break points saved: 58.8%. Break points converted: 42.1%.",
+    );
+  });
+
+  test("an answer that cites a measure anywhere — a figure, a block, the body — is left as written", async () => {
+    for (const reply of [
+      "Headline.\nFIGURE: Saved = {{r1.break_points_saved_pct}}\n\nFrom {{r1.matches_in_scope}} matches.",
+      "Headline.\n\nYou saved {{r1.break_points_saved_pct}}.",
+      "You saved {{r1.break_points_saved_pct}}.",
+    ]) {
+      const result = await run([reply]);
+      expect(result.text, reply).not.toContain("Break points converted:");
+    }
+  });
+
+  test("several rows, or a result with no known measure, get nothing added", async () => {
+    const several = await run(
+      ["Headline.\n\nFrom {{r1.matches_in_scope}} matches."],
+      [BREAKS[0], BREAKS[0]],
+    );
+    expect(several.text).toBe("From 18 matches.");
+    const unknown = await run(
+      ["Headline.\n\nFrom {{r1.matches_in_scope}} matches."],
+      [{ odd_rate: 3, matches_in_scope: 18 }],
+    );
+    expect(unknown.text).toBe("From 18 matches.");
   });
 });

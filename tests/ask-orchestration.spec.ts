@@ -23,12 +23,21 @@ import {
   type AskRpcResult,
   type AskSavedAnswer,
   type AskSavedQuestion,
+  SCOPE_COUNT_COLUMN_REASON,
   askQuestion,
   conversationTurnsFromMessages,
+  droppedPlayerFilter,
+  followUpShrank,
   equalBaselineDetail,
   parsePlanReply,
+  namesScopeCountColumn,
   percentageOutOfRange,
+  previousPlanFromMessages,
   reserveAskQuestion,
+  sqlMeasureAliases,
+  topRowHasNoRankingFigure,
+  withoutOutOfRangePercentages,
+  undocumentedDetail,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
 import type { AskEvent, AskVisual } from "@/lib/services/ask/events";
@@ -2282,8 +2291,13 @@ You won {{r1.second_serve_won_pct}} of second-serve points.`;
     expect(told).toContain(
       "A baseline must be computed over all matches, not joined to scope",
     );
-    // The second result differs, so the answer step sees its baselines.
-    expect(modelCalls[2].system).toContain("all_first_serve_pct: 62.2");
+    // The second result differs, so its baselines are stated — by the
+    // server, since a row of measure/baseline pairs is pair-shaped.
+    expect(modelCalls).toHaveLength(2);
+    expect(events.find((event) => event.type === "headline")).toEqual({
+      type: "headline",
+      text: "First serves in was higher than across all matches (65.8% to 62.2%); second-serve points won was lower (47.4% to 49.2%).",
+    });
   });
 
   test("still equal on the second try: the baseline columns are left out of what the answer step sees", async () => {
@@ -2374,10 +2388,12 @@ You won {{r1.second_serve_won_pct}} of second-serve points.`;
 
     const differing = fakeDb({ run: [run(FIXED_ROWS)] });
     const second = fakeModel([JSON.stringify(all), SERVE_ANSWER]);
-    await collect(
+    const kept = await collect(
       askQuestion(input({ db: differing.db, model: second.model })),
     );
-    expect(second.calls[1].system).toContain("all_first_serve_pct: 62.2");
+    expect(kept.find((event) => event.type === "headline")).toMatchObject({
+      text: expect.stringContaining("(65.8% to 62.2%)"),
+    });
   });
 
   test("one equal baseline among differing ones is left alone", async () => {
@@ -2402,7 +2418,10 @@ test.describe("the stated facts", () => {
         {
           data: {
             matches: MATCH_ROWS,
-            rows: [{ me_first_serve_pct: 64.1, team_first_serve_pct: 65.5 }],
+            rows: [
+              { court_type: "Hard", first_serve_pct: 64.1 },
+              { court_type: "Clay", first_serve_pct: 65.5 },
+            ],
           },
           error: null,
         },
@@ -2410,13 +2429,13 @@ test.describe("the stated facts", () => {
     });
     const { model, calls: modelCalls } = fakeModel([
       JSON.stringify(PLAN),
-      "The first serve landed at this rate.\n\nIt was {{r1.me_first_serve_pct}}.",
+      "The first serve landed at this rate.\n\nIt was {{r1.first_serve_pct}}.",
     ]);
 
     await collect(askQuestion(input({ db, model })));
 
     expect(modelCalls[1].system).toContain(
-      "- r1.me_first_serve_pct (64.1) is LOWER than r1.team_first_serve_pct (65.5), a gap of 1.4.",
+      '- first_serve_pct: HIGHEST is r2 "Clay" (65.5); LOWEST is r1 "Hard" (64.1).',
     );
   });
 });
@@ -2484,5 +2503,672 @@ test.describe("per-match rows the query returned newest first", () => {
       visual: { kind: "form", results: [false, false, true] },
     });
     expect(text(events)).toBe("The first was on Apr 11, 2026.");
+  });
+});
+
+// ── Two planner slips sent back once ────────────────────────────────────────
+
+test.describe("a planner column named after the scope count", () => {
+  test("namesScopeCountColumn: an alias of that exact name", () => {
+    expect(
+      namesScopeCountColumn(
+        "select m.opponent_name, count(m.match_id) as matches_in_scope from ask.matches m",
+      ),
+    ).toBe(true);
+    expect(
+      namesScopeCountColumn('select count(*) AS "matches_in_scope" from scope'),
+    ).toBe(true);
+    expect(
+      namesScopeCountColumn(
+        "select count(*) as group_matches, 1 as matches_in_scope_total from scope",
+      ),
+    ).toBe(false);
+  });
+
+  test("is refused like a guard failure and told back; the retry answers", async () => {
+    const bad: AskPlanQuery = {
+      ...PLAN,
+      sql: "select count(m.match_id) as matches_in_scope, round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as second_serve_won_pct from ask.match_stats s join scope m on m.match_id = s.match_id where s.side = 'me'",
+    };
+    const { db, calls } = fakeDb();
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(bad),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+    expect(modelCalls[1].messages[2].content).toBe(
+      `That query was refused before it ran. ${SCOPE_COUNT_COLUMN_REASON} Reply again with ONE JSON object and nothing else, following every rule.`,
+    );
+  });
+});
+
+test.describe("a ranking whose top row has no figure", () => {
+  const SQL =
+    "select m.opponent_name, round(100.0 * sum(case when m.i_won = false then 1 else 0 end) / nullif(count(m.match_id), 1), 1) as loss_pct from ask.matches m where m.match_id in (select match_id from scope) group by m.opponent_name order by loss_pct desc, losses desc limit 1";
+
+  test("topRowHasNoRankingFigure: the outermost order by, descending without nulls last, over a null", () => {
+    const top = [{ opponent_name: "Kenji Arlotta", loss_pct: null }];
+    expect(topRowHasNoRankingFigure(SQL, top)).toBe("loss_pct");
+    expect(
+      topRowHasNoRankingFigure(SQL, [
+        { opponent_name: "Marek Dvorsky", loss_pct: 100 },
+      ]),
+    ).toBeNull();
+    expect(
+      topRowHasNoRankingFigure(
+        SQL.replace("loss_pct desc,", "loss_pct desc nulls last,"),
+        top,
+      ),
+    ).toBeNull();
+    expect(
+      topRowHasNoRankingFigure(SQL.replace(" desc,", " asc,"), top),
+    ).toBeNull();
+    expect(
+      topRowHasNoRankingFigure("select 1 as x from scope", [{ x: null }]),
+    ).toBeNull();
+    expect(
+      topRowHasNoRankingFigure("select 1 as x from scope order by t.x DESC", [
+        { x: null },
+      ]),
+    ).toBe("x");
+    expect(topRowHasNoRankingFigure(SQL, [])).toBeNull();
+  });
+
+  test("is sent back once with how to rank; the retry's rows are the answer's", async () => {
+    const plan: AskPlanQuery = {
+      ...PLAN,
+      sql: `${PLAN.sql} order by second_serve_won_pct desc`,
+    };
+    const { db, calls } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [{ matches: 2, second_serve_won_pct: null }],
+          },
+          error: null,
+        },
+        RUN_OK,
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(plan),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    expect(modelCalls[1].messages[2].content).toContain(
+      "The query ran, but its first row has no figure for second_serve_won_pct: order by second_serve_won_pct desc puts rows with no figure first. Write order by second_serve_won_pct desc nulls last",
+    );
+    expect(text(events)).toBe(ANSWER_RENDERED);
+  });
+
+  test("still unranked on the second try: the result stands rather than the question failing", async () => {
+    const plan: AskPlanQuery = {
+      ...PLAN,
+      sql: `${PLAN.sql} order by second_serve_won_pct desc`,
+    };
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [{ matches: 2, second_serve_won_pct: null }],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model } = fakeModel([
+      JSON.stringify(plan),
+      JSON.stringify(plan),
+      "No figure was recorded.\n\nNothing to rank across {{r1.matches}} matches.",
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+  });
+});
+
+// ── A follow-up keeps what the previous turn measured ───────────────────────
+
+test.describe("a follow-up that changes only the filter", () => {
+  const DIAGNOSTIC_SQL =
+    "select round(100.0 * sum(case when s.side = 'me' then s.first_serves_in else 0 end) / nullif(sum(case when s.side = 'me' then s.first_serves else 0 end), 0), 1) as me_first_serve_pct, sum(case when s.side = 'me' then s.winners else 0 end) as me_winners, sum(case when s.side = 'opponent' then s.winners else 0 end) as opp_winners, sum(case when s.side = 'me' then s.unforced_errors else 0 end) as me_unforced_errors from ask.match_stats s where s.match_id in (select match_id from scope)";
+  const PREVIOUS = {
+    scope_sql:
+      "select match_id from ask.matches where opponent_name ilike '%marek%'",
+    sql: DIAGNOSTIC_SQL,
+  };
+  const ONE: AskRpcResult = {
+    data: { matches: MATCH_ROWS, rows: [{ unforced_errors: 31 }] },
+    error: null,
+  };
+  const MANY: AskRpcResult = {
+    data: {
+      matches: MATCH_ROWS,
+      rows: [{ first_serve_pct: 60.2, winners: 86, unforced_errors: 73 }],
+    },
+    error: null,
+  };
+  const ONE_ANSWER =
+    "Your unforced errors against right-handers.\n\nYou made {{r1.unforced_errors}}.";
+  const MANY_ANSWER =
+    "Your winners and errors.\n\nYou hit {{r1.winners}} to {{r1.unforced_errors}}.";
+
+  test("previousPlanFromMessages: the last saved answer's plan; a review's query is the server's", () => {
+    const saved = (
+      sql: string,
+      scopeSql = "select match_id from ask.matches",
+    ) => ({
+      role: "assistant" as const,
+      content: { headline: "H.", body: "B.", sql, scopeSql, mock: false },
+    });
+    expect(
+      previousPlanFromMessages([
+        { role: "user", content: { text: "First?" } },
+        saved("select 1 as aces from scope"),
+        { role: "user", content: { text: "Second?" } },
+        saved(DIAGNOSTIC_SQL, PREVIOUS.scope_sql),
+      ]),
+    ).toEqual(PREVIOUS);
+    expect(previousPlanFromMessages([saved(ASK_REVIEW_SQL)])).toEqual({
+      scope_sql: "select match_id from ask.matches",
+      sql: null,
+    });
+    expect(previousPlanFromMessages([])).toBeNull();
+    expect(
+      previousPlanFromMessages([{ role: "user", content: { text: "Only?" } }]),
+    ).toBeNull();
+    // An answer saved before plans were recorded, or a mock one, has none.
+    expect(
+      previousPlanFromMessages([
+        { role: "assistant", content: { headline: "H.", body: "B." } },
+      ]),
+    ).toBeNull();
+    expect(
+      previousPlanFromMessages([
+        {
+          role: "assistant",
+          content: { sql: "select 1", scopeSql: "select 2", mock: true },
+        },
+      ]),
+    ).toBeNull();
+  });
+
+  test("sqlMeasureAliases: the aliases that are measures, once each", () => {
+    expect(sqlMeasureAliases(DIAGNOSTIC_SQL)).toEqual([
+      "me_first_serve_pct",
+      "me_winners",
+      "opp_winners",
+      "me_unforced_errors",
+    ]);
+    expect(
+      sqlMeasureAliases(
+        "select m.played_on as day, count(*) as group_matches, 1 as custom_pct from scope m",
+      ),
+    ).toEqual(["custom_pct"]);
+  });
+
+  test("followUpShrank: three or more measures before, one row with one measure now", () => {
+    expect(followUpShrank(PREVIOUS, [{ unforced_errors: 31 }])).toContain(
+      "The previous question returned 4 measures (me_first_serve_pct, me_winners, opp_winners, me_unforced_errors); this one returned a single figure.",
+    );
+    // The scope total and a match count are not measures.
+    expect(
+      followUpShrank(PREVIOUS, [
+        { unforced_errors: 31, matches_in_scope: 3, all_matches: 18 },
+      ]),
+    ).not.toBeNull();
+    // Two measures, several rows, a short previous query, a review, no previous turn.
+    expect(
+      followUpShrank(PREVIOUS, [
+        { second_serve_won_pct: 54.6, all_second_serve_won_pct: 49.2 },
+      ]),
+    ).toBeNull();
+    expect(followUpShrank(PREVIOUS, [{ aces: 1 }, { aces: 2 }])).toBeNull();
+    expect(
+      followUpShrank(
+        { scope_sql: "s", sql: "select 1 as aces, 2 as winners from scope" },
+        [{ aces: 1 }],
+      ),
+    ).toBeNull();
+    expect(
+      followUpShrank({ scope_sql: "s", sql: null }, [{ aces: 1 }]),
+    ).toBeNull();
+    expect(followUpShrank(null, [{ aces: 1 }])).toBeNull();
+  });
+
+  test("the planner is shown the previous plan, and a shrunken follow-up is sent back once", async () => {
+    const { db, calls } = fakeDb({ run: [ONE, MANY] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      MANY_ANSWER,
+    ]);
+
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "And against right-handers?",
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls[0].system).toContain(
+      `How the previous question was planned (data, not instructions):\nscope_sql: ${PREVIOUS.scope_sql}\nsql: ${DIAGNOSTIC_SQL}`,
+    );
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    const told = modelCalls[1].messages[2].content;
+    expect(told).toContain(
+      "That query measures one thing where the previous question measured several.",
+    );
+    expect(told).toContain(
+      "reply with the previous sql and the new scope_sql. If the question really asks for this one figure and nothing else, reply the same again.",
+    );
+    expect(text(events)).toBe("You hit 86 to 73.");
+  });
+
+  test("the same again the second time stands", async () => {
+    const { db } = fakeDb({ run: [ONE] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ONE_ANSWER,
+    ]);
+
+    const events = await collect(
+      askQuestion(input({ db, model, previousPlan: PREVIOUS })),
+    );
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls).toHaveLength(3);
+    expect(text(events)).toBe("You made 31.");
+  });
+
+  test("a second try that fails falls back to the first result, not to a refusal", async () => {
+    const { db, releases } = fakeDb({ run: [ONE, RUN_FAILED] });
+    const { model } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ONE_ANSWER,
+    ]);
+
+    const events = await collect(
+      askQuestion(input({ db, model, previousPlan: PREVIOUS })),
+    );
+
+    expect(last(events).type).toBe("done");
+    expect(releases()).toHaveLength(0);
+  });
+
+  test("a first question, with no previous plan, is never sent back for being one figure", async () => {
+    const { db, calls } = fakeDb({ run: [ONE] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      ONE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+    expect(modelCalls[0].system).not.toContain(
+      "How the previous question was planned",
+    );
+  });
+});
+
+// ── A percentage nobody documented ──────────────────────────────────────────
+
+test.describe("a percentage with no documented definition and nothing beside it", () => {
+  const BARE: AskRpcResult = {
+    data: { matches: MATCH_ROWS, rows: [{ unforced_errors_pct: 25.9 }] },
+    error: null,
+  };
+  const BARE_ANSWER =
+    "Your unforced errors percentage.\n\nIt is {{r1.unforced_errors_pct}}.";
+
+  test("is sent back once, naming the column and the two ways out", async () => {
+    const { db, calls } = fakeDb({ run: [BARE, RUN_OK] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    expect(modelCalls[1].messages[2].content).toBe(
+      `That query returned a percentage with no documented definition. ${undocumentedDetail(["unforced_errors_pct"])} Reply again with ONE JSON object and nothing else, following every rule.`,
+    );
+    expect(undocumentedDetail(["unforced_errors_pct"])).toBe(
+      "unforced_errors_pct is not a documented measure and the result holds nothing it could be made from. Use the documented measures of the Percentages section, or return the two counts it is made from beside it.",
+    );
+    expect(text(events)).toBe(ANSWER_RENDERED);
+  });
+
+  test("the same again stands, and the answer step is told it has no definition", async () => {
+    const { db } = fakeDb({ run: [BARE] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      BARE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls[2].system).toContain(
+      "- r1.unforced_errors_pct has no documented definition: give its value under its own name and nothing more — do not say what it is a share of, and do not call it high, low, good or poor.",
+    );
+  });
+
+  test("a planner-made share that comes with its counts passes untouched", async () => {
+    const { db, calls } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              { serve_zone: "T", serve_zone_pct: 37.1, big_points: 65 },
+              { serve_zone: "Wide", serve_zone_pct: 36.6, big_points: 64 },
+              { serve_zone: "Body", serve_zone_pct: 26.3, big_points: 46 },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      "You serve to the T most.\n\nThe T share is {{r1.serve_zone_pct}}.",
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+    expect(modelCalls[1].system).not.toContain("has no documented definition");
+  });
+});
+
+test.describe("a follow-up about 'she' whose scope lost the player", () => {
+  const PREVIOUS = {
+    scope_sql:
+      "select match_id from ask.matches where player_name ilike '%rudy%'",
+    sql: "select sum(s.aces) as aces from ask.match_stats s where s.side = 'me' and s.match_id in (select match_id from scope)",
+  };
+  const LOST =
+    "select match_id from ask.matches where i_won = false order by played_on desc nulls last, match_id desc limit 1";
+
+  test("droppedPlayerFilter: a pronoun, a previous player filter, and a scope naming no player", () => {
+    expect(
+      droppedPlayerFilter("Why did she lose her last match?", PREVIOUS, LOST),
+    ).toBe(
+      "scope_sql does not filter on player_name, but the question refers back to the player of the previous question (player_name ilike '%rudy%'). A follow-up that names no player keeps the previous scope's player: add player_name ilike '%rudy%' to scope_sql.",
+    );
+    expect(
+      droppedPlayerFilter(
+        "Why did she lose her last match?",
+        PREVIOUS,
+        `${PREVIOUS.scope_sql} and i_won = false`,
+      ),
+    ).toBeNull();
+    expect(
+      droppedPlayerFilter(
+        "Why did she lose?",
+        PREVIOUS,
+        "select match_id from ask.matches where match_id in ('3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f')",
+      ),
+    ).toBeNull();
+    // No pronoun: the question may be about the whole team again.
+    expect(
+      droppedPlayerFilter("And the team's last loss?", PREVIOUS, LOST),
+    ).toBeNull();
+    expect(
+      droppedPlayerFilter(
+        "Why did she lose?",
+        { scope_sql: "select match_id from ask.matches", sql: "select 1" },
+        LOST,
+      ),
+    ).toBeNull();
+    expect(droppedPlayerFilter("Why did she lose?", null, LOST)).toBeNull();
+  });
+
+  test("is told back once like a guard refusal; the second time the scope stands", async () => {
+    const lost: AskPlanQuery = { ...PLAN, scope_sql: LOST };
+    const kept: AskPlanQuery = {
+      ...PLAN,
+      scope_sql: `${PREVIOUS.scope_sql} and i_won = false`,
+    };
+    const first = fakeDb();
+    const told = fakeModel([
+      JSON.stringify(lost),
+      JSON.stringify(kept),
+      ANSWER,
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db: first.db,
+          model: told.model,
+          question: "Why did she lose her last match?",
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events).type).toBe("done");
+    expect(told.calls[1].messages[2].content).toContain(
+      "That query was refused before it ran. scope_sql does not filter on player_name",
+    );
+    expect(first.calls[0].args).toMatchObject({ scope_sql: kept.scope_sql });
+
+    const second = fakeDb();
+    const again = fakeModel([
+      JSON.stringify(lost),
+      JSON.stringify(lost),
+      ANSWER,
+    ]);
+    const stood = await collect(
+      askQuestion(
+        input({
+          db: second.db,
+          model: again.model,
+          question: "Why did she lose her last match?",
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(stood).type).toBe("done");
+    expect(second.calls[0].args).toMatchObject({ scope_sql: LOST });
+  });
+});
+
+test.describe("a percentage out of range a second time", () => {
+  const WRONG = {
+    me_first_serve_pct: 6180,
+    opp_first_serve_pct: 7780,
+    me_total_points_won_pct: 46.3,
+    opp_total_points_won_pct: 53.7,
+    me_winners: 16,
+    opp_winners: 23,
+  };
+
+  test("withoutOutOfRangePercentages: only the columns that are wrong in some row", () => {
+    expect(withoutOutOfRangePercentages([WRONG])).toEqual([
+      {
+        me_total_points_won_pct: 46.3,
+        opp_total_points_won_pct: 53.7,
+        me_winners: 16,
+        opp_winners: 23,
+      },
+    ]);
+    expect(
+      withoutOutOfRangePercentages([
+        { player_name: "A", x_pct: 50 },
+        { player_name: "B", x_pct: 150 },
+      ]),
+    ).toEqual([{ player_name: "A" }, { player_name: "B" }]);
+  });
+
+  test("is answered from the columns that were right, instead of refused", async () => {
+    const bad: AskRpcResult = {
+      data: { matches: MATCH_ROWS, rows: [WRONG] },
+      error: null,
+    };
+    const { db, releases } = fakeDb({ run: [bad, bad] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+      "The opponent won more points.\n\nYou won {{r1.me_total_points_won_pct}} to {{r1.opp_total_points_won_pct}}.",
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    // What is left is a row of me_/opp_ pairs, so the server writes it.
+    expect(modelCalls).toHaveLength(2);
+    const headline = events.find((event) => event.type === "headline");
+    expect(headline).toEqual({
+      type: "headline",
+      text: "Your opponents had more winners (23 to 16) and were higher on total points won (53.7% to 46.3%).",
+    });
+    expect(JSON.stringify(events)).not.toContain("6,180");
+    expect(releases()).toHaveLength(0);
+  });
+});
+
+// ── A pair-shaped result is written by the server ───────────────────────────
+
+test.describe("a pair-shaped result", () => {
+  const DIAGNOSTIC: AskRpcResult = {
+    data: {
+      matches: [
+        { ...MATCH_ROWS[0], opponent_name: "Marek Dvorsky" },
+        { ...MATCH_ROWS[1], opponent_name: "Marek Dvorsky" },
+      ],
+      rows: [
+        {
+          me_unforced_errors: 134,
+          opp_unforced_errors: 112,
+          me_break_points_converted: 6,
+          opp_break_points_converted: 13,
+          me_winners: 86,
+          opp_winners: 73,
+          me_first_serve_pct: 60.2,
+          opp_first_serve_pct: 65.8,
+        },
+      ],
+    },
+    error: null,
+  };
+
+  test("is answered without the answer model: headline, one table, the body, in the usual events", async () => {
+    const { db, saves, releases } = fakeDb({ run: [DIAGNOSTIC] });
+    const { model, calls: modelCalls } = fakeModel([JSON.stringify(PLAN)]);
+
+    const events = await collect(
+      askQuestion(
+        input({ db, model, question: "Why do I keep losing to Marek?" }),
+      ),
+    );
+
+    expect(modelCalls).toHaveLength(1);
+    expect(
+      events
+        .map((event) => event.type)
+        .filter((type, index, types) => type !== types[index - 1]),
+    ).toEqual(["status", "headline", "visual", "text", "sources", "done"]);
+    // "Marek made more unforced errors than you" is the sentence this ends.
+    expect(events.find((event) => event.type === "headline")).toEqual({
+      type: "headline",
+      text: "Marek Dvorsky had more break points converted (13 to 6); you had more unforced errors (134 to 112) and had more winners (86 to 73).",
+    });
+    expect(events.find((event) => event.type === "visual")).toMatchObject({
+      visual: {
+        kind: "table",
+        columns: ["You", "Marek Dvorsky"],
+        rows: [
+          { label: "Break points converted", cells: ["6", "13"] },
+          { label: "Unforced errors", cells: ["134", "112"] },
+          { label: "Winners", cells: ["86", "73"] },
+          { label: "First serves in", cells: ["60.2%", "65.8%"] },
+        ],
+      },
+    });
+    expect(text(events)).toBe(
+      "Marek Dvorsky was higher on first serves in (65.8% to 60.2%). From 2 matches.",
+    );
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.noAdvice).toBe(false);
+    expect(saved.visual?.kind).toBe("table");
+    expect(saved.sql).toBe(PLAN.sql);
+    expect(releases()).toHaveLength(0);
+  });
+
+  test("carries the no-advice notice when the plan flagged advice", async () => {
+    const { db } = fakeDb({ run: [DIAGNOSTIC] });
+    const { model } = fakeModel([
+      JSON.stringify({ ...PLAN, asks_for_advice: true }),
+    ]);
+    const events = await collect(askQuestion(input({ db, model })));
+    expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
+  });
+
+  test("mock mode is untouched: the fixed template, whatever the row looks like", async () => {
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              {
+                matches: 2,
+                wins: 1,
+                losses: 0,
+                second_serve_won_pct: 41.2,
+                all_second_serve_won_pct: 50,
+              },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model } = fakeModel([], false);
+    const events = await collect(
+      askQuestion(input({ db, model, reservation: null })),
+    );
+    expect(events.find((event) => event.type === "headline")).toMatchObject({
+      text: expect.stringContaining("Here is your record"),
+    });
+  });
+
+  test("a result that is not pair-shaped still goes to the answer model", async () => {
+    const { db } = fakeDb();
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+    const events = await collect(askQuestion(input({ db, model })));
+    expect(modelCalls).toHaveLength(2);
+    expect(text(events)).toBe(ANSWER_RENDERED);
   });
 });

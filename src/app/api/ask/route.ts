@@ -67,6 +67,7 @@ import {
 import {
   askQuestion,
   conversationTurnsFromMessages,
+  previousPlanFromMessages,
   reserveAskQuestion,
   type AskDatabase,
   type AskModel,
@@ -415,6 +416,9 @@ export async function POST(request: Request): Promise<Response> {
     conversation: conversation
       ? conversationTurnsFromMessages(conversation.messages)
       : [],
+    previousPlan: conversation
+      ? previousPlanFromMessages(conversation.messages)
+      : null,
     conversationId: conversation?.id ?? null,
     reservation: reserved.reservation,
     scope,

@@ -13,17 +13,21 @@ import type {
 } from "@/lib/services/ask/events";
 import {
   equalBaselineColumns,
+  measureColumnCount,
   oldestFirst,
   scopeIsNarrowed,
+  undocumentedPercentages,
   withOrderSummary,
   withoutColumns,
 } from "@/lib/services/ask/facts";
+import { askMeasure } from "@/lib/services/ask/measures";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import type { AskScope } from "@/lib/services/ask/scope";
 import {
   ASK_SCOPE_COUNT_COLUMN,
   type AskPlanQuery,
   type AskPlanReply,
+  type AskPreviousPlan,
   type AskPromptTurn,
   buildAnswerPrompt,
   buildPlanPrompt,
@@ -36,6 +40,7 @@ import {
   readAskReview,
   reviewAnswerRow,
 } from "@/lib/services/ask/review";
+import { buildPairedAnswer, onlyName } from "@/lib/services/ask/paired";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -88,7 +93,10 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  * the same renderer, the same events, and always the no-advice notice. A
  * result in date order also gets each measure's first, last, lowest and
  * highest value copied onto its first row (`withOrderSummary`), so the
- * answer can cite them without having to name the right row.
+ * answer can cite them without having to name the right row. And a
+ * PAIR-SHAPED result — one row of me_/opp_ or measure/baseline pairs — is
+ * answered by `paired.ts` the way a review is: the server writes the
+ * comparison, and the answer model is not called.
  *
  * Privacy: nothing here logs the question, a tag name, a row, a label or the
  * model's prose. Players may be minors (`adapter.ts`). The two log lines are
@@ -153,6 +161,12 @@ export interface AskQuestionInput {
   tags: AskResolvedTags;
   /** Earlier turns of the conversation, oldest first; empty for a new one. */
   conversation: readonly AskPromptTurn[];
+  /**
+   * How the turn before this one was planned (`previousPlanFromMessages()`),
+   * or null/absent for a first question. The planner is shown it, and a
+   * follow-up that shrinks many measures to one is sent back once.
+   */
+  previousPlan?: AskPreviousPlan | null;
   /** The conversation to append to, or null to start one. */
   conversationId: string | null;
   /** From `reserveAskQuestion()`; null in mock mode. */
@@ -251,7 +265,14 @@ function readLimitDetail(message: string) {
 
 /** Why a plan could not be used, told back to the planner once. */
 type PlanProblem = {
-  kind: "unparseable" | "guard" | "database" | "range" | "baseline";
+  kind:
+    | "unparseable"
+    | "guard"
+    | "database"
+    | "range"
+    | "baseline"
+    | "followup"
+    | "undocumented";
   detail: string;
 };
 
@@ -291,12 +312,142 @@ export function percentageOutOfRange(rows: readonly AskRow[]): string | null {
   return null;
 }
 
+/** The rows without any `_pct` column that holds a value outside 0–100 in some row. */
+export function withoutOutOfRangePercentages(
+  rows: readonly AskRow[],
+): AskRow[] {
+  const bad = new Set<string>();
+  for (const row of rows) {
+    for (const [column, value] of Object.entries(row)) {
+      if (!/_pct$/.test(column) || typeof value !== "number") continue;
+      if (!Number.isFinite(value) || value < 0 || value > 100) bad.add(column);
+    }
+  }
+  return withoutColumns(rows, [...bad]);
+}
+
 /** The rows with {@link ASK_SCOPE_COUNT_COLUMN} set on every one of them. */
 export function withScopeCount(
   rows: readonly AskRow[],
   matchCount: number,
 ): AskRow[] {
   return rows.map((row) => ({ ...row, [ASK_SCOPE_COUNT_COLUMN]: matchCount }));
+}
+
+/** What the planner is told when its sql names a column after the server's scope count. */
+export const SCOPE_COUNT_COLUMN_REASON = `sql names a column ${ASK_SCOPE_COUNT_COLUMN}. The app adds that column itself and never reads yours. Name a group's own number of matches group_matches (player_matches for a player), and do not count the matches in scope at all.`;
+
+/** Whether model-written sql aliases a column as the scope count. */
+export function namesScopeCountColumn(sql: string): boolean {
+  return new RegExp(
+    String.raw`\bas\s+"?${ASK_SCOPE_COUNT_COLUMN}"?(?![a-z0-9_])`,
+    "i",
+  ).test(sql);
+}
+
+/**
+ * The column a query ranks by, descending without `nulls last`, when the
+ * first row it returned has no figure there; null otherwise. Read from the
+ * last `order by` of the sql — the outermost one.
+ */
+export function topRowHasNoRankingFigure(
+  sql: string,
+  rows: readonly AskRow[],
+): string | null {
+  const first = rows[0];
+  if (!first || rows.length < 1) return null;
+  const at = sql.toLowerCase().lastIndexOf("order by");
+  if (at === -1) return null;
+  const match =
+    /^order\s+by\s+(?:[a-z_][a-z0-9_]*\.)?([a-z_][a-z0-9_]*)\s+desc\b(?!\s+nulls\s+last)/i.exec(
+      sql.slice(at),
+    );
+  if (!match) return null;
+  const column = match[1];
+  return column in first && first[column] === null ? column : null;
+}
+
+/** A previous query with at least this many measures is one a follow-up is expected to keep. */
+export const MIN_FOLLOW_UP_MEASURES = 3;
+
+/** The measure columns a query's sql names: its `as` aliases the dictionary knows, or that are percentages. */
+export function sqlMeasureAliases(sql: string): string[] {
+  const names = new Set<string>();
+  for (const match of sql.matchAll(/\bas\s+"?([a-z_][a-z0-9_]*)"?/gi)) {
+    const name = match[1].toLowerCase();
+    if (askMeasure(name) !== null || /(?:^|_)pct$/.test(name)) names.add(name);
+  }
+  return [...names];
+}
+
+/**
+ * Why a follow-up's result reads as having dropped what the previous turn
+ * measured, or null: the previous query named three or more measures and
+ * this one came back as one row holding a single one. "And against
+ * right-handers?" after a ten-measure diagnostic, answered with one
+ * invented percentage.
+ */
+export function followUpShrank(
+  previous: AskPreviousPlan | null,
+  rows: readonly AskRow[],
+): string | null {
+  if (!previous || previous.sql === null || rows.length !== 1) return null;
+  const before = sqlMeasureAliases(previous.sql);
+  if (before.length < MIN_FOLLOW_UP_MEASURES) return null;
+  if (measureColumnCount(rows[0]) !== 1) return null;
+  return `The previous question returned ${before.length} measures (${before.slice(0, 6).join(", ")}${before.length > 6 ? ", …" : ""}); this one returned a single figure. A follow-up that changes only who, when or where keeps the previous query's columns and changes the scope and the filters: reply with the previous sql and the new scope_sql. If the question really asks for this one figure and nothing else, reply the same again.`;
+}
+
+/**
+ * Why a follow-up's scope reads as having dropped the previous turn's
+ * player, or null: the previous scope filtered `player_name ilike`, the
+ * question refers back with a pronoun, and the new scope names neither a
+ * player nor a list of match ids.
+ */
+export function droppedPlayerFilter(
+  question: string,
+  previous: AskPreviousPlan | null,
+  scopeSql: string,
+): string | null {
+  if (!previous) return null;
+  const filter = /player_name\s+ilike\s+'([^']+)'/i.exec(previous.scope_sql);
+  if (!filter) return null;
+  if (!/\b(?:she|he|her|hers|his|him|they|their|them)\b/i.test(question)) {
+    return null;
+  }
+  if (
+    /player_name/i.test(scopeSql) ||
+    /match_id\s+in\s*\(\s*'/i.test(scopeSql)
+  ) {
+    return null;
+  }
+  return `scope_sql does not filter on player_name, but the question refers back to the player of the previous question (player_name ilike '${filter[1]}'). A follow-up that names no player keeps the previous scope's player: add player_name ilike '${filter[1]}' to scope_sql.`;
+}
+
+/** What the planner is told about a percentage with no documented definition and no counts beside it. */
+export function undocumentedDetail(columns: readonly string[]): string {
+  return `${columns.join(", ")} ${columns.length === 1 ? "is not a documented measure" : "are not documented measures"} and the result holds nothing ${columns.length === 1 ? "it" : "they"} could be made from. Use the documented measures of the Percentages section, or return the two counts ${columns.length === 1 ? "it is" : "each is"} made from beside it.`;
+}
+
+/**
+ * The previous turn's plan, from the saved messages of a conversation: the
+ * last answer's `scopeSql` and `sql`, which every saved answer records. A
+ * review's query is the server's and is reported as null. Null when there is
+ * no earlier answer or it holds no plan.
+ */
+export function previousPlanFromMessages(
+  messages: readonly { role: "user" | "assistant"; content: unknown }[],
+): AskPreviousPlan | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "assistant") continue;
+    const record = asRecord(message.content);
+    const scopeSql = stringOrNull(record?.scopeSql);
+    const sql = stringOrNull(record?.sql);
+    if (!scopeSql || !sql || record?.mock === true) return null;
+    return { scope_sql: scopeSql, sql: sql === ASK_REVIEW_SQL ? null : sql };
+  }
+  return null;
 }
 
 type PlanStep =
@@ -354,6 +505,7 @@ export async function* askQuestion(
           today,
           tags: input.tags.prompt,
           conversation: input.conversation,
+          previousPlan: input.previousPlan ?? null,
           ...(team ? { scope } : {}),
         })
       : "";
@@ -362,7 +514,7 @@ export async function* askQuestion(
     let plan: AskPlanQuery | null = null;
     let result: QueryResult | null = null;
     let reviewed = false;
-    /** The review's answer, written by the server in the renderer's syntax. */
+    /** A server-written answer in the renderer's syntax: the review's, or a pair-shaped result's. */
     let reviewText: string | null = null;
     let queried = false;
     // A first result that ran but whose baselines all equalled the scoped
@@ -397,10 +549,30 @@ export async function* askQuestion(
         return;
       }
 
-      const check = checkAskSql({
+      const guard = checkAskSql({
         scopeSql: step.plan.scope_sql,
         sql: step.plan.sql,
       });
+      // The scope count is the server's column. A planner that names one of
+      // its own that way has counted something else under the name, and the
+      // server's value would silently replace it.
+      // And a follow-up about "she" or "his" whose scope lost the previous
+      // turn's player: told back once, and the second time it stands.
+      const lostPlayer =
+        attempt === 0
+          ? droppedPlayerFilter(
+              input.question,
+              input.previousPlan ?? null,
+              step.plan.scope_sql,
+            )
+          : null;
+      const check: typeof guard = !guard.ok
+        ? guard
+        : !step.review && namesScopeCountColumn(step.plan.sql)
+          ? { ok: false, reason: SCOPE_COUNT_COLUMN_REASON }
+          : lostPlayer !== null
+            ? { ok: false, reason: lostPlayer }
+            : guard;
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -443,7 +615,8 @@ export async function* askQuestion(
         yield await fail("cannot_answer", cannotAnswer);
         return;
       }
-      const badColumn = percentageOutOfRange(run.result.rows);
+      let resultRows = run.result.rows;
+      const badColumn = percentageOutOfRange(resultRows);
       if (badColumn !== null) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -462,13 +635,41 @@ export async function* askQuestion(
           );
           continue;
         }
-        yield await fail("cannot_answer", cannotAnswer);
-        return;
+        // Out of range a second time. The columns that are wrong are left
+        // out; if the rest still holds a measure, that is the answer —
+        // counts and the percentages that were right are not thrown away
+        // with the ones that were not.
+        const usable = withoutOutOfRangePercentages(resultRows);
+        if (usable.length === 0 || measureColumnCount(usable[0]) === 0) {
+          yield await fail("cannot_answer", cannotAnswer);
+          return;
+        }
+        resultRows = usable;
       }
+      // "order by loss_pct desc limit 1" with a null in front: Postgres puts
+      // rows with no figure first when descending, so the top row is one
+      // with nothing to rank. Sent back once; a second time it stands.
+      const unranked = step.review
+        ? null
+        : topRowHasNoRankingFigure(step.plan.sql, resultRows);
+      if (unranked !== null && attempt === 0 && !fallback) {
+        messages.push(
+          { role: "assistant", content: step.reply },
+          {
+            role: "user",
+            content: feedback({
+              kind: "database",
+              detail: `The query ran, but its first row has no figure for ${unranked}: order by ${unranked} desc puts rows with no figure first. Write order by ${unranked} desc nulls last, and check the nullif in ${unranked} divides by zero only when there is nothing to divide.`,
+            }),
+          },
+        );
+        continue;
+      }
+
       if (step.review) {
         // The server's own query: nothing to send back to the planner. No
         // match with statistics in scope is "no data", decided below.
-        const review = readAskReview(run.result.rows);
+        const review = readAskReview(resultRows);
         plan = step.plan;
         reviewed = true;
         if (review === null) {
@@ -494,7 +695,7 @@ export async function* askQuestion(
       // back once; the second time the baseline columns are left out.
       // Per-match rows the query returned newest first are turned round:
       // the trend and the win/loss strip are drawn oldest first.
-      let rows = oldestFirst(run.result.rows);
+      let rows = oldestFirst(resultRows);
       const narrowed = scopeIsNarrowed(step.plan.scope_sql);
       // Over every match, an all-matches baseline is the figure a second
       // time by definition: one equal pair is enough, and there is nothing
@@ -526,11 +727,36 @@ export async function* askQuestion(
           continue;
         }
       }
-      plan = step.plan;
-      result = {
-        matches: run.result.matches,
-        rows: withScopeCount(withOrderSummary(rows), run.result.matches.length),
+      // Two shapes that are sent back once and stand the second time: a
+      // follow-up that shrank the previous question's measures to one, and a
+      // percentage nobody documented with nothing beside it to define it.
+      const shrunk = followUpShrank(input.previousPlan ?? null, rows);
+      const undocumented = undocumentedPercentages(rows);
+      const problem: PlanProblem | null =
+        shrunk !== null
+          ? { kind: "followup", detail: shrunk }
+          : undocumented !== null
+            ? { kind: "undocumented", detail: undocumentedDetail(undocumented) }
+            : null;
+      const answered = {
+        plan: step.plan,
+        result: {
+          matches: run.result.matches,
+          rows: withScopeCount(
+            withOrderSummary(rows),
+            run.result.matches.length,
+          ),
+        },
       };
+      if (problem !== null && attempt === 0 && !fallback) {
+        fallback = answered;
+        messages.push(
+          { role: "assistant", content: step.reply },
+          { role: "user", content: feedback(problem) },
+        );
+        continue;
+      }
+      ({ plan, result } = answered);
     }
 
     if (plan === null || result === null) {
@@ -546,13 +772,34 @@ export async function* askQuestion(
       return;
     }
 
+    // A pair-shaped result — one row of me_/opp_ or measure/baseline pairs —
+    // is written by the server too (`paired.ts`): which side of each pair is
+    // higher is worked out in code, so no sentence can say it backwards.
+    // Never in mock mode, whose template is the answer there.
+    if (reviewText === null && model.configured) {
+      const paired = buildPairedAnswer(result.rows, {
+        team,
+        matchCount: result.matches.length,
+        opponentName: onlyName(
+          result.matches.map((match) => match.opponentName),
+        ),
+        playerName: team
+          ? onlyName(result.matches.map((match) => match.playerName))
+          : null,
+      });
+      if (paired !== null) {
+        reviewText = paired.text;
+        result = { matches: result.matches, rows: paired.rows };
+      }
+    }
+
     // ── Answer ─────────────────────────────────────────────────────────────
     yield { type: "status", stage: "writing" };
 
     let chunks: AsyncIterable<string>;
     if (reviewText !== null) {
-      // A review is written by the server, not the model: the same syntax,
-      // through the same renderer.
+      // Written by the server, not the model: the same syntax, through the
+      // same renderer.
       chunks = oneChunk(reviewText);
     } else if (model.configured) {
       try {
@@ -795,7 +1042,11 @@ function feedback(problem: PlanProblem): string {
           ? "That query returned a percentage outside 0 to 100."
           : problem.kind === "baseline"
             ? "That query's baseline is the same as the figure it is compared with."
-            : "That reply could not be read.";
+            : problem.kind === "followup"
+              ? "That query measures one thing where the previous question measured several."
+              : problem.kind === "undocumented"
+                ? "That query returned a percentage with no documented definition."
+                : "That reply could not be read.";
   return `${lead} ${oneLine(problem.detail)} Reply again with ONE JSON object and nothing else, following every rule.`;
 }
 

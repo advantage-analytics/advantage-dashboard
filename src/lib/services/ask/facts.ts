@@ -1,4 +1,5 @@
 import type { AskRow } from "@/lib/services/ask/answer-render";
+import { askMeasure } from "@/lib/services/ask/measures";
 
 /**
  * What a query's result shows, stated by the server before the answer model
@@ -344,6 +345,10 @@ function pairStatements(rows: readonly AskRow[]): string[] {
 }
 
 /** The column that names what each row is about, or null. */
+export function rowLabelColumn(rows: readonly AskRow[]): string | null {
+  return labelColumn(rows);
+}
+
 function labelColumn(rows: readonly AskRow[]): string | null {
   const first = rows[0];
   if (!first) return null;
@@ -495,7 +500,7 @@ function extremeStatements(
       const at = names(value);
       return at.length === 1
         ? `${word} is ${at[0]} (${value})`
-        : `${word} is TIED between ${listed(at)} (${value}), so no single row is the ${word.toLowerCase()}`;
+        : `there is NO single ${word.toLowerCase()}, ${listed(at)} are TIED at ${value}`;
     };
     statements.push(
       `${column}: ${side("HIGHEST", high)}; ${side("LOWEST", low)}.${tail}`,
@@ -704,16 +709,16 @@ function countStatements(
 
 /**
  * Words that make two column names the same measure for different parts of
- * one thing: serve direction, rally length, first and second serve, wing,
- * result. `big_point_serves_t`, `…_body` and `…_wide` are siblings.
+ * one thing: serve direction, rally length, wing, result. First against
+ * second serve is deliberately not one: stated side by side, the model led
+ * with it and got it backwards ("a higher share behind his second serve
+ * than his first" over 51.8 and 63.2), where the question was about neither. `big_point_serves_t`, `…_body` and `…_wide` are siblings.
  */
 export const ASK_SIBLING_WORDS: readonly (readonly string[])[] = [
   ["t", "body", "wide"],
   ["short", "medium", "long"],
-  ["first", "second"],
   ["forehand", "backhand"],
   ["wins", "losses"],
-  ["won", "lost"],
   ["hard", "clay", "grass"],
   ["deuce", "ad"],
 ];
@@ -774,6 +779,107 @@ function siblingStatements(row: AskRow): string[] {
   return statements.slice(0, MAX_SIBLING_STATEMENTS);
 }
 
+/** The sibling families a sentence can be checked against: their words are not ordinary prose. */
+const RANKED_IN_PROSE: readonly (readonly string[])[] = [
+  ["t", "body", "wide"],
+  ["short", "medium", "long"],
+];
+
+/** Which of a family's words holds the highest and the lowest figure in a one-row result. */
+export interface AskSiblingRanking {
+  /** The family's words that the row has a figure for, in the family's order. */
+  words: string[];
+  highest: string;
+  lowest: string;
+}
+
+/**
+ * The rankings of a one-row result's serve directions and rally lengths:
+ * for each family, the one word with the highest figure and the one with the
+ * lowest. A family is left out when its figures tie at either end, or when
+ * two of its column groups (the counts and the shares) disagree.
+ *
+ * `answer-render.ts` checks a superlative against it: "you serve wide most
+ * often" over T 38.7, wide 34.8.
+ */
+export function siblingRankings(rows: readonly AskRow[]): AskSiblingRanking[] {
+  if (rows.length !== 1) return [];
+  const row = rows[0];
+  const columns = Object.keys(row).filter(comparable);
+  const have = new Set(columns);
+  const found = new Map<string, AskSiblingRanking | null>();
+  const seen = new Set<string>();
+  for (const column of columns) {
+    const parts = column.split("_");
+    for (const [at, part] of parts.entries()) {
+      const family = RANKED_IN_PROSE.find((words) => words.includes(part));
+      if (!family) continue;
+      const cells = family.flatMap((word) => {
+        const name = [...parts.slice(0, at), word, ...parts.slice(at + 1)].join(
+          "_",
+        );
+        const value = row[name];
+        return have.has(name) && isNumber(value)
+          ? [{ word, name, value: printed(value) }]
+          : [];
+      });
+      if (cells.length < 2) continue;
+      const group = cells.map((cell) => cell.name).join("\u0000");
+      if (seen.has(group)) continue;
+      seen.add(group);
+      const key = family.join("\u0000");
+      const high = Math.max(...cells.map((cell) => cell.value));
+      const low = Math.min(...cells.map((cell) => cell.value));
+      const top = cells.filter((cell) => cell.value === high);
+      const bottom = cells.filter((cell) => cell.value === low);
+      const ranking: AskSiblingRanking | null =
+        top.length === 1 && bottom.length === 1 && high !== low
+          ? {
+              words: cells.map((cell) => cell.word),
+              highest: top[0].word,
+              lowest: bottom[0].word,
+            }
+          : null;
+      const before = found.get(key);
+      if (before === undefined) {
+        found.set(key, ranking);
+      } else if (
+        before === null ||
+        ranking === null ||
+        before.highest !== ranking.highest ||
+        before.lowest !== ranking.lowest
+      ) {
+        found.set(key, null);
+      }
+    }
+  }
+  return [...found.values()].flatMap((ranking) => (ranking ? [ranking] : []));
+}
+
+/**
+ * The column holding a one-row result's own match count when it differs from
+ * the scope total: the row covers `group_matches` matches, not every match
+ * that was looked at. Null otherwise.
+ */
+export function singleRowOwnCount(rows: readonly AskRow[]): string | null {
+  if (rows.length !== 1) return null;
+  const row = rows[0];
+  const scope = row[SCOPE_COUNT_COLUMN];
+  if (!isNumber(scope)) return null;
+  return (
+    Object.keys(row).find((column) => {
+      const value = row[column];
+      return (
+        column !== SCOPE_COUNT_COLUMN &&
+        MATCH_COUNT_COLUMN.test(column) &&
+        !TOTAL_COUNT_COLUMN.test(column) &&
+        isNumber(value) &&
+        value !== scope
+      );
+    }) ?? null
+  );
+}
+
 /**
  * Per-match rows oldest first. The plan prompts ask for that order and the
  * trend line and the win/loss strip are drawn in it, under a caption that
@@ -812,7 +918,7 @@ function singleRowStatements(row: AskRow, label: string | null): string[] {
   }
   if (label !== null && !paired) {
     statements.push(
-      `ONLY ONE GROUP HAS FIGURES: ${rowName(row, 0, label)}. The result has no row for any other group, so say that only this group has recorded matches and give its figures; never write "more than", "compared with", "higher than" or "lower than" about a group that is not in the result.`,
+      `ONLY ONE ROW IS IN THE RESULT: ${rowName(row, 0, label)}. Give its figures; never write "more than", "compared with", "higher than" or "lower than" about a group that is not in the result, and do not say why other groups are absent or that they have no matches.`,
     );
   }
   return statements;
@@ -825,6 +931,103 @@ function singleRowStatements(row: AskRow, label: string | null): string[] {
  */
 export function computeAskFacts(rows: readonly AskRow[]): string[] {
   if (rows.length === 0) return [];
+  // The names statement is added to whatever the cap leaves: it is what
+  // stops a right number being given the wrong name.
+  const names = measureNameStatement(rows[0]);
+  const undefinedOnes = (undocumentedPercentages(rows) ?? []).map(
+    (column) =>
+      `r1.${column} has no documented definition: give its value under its own name and nothing more — do not say what it is a share of, and do not call it high, low, good or poor.`,
+  );
+  const tail = [
+    ...undefinedOnes.slice(0, 2),
+    ...(names === null ? [] : [names]),
+  ];
+  const body = comparisonFacts(rows).slice(
+    0,
+    MAX_ASK_FACT_STATEMENTS - tail.length,
+  );
+  return [...body, ...tail];
+}
+
+/** How the names statement begins: the block tells it apart from a comparison by this. */
+export const ASK_MEASURE_NAMES_LEAD = "What the columns are called:";
+
+/**
+ * The `_pct` columns of a result that are not a documented measure
+ * (`measures.ts`) and come with nothing they could be made from: no count
+ * column beside them. "unforced_errors_pct: 25.9" on its own is a number
+ * with no definition — of what, over what? A planner-made share that does
+ * carry its counts (the T, body and wide counts beside their shares) is the
+ * planner's to define and is not listed. Null when there is none.
+ */
+export function undocumentedPercentages(
+  rows: readonly AskRow[],
+): string[] | null {
+  const first = rows[0];
+  if (!first) return null;
+  const isPercent = (column: string) => /(?:^|_)pct$/.test(column);
+  const hasCounts = Object.keys(first).some(
+    (column) =>
+      column !== SCOPE_COUNT_COLUMN &&
+      !isPercent(column) &&
+      !DIFFERENCE_COLUMN.test(column) &&
+      rows.some((row) => isNumber(row[column])),
+  );
+  if (hasCounts) return null;
+  const unknown = Object.keys(first).filter(
+    (column) =>
+      isPercent(column) &&
+      askMeasure(column) === null &&
+      rows.some((row) => isNumber(row[column])),
+  );
+  return unknown.length > 0 ? unknown : null;
+}
+
+/** How many columns of a row hold a measure: a number, the scope total and match counts aside. */
+export function measureColumnCount(row: AskRow): number {
+  return Object.keys(row).filter(
+    (column) =>
+      column !== SCOPE_COUNT_COLUMN &&
+      !MATCH_COUNT_COLUMN.test(column) &&
+      (isNumber(row[column]) || row[column] === null),
+  ).length;
+}
+
+/** At most this many columns are named in the names statement. */
+const MAX_NAMED_MEASURES = 10;
+
+/**
+ * What the result's columns are called, for the ones whose name says
+ * (`measures.ts`): "total_points_won_pct = total points won (the share of
+ * points, not a match win rate)". Lower case on purpose: the model copies
+ * the statement's own spelling into its prose. One statement, one entry per measure —
+ * `me_x` and `opp_x` are the same measure and named once.
+ */
+function measureNameStatement(row: AskRow): string | null {
+  // By the result's own column names: a name the result does not hold would
+  // be cited, and a reference to a missing column fails the whole answer.
+  const columns = new Map<string, { names: string[]; text: string }>();
+  for (const column of Object.keys(row)) {
+    const measure = askMeasure(column);
+    if (!measure) continue;
+    const entry = columns.get(measure.key) ?? {
+      names: [],
+      // Lower-case first letter only: "serves to the T" keeps its T.
+      text: `${measure.label.charAt(0).toLowerCase()}${measure.label.slice(1)}${measure.note ? ` (${measure.note})` : ""}`,
+    };
+    entry.names.push(column);
+    columns.set(measure.key, entry);
+  }
+  const entries = [...columns.values()]
+    .slice(0, MAX_NAMED_MEASURES)
+    .map((entry) => `${listed(entry.names.slice(0, 3))} = ${entry.text}`);
+  return entries.length === 0
+    ? null
+    : `${ASK_MEASURE_NAMES_LEAD} ${entries.join("; ")}. Call each measure by that name and no other.`;
+}
+
+/** Every comparison the rows support, capped: `computeAskFacts()` without the names statement. */
+export function comparisonFacts(rows: readonly AskRow[]): string[] {
   const pairs = pairStatements(rows.slice(0, MAX_LABELLED_ROWS)).slice(
     0,
     MAX_PAIR_STATEMENTS,
@@ -837,8 +1040,8 @@ export function computeAskFacts(rows: readonly AskRow[]): string[] {
     return [
       ...singleRowStatements(rows[0], label),
       ...counts,
-      ...siblingStatements(rows[0]),
       ...pairs,
+      ...siblingStatements(rows[0]),
     ].slice(0, MAX_ASK_FACT_STATEMENTS);
   }
 
@@ -890,9 +1093,18 @@ export const ASK_FACTS_HEADING =
  * compared, so nothing is called higher or lower.
  */
 export function renderAskFactsBlock(statements: readonly string[]): string {
-  const body =
-    statements.length === 0
-      ? "(nothing in this result was compared: state its figures without a comparative word)"
-      : statements.map((statement) => `- ${statement}`).join("\n");
+  const lines = statements.map((statement) => `- ${statement}`);
+  // The names statement compares nothing: with it alone, nothing was compared.
+  const compared = statements.some(
+    (statement) => !statement.startsWith(ASK_MEASURE_NAMES_LEAD),
+  );
+  const body = [
+    ...(compared
+      ? []
+      : [
+          "(nothing in this result was compared: state its figures without a comparative word)",
+        ]),
+    ...lines,
+  ].join("\n");
   return `<<< ${ASK_FACTS_HEADING}\n${body}\n>>>`;
 }

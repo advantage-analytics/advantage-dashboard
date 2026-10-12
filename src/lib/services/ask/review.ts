@@ -4,6 +4,7 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { askMeasureLabel } from "@/lib/services/ask/measures";
 
 /**
  * The review: what "How can I improve for my next match?" gets.
@@ -45,7 +46,7 @@ import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 export interface AskReviewMeasure {
   /** The measure's name in the SQL and, prefixed, in the answer row. Percentages end in `_pct`. */
   key: string;
-  /** As the answer names it. Sentence case; no digits. */
+  /** As the answer names it: the server's one name for the measure (`measures.ts`). */
   label: string;
   /** `match_stats` counter summed for the value: the numerator of a percentage, or the count itself. */
   numerator: string;
@@ -63,7 +64,7 @@ export interface AskReviewMeasure {
 export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   {
     key: "first_serve_pct",
-    label: "First serves in",
+    label: askMeasureLabel("first_serve_pct"),
     numerator: "first_serves_in",
     denominator: "first_serves",
     higherIsBetter: true,
@@ -71,7 +72,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "first_serve_won_pct",
-    label: "First-serve points won",
+    label: askMeasureLabel("first_serve_won_pct"),
     numerator: "first_serve_points_won",
     denominator: "first_serves_in",
     higherIsBetter: true,
@@ -79,7 +80,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "second_serve_won_pct",
-    label: "Second-serve points won",
+    label: askMeasureLabel("second_serve_won_pct"),
     numerator: "second_serve_points_won",
     denominator: "second_serves_in",
     higherIsBetter: true,
@@ -87,21 +88,21 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "double_faults",
-    label: "Double faults",
+    label: askMeasureLabel("double_faults"),
     numerator: "double_faults",
     higherIsBetter: false,
     tolerance: 0.5,
   },
   {
     key: "aces",
-    label: "Aces",
+    label: askMeasureLabel("aces"),
     numerator: "aces",
     higherIsBetter: true,
     tolerance: 0.5,
   },
   {
     key: "first_return_won_pct",
-    label: "First-serve return points won",
+    label: askMeasureLabel("first_return_won_pct"),
     numerator: "first_return_points_won",
     denominator: "first_returns",
     higherIsBetter: true,
@@ -109,7 +110,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "second_return_won_pct",
-    label: "Second-serve return points won",
+    label: askMeasureLabel("second_return_won_pct"),
     numerator: "second_return_points_won",
     denominator: "second_returns",
     higherIsBetter: true,
@@ -117,7 +118,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "break_points_converted_pct",
-    label: "Break points converted",
+    label: askMeasureLabel("break_points_converted_pct"),
     numerator: "break_points_converted",
     denominator: "break_point_opportunities",
     higherIsBetter: true,
@@ -125,7 +126,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "break_points_saved_pct",
-    label: "Break points saved",
+    label: askMeasureLabel("break_points_saved_pct"),
     numerator: "break_points_saved",
     denominator: "break_points_faced",
     higherIsBetter: true,
@@ -133,21 +134,21 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "winners",
-    label: "Winners",
+    label: askMeasureLabel("winners"),
     numerator: "winners",
     higherIsBetter: true,
     tolerance: 2,
   },
   {
     key: "unforced_errors",
-    label: "Unforced errors",
+    label: askMeasureLabel("unforced_errors"),
     numerator: "unforced_errors",
     higherIsBetter: false,
     tolerance: 2,
   },
   {
     key: "total_points_won_pct",
-    label: "Total points won",
+    label: askMeasureLabel("total_points_won_pct"),
     numerator: "total_points_won",
     denominator: "total_points",
     higherIsBetter: true,
@@ -155,7 +156,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "short_rally_won_pct",
-    label: "Short rallies won",
+    label: askMeasureLabel("short_rally_won_pct"),
     numerator: "short_rally_won",
     denominator: "short_rally_total",
     higherIsBetter: true,
@@ -163,7 +164,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "medium_rally_won_pct",
-    label: "Medium rallies won",
+    label: askMeasureLabel("medium_rally_won_pct"),
     numerator: "medium_rally_won",
     denominator: "medium_rally_total",
     higherIsBetter: true,
@@ -171,7 +172,7 @@ export const ASK_REVIEW_MEASURES: readonly AskReviewMeasure[] = [
   },
   {
     key: "long_rally_won_pct",
-    label: "Long rallies won",
+    label: askMeasureLabel("long_rally_won_pct"),
     numerator: "long_rally_won",
     denominator: "long_rally_total",
     higherIsBetter: true,
