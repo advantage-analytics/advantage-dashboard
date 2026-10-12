@@ -41,8 +41,11 @@ const BETA_FORCE_PRIVATE = true;
  * PATCH rules live in `normalizeMatchPatch` (`src/lib/matches/patch-match.ts`).
  */
 
+// `matches` points at `programs` twice (`program_id`, `opponent_program_id`),
+// so the embed names its foreign key — without the hint PostgREST refuses the
+// read as ambiguous.
 const MATCH_COLUMNS =
-  "id, tournament_name, round, date, match_type, court_type, player1_id, player1_name, player2_name, score, private, format, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, program_id, event_entry_id, source_provider";
+  "id, tournament_name, round, date, match_type, court_type, player1_id, player1_name, player2_name, score, private, format, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, program_id, event_entry_id, source_provider, opponent_program_id, opponent_school, opponent_program:programs!matches_opponent_program_id_fkey(id, school_name, school_abbrev, crest_path, conference, division, team)";
 
 interface MatchRow {
   id: string;
@@ -51,6 +54,7 @@ interface MatchRow {
   program_id: string | null;
   event_entry_id: string | null;
   source_provider: string | null;
+  opponent_program_id?: string | null;
   [key: string]: unknown;
 }
 
@@ -94,10 +98,20 @@ function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-function badRequest(error: string, field?: string) {
+/**
+ * A refused body: `{ error, code?, field? }`. `error` is the sentence the
+ * dialog shows, `code` the slug a client branches on, `field` the key the
+ * dialog puts the message under.
+ */
+function badRequest(
+  error: string,
+  field?: string,
+  code?: string,
+  status: 400 | 422 = 400,
+) {
   return NextResponse.json(
-    { error, ...(field ? { field } : {}) },
-    { status: 400 },
+    { error, ...(code ? { code } : {}), ...(field ? { field } : {}) },
+    { status },
   );
 }
 
@@ -385,7 +399,7 @@ export async function PATCH(
     matchType: (stored.match_type as string | null) ?? null,
     round: (stored.round as string | null) ?? null,
   });
-  if (!result.ok) return badRequest(result.error, result.field);
+  if (!result.ok) return badRequest(result.error, result.field, result.code);
 
   const update = result.update;
 
@@ -432,6 +446,36 @@ export async function PATCH(
         );
       }
       update.player1_name = pick ? pick.name : ownName;
+    }
+  }
+
+  // Their team, when it is a program: the id must be one this caller can see
+  // in the directory. Asked here so a made-up id is a sentence and a code,
+  // not the foreign key's raw refusal as a 500. An id the row already holds
+  // was checked when it was written.
+  if (
+    typeof update.opponent_program_id === "string" &&
+    update.opponent_program_id !== stored.opponent_program_id
+  ) {
+    const { data: program, error: programError } = await supabase
+      .from("programs")
+      .select("id")
+      .eq("id", update.opponent_program_id)
+      .maybeSingle();
+    if (programError) {
+      return serverError(
+        "PATCH /api/matches/[matchId]: failed to load opponent program",
+        programError,
+        "Could not check their team",
+      );
+    }
+    if (!program) {
+      return badRequest(
+        "That team isn't in the directory. Choose another, or keep the school as typed.",
+        "opponent_program_id",
+        "opponent_program_not_found",
+        422,
+      );
     }
   }
   if (BETA_FORCE_PRIVATE) update.private = true;

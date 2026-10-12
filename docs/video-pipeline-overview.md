@@ -449,8 +449,8 @@ seconds, whichever comes first**.
 
 That rule replaced `pct % 10 === 0`, which had a real bug: a chunk boundary that stepped
 over a multiple of ten skipped the write entirely. On a slow upload enough skips in a
-row is 15 minutes of silence, and the reaper marks the job failed underneath an upload
-that is still running. The 60-second floor is what makes that impossible regardless of
+row is long enough for the job to read as paused — and, once, for the reaper to mark it
+failed — underneath an upload that is still running. The 60-second floor is what makes that impossible regardless of
 chunk size.
 
 **A percentage is shown only while uploading.** The vendor sends queue and analysis
@@ -462,12 +462,29 @@ all over again. Those render a bare status word.
 from an upload still in flight. Observed exactly that: a job wrote 0% and was never
 touched again, showing "Uploading 0%" indefinitely.
 
-`reap_stalled_uploads()` fails `pending`/`uploading` jobs whose `updated_at` has been
-silent for 15 minutes. Keyed on **staleness, not age** — a live upload keeps touching
-`updated_at` no matter how large the file, so absolute age would false-fail a
-legitimately long upload. It runs on the read path in `loadMatchAnalysis()`, which is
-exactly when a stale row is misleading, and avoids enabling `pg_cron` for one statement.
-It is **not** `SECURITY DEFINER`: RLS applies, so a caller only ever reaps their own.
+**Quiet is two thresholds, not one.** Twenty minutes without a progress write and the
+job reads **"Upload paused"** on the Matches row, the activity tray and the match page
+(`isUploadPaused()`), and its uploader is emailed once. Nothing is failed: the job stays
+`uploading`, because a tab whose computer wakes up carries the transfer on — one real
+upload finished that way after four hours asleep. The match page offers the uploader
+"Upload the video again", which ends the paused job first.
+
+`reap_stalled_uploads()` then fails `pending`/`uploading` jobs whose `updated_at` has
+been silent for **six hours** (`UPLOAD_ABANDONED_AFTER`, passed as `p_stale_after` by
+every caller; the function's own fifteen-minute default is no longer used). Six hours is
+the life of the upload credential, so nothing can finish past it. Keyed on **staleness,
+not age** — a live upload keeps touching `updated_at` no matter how large the file. It
+runs on the read path in `loadMatchAnalysis()` and, once the
+`schedule_stalled_upload_sweep` migration is applied, every five minutes from `pg_cron`
+(with `/api/cron/reap-stalled-uploads` sending the paused email). It is **not**
+`SECURITY DEFINER`: RLS applies, so a signed-in caller only ever reaps their own.
+
+**A failed job stops its tab.** Blobs are named per match, so two uploads of one match
+share a staging area, and a tab that resumed after its job was failed could publish over
+the newer upload. `splitstep/job-liveness.ts` is asked before the upload URL, before a
+block after any pause, and before the commit; a failed (or deleted) job ends the upload
+there. That is why the reaper threshold had to move with it: at fifteen minutes it would
+end every upload whose laptop lid was closed over lunch.
 
 ---
 
@@ -547,8 +564,9 @@ Four rules keep it working no matter what the UI looks like:
 - **Never log the SAS URL.** It is a six-hour write credential, and the browser console
   outlives the upload — it survives screen shares, extensions, and anyone opening
   devtools. Log the blob name, which is what you want when debugging anyway.
-- **Keep writing `upload_progress_percent`.** Stop and the reaper (§7) fails the job
-  after 15 minutes of silence — the progress write _is_ the heartbeat.
+- **Keep writing `upload_progress_percent`.** Stop and the job reads as paused after 20
+  minutes of silence, and the reaper (§7) fails it after six hours — the progress write
+  _is_ the heartbeat.
 - **Keep the `beforeunload` guard around the whole transfer.** The wizard has already
   closed by then, so it is the only thing telling the user the work is not finished.
 - **The upload outlives the wizard.** It continues in the background after the user

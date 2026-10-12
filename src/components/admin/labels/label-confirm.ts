@@ -1,4 +1,5 @@
 import type { LabelGame } from "@/lib/services/labels/operations";
+import type { ServeHitterFollow } from "@/lib/services/labels/serve-hitter";
 import type { LabelSide } from "@/lib/services/labels/session";
 import type { SideNames } from "./label-format";
 
@@ -37,6 +38,36 @@ export type LabelConfirm =
        * server and only `server` changes.
        */
       swaps: "shots" | "shots-and-winner" | null;
+    }
+  | {
+      /**
+       * A game's header dragged past points whose players switch with their
+       * new server (game-boundary.ts). A drag that switches nobody's players
+       * is not asked about.
+       */
+      kind: "move-boundary";
+      to: LabelGame;
+      /** The destination's rank in its set, as the band numbers it. */
+      gameInSet: number;
+      /** The points to move, in the order to move them. */
+      pointIds: readonly string[];
+      /** The destination game's server. */
+      server: LabelSide;
+      /** How many of the points switch players. */
+      swaps: number;
+    }
+  | {
+      /**
+       * A serve given to the other player (serve-hitter.ts): whether the
+       * rest of the point, and the game's server, follow it. The one confirm
+       * with a second answer — "Only this shot" writes the edit alone.
+       */
+      kind: "serve-hitter";
+      shotId: string;
+      pointNumber: number;
+      /** The game's rank in its set, as the band numbers it. */
+      gameInSet: number | null;
+      follow: ServeHitterFollow;
     }
   | {
       kind: "reset-shot";
@@ -78,6 +109,74 @@ export interface LabelConfirmCopy {
   confirmLabel: string;
   pendingLabel: string;
   tone: "primary" | "danger";
+  /** A second answer at the footer's left; absent on every confirm but one. */
+  alternativeLabel?: string;
+}
+
+/** What a serve changing hands takes with it, as the confirm says it. */
+function serveHitterCopy(
+  confirm: Extract<LabelConfirm, { kind: "serve-hitter" }>,
+  names: SideNames,
+): LabelConfirmCopy {
+  const { follow, pointNumber } = confirm;
+  const player = names[follow.hitter];
+  const rest =
+    follow.point === "shots-and-winner"
+      ? `Every other shot in point ${pointNumber} changes hands, and so does who won it.`
+      : follow.point === "shots"
+        ? `Every other shot in point ${pointNumber} changes hands.`
+        : follow.point === "winner"
+          ? `Who won point ${pointNumber} changes with it.`
+          : "";
+  const base = {
+    pendingLabel: "Switching…",
+    tone: "primary" as const,
+    alternativeLabel: "Only this shot",
+  };
+  if (!follow.game) {
+    return {
+      ...base,
+      title:
+        follow.point === "winner"
+          ? `${player} served point ${pointNumber}, switch who won it?`
+          : `${player} served point ${pointNumber}, switch the other shots?`,
+      description: rest,
+      confirmLabel: "Switch players",
+    };
+  }
+  const { game, type, first, points, switched } = follow.game;
+  const others =
+    switched === 0
+      ? ""
+      : switched === 1
+        ? "The players switch on 1 other point too."
+        : `The players switch on ${switched} other points too.`;
+  if (type === "game") {
+    const where = `set ${game.setNumber}, game ${confirm.gameInSet ?? game.gameNumber}`;
+    const scope =
+      points === 1
+        ? `${player} becomes the server of ${where}.`
+        : `${player} becomes the server of all ${points} points in ${where}.`;
+    return {
+      ...base,
+      title: `${player} served point ${pointNumber}, change the game's server?`,
+      description: [scope, rest, others].filter(Boolean).join(" "),
+      confirmLabel: "Change server",
+    };
+  }
+  const name = type === "tiebreak" ? "tiebreak" : "match tiebreak";
+  return {
+    ...base,
+    title: `${player} served point ${pointNumber}, reorder the ${name}?`,
+    description: [
+      `The ${name}'s serve order is rebuilt around it: ${names[first]} serves first, then two points each in turn.`,
+      rest,
+      others,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    confirmLabel: "Reorder serves",
+  };
 }
 
 export function labelConfirmCopy(
@@ -121,6 +220,24 @@ export function labelConfirmCopy(
         tone: "primary",
       };
     }
+    case "move-boundary": {
+      const n = confirm.pointIds.length;
+      const what = n === 1 ? "1 point" : `${n} points`;
+      const all = confirm.swaps === n;
+      const switched =
+        n === 1
+          ? "Every shot in it changes hands, and so does who won it."
+          : `On ${all ? "each of them" : `${confirm.swaps} of them`}, every shot changes hands, and so does who won it.`;
+      return {
+        title: `Move ${what} to game ${confirm.gameInSet}?`,
+        description: `${names[confirm.server]} serves set ${confirm.to.setNumber}, game ${confirm.gameInSet}, and becomes the server of ${n === 1 ? "this point" : "these points"}. ${switched}`,
+        confirmLabel: n === 1 ? "Move point" : "Move points",
+        pendingLabel: "Moving…",
+        tone: "primary",
+      };
+    }
+    case "serve-hitter":
+      return serveHitterCopy(confirm, names);
     case "reset-shot":
       return {
         title: `Reset shot ${confirm.shotNumber} to its original values?`,

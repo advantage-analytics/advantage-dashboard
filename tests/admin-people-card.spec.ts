@@ -56,6 +56,7 @@ function invite(expired: boolean): AdminTeamInvite {
     role: "player",
     createdAt: "2026-09-01T12:00:00Z",
     invitedBy: null,
+    playerId: null,
     expiresAt: "2026-09-08T12:00:00Z",
     invitedByName: null,
     expired,

@@ -6,9 +6,11 @@ import * as types from "@/components/dashboard/matches/new-match-wizard/types";
 import * as validation from "@/components/dashboard/matches/new-match-wizard/validation";
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
+import * as opponentTeam from "@/components/dashboard/matches/new-match-wizard/opponent-team";
 import * as styleSaveOffer from "@/components/dashboard/matches/new-match-wizard/style-save-offer";
 import { buildMatchData } from "@/components/dashboard/matches/new-match-wizard/utils";
 import * as scoreFormat from "@/lib/ui/score-format";
+import * as adminApproval from "@/lib/admin/uploads/approval";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
@@ -89,6 +91,12 @@ export function uploadWizardHarness(
      * returns it — the owner-who-plays case the RPC leaves out.
      */
     ownProfile?: subjectEligibility.OwnProfileRow | null;
+    /**
+     * The `id` every `programs` read answers with, beside its status — what
+     * the save's `program_key` → id lookup resolves an opponent program to.
+     * Unset, the read carries no id, as before.
+     */
+    opponentProgramId?: string;
     /**
      * What the `saveMatchDraft` server action answers. `"refused"` is the
      * null it returns for no workspace context, no signed-in user, or a
@@ -263,7 +271,12 @@ export function uploadWizardHarness(
             if (read === "error") {
               return { data: null, error: { message: "network error" } };
             }
-            return { data: { status: read }, error: null };
+            return {
+              data: options.opponentProgramId
+                ? { status: read, id: options.opponentProgramId }
+                : { status: read },
+              error: null,
+            };
           };
         }
         return () => programStatusQuery;
@@ -360,6 +373,8 @@ export function uploadWizardHarness(
       SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE:
         "Submission response was interrupted. Check this operation before retrying with the same file.",
     },
+    // Pure: the console's own answer to "is this team uploadable".
+    "@/lib/admin/uploads/approval": adminApproval,
     // Pure, and only read to describe the saved match to the success screen.
     "@/lib/ui/score-format": scoreFormat,
     "@/lib/wizard/actions": {
@@ -385,6 +400,8 @@ export function uploadWizardHarness(
       saveRosterPlayerStyle: async () => ({ ok: true }),
     },
     "./types": types,
+    // Pure: whether the "their team" field is empty, for the line fallback.
+    "./opponent-team": opponentTeam,
     "./validation": validation,
     "./score-state": scoreState,
     // The real thing: pure, and it is the seam under test. It pulls in the

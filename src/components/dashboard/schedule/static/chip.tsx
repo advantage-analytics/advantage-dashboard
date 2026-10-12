@@ -19,10 +19,20 @@ export function Chip({
   label,
   active,
   onClick,
+  leading,
+  detail,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  /**
+   * A mark before the label — a roster face in the opponent drawer's
+   * "Faced by" row. The pill's left inset drops to 4px so an 18px circle sits
+   * concentric with the pill's own round end.
+   */
+  leading?: React.ReactNode;
+  /** A quiet figure after the label (a record: "3-1"), 11px `--ink-500`. */
+  detail?: string;
 }) {
   return (
     <button
@@ -30,14 +40,21 @@ export function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] border px-[11px] text-[12px]",
+        "inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] border text-[12px]",
+        leading ? "pr-2.5 pl-1" : "px-[11px]",
         "transition-colors duration-[var(--duration-hover)] outline-none focus-visible:shadow-[var(--focus-ring)]",
         active
           ? "border-[var(--border-medium)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
           : "border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]",
       )}
     >
+      {leading}
       {label}
+      {detail ? (
+        <span className="tabular text-[11px] font-normal text-[var(--ink-500)]">
+          {detail}
+        </span>
+      ) : null}
     </button>
   );
 }

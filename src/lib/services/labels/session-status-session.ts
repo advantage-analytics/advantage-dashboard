@@ -57,13 +57,17 @@ export type LabelPublish = (
 >;
 
 /**
- * Publish with the labelled score taken as it is: the confirm before "Mark
- * complete" already listed any difference from the entered score.
+ * Publish, refusing a labelled score that differs from the match record's.
+ * Until 2026-10-10 the console accepted it on the confirm's yes, and a set
+ * labelled 5–5 against a 6–4 record reached every stat. Each cause has its
+ * own answer now: fix the game, say the video ends early, or correct the
+ * match record. `scripts/label-apply.ts --accept-score` stays the escape
+ * hatch for a score the rules of tennis can't produce.
  */
-const publishAcceptingScore: LabelPublish = async (supabase, sessionId) => {
+const publishCheckingScore: LabelPublish = async (supabase, sessionId) => {
   // Loaded on use: it reads through labels-server.ts.
   const { publishLabelSession } = await import("./apply-session");
-  return publishLabelSession({ db: supabase, sessionId, acceptScore: true });
+  return publishLabelSession({ db: supabase, sessionId, acceptScore: false });
 };
 
 const RACED = racedMessage("session");
@@ -80,7 +84,7 @@ export async function writeLabelSessionComplete(params: {
   publish?: LabelPublish;
   now?: () => number;
 }): Promise<LabelSessionStatusResult> {
-  const { supabase, publish = publishAcceptingScore, now = Date.now } = params;
+  const { supabase, publish = publishCheckingScore, now = Date.now } = params;
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 

@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 import {
   flagGroups,
+  flagStopLabel,
+  scoreStop,
   stepFlag,
   type OpenFlag,
 } from "@/lib/services/labels/flag-nav";
+import type { LabelScoreMismatch } from "@/lib/services/labels/set-scores";
 
 const points = ["a", "b", "c", "d", "e"].map((id) => ({ id }));
 const flag = (
@@ -69,4 +72,41 @@ test("a counted mark no kind names is listed under Other", () => {
   const groups = flagGroups([flag("a", "winner_to_error_by_bounce")]);
   expect(groups.map((g) => g.name)).toEqual(["Other"]);
   expect(groups[0].rows[0].label).toBe("Winner or error?");
+});
+
+test.describe("the score stop", () => {
+  const rows = points.map((p, i) => ({
+    ...p,
+    pointIndex: i,
+    status: i === 4 ? ("deleted" as const) : ("unchanged" as const),
+  }));
+  const mismatch: LabelScoreMismatch = {
+    setNumber: 1,
+    labelled: "5–5",
+    entered: "6–4",
+    firstPointId: "a",
+    lastPointId: "c",
+    reasons: [],
+  };
+
+  test("sits on the set's last point, or the last live point when the rows never reach the set", () => {
+    expect(scoreStop(mismatch, rows)).toEqual({
+      pointId: "c",
+      pointNumber: 3,
+      label: "Set 1 ends 5–5, record 6–4",
+    });
+    const unreached = { ...mismatch, firstPointId: null, lastPointId: null };
+    expect(scoreStop(unreached, rows)?.pointId).toBe("d");
+    expect(scoreStop(null, rows)).toBeNull();
+  });
+
+  test("appended after the marks, it is stepped in rail order and named in its own words", () => {
+    const stop = scoreStop(mismatch, rows)!;
+    const stops = [...flags, stop];
+    expect(stepFlag(stops, points, "b", 1)?.pointId).toBe("c");
+    expect(stepFlag(stops, points, "c", 1)?.pointId).toBe("d");
+    expect(stepFlag(stops, points, "d", -1)?.pointId).toBe("c");
+    expect(flagStopLabel(stop)).toBe("Set 1 ends 5–5, record 6–4");
+    expect(flagStopLabel(flags[0])).toBe("Check the ending");
+  });
 });

@@ -18,8 +18,8 @@
  *
  * Refuses, before writing anything, on: build problems, imported points on
  * the match (never mix providers), nothing to write, or a labelled score that
- * differs from the entered one unless `acceptScore` — the console passes it,
- * because its confirm already listed the difference.
+ * differs from the entered one unless `acceptScore` — only
+ * `scripts/label-apply.ts --accept-score` passes it; the console never does.
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -35,6 +35,7 @@ import {
   vendorShotFacts,
   type AppliedPointRow,
 } from "./apply";
+import { chunksOf } from "./chunks";
 import { labelScores } from "./score";
 import {
   enteredScore,
@@ -58,11 +59,7 @@ export interface LabelApplyBackup {
   matchStats: Row[];
 }
 
-function chunks<T>(rows: readonly T[], size = CHUNK): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
-  return out;
-}
+const chunks = <T>(rows: readonly T[]): T[][] => chunksOf(rows, CHUNK);
 
 // ── Reads ────────────────────────────────────────────────────────────────────
 
@@ -390,7 +387,7 @@ export async function publishPlanned(params: {
   if (plan.mismatch && !acceptScore) {
     return {
       ok: false,
-      error: `Not published: ${scoreMismatchSentence(plan.mismatch)}`,
+      error: `Not published: ${scoreMismatchSentence(plan.mismatch)}. Fix the set, mark the video as ending early, or correct the match record.`,
     };
   }
   if (plan.built.points.length === 0) {
@@ -472,7 +469,12 @@ export async function publishPlanned(params: {
   };
 }
 
-/** Load, plan and publish one session. */
+/**
+ * Load, plan and publish one session. A session labelled with marks off is
+ * published whatever its score: it draws no score flag and cannot be told the
+ * video ends early (session-fields-session.ts), so a refusal there would have
+ * no answer the console can give.
+ */
 export async function publishLabelSession(params: {
   db: AdminClient;
   sessionId: string;
@@ -484,6 +486,6 @@ export async function publishLabelSession(params: {
     db: params.db,
     context,
     plan: planApply(context),
-    acceptScore: params.acceptScore,
+    acceptScore: params.acceptScore || !context.session.marksEnabled,
   });
 }

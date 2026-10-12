@@ -61,15 +61,18 @@ import {
   applyPointMove,
   applyPointRestore,
   applyShotDelete,
+  deadBallsAfterMiss,
   applyShotRestore,
   applyShotsRemoved,
   deadBallReason,
   applyShotsRestored,
   destinationServerIn,
+  gameInSetOf,
   liveShotsAfter,
   moveNeedsServerSwitch,
   planAddedShot,
   planPointMove,
+  type PlannedPointMove,
   type LabelDeleteReason,
   type LabelGame,
 } from "@/lib/services/labels/operations";
@@ -132,6 +135,20 @@ import {
   type LabelSessionFieldsPatch,
 } from "@/lib/services/labels/session-fields";
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
+import {
+  endingPatchForShotChange,
+  SHOT_FIELDS_MOVING_ENDING,
+} from "@/lib/services/labels/ending-derived";
+import { planGameBoundary } from "@/lib/services/labels/game-boundary";
+import {
+  servedRightHitWrong,
+  serversOffOrder,
+  tiebreakServeOrders,
+} from "@/lib/services/labels/tiebreak-serve";
+import {
+  planServeHitterFollow,
+  type ServeHitterFollow,
+} from "@/lib/services/labels/serve-hitter";
 import { completeWarnings } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
 import { advButton } from "@/lib/ui/adv-button";
@@ -177,7 +194,14 @@ import {
 import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
-import { openFlags, stepFlag } from "@/lib/services/labels/flag-nav";
+import {
+  openFlags,
+  scoreStop,
+  slotStops,
+  stepFlag,
+  type FlagStop,
+} from "@/lib/services/labels/flag-nav";
+import { sessionScoreMismatch } from "@/lib/services/labels/set-scores";
 import {
   planTiebreakFold,
   tiebreakFolds,
@@ -699,11 +723,66 @@ export function LabelConsole({
         return null;
       }
       const retime = "video_time" in patch;
-      const change = (current: readonly LabelPoint[]) =>
+      const patched = (current: readonly LabelPoint[]) =>
         updateShot(current, shotId, retime, (shot) =>
           applyLabelShotPatch(shot, patch),
         );
-      setPoints(change);
+      // A rally ball marked out takes the stroke or two after it in the same
+      // write (`deadBallsAfterMiss`, as the server reads it): they go at once
+      // here too, so "Did the point end here?" never shows for a question
+      // the write is already answering.
+      const reason = deadBallReason(plan.row.stroke);
+      const ownerBefore = pointOfShot(patched(rows), shotId);
+      const dead = ownerBefore
+        ? deadBallsAfterMiss(
+            ownerBefore.shots,
+            shotId,
+            before,
+            patch,
+            drawsGhosts(marks),
+          )
+        : [];
+      const deadIds = new Set(dead.map((shot) => shot.id));
+      const change = (current: readonly LabelPoint[]) =>
+        dead.length === 0 || !ownerBefore
+          ? patched(current)
+          : replacePoint(patched(current), ownerBefore.id, (p) => ({
+              ...p,
+              shots: p.shots.map((s) =>
+                deadIds.has(s.id) ? applyShotDelete(s, reason) : s,
+              ),
+            }));
+      // The strokes this write took optimistically that the server did not:
+      // back as they were read.
+      const putBackDead = (
+        current: LabelPoint[],
+        kept: ReadonlySet<string> = new Set(),
+      ) => {
+        const back = new Map(
+          dead.filter((s) => !kept.has(s.id)).map((s) => [s.id, s]),
+        );
+        // On the owning row as it stands now: a split may have replaced
+        // the draft point the stroke sat in since the write went out.
+        const owner = pointOfShot(current, shotId);
+        return back.size === 0 || !owner
+          ? current
+          : replacePoint(current, owner.id, (p) => ({
+              ...p,
+              shots: p.shots.map((s) => back.get(s.id) ?? s),
+            }));
+      };
+      const undoEnding = (current: LabelPoint[]) =>
+        ending.undo(current, pointOfShot(current, shotId)?.id);
+      // The ending the server will settle in this same call, now.
+      const ownerRead = pointOfShot(rows, shotId);
+      const ending = endingFollow(
+        SHOT_FIELDS_MOVING_ENDING.some((field) => field in patch)
+          ? ownerRead
+          : null,
+        ownerRead ? change([ownerRead])[0] : null,
+        drawsGhosts(marks),
+      );
+      setPoints((current) => ending.apply(change(current)));
 
       dispatchSave({ type: "start" });
       const result = await settle(onSaveShot(shotId, patch));
@@ -717,21 +796,32 @@ export function LabelConsole({
           ]),
         ) as LabelShotPatch;
         setPoints((current) =>
-          updateShot(current, shotId, retime, (shot) => ({
-            ...applyLabelShotPatch(shot, undo),
-            status: before.status,
-          })),
+          undoEnding(
+            putBackDead(
+              updateShot(current, shotId, retime, (shot) => ({
+                ...applyLabelShotPatch(shot, undo),
+                status: before.status,
+              })),
+            ),
+          ),
         );
         dispatchSave({ type: "failure", message: result.error });
         return null;
       }
       const removed = result.removedAfter;
-      const reason = deadBallReason(plan.row.stroke);
+      const removedIds = new Set(removed?.map((r) => r.id));
       setPoints((current) => {
-        const saved = updateShot(current, shotId, false, (shot) => ({
-          ...shot,
-          status: result.status,
-        }));
+        // With no `point` answered the server settled nothing: the ending
+        // taken ahead of it goes back.
+        const saved = updateShot(
+          putBackDead(result.point ? current : undoEnding(current), removedIds),
+          shotId,
+          false,
+          (shot) => ({
+            ...shot,
+            status: result.status,
+          }),
+        );
         // The owning row as it stands now, not as it was when the write
         // went out: a split's draft point may have been replaced by the
         // saved one in the meantime, and the answer lands on that.
@@ -769,7 +859,7 @@ export function LabelConsole({
         ? { ...saved, shots: applyShotsRemoved(saved.shots, removed, reason) }
         : saved;
     },
-    [onSaveShot],
+    [onSaveShot, marks],
   );
 
   /**
@@ -870,11 +960,20 @@ export function LabelConsole({
     if (!before || !operations) return;
     if (placement.shotId === shotId) setPlacement(NO_PLACEMENT);
     const settlePoint = settlePointOf(shotId);
+    const gone = (rows: LabelPoint[]) =>
+      replaceShot(rows, shotId, (s) => applyShotDelete(s, reason));
+    const owner = pointOfShot(points, shotId);
+    const ending = endingFollow(
+      owner,
+      owner ? gone([owner])[0] : null,
+      drawsGhosts(marks),
+    );
     void runOperation(
-      (rows) => replaceShot(rows, shotId, (s) => applyShotDelete(s, reason)),
+      (rows) => ending.apply(gone(rows)),
       () => operations.deleteShot(shotId, reason),
-      settlePoint,
-      putBackShot(shotId, before),
+      (rows, result) =>
+        settlePoint(result.point ? rows : ending.undo(rows), result),
+      (rows) => ending.undo(putBackShot(shotId, before)(rows)),
     );
   }
 
@@ -882,15 +981,26 @@ export function LabelConsole({
     const before = findShot(points, shotId);
     if (!before || !operations) return;
     const settlePoint = settlePointOf(shotId);
+    const back = (rows: LabelPoint[]) =>
+      replaceShot(rows, shotId, applyShotRestore);
+    const owner = pointOfShot(points, shotId);
+    const ending = endingFollow(
+      owner,
+      owner ? back([owner])[0] : null,
+      drawsGhosts(marks),
+    );
     void runOperation(
-      (rows) => replaceShot(rows, shotId, applyShotRestore),
+      (rows) => ending.apply(back(rows)),
       () => operations.restoreShot(shotId),
       (rows, result) =>
         settlePoint(
-          replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
+          replaceShot(result.point ? rows : ending.undo(rows), shotId, (s) => ({
+            ...s,
+            status: result.status,
+          })),
           result,
         ),
-      putBackShot(shotId, before),
+      (rows) => ending.undo(putBackShot(shotId, before)(rows)),
     );
   }
 
@@ -927,23 +1037,24 @@ export function LabelConsole({
     if (placement.shotId !== null && ids.has(placement.shotId)) {
       setPlacement(NO_PLACEMENT);
     }
+    const removeFrom = (p: LabelPoint): LabelPoint => ({
+      ...p,
+      shots: p.shots.map((s) =>
+        ids.has(s.id) ? applyShotDelete(s, reason) : s,
+      ),
+    });
+    const ending = endingFollow(point, removeFrom(point), drawsGhosts(marks));
     void runOperation(
-      (rows) =>
-        replacePoint(rows, pointId, (p) => ({
-          ...p,
-          shots: p.shots.map((s) =>
-            ids.has(s.id) ? applyShotDelete(s, reason) : s,
-          ),
-        })),
+      (rows) => ending.apply(replacePoint(rows, pointId, removeFrom)),
       () => operations.removeShotsAfter(shotId),
       (rows, result) =>
-        replacePoint(rows, pointId, (p) =>
+        replacePoint(result.point ? rows : ending.undo(rows), pointId, (p) =>
           applyEndingSync(
             { ...p, shots: applyShotsRemoved(p.shots, result.removed, reason) },
             result.point,
           ),
         ),
-      putBackShots(pointId, after),
+      (rows) => ending.undo(putBackShots(pointId, after)(rows)),
     );
   }
 
@@ -1184,7 +1295,7 @@ export function LabelConsole({
     const plan = planPlayerSwitch(before);
     if ("error" in plan) return refuse(plan.error);
     const shotsBefore = shotSwapsOf(before.shots);
-    void runOperation(
+    return runOperation(
       (rows) =>
         applyShotSwaps(
           replacePoint(rows, pointId, (p) => applyPlayerSwitch(p, plan.write)),
@@ -1429,13 +1540,17 @@ export function LabelConsole({
       });
       return;
     }
-    movePoint(pointId, to, false);
+    void movePoint(pointId, to, false);
   }
 
   /**
    * Move one point (`planPointMove`): game, server and, if needed, players.
    */
-  function movePoint(pointId: string, to: LabelGame, switchServer: boolean) {
+  async function movePoint(
+    pointId: string,
+    to: LabelGame,
+    switchServer: boolean,
+  ): Promise<void> {
     const before = points.find((p) => p.id === pointId);
     if (!before || !operations) return;
     const plan = planPointMove(
@@ -1444,42 +1559,107 @@ export function LabelConsole({
       destinationServerIn(points, pointId, to),
       switchServer,
     );
-    if ("error" in plan) return refuse(plan.error);
-    const shotsBefore = shotSwapsOf(before.shots);
-    void runOperation(
-      (rows) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
-          plan.shots,
-        ),
+    if ("error" in plan) {
+      refuse(plan.error);
+      return;
+    }
+    await runOperation(
+      (rows) => pointMoved(rows, pointId, plan),
       () => operations.movePoint(pointId, to, switchServer),
-      (rows, result) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({
-            ...p,
-            status: result.status,
-            server: result.server,
-            setNumber: result.setNumber,
-            gameNumber: result.gameNumber,
-            winner: result.winner,
-            endedBy: result.endedBy,
-          })),
-          result.shots,
-        ),
-      (rows) =>
-        applyShotSwaps(
-          replacePoint(rows, pointId, (p) => ({
-            ...p,
-            setNumber: before.setNumber,
-            gameNumber: before.gameNumber,
-            server: before.server,
-            status: before.status,
-            winner: before.winner,
-            endedBy: before.endedBy,
-          })),
-          shotsBefore,
-        ),
+      (rows, result) => pointMoveSettled(rows, pointId, result),
+      (rows) => pointMovePutBack(rows, before),
     );
+  }
+
+  /**
+   * A game's header dragged to a new start (`game-boundary.ts`): the points
+   * it passed move into the neighbouring game, one move each. Asks first only
+   * when a moved point's players switch with its server; a point that only
+   * changes game and server goes at once.
+   */
+  function requestMoveBoundary(game: LabelGame, beforePointId: string) {
+    if (!operations) return;
+    const plan = planGameBoundary(points, game, beforePointId);
+    if ("error" in plan) return refuse(plan.error);
+    const { to, pointIds } = plan.write;
+    if (pointIds.length === 0) return;
+    const server = destinationServerIn(points, pointIds[0], to);
+    const swaps = pointIds.filter((id) => {
+      const point = points.find((p) => p.id === id);
+      return point ? moveSwapsPlayers(point, server) : false;
+    }).length;
+    if (swaps === 0 || server === null) return void moveBoundary(to, pointIds);
+    setConfirm({
+      kind: "move-boundary",
+      to,
+      gameInSet: gameInSetOf(points, to),
+      pointIds,
+      server,
+      swaps,
+    });
+  }
+
+  /**
+   * The run's moves. Every point takes its new game at once — one at a time
+   * would leave a game a point short between two writes, and the slots that
+   * read the score would ask about a state the run is only passing through.
+   * The writes then go in order; a refused one puts it and the rest back.
+   * A tiebreak on either side of the boundary then has its serve order put
+   * right.
+   */
+  async function moveBoundary(to: LabelGame, pointIds: readonly string[]) {
+    if (!operations) return;
+    if (pointIds.some((id) => id.startsWith(PENDING_POINT_PREFIX))) {
+      return refuse("Wait for the new point to save, then move it.");
+    }
+    let rows: LabelPoint[] = points;
+    const steps: {
+      before: LabelPoint;
+      plan: Extract<PlannedPointMove, { ok: true }>;
+    }[] = [];
+    for (const id of pointIds) {
+      const before = rows.find((p) => p.id === id);
+      if (!before) return;
+      const plan = planPointMove(
+        before,
+        to,
+        destinationServerIn(rows, id, to),
+        true,
+      );
+      if ("error" in plan) return refuse(plan.error);
+      steps.push({ before, plan });
+      rows = pointMoved(rows, id, plan);
+    }
+    type Step = (typeof steps)[number];
+    const moved = (current: LabelPoint[], { before, plan }: Step) =>
+      pointMoved(current, before.id, plan);
+    const putBack = (current: LabelPoint[], { before }: Step) =>
+      pointMovePutBack(current, before);
+    setPoints((current) => steps.reduce(moved, current));
+    dispatchSave({ type: "start" });
+    for (const [i, { before }] of steps.entries()) {
+      const result = await settle(operations.movePoint(before.id, to, true));
+      if ("error" in result) {
+        setPoints((current) => steps.slice(i).reduce(putBack, current));
+        dispatchSave({ type: "failure", message: result.error });
+        return;
+      }
+      setPoints((current) => pointMoveSettled(current, before.id, result));
+    }
+    dispatchSave({ type: "success", at: Date.now() });
+    // A tiebreak that gained or lost points has every turn behind them
+    // shifted, and a move gives each point the game's one server: its order
+    // is put right in the same gesture (`fixTiebreakServe`, which does
+    // nothing for an ordinary game or a tiebreak still in order).
+    const source = steps[0]?.before;
+    const games: LabelGame[] = [to];
+    if (source && source.setNumber !== null && source.gameNumber !== null) {
+      games.push({
+        setNumber: source.setNumber,
+        gameNumber: source.gameNumber,
+      });
+    }
+    for (const game of games) await fixTiebreakServe(game, rows);
   }
 
   /**
@@ -1490,11 +1670,12 @@ export function LabelConsole({
   function runGameOperation(
     plan: PlannedGameWrites,
     call: () => Promise<LabelGameWriteResult>,
+    rows: readonly LabelPoint[] = points,
   ) {
     if ("error" in plan) return refuse(plan.error);
     const written = new Set(plan.writes.map((write) => write.id));
     const before = new Map(
-      points.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
+      rows.filter((p) => written.has(p.id)).map((p) => [p.id, p]),
     );
     const shotsBefore = shotSwapsOf(
       [...before.values()].flatMap((point) => point.shots),
@@ -1519,10 +1700,100 @@ export function LabelConsole({
     );
   }
 
-  function setGameServer(game: LabelGame, server: LabelSide) {
+  /** `rows`: the rows to plan from, when an edit has only just landed on them. */
+  function setGameServer(
+    game: LabelGame,
+    server: LabelSide,
+    rows: readonly LabelPoint[] = points,
+  ) {
     if (!operations) return;
-    runGameOperation(planGameServer(points, game, server), () =>
-      operations.setGameServer(session.id, game, server),
+    runGameOperation(
+      planGameServer(rows, game, server),
+      () => operations.setGameServer(session.id, game, server),
+      rows,
+    );
+  }
+
+  /**
+   * The labeller's shot edit. A serve given to the other player asks first
+   * whether the rest follows it (`planServeHitterFollow`): the point's other
+   * rows, and the game's server. Every other edit is written at once.
+   */
+  function requestPatchShot(shotId: string, patch: LabelShotPatch) {
+    // A draft stroke's add is still in flight: the server would switch the
+    // saved rows and not it, so its edit goes alone.
+    if (
+      operations &&
+      !shotId.startsWith(PENDING_SHOT_PREFIX) &&
+      "hitter" in patch &&
+      Object.keys(patch).length === 1
+    ) {
+      const follow = planServeHitterFollow(
+        points,
+        shotId,
+        patch.hitter ?? null,
+      );
+      const point = follow && points.find((p) => p.id === follow.pointId);
+      if (follow && point && !point.id.startsWith(PENDING_POINT_PREFIX)) {
+        setConfirm({
+          kind: "serve-hitter",
+          shotId,
+          pointNumber: point.pointIndex + 1,
+          gameInSet: scores.points.get(point.id)?.gameInSet ?? null,
+          follow,
+        });
+        return;
+      }
+    }
+    void patchShot(shotId, patch);
+  }
+
+  /**
+   * "Fix serve order" on a tiebreak (`tiebreak-serve.ts`): a point the order
+   * already serves right but whose strokes are the other player's switches
+   * players, one write each; then the game's server from the order's first
+   * server, planned over the rows with those switches on them.
+   */
+  async function fixTiebreakServe(
+    game: LabelGame,
+    from: readonly LabelPoint[] = points,
+  ) {
+    const order = tiebreakServeOrders(from).find(
+      (o) =>
+        o.game.setNumber === game.setNumber &&
+        o.game.gameNumber === game.gameNumber,
+    );
+    if (!order || !operations) return;
+    let rows: LabelPoint[] = [...from];
+    for (const off of order.off.filter(servedRightHitWrong)) {
+      const point = rows.find((p) => p.id === off.pointId);
+      const plan = point ? planPlayerSwitch(point) : null;
+      if (!plan || "error" in plan) continue;
+      if (!(await switchPlayers(off.pointId))) return;
+      rows = applyShotSwaps(
+        replacePoint(rows, off.pointId, (p) =>
+          applyPlayerSwitch(p, plan.write),
+        ),
+        plan.shots,
+      );
+    }
+    if (serversOffOrder(order)) setGameServer(game, order.first, rows);
+  }
+
+  /** A yes to the serve's confirm, by the operation its plan names. */
+  async function followServeHitter(shotId: string, follow: ServeHitterFollow) {
+    if (follow.run === "switch-point") return switchPlayers(follow.pointId);
+    if (!follow.game) return;
+    const { game, first } = follow.game;
+    if (follow.run === "game-server") return setGameServer(game, first);
+    // Only the serve was wrong on this point: its own edit first, then the
+    // game's server planned over the rows with that edit on them.
+    const saved = await writeShot(points, shotId, { hitter: follow.hitter });
+    if (!saved) return;
+    setGameServer(
+      game,
+      first,
+      points.map((p) => (p.id === saved.id ? saved : p)),
     );
   }
 
@@ -1635,7 +1906,13 @@ export function LabelConsole({
         deletePoint(question.pointId);
         return;
       case "move-point":
-        movePoint(question.pointId, question.to, true);
+        void movePoint(question.pointId, question.to, true);
+        return;
+      case "move-boundary":
+        void moveBoundary(question.to, question.pointIds);
+        return;
+      case "serve-hitter":
+        void followServeHitter(question.shotId, question.follow);
         return;
       case "reset-shot":
         resetShot(question.shotId);
@@ -1716,16 +1993,16 @@ export function LabelConsole({
     selectShot,
     holdOnEditorFocus,
     patchPoint,
-    patchShot,
+    patchShot: requestPatchShot,
     removeShotsAfter,
     restoreShots,
     setGameServer,
+    moveGameBoundary: requestMoveBoundary,
+    fixTiebreakServe,
     setGameType,
     findGap,
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
-    fixEnteredScore: (sets: number[][]) =>
-      void updateSessionFields({ final_score: sets }),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
   });
@@ -1736,10 +2013,37 @@ export function LabelConsole({
   const checkOpenPoint = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous open flag, as the header's flag does.
   const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
-  const openMarks = useMemo(
-    () => (liveMarks ? openFlags(points, liveMarks) : []),
-    [points, liveMarks],
+  // The rail's amber slots as stops, read off the rows once for the keys
+  // here and the rail's header — marks or none.
+  const slotJumpStops = useMemo(
+    () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
+    [operable, points, session.adScoring],
   );
+  // The marks, the set that doesn't add up and every amber slot between the
+  // rows, as the rail's header steps them.
+  const openMarks = useMemo(() => {
+    const slots: readonly FlagStop[] = slotJumpStops;
+    if (!liveMarks) return slots;
+    const marked: FlagStop[] = openFlags(points, liveMarks);
+    const stop = scoreStop(
+      sessionScoreMismatch({
+        points,
+        games: scores.games,
+        finalScore: sessionFields.finalScore,
+        matchScore: session.matchScore,
+        videoEndsEarly: sessionFields.videoEndsEarly,
+      }),
+      points,
+    );
+    return [...marked, ...(stop ? [stop] : []), ...slots];
+  }, [
+    points,
+    liveMarks,
+    scores,
+    sessionFields,
+    session.matchScore,
+    slotJumpStops,
+  ]);
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
@@ -1908,6 +2212,9 @@ export function LabelConsole({
       onRemoveShotsAfter={operable ? railHandlers.removeShotsAfter : undefined}
       onRestoreShots={operable ? railHandlers.restoreShots : undefined}
       onSetGameServer={operable ? railHandlers.setGameServer : undefined}
+      onFixTiebreakServe={operable ? railHandlers.fixTiebreakServe : undefined}
+      slotStops={slotJumpStops}
+      onMoveGameBoundary={operable ? railHandlers.moveGameBoundary : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
       onPullGame={operable ? railHandlers.pullGamePoints : undefined}
       onAddPoint={operable ? railHandlers.addPointAfter : undefined}
@@ -1922,7 +2229,6 @@ export function LabelConsole({
       finalScore={sessionFields.finalScore}
       videoEndsEarly={sessionFields.videoEndsEarly}
       matchScore={session.matchScore}
-      onFixEnteredScore={operable ? railHandlers.fixEnteredScore : undefined}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
       onGoToPoint={railHandlers.findGap}
@@ -2012,6 +2318,14 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
+          onAlternative={(question) => {
+            setConfirm(null);
+            if (question.kind === "serve-hitter") {
+              void patchShot(question.shotId, {
+                hitter: question.follow.hitter,
+              });
+            }
+          }}
         />
       ) : null}
     </div>
@@ -2221,6 +2535,92 @@ function replacePoint(
   change: (point: LabelPoint) => LabelPoint,
 ): LabelPoint[] {
   return points.map((point) => (point.id === pointId ? change(point) : point));
+}
+
+const NO_SLOT_STOPS: ReturnType<typeof slotStops> = [];
+
+/** A planned point move (`planPointMove`), as the rows take it at once. */
+function pointMoved(
+  rows: readonly LabelPoint[],
+  pointId: string,
+  plan: Extract<PlannedPointMove, { ok: true }>,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
+    plan.shots,
+  );
+}
+
+/** The move as the server wrote it: the last word over `pointMoved`. */
+function pointMoveSettled(
+  rows: readonly LabelPoint[],
+  pointId: string,
+  result: Extract<LabelMovePointResult, { ok: true }>,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, pointId, (p) => ({
+      ...p,
+      status: result.status,
+      server: result.server,
+      setNumber: result.setNumber,
+      gameNumber: result.gameNumber,
+      winner: result.winner,
+      endedBy: result.endedBy,
+    })),
+    result.shots,
+  );
+}
+
+/** A move undone: the point's columns and its strokes' hitters as `before` had them. */
+function pointMovePutBack(
+  rows: readonly LabelPoint[],
+  before: LabelPoint,
+): LabelPoint[] {
+  return applyShotSwaps(
+    replacePoint(rows, before.id, (p) => ({
+      ...p,
+      setNumber: before.setNumber,
+      gameNumber: before.gameNumber,
+      server: before.server,
+      status: before.status,
+      winner: before.winner,
+      endedBy: before.endedBy,
+    })),
+    shotSwapsOf(before.shots),
+  );
+}
+
+/**
+ * The ending a shot change calls for (`endingPatchForShotChange`, the rule
+ * the server settles it by), applied at once and taken back as it was read:
+ * while a write is in flight the stored ending must not disagree with the
+ * rows, or "Different ending?" asks about a change the write is already
+ * making. The server's `point` stays the last word.
+ */
+function endingFollow(
+  before: LabelPoint | null | undefined,
+  after: LabelPoint | null | undefined,
+  ghosts: boolean,
+): {
+  apply: (rows: LabelPoint[]) => LabelPoint[];
+  /** `pointId`: the row to put it back on, when its id may have changed. */
+  undo: (rows: LabelPoint[], pointId?: string) => LabelPoint[];
+} {
+  const patch =
+    before && after ? endingPatchForShotChange(before, after, ghosts) : null;
+  if (!patch || !before) return { apply: (rows) => rows, undo: (rows) => rows };
+  return {
+    apply: (rows) =>
+      replacePoint(rows, before.id, (p) => applyLabelPointPatch(p, patch)),
+    undo: (rows, pointId = before.id) =>
+      replacePoint(rows, pointId, (p) => ({
+        ...p,
+        ending: before.ending,
+        endedBy: before.endedBy,
+        winner: before.winner,
+        status: before.status,
+      })),
+  };
 }
 
 /**

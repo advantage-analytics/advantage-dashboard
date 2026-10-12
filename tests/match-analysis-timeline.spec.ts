@@ -382,6 +382,35 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     expect(cancelled?.vendorStartedAt).toBeUndefined();
     // A cancel is not a failure: no recovery class, so no Retry.
     expect(cancelled?.recovery).toBeUndefined();
+
+    // A live failure carries where its upload stopped, floored; a running
+    // upload carries none, so a resubmission resets the last attempt's. The
+    // row has a video key throughout — it is written before the bytes move.
+    const stopped = liveAnalysisPatch({
+      ...row,
+      status: "failed",
+      external_job_id: null,
+      upload_progress_percent: 27.8,
+    });
+    expect(stopped?.stoppedUploadPercent).toBe(27);
+    expect(stopped?.uploadPercent).toBeUndefined();
+    expect(stopped?.recovery).toBe("upload_again");
+    // A failure after the transfer finished did not stop part-way.
+    const afterUpload = liveAnalysisPatch({
+      ...row,
+      status: "failed",
+      external_job_id: null,
+      upload_progress_percent: 100,
+    });
+    expect(afterUpload).toHaveProperty("stoppedUploadPercent", undefined);
+    expect(afterUpload?.recovery).toBe("retry");
+    const rerun = liveAnalysisPatch({
+      ...row,
+      status: "uploading",
+      upload_progress_percent: 3,
+    });
+    expect(rerun).toHaveProperty("stoppedUploadPercent", undefined);
+    expect(rerun?.uploadPercent).toBe(3);
   });
 });
 

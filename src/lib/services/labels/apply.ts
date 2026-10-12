@@ -18,6 +18,10 @@
  * - A let serve (`isLetServe`) is replayed, not played: it is never written as
  *   a serve, so it cannot count as a first serve in or out. It still widens
  *   the point's clip window, as the derivation's dropped strokes do.
+ * - A serve stored in whose landing reads out or net (`inServeLandingMiss`)
+ *   is written as in with no `landing_x` / `landing_y` and no `zone`: the
+ *   landing is the vendor's wrong bounce, and a serve with no placement is
+ *   one every reader already skips (the derivation writes them too).
  * - Score strings come from the console's own scoreboard (`labelScores`),
  *   server-first like the vendor's, and the pressure flags from the same
  *   `pressureFor` the derivation runs over them.
@@ -41,6 +45,7 @@ import {
   type SplitStepRally,
 } from "@/lib/services/splitstep/derivation";
 import { publishEnding } from "./ending-derived";
+import { inServeLandingMiss } from "./shot-derived";
 import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
@@ -390,6 +395,9 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       }
       const facts =
         shot.eventId !== null ? vendor?.get(shot.eventId) : undefined;
+      // An in serve whose landing is outside the box carries the wrong
+      // bounce: written as in, without the landing or the zone read off it.
+      const landed = inServeLandingMiss(shot) === null;
       shots.push({
         shot_number: shotNumber(i, from),
         is_player1: shot.hitter === "p1",
@@ -398,14 +406,16 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
         speed_mph: facts?.speedMph ?? null,
         contact_x: shot.contactX,
         contact_y: shot.contactY,
-        landing_x: shot.landingX,
-        landing_y: shot.landingY,
+        landing_x: landed ? shot.landingX : null,
+        landing_y: landed ? shot.landingY : null,
         result: shotResultOf(shot.result),
         video_time: shot.videoTime,
         bounce_video_time: facts?.bounceVideoTime ?? null,
-        zone: isServeStroke(shot.stroke)
-          ? serveZone(shot.landingX)
-          : directionZone(shot.landingX, shot.contactX),
+        zone: !landed
+          ? null
+          : isServeStroke(shot.stroke)
+            ? serveZone(shot.landingX)
+            : directionZone(shot.landingX, shot.contactX),
         flags: [],
         derived: true,
       });

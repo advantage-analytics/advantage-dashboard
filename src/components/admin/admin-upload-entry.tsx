@@ -53,6 +53,36 @@ const choices = [
   },
 ] as const;
 
+/**
+ * `programs.status` as the console says it. Only `suspended` stops an upload
+ * here — see `adminCanUploadFor()` — so the rest are facts, not warnings.
+ */
+const STATUS_LABEL: Record<string, string> = {
+  active: "Pilot",
+  claim_pending: "Awaiting approval",
+  unclaimed: "Unclaimed",
+  suspended: "Suspended · uploads paused",
+};
+
+/** The check-dot radio: one spelling for the kind cards and the target row. */
+const CHECK_DOT_INPUT =
+  "absolute inset-0 size-3.5 cursor-pointer appearance-none rounded-full border border-[var(--ink-300)] bg-[var(--surface-card)] checked:border-[var(--blue)] checked:bg-[var(--blue)] disabled:cursor-default";
+const CHECK_DOT_MARK =
+  "pointer-events-none absolute top-1/2 left-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 text-white";
+
+const TARGETS = [
+  {
+    value: "new",
+    label: "New match",
+    detail: "Creates the match from this upload",
+  },
+  {
+    value: "existing",
+    label: "Existing recorded result",
+    detail: "Adds analysis to a result already entered",
+  },
+] as const;
+
 function FileOrVideo({
   context,
   kind,
@@ -110,35 +140,61 @@ function FileOrVideo({
   return (
     <div className="flex flex-col gap-5">
       {!attachment && (
-        <section aria-label="Analysis target" className="flex flex-col gap-3">
-          <div className="flex gap-4 text-[13px]">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="analysis-target"
-                checked={target === "new"}
-                disabled={pending}
-                onChange={() => {
-                  setTarget("new");
-                  setError(null);
-                }}
-              />
-              New match
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="analysis-target"
-                checked={target !== "new"}
-                disabled={pending}
-                onChange={chooseExisting}
-              />
-              Existing recorded result
-            </label>
-          </div>
+        // The wizard below is full-bleed; this row belongs to the page's column.
+        <section
+          aria-label="Analysis target"
+          className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-6"
+        >
+          <fieldset disabled={pending} className="flex flex-col gap-3">
+            <legend className="mb-3 text-[12px] text-[var(--ink-600)]">
+              Where does it go?
+            </legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {TARGETS.map(({ value, label, detail }) => {
+                const checked = (target === "new") === (value === "new");
+                return (
+                  <label
+                    key={value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] py-4 ${checked ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+                  >
+                    <span className="relative mt-[3px] size-3.5 shrink-0">
+                      <input
+                        type="radio"
+                        name="analysis-target"
+                        value={value}
+                        checked={checked}
+                        onChange={
+                          value === "new"
+                            ? () => {
+                                setTarget("new");
+                                setError(null);
+                              }
+                            : chooseExisting
+                        }
+                        className={CHECK_DOT_INPUT}
+                      />
+                      {checked && (
+                        <Check
+                          aria-hidden="true"
+                          className={CHECK_DOT_MARK}
+                          strokeWidth={2.5}
+                        />
+                      )}
+                    </span>
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="text-[13px] font-medium">{label}</span>
+                      <span className="text-[12px] text-[var(--ink-600)]">
+                        {detail}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           {target !== "new" && (
             <>
-              <label className="flex flex-col gap-2 text-[12px]">
+              <label className="flex flex-col gap-2 text-[12px] text-[var(--ink-600)]">
                 Recorded result
                 <select
                   aria-label="Recorded result"
@@ -162,7 +218,7 @@ function FileOrVideo({
               )}
               <button
                 type="button"
-                className={advButton("primary", "md")}
+                className={`${advButton("primary", "md")} self-start`}
                 disabled={pending || target === "existing"}
                 onClick={prepare}
               >
@@ -211,9 +267,12 @@ export function AdminUploadEntry({
 }) {
   const router = useRouter();
   const team = context?.workspace.id ?? null;
+  const wizardBelow = Boolean(context) && (kind === "file" || kind === "video");
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <main className="mx-auto flex w-full max-w-[1000px] flex-col gap-6 px-6 pt-9 pb-12">
+      <main
+        className={`mx-auto flex w-full max-w-[1000px] flex-col gap-6 px-6 pt-9 ${wizardBelow ? "pb-6" : "pb-12"}`}
+      >
         <div className="flex flex-col gap-1.5">
           <h1 className="text-display">Upload for a team</h1>
           <p className="text-[13px] text-[var(--ink-600)]">
@@ -256,9 +315,8 @@ export function AdminUploadEntry({
                   .join(" ")}
               </span>
               <span className="text-[12px] text-[var(--ink-600)]">
-                {context.workspace.programStatus === "active"
-                  ? "Pilot"
-                  : "Not active"}{" "}
+                {STATUS_LABEL[context.workspace.programStatus ?? ""] ??
+                  "Status unknown"}{" "}
                 · {(context.videoAllowance.remainingSeconds / 3600).toFixed(1)}{" "}
                 h of video left this month
               </span>
@@ -291,12 +349,12 @@ export function AdminUploadEntry({
                     checked={kind === value}
                     onChange={() => router.push(adminUploadHref(team, value))}
                     aria-label={label}
-                    className="absolute inset-0 size-3.5 cursor-pointer appearance-none rounded-full border border-[var(--ink-300)] bg-[var(--surface-card)] checked:border-[var(--blue)] checked:bg-[var(--blue)]"
+                    className={CHECK_DOT_INPUT}
                   />
                   {kind === value && (
                     <Check
                       aria-hidden="true"
-                      className="pointer-events-none absolute top-1/2 left-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 text-white"
+                      className={CHECK_DOT_MARK}
                       strokeWidth={2.5}
                     />
                   )}
@@ -339,14 +397,18 @@ export function AdminUploadEntry({
             Choose what you’re adding to continue.
           </p>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-[var(--ink-600)]">
-          <span>Uploads are attributed to the selected team.</span>
-          <Link href="/admin/uploads" className="hover:text-[var(--ink-900)]">
-            Cancel
-          </Link>
-        </div>
+        {/* The wizard carries its own Cancel, and this line would otherwise
+            sit between the two questions it should follow. */}
+        {!wizardBelow && (
+          <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-[var(--ink-600)]">
+            <span>Uploads are attributed to the selected team.</span>
+            <Link href="/admin/uploads" className="hover:text-[var(--ink-900)]">
+              Cancel
+            </Link>
+          </div>
+        )}
       </main>
-      {context && (kind === "file" || kind === "video") && (
+      {context && wizardBelow && (kind === "file" || kind === "video") && (
         <FileOrVideo key={`${team}:${kind}`} context={context} kind={kind} />
       )}
     </div>

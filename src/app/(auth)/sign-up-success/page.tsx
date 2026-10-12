@@ -1,64 +1,30 @@
-"use client";
+import { SignUpSuccess } from "@/components/auth/sign-up-success";
+import { safeNext } from "@/lib/auth/safe-next";
+import { joinTokenFromPath } from "@/lib/services/programs/join-links";
+import { joinProgramNameForNext } from "@/lib/services/programs/join-state-server";
 
-import Link from "next/link";
-import FormHeader from "@/components/auth/form-header";
-import AuthButton from "@/components/auth/auth-button";
-import AuthFooter, { AUTH_LINK } from "@/components/auth/auth-footer";
+export const metadata = { title: "Account created" };
 
-/** What happens next, in the order it happens. */
-const STEPS = [
-  "Open the link from your inbox",
-  "Confirm your email address",
-  "Land on your dashboard",
-];
+/**
+ * Reads `?next=` so the screen can say where the confirmation mail leads.
+ *
+ * `SignUpForm` forwards its destination here. For an ordinary sign-up there is
+ * none and this renders the screen it always did. For one that began on a join
+ * link, "You've Joined the Team" would be false — the account exists, the
+ * membership does not yet — so the client component swaps the title and the
+ * last step, and its links back into auth keep the same `next`.
+ */
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { next: raw } = await searchParams;
+  const next = safeNext(typeof raw === "string" ? raw : null);
+  const joining = joinTokenFromPath(next) !== null;
+  const joinProgram = joining ? await joinProgramNameForNext(next) : null;
 
-export default function Page() {
   return (
-    <div
-      className="flex w-full max-w-[360px] flex-col gap-[24px]"
-      style={{ animation: "fadeUp 0.5s ease-out" }}
-    >
-      <FormHeader
-        eyebrow="Account created"
-        title="You've Joined the Team."
-        description="We sent a confirmation link to your email. Open it to activate your account."
-      />
-
-      <ol className="flex flex-col">
-        {STEPS.map((step, index) => (
-          <li
-            key={step}
-            className="flex items-baseline gap-[12px] border-t border-[var(--border-hairline)] py-[10px]"
-          >
-            <span className="mono tabular text-[11px] text-[var(--ink-500)]">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <span className="text-body-sm">{step}</span>
-          </li>
-        ))}
-      </ol>
-
-      <div className="flex flex-col gap-[16px]">
-        <AuthButton onClick={() => window.open("mailto:", "_blank")}>
-          Open Email App
-        </AuthButton>
-
-        <AuthFooter>
-          <span className="text-body-sm">
-            Already confirmed?{" "}
-            <Link href="/login" className={AUTH_LINK}>
-              Sign in
-            </Link>
-          </span>
-          <span className="text-micro">
-            Nothing after a minute? Check your spam folder or{" "}
-            <Link href="/sign-up" className={AUTH_LINK}>
-              sign up again
-            </Link>
-            .
-          </span>
-        </AuthFooter>
-      </div>
-    </div>
+    <SignUpSuccess next={next} joining={joining} joinProgram={joinProgram} />
   );
 }

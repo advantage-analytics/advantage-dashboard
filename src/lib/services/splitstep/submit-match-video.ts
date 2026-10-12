@@ -3,6 +3,11 @@ import {
   UploadAbortedError,
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
+import { holdTabAwake } from "@/lib/services/upload/tab-keep-awake";
+import {
+  ensureJobLive,
+  SUPERSEDED_UPLOAD_MESSAGE,
+} from "@/lib/services/splitstep/job-liveness";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
 import { remuxedJobWindow } from "@/lib/video/trim-plan";
@@ -47,6 +52,16 @@ export { refusalCodeFor };
  * would destroy a recorded result. So the caller decides.
  */
 
+/**
+ * How long a transfer may run without re-reading its job's status. Blocks
+ * follow each other within seconds, so a gap this long means the tab was
+ * suspended — and the job may have been reaped while it was.
+ */
+const LIVENESS_CHECK_MS = 30_000;
+
+/** How many times a forced check asks before going on without an answer. */
+const LIVENESS_COMMIT_ATTEMPTS = 3;
+
 /** Bytes moved so far, and what that implies. */
 export interface VideoUploadProgress {
   /**
@@ -87,7 +102,15 @@ export type VideoUploadEvent = { matchId: string } & (
    */
   | { kind: "submit_failed"; error: string }
   | { kind: "cancelled" }
-  | { kind: "failed"; error: string }
+  | {
+      kind: "failed";
+      error: string;
+      /**
+       * Set when the failure belongs to one specific job that has been
+       * replaced; an upload state holding a different job ignores it.
+       */
+      jobId?: string;
+    }
 );
 
 /** The three answers no lineup and no event can know. */
@@ -220,16 +243,58 @@ export async function uploadAndSubmitVideo({
     return event.returnValue;
   };
   window.addEventListener("beforeunload", handleBeforeUnload);
+  // The other way an hour-long upload dies: the computer sleeps. Held for the
+  // cut and the transfer, released wherever the unload guard comes off.
+  const awake = holdTabAwake();
 
   let preparedStorageName: string | null = null;
+
+  // Set when the job has failed underneath this tab — reaped while the
+  // computer slept, or replaced. See `job-liveness.ts`: from then on nothing
+  // more may be written to the match's blob, least of all the commit.
+  let superseded = false;
+  let livenessCheckedAt = Date.now();
+  const stopIfSuperseded = async (force: boolean) => {
+    if (superseded) return;
+    // One read a block would be hundreds on a full match. Unforced, it asks
+    // at most once per interval — about two reads a minute of transfer — and
+    // so always on the first request after a pause, which is what a sleep
+    // looks like.
+    if (!force && Date.now() - livenessCheckedAt < LIVENESS_CHECK_MS) return;
+    // The commit publishes the file, so an answer matters most there: a
+    // computer that has just woken is often offline for its first seconds.
+    const attempts = force ? LIVENESS_COMMIT_ATTEMPTS : 1;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      const liveness = await ensureJobLive(supabase, jobId);
+      if (liveness === "superseded") {
+        superseded = true;
+        controller.abort();
+        return;
+      }
+      if (liveness === "live") {
+        // Only an answer resets the clock. After a read that failed, the
+        // very next request asks again rather than running blind for the
+        // rest of the interval.
+        livenessCheckedAt = Date.now();
+        return;
+      }
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  };
+  const refuseIfSuperseded = async (force: boolean) => {
+    await stopIfSuperseded(force);
+    if (superseded) throw new UploadAbortedError();
+  };
 
   try {
     let file = pickedFile;
 
     if (trim) {
-      // `reap_stalled_uploads()` marks a job failed after 15 minutes without a
-      // progress write. A long cut writes nothing, so keep the heartbeat going
-      // at the same 60-second cadence the transfer uses.
+      // An upload with no progress write for twenty minutes reads as paused,
+      // and is mailed about (`isUploadPaused()`). A long cut writes nothing,
+      // so keep the heartbeat going at the transfer's 60-second cadence.
       const heartbeat = window.setInterval(() => {
         void supabase
           .from("processing_jobs")
@@ -293,6 +358,10 @@ export async function uploadAndSubmitVideo({
       }
     }
 
+    // Before asking for a URL: the route records the blob name on the match's
+    // LIVE job, which after a long cut may no longer be this one.
+    await refuseIfSuperseded(true);
+
     const res = await fetch("/api/splitstep/upload-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -342,6 +411,7 @@ export async function uploadAndSubmitVideo({
           // Local UI first: throttled only to the precision it can actually
           // show, not to the database's cadence. A bar that moves once a minute
           // is the problem this exists to fix.
+          awake.setPercent(exact);
           const tenth = Math.round(exact * 10);
           if (tenth !== lastSentTenth) {
             lastSentTenth = tenth;
@@ -370,22 +440,35 @@ export async function uploadAndSubmitVideo({
 
           // Fire-and-forget: a dropped progress write must never disturb the
           // upload itself.
+          //
+          // Only onto a row that is still uploading. A write that finds none
+          // means the job moved underneath this tab — reaped while it slept,
+          // most likely — so ask whether the upload is still ours.
           void supabase
             .from("processing_jobs")
             .update({ upload_progress_percent: pct })
             .eq("id", jobId)
-            .then(({ error }) => {
+            .in("status", ["pending", "uploading"])
+            .select("id")
+            .then(({ data, error }) => {
               if (error) {
                 console.warn(
                   "Could not record upload progress:",
                   error.message,
                 );
+                return;
               }
+              if ((data?.length ?? 0) === 0) void stopIfSuperseded(true);
             });
         },
+        // Before every block that follows a pause, every retry, and always
+        // before the commit — the write that publishes this file over
+        // anything else uploaded for the match in the meantime.
+        beforeRequest: (kind) => refuseIfSuperseded(kind === "commit"),
       });
     } finally {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      awake.release();
     }
 
     // The bytes are committed in Azure; the local cut has done its job.
@@ -397,7 +480,7 @@ export async function uploadAndSubmitVideo({
     // The terminal write, checked and retried once (`mark-job-uploaded.ts`).
     // If it still does not land, the row is stuck at `uploading`: submitting
     // would only earn a 409 from `/api/splitstep/jobs`, and the reaper would
-    // fail it silently 15 minutes from now. So don't submit — throw into the
+    // fail it silently hours from now. So don't submit — throw into the
     // transfer-failure path below, which marks the job failed and reports it
     // through `onEvent` / `onTransferFailed` like any other failed upload.
     const marked = await markJobUploaded(supabase, { jobId, videoObjectKey });
@@ -497,6 +580,7 @@ export async function uploadAndSubmitVideo({
     }
   } catch (uploadErr) {
     window.removeEventListener("beforeunload", handleBeforeUnload);
+    awake.release();
     if (preparedStorageName) void discardPreparedVideo(preparedStorageName);
 
     const cancelled =
@@ -507,26 +591,41 @@ export async function uploadAndSubmitVideo({
       cancelled ? "" : uploadErr,
     );
 
-    const message =
-      uploadErr instanceof Error ? uploadErr.message : "Video upload failed";
+    const message = superseded
+      ? SUPERSEDED_UPLOAD_MESSAGE
+      : uploadErr instanceof Error
+        ? uploadErr.message
+        : "Video upload failed";
     onEvent?.(
-      cancelled
+      cancelled && !superseded
         ? { matchId, kind: "cancelled" }
-        : { matchId, kind: "failed", error: message },
+        : superseded
+          ? // Named, so a newer upload of this match running in the same tab
+            // does not take this one's ending for its own.
+            { matchId, kind: "failed", error: message, jobId }
+          : { matchId, kind: "failed", error: message },
     );
 
-    // Best effort: a failed write here leaves the row for
-    // `reap_stalled_uploads()`, which is no worse than before — but say so.
-    const { error: failError } = await supabase
-      .from("processing_jobs")
-      .update({
-        status: "failed",
-        error_message: message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-    if (failError) {
-      console.error("Could not mark the job failed:", failError.message);
+    // A superseded job is already settled, and no longer this tab's row to
+    // write: it was failed by the reaper, or by whoever replaced it.
+    if (!superseded) {
+      // Best effort: a failed write here leaves the row for
+      // `reap_stalled_uploads()`, which is no worse than before — but say so.
+      const { error: failError } = await supabase
+        .from("processing_jobs")
+        .update({
+          status: "failed",
+          error_message: message,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", jobId)
+        // Never over a job that got past uploading. If the terminal write
+        // landed and only its confirmation was lost, the row says `uploaded`
+        // and the video is committed; calling that failed would discard it.
+        .in("status", ["pending", "uploading"]);
+      if (failError) {
+        console.error("Could not mark the job failed:", failError.message);
+      }
     }
 
     // Fires on a user cancel too. That is what the wizard did before this move

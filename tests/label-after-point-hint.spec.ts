@@ -14,7 +14,7 @@ import { POINT_1_SHOTS } from "./fixtures/label-session";
 
 /**
  * The hints read off the labelled rows (marks-state.ts): "Point ended here" —
- * the last stroke whose ball was out or in the net with strokes after it —
+ * the second-to-last stroke, when its ball was out —
  * then "Ending looks stale", "Second serve?", "No landing on the last shot"
  * (with its counted twin "Ending can't be read") and "Serve after a serve in
  * play".
@@ -49,7 +49,7 @@ const LONG = { x: 0, y: 25 };
 const NETTED = { x: 0, y: 8 };
 
 test.describe("pointEndedEarly", () => {
-  test("the last out ball with one stroke after it, and with three", () => {
+  test("an out ball with one stroke after it; with more after it, play went on", () => {
     const one = pointEndedEarly(
       { shots: [stroke("a", IN), stroke("b", LONG), stroke("c", IN)] },
       true,
@@ -62,7 +62,7 @@ test.describe("pointEndedEarly", () => {
     });
     expect(hintLabel(one!)).toBe("Did the point end here? 1 shot follows");
     expect(markHover(one!, NAMES)).toBe(
-      "This shot reads as out or in the net, yet play went on. If the point ended here, split what follows into its own point or remove it. If the call is wrong, fix the landing or dismiss this.",
+      "This shot reads as out, yet one more stroke follows it. If the point ended here, answer yes to mark it out and remove that stroke, or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
     );
 
     const three = pointEndedEarly(
@@ -76,23 +76,31 @@ test.describe("pointEndedEarly", () => {
       },
       true,
     );
-    expect(three?.params).toEqual({ shotId: "a", after: ["b", "c", "d"] });
-    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
+    expect(three).toBeNull();
   });
 
-  test("the LAST out ball: an earlier one is the point still going", () => {
+  test("only the second-to-last stroke: an earlier out read is the point still going", () => {
     const hint = pointEndedEarly(
       {
         shots: [
           stroke("a", LONG),
           stroke("b", IN),
-          stroke("c", NETTED),
+          stroke("c", LONG),
           stroke("d", IN),
         ],
       },
       true,
     );
     expect(hint?.params).toEqual({ shotId: "c", after: ["d"] });
+  });
+
+  test("never a net read: the vendor's bounce on the hitter's own side is usually the incoming one", () => {
+    expect(
+      pointEndedEarly(
+        { shots: [stroke("a", IN), stroke("b", NETTED), stroke("c", IN)] },
+        true,
+      ),
+    ).toBeNull();
   });
 
   test("the result is the coordinates' when all four are placed, the stored one until then", () => {
@@ -114,8 +122,8 @@ test.describe("pointEndedEarly", () => {
       pointEndedEarly(
         { shots: [stroke("a", null, { result: "net" }), stroke("b", IN)] },
         true,
-      )?.params,
-    ).toEqual({ shotId: "a", after: ["b"] });
+      ),
+    ).toBeNull();
     expect(
       pointEndedEarly(
         { shots: [stroke("a", null, { result: null }), stroke("b", IN)] },
@@ -124,7 +132,7 @@ test.describe("pointEndedEarly", () => {
     ).toBeNull();
   });
 
-  test("a second serve out or in the net is a double fault: the strokes after it were hit after the point ended", () => {
+  test("a second serve out is a double fault: the stroke after it was hit after the point ended", () => {
     const serves = (second: { x: number; y: number }) => [
       stroke("a", LONG, { stroke: "first_serve" }),
       stroke("b", second, { stroke: "second_serve" }),
@@ -133,20 +141,23 @@ test.describe("pointEndedEarly", () => {
       pointEndedEarly({ shots: [...serves(LONG), stroke("c", IN)] }, true)
         ?.params,
     ).toEqual({ shotId: "b", after: ["c"] });
-    // Three after it: too many to take with the edit, so the hint offers it.
-    const three = pointEndedEarly(
-      {
-        shots: [
-          ...serves(NETTED),
-          stroke("c", IN),
-          stroke("d", IN),
-          stroke("e", IN),
-        ],
-      },
-      true,
-    );
-    expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
-    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
+    // Netted, or with a rally after it: not asked.
+    expect(
+      pointEndedEarly({ shots: [...serves(NETTED), stroke("c", IN)] }, true),
+    ).toBeNull();
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            ...serves(LONG),
+            stroke("c", IN),
+            stroke("d", IN),
+            stroke("e", IN),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
   });
 
   test("nothing when the out ball is the last stroke, is a serve, or there is none", () => {

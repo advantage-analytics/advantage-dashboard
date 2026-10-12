@@ -84,6 +84,23 @@ test.describe("autosaved format answers stay in their workspace", () => {
     expect(loaded).not.toHaveProperty("playOnLets");
   });
 
+  test("another workspace does not inherit the opponent's team", () => {
+    saveFormDataToStorage(
+      {
+        ...saved,
+        opponentTeamSchool: "Somewhere State",
+        opponentTeamSource: "picked",
+      },
+      "team:college-a",
+    );
+    const other = loadFormDataFromStorage("personal:user-1");
+    expect(other).not.toHaveProperty("opponentTeamSchool");
+    expect(other).not.toHaveProperty("opponentTeamSource");
+    expect(loadFormDataFromStorage("team:college-a")?.opponentTeamSchool).toBe(
+      "Somewhere State",
+    );
+  });
+
   test("an untagged save is treated as another workspace's", () => {
     store.set("uploadFormData", JSON.stringify(saved));
     expect(loadFormDataFromStorage("team:college-a")).not.toHaveProperty(

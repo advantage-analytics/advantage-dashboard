@@ -30,7 +30,11 @@ import {
   type LabelPoint,
   type LabelShot,
 } from "./session";
-import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
+import {
+  effectiveShotResult,
+  inServeLandingMiss,
+  type ResultReadableShot,
+} from "./shot-derived";
 import {
   addedPointBetween,
   pointEndedKey,
@@ -156,6 +160,13 @@ export function markState(
     }
   }
 
+  // Read off the rows as they stand, so while it is there it is still true:
+  // an edit that leaves the point stopping on a missed first serve has not
+  // settled it.
+  if (mark.code === "first_serve_fault_alone") {
+    return checked ? "checked-as-is" : "open";
+  }
+
   if (pointChanged(point)) return checked ? "checked" : "settled";
   return checked ? "checked-as-is" : "open";
 }
@@ -271,53 +282,57 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
 }
 
 /**
- * "Point ended here": the last live stroke that is not a first serve and
- * whose ball was out or in the net — a rally ball, or a second serve's double
- * fault (`endsPointWhenMissed`) — with one or more live strokes after it. Those were
- * hit after the point ended — or are a second point the vendor ran into this
- * one — so the hint offers to remove them or to split there. Live means not
- * deleted and, with `ghosts` on, not a ghost. Only the latest such stroke is
- * asked about, and not once the labeller has settled it or anything after it.
+ * "Point ended here": the point's second-to-last live stroke, when it is not a
+ * first serve and its ball reads out — a rally ball, or a second serve's
+ * double fault (`endsPointWhenMissed`). The one stroke after it was hit after
+ * the point ended, so the hint offers to remove it or to split there. Live
+ * means not deleted and, with `ghosts` on, not a ghost. Not once the labeller
+ * has settled it or anything after it.
+ *
+ * Only at the end, and never a net call. Measured 2026-10-10 over every
+ * checked label point: a stroke read missed from the vendor's bounce with a
+ * whole rally after it was a ball in play on 247 of 251 strokes in Andy
+ * Nguyen v Shaurya Bharadwaj alone. That bounce is often the wrong bounce,
+ * the incoming one on the hitter's own side, which reads as a net ball. Held to
+ * the second-to-last stroke, an out read ended the point 25 times in 47, and
+ * a net read 6 times in 40.
  */
 export function pointEndedEarly(
   point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
   ghosts: boolean,
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
+  if (live.length < 2) return null;
+  const i = live.length - 2;
+  const shot = live[i];
+  if (!endsPointWhenMissed(shot.stroke)) return null;
+  if (effectiveShotResult(shot) !== "out") return null;
+  // Settled once the labeller has looked at this stroke or one after it:
+  // dismissed the question there, or edited, added or deleted a stroke
+  // after it.
   const ordered = orderLabelShots(point.shots);
   const dismissed = new Set(point.dismissed ?? []);
-  for (let i = live.length - 2; i >= 0; i -= 1) {
-    const shot = live[i];
-    if (!endsPointWhenMissed(shot.stroke)) continue;
-    if (!isMissedResult(effectiveShotResult(shot))) continue;
-    // Settled once the labeller has looked at this stroke or one after it:
-    // dismissed the question there, or edited, added or deleted a stroke
-    // after it. Play went on past a later stroke, so the rally was live
-    // through every one before it — the question does not move up the rally
-    // to a stroke the labeller has already watched go by.
-    const at = ordered.findIndex((s) => s.id === shot.id);
-    const settled =
-      dismissed.has(pointEndedKey(shot.id)) ||
-      ordered.slice(at + 1).some(
-        (s) =>
-          dismissed.has(pointEndedKey(s.id)) ||
-          s.status === "edited" ||
-          s.status === "added" ||
-          // A stroke added and deleted by mistake was never looked at.
-          (s.status === "deleted" && !isWithdrawnAdd(s)),
-      );
-    if (settled) return null;
-    return {
-      code: "shot_after_point_end",
-      tier: "hint",
-      scope: "point",
-      params: {
-        shotId: shot.id,
-        after: live.slice(i + 1).map((s) => s.id),
-      },
-    };
-  }
-  return null;
+  const at = ordered.findIndex((s) => s.id === shot.id);
+  const settled =
+    dismissed.has(pointEndedKey(shot.id)) ||
+    ordered.slice(at + 1).some(
+      (s) =>
+        dismissed.has(pointEndedKey(s.id)) ||
+        s.status === "edited" ||
+        s.status === "added" ||
+        // A stroke added and deleted by mistake was never looked at.
+        (s.status === "deleted" && !isWithdrawnAdd(s)),
+    );
+  if (settled) return null;
+  return {
+    code: "shot_after_point_end",
+    tier: "hint",
+    scope: "point",
+    params: {
+      shotId: shot.id,
+      after: live.slice(i + 1).map((s) => s.id),
+    },
+  };
 }
 
 /** A stroke with no landing placed, the labeller not having called it unclear. */
@@ -374,6 +389,77 @@ export function lastShotUnresolved(
     scope: "point",
     params: {},
   };
+}
+
+/**
+ * "Fault, no second serve": the point's last live stroke is a first serve
+ * stored out or in the net (by its landing, with nothing stored), so the rows stop
+ * where a point cannot — a second serve followed, or the serve was in and a
+ * rally did. A `count` mark, raised live by score-marks.ts; gone once a
+ * stroke follows it or its call changes. Never on a replayed let or a
+ * non-point, whose ending says the rows do not decide it, nor on the serve
+ * "Second serve?" already asks about.
+ */
+export function firstServeFaultAlone(
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "ending">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "first_serve_fault_alone" }> | null {
+  if (isNonPointEnding(point.ending ?? null)) return null;
+  // Cheap exit before the sort: some stroke must be a first serve.
+  if (!point.shots.some((shot) => shot.stroke === "first_serve")) return null;
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || last.stroke !== "first_serve") return null;
+  // The result the row shows and the publish writes: the stored one. A serve
+  // stored in with a landing outside the box is "Serve in, landing outside
+  // the box" (`serveInLandingOut`), not a fault.
+  if (!isMissedResult(last.result ?? effectiveShotResult(last))) return null;
+  // After an earlier fault it is the second serve under the wrong name:
+  // "Second serve?" asks that, and retyping it makes a double fault.
+  if (secondServeAsFirst(point, ghosts)?.params.shotId === last.id) {
+    return null;
+  }
+  return {
+    code: "first_serve_fault_alone",
+    tier: "count",
+    scope: "point",
+    params: {},
+  };
+}
+
+/**
+ * "Serve in, landing outside the box": a live serve stored `in` whose own
+ * coordinates read out or net (`deriveShotResult`). The seed stores a first
+ * serve as in when a rally follows it with no second serve — it must have
+ * been — but keeps the vendor's bounce, which is often the wrong one; the
+ * publish writes such a serve as in with no landing and no placement
+ * (apply.ts) until the bounce is placed in the box. Measured 2026-10-11 over the checked points of six
+ * hand-labelled sessions: 60 such serves, the landing re-placed on 5. A
+ * quiet hint, never counted: the score is right either way. The first such
+ * serve in video order; a let is replayed and not read.
+ */
+export function serveInLandingOut(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "serve_in_landing_out" }> | null {
+  // Cheap exit before the sort: some serve must be stored in.
+  if (
+    !point.shots.some(
+      (shot) => shot.result === "in" && isServeStroke(shot.stroke),
+    )
+  ) {
+    return null;
+  }
+  for (const shot of liveShotsInOrder(point, ghosts)) {
+    const landing = inServeLandingMiss(shot);
+    if (landing === null) continue;
+    return {
+      code: "serve_in_landing_out",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: shot.id, landing },
+    };
+  }
+  return null;
 }
 
 /**

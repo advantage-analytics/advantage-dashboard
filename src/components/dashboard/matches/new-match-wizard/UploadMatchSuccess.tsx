@@ -26,6 +26,7 @@ import {
   VerticalStep,
   type StepState,
 } from "@/components/dashboard/shared/vertical-steps";
+import { UploadKeepOpenNote } from "../upload-keep-open-note";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
@@ -478,15 +479,10 @@ function stepBody(
           </span>
           {upload?.cancel && <CancelUploadControl cancel={upload.cancel} />}
         </div>
-        {/* The instruction first, in the darker ink; the reassurance under it,
-            quieter. Leaving in-app is safe — only closing the tab stops the
-            transfer, and `beforeunload` guards that. */}
-        <div className="mt-1 flex flex-col gap-0.5">
-          <p className={cn(NOTE, "text-[var(--ink-700)]")}>
-            {UPLOADING_COPY.notes.keepTabOpen}
-          </p>
-          <p className={NOTE}>{UPLOADING_COPY.notes.keepUsing}</p>
-        </div>
+        {/* Leaving in-app is safe — only closing the tab or a sleeping
+            computer stops the transfer; `beforeunload` guards the first and
+            the wake lock in `submit-match-video.ts` the second. */}
+        <UploadKeepOpenNote />
       </>
     );
   }
@@ -635,8 +631,8 @@ function wizardHref(url: URL | null, match: string | null): string {
  *
  * ── It re-sends the lost "failed" first ─────────────────────────────────────
  * When a transfer dies because the connection dropped, the write marking its
- * job `failed` usually dies with it, and the job sits at `uploading` until the
- * reaper retires it a quarter of an hour later. The `?match=` page counts that
+ * job `failed` usually dies with it, and the job sits at `uploading` — reading
+ * as paused after twenty minutes — until the reaper retires it hours later. The `?match=` page counts that
  * as live and sends the person to the match instead of the wizard. So the
  * click writes it again — the same write the transfer's own catch makes, and
  * only onto a job still claiming to upload — and follows the link however

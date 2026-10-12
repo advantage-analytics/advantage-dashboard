@@ -27,6 +27,7 @@ import {
   isWorking,
   jobRecoveryFacts,
   pipelinePercent,
+  stoppedUploadPercent,
   recoveryFields,
   resolveAnalysisStatus,
 } from "./match-analysis";
@@ -69,6 +70,8 @@ export type ActivityAnalysis = Pick<
   | "status"
   | "progressPercent"
   | "uploadPercent"
+  | "stoppedUploadPercent"
+  | "updatedAt"
   | "startedAt"
   | "recovery"
   | "jobId"
@@ -325,6 +328,11 @@ export async function getActivityFeed(
         // transitions without a percentage, so anything shown for queued or
         // processing would be invented.
         uploadPercent,
+        // A failed upload keeps the upload row's shape in the tray, frozen
+        // where it stopped. The tray draws it for `upload_again` only.
+        stoppedUploadPercent: stoppedUploadPercent(row),
+        // When the row last moved — what `isUploadPaused()` reads.
+        updatedAt: row.updated_at,
         startedAt: row.created_at,
         recovery,
         jobId: row.id,

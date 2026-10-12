@@ -15,6 +15,9 @@
 // looked at. Name only controls that OPEN or SWITCH something — never one that
 // sends, saves, deletes or confirms; the account is real and so is its data.
 //
+// A path under /dashboard/team runs in the team workspace automatically; prefix
+// any other path with "team:" to run it there too: "team:/dashboard/opponents".
+//
 // Environment (loaded from the checkout's .env.local via scripts/lib/env.ts —
 // never pass the values on a command line, and never print them):
 //   EYES_ON_EMAIL / EYES_ON_PASSWORD   the verifier account. Unset → exit 2.
@@ -41,6 +44,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvLocal } from "../lib/env.ts";
+import { parsePathSpec } from "./path-spec.mjs";
 
 /** The checkout this script lives in — .env.local and `next dev` both
  * belong to it, whatever directory the caller happened to be in. */
@@ -57,7 +61,7 @@ const DEV_SERVER_GRACE_MS = 3_000;
 function usage(msg) {
   if (msg) console.error(`capture: ${msg}`);
   console.error(
-    "usage: node scripts/eyes-on/capture.mjs --out <dir> <path> [<path> …]",
+    "usage: node scripts/eyes-on/capture.mjs --out <dir> <path> [<path> …]\n  <path> = [team:]/route[::<click>…]  (team: runs it in the team workspace)",
   );
   process.exit(1);
 }
@@ -72,11 +76,11 @@ for (let i = 0; i < argv.length; i++) {
     out = argv[++i] ?? "";
   } else if (a.startsWith("--out=")) {
     out = a.slice("--out=".length);
-  } else if (a.startsWith("/")) {
-    // "<path>::<click>::<click>" — see the header.
+  } else if (parsePathSpec(a)) {
+    // "[team:]<path>::<click>::<click>" — see the header.
     paths.push(a);
   } else {
-    usage(`unknown argument: ${a} (paths start with "/")`);
+    usage(`unknown argument: ${a} (paths start with "/" or "team:/")`);
   }
 }
 // The header's rule, enforced where it can be: a click whose name reads as an
@@ -86,10 +90,7 @@ for (let i = 0; i < argv.length; i++) {
 const ACTS_ON_DATA =
   /\b(send|save|delete|remove|revoke|confirm|submit|turn off|reset|sign out|leave|archive|approve|decline|accept|transfer|upgrade|pay)\b/i;
 for (const spec of paths) {
-  const refused = spec
-    .split("::")
-    .slice(1)
-    .find((c) => ACTS_ON_DATA.test(c));
+  const refused = parsePathSpec(spec).clicks.find((c) => ACTS_ON_DATA.test(c));
   if (refused) {
     usage(
       `refusing to press "${refused}": clicks may only open or switch something`,
@@ -387,9 +388,10 @@ async function main() {
 
   // ── pages ──
   for (const spec of paths) {
-    const [path, ...clicks] = spec.split("::");
+    const { team: wantTeam, path, clicks } = parsePathSpec(spec);
     const entry = {
       path,
+      workspace: wantTeam ? "team" : "personal",
       clicks,
       finalUrl: "",
       status: null,
@@ -404,7 +406,6 @@ async function main() {
     // The active workspace is a cookie the server re-validates against
     // membership (src/lib/workspace/workspace-cookie.ts). Team paths get the
     // configured program; everything else runs in the personal workspace.
-    const wantTeam = path.startsWith("/dashboard/team");
     await context.clearCookies({ name: "advantage_workspace" });
     if (wantTeam && env.teamWorkspace) {
       await context.addCookies([
@@ -426,7 +427,10 @@ async function main() {
       entry.finalUrl = p.url().replace(baseUrl, "");
       entry.title = await p.title();
       if (/^\/login/.test(entry.finalUrl)) entry.note = "bounced to /login";
-      else if (wantTeam && !entry.finalUrl.startsWith("/dashboard/team"))
+      else if (
+        path.startsWith("/dashboard/team") &&
+        !entry.finalUrl.startsWith("/dashboard/team")
+      )
         entry.note = `bounced to ${entry.finalUrl} (workspace not applied?)`;
       else if (/^\/onboarding/.test(entry.finalUrl))
         entry.note = "bounced to /onboarding (verifier account not onboarded)";

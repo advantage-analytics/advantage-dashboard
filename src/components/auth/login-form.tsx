@@ -18,7 +18,7 @@ import {
   AUTH_NEXT_COOKIE,
   AUTH_NEXT_MAX_AGE_SECONDS,
 } from "@/lib/auth/auth-next-cookie";
-import { safeNext } from "@/lib/auth/safe-next";
+import { authHref, safeNext } from "@/lib/auth/safe-next";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -62,7 +62,14 @@ const GOOGLE_MARK = (
  *   idempotent, and both navigations below are same-file, so the guarantee
  *   that no attacker-controlled origin reaches them should be too.
  */
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({
+  next,
+  joinProgram,
+}: {
+  next?: string;
+  /** The team `next` leads to, when it is a join link. Names it in the header. */
+  joinProgram?: string | null;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<AuthError | null>(null);
@@ -150,11 +157,19 @@ export function LoginForm({ next }: { next?: string }) {
       className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
-      <FormHeader
-        eyebrow="Sign in"
-        title="Welcome Back."
-        description="Your matches, your numbers, and whatever your program has sent for you."
-      />
+      {joinProgram ? (
+        <FormHeader
+          eyebrow={`Joining ${joinProgram}`}
+          title="Welcome Back."
+          description="You'll see what your coaches can see before anything is shared, then decide whether to join."
+        />
+      ) : (
+        <FormHeader
+          eyebrow="Sign in"
+          title="Welcome Back."
+          description="Your matches, your numbers, and whatever your program has sent for you."
+        />
+      )}
 
       <div className="flex flex-col gap-[20px]">
         <FormField
@@ -215,7 +230,10 @@ export function LoginForm({ next }: { next?: string }) {
         <AuthFooter>
           <span className="text-body-sm">
             New here?{" "}
-            <Link href="/sign-up" className={AUTH_LINK}>
+            <Link
+              href={authHref("/sign-up", destination)}
+              className={AUTH_LINK}
+            >
               Create an account
             </Link>
           </span>

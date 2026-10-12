@@ -1,4 +1,4 @@
-import { getInitials } from "@/lib/data/match-utils";
+import { crestLetters } from "@/lib/ui/crest-letters";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils";
  * (`InitialsAvatar`) and puts every other mark on a 6–8px radius square, so a
  * program and a person on the same page never read as the same kind of thing.
  *
+ * Letters: `crestLetters(shortCode, name)` — the short code when it is 1-3
+ * characters, else the name's initials cut to three. The size is fixed per
+ * tile (9px at 26, 10px at 38 and 52, 16px at 64) and the tile never wraps,
+ * scales or grows to fit them — design "Team crests" rules table (Letter
+ * size, Letter count, No wrap in the tile).
+ *
  * `<img>` rather than `next/image`: the crest is ≤512 KB by bucket rule and
  * drawn at 38–52px, and `next.config.ts` whitelists no remote image host. The
  * lint rule is `warn`, and the repo disables it inline where a plain image is
@@ -16,11 +22,14 @@ import { cn } from "@/lib/utils";
 export function ProgramCrest({
   name,
   crestUrl,
+  shortCode,
   size = 38,
   className,
 }: {
   name: string;
   crestUrl: string | null;
+  /** The program's school abbreviation, when known; see `crestLetters`. */
+  shortCode?: string | null;
   /**
    * 26 in the admin teams table, 38 in a list row, 52 at the head of the
    * identity card, 64 at the head of the admin team page.
@@ -47,7 +56,9 @@ export function ProgramCrest({
         // (`check-design-drift` check 2 fails on it). 16px is the nearest step
         // above and reads the same at 64px.
         "text-[16px] font-semibold text-[var(--ink-700)]"
-      : "text-[10px] font-medium tracking-[1px] text-[var(--ink-600)]";
+      : size === 26
+        ? "text-[9px] font-medium tracking-[0.2px] text-[var(--ink-600)]"
+        : "text-[10px] font-medium tracking-[1px] text-[var(--ink-600)]";
 
   if (crestUrl) {
     return (
@@ -73,11 +84,11 @@ export function ProgramCrest({
         box,
         shape,
         initials,
-        "flex shrink-0 items-center justify-center bg-[var(--surface-subtle)]",
+        "flex flex-none items-center justify-center overflow-hidden bg-[var(--surface-subtle)] leading-none whitespace-nowrap",
         className,
       )}
     >
-      {getInitials(name)}
+      {crestLetters(shortCode, name)}
     </span>
   );
 }

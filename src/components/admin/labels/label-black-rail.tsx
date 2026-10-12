@@ -7,7 +7,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Maximize2, Minimize2 } from "lucide-react";
+import { Flag, Maximize2, Minimize2, Scale } from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -32,7 +32,11 @@ import {
   scoreMismatchDetail,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
-import { openFlags } from "@/lib/services/labels/flag-nav";
+import {
+  openFlags,
+  scoreStop,
+  type ScoreStop,
+} from "@/lib/services/labels/flag-nav";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   bandsBeforePoints,
@@ -46,12 +50,9 @@ import type {
   MatchScore,
 } from "@/lib/services/labels/session";
 import {
-  enteredScore,
-  formatSets,
-  labelSetScores,
   mismatchGameKey,
-  scoreMismatch,
   scoreMismatchSentence,
+  sessionScoreMismatch,
   scoreReasonText,
   type LabelScoreMismatch,
 } from "@/lib/services/labels/set-scores";
@@ -59,7 +60,16 @@ import { cn } from "@/lib/utils";
 import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
+import { BlackTextAction, gameSlot } from "./label-black-parts";
+import {
+  dropBeforePoint,
+  planGameBoundary,
+} from "@/lib/services/labels/game-boundary";
 import { tiebreakFolds } from "@/lib/services/labels/tiebreak-fold";
+import {
+  tiebreakServeBeforePoints,
+  tiebreakServeOrders,
+} from "@/lib/services/labels/tiebreak-serve";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -70,6 +80,7 @@ import {
   BlackDeletedPoint,
   BlackGameOverflow,
   BlackTiebreakFold,
+  BlackTiebreakServe,
   BlackPointRow,
   BlackSuggestedPoint,
   openPointSuggestions,
@@ -140,6 +151,9 @@ export function LabelBlackRail({
   onRemoveShotsAfter,
   onRestoreShots,
   onSetGameServer,
+  onFixTiebreakServe,
+  onMoveGameBoundary,
+  slotStops,
   onSetGameType,
   openGhostIds = NO_IDS,
   onToggleGhost,
@@ -149,7 +163,6 @@ export function LabelBlackRail({
   finalScore = null,
   videoEndsEarly = null,
   matchScore = null,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onGoToPoint,
@@ -199,6 +212,19 @@ export function LabelBlackRail({
   onRemoveShotsAfter?: EditContext["onRemoveShotsAfter"];
   onRestoreShots?: EditContext["onRestoreShots"];
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+  /** "Fix serve order" on a tiebreak off its order (tiebreak-serve.ts). */
+  onFixTiebreakServe?: (game: LabelGame) => void;
+  /**
+   * A game band dropped above a point (game-boundary.ts): the points it
+   * passed move into the neighbouring game. Absent, the bands do not drag.
+   */
+  onMoveGameBoundary?: (game: LabelGame, beforePointId: string) => void;
+  /**
+   * Every amber slot between the rows as a stop (flag-nav.ts `slotStops`),
+   * computed once by the console for its `]` / `[` keys and handed here for
+   * the header's count and jumps. Absent: none.
+   */
+  slotStops?: readonly ScoreStop[];
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   /** Ghosts shown as their struck-through row (the console's state). */
   openGhostIds?: ReadonlySet<string>;
@@ -214,11 +240,10 @@ export function LabelBlackRail({
   videoEndsEarly?: boolean | null;
   matchScore?: MatchScore | null;
   /**
-   * The chip's answers. Given all three, the chip opens a menu of them; absent,
-   * it is words alone. `onFixEnteredScore` gets the labelled sets as `[p1, p2]`
-   * pairs, as `final_score` stores them.
+   * The chip's answers. Given both, the chip opens a menu of them; absent, it
+   * is words alone. Neither rewrites the entered score: the match record's is
+   * the source of truth the labelled points are held against.
    */
-  onFixEnteredScore?: (finalScore: number[][]) => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   /** Make a point current, hold the rail and bring the row up: the flag jumps. */
@@ -251,14 +276,19 @@ export function LabelBlackRail({
   // The chip's arithmetic, over the same rows as the scoreboard: only with
   // marks built, not once the labeller has said the video ends early, and only
   // on a disagreement.
-  const labelledSets = useMemo(
-    () => labelSetScores(points, scores.games),
-    [points, scores],
-  );
   const mismatch =
-    marks !== null && videoEndsEarly !== true
-      ? scoreMismatch(labelledSets, enteredScore(finalScore, matchScore))
+    marks !== null
+      ? sessionScoreMismatch({
+          points,
+          games: scores.games,
+          finalScore,
+          matchScore,
+          videoEndsEarly,
+        })
       : null;
+  // The mismatch as a flag of its own: counted, jumped to, and a slot after
+  // the set's last point (`BlackSetScoreSlot`).
+  const setScoreStop = scoreStop(mismatch, points);
   // The header's open marks, over every live row — marks, not points, as the rows
   // roll them up. None on the marks-off session.
   const openMarks = useMemo(
@@ -327,6 +357,48 @@ export function LabelBlackRail({
       ),
     [editable, points, adScoring],
   );
+  // A game band in the air, and the point its drop would land above — set
+  // only where `planGameBoundary` has something to move.
+  const [bandDrag, setBandDrag] = useState<{
+    game: LabelGame;
+    before: string | null;
+  } | null>(null);
+  const draggedGame = bandDrag?.game ?? null;
+  const bandDragHandlers = useMemo(
+    () =>
+      editable && onMoveGameBoundary
+        ? {
+            onStart: (game: LabelGame, event: React.DragEvent) => {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", "");
+              setBandDrag({ game, before: null });
+            },
+            onEnd: () => setBandDrag(null),
+          }
+        : null,
+    [editable, onMoveGameBoundary],
+  );
+  const dropTarget = (event: React.DragEvent): string | null => {
+    if (!draggedGame || !(event.target instanceof Element)) return null;
+    const row = event.target.closest<HTMLElement>('[data-row="point"]');
+    const id = row?.dataset.pointId;
+    if (!row || !id) return null;
+    const { top, height } = row.getBoundingClientRect();
+    const before = dropBeforePoint(
+      points,
+      id,
+      event.clientY < top + Math.min(height, 44) / 2,
+    );
+    if (before === null) return null;
+    const plan = planGameBoundary(points, draggedGame, before);
+    return "ok" in plan && plan.write.pointIds.length > 0 ? before : null;
+  };
+  // The tiebreaks off their serve order, by the first point that is off it.
+  const serveOrderBefore = useMemo(
+    () =>
+      tiebreakServeBeforePoints(editable ? tiebreakServeOrders(points) : []),
+    [editable, points],
+  );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
@@ -394,31 +466,23 @@ export function LabelBlackRail({
               fromPointId={expandedPointId ?? playingPointId}
               onGoToPoint={onGoToPoint}
               tone={tone}
+              scoreStop={setScoreStop}
+              extraStops={slotStops}
               score={
                 mismatch
                   ? (close) => (
                       <ScoreRows
                         mismatch={mismatch}
-                        stored={formatSets(labelledSets)}
                         close={close}
                         onGoToGame={goToGame}
-                        onFixEnteredScore={
-                          onFixEnteredScore && editable
-                            ? () =>
-                                onFixEnteredScore(
-                                  labelledSets.map((set) => [
-                                    set.games[0],
-                                    set.games[1],
-                                  ]),
-                                )
-                            : undefined
-                        }
                         onVideoEndsEarly={
                           editable ? onVideoEndsEarly : undefined
                         }
                         onFindGap={editable ? onFindGap : undefined}
                         onClearEnteredScore={
-                          editable && finalScore !== null
+                          // Only where the stored score is the one held:
+                          // a match record outranks it (`enteredScore`).
+                          editable && finalScore !== null && !matchScore
                             ? onClearEnteredScore
                             : undefined
                         }
@@ -482,6 +546,31 @@ export function LabelBlackRail({
               ref={scrollerRef}
               data-label-rail-scroller=""
               className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2"
+              onDragOver={
+                bandDrag
+                  ? (event) => {
+                      const before = dropTarget(event);
+                      if (before !== null) {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }
+                      if (before !== bandDrag.before) {
+                        setBandDrag({ game: bandDrag.game, before });
+                      }
+                    }
+                  : undefined
+              }
+              onDrop={
+                bandDrag
+                  ? (event) => {
+                      const before = dropTarget(event);
+                      setBandDrag(null);
+                      if (before === null) return;
+                      event.preventDefault();
+                      onMoveGameBoundary?.(bandDrag.game, before);
+                    }
+                  : undefined
+              }
             >
               {points.map((point) => {
                 if (point.status === "deleted") {
@@ -497,10 +586,20 @@ export function LabelBlackRail({
                 const slot = slotBefore.get(point.id);
                 const overflow = overflowBefore.get(point.id);
                 const fold = foldBefore.get(point.id);
+                const serveOrder = serveOrderBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
                   <Fragment key={point.id}>
+                    {bandDrag?.before === point.id ? (
+                      <div
+                        data-game-drop=""
+                        aria-hidden="true"
+                        className="pointer-events-none relative h-0"
+                      >
+                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[var(--blue)]" />
+                      </div>
+                    ) : null}
                     {band ? (
                       <LabelGameBand
                         band={band}
@@ -513,6 +612,16 @@ export function LabelBlackRail({
                         }
                         onSetGameType={editable ? onSetGameType : undefined}
                         onSetGameServer={editable ? onSetGameServer : undefined}
+                        drag={
+                          bandDragHandlers && band !== scores.games[0]
+                            ? bandDragHandlers
+                            : undefined
+                        }
+                        gripTrack={bandDragHandlers !== null}
+                        dragging={
+                          draggedGame?.setNumber === band.setNumber &&
+                          draggedGame.gameNumber === band.gameNumber
+                        }
                         menu={tone}
                       />
                     ) : null}
@@ -536,6 +645,13 @@ export function LabelBlackRail({
                         summary={overflow.summary}
                         point={point}
                         edit={edit}
+                      />
+                    ) : null}
+                    {serveOrder ? (
+                      <BlackTiebreakServe
+                        order={serveOrder}
+                        names={names}
+                        onFix={onFixTiebreakServe}
                       />
                     ) : null}
                     <BlackPointRow
@@ -567,6 +683,15 @@ export function LabelBlackRail({
                         onAddPoint={onAddPoint}
                       />
                     ) : null}
+                    {mismatch && setScoreStop?.pointId === point.id
+                      ? setScoreSlot({
+                          mismatch,
+                          anchor: point.id,
+                          onVideoEndsEarly: editable
+                            ? onVideoEndsEarly
+                            : undefined,
+                        })
+                      : null}
                   </Fragment>
                 );
               })}
@@ -594,34 +719,27 @@ export function LabelBlackRail({
  */
 export function ScoreRows({
   mismatch,
-  stored,
   close,
   onGoToGame,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
-  /** The labelled sets as "Fix the entered score" will store them: "6–3, 4–5". */
-  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
-  onFixEnteredScore?: () => void;
   onVideoEndsEarly?: () => void;
   onFindGap?: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
 }) {
   const { setNumber, labelled, entered } = mismatch;
   const detail = scoreMismatchDetail(setNumber, labelled, entered);
-  if (onFixEnteredScore && onVideoEndsEarly && onFindGap) {
+  if (onVideoEndsEarly && onFindGap) {
     return (
       <ScoreChipMenu
         mismatch={mismatch}
-        stored={stored}
         close={close}
         onGoToGame={onGoToGame}
-        onFixEnteredScore={onFixEnteredScore}
         onVideoEndsEarly={onVideoEndsEarly}
         onFindGap={onFindGap}
         onClearEnteredScore={onClearEnteredScore}
@@ -647,24 +765,20 @@ export function ScoreRows({
 
 /**
  * The chip's menu rows, hook-free so a spec can read them: "Go to game N"
- * when a game is named, the three answers, and "Use the match score again"
+ * when a game is named, the two answers, and "Use the match score again"
  * when given. Each row closes the menu, then asks.
  */
 export function ScoreChipMenu({
   mismatch,
-  stored,
   close,
   onGoToGame,
-  onFixEnteredScore,
   onVideoEndsEarly,
   onFindGap,
   onClearEnteredScore,
 }: {
   mismatch: LabelScoreMismatch;
-  stored: string;
   close: () => void;
   onGoToGame: (gameKey: string) => void;
-  onFixEnteredScore: () => void;
   onVideoEndsEarly: () => void;
   onFindGap: (pointId: string | null) => void;
   onClearEnteredScore?: () => void;
@@ -683,14 +797,6 @@ export function ScoreChipMenu({
           }}
         />
       ) : null}
-      <FloatMenuItem
-        label={SCORE_MISMATCH_ANSWERS.fix.label}
-        description={`Store ${stored} as the entered score.`}
-        onSelect={() => {
-          close();
-          onFixEnteredScore();
-        }}
-      />
       <FloatMenuItem
         label={SCORE_MISMATCH_ANSWERS.endsEarly.label}
         description={SCORE_MISMATCH_ANSWERS.endsEarly.description}
@@ -719,6 +825,55 @@ export function ScoreChipMenu({
       ) : null}
     </>
   );
+}
+
+/**
+ * After the last point of a set whose games don't make the match record's
+ * score: "Set 1 ends 5–5" over "The match record says 6–4", in the game
+ * slots' dashed amber. It names no game: without the video, a guess at which
+ * game was credited to the wrong player sends the labeller to the wrong one.
+ * Its one answer is "Video ends early" — the other two causes are fixed in
+ * the rows, or on the match record itself. When the rows never reach the
+ * set, it sits after the last point and says so.
+ */
+export function setScoreSlot({
+  mismatch,
+  anchor,
+  onVideoEndsEarly,
+}: {
+  mismatch: LabelScoreMismatch;
+  /** The point it follows: the set's last, or the session's last. */
+  anchor: string;
+  onVideoEndsEarly?: () => void;
+}) {
+  const reached = mismatch.lastPointId !== null;
+  const label = SCORE_MISMATCH_ANSWERS.endsEarly.label;
+  return gameSlot({
+    icon: Scale,
+    row: "set-score",
+    anchor,
+    title: reached
+      ? `Set ${mismatch.setNumber} ends ${mismatch.labelled}`
+      : `These points stop before set ${mismatch.setNumber}`,
+    reason: reached
+      ? `The match record says ${mismatch.entered}. A game is missing or credited to the wrong player`
+      : `The match record says set ${mismatch.setNumber} was ${mismatch.entered}`,
+    action: onVideoEndsEarly ? (
+      <BlackTextAction
+        ink="amber"
+        data-set-score-ends-early=""
+        aria-label={`${label}: ${SCORE_MISMATCH_ANSWERS.endsEarly.description}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onVideoEndsEarly();
+        }}
+      >
+        {label}
+      </BlackTextAction>
+    ) : null,
+    actionLabel: label,
+    details: [SCORE_MISMATCH_ANSWERS.endsEarly.description],
+  });
 }
 
 interface OverflowSlot {

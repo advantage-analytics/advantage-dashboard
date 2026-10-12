@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, GripVertical } from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -207,6 +207,9 @@ export const LabelGameBand = memo(function LabelGameBand({
   outcome,
   onSetGameType,
   onSetGameServer,
+  drag,
+  dragging = false,
+  gripTrack = false,
   menu = "dark",
 }: {
   band: LabelGameBandScore;
@@ -217,6 +220,22 @@ export const LabelGameBand = memo(function LabelGameBand({
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+  /**
+   * Present: the band can be dragged to where the game starts (the rail owns
+   * the drop). It gains a grip in the rows' number track, and its name
+   * starts where the rows' content does.
+   */
+  drag?: {
+    onStart: (game: LabelGame, event: React.DragEvent) => void;
+    onEnd: () => void;
+  };
+  /** This band is the one in the air. */
+  dragging?: boolean;
+  /**
+   * Keep the grip's track empty on a band that cannot drag (the match's
+   * first), so every band of a rail that drags starts on one edge.
+   */
+  gripTrack?: boolean;
   /** The menus' tone: portalled, so the rail's palette does not reach them. */
   menu?: FloatMenuTone;
 }) {
@@ -250,8 +269,35 @@ export const LabelGameBand = memo(function LabelGameBand({
       data-game-band={`${band.setNumber}-${band.gameNumber}`}
       data-game-key={gameKey(band)}
       data-game-type={model.type}
-      className={PAINT.band}
+      data-game-draggable={drag ? "" : undefined}
+      draggable={drag ? true : undefined}
+      onDragStart={
+        drag ? (event) => drag.onStart(model.game, event) : undefined
+      }
+      onDragEnd={drag?.onEnd}
+      className={cn(
+        PAINT.band,
+        drag && "group/band cursor-grab active:cursor-grabbing",
+        dragging && "opacity-40",
+      )}
     >
+      {drag || gripTrack ? (
+        // The rows' number track (22px, then their 10px gap): the grip sits
+        // where a point's number does, and the band's name starts on the
+        // rows' own content edge instead of crowding the grip.
+        <span
+          data-game-grip={drag ? "" : undefined}
+          aria-hidden="true"
+          className="-my-1 mr-[10px] flex h-[22px] w-[22px] shrink-0 items-center justify-center"
+        >
+          {drag ? (
+            <GripVertical
+              className="size-3.5 text-white/25 transition-colors duration-[var(--duration-hover)] group-hover/band:text-white/60"
+              strokeWidth={1.6}
+            />
+          ) : null}
+        </span>
+      ) : null}
       {menus ? (
         <span className="flex items-center">
           {model.setLabel ? (

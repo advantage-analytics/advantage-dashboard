@@ -18,8 +18,22 @@ import {
   PASSWORD_RULE,
   type AuthError,
 } from "@/lib/auth/error-messages";
+import { authHref, safeNext } from "@/lib/auth/safe-next";
 
-export function SignUpForm() {
+/**
+ * @param next Where the confirmation mail should land — `/sign-up` reads it
+ *   from `?next=`. Clamped again here rather than trusted, as `LoginForm` does:
+ *   `safeNext` is idempotent, and it ends up inside a URL this form builds.
+ * @param joinProgram The team `next` leads to, when it is a join link.
+ */
+export function SignUpForm({
+  next,
+  joinProgram,
+}: {
+  next?: string;
+  joinProgram?: string | null;
+}) {
+  const destination = safeNext(next ?? null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -64,11 +78,13 @@ export function SignUpForm() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/confirm?next=/dashboard`,
+          // The destination rides in the confirmation link, so the click that
+          // activates the account is the one that returns to a join link.
+          emailRedirectTo: `${window.location.origin}/confirm?next=${encodeURIComponent(destination)}`,
         },
       });
       if (signUpError) throw signUpError;
-      router.push("/sign-up-success");
+      router.push(authHref("/sign-up-success", destination));
     } catch (err: unknown) {
       setError(toAuthError(err));
     } finally {
@@ -82,11 +98,19 @@ export function SignUpForm() {
       className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
-      <FormHeader
-        eyebrow="Sign up"
-        title="Create Account."
-        description="Unlock data-driven insights and performance tracking for your game."
-      />
+      {joinProgram ? (
+        <FormHeader
+          eyebrow={`Joining ${joinProgram}`}
+          title="Create Account."
+          description="The confirmation email brings you back to the invitation. Nothing is shared until you press Join there."
+        />
+      ) : (
+        <FormHeader
+          eyebrow="Sign up"
+          title="Create Account."
+          description="Unlock data-driven insights and performance tracking for your game."
+        />
+      )}
 
       <div className="flex flex-col gap-[20px]">
         <FormField
@@ -182,7 +206,7 @@ export function SignUpForm() {
         <AuthFooter>
           <span className="text-body-sm">
             Already have an account?{" "}
-            <Link href="/login" className={AUTH_LINK}>
+            <Link href={authHref("/login", destination)} className={AUTH_LINK}>
               Sign in
             </Link>
           </span>

@@ -29,7 +29,8 @@ import type { Hand } from "@/components/dashboard/matches/match-detail/match-fil
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
-import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
+import { useFilmReadOnly } from "./film-read-only";
 import { cn } from "@/lib/utils";
 
 import { filmProgressWidth } from "./film-clock";
@@ -348,7 +349,9 @@ export const PointList = memo(function PointList({
   // The viewer's rows lead with the workspace's own mark — the profile photo
   // on personal, the program's crest on a team — so a point you decided reads
   // as yours at a glance; the opponent's rows keep their initials.
-  const { active: workspace } = useWorkspace();
+  // Null on the public share page, which has no workspace: the viewer's rows
+  // then keep initials like the opponent's.
+  const workspace = useOptionalWorkspace()?.active ?? null;
   // A row's words are the filters' own: an unreturned serve is named "Ace"
   // on a derived match (`pointResultLabel`), as the head-to-head Aces row
   // that opens it counts it, and its direction reads Inside Out / Inside In
@@ -1024,7 +1027,7 @@ export const PointRow = memo(function PointRow({
   isYou: boolean;
   initials: string;
   /** The active workspace, whose mark leads the viewer's own rows. */
-  workspace: Pick<Workspace, "kind" | "mark" | "iconUrl">;
+  workspace: Pick<Workspace, "kind" | "mark" | "iconUrl"> | null;
   showPointScore: boolean;
   isActive: boolean;
   activeStart: number;
@@ -1037,6 +1040,7 @@ export const PointRow = memo(function PointRow({
   tone?: FilmListTone;
 }) {
   const t = ROW_TONE[tone];
+  const readOnly = useFilmReadOnly();
   // A point with no `videoTime` has nowhere to seek to. It still reads, it
   // just cannot be clicked — imports predating video timing are full of them.
   const seekable = point.videoTime != null;
@@ -1086,7 +1090,7 @@ export const PointRow = memo(function PointRow({
         {/* The viewer's own mark, never the frame's white initials chip
             (phase-1 decision): a point the viewer WON reads as theirs at a
             glance on both tones. The opponent keeps initials. */}
-        {isYou ? (
+        {isYou && workspace ? (
           <WorkspaceMark
             workspace={workspace}
             className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
@@ -1124,31 +1128,33 @@ export const PointRow = memo(function PointRow({
         </span>
       )}
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSaved(point.id);
-        }}
-        aria-label={point.saved ? "Remove bookmark" : "Bookmark this point"}
-        aria-pressed={point.saved}
-        className={cn(
-          t.save,
-          // The room's row: the bookmark sits over the row's right edge and
-          // fades in as the score slides aside; a saved point's stays lit.
-          point.saved ? FILM_ROW_ACTION_HELD : FILM_ROW_ACTION_ON_REACH,
-        )}
-      >
-        <Bookmark
-          className="h-[13px] w-[13px]"
-          strokeWidth={1.6}
-          style={{
-            color: point.saved ? t.savedInk : t.restingInk,
-            fill: point.saved ? t.savedInk : "none",
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSaved(point.id);
           }}
-          aria-hidden="true"
-        />
-      </button>
+          aria-label={point.saved ? "Remove bookmark" : "Bookmark this point"}
+          aria-pressed={point.saved}
+          className={cn(
+            t.save,
+            // The room's row: the bookmark sits over the row's right edge and
+            // fades in as the score slides aside; a saved point's stays lit.
+            point.saved ? FILM_ROW_ACTION_HELD : FILM_ROW_ACTION_ON_REACH,
+          )}
+        >
+          <Bookmark
+            className="h-[13px] w-[13px]"
+            strokeWidth={1.6}
+            style={{
+              color: point.saved ? t.savedInk : t.restingInk,
+              fill: point.saved ? t.savedInk : "none",
+            }}
+            aria-hidden="true"
+          />
+        </button>
+      )}
 
       {/* The playing row's rule, as the room draws it (`PanelRow`): a bare
           2px blue line growing from the row's left edge across its full

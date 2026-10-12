@@ -171,6 +171,8 @@ export function TeamDetail({
           eventsPolicy={draft.eventsPolicy}
           onEventsPolicyChange={(next) => set("eventsPolicy", next)}
           canEditPolicies={isOwner}
+          programId={programId}
+          playersCanShareVideo={data.program.playersCanShareVideo}
         />
       )}
 

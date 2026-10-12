@@ -12,7 +12,11 @@ export const dynamic = "force-dynamic";
  * requiring auth here would invert the flow. Nothing it returns is sensitive:
  * school, squad, division, conference and whether the program is already taken
  * are published facts, and the owner's full name comes back with no address.
- * Contact addresses live in a table `anon` cannot read at all.
+ * Contact addresses live in a table `anon` cannot read at all. Each row also
+ * carries the program's `id`, `schoolAbbrev` and `crestUrl` — published facts
+ * too (the crest bucket is public), there so a picker can draw a crest and
+ * point at the row it picked without a second request. Both intents get them;
+ * `redactForPlayer` still drops the owner and the claim state.
  *
  * `?intent=join` narrows that further. A coach is searching for their own
  * program and needs to know who already has it; a player is searching for a

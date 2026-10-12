@@ -51,7 +51,21 @@ const loader = createLoader({
       WorkspaceScopeChip: marker("WorkspaceScopeChip"),
     },
     "@/components/dashboard/matches/analysis-progress-track": {
-      AnalysisProgressTrack: marker("AnalysisProgressTrack"),
+      // Props out as attributes, so a row's bar can be read back: where it
+      // sits, whether it is moving, and what colour it was asked for.
+      AnalysisProgressTrack: (props: {
+        percent: number;
+        live?: boolean;
+        tone?: string;
+        label?: string;
+      }) =>
+        React.createElement("span", {
+          "data-component": "AnalysisProgressTrack",
+          "data-percent": props.percent,
+          "data-live": props.live ? "true" : "false",
+          "data-tone": props.tone ?? "default",
+          "aria-label": props.label,
+        }),
     },
     "@/components/dashboard/workspace-provider": {
       useWorkspace: () => ({ viewer: { id: "viewer-1" } }),
@@ -133,6 +147,74 @@ test("an upload_again row links to Add video for this match", () => {
   expect(row!.inner).not.toContain("<a ");
   expect(row!.inner).toContain("Failed:");
   expect(row!.text).not.toContain("Analysis failed —");
+});
+
+test("an upload_again row with a stopped percent keeps the upload row's shape", () => {
+  const html = render([
+    item(UPLOAD_ID, "M. Reid vs J. Park", {
+      status: "failed",
+      recovery: "upload_again",
+      stoppedUploadPercent: 27,
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("M. Reid vs J. Park"));
+  expect(row).toBeDefined();
+  // Still one link, to the same place the ordinary failed row goes.
+  expect(row!.href).toBe(`/dashboard/matches/new?match=${UPLOAD_ID}`);
+  expect(row!.inner).not.toContain("<a ");
+  expect(row!.inner).toContain("Failed:");
+
+  // Title, then the bar, then where it stopped beside the action.
+  const title = row!.text.indexOf("M. Reid vs J. Park");
+  const reason = row!.text.indexOf("Upload stopped at 27%");
+  const action = row!.text.indexOf("Add video");
+  expect(title).toBeGreaterThan(-1);
+  expect(reason).toBeGreaterThan(title);
+  expect(action).toBeGreaterThan(reason);
+  const bar = row!.inner.indexOf('data-component="AnalysisProgressTrack"');
+  expect(bar).toBeGreaterThan(row!.inner.indexOf("M. Reid vs J. Park"));
+  expect(bar).toBeLessThan(row!.inner.indexOf("Upload stopped at 27%"));
+  // The title is the row's medium line, as on every failed row.
+  expect(row!.inner).toMatch(
+    /<span class="[^"]*font-medium[^"]*">M\. Reid vs J\. Park<\/span>/,
+  );
+
+  // Frozen where it stopped: grey, and not moving.
+  expect(row!.inner).toContain('data-percent="27"');
+  expect(row!.inner).toContain('data-live="false"');
+  expect(row!.inner).toContain('data-tone="var(--ink-300)"');
+
+  // The short reason is replaced, not repeated.
+  expect(row!.text).not.toContain("Upload didn't finish");
+});
+
+test("an upload_again row with no stopped percent keeps the ordinary failed row", () => {
+  const html = render([
+    item(UPLOAD_ID, "M. Reid vs J. Park", {
+      status: "failed",
+      recovery: "upload_again",
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("M. Reid vs J. Park"));
+  expect(row!.text).toContain("Upload didn't finish");
+  expect(row!.text).not.toContain("Upload stopped at");
+  expect(row!.inner).not.toContain("AnalysisProgressTrack");
+});
+
+test("any other failure ignores a stopped percent and keeps the ordinary failed row", () => {
+  // The server never sets a reading on such a row; the tray ignores one anyway.
+  const html = render([
+    item(RETRY_ID, "A. Lee vs B. Cruz", {
+      status: "failed",
+      recovery: "retry",
+      stoppedUploadPercent: 100,
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("A. Lee vs B. Cruz"));
+  expect(row!.href).toBe(`/dashboard/matches/${RETRY_ID}`);
+  expect(row!.text).toContain("Open");
+  expect(row!.text).not.toContain("Upload stopped at");
+  expect(row!.inner).not.toContain("AnalysisProgressTrack");
 });
 
 test("a retry row links to the match page and reads Open", () => {

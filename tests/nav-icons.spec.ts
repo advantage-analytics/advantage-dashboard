@@ -67,22 +67,29 @@ test.describe("nav data: icons and comingSoon flags", () => {
     };
     walk(appDir);
 
-    for (const link of [...PERSONAL_NAV, ...TEAM_NAV]) {
-      const file = routeToFile.get(link.href);
-      // Fail loudly rather than skipping: an href we cannot resolve to a page
-      // is exactly the silent hole this test exists to close.
-      expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
+    const lists = [
+      { kind: "personal", links: PERSONAL_NAV },
+      { kind: "team", links: TEAM_NAV },
+    ] as const;
 
-      const rendersComingSoon = fs
-        .readFileSync(file as string, "utf8")
-        .includes("ComingSoonPage");
+    for (const { links } of lists) {
+      for (const link of links) {
+        const file = routeToFile.get(link.href);
+        // Fail loudly rather than skipping: an href we cannot resolve to a page
+        // is exactly the silent hole this test exists to close.
+        expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
 
-      expect(
-        Boolean(link.comingSoon),
-        rendersComingSoon
-          ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
-          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
-      ).toBe(rendersComingSoon);
+        const rendersComingSoon = fs
+          .readFileSync(file as string, "utf8")
+          .includes("ComingSoonPage");
+
+        expect(
+          Boolean(link.comingSoon),
+          rendersComingSoon
+            ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
+            : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
+        ).toBe(rendersComingSoon);
+      }
     }
   });
 });

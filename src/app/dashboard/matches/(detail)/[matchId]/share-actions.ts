@@ -12,7 +12,9 @@
  *
  * Off then on mints a NEW token: `disableMatchShare` deletes the row and
  * `enableMatchShare` inserts a fresh one, so a link that was once handed out
- * stays dead once it has been turned off.
+ * stays dead once it has been turned off. What the link carries is the one
+ * thing edited in place (`setMatchShareVisualizations`), for the same reason:
+ * the link is already in someone's inbox.
  */
 
 import { revalidatePath } from "next/cache";
@@ -21,7 +23,12 @@ import { matchShareUrl } from "@/lib/data/match-share-server";
 import { generateToken } from "@/lib/services/programs/tokens";
 
 export type ShareActionResult =
-  | { ok: true; url: string | null }
+  | {
+      ok: true;
+      url: string | null;
+      includesVisualizations: boolean;
+      includesVideo: boolean;
+    }
   | { ok: false; error: "forbidden" | "failed" };
 
 // The route group stays in the pattern — see `saved-views-actions.ts`.
@@ -41,7 +48,14 @@ export async function enableMatchShare(
   const token = generateToken();
   const { error } = await supabase
     .from("match_share_links")
-    .insert({ match_id: matchId, token, created_by: viewerId });
+    // A new link carries the Visualizations view unless its maker turns that
+    // off; the column's own default (false) is for the links that predate it.
+    .insert({
+      match_id: matchId,
+      token,
+      created_by: viewerId,
+      include_visualizations: true,
+    });
 
   if (error) {
     if (error.code === UNIQUE_VIOLATION) {
@@ -49,18 +63,109 @@ export async function enableMatchShare(
       // exists rather than failing the toggle.
       const { data } = await supabase
         .from("match_share_links")
-        .select("token")
+        .select("token, include_visualizations, include_video")
         .eq("match_id", matchId)
         .maybeSingle();
       if (data?.token) {
-        return { ok: true, url: matchShareUrl(data.token as string) };
+        return {
+          ok: true,
+          url: matchShareUrl(data.token as string),
+          includesVisualizations: data.include_visualizations === true,
+          includesVideo: data.include_video === true,
+        };
       }
     }
     return { ok: false, error: "forbidden" };
   }
 
   revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
-  return { ok: true, url: matchShareUrl(token) };
+  // A new link never starts with the video: the insert policy refuses one
+  // that does, and `setMatchShareVideo` is the only way to add it.
+  return {
+    ok: true,
+    url: matchShareUrl(token),
+    includesVisualizations: true,
+    includesVideo: false,
+  };
+}
+
+/**
+ * Put the Visualizations view on the match's public link, or take it off.
+ * The token does not change. `authenticated` may update this one column and
+ * nothing else on the row; a viewer who may not share updates no row, which
+ * reads back as `forbidden` — as does a match with no link to change.
+ */
+export async function setMatchShareVisualizations(
+  matchId: string,
+  include: boolean,
+): Promise<ShareActionResult> {
+  if (!UUID.test(matchId)) return { ok: false, error: "forbidden" };
+  const ctx = await requireWorkspaceContext();
+  if (!ctx) return { ok: false, error: "forbidden" };
+  const { supabase } = ctx;
+
+  const { data, error } = await supabase
+    .from("match_share_links")
+    .update({ include_visualizations: include === true })
+    .eq("match_id", matchId)
+    .select("token, include_visualizations, include_video")
+    .maybeSingle();
+  if (error) return { ok: false, error: "failed" };
+  if (!data?.token) return { ok: false, error: "forbidden" };
+
+  revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
+  return {
+    ok: true,
+    url: matchShareUrl(data.token as string),
+    includesVisualizations: data.include_visualizations === true,
+    includesVideo: data.include_video === true,
+  };
+}
+
+const INSUFFICIENT_PRIVILEGE = "42501";
+
+/**
+ * Put the match's video on its public link, or take it off. The token does
+ * not change. `include_video` has no column grant: the
+ * `set_match_share_video` function is the one way to write it, and it is
+ * where "who may share video" is decided (`can_share_match_video` — program
+ * staff, or players where the program allows it). Taking it off is open to
+ * anyone who may share the match.
+ */
+export async function setMatchShareVideo(
+  matchId: string,
+  include: boolean,
+): Promise<ShareActionResult> {
+  if (!UUID.test(matchId)) return { ok: false, error: "forbidden" };
+  const ctx = await requireWorkspaceContext();
+  if (!ctx) return { ok: false, error: "forbidden" };
+  const { supabase } = ctx;
+
+  const { error } = await supabase.rpc("set_match_share_video", {
+    p_match_id: matchId,
+    p_include: include === true,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: error.code === INSUFFICIENT_PRIVILEGE ? "forbidden" : "failed",
+    };
+  }
+
+  const { data } = await supabase
+    .from("match_share_links")
+    .select("token, include_visualizations, include_video")
+    .eq("match_id", matchId)
+    .maybeSingle();
+  if (!data?.token) return { ok: false, error: "failed" };
+
+  revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
+  return {
+    ok: true,
+    url: matchShareUrl(data.token as string),
+    includesVisualizations: data.include_visualizations === true,
+    includesVideo: data.include_video === true,
+  };
 }
 
 export async function disableMatchShare(
@@ -78,5 +183,10 @@ export async function disableMatchShare(
   if (error) return { ok: false, error: "forbidden" };
 
   revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
-  return { ok: true, url: null };
+  return {
+    ok: true,
+    url: null,
+    includesVisualizations: false,
+    includesVideo: false,
+  };
 }

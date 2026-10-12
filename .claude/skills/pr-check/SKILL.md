@@ -325,7 +325,8 @@ or memory sees what is there. Do not hand it any of those. Hand it exactly:
    with `$OUT` under the session scratchpad. The script starts (or attaches
    to) a dev server, signs in as the `EYES_ON_*` account from `.env.local`,
    dismisses the beta welcome dialog, selects the `EYES_ON_TEAM_WORKSPACE`
-   program for `/dashboard/team` paths, and writes the PNGs and
+   program for `/dashboard/team` paths and for any path prefixed `team:`
+   (e.g. `team:/dashboard/opponents`, which keeps its URL), and writes the PNGs and
    `report.json` the agent reads. It never prints the credentials, and
    neither do you.
 
