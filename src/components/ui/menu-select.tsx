@@ -8,6 +8,7 @@ import {
   FloatMenuItem,
   FloatMenuLabel,
   FloatMenuNote,
+  type FloatMenuTone,
 } from "@/components/ui/float-menu";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,12 @@ export interface MenuOption<T extends string> {
    * each belongs to is written over them. Ungrouped lists render as before.
    */
   group?: string;
+  /**
+   * A hairline above this row, inside its group and without a new heading:
+   * the label console's serve-result menu sets its "Let" apart from the
+   * result the landing gives.
+   */
+  divider?: boolean;
 }
 
 /**
@@ -53,6 +60,9 @@ export function MenuSelect<T extends string>({
   placeholder,
   align,
   scroll = false,
+  tone = "light",
+  open: openProp,
+  onOpenChange,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -88,8 +98,31 @@ export function MenuSelect<T extends string>({
    * length of — a division's conferences run to forty — rather than a design.
    */
   scroll?: boolean;
+  /**
+   * The MENU's tone, handed straight to `FloatMenu`: `"dark"` for a select on
+   * a black surface (the label console's rail in its dark tone), where a white
+   * menu would be the brightest thing in the room. The trigger is not
+   * touched — a dark surface styles its own through `className`. Default
+   * `"light"`.
+   */
+  tone?: FloatMenuTone;
+  /**
+   * Controlled open state, for a caller that answers the menu being open
+   * (the label console's shot row steps its actions aside). Absent, the
+   * select keeps its own.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = openProp ?? ownOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (openProp === undefined) setOwnOpen(next);
+      onOpenChange?.(next);
+    },
+    [openProp, onOpenChange],
+  );
   const current = options.find((option) => option.value === value);
 
   // One handler for every row rather than a closure per option per render;
@@ -101,7 +134,7 @@ export function MenuSelect<T extends string>({
     },
     // `value` may be `undefined`; `next !== value` is still exactly the
     // "did this actually change" check.
-    [onChange, value],
+    [onChange, value, setOpen],
   );
 
   const trigger = (
@@ -158,6 +191,7 @@ export function MenuSelect<T extends string>({
       onOpenChange={setOpen}
       trigger={trigger}
       label={label}
+      tone={tone}
       align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
       className={
@@ -172,7 +206,9 @@ export function MenuSelect<T extends string>({
           option.group !== undefined && option.group !== previous;
         return (
           <Fragment key={option.value}>
-            {opensGroup && index > 0 ? <FloatMenuDivider /> : null}
+            {(opensGroup || option.divider) && index > 0 ? (
+              <FloatMenuDivider />
+            ) : null}
             {opensGroup ? (
               <FloatMenuLabel>{option.group}</FloatMenuLabel>
             ) : null}

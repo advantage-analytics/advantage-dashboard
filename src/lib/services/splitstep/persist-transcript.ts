@@ -22,10 +22,12 @@ import {
   lineCallsFor,
   type LineCalls,
   type MatchScore,
+  type SplitStepRally,
   type SplitStepStroke,
   type Transcript,
 } from "./derivation";
 import { RESULTS_BUCKET } from "./config";
+import { HAND_LABELLED_FLAG } from "./derivation/flags";
 
 const LOG = "[splitstep:persist]";
 
@@ -42,6 +44,12 @@ export type PersistOutcome =
       reason: string;
       transcript: Transcript | null;
       failure: PersistFailure;
+      /**
+       * Refused because the match's rows were applied from hand labels
+       * (`scripts/label-apply.ts`) and `allowOverwriteLabels` was not passed.
+       * Decided before the delete, so the labelled rows are untouched.
+       */
+      labelsProtected?: true;
     };
 
 /**
@@ -110,6 +118,20 @@ export async function buildTranscriptForJob(params: {
   /** Set whenever `transcript` is null or not ok; see {@link PersistFailure}. */
   failure: PersistFailure | null;
   job: JobRow | null;
+  /**
+   * The vendor's results JSON exactly as parsed from Storage, set whenever the
+   * download succeeded. The label seed (src/lib/services/labels) freezes each
+   * raw stroke next to its label row, and reading it here means one download
+   * serves both the transcript and the seed.
+   */
+  raw?: unknown;
+  /**
+   * The rallies the transcript was built from (`analyzeResults(raw).rallies`),
+   * set whenever `raw` is. The labels console's marks (src/lib/services/labels/
+   * marks.ts) read the rally beside the derived point — a serve called out, a
+   * stroke the derivation dropped — so the same download serves them too.
+   */
+  rallies?: SplitStepRally[];
 }> {
   const { supabase, jobId } = params;
 
@@ -170,7 +192,8 @@ export async function buildTranscriptForJob(params: {
   // `shots.video_time` are what the player seeks against, and the player seeks
   // in the ORIGINAL video while the vendor timestamps the trimmed one.
   const startTimeSeconds = Number(job.start_time_seconds ?? 0);
-  const analysis = analyzeResults(JSON.parse(await blob.text()), {
+  const raw: unknown = JSON.parse(await blob.text());
+  const analysis = analyzeResults(raw, {
     startTimeSeconds: Number.isFinite(startTimeSeconds) ? startTimeSeconds : 0,
   });
 
@@ -198,6 +221,8 @@ export async function buildTranscriptForJob(params: {
     reason: transcript.reason,
     failure: transcript.ok ? null : "refused",
     job,
+    raw,
+    rallies: analysis.rallies,
   };
 }
 
@@ -251,8 +276,22 @@ export async function persistTranscript(params: {
    * The check runs before the delete, so a refusal leaves the match as it was.
    */
   keepPlayerMapping?: boolean;
+  /**
+   * Replace rows that were applied from a hand-labelling session (points
+   * flagged `hand_labelled`). Off by default: those rows are what the
+   * labeller saw on the video, and a re-derive from the vendor's file would
+   * silently put the vendor's version back. Pass it only on purpose
+   * (`scripts/splitstep-derive.ts --force-over-labels`).
+   */
+  allowOverwriteLabels?: boolean;
 }): Promise<PersistOutcome> {
-  const { supabase, jobId, dryRun = false, keepPlayerMapping = false } = params;
+  const {
+    supabase,
+    jobId,
+    dryRun = false,
+    keepPlayerMapping = false,
+    allowOverwriteLabels = false,
+  } = params;
 
   try {
     const { transcript, reason, failure, job } = await buildTranscriptForJob({
@@ -268,6 +307,37 @@ export async function persistTranscript(params: {
         transcript,
         failure: failure ?? "refused",
       };
+    }
+
+    // Refuse to overwrite hand labels. Checked before the delete, so a refusal
+    // leaves the labelled rows exactly as they were, and before the dry-run
+    // return, so a dry run says up front that --write would be refused.
+    if (!allowOverwriteLabels) {
+      const { count: labelledCount, error: labelledError } = await supabase
+        .from("points")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", job.match_id)
+        // flags is jsonb: a bare JS array serialises as the Postgres array
+        // literal {hand_labelled}, which jsonb rejects (22P02).
+        .contains("flags", JSON.stringify([HAND_LABELLED_FLAG]));
+      if (labelledError) {
+        return {
+          ok: false,
+          reason: `could not check for hand-labelled points: ${labelledError.message}`,
+          transcript,
+          failure: "refused",
+        };
+      }
+      if ((labelledCount ?? 0) > 0) {
+        return {
+          ok: false,
+          reason:
+            "hand labels applied — pass allowOverwriteLabels to replace them",
+          transcript,
+          failure: "refused",
+          labelsProtected: true,
+        };
+      }
     }
 
     if (dryRun) {

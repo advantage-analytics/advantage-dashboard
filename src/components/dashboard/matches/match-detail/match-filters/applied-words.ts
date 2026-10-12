@@ -131,6 +131,18 @@ const PHRASE: {
   customRallyShot: (_, value) => `rally shot ${String(value)}`,
 };
 
+/** One applied value's phrase — `appliedPhrases`' wording for a single
+ * option, for a host that draws one token per value (the Visualizations
+ * applied strip). */
+export function phraseFor(
+  key: MatchFilterKey,
+  option: string,
+  value: unknown,
+  names: PhraseNames,
+): string {
+  return PHRASE[key](option, value, names);
+}
+
 /** Catalog position of `value` in `key` (sets: the number itself); unknowns last. */
 function orderOf(key: MatchFilterKey, value: unknown): number {
   if (key === "sets") return value as number;
@@ -197,7 +209,7 @@ export function appliedPhrases(
   const out: string[] = [];
   for (const key of SENTENCE_KEYS) {
     for (const value of appliedValues(filters, key)) {
-      out.push(PHRASE[key](optionLabel(key, value), value, names));
+      out.push(phraseFor(key, optionLabel(key, value), value, names));
     }
   }
   return out;

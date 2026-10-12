@@ -41,6 +41,7 @@ export function TeamHomePageSkeleton() {
     return (
       <TeamHomeDayZeroPage
         canManage={isProgramStaff(active)}
+        canUpload={canUploadForProgram(active)}
         teamName={active.name}
       />
     );

@@ -27,6 +27,7 @@ import {
   jobRecoveryFacts,
   jobTimingFields,
   pipelinePercent,
+  stoppedUploadPercent,
   recoveryFields,
   resolveAnalysisStatus,
 } from "@/lib/data/match-analysis";
@@ -93,6 +94,8 @@ export type LiveAnalysisPatch = Pick<
   | "status"
   | "progressPercent"
   | "uploadPercent"
+  | "stoppedUploadPercent"
+  | "updatedAt"
   | "failNote"
   | "recovery"
   | "note"
@@ -149,6 +152,13 @@ export function liveAnalysisPatch(
     status,
     progressPercent: pipelinePercent(status, uploadPercent),
     uploadPercent,
+    // Set on every patch, so a resubmission resets it to undefined instead of
+    // leaving the last attempt's reading merged over a running upload.
+    stoppedUploadPercent: stoppedUploadPercent(row),
+    // Every progress write moves this. Without it the merged analysis keeps
+    // the server render's value, and an upload followed live for twenty
+    // minutes would read as paused while its bar was moving.
+    updatedAt: row.updated_at ?? undefined,
     // Without this the patch would blank the ETA's only input the moment the
     // first live event landed.
     startedAt: row.created_at,

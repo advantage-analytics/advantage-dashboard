@@ -17,6 +17,7 @@ import {
 import type { RosterFullRow, RosterPlayerOption } from "./roster-shared";
 import { readAllPages } from "./admin-range-read";
 import { UUID_RE } from "@/lib/admin/validation";
+import { adminCanUploadFor } from "@/lib/admin/uploads/approval";
 
 /** Server-only through the server/admin imports, enforced by client-bundle-boundary.spec.ts. */
 export interface AdminUploadContext {
@@ -238,7 +239,7 @@ export const getAdminUploadContext = cache(
       const program = await admin
         .from("programs")
         .select(
-          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone",
+          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone",
         )
         .eq("id", programId)
         .maybeSingle();
@@ -256,9 +257,12 @@ export const getAdminUploadContext = cache(
         name: p.school_name,
         team: p.team,
         orgType: p.org_type,
+        pilotEligible: p.pilot_eligible === true,
         timeZone: p.time_zone,
         programStatus: p.status,
-        canSubmitVideo: p.status === "active",
+        // Not the dashboard's rule: the console uploads for teams that are not
+        // approved yet. See `adminCanUploadFor()`.
+        canSubmitVideo: adminCanUploadFor(p.status),
         playersCanUpload: p.players_can_upload,
         uploadPolicy: p.upload_policy,
         eventsPolicy: p.events_policy,

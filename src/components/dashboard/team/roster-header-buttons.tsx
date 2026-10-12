@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   AddPlayerDialog,
@@ -13,13 +14,20 @@ import {
 } from "@/components/dashboard/team/roster-actions";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import { RosterInviteDialog } from "./roster-invite-dialog";
+import {
+  AddSelfDialog,
+  mayAddSelf,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { useClaimInvite } from "./roster-claim-invite";
 import type {
   FormerPlayer,
   RosterMember,
   SeatUsage,
 } from "@/lib/data/team-roster-server";
+import type { TeamJoinLink } from "@/lib/data/team-settings-server";
 
 /**
  * The coach's own three writes, which is what this dialog has always called.
@@ -72,6 +80,7 @@ export function RosterHeaderButtons({
   roster,
   playersCanUpload,
   former,
+  joinLink,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
@@ -94,9 +103,60 @@ export function RosterHeaderButtons({
    * profile beside their old one.
    */
   former: FormerPlayer[];
+  /**
+   * The program's live join link, or null — `getRosterJoinLink`, the same
+   * `TeamJoinLink` Settings › Teams reads, so the Invite dialog's "Join link"
+   * half opens on the rung that is really live.
+   */
+  joinLink: TeamJoinLink | null;
 }) {
+  const { active, viewer } = useWorkspace();
   const [inviting, setInviting] = useState(false);
+  /**
+   * "Add yourself as a player" — reached by typing your own address into
+   * either dialog. Offered to staff this roster does not carry as a player;
+   * for anybody else their own address is an ordinary duplicate.
+   */
+  const [addingSelf, setAddingSelf] = useState(false);
+  const self: OwnAddressOffer = mayAddSelf(
+    active.role,
+    roster.some(
+      (member) => member.role === "player" && member.userId === viewer.id,
+    ),
+  )
+    ? {
+        email: viewer.email,
+        onAddSelf: () => {
+          // Invite is held open by a claim target as well as by `inviting`
+          // (the drawer's "Invite to claim →"); clearing only one left it
+          // open underneath the dialog this hands off to.
+          setInviting(false);
+          claim.clear();
+          setAddingPlayer(false);
+          setAddingSelf(true);
+        },
+      }
+    : null;
   const [addingPlayer, setAddingPlayer] = useState(false);
+  /**
+   * `?add=player` lands with Add player already open — Team Home's day-zero
+   * "Add players" button, which names this dialog and should not need a second
+   * click to reach it. Consumed once, during render (the arrival is the event,
+   * so there is no frame with the dialog still closed), then taken off the URL
+   * so a reload or the back button does not reopen a dialog somebody closed.
+   */
+  const openOnArrival = useSearchParams().get("add") === "player";
+  const [arrival, setArrival] = useState(openOnArrival);
+  if (arrival) {
+    setArrival(false);
+    setAddingPlayer(true);
+  }
+  useEffect(() => {
+    if (!openOnArrival) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", url);
+  }, [openOnArrival]);
   /**
    * What Add player should open holding.
    *
@@ -142,6 +202,9 @@ export function RosterHeaderButtons({
           `Tb4c`: "ghost Invite beside primary Add player". It was `outline`,
           which the v3 readme rules out beside a primary on a grey page. */}
       <div className="flex shrink-0 items-center gap-2.5">
+        {/* One way in. The join link used to open as a popover anchored
+            here, after the dialog closed to make room for it; it is now the
+            dialog's own second half ("Join link" beside "Email invite"). */}
         <button
           type="button"
           className={advButton("ghost")}
@@ -174,6 +237,8 @@ export function RosterHeaderButtons({
         openInviteEmails={openInviteEmails}
         playersCanUpload={playersCanUpload}
         onHandOffToAddPlayer={handOffToAddPlayer}
+        self={self}
+        joinLink={joinLink}
       />
 
       <AddPlayerDialog
@@ -201,7 +266,21 @@ export function RosterHeaderButtons({
         former={former}
         initial={addInitial}
         actions={MEMBER_ACTIONS}
+        self={self}
       />
+
+      {/* Mounted only while it can be opened, or is open: the roster refresh
+          after a success withdraws the offer before the dialog has closed. */}
+      {(self || addingSelf) && (
+        <AddSelfDialog
+          open={addingSelf}
+          onOpenChange={setAddingSelf}
+          programId={active.id}
+          viewerName={viewer.name}
+          teamName={active.name}
+          seats={seats}
+        />
+      )}
     </>
   );
 }

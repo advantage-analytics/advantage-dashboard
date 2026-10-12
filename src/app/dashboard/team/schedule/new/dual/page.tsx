@@ -1,3 +1,4 @@
+import { toGenderedSquad } from "@/lib/data/squad";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
@@ -114,7 +115,9 @@ export default async function NewDualPage() {
       // directory is narrowed to this program's squad, and waiting for the
       // other four reads to learn it would serialise the slowest read here.
       settingsRead.then((read) =>
-        getOpponentDirectory(read?.program.team ?? null),
+        // Co-ed and "not set" both mean no one squad's directory applies,
+        // so both read the whole directory rather than the men's.
+        getOpponentDirectory(toGenderedSquad(read?.program.team)),
       ),
       ownProgramKey(active.id),
       // Read for the head-to-head half of every subline on step one. Staff-only
@@ -139,7 +142,7 @@ export default async function NewDualPage() {
         // Which squad this program fields — step one lists only opponents it
         // could actually play. Null when the settings read came back empty,
         // which step one reads as "do not narrow": see `NewDualData`.
-        ourTeam: settings?.program.team ?? null,
+        ourTeam: toGenderedSquad(settings?.program.team),
         ourDivision: self?.division ?? null,
         // Its own read, not off `self`: `self` exists only for a college row
         // of the squad, and a null key here would make step one's

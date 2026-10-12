@@ -11,7 +11,7 @@ import {
   viewerInitialTransform,
   VIEWER_COURT,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
-import { bandKindFor } from "@/components/dashboard/matches/match-detail/shots/viz-bands-menu";
+import { bandKindFor } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   parseVizState,
   vizStateQuery,
@@ -200,7 +200,7 @@ test("default previews include independent rally placement tiles for both subjec
     (state) => vizStateQuery(new URLSearchParams(), state),
   );
   const rallies = tiles.filter((t) => t.cut === "rallyPlacement");
-  expect(tiles).toHaveLength(8);
+  expect(tiles).toHaveLength(10);
   expect(rallies.map((t) => t.key)).toEqual([
     "you:rallyPlacement",
     "opponent:rallyPlacement",

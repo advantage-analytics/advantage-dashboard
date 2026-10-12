@@ -91,3 +91,49 @@ export async function readAverageFrameRate(
   // into null.
   return withDeadline(readUnbounded(file), deadlineMs);
 }
+
+/** What the container says the picture is, and whether this tab can fix it. */
+export interface ContainerVideoFormat {
+  /** Mediabunny's codec name ("avc", "hevc", …), or null when unnamed. */
+  videoCodec: string | null;
+  /**
+   * Whether this browser can decode the track AND encode 1080p H.264, i.e.
+   * whether the pre-upload re-encode (`src/lib/video/trim-plan.ts`) can run.
+   */
+  canConvert: boolean;
+}
+
+async function readFormatUnbounded(
+  file: Blob,
+): Promise<ContainerVideoFormat | null> {
+  const { Input, BlobSource, ALL_FORMATS, canEncodeVideo } =
+    await import("mediabunny");
+  const input = new Input({
+    formats: ALL_FORMATS,
+    source: new BlobSource(file),
+  });
+  try {
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) return null;
+    const videoCodec = await track.getCodec();
+    const [decodes, encodes] = await Promise.all([
+      track.canDecode(),
+      canEncodeVideo("avc", { width: 1920, height: 1080 }),
+    ]);
+    return { videoCodec, canConvert: decodes && encodes };
+  } finally {
+    input.dispose();
+  }
+}
+
+/**
+ * The primary video track's codec and whether this browser could re-encode it,
+ * or `null` when the container cannot be read in time. Never throws.
+ */
+export async function readContainerVideoFormat(
+  file: Blob,
+  options?: { deadlineMs?: number },
+): Promise<ContainerVideoFormat | null> {
+  const deadlineMs = options?.deadlineMs ?? CONTAINER_FRAME_RATE_DEADLINE_MS;
+  return withDeadline(readFormatUnbounded(file), deadlineMs);
+}

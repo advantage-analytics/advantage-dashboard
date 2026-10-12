@@ -11,6 +11,7 @@ import { SettingsButton } from "@/components/dashboard/settings/settings-button"
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { RolePill } from "@/components/ui/role-pill";
 import { StatePill } from "@/components/ui/state-pill";
 import {
   RoleMenu,
@@ -22,7 +23,7 @@ import {
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
-  resendRole,
+  resendInput,
 } from "@/components/dashboard/team/roster-vocabulary";
 import {
   adminInviteMember,
@@ -354,7 +355,7 @@ export function AdminPeopleCard({
                   action={adminSetProgramMemberRole}
                 />
               ) : (
-                <StatePill>{capitalize(member.role)}</StatePill>
+                <RolePill role={member.role} />
               )}
             </AdminPersonRow>
           );
@@ -390,12 +391,13 @@ export function AdminPeopleCard({
                   () =>
                     adminInviteMember({
                       programId,
-                      email: invite.email,
                       // `create_program_invite` upserts on the one-open-invite
                       // index, so this refreshes the row and mints a fresh
                       // token rather than leaving two live links into one
                       // program — exactly as the Roster resends.
-                      role: resendRole(invite.role),
+                      // Carries the roster row it claims, when it claims
+                      // one — see `resendInput`.
+                      ...resendInput(invite),
                     }),
                   `Invitation to ${invite.email} sent again.`,
                 )

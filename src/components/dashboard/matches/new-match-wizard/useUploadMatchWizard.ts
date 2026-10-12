@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
 import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
+import { adminUploadApproval } from "@/lib/admin/uploads/approval";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import type { Workspace } from "@/lib/workspace/types";
 import type { ProgramApprovalReading } from "@/lib/workspace/upload-eligibility";
@@ -73,6 +74,8 @@ import {
   ParsingState,
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
+  videoCheckOf,
+  withoutVideoCheck,
   STEP_ORDER_BY_KIND,
   NO_FORMAT_DEFAULTS,
   presetLineKey,
@@ -541,6 +544,8 @@ export interface UseUploadMatchWizardReturn {
   // Video analysis (processing providers only)
   videoProbe: VideoProbeSummary | null;
   videoWarnings: string[];
+  /** Facts about the video that are not cautions — drawn grey. */
+  videoNotes: string[];
   isProbing: boolean;
   /** Provider-owned media rules, so the wizard never names a vendor. */
   minTrimSeconds: number;
@@ -657,6 +662,13 @@ export interface UseUploadMatchWizardReturn {
     /** True in a team workspace with no preset — the wizard must ask. */
     required: boolean;
     /**
+     * The program `roster` belongs to, or null outside a team. Not always the
+     * switcher's active workspace: an attached line pins the wizard to the
+     * match's own program. Anything that ACTS on the roster — adding yourself
+     * to it — must agree with this, not with the switcher.
+     */
+    programId: string | null;
+    /**
      * The ELIGIBLE roster: the program's live players, the viewer's own
      * profile included when they genuinely hold one (see
      * `eligibleRosterOptions`). Nobody else is offered — there is no "Myself"
@@ -680,6 +692,13 @@ export interface UseUploadMatchWizardReturn {
      * anything else is ignored rather than installed.
      */
     choose: (subject: MatchSubject) => void;
+    /**
+     * Installs a roster profile that was created a moment ago — the viewer
+     * adding themselves as a player from the For menu. The list in hand
+     * predates that row, so this reloads it and holds the answer meanwhile;
+     * the fresh list is what confirms it, exactly as for a `?player=` seed.
+     */
+    chooseAdded: (subject: RosterSubject) => void;
   };
   /**
    * May this match be recorded here, and for whom — `uploadEligibility()`
@@ -943,6 +962,7 @@ export function useUploadMatchWizard({
   // and the trim rail knows the true duration.
   const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
   const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
+  const [videoNotes, setVideoNotes] = useState<string[]>([]);
   const [isProbing, setIsProbing] = useState(false);
   /**
    * True from the moment a window start moved far enough to drop the
@@ -954,8 +974,7 @@ export function useUploadMatchWizard({
    * The window start as it stood when `initialTopPlayerIsPlayer1` was last
    * answered — the distance every later trim is measured against, so ten 10 s
    * jumps add up the way one 100 s drag does. Null when no answer has been
-   * given in this session (including a resumed draft, which restores the
-   * answer but not the moment it was given).
+   * given in this session.
    */
   const topPlayerAnswerStartRef = useRef<number | null>(null);
   /**
@@ -970,12 +989,12 @@ export function useUploadMatchWizard({
   /**
    * The recording the camera answers describe, as {@link videoSignature}.
    *
-   * Null means "no answer belongs to a file in this session" — which includes
-   * a RESUMED DRAFT, whose answers come back without the video they were given
-   * for. Re-picking then re-asks both questions rather than assuming the file
+   * Null means "no answer belongs to a file in this session". A pick against
+   * a null signature re-asks both questions rather than assuming the file
    * chosen is the one they were answered for; two recordings can share a name,
    * and the guardrail's own rule is that a false clear costs one click while a
-   * false keep costs the match.
+   * false keep costs the match. A resumed draft brings no answers back at all
+   * (`VIDEO_CHECK_FIELDS`).
    */
   const cameraAnswerFileRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1352,6 +1371,17 @@ export function useUploadMatchWizard({
    * from it (to tell a carried score from a typed one) and its source kind.
    */
   const seededPresetRef = useRef<EventPreset | null>(null);
+  /**
+   * The id of the draft whose saved answers have been seeded into the form.
+   *
+   * `draft` comes straight from the Server Component, so any server re-render
+   * of the page hands over a new object describing the SAME draft and re-runs
+   * the seed effect below. A draft is seeded once per id: a second pass would
+   * put its saved answers back over the live ones — the top-player answer and
+   * the trim window among them (`docs/ui-revamp-guardrails.md` §4) — and send
+   * the step back to the file.
+   */
+  const seededDraftIdRef = useRef<string | null>(null);
 
   // The wizard autosaves as you answer (design 11c): every change lands in
   // localStorage a moment later, and the header says so. A draft ROW is
@@ -1378,7 +1408,8 @@ export function useUploadMatchWizard({
         stepIndex: Math.max(0, order.indexOf(step)),
         stepCount: order.length,
         provider: selectedProvider,
-        formData,
+        // The video check never reaches the row — see `VIDEO_CHECK_FIELDS`.
+        formData: withoutVideoCheck(formData) as MatchFormData,
         fileName: uploadedFile?.name ?? null,
         preset: preset ?? null,
         attachedLine,
@@ -1457,6 +1488,10 @@ export function useUploadMatchWizard({
       // Captured here, not read in the updater below: `seededRef` flips to
       // true further down this effect, before React runs the updater.
       const firstSeed = !seededRef.current;
+      // Captured for the updater too. See `seededDraftIdRef`.
+      const seedDraft =
+        draft && seededDraftIdRef.current !== draft.id ? draft : null;
+      if (seedDraft) seededDraftIdRef.current = seedDraft.id;
       // The Lets default applies when a line is (re)opened — its first seed
       // or a swap — never on a re-run for the SAME line (a format re-sync),
       // which would silently undo a coach's "Lets played" choice. A resumed
@@ -1490,7 +1525,10 @@ export function useUploadMatchWizard({
         }
       }
       setFormData((prev) => {
-        const base = { ...prev, ...(draft?.formData ?? {}) };
+        const base = {
+          ...prev,
+          ...(seedDraft ? withoutVideoCheck(seedDraft.formData) : {}),
+        };
         const scoreCleared: Partial<MatchFormData> =
           // A score equal to line A's recorded one came from line A's record
           // (or cannot be told apart from it) and is wrong for line B; a
@@ -1507,8 +1545,8 @@ export function useUploadMatchWizard({
             : {};
         return {
           ...base,
-          // After the draft: a swap in a resumed flow re-spreads the draft,
-          // whose answers were given for its line's players too.
+          // After the draft, whose answers were given for its line's players
+          // too.
           ...swapCleared,
           ...scoreCleared,
           eventName: preset.eventName ?? "",
@@ -1546,8 +1584,7 @@ export function useUploadMatchWizard({
               preset.eventKind === "tournament")
               ? true
               : // A resumed draft's saved answer on its first seed; after that
-                // the live value — `base` re-spreads the draft, which would
-                // put the draft's answer back over a newer toggle.
+                // the live value.
                 firstSeed
                 ? base.playOnLets
                 : prev.playOnLets,
@@ -1587,12 +1624,21 @@ export function useUploadMatchWizard({
     // A draft being resumed outranks whatever localStorage has: it is the
     // explicit thing the person clicked Resume on.
     if (draft) {
+      // Already seeded: the live answers and the step stand. See
+      // `seededDraftIdRef`.
+      if (seededDraftIdRef.current === draft.id) return;
+      seededDraftIdRef.current = draft.id;
       const draftProvider =
         draft.provider && isProviderSupported(draft.provider)
           ? (draft.provider as ProviderId)
           : DEFAULT_PROVIDER_ID;
       setSelectedProvider(draftProvider);
-      setFormData({ ...getDefaultFormData(formatDefaults), ...draft.formData });
+      setFormData({
+        ...getDefaultFormData(formatDefaults),
+        // A row saved before the video check stopped being stored still
+        // carries it — see `VIDEO_CHECK_FIELDS`.
+        ...withoutVideoCheck(draft.formData),
+      });
       if (draft.attachedLine) {
         attachedLineRef.current = draft.attachedLine;
         setAttachedLine(draft.attachedLine);
@@ -1655,11 +1701,17 @@ export function useUploadMatchWizard({
       // hold whoever the previous visit was for, and a name left disagreeing
       // with the id chosen in the For field is the mismatch the details step
       // exists to make impossible.
-      setFormData({
+      //
+      // The video check is never stored (`VIDEO_CHECK_FIELDS`), so the live
+      // one is kept: an in-place workspace switch re-runs this with a video
+      // still loaded, and blanking its window would leave nothing to submit.
+      // On a fresh mount the live one is the unanswered default.
+      setFormData((prev) => ({
         ...getDefaultFormData(formatDefaults),
         ...storedFormData,
+        ...videoCheckOf(prev),
         ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
-      });
+      }));
     } else {
       // Nothing stored to reseed from — a switch in place before the first
       // autosave, or storage that cannot be written. The live form may still
@@ -1805,8 +1857,10 @@ export function useUploadMatchWizard({
     ProgramApprovalReading | undefined
   > => {
     if (admin) {
-      const reading = admin.context.workspace
-        .programStatus as ProgramApprovalReading;
+      // The console uploads for teams that are not approved yet.
+      const reading = adminUploadApproval(
+        admin.context.workspace.programStatus,
+      );
       setApprovalReading(reading);
       return reading;
     }
@@ -1870,8 +1924,9 @@ export function useUploadMatchWizard({
    * so an owner or coach who also plays would otherwise have no row of their
    * own to pick — and no "Myself" to fall back on, since that is exactly the
    * fallback this wizard no longer has. `eligibleRosterOptions()` folds it in
-   * on the same terms as everyone else. Readable under the roster's own
-   * SELECT policy (`program_id in user_program_ids()`).
+   * on the same terms as everyone else. (The RPC stopped dropping it in
+   * `20261008160418`, so the fold is now a guard.) Readable under the roster's
+   * own SELECT policy (`program_id in user_program_ids()`).
    *
    * A failed RPC leaves the roster NULL and flags it, rather than reading as
    * an empty program: `uploadEligibility()` refuses on null as
@@ -2067,9 +2122,15 @@ export function useUploadMatchWizard({
     () =>
       wizardUploadEligibility({
         ...eligibilityInput,
-        approval: approvalReading,
+        // Before any re-read, a team workspace falls back to its own status,
+        // which would refuse the console for an unapproved team.
+        approval:
+          approvalReading ??
+          (admin
+            ? adminUploadApproval(admin.context.workspace.programStatus)
+            : undefined),
       }),
-    [eligibilityInput, approvalReading],
+    [eligibilityInput, approvalReading, admin],
   );
   /**
    * Retry a retryable refusal — re-reads whichever lookup failed (the
@@ -2099,12 +2160,20 @@ export function useUploadMatchWizard({
    * longer offers it), and a roster id the loaded list does not carry is
    * refused too. A pick made before the list has loaded is accepted and
    * re-checked by the effect above once it has.
+   *
+   * `awaitingReload` is that same case made on purpose: the row was created
+   * after the list in hand was read, the caller has already asked for a fresh
+   * one, and the stale list must not be the thing that refuses it.
    */
   const chooseMatchSubject = useCallback(
-    (subject: MatchSubject) => {
+    (subject: MatchSubject, awaitingReload = false) => {
       if (eligibilityWorkspace.kind === "team") {
         if (subject.kind !== "roster") return;
-        if (teamRoster && rosterSubjectOrNull(subject, teamRoster) === null)
+        if (
+          !awaitingReload &&
+          teamRoster &&
+          rosterSubjectOrNull(subject, teamRoster) === null
+        )
           return;
       }
       const previous = matchSubjectRef.current;
@@ -2147,6 +2216,25 @@ export function useUploadMatchWizard({
       applyMatchSubject,
       resetIdentityAnswer,
     ],
+  );
+
+  /**
+   * `whoPlayed.choose` — one argument, on purpose. `chooseMatchSubject`'s
+   * second parameter skips the roster check, and a function handed out as a
+   * prop is one `onClick={choose}` away from receiving a truthy event there.
+   */
+  const chooseListedSubject = useCallback(
+    (subject: MatchSubject) => chooseMatchSubject(subject),
+    [chooseMatchSubject],
+  );
+
+  /** See `whoPlayed.chooseAdded`. Reload first, so the answer rides a null list. */
+  const chooseAddedSubject = useCallback(
+    (subject: RosterSubject) => {
+      reloadRoster();
+      chooseMatchSubject(subject, true);
+    },
+    [reloadRoster, chooseMatchSubject],
   );
 
   // Step navigation handlers
@@ -2311,6 +2399,7 @@ export function useUploadMatchWizard({
       const generation = resetFileGeneration();
       setUploadError(null);
       setVideoWarnings([]);
+      setVideoNotes([]);
       setVideoProbe(null);
       setUploadedFile(null);
       setIsProbing(true);
@@ -2321,7 +2410,7 @@ export function useUploadMatchWizard({
         if (generation !== fileGenerationRef.current) return;
 
         if (!result.success) {
-          setUploadError(result.error || "This video can't be analysed.");
+          setUploadError(result.error || "This video can't be analyzed.");
           return;
         }
 
@@ -2329,6 +2418,7 @@ export function useUploadMatchWizard({
 
         setVideoProbe(summary);
         setVideoWarnings(result.warnings ?? []);
+        setVideoNotes(result.notes ?? []);
         setUploadedFile({
           name: file.name,
           size: formatFileSize(file.size),
@@ -2355,7 +2445,7 @@ export function useUploadMatchWizard({
         // A DIFFERENT recording invalidates both camera answers — see
         // CLEARED_CAMERA_ANSWERS. Re-picking the identical file (Remove, then
         // add the same one back) is not a swap and keeps them; an unknown
-        // signature, which is what a resumed draft has, counts as different.
+        // signature counts as different.
         const signature = videoSignature(file);
         const sameRecording = cameraAnswerFileRef.current === signature;
         if (!sameRecording) forgetCameraAnswers();
@@ -2382,8 +2472,13 @@ export function useUploadMatchWizard({
         });
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
+        // Lead-first, like the validator's refusals: the strip sets the first
+        // sentence as its lead, and a bare exception message ("The operation
+        // was aborted.") would otherwise be the whole notice.
         setUploadError(
-          err instanceof Error ? err.message : "Couldn't read this video.",
+          err instanceof Error && err.message
+            ? `Couldn't read this video. ${err.message}`
+            : "Couldn't read this video.",
         );
       } finally {
         if (generation === fileGenerationRef.current) setIsProbing(false);
@@ -2405,10 +2500,9 @@ export function useUploadMatchWizard({
       // the ONE place that clears it: the handle drag's release, the arrow
       // nudge, `I` and the start CutField's Set button all arrive here.
       const { start: previousStart, answered } = topPlayerAnswerRef.current;
-      // A resumed draft restores the answer but not the moment it was given.
-      // Adopt the committed start as the baseline rather than reading "no
-      // baseline" as "clear": creep is then measured from where the player
-      // came back to the step.
+      // Should an answer ever stand with no recorded baseline, adopt the
+      // committed start as the baseline rather than reading "no baseline" as
+      // "clear".
       const baseline = topPlayerAnswerStartRef.current ?? previousStart ?? 0;
       const startMoved =
         previousStart !== undefined && startSeconds !== previousStart;
@@ -2446,6 +2540,7 @@ export function useUploadMatchWizard({
     resetFileGeneration();
     setVideoProbe(null);
     setVideoWarnings([]);
+    setVideoNotes([]);
     setUploadedFile(null);
     setUploadError(null);
     forgetCameraAnswers();
@@ -3824,6 +3919,7 @@ export function useUploadMatchWizard({
     // Video analysis
     videoProbe,
     videoWarnings,
+    videoNotes,
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
     remainingQuotaSeconds,
@@ -3845,12 +3941,15 @@ export function useUploadMatchWizard({
     handleFormatChange,
     whoPlayed: {
       required: askWhoPlayed,
+      programId:
+        eligibilityWorkspace.kind === "team" ? eligibilityWorkspace.id : null,
       roster: teamRoster,
       loadFailed: rosterLoadFailed,
       reload: reloadRoster,
       uploaderName,
       subject: matchSubject,
-      choose: chooseMatchSubject,
+      choose: chooseListedSubject,
+      chooseAdded: chooseAddedSubject,
     },
     eligibility,
     retryEligibility,

@@ -188,3 +188,20 @@ export function trimmedObjectKey(params: {
 }): string {
   return `trimmed/${params.userId}/${params.matchId}/${params.jobId}.mp4`;
 }
+
+/**
+ * `label-backups/{match_id}/{session_id}/{stamp}.json` — the match's derived
+ * points, shots, bookmarks and match_stats as they were before a hand-labelled
+ * publish replaced them (labels/apply-session.ts). In the `match-results`
+ * bucket. Match first, so the match purge can accept a recorded backup key only
+ * from under its own match (purge-match-storage.ts), and the orphan sweeper
+ * attributes it by that segment too.
+ */
+export function labelBackupObjectKey(params: {
+  sessionId: string | null;
+  matchId: string;
+  createdAt: string;
+}): string {
+  const stamp = params.createdAt.replace(/[:.]/g, "-");
+  return `label-backups/${params.matchId}/${params.sessionId ?? "none"}/${stamp}.json`;
+}

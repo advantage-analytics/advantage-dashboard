@@ -51,7 +51,6 @@ export const PERSONAL_NAV: readonly NavLink[] = [
     name: "Opponents",
     href: "/dashboard/opponents",
     icon: Brain,
-    comingSoon: true,
   },
   {
     name: "Ask",
@@ -102,7 +101,10 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * why it appears in `PERSONAL_NAV` — the pooled record is not program-scoped,
  * so there is nothing about it that requires a team. Its page answers the
  * coming-soon stub BEFORE its team gate for the same reason: a nav entry that
- * silently redirects reads as a broken link, not an unfinished feature.
+ * silently redirects reads as a broken link, not an unfinished feature. The
+ * personal Opponents page has since shipped (so `PERSONAL_NAV`'s entry is no
+ * longer flagged); the team one is still the stub, which is why this entry
+ * keeps `comingSoon`.
  *
  * Statistics and Ask are `/dashboard/team/statistics` and `/dashboard/team/ask`
  * — separate routes from `PERSONAL_NAV`'s, not the same href reused. That is

@@ -4,6 +4,8 @@ import {
   isTrayFailure,
   trayFailureAction,
   trayFailureReason,
+  trayStoppedUploadPercent,
+  trayStoppedUploadReason,
 } from "@/components/dashboard/activity/tray-failure";
 import { STEPPER_COPY } from "@/components/dashboard/matches/match-detail/analysis-steps";
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
@@ -253,5 +255,42 @@ test.describe("trayFailureReason's one-line reason per class", () => {
         attemptsUsed: 3,
       }),
     ).toBe("Tried three times");
+  });
+});
+
+test.describe("a stopped upload's position", () => {
+  test("only an upload_again row with a recorded percent reports one", () => {
+    expect(
+      trayStoppedUploadPercent({
+        recovery: "upload_again",
+        stoppedUploadPercent: 27,
+      }),
+    ).toBe(27);
+    expect(
+      trayStoppedUploadPercent({
+        recovery: "upload_again",
+        stoppedUploadPercent: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("every other class ignores the reading", () => {
+    for (const recovery of [
+      "retry",
+      "rederive",
+      "fix_recording",
+      "wait_or_ask",
+      "stats_unavailable",
+      undefined,
+    ] as const) {
+      expect(
+        trayStoppedUploadPercent({ recovery, stoppedUploadPercent: 64 }),
+      ).toBeUndefined();
+    }
+  });
+
+  test("the reason is the stepper's failed-step words plus the percent", () => {
+    expect(STEPPER_COPY.steps.videoFailed).toBe("Upload stopped");
+    expect(trayStoppedUploadReason(27)).toBe("Upload stopped at 27%");
   });
 });

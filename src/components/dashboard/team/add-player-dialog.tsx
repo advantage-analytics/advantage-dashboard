@@ -39,6 +39,11 @@ import {
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
+import {
+  OwnAddressNotice,
+  isOwnAddress,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -283,6 +288,7 @@ export function AddPlayerDialog({
   former,
   initial,
   actions,
+  self = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -305,6 +311,12 @@ export function AddPlayerDialog({
   initial?: AddPlayerInitial;
   /** Which program's roster this writes to. See `AddPlayerActions`. */
   actions: AddPlayerActions;
+  /**
+   * Staff typing their own address are offered "Add yourself as a player"
+   * instead of the server's refusal. Absent on the admin console, where the
+   * person at the keyboard is not a member of the program.
+   */
+  self?: OwnAddressOffer;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -502,8 +514,13 @@ export function AddPlayerDialog({
   const taken = seats.used + seats.pending;
   const full = taken >= seats.seats;
 
+  // Their own address: `add_program_player` refuses it (a member does not get
+  // a second, coach-managed identity), so the form offers the right door.
+  const ownAddress = isOwnAddress(self, email);
+
   const ready =
     !full &&
+    !ownAddress &&
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
     (spotTakenBy.length === 0 || spotAcknowledged);
@@ -873,6 +890,8 @@ export function AddPlayerDialog({
           onChange={(event) => setEmail(event.target.value)}
         />
       </SettingsField>
+
+      {ownAddress && self && <OwnAddressNotice onAddSelf={self.onAddSelf} />}
 
       <label className="flex cursor-pointer items-start gap-2.5">
         <Checkbox

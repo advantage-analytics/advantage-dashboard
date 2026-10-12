@@ -63,18 +63,27 @@ you read the payload before anything is spent.
 
 ## 2. Two stores, two systems
 
-| Artifact                                                          | Where                                                                                      | Why there                                                            |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Uploaded video (cut to the selected window), 1–8 GB               | **Azure Blob** `advantage-videos`, `videos/…`                                              | the only host the vendor's `VideoUrl` accepts (§3); kept and played  |
-| Vendor's trimmed video (older matches only)                       | **Azure Blob** `advantage-videos`, `trimmed/…`                                             | no longer copied (§2 note); played only where no upload survives     |
-| Raw strokes JSON, ~1 MB                                           | **Supabase Storage** `match-results` (private)                                             | beside `match-data`, and next to the Edge Function that will read it |
-| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet       |
-| Webhook envelopes, ~1 KB                                          | Postgres `splitstep_webhook_deliveries`                                                    | needs to be transactional with the job row                           |
+| Artifact                                                       | Where                                                                                         | Why there                                                                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Uploaded video (cut to the selected window), 1–8 GB            | **Azure Blob** `advantage-videos`, `videos/…`                                                 | the only host the vendor's `VideoUrl` accepts (§3); kept and played                                                     |
+| Vendor's trimmed video, 0.2–1.5 GB                             | **Azure Blob** `advantage-videos`, `trimmed/…`                                                | copied server-side again since 2026-10-10 (§2 note); the archive and the fallback, played only where no upload survives |
+| Raw strokes JSON, ~1 MB                                        | **Supabase Storage** `match-results` (private)                                                | beside `match-data`, and next to the Edge Function that will read it                                                    |
+| Per-frame players / trajectories JSON (Sept 2026 API), 2–80 MB | **Supabase Storage** `match-results`, `…/{job}.players.json.gz` / `…/{job}.trajectories.json` | players gzipped (the bucket caps an object at 50 MB); trajectories feed ball paths; a daily cron retries misses         |
+| Webhook envelopes, ~1 KB                                       | Postgres `splitstep_webhook_deliveries`                                                       | needs to be transactional with the job row                                                                              |
 
 The vendor hands their processed video back on `trimmed_video_url` beside `strokes_url`
 (named `sas_url` until September 2026 — the parser accepts both, and the column is still
 `processing_jobs.sas_url`). Two more urls arrived with that rename: `players_url` and
 `trajectories_url` (nullable), per-frame tracking that lands beside the strokes file.
+
+> **October 2026: we keep everything a completion links to.** The players file of a
+> long match is 60–80 MB, over `match-results`' 50 MB object cap, so it was refused
+> on 10 of 14 jobs; it is now gzipped (76 MB → 8 MB) and fetched beside derivation.
+> The trimmed video is copied into `trimmed/…` again — not to play (our upload still
+> wins, below) but to have it. Misses are retried daily by
+> `/api/cron/archive-vendor-files` while the 7-day url lives
+> (`src/lib/services/splitstep/vendor-archive.ts`). The vendor's own field list is in
+> [`splitstep-api-reference.md`](splitstep-api-reference.md).
 
 > **September 2026: we keep our own file and no longer copy theirs.** From 2026-08-13
 > the webhook copied `trimmed_video_url` into `trimmed/…` and then deleted our source.
@@ -249,10 +258,11 @@ What it does, in order:
    That is what makes the envelope, and the urls inside it, recoverable by hand.
 4. **Return 200.**
 5. **On `job_completed`, in `after()`**: fetch `strokes_url`, write the JSON verbatim to
-   `match-results`, then `finalize_splitstep_results()`; grade and derive (the vendor's
-   trimmed video url is recorded on the row and not downloaded); and only then fetch `players_url` / `trajectories_url` into
-   `players_object_key` / `trajectories_object_key`, best-effort in whatever budget is
-   left.
+   `match-results`, then `finalize_splitstep_results()`; grade and derive. Beside that,
+   started first: the trimmed video's Azure server-side copy (`trimmed_object_key`)
+   and the players file (gzipped, `players_object_key`); the trajectories file lands
+   before derivation, which reads it. Anything that misses is retried by the daily
+   `/api/cron/archive-vendor-files` while its url lives.
 
 ### Authentication, in detail
 
@@ -439,8 +449,8 @@ seconds, whichever comes first**.
 
 That rule replaced `pct % 10 === 0`, which had a real bug: a chunk boundary that stepped
 over a multiple of ten skipped the write entirely. On a slow upload enough skips in a
-row is 15 minutes of silence, and the reaper marks the job failed underneath an upload
-that is still running. The 60-second floor is what makes that impossible regardless of
+row is long enough for the job to read as paused — and, once, for the reaper to mark it
+failed — underneath an upload that is still running. The 60-second floor is what makes that impossible regardless of
 chunk size.
 
 **A percentage is shown only while uploading.** The vendor sends queue and analysis
@@ -452,12 +462,29 @@ all over again. Those render a bare status word.
 from an upload still in flight. Observed exactly that: a job wrote 0% and was never
 touched again, showing "Uploading 0%" indefinitely.
 
-`reap_stalled_uploads()` fails `pending`/`uploading` jobs whose `updated_at` has been
-silent for 15 minutes. Keyed on **staleness, not age** — a live upload keeps touching
-`updated_at` no matter how large the file, so absolute age would false-fail a
-legitimately long upload. It runs on the read path in `loadMatchAnalysis()`, which is
-exactly when a stale row is misleading, and avoids enabling `pg_cron` for one statement.
-It is **not** `SECURITY DEFINER`: RLS applies, so a caller only ever reaps their own.
+**Quiet is two thresholds, not one.** Twenty minutes without a progress write and the
+job reads **"Upload paused"** on the Matches row, the activity tray and the match page
+(`isUploadPaused()`), and its uploader is emailed once. Nothing is failed: the job stays
+`uploading`, because a tab whose computer wakes up carries the transfer on — one real
+upload finished that way after four hours asleep. The match page offers the uploader
+"Upload the video again", which ends the paused job first.
+
+`reap_stalled_uploads()` then fails `pending`/`uploading` jobs whose `updated_at` has
+been silent for **six hours** (`UPLOAD_ABANDONED_AFTER`, passed as `p_stale_after` by
+every caller; the function's own fifteen-minute default is no longer used). Six hours is
+the life of the upload credential, so nothing can finish past it. Keyed on **staleness,
+not age** — a live upload keeps touching `updated_at` no matter how large the file. It
+runs on the read path in `loadMatchAnalysis()` and, once the
+`schedule_stalled_upload_sweep` migration is applied, every five minutes from `pg_cron`
+(with `/api/cron/reap-stalled-uploads` sending the paused email). It is **not**
+`SECURITY DEFINER`: RLS applies, so a signed-in caller only ever reaps their own.
+
+**A failed job stops its tab.** Blobs are named per match, so two uploads of one match
+share a staging area, and a tab that resumed after its job was failed could publish over
+the newer upload. `splitstep/job-liveness.ts` is asked before the upload URL, before a
+block after any pause, and before the commit; a failed (or deleted) job ends the upload
+there. That is why the reaper threshold had to move with it: at fifteen minutes it would
+end every upload whose laptop lid was closed over lunch.
 
 ---
 
@@ -537,8 +564,9 @@ Four rules keep it working no matter what the UI looks like:
 - **Never log the SAS URL.** It is a six-hour write credential, and the browser console
   outlives the upload — it survives screen shares, extensions, and anyone opening
   devtools. Log the blob name, which is what you want when debugging anyway.
-- **Keep writing `upload_progress_percent`.** Stop and the reaper (§7) fails the job
-  after 15 minutes of silence — the progress write _is_ the heartbeat.
+- **Keep writing `upload_progress_percent`.** Stop and the job reads as paused after 20
+  minutes of silence, and the reaper (§7) fails it after six hours — the progress write
+  _is_ the heartbeat.
 - **Keep the `beforeunload` guard around the whole transfer.** The wizard has already
   closed by then, so it is the only thing telling the user the work is not finished.
 - **The upload outlives the wizard.** It continues in the background after the user
@@ -707,9 +735,9 @@ delivery will.
 
 No url on a completion is mocked: it uploads fixtures to `match-results` and signs them,
 standing in for the results JSON, the players JSON and the trimmed video, so the downloads
-run over real HTTP. The trimmed video url must be recorded on the job row and **not**
-copied — the suite asserts `trimmed_object_key` stays null once the last `after()` step
-has landed. Because all of it happens in `after()`, the assertions poll rather than
+run over real HTTP. Everything must be kept — the suite asserts the players file is
+stored gzipped and inflates to the fixture, and that `trimmed_object_key` is set (the
+copy started), and it deletes the copied blob on the way out. Because all of it happens in `after()`, the assertions poll rather than
 checking immediately.
 
 Everything it creates is removed on the way out.

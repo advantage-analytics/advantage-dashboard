@@ -129,6 +129,27 @@ test("refusals carry the status the route answers: 401 no session, 403 not an ad
   ).toMatchObject({ ok: false, status: 400 });
   expect([anonymous.calls, member.calls, bad.calls]).toEqual([[], [], []]);
 });
+test("approval is not asked of the console: only a suspended program is refused", async () => {
+  for (const [programStatus, canSubmitVideo] of [
+    ["unclaimed", true],
+    ["claim_pending", true],
+    ["suspended", false],
+  ] as const) {
+    const h = harness();
+    const base = await h.deps.getAdminUploadContext();
+    h.deps.getAdminUploadContext = async () => ({
+      ok: true as const,
+      context: {
+        ...base.context,
+        workspace: { canSubmitVideo, programStatus },
+      } as AdminUploadContext,
+    });
+    const answer = await submitAdminMatchVideo(input, h.deps);
+    expect(answer.ok).toBe(canSubmitVideo);
+    expect(h.calls.length).toBe(canSubmitVideo ? 1 : 0);
+    if (!answer.ok) expect(answer.message).toContain("suspended");
+  }
+});
 test("a refused reservation answers a sentence, never the RPC's own text", async () => {
   const h = harness(true, id(3), 'duplicate key value violates "secret_idx"');
   const answer = await submitAdminMatchVideo(input, h.deps);

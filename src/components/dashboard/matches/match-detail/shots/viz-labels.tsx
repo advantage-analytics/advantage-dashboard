@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { filterKeysFor } from "./viz-model";
-import type { VizState } from "./viz-url";
+import { sameFilterValue, type VizState } from "./viz-url";
 import { ACE_STAR_FILL } from "./court-art";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ export const CUT_LABEL: Record<Cut, string> = {
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
+  errors: "Errors",
 };
 
 export const CHART_LABEL: Record<Chart, string> = {
@@ -77,6 +78,7 @@ const MISS_ITEM: LegendItem = {
   label: "Miss",
 };
 const OUTCOME_ITEMS: LegendItem[] = [WON_ITEM, LOST_ITEM, MISS_ITEM];
+const ERROR_ITEM: LegendItem = { ...LOST_ITEM, key: "error", label: "Error" };
 
 // Imports `court-art.tsx`'s own `ACE_STAR_FILL` rather than a second literal
 // — one hex, one allowlist entry, and the legend swatch can never drift from
@@ -100,6 +102,14 @@ const BACKHAND_ITEM: LegendItem = {
   glyph: "triangle",
   color: "var(--ink-500)",
   label: "Backhand",
+  outline: true,
+};
+
+const OTHER_STROKE_ITEM: LegendItem = {
+  key: "other-stroke",
+  glyph: "circle",
+  color: "var(--ink-500)",
+  label: "Forehand, serve or other",
   outline: true,
 };
 
@@ -137,6 +147,12 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (chart === "zones") return cut === "serve" ? OUTCOME_ITEMS : [];
   if (cut === "rallyPosition") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
+  }
+  // Every errors dot is a lost point — one swatch, named for what it is.
+  // Only backhands draw as triangles here; double-fault serves, volleys and
+  // overheads share the circle, so it is not labelled "Forehand".
+  if (cut === "errors") {
+    return [ERROR_ITEM, OTHER_STROKE_ITEM, BACKHAND_ITEM];
   }
   if (cut === "serve") return [...OUTCOME_ITEMS, ACE_ITEM];
   return [...OUTCOME_ITEMS, FOREHAND_ITEM, BACKHAND_ITEM];
@@ -203,14 +219,6 @@ export interface SavedViewLite {
   filters: VizFilters;
 }
 
-/** Set equality for two filter-group lists — order-independent, mirroring
- * `viz-url.ts`'s own private `sameValues`. */
-function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
-  if (a.length !== b.length) return false;
-  const bSet = new Set(b);
-  return a.every((v) => bSet.has(v));
-}
-
 /**
  * Pure — what the "View" trigger should say (F4b P2e: "The trigger shows the
  * saved view's name with a bookmark glyph once one is loaded"). `viewId` set
@@ -243,9 +251,7 @@ export function loadedViewLabel(
         state.cut === view.cut &&
         state.chart === view.chart &&
         filterKeysFor(view.cut).every((key) =>
-          key === "player"
-            ? state.filters.player === view.filters.player
-            : sameValues(state.filters[key], view.filters[key]),
+          sameFilterValue(key, state.filters, view.filters),
         );
       return { label: view.name, bookmark };
     }

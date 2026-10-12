@@ -170,7 +170,8 @@ function ProviderStepBody() {
 /**
  * `FileStepContent` with no file yet, video kind: the 280px dashed drop zone
  * (its film glyph always drawn; the two lines name whose video, so bars), then
- * `VideoRequirements` — eyebrow, the spec line, four icon rows, the link.
+ * `VideoRequirements` — eyebrow, two 40px-mark rows (the second with its
+ * court frame), the line of facts, the link.
  * The zone's bars take `--ink-200`: the skeleton token vanishes on its
  * `--surface-page` ground.
  */
@@ -189,24 +190,43 @@ function FileStepBody() {
         </span>
       </div>
 
-      <div className="flex flex-col gap-3.5">
-        <EyebrowBar className="w-44" />
-        <span className="flex h-[18px] items-center">
-          <PendingBar className="h-2.5 w-80" />
-        </span>
-        <div className="flex flex-col gap-2.5">
-          {["w-[88%]", "w-full", "w-[80%]", "w-[84%]"].map((width) => (
-            <div key={width} className="flex items-start gap-3">
-              <PendingBar className="mt-0.5 size-[13px] shrink-0" />
-              <span className="flex h-[18px] flex-1 items-center">
-                <PendingBar className={cn("h-2.5", width)} />
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5">
+          <EyebrowBar className="w-44" />
+          <div className="flex flex-col">
+            <div className="flex items-start gap-4 border-b border-[var(--border-hairline)] pb-4">
+              <PendingBar className="size-10 shrink-0" />
+              <span className="flex flex-1 flex-col gap-1">
+                <span className="flex h-5 items-center">
+                  <PendingBar className="h-3 w-48" />
+                </span>
+                <span className="flex h-4 items-center">
+                  <PendingBar className="h-2.5 w-64" />
+                </span>
               </span>
             </div>
-          ))}
+            <div className="flex items-center gap-4 pt-4">
+              <PendingBar className="size-10 shrink-0" />
+              <span className="flex flex-1 flex-col gap-1">
+                <span className="flex h-5 items-center">
+                  <PendingBar className="h-3 w-52" />
+                </span>
+                <span className="flex h-4 items-center">
+                  <PendingBar className="h-2.5 w-[88%]" />
+                </span>
+              </span>
+              <PendingBar className="h-[81px] w-[144px] shrink-0" />
+            </div>
+          </div>
         </div>
-        <span className="flex h-[18px] items-center">
-          <PendingBar className="h-2.5 w-32" />
-        </span>
+        <div className="flex flex-col items-start gap-2">
+          <span className="flex h-4 items-center">
+            <PendingBar className="h-2.5 w-80" />
+          </span>
+          <span className="flex h-4 items-center">
+            <PendingBar className="h-2.5 w-32" />
+          </span>
+        </div>
       </div>
     </div>
   );

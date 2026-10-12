@@ -233,14 +233,30 @@ export function sectionSummary(
   return parts.length === 0 ? null : parts.join(" · ");
 }
 
+/** What the panel's count counts — points, unless the host counts
+ * something else (the Visualizations tab's serves, shots or errors). */
+export interface CountNoun {
+  one: string;
+  many: string;
+}
+
+const POINT_NOUN: CountNoun = { one: "point", many: "points" };
+
 /** The drawer footer's live count: "9 of 114 points". */
-export function draftCountLine(count: number, total: number): string {
-  return `${count} of ${total} ${total === 1 ? "point" : "points"}`;
+export function draftCountLine(
+  count: number,
+  total: number,
+  noun: CountNoun = POINT_NOUN,
+): string {
+  return `${count} of ${total} ${total === 1 ? noun.one : noun.many}`;
 }
 
 /** The drawer's primary: "Show 9 points", "Show 1 point". */
-export function showPointsLabel(count: number): string {
-  return `Show ${count} ${count === 1 ? "point" : "points"}`;
+export function showPointsLabel(
+  count: number,
+  noun: CountNoun = POINT_NOUN,
+): string {
+  return `Show ${count} ${count === 1 ? noun.one : noun.many}`;
 }
 
 /**

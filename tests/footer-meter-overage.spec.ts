@@ -137,6 +137,17 @@ test("over the allowance, the bar's label states the overage", () => {
   expect(label).toContain("over the allowance by 1.0 hours");
 });
 
+test("a sub-minute overage is stated in seconds, in the readout and the label", () => {
+  // The same formatter as `quotaRefusal()`: 45 s over is not "1 min".
+  const html = render({
+    remainingSeconds: 2 * HOUR,
+    selectedSeconds: 2 * HOUR + 45,
+  });
+  expect(readout(html)).toContain("Over by 45 sec");
+  const label = /aria-label="([^"]*)"/.exec(html)?.[1] ?? "";
+  expect(label).toContain("over the allowance by 45 seconds");
+});
+
 test("a window that exactly consumes what is left is not an overage", () => {
   // `quotaRefusal()` allows the exact fit, so the meter must not contradict it.
   const exact = render({

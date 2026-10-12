@@ -51,6 +51,13 @@ export interface BlockUploadOptions {
    * them after a week, so a cancelled upload leaves nothing to clean up.
    */
   signal?: AbortSignal;
+  /**
+   * Awaited before every PUT attempt — each block, each retry, and the commit
+   * — so the caller can refuse to write once the upload is no longer its to
+   * finish. Throw `UploadAbortedError` to stop. `"commit"` is the one moment
+   * the upload becomes visible at the blob name.
+   */
+  beforeRequest?: (kind: "block" | "commit") => Promise<void>;
 }
 
 /** Thrown when `signal` fires. Distinct so callers can tell it from a failure. */
@@ -171,9 +178,13 @@ function put(params: {
 async function putWithRetry(
   params: Parameters<typeof put>[0],
   label: string,
+  beforeAttempt?: () => Promise<void>,
 ): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
+      // Before the retry as well as the first try: a block that failed
+      // because the computer slept is retried the moment it wakes.
+      await beforeAttempt?.();
       await put(params);
       return;
     } catch (err) {
@@ -227,6 +238,7 @@ export async function uploadFileInBlocks({
   contentType,
   signal,
   onProgress,
+  beforeRequest,
 }: BlockUploadOptions): Promise<void> {
   if (file.size === 0) {
     throw new Error("The selected file is empty.");
@@ -261,6 +273,7 @@ export async function uploadFileInBlocks({
           onProgress?.(start + loadedInThisBlock, file.size),
       },
       `block ${index + 1}/${blockCount}`,
+      beforeRequest && (() => beforeRequest("block")),
     );
 
     onProgress?.(end, file.size);
@@ -285,5 +298,6 @@ export async function uploadFileInBlocks({
       signal,
     },
     "block list commit",
+    beforeRequest && (() => beforeRequest("commit")),
   );
 }

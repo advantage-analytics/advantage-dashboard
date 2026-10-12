@@ -36,6 +36,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   ballPathsObjectKey,
+  labelBackupObjectKey,
   playersObjectKey,
   resultsObjectKey,
   trajectoriesObjectKey,
@@ -173,6 +174,17 @@ export const RESULTS_LAYOUTS: KeyLayout[] = [
       userId: PROBE_USER,
       matchId: PROBE_MATCH,
       jobId: PROBE_JOB,
+    }),
+  ),
+  // The version a hand-labelled publish replaced. Not under `results/`, and
+  // the match id is second, not third — `layoutFrom` reads where it sits. The
+  // match purge removes the ones recorded on its jobs; this catches the rest.
+  layoutFrom(
+    "label-backups/{match}/{session}/{stamp}.json",
+    labelBackupObjectKey({
+      sessionId: PROBE_JOB,
+      matchId: PROBE_MATCH,
+      createdAt: "2026-10-10T00:00:00.000Z",
     }),
   ),
 ];

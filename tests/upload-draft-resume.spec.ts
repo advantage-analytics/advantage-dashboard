@@ -605,3 +605,229 @@ test.describe("no duplicate match (T20)", () => {
     expect(h.draftDeletes).toContain("draft-m");
   });
 });
+
+// ─── A re-rendered page must not put the draft back over live answers ──────
+
+/**
+ * `draft` reaches the hook straight from the Server Component, so any server
+ * re-render of `/dashboard/matches/new` (a `router.refresh()`, a revalidation)
+ * hands over a NEW object describing the SAME draft. The seed effect used to
+ * depend on that object's identity: it re-ran, replaced the live form with the
+ * draft's saved answers and sent the step back to the file.
+ *
+ * The answer that matters most is `initialTopPlayerIsPlayer1`
+ * (`docs/ui-revamp-guardrails.md` §4): reverted to the draft's value it
+ * attributes every statistic to the wrong player with nothing looking broken.
+ * The drafts below carry the video check the way a row saved before
+ * `VIDEO_CHECK_FIELDS` does.
+ */
+function courtVideo() {
+  return new File(["video-bytes"], "court-one.mp4", {
+    type: "video/mp4",
+    lastModified: 1_700_000_000_000,
+  });
+}
+
+test.describe("a structurally equal draft does not re-seed", () => {
+  test("a personal draft keeps the live answers and the step", async () => {
+    const draft = draftOf({
+      provider: "splitstep",
+      formData: {
+        opponentName: "Saved Opponent",
+        fixedCamera: true,
+        initialTopPlayerIsPlayer1: false,
+        videoStartSeconds: 0,
+        videoEndSeconds: 1800,
+      } as MatchDraft["formData"],
+    });
+    const h = uploadWizardHarness({
+      props: { draft, initialProvider: "splitstep" },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("file");
+    // The first seed does carry the draft's answers in.
+    expect(h.current.formData.opponentName).toBe("Saved Opponent");
+
+    await h.current.onVideoPick(courtVideo());
+    await h.flush();
+    h.current.handleTrimChange(120, 3600);
+    h.render();
+    h.current.handleInputChange("fixedCamera", true);
+    h.current.handleInputChange("initialTopPlayerIsPlayer1", true);
+    h.current.handleInputChange("opponentName", "Typed Opponent");
+    h.current.handleFileContinue();
+    h.render();
+    const before = { step: h.current.step, formData: h.current.formData };
+    expect(before.step).toBe("trim");
+    expect(before.formData.initialTopPlayerIsPlayer1).toBe(true);
+
+    // The server re-rendered the page: same draft, new object.
+    h.props.draft = structuredClone(draft);
+    h.render();
+    await h.flush();
+
+    expect(h.current.formData.initialTopPlayerIsPlayer1).toBe(true);
+    expect(h.current.formData.videoStartSeconds).toBe(120);
+    expect(h.current.formData.videoEndSeconds).toBe(3600);
+    expect(h.current.formData.opponentName).toBe("Typed Opponent");
+    expect(h.current.formData).toEqual(before.formData);
+    expect(h.current.step).toBe(before.step);
+  });
+
+  test("a preset draft keeps the live answers and the step", async () => {
+    const preset = linePreset();
+    const draft = draftOf({
+      id: "draft-m",
+      provider: "splitstep",
+      preset,
+      formData: {
+        fixedCamera: true,
+        initialTopPlayerIsPlayer1: false,
+        playerHand: "left",
+      } as MatchDraft["formData"],
+    });
+    const h = uploadWizardHarness({
+      team: true,
+      props: { draft, preset, initialProvider: "splitstep" },
+    });
+    await h.flush();
+    // The first seed does carry the draft's answers in.
+    expect(h.current.formData.playerHand).toBe("left");
+
+    await h.current.onVideoPick(courtVideo());
+    await h.flush();
+    h.current.handleTrimChange(120, 3600);
+    h.render();
+    h.current.handleInputChange("fixedCamera", true);
+    h.current.handleInputChange("initialTopPlayerIsPlayer1", true);
+    h.current.handleInputChange("playerHand", "right");
+    h.current.handleFileContinue();
+    h.render();
+    const before = { step: h.current.step, formData: h.current.formData };
+    expect(before.step).toBe("trim");
+    expect(before.formData.initialTopPlayerIsPlayer1).toBe(true);
+
+    h.props.draft = structuredClone(draft);
+    h.render();
+    await h.flush();
+
+    expect(h.current.formData.initialTopPlayerIsPlayer1).toBe(true);
+    expect(h.current.formData.playerHand).toBe("right");
+    expect(h.current.formData).toEqual(before.formData);
+    expect(h.current.step).toBe(before.step);
+  });
+});
+
+// ─── The video check is never persisted ────────────────────────────────────
+
+/**
+ * The trim window and both camera answers describe one picked file, which
+ * survives neither localStorage nor a draft row — the next pick resets the
+ * window and clears the answers. Storing them only made the overwrite above
+ * possible, so they are stripped on write, and on read for older copies.
+ */
+test.describe("the video check is never persisted", () => {
+  const VIDEO_CHECK = {
+    videoStartSeconds: 120,
+    videoEndSeconds: 3600,
+    fixedCamera: true,
+    initialTopPlayerIsPlayer1: false,
+  };
+
+  test("a resumed draft that still carries it opens unanswered", async () => {
+    for (const team of [false, true]) {
+      const preset = team ? linePreset() : null;
+      const h = uploadWizardHarness({
+        team,
+        props: {
+          initialProvider: "splitstep",
+          ...(preset ? { preset } : {}),
+          draft: draftOf({
+            provider: "splitstep",
+            preset,
+            formData: {
+              ...VIDEO_CHECK,
+              playerHand: "left",
+            } as MatchDraft["formData"],
+          }),
+        },
+      });
+      await h.flush();
+      expect(h.current.formData.playerHand).toBe("left");
+      // Unanswered, never a boolean (guardrails §3.1).
+      expect(h.current.formData.initialTopPlayerIsPlayer1).toBeUndefined();
+      expect(h.current.formData.fixedCamera).toBeUndefined();
+      expect(h.current.formData.videoStartSeconds).toBeUndefined();
+      expect(h.current.formData.videoEndSeconds).toBeUndefined();
+    }
+  });
+
+  test("Save draft writes the row without it", async () => {
+    const h = uploadWizardHarness({ props: { initialProvider: "splitstep" } });
+    await h.flush();
+    await h.current.onVideoPick(courtVideo());
+    await h.flush();
+    h.current.handleTrimChange(120, 3600);
+    h.render();
+    h.current.handleInputChange("fixedCamera", true);
+    h.current.handleInputChange("initialTopPlayerIsPlayer1", true);
+    h.current.handleInputChange("opponentName", "Typed Opponent");
+    h.render();
+
+    expect(await h.current.saveDraft()).toBe(true);
+    const [saved] = h.draftSaves as unknown as { formData: object }[];
+    expect(saved.formData).toMatchObject({ opponentName: "Typed Opponent" });
+    for (const field of Object.keys(VIDEO_CHECK))
+      expect(saved.formData).not.toHaveProperty(field);
+    // The live form is untouched: only the copy is stripped.
+    expect(h.current.formData.initialTopPlayerIsPlayer1).toBe(true);
+    expect(h.current.formData.videoStartSeconds).toBe(120);
+  });
+
+  test("the autosave neither writes it nor reads an older copy's", () => {
+    const store = new Map<string, string>();
+    const { loadFormDataFromStorage, saveFormDataToStorage, STORAGE_KEYS } =
+      createLoader({
+        globals: {
+          localStorage: {
+            getItem: (k: string) => store.get(k) ?? null,
+            setItem: (k: string, v: string) => void store.set(k, v),
+            removeItem: (k: string) => void store.delete(k),
+          },
+        },
+      }).load(`${WIZARD}/utils.ts`) as {
+        loadFormDataFromStorage: (key: string) => object | null;
+        saveFormDataToStorage: (form: unknown, key: string) => void;
+        STORAGE_KEYS: { FORM_DATA: string };
+      };
+    const form = { ...VIDEO_CHECK, opponentName: "Typed Opponent" };
+
+    saveFormDataToStorage(form, "personal:user");
+    const written = JSON.parse(store.get(STORAGE_KEYS.FORM_DATA)!);
+    expect(written).toEqual({ opponentName: "Typed Opponent" });
+
+    // A copy written before the rule, in its own workspace and in another.
+    store.set(STORAGE_KEYS.FORM_DATA, JSON.stringify(form));
+    for (const key of ["personal:user", "team:elsewhere"]) {
+      const loaded = loadFormDataFromStorage(key);
+      expect(loaded).toMatchObject({ opponentName: "Typed Opponent" });
+      for (const field of Object.keys(VIDEO_CHECK))
+        expect(loaded).not.toHaveProperty(field);
+    }
+  });
+
+  test("the hook keeps the live video check when it re-seeds from storage", () => {
+    const hook = source(`${WIZARD}/useUploadMatchWizard.ts`);
+    expect(hook).toMatch(/\.\.\.storedFormData,\s*\.\.\.videoCheckOf\(prev\),/);
+  });
+});
+
+test("an untrimmed window says to cut the warm-up before answering", () => {
+  const trim = source(`${WIZARD}/TrimStepContent.tsx`);
+  expect(trim).toContain(
+    "Your window still starts at 0:00. Cut the warm-up first — then answer for the first frame you keep.",
+  );
+  expect(trim).toMatch(
+    /topPlayerAnswerStale\s*\?[^:]+:\s*committedStart === 0/,
+  );
+});

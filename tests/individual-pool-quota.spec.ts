@@ -72,6 +72,41 @@ test("personal workspaces and custom orgs draw from the pool; colleges do not", 
   expect(quotaTierFor({ kind: "team", orgType: "college" })).toBe("program");
 });
 
+test("an admin-granted pilot_eligible custom org draws the program pool; nothing else reads the flag", () => {
+  // The grant: a club on the program figure, exactly as a college is.
+  expect(
+    quotaTierFor({ kind: "team", orgType: "club", pilotEligible: true }),
+  ).toBe("program");
+  expect(
+    monthlyCapSecondsFor({
+      kind: "team",
+      orgType: "high_school",
+      pilotEligible: true,
+    }),
+  ).toBe(75 * HOUR);
+  // Explicitly false, or a constructor that never read the column: the
+  // reduced figure — fail closed.
+  expect(
+    quotaTierFor({ kind: "team", orgType: "club", pilotEligible: false }),
+  ).toBe("individual");
+  expect(quotaTierFor({ kind: "team", orgType: "academy" })).toBe("individual");
+  // The flag is a team fact; a personal workspace carrying it is ignored.
+  expect(
+    quotaTierFor({ kind: "personal", orgType: null, pilotEligible: true }),
+  ).toBe("individual");
+  expect(
+    monthlyCapSecondsFor({
+      kind: "personal",
+      orgType: null,
+      pilotEligible: true,
+    }),
+  ).toBe(2 * HOUR);
+  // A college never needs it and is unchanged with or without it.
+  expect(
+    quotaTierFor({ kind: "team", orgType: "college", pilotEligible: false }),
+  ).toBe("program");
+});
+
 test("with room in the pool, a player's own cap is the limit", () => {
   const peek = pickPeek(own(HOUR), {
     pilot_used_seconds: 2 * HOUR,

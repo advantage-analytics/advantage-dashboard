@@ -1,9 +1,9 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
 import {
   DayZeroShape,
-  GHOST_OPACITY,
   GhostRule,
 } from "@/components/dashboard/home/day-zero-shape";
 import {
@@ -17,6 +17,7 @@ import type {
   RosterMember,
   SeatUsage,
 } from "@/lib/data/team-roster-server";
+import type { TeamJoinLink } from "@/lib/data/team-settings-server";
 
 /**
  * Roster before the program has a player on it.
@@ -58,6 +59,16 @@ const ROW_RULES: readonly ({
   { col: COL.last, width: "62%" }, // Last match
 ];
 
+/**
+ * Eight rows where the shared ladder (`GHOST_OPACITY`) has five. A squad is
+ * six singles lines and a bench, so five rows stopped the card halfway down
+ * the page and read as a short list rather than a roster. Same start and the
+ * same kind of falloff, run further — and never to zero.
+ */
+const ROSTER_GHOST_OPACITY = [
+  1, 0.85, 0.7, 0.58, 0.46, 0.36, 0.28, 0.2,
+] as const;
+
 function GhostRow({ opacity }: { opacity: number }) {
   return (
     <div className={`${ROW} h-[52px]`} style={{ opacity }} aria-hidden="true">
@@ -79,6 +90,8 @@ export interface RosterDayZeroButtons {
   playersCanUpload: boolean;
   /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
   former: FormerPlayer[];
+  /** Forwarded to `RosterHeaderButtons` — see its own doc comment. */
+  joinLink: TeamJoinLink | null;
 }
 
 export function RosterDayZero({
@@ -130,15 +143,20 @@ export function RosterDayZero({
               {ROSTER_COLUMNS.map((column) => (
                 <span
                   key={column.label}
-                  className={`${column.col} eyebrow-sm${
-                    column.center ? "text-center" : ""
-                  }`}
+                  /* `cn`, not a template literal: the class sorter trims the
+                     space out of a conditional fragment, which welded this
+                     into "eyebrow-smtext-center" and left the "#" unstyled. */
+                  className={cn(
+                    column.col,
+                    "eyebrow-sm",
+                    column.center && "text-center",
+                  )}
                 >
                   {column.label}
                 </span>
               ))}
             </div>
-            {GHOST_OPACITY.map((opacity) => (
+            {ROSTER_GHOST_OPACITY.map((opacity) => (
               <GhostRow key={opacity} opacity={opacity} />
             ))}
           </div>

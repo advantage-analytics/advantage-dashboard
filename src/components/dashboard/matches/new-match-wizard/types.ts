@@ -255,6 +255,48 @@ export const DEFAULT_FORM_DATA: FormData = {
 };
 
 /**
+ * The video check — the trim window and both camera answers. Never persisted.
+ *
+ * All four describe ONE picked file, and a `File` survives neither
+ * localStorage nor a draft row: the next pick resets the window to the whole
+ * clip and, with no recording to match the answers to, clears both of them.
+ * So a stored copy could only ever be put back over a live answer — which for
+ * `initialTopPlayerIsPlayer1` attributes every statistic to the wrong player
+ * (`docs/ui-revamp-guardrails.md` §4). Stripped on write, and on read for
+ * copies saved before this rule.
+ */
+export const VIDEO_CHECK_FIELDS = [
+  "videoStartSeconds",
+  "videoEndSeconds",
+  "fixedCamera",
+  "initialTopPlayerIsPlayer1",
+] as const satisfies readonly (keyof FormData)[];
+
+/**
+ * `formData` without {@link VIDEO_CHECK_FIELDS}. The keys are removed rather
+ * than set to `undefined`: callers spread the result over a live form.
+ */
+export function withoutVideoCheck<T extends Partial<FormData>>(
+  formData: T,
+): Omit<T, (typeof VIDEO_CHECK_FIELDS)[number]> {
+  const rest: Partial<FormData> = { ...formData };
+  for (const field of VIDEO_CHECK_FIELDS) delete rest[field];
+  return rest as Omit<T, (typeof VIDEO_CHECK_FIELDS)[number]>;
+}
+
+/** Only {@link VIDEO_CHECK_FIELDS} of `formData` — the live video check. */
+export function videoCheckOf(
+  formData: FormData,
+): Pick<FormData, (typeof VIDEO_CHECK_FIELDS)[number]> {
+  return {
+    videoStartSeconds: formData.videoStartSeconds,
+    videoEndSeconds: formData.videoEndSeconds,
+    fixedCamera: formData.fixedCamera,
+    initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+  };
+}
+
+/**
  * The format answers a workspace pre-selects over `DEFAULT_FORM_DATA`.
  *
  * College tennis plays no-ad with lets played on, so a college team workspace

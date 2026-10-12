@@ -16,7 +16,7 @@
  * beside a 7 GB file otherwise reads as "sent".
  */
 
-import { memo, useEffect, useId, useRef } from "react";
+import { memo, useId } from "react";
 import {
   FileSpreadsheet,
   Film,
@@ -26,6 +26,7 @@ import {
   Swords,
   TriangleAlert,
   Users,
+  VideoOff,
   X,
   XCircle,
 } from "lucide-react";
@@ -36,7 +37,19 @@ import type {
   UploadedFile,
   VideoProbeSummary,
 } from "./types";
-import { noteStripCls } from "./styles";
+import {
+  errorStripCls,
+  noteIconCls,
+  noteStripCls,
+  warningStripCls,
+} from "./styles";
+import {
+  CheckedFileRow,
+  VideoFileLead,
+  videoFileFacts,
+} from "./CheckedFileRow";
+import { NoticeText } from "./NoticeText";
+import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 import { VideoRequirements } from "./VideoRequirements";
 import { formatProbeFps } from "@/lib/services/upload/validators/splitstep-validator";
@@ -52,8 +65,10 @@ export interface FileStepContentProps {
   uploadedFile: UploadedFile | null;
   /** Processing providers only: what the local probe read off the video. */
   probe: VideoProbeSummary | null;
-  /** Probe warnings — the file passed, with a caveat worth one line. */
+  /** Probe warnings — the file passed, with a caution. Drawn yellow. */
   warnings: string[];
+  /** Facts about the file that are not cautions. They join row 1's line. */
+  notes?: string[];
   /** Probing a video, validating or reading an export. */
   busy: boolean;
   /** Why the file was refused. */
@@ -119,53 +134,6 @@ function extensionList(acceptString: string): string {
     .filter((s) => s.startsWith("."))
     .map((s) => s.slice(1).toUpperCase())
     .join(" · ");
-}
-
-/**
- * A still from the file, as the row's 40px lead.
- *
- * Its own object URL rather than the trim step's: that one is created when the
- * player mounts, two steps from here. A few seconds in rather than frame zero,
- * which on a phone recording is usually the ground.
- */
-function VideoStill({
-  file,
-  durationSeconds,
-}: {
-  file: File;
-  durationSeconds: number;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-  // URL created and revoked in the same effect, src set from it — see the
-  // same note in TrimStepContent: a memoised URL revoked from a cleanup is
-  // dead by the time development's second effect run looks for it.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const url = URL.createObjectURL(file);
-    el.src = url;
-    return () => {
-      // Detach before revoking — Safari otherwise keeps the handle alive.
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
-      URL.revokeObjectURL(url);
-    };
-  }, [file]);
-  const at = Math.min(5, durationSeconds * 0.05) || 0.001;
-  return (
-    <video
-      ref={ref}
-      muted
-      playsInline
-      preload="metadata"
-      aria-hidden="true"
-      onLoadedMetadata={(e) => {
-        if (e.currentTarget.currentTime === 0) e.currentTarget.currentTime = at;
-      }}
-      className="size-10 object-cover opacity-90"
-    />
-  );
 }
 
 /**
@@ -312,6 +280,7 @@ function FileStepContentImpl({
   uploadedFile,
   probe,
   warnings,
+  notes = [],
   busy,
   error,
   parsingState,
@@ -343,17 +312,30 @@ function FileStepContentImpl({
         ? "read"
         : "ready";
 
-  const videoFacts = probe
-    ? [
-        formatTimecode(probe.durationSeconds),
-        formatResolution(probe.width, probe.height),
-        formatProbeFps(probe),
-        uploadedFile?.size,
-        "checked",
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const videoFacts = videoFileFacts(probe, uploadedFile?.size, "checked");
+
+  // What row 1 of the requirements reports once a video has passed the check.
+  // Nothing for a refused file: the wizard holds no probe for one, and the red
+  // strip under the drop zone already says what was wrong.
+  //
+  // A note ("Recorded at 30 fps. 60 fps gives…") rides in the row too, not in a
+  // strip of its own: its first sentence only restates the measured value the
+  // row already shows, so what is left is one clause, and a second grey strip
+  // under "Nothing is uploading yet" was two notices where one is the rule.
+  const suggestion = notes.map(noteSuggestion).filter(Boolean).join(" · ");
+  const videoResult =
+    isVideo && Boolean(uploadedFile) && !busy && probe
+      ? {
+          status: warnings.length > 0 ? ("warn" as const) : ("pass" as const),
+          suggestion: suggestion || undefined,
+          label: [
+            formatResolution(probe.width, probe.height),
+            formatProbeFps(probe),
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      : undefined;
 
   const browse = () => document.getElementById(inputId)?.click();
 
@@ -436,22 +418,37 @@ function FileStepContentImpl({
             {input}
           </div>
 
+          {/* A refused video names its own problem in its first sentence
+              (the validator writes lead-first), so there is no fixed prefix
+              here. An export's refusal is the parser's sentence and still
+              needs one. */}
           {error && (
-            <div className={noteStripCls}>
-              <XCircle
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>
-                <b className="font-medium text-[var(--ink-900)]">
-                  {isVideo
-                    ? "This video can't be analysed"
-                    : "This export couldn't be read"}
-                </b>
-                {" — "}
-                {error}
-              </span>
+            <div className={errorStripCls} role="alert">
+              {isVideo ? (
+                <>
+                  <VideoOff
+                    className={noteIconCls}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  <NoticeText>{error}</NoticeText>
+                </>
+              ) : (
+                <>
+                  <XCircle
+                    className={noteIconCls}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <b className="font-medium">
+                      This export couldn&apos;t be read
+                    </b>
+                    {" — "}
+                    {error}
+                  </span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -462,50 +459,40 @@ function FileStepContentImpl({
           {/* A checked file becomes a step-1 field: 40px lead, 14px name, mono
               facts in the subline. Replace is the quiet blue action; remove is
               a 28px icon square named by its label. */}
-          <div className="flex items-center gap-4 border-b border-[var(--border-hairline)] pb-4">
-            <span
-              className={`inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)] ${
-                isVideo ? "bg-[var(--ink-900)]" : ""
-              }`}
-            >
-              {isVideo ? (
-                uploadedFile?.file ? (
-                  <VideoStill
-                    file={uploadedFile.file}
-                    durationSeconds={probe?.durationSeconds ?? 0}
-                  />
-                ) : (
-                  <Film
-                    className="size-4 text-white/70"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )
-              ) : selectedProvider === "swing-vision" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src="/providers/swingvision-icon.png"
-                  alt=""
-                  className="size-10"
+          <CheckedFileRow
+            ruled
+            lead={
+              isVideo ? (
+                <VideoFileLead
+                  file={uploadedFile?.file}
+                  durationSeconds={probe?.durationSeconds ?? 0}
                 />
               ) : (
-                <FileSpreadsheet
-                  className="size-5 text-[var(--ink-500)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              )}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-[14px] leading-5 text-[var(--ink-900)]">
-                {uploadedFile?.name}
-              </span>
-              <span className="mono tabular text-micro leading-4">
-                {isVideo
-                  ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
-                  : `${extension} · ${uploadedFile?.size} · ${exportStatus}`}
-              </span>
-            </span>
+                <span className="inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-button)]">
+                  {selectedProvider === "swing-vision" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src="/providers/swingvision-icon.png"
+                      alt=""
+                      className="size-10"
+                    />
+                  ) : (
+                    <FileSpreadsheet
+                      className="size-5 text-[var(--ink-500)]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              )
+            }
+            name={uploadedFile?.name}
+            facts={
+              isVideo
+                ? (videoFacts ?? `${uploadedFile?.size} · Checked`)
+                : `${extension} · ${uploadedFile?.size} · ${exportStatus}`
+            }
+          >
             <button
               type="button"
               onClick={browse}
@@ -526,9 +513,23 @@ function FileStepContentImpl({
               />
             </button>
             {input}
-          </div>
+          </CheckedFileRow>
 
-          {isVideo && (
+          {/* A caution takes the place of the note below rather than stacking
+              on it: one strip under the file, and the yellow one is the one
+              that must not be missed. */}
+          {warnings.map((w) => (
+            <div key={w} className={warningStripCls}>
+              <TriangleAlert
+                className={noteIconCls}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <NoticeText>{w}</NoticeText>
+            </div>
+          ))}
+
+          {isVideo && warnings.length === 0 && (
             /* The honest thing about timing: nothing has left the machine. */
             <div className={noteStripCls}>
               <Info
@@ -543,21 +544,10 @@ function FileStepContentImpl({
             </div>
           )}
 
-          {warnings.map((w) => (
-            <div key={w} className={noteStripCls}>
-              <TriangleAlert
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>{w}</span>
-            </div>
-          ))}
-
           {parsingState.parseWarnings.map((w) => (
-            <div key={w} className={noteStripCls}>
+            <div key={w} className={warningStripCls}>
               <TriangleAlert
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                className={noteIconCls}
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
@@ -566,16 +556,14 @@ function FileStepContentImpl({
           ))}
 
           {parsingState.parseError && (
-            <div className={noteStripCls}>
+            <div className={errorStripCls}>
               <XCircle
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--error)]"
+                className={noteIconCls}
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
               <span>
-                <b className="font-medium text-[var(--ink-900)]">
-                  Couldn&apos;t read this export
-                </b>
+                <b className="font-medium">Couldn&apos;t read this export</b>
                 {" — "}
                 {parsingState.parseError} You can still enter the details by
                 hand on the next step.
@@ -591,7 +579,7 @@ function FileStepContentImpl({
       {hasFile && !isVideo && parsingState.parseSuccess ? (
         <FoundInExport formData={formData} />
       ) : isVideo ? (
-        <VideoRequirements />
+        <VideoRequirements result={videoResult} />
       ) : (
         <div className="flex flex-col gap-3.5">
           <span className="eyebrow">What the export needs</span>

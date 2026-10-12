@@ -58,7 +58,8 @@ export default async function ProgramIntakePage() {
   ]);
   if (!membership || !program) redirect("/dashboard/team");
 
-  // A custom team has no squad, so its eyebrow is the name alone.
+  // A custom team created before setup asked has no squad, so its eyebrow
+  // is the name alone; one that answered reads "Riverside · Co-ed".
   const eyebrow = [
     program.school_name,
     program.team ? teamLabel(program.team) : null,

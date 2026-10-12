@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowRight, GraduationCap, UserPlus, Users } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
+import { StatePill } from "@/components/ui/state-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import {
   approveJoinRequest,
@@ -82,10 +83,10 @@ function Pill({
   children: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 py-[3px] text-[10px] font-medium text-[var(--ink-700)]">
+    <StatePill className="gap-1">
       {icon}
       {children}
-    </span>
+    </StatePill>
   );
 }
 

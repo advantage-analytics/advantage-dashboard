@@ -25,6 +25,7 @@
  */
 
 import { serveCourtSide } from "./court";
+import { serveEnd, type CourtEnd } from "./position";
 import { lastServeIndex } from "./result-type";
 import { opponentOf } from "./rallies";
 import { CHANGEOVER_MIN_GAP_S } from "./server-witness";
@@ -73,14 +74,15 @@ export function frozenStretches(
  * game is the score stream's call, made by the caller.
  */
 export function frozenGameStarts(run: readonly SplitStepRally[]): boolean[] {
-  let previousEnd: "top" | "bottom" | null = null;
+  let previousEnd: CourtEnd | null = null;
   let previousTime: number | null = null;
 
   return run.map((rally, i) => {
     const serve = rally.strokes[lastServeIndex(rally)] ?? rally.strokes[0];
-    const y = serve?.playerY ?? null;
-    const end = y === null || y === 0 ? null : y > 0 ? "top" : "bottom";
-    const side = serve ? serveCourtSide(serve.playerX, y) : null;
+    const end = serveEnd(rally);
+    const side = serve
+      ? serveCourtSide(serve.playerX, serve.playerY ?? null)
+      : null;
     const time = serve?.videoTime ?? null;
 
     let starts = false;

@@ -6,7 +6,13 @@ function harness(data: boolean | null, error: unknown = null) {
   const effects: string[] = [];
   const mocks: Record<string, unknown> = {
     "@/lib/supabase/admin": {
-      createAdminClient: () => ({ rpc: async () => ({ data, error }) }),
+      createAdminClient: () => ({
+        rpc: async () => ({ data, error }),
+        // The shared-key read: no other match records these keys.
+        from: () => ({
+          select: () => ({ in: async () => ({ data: [], error: null }) }),
+        }),
+      }),
     },
     "@/lib/services/splitstep/config": { RESULTS_BUCKET: "results" },
     "@/lib/services/splitstep/video-url": {

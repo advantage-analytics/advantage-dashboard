@@ -376,11 +376,40 @@ test.describe("Admin program RPC gates (live)", () => {
     expect(result.error?.code).toBe(INVALID_PARAMETER);
   });
 
-  test("admin_create_program creates a club program with program_key null and status unclaimed", async () => {
+  test("admin_create_program refuses a co-ed college, and an unknown squad", async () => {
+    const base = {
+      p_school_name: `${MARK} Coed College`,
+      p_division: null,
+      p_conference: null,
+      p_city: null,
+      p_state: null,
+      p_primary_domain: null,
+    };
+    // A college is two directory rows, one per squad; co-ed is not one of them.
+    const college = await adminSession.client.rpc("admin_create_program", {
+      ...base,
+      p_org_type: "college",
+      p_team: "coed",
+      p_program_key: `${MARK}CoedCollege`,
+      p_school_group: `${MARK}coedcollege|TX`,
+    });
+    expect(college.error?.code).toBe(INVALID_PARAMETER);
+
+    const unknown = await adminSession.client.rpc("admin_create_program", {
+      ...base,
+      p_org_type: "club",
+      p_team: "mixed",
+      p_program_key: null,
+      p_school_group: null,
+    });
+    expect(unknown.error?.code).toBe(INVALID_PARAMETER);
+  });
+
+  test("admin_create_program creates a co-ed club program with program_key null and status unclaimed", async () => {
     const result = await adminSession.client.rpc("admin_create_program", {
       p_org_type: "club",
       p_school_name: `${MARK} Created Club`,
-      p_team: null,
+      p_team: "coed",
       p_program_key: null,
       p_school_group: null,
       p_division: null,
@@ -395,10 +424,11 @@ test.describe("Admin program RPC gates (live)", () => {
 
     const row = await admin
       .from("programs")
-      .select("program_key, status, org_type, school_name")
+      .select("program_key, status, org_type, school_name, team")
       .eq("id", createdProgram)
       .single();
     expect(row.data).toMatchObject({
+      team: "coed",
       program_key: null,
       status: "unclaimed",
       org_type: "club",

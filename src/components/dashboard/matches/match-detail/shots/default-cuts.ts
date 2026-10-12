@@ -1,6 +1,6 @@
 /**
  * Default cuts for the Visualizations tab redesign.
- * Four quick-start views that pre-populate the visualization with
+ * Five quick-start views that pre-populate the visualization with
  * sensible filters and pill labels.
  *
  * Pure TypeScript; no React, no "use client".
@@ -44,5 +44,12 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     name: "Rally placement",
     filters: {},
     pills: ["All rally shots"],
+  },
+  {
+    cut: "errors",
+    chart: "scatter",
+    name: "Unforced errors",
+    filters: { error: ["unforced"] },
+    pills: ["Unforced", "All strokes"],
   },
 ];

@@ -17,7 +17,11 @@ import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { isLiveUpdating, type AnalysisStatus } from "@/lib/data/match-analysis";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
-import type { MemberRole } from "@/lib/data/team-settings-server";
+import {
+  loadProgramJoinLink,
+  type MemberRole,
+  type TeamJoinLink,
+} from "@/lib/data/team-settings-server";
 
 /**
  * What the Roster page reads.
@@ -140,6 +144,13 @@ export interface RosterMember {
   /** The login's profile photo, or null to draw initials. */
   avatarUrl: string | null;
   role: MemberRole;
+  /**
+   * The seat this player ALSO holds at the staff table — an owner, coach or
+   * staff member who added themselves to the roster. Such a person is two rows
+   * of `program_roster_full` sharing a `userId`: this player row, and a staff
+   * row. Null on every staff row and on a player who is only a player.
+   */
+  staffRole: Exclude<MemberRole, "player"> | null;
   /** "coach" until they claim the profile, then "self". */
   managedBy: "coach" | "self";
   uploadEnabled: boolean;
@@ -168,6 +179,16 @@ export interface RosterMember {
    * be an affordance that always fails.
    */
   duplicateOfPlayerId: string | null;
+  /**
+   * Set on BOTH rows of a likely-duplicate pair when one of them is a player
+   * profile held by the owner, a coach or staff: who holds it. Merging such a
+   * pair follows `merge_program_players`' ladder rather than plain staff
+   * authority, so the row needs it to decide whether to offer the merge.
+   */
+  duplicateHolder: {
+    role: Exclude<MemberRole, "player">;
+    userId: string;
+  } | null;
   matchesPlayed: number;
   /**
    * Decided matches, each way. The Record column — "4–1" — is what a coach
@@ -202,6 +223,13 @@ export interface RosterInvite {
    * their own invitations, and a row must not credit somebody else's.
    */
   invitedBy: string | null;
+  /**
+   * `program_invites.player_id` — the roster row this invitation claims, or
+   * null for someone new. Resend hands it back to `inviteMember`; dropped, the
+   * RPC takes the address for a stranger's and refuses it as a duplicate of
+   * the row it was sent to.
+   */
+  playerId: string | null;
 }
 
 export interface RosterData {
@@ -351,7 +379,7 @@ export const getRosterData = cache(async function getRosterData(
     supabase.rpc("program_seat_usage", { p_program_id: programId }),
     supabase
       .from("program_invites")
-      .select("id, email, role, created_at, invited_by")
+      .select("id, email, role, created_at, invited_by, player_id")
       .eq("program_id", programId)
       .is("accepted_at", null)
       .order("created_at", { ascending: false }),
@@ -483,6 +511,17 @@ export const getRosterData = cache(async function getRosterData(
   await reconcileBeforePageRead(latestMatchIds, "roster");
   const analysisByMatch = await loadMatchAnalysis(supabase, latestMatchIds);
 
+  // Staff who also play: the login's staff role, keyed by the login.
+  const staffRoleByUser = new Map<string, Exclude<MemberRole, "player">>();
+  for (const row of rows) {
+    if (row.role !== "player" && row.user_id) {
+      staffRoleByUser.set(
+        row.user_id,
+        row.role as Exclude<MemberRole, "player">,
+      );
+    }
+  }
+
   const members: RosterMember[] = rows.map((row) => {
     const results = resultsByMember.get(row.player_id) ?? [];
 
@@ -529,6 +568,10 @@ export const getRosterData = cache(async function getRosterData(
       email: row.email,
       avatarUrl: row.user_id ? (avatars.get(row.user_id) ?? null) : null,
       role: row.role as MemberRole,
+      staffRole:
+        row.role === "player" && row.user_id
+          ? (staffRoleByUser.get(row.user_id) ?? null)
+          : null,
       managedBy:
         row.managed_by === "coach" ? ("coach" as const) : ("self" as const),
       uploadEnabled: row.upload_enabled,
@@ -538,6 +581,7 @@ export const getRosterData = cache(async function getRosterData(
       claimedToday: isToday(row.claimed_at, now, timeZone),
       // Filled in below, once every row is known.
       duplicateOfPlayerId: null,
+      duplicateHolder: null,
       matchesPlayed: results.length,
       wins,
       losses,
@@ -612,6 +656,12 @@ export const getRosterData = cache(async function getRosterData(
     if (pair.every((m) => m.managedBy === "self")) continue;
     pair[0].duplicateOfPlayerId = pair[1].playerId;
     pair[1].duplicateOfPlayerId = pair[0].playerId;
+    const held = pair.find((m) => m.staffRole !== null && m.userId !== null);
+    if (held?.staffRole && held.userId) {
+      const holder = { role: held.staffRole, userId: held.userId };
+      pair[0].duplicateHolder = holder;
+      pair[1].duplicateHolder = holder;
+    }
   }
 
   // Staff first, then players by lineup, each group alphabetical where nothing
@@ -643,6 +693,7 @@ export const getRosterData = cache(async function getRosterData(
       role: row.role as MemberRole,
       invitedOn: shortDate(row.created_at as string),
       invitedBy: (row.invited_by as string | null) ?? null,
+      playerId: (row.player_id as string | null) ?? null,
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
     uploadPolicy:
@@ -719,4 +770,30 @@ export async function getFormerPlayers(
     archivedOn: shortDate(row.archived_at),
     matchCount: Number(row.match_count),
   }));
+}
+
+/**
+ * The program's live join link for the Roster's Invite popover — the same
+ * `TeamJoinLink` Settings › Teams reads, through the same
+ * `loadProgramJoinLink` query.
+ *
+ * Names the link's maker off `getRosterData`, which is `cache()`d, so this
+ * shares the page's roster read rather than repeating it, and the link row is
+ * requested beside it rather than after. Staff-only under RLS: a player reads
+ * null, and the page does not ask for one.
+ */
+export async function getRosterJoinLink(
+  programId: string,
+  viewerId: string,
+): Promise<TeamJoinLink | null> {
+  const supabase = await createClient();
+  return loadProgramJoinLink(
+    supabase,
+    programId,
+    getRosterData(programId).then((roster) => ({
+      viewerId,
+      nameOf: (userId: string) =>
+        roster.members.find((member) => member.userId === userId)?.name ?? null,
+    })),
+  );
 }

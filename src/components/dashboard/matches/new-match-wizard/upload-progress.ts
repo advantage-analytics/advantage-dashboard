@@ -95,6 +95,17 @@ export function applyVideoUploadEvent(
     });
   }
 
+  // An ending that names another job is not this upload's: the tab can hold
+  // a replaced upload and its replacement for the same match at once.
+  if (
+    event.kind === "failed" &&
+    event.jobId !== undefined &&
+    current.jobId !== undefined &&
+    event.jobId !== current.jobId
+  ) {
+    return prev;
+  }
+
   const patch: Partial<UploadState> =
     event.kind === "progress"
       ? { progress: event.progress }

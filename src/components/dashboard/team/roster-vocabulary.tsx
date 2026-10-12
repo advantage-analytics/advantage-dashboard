@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -35,27 +34,6 @@ export const INVITE_RING =
  */
 export function InviteRing() {
   return <span aria-hidden className={INVITE_RING} />;
-}
-
-/**
- * "Claimed today" — 7d's pill, and the only thing that marks a fresh claim.
- *
- * The row deliberately does not tint itself as well: `--surface-muted` is the
- * hover token, so a tinted row sat there looking permanently moused-over. The
- * pill says it in words instead.
- */
-/**
- * The roster's quiet grey pill — a claim receipt, a score waiting to be
- * reviewed. One string, because it was three: the same 20px pill was typed out
- * in this file and twice in the table, already drifting on height and ink.
- * `ui/state-pill.tsx` is the system's 18px cousin and the eventual home; it is
- * two pixels shorter, so converging is a visual change rather than a tidy-up.
- */
-export const SUBTLE_PILL =
-  "inline-flex h-5 items-center whitespace-nowrap rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]";
-
-export function ClaimedTodayPill() {
-  return <span className={cn(SUBTLE_PILL, "shrink-0")}>Claimed today</span>;
 }
 
 /** "Invited Aug 4 as player" — what an outstanding invitation says about itself. */
@@ -101,6 +79,30 @@ export function InvitedLine({
  */
 export function resendRole(role: MemberRole): Exclude<MemberRole, "owner"> {
   return role === "owner" ? "player" : role;
+}
+
+/**
+ * What a resend sends: the open invitation, again.
+ *
+ * `playerId` is the part that gets dropped. `create_program_invite` reads an
+ * invitation with no player as a stranger's, and refuses a stranger whose
+ * address is already on an unclaimed roster row — so a resend that forgets the
+ * row it was sent to is refused as a duplicate of that very row ("… is already
+ * on this roster without an account"). Where the row has no address the call
+ * succeeds instead and unbinds the invitation, and accepting it mints a second
+ * profile for the same athlete. Every surface that resends builds its
+ * arguments here, so none of them can leave it out.
+ */
+export function resendInput(invite: {
+  email: string;
+  role: MemberRole;
+  playerId: string | null;
+}) {
+  return {
+    email: invite.email,
+    role: resendRole(invite.role),
+    playerId: invite.playerId,
+  };
 }
 
 /**

@@ -1,5 +1,6 @@
 "use server";
 
+import type { Squad } from "@/lib/data/squad";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -19,7 +20,8 @@ import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
-import type { MemberRole } from "@/lib/data/team-settings-server";
+import { joinLinkUrl, type MemberRole } from "@/lib/data/team-settings-server";
+import type { JoinLinkMode } from "@/lib/services/programs/join-links";
 import type {
   EventsPolicy,
   UploadPolicy,
@@ -122,7 +124,8 @@ function programLabel(workspace: Workspace): string {
 
 export interface TeamSettingsInput {
   schoolName: string;
-  team: "mens" | "womens";
+  /** Null leaves the stored squad alone — the RPC coalesces it. */
+  team: Squad | null;
   conference: string;
   homeVenue: string;
   defaultSurface: string | null;
@@ -299,7 +302,8 @@ export type LeaveResult =
  * The caller leaves a program — any member but the owner.
  *
  * `leave_program` is the authority: it refuses the owner, un-claims the
- * caller's roster profile (so a fresh invitation can hand it back), clears the
+ * caller's roster profile (so a fresh invitation can hand it back — and, for a
+ * coach or staff member, this action archives that profile first), clears the
  * uploader columns that would otherwise keep the team's matches readable, and
  * drops the membership. The owner check here is the RPC's rule restated so the
  * form can say it in words: a program without an owner has nobody who can
@@ -326,6 +330,52 @@ export async function leaveProgram(programId: string): Promise<LeaveResult> {
   }
 
   const supabase = await createClient();
+
+  // A coach or staff member who added themselves as a player takes that
+  // profile off the roster as they go. `leave_program` only un-claims a
+  // profile and leaves it live — right for a player, whose row the coach goes
+  // on managing, and wrong here: it would leave a roster row holding a seat,
+  // named after somebody no longer on the team. Archived FIRST, while they are
+  // still a member: the holder may always archive their own profile, and once
+  // they have left they may archive nothing. The matches stay on the profile,
+  // and a coach can restore it.
+  //
+  // Refused rather than skipped if the archive fails: nothing has happened
+  // yet, so "try again" is true, where leaving anyway would strand the row.
+  if (member.program.role !== "player") {
+    const { data: profile, error: profileError } = await supabase
+      .from("program_players")
+      .select("id")
+      .eq("program_id", programId)
+      .eq("claimed_by_user_id", member.viewer.id)
+      .is("archived_at", null)
+      .is("merged_into_id", null)
+      .maybeSingle();
+    // A read that failed is not "no profile": leaving on it would strand the
+    // row this block exists to take off the roster.
+    if (profileError) {
+      return {
+        ok: false,
+        error: "Couldn't check your roster profile. Try again.",
+      };
+    }
+    if (profile?.id) {
+      const { error: archiveError } = await supabase.rpc(
+        "archive_program_player",
+        { p_player_id: profile.id },
+      );
+      if (archiveError) {
+        return {
+          ok: false,
+          error: toMessage(
+            archiveError,
+            "Couldn't take your player profile off the roster. Try again.",
+          ),
+        };
+      }
+    }
+  }
+
   const { data, error } = await supabase.rpc("leave_program", {
     p_program_id: programId,
   });
@@ -730,5 +780,152 @@ export async function setPlayersCanUpload(
   // that flips it lives on that page — without this the sentence under the
   // table contradicts the switch the coach just moved.
   revalidatePath(ROSTER_PATH);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Join links — one reusable link per program (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unlike an invitation, the raw token IS returned to the caller — as the URL.
+ * The person asking for it is the one who hands it out, so there is no second
+ * recipient to protect; and the column is plaintext precisely so the same URL
+ * can be shown again after a reload (the migration header says why). The
+ * token is still minted here with `generateToken()`, never by the browser.
+ *
+ * Authority lives in SQL, like everything else in this file: the owner and
+ * coaches mint, reset, change the mode and turn it off (20261007231013 gave
+ * minting the same gate as the other two); staff read and copy the live link.
+ * The RPCs say each refusal in words the popover shows.
+ */
+export type JoinLinkResult =
+  { ok: true; url: string } | { ok: false; error: string };
+
+/** The settings page for this program, the teams layout above it, and the Roster. */
+function revalidateJoinLink(programId: string): void {
+  revalidatePath(`${SETTINGS_PATH}/${programId}`);
+  revalidateTeams();
+  revalidatePath(ROSTER_PATH);
+}
+
+function isJoinLinkMode(value: string): value is JoinLinkMode {
+  return value === "open" || value === "approve";
+}
+
+/**
+ * Mint the link — or replace the live one, which is the same RPC:
+ * `set_program_join_link` revokes whatever is live and inserts the new row in
+ * one transaction, so "Reset link" below is this call with the current mode.
+ */
+async function mintJoinLink(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<JoinLinkResult> {
+  const supabase = await createClient();
+  const token = generateToken();
+
+  const { error } = await supabase.rpc("set_program_join_link", {
+    p_program_id: programId,
+    p_token: token,
+    p_mode: mode,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't create the join link."),
+    };
+  }
+
+  revalidateJoinLink(programId);
+  return { ok: true, url: joinLinkUrl(token) };
+}
+
+/** Turn the link on, with who it admits. Replaces a live link if one exists. */
+export async function createJoinLink(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<JoinLinkResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (!isJoinLinkMode(mode)) {
+    return { ok: false, error: "Choose who the link should admit." };
+  }
+  return mintJoinLink(programId, mode);
+}
+
+/**
+ * A new URL, same mode. The old one stops working the moment this returns.
+ *
+ * The mode is read off the live row (staff can select it under RLS) so a
+ * reset never silently flips an approve-mode link open. No live row — the
+ * link was turned off between the page render and the click — is a plain
+ * mint in open mode, which is what the popover's first rung means.
+ */
+export async function resetJoinLink(
+  programId: string,
+): Promise<JoinLinkResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("program_join_links")
+    .select("mode")
+    .eq("program_id", programId)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  const mode = (current?.mode as string | null | undefined) ?? "open";
+  return mintJoinLink(programId, isJoinLinkMode(mode) ? mode : "open");
+}
+
+/** Open ↔ approve, on the live link. Owner and coaches; the RPC says so otherwise. */
+export async function setJoinLinkMode(
+  programId: string,
+  mode: JoinLinkMode,
+): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+  if (!isJoinLinkMode(mode)) {
+    return { ok: false, error: "Choose who the link should admit." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_join_link_mode", {
+    p_program_id: programId,
+    p_mode: mode,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change who the link admits."),
+    };
+  }
+
+  revalidateJoinLink(programId);
+  return { ok: true };
+}
+
+/** Turn the link off. Everyone holding the URL loses it; silent when already off. */
+export async function revokeJoinLink(programId: string): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("revoke_program_join_link", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't turn the link off."),
+    };
+  }
+
+  revalidateJoinLink(programId);
   return { ok: true };
 }

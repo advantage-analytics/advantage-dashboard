@@ -89,22 +89,50 @@ colour: **11px text at 1.6 line height, a 13px glyph at stroke 1.5** nudged
 `mt-0.5` to the first line, an 8px gap, radius-element (8px). Grey is
 `--surface-subtle` with `--ink-700` text and a `px-3 py-2.5` pad; yellow is the
 warning triple with a 1px `--warning-border` and a pad one pixel smaller
-(`px-[11px] py-[9px]`) so both strips measure the same. Colour carries the
-meaning, size never does: no 12/16px "louder" warning, no 13px body-size alert.
-In the wizard the classes are `noteStripCls`, `warningStripCls` and
-`noteIconCls` (`new-match-wizard/styles.ts`); build on those rather than
-restating the numbers.
+(`px-[11px] py-[9px]`) so both strips measure the same; red is the danger
+triple — `--danger-bg` wash, 1px `--danger-border`, `--danger-text` — at the
+yellow strip's exact geometry. Colour carries the meaning, size never does: no
+12/16px "louder" warning, no 13px body-size alert. In the wizard the classes are
+`noteStripCls`, `warningStripCls`, `errorStripCls` and `noteIconCls`
+(`new-match-wizard/styles.ts`); build on those rather than restating the
+numbers.
+
+**Three colours, and the glyph agrees with the strip.** On a yellow or red
+strip the text and the glyph both take the strip's own ink (`--warning-text`,
+`--danger-text`) — the glyph carries no colour class of its own. A red or amber
+glyph on a GREY strip is the retired pairing; `tests/notice-strips.spec.ts`
+reads the two upload flows and fails on one.
 
 - **Grey for a wait or a fact** — nothing is wrong and nothing is the person's
   to fix: what an export includes, a team still being confirmed (the note sits
   under the source it's about, Continue stays off, and it ends with a
-  `mailto:` link to team@advantage-analytics.com), an error that already
-  happened (grey with a red `XCircle`).
+  `mailto:` link to team@advantage-analytics.com), the file step's "Nothing
+  is uploading yet". Glyph: `Info` in `--ink-400`. One grey strip per place: a
+  second fact about the same thing joins the row or line it qualifies (the
+  60 fps nudge sits in the requirement row's detail), never a second strip.
 - **Yellow for what must be answered or must not be missed** — a Warning
-  question, "keep this tab open". Never stack a yellow strip under a grey one
-  that already says the same thing.
-- The first sentence may be set `font-medium` in `--ink-900` (grey) or the
-  warning ink (yellow) as the lead; the rest stays plain.
+  question, "keep this tab open", a video accepted with a caution (a
+  variable frame rate). Never stack a yellow strip under a grey one that
+  already says the same thing; on the wizard's file step a caution **replaces**
+  the grey "Nothing is uploading yet" note rather than sitting above it. Glyph:
+  `TriangleAlert`.
+- **Red for a refusal or a failure the person has to act on** (2026-10-08,
+  in-repo — design owner's pick, "Notices 2b" of the upload-wizard canvas): a
+  video that can't be analysed, a save that didn't land, a trim window too
+  short to submit, an allowance that is spent. Glyph: `XCircle`; the two
+  "this video was refused" strips use `VideoOff`, which says which thing was
+  refused. Carries `role="alert"` where the refusal arrives after an action.
+  _Supersedes: "an error that already happened (grey with a red `XCircle`)" —
+  on a grey strip a refusal read no louder than a neutral fact, and the two
+  differed only by a 13px glyph._
+- The first sentence may be set `font-medium` as the lead — in `--ink-900` on
+  grey, in the strip's own ink on yellow and red; the rest stays plain.
+  Messages are written lead-first so this needs no second field: `NoticeText`
+  (`new-match-wizard/NoticeText.tsx`) splits at the first full stop, and the
+  video validator's messages all open with the problem ("Frame rate too low.").
+- The red strip is the **danger** family, not `--error`. `--error` (#FF453A)
+  stays the inline field-error red; a strip is not a field, and the footer's
+  `MissingFieldsPill` beside it was already danger-red.
 - **Required fields still empty** are not a strip: the wizard footer carries a
   22px red pill — `TriangleAlert` 12px centred, "5 required left", 11px medium
   `--danger` on an 8% `--danger` wash with a 20% border (`MissingFieldsPill`).
@@ -235,22 +263,32 @@ and what the trailing action does (navigate vs mutate). Personal workspaces
 render neither — no schedule, no slot to state.
 
 **`TermMark`** — the mark before a row in a short list of facts a person is
-asked to read before they commit: the join flow's sharing terms
-(`components/join/join-terms.tsx`) and the guardian consent acknowledgments
+asked to read before they commit: the guardian consent acknowledgments
 (`app/onboarding/onboarding-flow.tsx`). A Lucide `Check` at 14px, stroke 1.5,
 `mt-[3px]` against `text-body-sm`, `aria-hidden` — the sentence carries the
 meaning, the glyph only separates the rows. It replaced a 2 × 12px bar, which
 read as a rendering artefact rather than a mark.
 
 Colour is the rule, not the glyph. `--blue` marks a row where something is
-gained or granted and `--ink-500` a row where nothing moves — that pairing is
-what makes the sharing terms' two columns readable as "they gain this" versus
-"you keep this" without a second sentence of policy. **Never `--blue` in a
-list that sits above a checkbox**: `AuthCheckbox` fills Signal Blue with a
+gained or granted and `--ink-500` a row where nothing moves. **Never `--blue`
+in a list that sits above a checkbox**: `AuthCheckbox` fills Signal Blue with a
 white check when set, and blue marks above it stack four blue checkmarks in
 one column with only the last one meaning anything. The guardian
 acknowledgments are ink for exactly that reason. Never `--ink-300` — a stroked
 glyph at that weight disappears.
+
+**Short labels are rows; full sentences are prose.** The join flow's sharing
+terms (`components/join/join-terms.tsx`) were six check-marked sentences and
+are now two short paragraphs under their eyebrows — "Your coaches will see",
+"Stays yours" — in the grey side panel beside the Join button
+(`JoinTermsPanel`, 2026-10-11). A row list earns its marks when each row is a
+label a person can scan; six sentences in a list read as fine print on the one
+screen where the text has to be read. The same rule that makes a confirm's
+cost prose rather than a bulleted tub.
+_Supersedes: "the join flow's sharing terms (`components/join/join-terms.tsx`)
+and the guardian consent acknowledgments" as the two users of `TermMark`, and
+"that pairing is what makes the sharing terms' two columns readable as 'they
+gain this' versus 'you keep this' without a second sentence of policy"._
 
 Not `CircleCheck`, which is `ResultMark`'s and means a match outcome. Not the
 claim flow's `ArrowRight` (`components/claim/sharing-rows.tsx`), which marks

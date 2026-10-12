@@ -2,7 +2,13 @@
  * Utility functions for the Upload Match wizard
  */
 
-import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
+import {
+  FormData,
+  WinnerLoserResult,
+  MatchData,
+  UploadedFile,
+  withoutVideoCheck,
+} from "./types";
 import { lastEnteredSet, retiredWinner } from "./score-state";
 import type { StopReason } from "./score-state";
 
@@ -549,20 +555,28 @@ export function formatHoursTenths(seconds: number): string {
 }
 
 /**
- * A span of allowance, either side of the line — "2 min", "45 min", "1.3 h".
+ * A span of allowance, either side of the line — "10 sec", "2 min", "1.3 h".
  *
  * Minutes under an hour, because tenths of an hour cannot say a small number:
  * two minutes rounds to "0.0 h", and a refusal whose own figures read as
- * nothing is a refusal nobody believes. Never less than one minute, for the
- * same reason. `long` is the spoken form for an `aria-label`.
+ * nothing is a refusal nobody believes. Seconds under a minute, for the same
+ * reason one step down: rounded up to a minute, ten seconds left and sixty
+ * seconds over both read "1 min". Never less than one second. `long` is the
+ * spoken form for an `aria-label`.
  *
  * Used for BOTH figures in the over-allowance refusal — how far over the trim
  * is, and how much is left — because a sentence that says "5 min over the
  * 0.0 h left" contradicts itself in its own second clause.
  */
 export function formatAllowanceSpan(seconds: number, long = false): string {
+  const whole = Math.max(1, Math.ceil(seconds));
+  if (whole < 60) {
+    return long
+      ? `${whole} ${whole === 1 ? "second" : "seconds"}`
+      : `${whole} sec`;
+  }
   if (seconds < 3600) {
-    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    const minutes = Math.ceil(seconds / 60);
     return long
       ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
       : `${minutes} min`;
@@ -591,9 +605,11 @@ export function loadFormDataFromStorage(workspaceKey: string): FormData | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.FORM_DATA);
     if (!stored) return null;
-    const formData: FormData = JSON.parse(stored);
+    // A copy saved before the video check stopped being stored still carries
+    // it — see `VIDEO_CHECK_FIELDS`.
+    const formData = withoutVideoCheck(JSON.parse(stored) as FormData);
     if (localStorage.getItem(STORAGE_KEYS.FORM_DATA_WORKSPACE) === workspaceKey)
-      return formData;
+      return formData as FormData;
     // Removed rather than set to undefined: the caller spreads this over the
     // defaults, and an own `undefined` key would still overwrite them.
     const {
@@ -631,12 +647,16 @@ export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
 
 /**
  * Save form data to localStorage, tagged with the workspace it was answered
- * in (see `loadFormDataFromStorage`).
+ * in (see `loadFormDataFromStorage`). The video check is left out — see
+ * `VIDEO_CHECK_FIELDS`.
  */
 export function saveFormDataToStorage(
   formData: FormData,
   workspaceKey: string,
 ): void {
-  localStorage.setItem(STORAGE_KEYS.FORM_DATA, JSON.stringify(formData));
+  localStorage.setItem(
+    STORAGE_KEYS.FORM_DATA,
+    JSON.stringify(withoutVideoCheck(formData)),
+  );
   localStorage.setItem(STORAGE_KEYS.FORM_DATA_WORKSPACE, workspaceKey);
 }

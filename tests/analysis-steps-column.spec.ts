@@ -182,7 +182,9 @@ for (const { id, analysis } of CASES) {
 
     expect(count(html, "<h1")).toBe(1);
     expect(html).toMatch(new RegExp(`<h1[^>]*>${escape(view.title)}</h1>`));
-    expect(count(html, "<li")).toBe(4);
+    // `<li ` with its space: the keep-open strip's monitor glyph is an SVG
+    // with `<line>` elements, which a bare "<li" would count as steps.
+    expect(count(html, "<li ")).toBe(4);
 
     // The wizard's column and title, class for class.
     for (const cls of [

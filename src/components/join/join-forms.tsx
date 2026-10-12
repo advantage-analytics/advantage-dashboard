@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
@@ -12,14 +12,10 @@ import {
   ClaimActions,
 } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
-import {
-  JoinQuotaFooter,
-  JoinSharingTerms,
-  NotNowLink,
-  Problem,
-} from "@/components/join/join-terms";
+import { NotNowLink, Problem } from "@/components/join/join-terms";
 import {
   acceptInvite,
+  acceptJoinLink,
   createAccountAndAccept,
   requestFreshInvite,
   signOutForInvite,
@@ -28,7 +24,10 @@ import {
   joinHref,
   notNowHref,
   signInThenHref,
+  signUpThenHref,
+  type JoinLinkMode,
 } from "@/lib/services/programs/join-links";
+import type { InviterName } from "@/lib/services/programs/invite-acceptance";
 import { ROLE_NOUN, type JoinRole } from "@/lib/services/programs/join-role";
 import { PASSWORD_RULE } from "@/lib/auth/error-messages";
 
@@ -46,33 +45,16 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  * person could change it, and the only thing changing it can do is fail.
  */
 
-/**
- * What the two accepting screens share.
- *
- * The sharing terms and the quota line are the same on both, and the design's
- * whole argument for 8.2 is that nobody reaches a Join button without passing
- * them. Threading the same two props through each form rather than letting
- * each one decide is what keeps that true when a third is added.
- */
-interface JoinTermsProps {
-  /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
-  programHours: number;
-  /** The personal allowance the same person already has. */
-  personalHours: number;
-}
-
 /** Signed in as the invited address. One button. */
 export function JoinReady({
   token,
   programName,
   role,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
-} & JoinTermsProps) {
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -81,7 +63,6 @@ export function JoinReady({
       <p className="text-body">
         You&apos;ll join {programName} as {ROLE_NOUN[role]}.
       </p>
-      <JoinSharingTerms />
       <Problem message={error} />
       <ClaimActions>
         <button
@@ -101,10 +82,6 @@ export function JoinReady({
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
       </ClaimActions>
     </div>
   );
@@ -116,14 +93,12 @@ export function JoinSignUp({
   programName,
   role,
   email,
-  programHours,
-  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
   email: string;
-} & JoinTermsProps) {
+}) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
@@ -154,8 +129,6 @@ export function JoinSignUp({
         {ROLE_NOUN[role]}. Your account uses{" "}
         <span className="text-[var(--ink-900)]">{email}</span>.
       </p>
-
-      <JoinSharingTerms />
 
       <div className="flex max-w-[380px] gap-3">
         <div className="min-w-0 flex-1">
@@ -224,10 +197,6 @@ export function JoinSignUp({
         <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
           Sign in with Google instead
         </Link>
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
       </ClaimActions>
     </form>
   );
@@ -352,5 +321,179 @@ export function JoinWrongAccount({
         </button>
       </ClaimActions>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Join links — the reusable, un-addressed door (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Signed in, holding a live join link. One button.
+ *
+ * A form action rather than a click handler, so the join is a POST by
+ * construction: nothing the page renders on a GET can reach `acceptJoinLink`.
+ * On success the action redirects (into the program, or back here as
+ * `link_requested` in approve mode), so only a refusal ever comes back.
+ */
+export function JoinLinkReady({
+  token,
+  programName,
+  mode,
+  inviterName,
+  rosterMatchName,
+}: {
+  token: string;
+  programName: string;
+  mode: JoinLinkMode;
+  inviterName: InviterName;
+  rosterMatchName: string | null;
+}) {
+  const [result, submit, pending] = useActionState(
+    () => acceptJoinLink(token),
+    null,
+  );
+  const error = result && !result.ok ? result.error : null;
+  const approve = mode === "approve";
+
+  return (
+    <form action={submit} className="flex flex-col gap-4">
+      <p className="text-body max-w-[58ch]">
+        {approve
+          ? `${programName}’s coaches approve each person who joins by this link. You’ll join as a player once they do.`
+          : "You’ll join as a player."}{" "}
+        {inviterName
+          ? `${inviterName} shared this link.`
+          : "A coach shared this link."}
+        {rosterMatchName && (
+          <>
+            {" "}
+            Your coach already has you on the roster as{" "}
+            <span className="text-[var(--ink-900)]">{rosterMatchName}</span> —
+            your matches will be waiting.
+          </>
+        )}
+      </p>
+      <Problem message={error} />
+      <ClaimActions>
+        <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
+          {approve
+            ? pending
+              ? "Sending…"
+              : "Request to join"
+            : pending
+              ? "Joining…"
+              : `Join ${programName}`}
+        </button>
+        <NotNowLink href={notNowHref(joinHref(token))} />
+      </ClaimActions>
+    </form>
+  );
+}
+
+/**
+ * Nobody signed in, holding a live join link.
+ *
+ * No form. The link was pasted into a group chat, not mailed to anyone, so
+ * there is no address to read off it — and an account is the auth pages' job,
+ * not this screen's. Both buttons leave for them carrying `?next=` back to
+ * this token: `/sign-up` returns through its confirmation mail, `/login`
+ * (password or Google) straight away. Either way the person lands here again
+ * holding a session, and the page answers `link_ready` with the Join button.
+ *
+ * One primary. "Sign in" is its `ghost` companion rather than a text link
+ * because it is an equal way in, not a way out; "Not now" is the way out, and
+ * stays text.
+ */
+export function JoinLinkSignUp({
+  token,
+  programName,
+  mode,
+}: {
+  token: string;
+  programName: string;
+  mode: JoinLinkMode;
+}) {
+  const here = joinHref(token);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-body max-w-[58ch]">
+        {mode === "approve"
+          ? `Create an account or sign in, and you’ll come back here to ask to join ${programName}. Its coaches approve each person who joins by this link.`
+          : "Create an account or sign in, and you’ll come back here to join as a player."}{" "}
+        Use the address your coach has for you, if you have one — it puts you on
+        your own roster row.
+      </p>
+
+      {/* Above the buttons, where this flow puts the line that qualifies them:
+          neither button commits to anything, and saying so is what lets
+          someone press one. */}
+      <p className="text-micro max-w-[58ch]">
+        {mode === "approve"
+          ? "Nothing is shared until you ask to join on the next screen and a coach approves it."
+          : "Nothing is shared until you press Join on the next screen."}
+      </p>
+
+      <ClaimActions>
+        <Link href={signUpThenHref(here)} className={CLAIM_BUTTON}>
+          Create account
+        </Link>
+        <Link href={signInThenHref(here)} className={advButton("ghost")}>
+          Sign in
+        </Link>
+        <Link href={notNowHref(here)} className={CLAIM_LINK}>
+          Not now
+        </Link>
+      </ClaimActions>
+    </div>
+  );
+}
+
+/** Approve mode, and the request is already in the queue. */
+export function JoinLinkRequested() {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
+        <span
+          aria-hidden="true"
+          className="size-[22px] shrink-0 rounded-full border border-dashed border-[var(--blue)]"
+        />
+        <span className="text-body-sm">
+          Nothing else to do. Opening this link again won&apos;t send a second
+          request.
+        </span>
+      </div>
+      <ClaimActions>
+        <Link href="/dashboard" className={CLAIM_BUTTON}>
+          Go to your dashboard
+        </Link>
+        <span className="text-micro">
+          Your personal matches are there in the meantime.
+        </span>
+      </ClaimActions>
+    </div>
+  );
+}
+
+/** Every seat taken. The link still works once a coach frees one. */
+export function JoinLinkFull({ signedIn }: { signedIn: boolean }) {
+  return (
+    <ClaimActions>
+      {signedIn ? (
+        <>
+          <Link href="/dashboard" className={CLAIM_BUTTON}>
+            Go to your dashboard
+          </Link>
+          <span className="text-micro">
+            Your personal matches are there in the meantime.
+          </span>
+        </>
+      ) : (
+        <Link href="/login" className={CLAIM_BUTTON}>
+          Go to sign in
+        </Link>
+      )}
+    </ClaimActions>
   );
 }

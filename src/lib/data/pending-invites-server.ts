@@ -46,6 +46,7 @@ export interface DbPendingInviteRow {
   school_name: string;
   team: string | null;
   org_type: string;
+  pilot_eligible: boolean;
   role: string;
   invited_by: string | null;
   inviter_first_name: string | null;
@@ -67,6 +68,8 @@ export interface PendingInvite {
   programName: string;
   /** Read server-side by `quotaHours()`; never rendered by a client component. */
   programOrgType: ProgramOrgType;
+  /** `programs.pilot_eligible` — `quotaHours()`'s other input; same rule as above. */
+  programPilotEligible: boolean;
   role: JoinRole;
   /** The coach who sent it, as far as a screen may say. See `InviterName`. */
   inviterName: InviterName;
@@ -90,6 +93,7 @@ export async function loadPendingInvites(
     id: row.invite_id,
     programName: programDisplayName(row.school_name, row.team),
     programOrgType: row.org_type as ProgramOrgType,
+    programPilotEligible: row.pilot_eligible === true,
     role: row.role as JoinRole,
     inviterName: displayName(row.inviter_first_name, row.inviter_last_name),
   }));

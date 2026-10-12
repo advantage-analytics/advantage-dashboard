@@ -67,13 +67,18 @@ export function accountTypeFor(
  * shape `program_usage_total()`, Settings › Usage, and the wizard's
  * remaining-quota read all filter on. That stays true for a custom org.
  *
- * The cap does not. Only a VERIFIED collegiate program — org_type 'college',
- * entered through the claim flow's review — draws the 75-hour program figure.
- * A self-serve custom org (club / high school / academy / other) has no
- * verification behind it and `create_custom_program` will mint one for any
- * signed-in account, so handing each the program figure would let one account
- * stack 75-hour allowances against the paid vendor. Custom orgs therefore
- * start on the INDIVIDUAL figure.
+ * The cap does not. A VERIFIED collegiate program — org_type 'college',
+ * entered through the claim flow's review — draws the 75-hour program figure
+ * on its own. A self-serve custom org (club / high school / academy / other)
+ * has no verification behind it and `create_custom_program` will mint one for
+ * any signed-in account, so handing each the program figure would let one
+ * account stack 75-hour allowances against the paid vendor. Custom orgs
+ * therefore start on the INDIVIDUAL figure, and move to the program figure
+ * only when an admin grants `programs.pilot_eligible` (`Workspace.pilotEligible`,
+ * set through `admin_set_pilot_eligible` from Admin › Teams; the audit log
+ * names who did it). The same predicate — `org_type = 'college' or
+ * pilot_eligible` — is spelled in SQL by `admin_reserve_video_quota`,
+ * `individual_tier_usage` and `individual_pool_usage`; change one, change all.
  *
  * NOTE: this supersedes the Stage 7 design's "same 75h" line — author
  * decision on the T2 re-run. PAID-PLAN MARKER: when the pricing-tier plan
@@ -82,10 +87,11 @@ export function accountTypeFor(
  * records — this function is the single seam.
  */
 export function quotaTierFor(
-  workspace: Pick<Workspace, "kind" | "orgType">,
+  workspace: Pick<Workspace, "kind" | "orgType" | "pilotEligible">,
 ): AccountType {
   if (workspace.kind !== "team") return "individual";
-  return workspace.orgType === "college" ? "program" : "individual";
+  if (workspace.orgType === "college") return "program";
+  return workspace.pilotEligible === true ? "program" : "individual";
 }
 
 /**
@@ -99,7 +105,10 @@ export function quotaTierFor(
  * pilot belongs to — is unchanged.
  */
 export function monthlyCapSecondsFor(
-  workspace: Pick<Workspace, "kind" | "orgType" | "individualPilot">,
+  workspace: Pick<
+    Workspace,
+    "kind" | "orgType" | "individualPilot" | "pilotEligible"
+  >,
 ): number {
   if (workspace.kind === "personal" && workspace.individualPilot) {
     return getPilotIndividualCapSeconds();

@@ -17,12 +17,19 @@ import type { InviterName } from "@/lib/services/programs/invite-acceptance";
  * href: the way back to the offer is `/join/<token>` from the link flow and
  * something else entirely from the signed-in one, and only the caller knows
  * which it came from.
+ *
+ * `kind` picks the second sentence. An invitation is addressed and expires;
+ * a join link is neither — it was pasted into a group chat and stays live
+ * until a coach turns it off — so "until it expires" would be a promise the
+ * link does not make.
  */
 export function NothingSent({
+  kind = "invite",
   reviewHref,
   programName,
   inviterName,
 }: {
+  kind?: "invite" | "link";
   reviewHref: string;
   programName: string;
   inviterName: InviterName;
@@ -34,8 +41,10 @@ export function NothingSent({
       title="Nothing was sent"
       body={
         <>
-          {inviterName ? `${inviterName} wasn't` : "Nobody was"} notified. The
-          invitation stays open until you use it or it expires.
+          {inviterName ? `${inviterName} wasn't` : "Nobody was"} notified.{" "}
+          {kind === "link"
+            ? "The link still works whenever you're ready."
+            : "The invitation stays open until you use it or it expires."}
         </>
       }
     >

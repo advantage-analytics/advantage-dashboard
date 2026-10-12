@@ -130,6 +130,7 @@ function route(
               return options.roster ?? emptyRoster;
             },
             getFormerPlayers: async () => [],
+            getRosterJoinLink: async () => null,
           };
         if (id.includes("join-requests-server"))
           return {

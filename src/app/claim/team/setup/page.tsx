@@ -73,6 +73,7 @@ export default async function TeamSetupPage({
         orgType={type}
         defaultOwnerName={parked?.ownerName || profileName}
         defaultTeamName={parked?.name ?? ""}
+        defaultTeam={parked?.team ?? null}
       />
     </ClaimShell>
   );

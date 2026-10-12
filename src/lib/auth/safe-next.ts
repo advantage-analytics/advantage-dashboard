@@ -30,3 +30,19 @@ export function safeNext(value: string | null): string {
     return FALLBACK;
   }
 }
+
+/**
+ * An auth page's own path, carrying `next` when there is somewhere to return to.
+ *
+ * `/login` and `/sign-up` link to each other, and a `next` that arrived on one
+ * has to survive the hop to the other — otherwise "Create an account" on a
+ * sign-in that came from a join link signs the person up and strands them on
+ * the dashboard. The default destination is left off so ordinary links stay
+ * clean. `next` is clamped here too: this builds an href from a query value.
+ */
+export function authHref(path: string, next: string | null | undefined) {
+  const destination = safeNext(next ?? null);
+  return destination === FALLBACK
+    ? path
+    : `${path}?next=${encodeURIComponent(destination)}`;
+}

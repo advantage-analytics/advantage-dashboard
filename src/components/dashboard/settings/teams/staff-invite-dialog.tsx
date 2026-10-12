@@ -16,6 +16,7 @@ import {
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
 import { advButton } from "@/lib/ui/adv-button";
+import { RolePill } from "@/components/ui/role-pill";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -183,9 +184,7 @@ export function StaffInviteDialog({
             <div className="flex flex-col gap-1.5">
               <span className="text-[11px] text-[var(--ink-600)]">Role</span>
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-[22px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-700)]">
-                  Staff
-                </span>
+                <RolePill role="staff" />
                 <span className="text-[11px] text-[var(--ink-400)]">
                   Only the owner invites coaches
                 </span>

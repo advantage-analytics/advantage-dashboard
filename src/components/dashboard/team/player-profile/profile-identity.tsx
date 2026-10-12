@@ -1,3 +1,4 @@
+import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/you-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -58,9 +59,7 @@ export function ProfileIdentity({
           </h1>
           {isSelf && <YouPill />}
           {profile.managedBy === "coach" && !isSelf && (
-            <span className="inline-flex h-[18px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
-              Coach-managed
-            </span>
+            <StatePill>Coach-managed</StatePill>
           )}
         </div>
         <p className="text-[12px] text-[var(--ink-600)]">

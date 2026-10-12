@@ -40,6 +40,7 @@ import {
   type StepState,
 } from "@/components/dashboard/shared/vertical-steps";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { UploadKeepOpenNote } from "../upload-keep-open-note";
 import { formatFileSize } from "../new-match-wizard/utils";
 import type { AttachmentMatchSummary } from "./MatchVideoAttachmentFlow";
 import type { AttachmentSaveState } from "./use-attachment-flow";
@@ -121,7 +122,9 @@ function stepsFor(
         {
           key: "trim",
           state: "now",
-          label: "Trimming video",
+          label: save.converting
+            ? "Converting video to 1080p"
+            : "Trimming video",
           value:
             save.percent === null ? undefined : `${Math.floor(save.percent)}%`,
         },
@@ -188,12 +191,7 @@ function CancelButton({ onCancel }: { onCancel: () => void }) {
 /** The one instruction. Leaving is cancelling, so there is no reassurance. */
 function KeepOpenNote() {
   return (
-    <p
-      data-testid="attachment-keep-open"
-      className={cn(NOTE, "mt-1 text-[var(--ink-700)]")}
-    >
-      Keep this tab open until the upload finishes.
-    </p>
+    <UploadKeepOpenNote reassure={false} data-testid="attachment-keep-open" />
   );
 }
 

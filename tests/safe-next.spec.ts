@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { safeNext } from "@/lib/auth/safe-next";
+import { authHref, safeNext } from "@/lib/auth/safe-next";
 
 /**
  * `safeNext` is the only thing standing between a `?next=` query value and a
@@ -44,5 +44,32 @@ test.describe("safeNext preserves a legitimate destination", () => {
     // The invite flow's whole point: land on the token page, not the
     // dashboard, and carry the page's own params through untouched.
     expect(safeNext("/join/abc?not-now=1")).toBe("/join/abc?not-now=1");
+  });
+});
+
+/**
+ * `/login`, `/sign-up` and `/sign-up-success` link to each other. A `next` that
+ * arrived on one has to survive the hop, or "Create an account" on a sign-in
+ * that came from a join link makes the account and strands it on the dashboard.
+ */
+test.describe("authHref carries the return address between auth pages", () => {
+  test("no destination, or the default one, leaves the link bare", () => {
+    expect(authHref("/sign-up", null)).toBe("/sign-up");
+    expect(authHref("/sign-up", undefined)).toBe("/sign-up");
+    expect(authHref("/login", "/dashboard")).toBe("/login");
+  });
+
+  test("a join link is carried, encoded", () => {
+    expect(authHref("/sign-up", "/join/abc123")).toBe(
+      "/sign-up?next=%2Fjoin%2Fabc123",
+    );
+    expect(authHref("/login", "/join/abc123?not-now=1")).toBe(
+      "/login?next=%2Fjoin%2Fabc123%3Fnot-now%3D1",
+    );
+  });
+
+  test("a hostile destination is clamped before it is carried", () => {
+    expect(authHref("/sign-up", "https://evil.com")).toBe("/sign-up");
+    expect(authHref("/sign-up", "//evil.com")).toBe("/sign-up");
   });
 });

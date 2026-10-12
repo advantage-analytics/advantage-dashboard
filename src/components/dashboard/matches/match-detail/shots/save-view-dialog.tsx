@@ -21,6 +21,8 @@ import type { SavedView, SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
 import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
+import type { PhraseNames } from "../match-filters/applied-words";
+import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { CUT_LABEL, CHART_LABEL } from "./viz-labels";
 import { cn } from "@/lib/utils";
 
@@ -54,13 +56,20 @@ import { cn } from "@/lib/utils";
  * forced (the field stays editable, and an empty field still blocks Save the
  * way it always did).
  */
-export function suggestedViewName(cut: Cut, filters: VizFilters): string {
-  const first = activeFilterEntries({
-    cut,
-    chart: "scatter",
-    filters,
-    viewId: null,
-  })[0];
+export function suggestedViewName(
+  cut: Cut,
+  filters: VizFilters,
+  names?: PhraseNames,
+): string {
+  const first = activeFilterEntries(
+    {
+      cut,
+      chart: "scatter",
+      filters,
+      viewId: null,
+    },
+    names,
+  )[0];
   return first ? `${CUT_LABEL[cut]} · ${first.label}` : CUT_LABEL[cut];
 }
 
@@ -114,6 +123,7 @@ export function SaveViewDialog({
   const router = useRouter();
   const dark = tone === "dark";
   const [name, setName] = useState("");
+  const sides = useMatchSides();
   const [shared, setShared] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -140,7 +150,14 @@ export function SaveViewDialog({
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- external source (dialog opened by a click outside this component), not a render-derivable value
-      setName(dark ? suggestedViewName(cut, filters) : "");
+      setName(
+        dark
+          ? suggestedViewName(cut, filters, {
+              you: sides.you.shortName,
+              opponent: sides.opp.shortName,
+            })
+          : "",
+      );
       setShared(false);
       setDuplicate(false);
       setServerError(null);

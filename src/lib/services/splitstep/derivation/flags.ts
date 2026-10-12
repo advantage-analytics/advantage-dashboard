@@ -22,6 +22,20 @@ import { LADDER, lastStrokeWinner } from "./winners";
 import type { LineCalls } from "./line-calls";
 import type { SplitStepRally, SplitStepStroke } from "./types";
 
+/**
+ * Marks a point written by `scripts/label-apply.ts` from a hand-labelling
+ * session. Not a derivation flag: `persistTranscript` refuses to replace a
+ * match carrying it unless told to.
+ */
+export const HAND_LABELLED_FLAG = "hand_labelled";
+
+/**
+ * Beside `hand_labelled`: a point the labeller knows was played — the score
+ * says so — but that is not on the video, so it carries a winner and server
+ * and nothing else (no strokes, no result type, no rally length or clip).
+ */
+export const OFF_VIDEO_FLAG = "off_video";
+
 export const POINT_FLAGS = {
   /**
    * Score fold and the last stroke's `in` flag name different winners.
@@ -97,6 +111,14 @@ export const POINT_FLAGS = {
    * score or the serve position is wrong. Skipped on a no-ad deciding point.
    */
   SCORE_SIDE_MISMATCH: "score_side_mismatch",
+  /**
+   * Review-only. The score-constrained segmentation (segmentation.ts, run from
+   * transcript.ts) puts this point in a different game, gives it a different
+   * server, or merges it with a neighbouring rally. Published rows are
+   * unchanged; the proposal is recorded so it can be measured before anything
+   * is promoted.
+   */
+  SEGMENT_PROPOSAL_DIFFERS: "segment_proposal_differs",
 } as const;
 
 /** How close to a line the ball before a winner must land to be suspect. */
@@ -107,16 +129,23 @@ const ENDING_SUSPECT_MARGIN_M = 1;
  * echoes the call. An out call at 0.9 near the end of a point was right 12 of
  * 12 on the labelled match; at 0.5–0.7 it was noise mid-rally.
  */
-const CONFIDENT_OUT_CALL = 0.85;
+export const CONFIDENT_OUT_CALL = 0.85;
 
 /**
  * Servers stand close to the centre mark, so a stance this near x = 0 says
  * nothing about the side; `score_side_mismatch` ignores it.
+ *
+ * 0.3 until 2026-10-10. Many players serve from deuce 0.15–0.3 m off the mark
+ * (Andy Nguyen at 0.16–0.18 on every far-end deuce game start), so the wide
+ * zone hid exactly the game-opening serves "wrong side for the score" exists
+ * to check. Over the four most-checked label sessions the sign of x named the
+ * side on all 426 game serves at 0.05 m or more; the misreads that remain sit
+ * under 0.05.
  */
-const SIDE_DEAD_ZONE_M = 0.3;
+export const SIDE_DEAD_ZONE_M = 0.1;
 
 /** Strokes after a second serve that can still be the returner at a dead ball. */
-const MAX_DEAD_TAIL = 2;
+export const MAX_DEAD_TAIL = 2;
 
 export const SHOT_FLAGS = {
   /** Flagged out, yet the rally continued past it. */

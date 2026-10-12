@@ -17,8 +17,11 @@ import type { EmailMessage } from "../send";
  * into an email per coach.
  *
  * It must say what stayed behind as plainly as what went. A coach reading
- * "left" worries about the match history; the profile and its matches are
- * still on the roster, coach-managed, and a fresh invitation can hand it back.
+ * "left" worries about the match history. For a PLAYER the profile and its
+ * matches are still on the roster, coach-managed, and a fresh invitation can
+ * hand it back. For a coach or staff member who had added themselves as a
+ * player, `leaveProgram` archived that profile as they went: it is off the
+ * roster, its matches stay, and Add player offers to restore it.
  */
 export interface MemberLeftOwnerInput {
   to: string;
@@ -52,9 +55,13 @@ export function memberLeftOwnerEmail(
     heading: `${name} left ${programName}`,
     body: [
       `Hi${owner ? ` ${owner}` : ""} — ${who} left ${programName} from their team settings. Their seat is free again.`,
-      profileKept
-        ? "Their player profile and its matches stay on your roster, now managed by your staff. Invite them again and the same profile goes back to them."
-        : "Nothing of theirs stays on your roster. Invite them again if they should be back.",
+      !profileKept
+        ? "Nothing of theirs stays on your roster. Invite them again if they should be back."
+        : memberRole === "player"
+          ? "Their player profile and its matches stay on your roster, now managed by your staff. Invite them again and the same profile goes back to them."
+          : // A coach or staff member who had added themselves as a player:
+            // `leaveProgram` archives that profile as they go.
+            "Their player profile came off the roster with them. Its matches stay with the program, and Add player offers to restore the profile if you put them back on the roster.",
     ],
     facts: [
       { label: "Program", value: programName },

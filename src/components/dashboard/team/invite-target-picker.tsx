@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { ChosenCheck } from "@/components/ui/float-menu";
+import { StatePill } from "@/components/ui/state-pill";
 import { getInitials } from "@/lib/data/match-utils";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
 
@@ -101,9 +102,7 @@ export function InviteTargetPicker({
             <span className="text-[13px] font-medium text-[var(--ink-900)]">
               {selected.name}
             </span>
-            <span className="inline-flex h-[18px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-[7px] text-[10px] font-medium text-[var(--ink-700)]">
-              Coach-managed
-            </span>
+            <StatePill>Coach-managed</StatePill>
           </>
         ) : (
           <span className="text-[13px] text-[var(--ink-400)]">

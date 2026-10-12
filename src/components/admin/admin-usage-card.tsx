@@ -9,7 +9,7 @@ import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import type { AdminTeamMember } from "@/lib/data/admin-team-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
-import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { ProgramOrgType, Workspace } from "@/lib/workspace/types";
 
 /**
  * Who on this program spent this month's Advantage Intelligence time.
@@ -37,11 +37,14 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
 export function AdminUsageCard({
   usage,
   orgType,
+  pilotEligible,
   members,
 }: {
   usage: ProgramUsage;
   /** Decides which cap the program draws — see `quotaTierFor()`. */
   orgType: ProgramOrgType | null;
+  /** `programs.pilot_eligible` — the admin-granted half of the tier. */
+  pilotEligible: boolean;
   /** For avatars only; a line whose author has left keeps its initials. */
   members: readonly Pick<AdminTeamMember, "userId" | "avatarUrl">[];
 }) {
@@ -50,7 +53,7 @@ export function AdminUsageCard({
     (total, line) => total + line.matchCount,
     0,
   );
-  const note = poolRuleNote(orgType);
+  const note = poolRuleNote({ orgType, pilotEligible });
 
   return (
     <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
@@ -109,18 +112,21 @@ export function AdminUsageCard({
  *
  * - A verified college draws the program figure, and every upload inside it
  *   files under the team pool. The individual figure is still worth naming,
- *   because it is easy to read as spent first; it covers a member's personal
- *   uploads only (Pilot's "Personal uploads" row says the same).
+ *   because it is easy to read as a per-member cap; it covers a member's
+ *   PERSONAL workspace only, outside the team (Pilot's "Members' own
+ *   workspaces" row says the same).
  * - Every other org type (and an unset one) is on the individual figure for
  *   the whole team — one allowance on the program ledger, shared.
  *
  * The figure is `getMonthlyCapSeconds("individual")`, never a literal 2, so it
  * moves when the tier does. Exported for the spec.
  */
-export function poolRuleNote(orgType: ProgramOrgType | null): string {
+export function poolRuleNote(
+  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+): string {
   const cap = formatHoursShort(getMonthlyCapSeconds("individual"));
-  if (quotaTierFor({ kind: "team", orgType }) === "program") {
-    return `Uploads here draw on the team pool. A member’s own ${cap} h covers their personal uploads only.`;
+  if (quotaTierFor({ kind: "team", ...tier }) === "program") {
+    return `Uploads here draw on the team pool; there is no per-member cap. Each member’s own ${cap} h applies to their personal workspace, outside this team.`;
   }
   return `This team is on the individual ${cap} h figure, shared by every member.`;
 }

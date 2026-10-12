@@ -785,7 +785,8 @@ export function SettingsTeamDetailPending() {
   const isOwner = role === "owner";
   const isStaff = role !== "player";
   const name = program?.name ?? "Program name";
-  const squad = program?.team === "womens" ? "Women's tennis" : "Men's tennis";
+  const squadName = teamLabel(program?.team ?? null);
+  const squad = squadName ? `${squadName} tennis` : "Not set";
   const lockedHint = `Ask ${SAMPLE.personName}, the owner, to change it.`;
   // A college owner picks Conference from the directory (a 34px select); a
   // club or high school, with no directory, types it (a 32px input).
@@ -902,7 +903,11 @@ export function SettingsTeamDetailPending() {
         <div className="flex items-center gap-2.5">
           <CardTitle>Members</CardTitle>
           {isStaff && (
-            <div className="flex flex-1 items-center justify-end">
+            <div className="flex flex-1 items-center justify-end gap-2.5">
+              <Button>
+                <span className="size-3" />
+                Invite link
+              </Button>
               <Button>
                 <span className="size-3" />
                 Invite staff

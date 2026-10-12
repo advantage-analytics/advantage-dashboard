@@ -16,6 +16,7 @@ import {
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
+  acceptJoinLinkWithSession,
   acceptPendingWithSession,
   acceptWithSession,
   accountExists,
@@ -86,6 +87,15 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       return "Somebody has already taken over that roster profile. Ask your coach to check the roster.";
     case "player_gone":
       return "That roster profile is no longer on the program. Ask your coach for a new invitation.";
+    case "requested":
+      // Not a refusal: the join-link actions intercept it and send the person
+      // back to the link, which now renders `link_requested`. Here only so the
+      // switch stays exhaustive.
+      return "Your request to join has been sent to the program's coaches.";
+    case "removed":
+      // A coach archived their roster row. The restore lives on the Roster,
+      // in the coach's hands — the link cannot undo a removal.
+      return "You were removed from this team. Ask a coach to add you back.";
     case "error":
       return outcome.message;
     default:
@@ -493,6 +503,62 @@ export async function createAccountAndAccept(
     await adoptMembershipAndNotify(admin, created.user.id, outcome.programId);
   }
   return finishJoin(outcome.programId);
+}
+
+// ---------------------------------------------------------------------------
+// Join links — the reusable, un-addressed door (`program_join_links`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a join-link accept goes once the database has answered.
+ *
+ * `ok` is the same ending as every invitation: settle the profile, tell the
+ * owner, land inside the program. `requested` is approve mode — the function
+ * filed the `program_requests` row itself — and the person is sent back to
+ * the link, which `resolveJoinState` now answers with `link_requested`. That
+ * round trip is deliberate: the page is the one place that renders join
+ * states, so the action does not grow a second copy of the "request sent"
+ * screen. Everything else is a refusal in the screen's words.
+ */
+async function finishJoinLink(
+  token: string,
+  outcome: AcceptOutcome,
+  userId: string | undefined,
+): Promise<JoinActionResult> {
+  if (!outcome.ok) {
+    if (outcome.status === "requested") redirect(joinHref(token));
+    return { ok: false, error: describe(outcome) };
+  }
+
+  if (userId) {
+    const admin = createAdminClient();
+    // Before `finishJoin`, which redirects by throwing.
+    await adoptMembershipAndNotify(admin, userId, outcome.programId);
+  }
+  return finishJoin(outcome.programId);
+}
+
+/**
+ * Signed in, holding a join link. One click.
+ *
+ * Nothing but the token crosses from the browser. The program, the role
+ * (always `player`) and the mode all come off the `program_join_links` row
+ * inside `accept_program_join_link`, which also re-checks seats and the
+ * session's confirmed address at the moment of the write. The page's GET only
+ * previews; this POST is the only thing that joins.
+ */
+export async function acceptJoinLink(token: string): Promise<JoinActionResult> {
+  const supabase = await createClient();
+  const [
+    outcome,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    acceptJoinLinkWithSession(token, supabase),
+    supabase.auth.getUser(),
+  ]);
+  return finishJoinLink(token, outcome, user?.id);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,15 +1,25 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
 import {
   JoinAskAgain,
+  JoinLinkFull,
+  JoinLinkReady,
+  JoinLinkRequested,
+  JoinLinkSignUp,
   JoinReady,
   JoinSignUp,
   JoinWrongAccount,
 } from "@/components/join/join-forms";
 import { JoinPane } from "@/components/join/join-pane";
+import { JoinTermsPanel } from "@/components/join/join-terms";
 import { NothingSent } from "@/components/join/nothing-sent";
-import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
+import {
+  resolveJoinStateOnce,
+  sessionNeedsName,
+} from "@/lib/services/programs/join-state-server";
+import { authHref } from "@/lib/auth/safe-next";
 import {
   isNotNow,
   joinHref,
@@ -17,7 +27,69 @@ import {
 } from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
 
-export const metadata = { title: "Join your program" };
+/**
+ * The token as the route carries it, decoded.
+ *
+ * The segment can still hold a percent sign after the framework's own decode
+ * — a link that was encoded twice on its way through a chat client arrives as
+ * `%E0%A4%A`, say — and `decodeURIComponent` throws on a broken escape. Read
+ * raw instead, so it resolves to `not_found` like any other token that is not
+ * one. (A URL that is malformed outright, `/join/%E0%A4%A` typed as-is, never
+ * gets this far: the framework answers it with its own 400.)
+ */
+function readToken(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * The tab title, and the card a pasted link unfurls to.
+ *
+ * A join link is pasted into a group chat, so its preview is the first thing a
+ * player sees — and "Advantage Analytics" over the product description told
+ * them neither whose link it was nor what to do with it. Only the JOIN-LINK
+ * states name the team. An invitation was addressed to one person, and a token
+ * that is unknown, spent or expired must read exactly like one that never
+ * existed; both keep the generic title and the site's default card.
+ *
+ * Never indexed: a link is for the people it was sent to.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const state = await resolveJoinStateOnce(readToken(token));
+  const robots = { index: false, follow: false };
+
+  switch (state.kind) {
+    case "link_sign_up":
+    case "link_ready":
+    case "link_full": {
+      const title = `Join ${state.programName}`;
+      // A full team's card must not invite people to a join the page will
+      // refuse; it says what the page says.
+      const description =
+        state.kind === "link_full"
+          ? "Every player seat is taken right now. Ask a coach to free one."
+          : "Create an account or sign in, then join as a player.";
+      const social = { title: `${title} on Advantage`, description };
+      return {
+        title,
+        description,
+        openGraph: social,
+        twitter: social,
+        robots,
+      };
+    }
+    default:
+      return { title: "Join your program", robots };
+  }
+}
 
 /**
  * Where an invitation link lands.
@@ -28,7 +100,8 @@ export const metadata = { title: "Join your program" };
  * would never hear anything — and could not have accepted if they had.
  *
  * Seven states, and every one of them is a real thing that happens rather than
- * a defensive branch. Two carry a form; one carries no screen at all, because
+ * a defensive branch. One carries a form (`sign_up`, the addressed invitation,
+ * whose token already proves the address); one carries no screen at all, because
  * `sign_in` means the account exists and signing into an account that exists
  * belongs to `/login?next=`, not to a password box grown on an invitation link;
  * four are ends with a way out, and those are the ones worth designing, because
@@ -57,11 +130,22 @@ export default async function JoinPage({
 }) {
   const { token } = await params;
   const query = await searchParams;
-  const state = await resolveJoinState(decodeURIComponent(token));
+  const state = await resolveJoinStateOnce(readToken(token));
   // 'college' where the state carries no org type — those branches (not_found,
   // expired, already_used, wrong_account) never render an allowance figure.
   const { programHours, personalHours } = quotaHours(
-    "programOrgType" in state ? state.programOrgType : "college",
+    "programOrgType" in state
+      ? {
+          orgType: state.programOrgType,
+          pilotEligible: state.programPilotEligible,
+        }
+      : { orgType: "college", pilotEligible: false },
+  );
+
+  // The terms and the allowance line, beside the decision on every screen that
+  // carries a Join button — see `JoinTermsPanel`.
+  const terms = (
+    <JoinTermsPanel programHours={programHours} personalHours={personalHours} />
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
@@ -69,17 +153,30 @@ export default async function JoinPage({
   // else the state itself is the answer.
   const declined = isNotNow(query);
 
+  // A Join button is about to render for an account with no name. Joining
+  // marks the account onboarded, so this is the last point the name step can
+  // run — see `sessionNeedsName`. It comes back here by the same `?next=` the
+  // auth pages use. Declining skips it: nothing is being joined.
+  if (
+    !declined &&
+    (state.kind === "ready" || state.kind === "link_ready") &&
+    (await sessionNeedsName())
+  ) {
+    redirect(authHref("/onboarding", joinHref(token)));
+  }
+
   switch (state.kind) {
-    // Revoked, mistyped, or never real. One message for all three, because
-    // distinguishing them would confirm to whoever is holding a bad token
-    // whether it was ever a good one.
+    // Revoked, mistyped, never real — an invitation or a join link alike. One
+    // message for all of them, because distinguishing them would confirm to
+    // whoever is holding a bad token whether it was ever a good one. No
+    // eyebrow: the page cannot name a program it refuses to recognise, and
+    // "Invitation" was wrong for the link half of the door.
     case "not_found":
       return (
         <JoinPane
           width={440}
-          eyebrow="Invitation"
           title="That link isn't valid"
-          body="It may have been withdrawn, or already replaced by a newer one. Ask whoever invited you to send another."
+          body="It may have been turned off or replaced, or it was an invitation that has already been used. Ask whoever shared it for a new one."
         >
           <ClaimActions>
             <Link href="/login" className={CLAIM_BUTTON}>
@@ -152,13 +249,16 @@ export default async function JoinPage({
         );
       }
       return (
-        <JoinPane eyebrow={state.programName} title="Join your program">
+        <JoinPane
+          eyebrow={state.programName}
+          title="Join your program"
+          mark={state.programName}
+          aside={terms}
+        >
           <JoinReady
             token={token}
             programName={state.programName}
             role={state.role}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
@@ -183,16 +283,111 @@ export default async function JoinPage({
         );
       }
       return (
-        <JoinPane eyebrow={state.programName} title="Set up your account">
+        <JoinPane
+          eyebrow={state.programName}
+          title="Set up your account"
+          mark={state.programName}
+          aside={terms}
+        >
           <JoinSignUp
             token={token}
             programName={state.programName}
             role={state.role}
             email={state.email}
-            programHours={programHours}
-            personalHours={personalHours}
           />
         </JoinPane>
       );
+
+    // ── Join links ──────────────────────────────────────────────────────────
+    // The reusable, un-addressed door. Same rule as the invitation states:
+    // this GET only previews; joining is the POST behind the button.
+    case "link_ready":
+      if (declined) {
+        return (
+          <NothingSent
+            kind="link"
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
+      return (
+        <JoinPane
+          eyebrow={state.programName}
+          title={`Join ${state.programName}`}
+          mark={state.programName}
+          aside={terms}
+        >
+          <JoinLinkReady
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+            inviterName={state.inviterName}
+            rosterMatchName={state.rosterMatchName}
+          />
+        </JoinPane>
+      );
+
+    case "link_sign_up":
+      if (declined) {
+        // `link_sign_up` carries no inviter: the preview is read without a
+        // session, and nobody needs naming to someone who has not signed in.
+        return (
+          <NothingSent
+            kind="link"
+            reviewHref={joinHref(token)}
+            programName={state.programName}
+            inviterName={null}
+          />
+        );
+      }
+      return (
+        // Same heading as `link_ready`: it is the same page one sign-in
+        // earlier, and "Set up your account" described a form that has moved
+        // to the auth pages.
+        <JoinPane
+          eyebrow={state.programName}
+          title={`Join ${state.programName}`}
+          mark={state.programName}
+          aside={terms}
+        >
+          <JoinLinkSignUp
+            token={token}
+            programName={state.programName}
+            mode={state.mode}
+          />
+        </JoinPane>
+      );
+
+    case "link_requested":
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title="Request sent"
+          body={`${state.programName}'s coaches will see your request on their roster. You'll get an email when they approve it.`}
+        >
+          <JoinLinkRequested />
+        </JoinPane>
+      );
+
+    case "link_full": {
+      const { signedIn } = state;
+      return (
+        <JoinPane
+          width={440}
+          eyebrow={state.programName}
+          title={`${state.programName} is full`}
+          body={
+            signedIn
+              ? "Every player seat is taken. Ask a coach to free one, then open this link again."
+              : "Every player seat is taken. If your coach already has you on the roster, sign in with the address they have for you and your seat is waiting. Otherwise ask a coach to free one, then open this link again."
+          }
+        >
+          <JoinLinkFull signedIn={signedIn} />
+        </JoinPane>
+      );
+    }
   }
 }

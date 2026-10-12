@@ -17,7 +17,7 @@ import { AlertCircle, Check, Info, X } from "lucide-react";
  * There was none before this. `useUploadMatchWizard` dispatches
  * `match-upload-failed` from three places and nothing listened, so a background
  * upload that died was invisible until the reaper turned it into a "Failed" row
- * on the matches list up to fifteen minutes later. The user's own tab knew
+ * on the matches list some time later. The user's own tab knew
  * immediately and had nowhere to put it.
  *
  * Hand-rolled rather than a toast library. What is needed is a list, a timer

@@ -60,7 +60,8 @@ import {
   VizBandsEditorSlab,
   editorContext,
 } from "./viz-bands-editor";
-import { bandKindFor, VizBandsMenu } from "./viz-bands-menu";
+import { VizBandsMenu } from "./viz-bands-menu";
+import { bandKindFor } from "./cut-kinds";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { VizFullscreenCourt } from "./viz-fullscreen-court";
 import { HeatRampSwatches } from "./viz-focused";
@@ -70,7 +71,6 @@ import {
   loadedViewLabel,
   type LegendItem,
 } from "./viz-labels";
-import { availableSets } from "./viz-model";
 import { activeFilterEntries, clearedFilters } from "./viz-url";
 import { VIZ_FOCUSED_HEADING_ID } from "./viz-court-transition";
 import { useFullscreenReveal } from "./use-fullscreen-reveal";
@@ -125,11 +125,6 @@ export function VizFullscreen() {
   // A read-only report (share page, sample match) offers no "Save this
   // view…" row and mounts no Save dialog — see `shotsWriteAccess`.
   const { canSaveViews } = shotsWriteAccess(meta);
-  // `availableSets` is an O(points) scan; this viewer re-renders on every
-  // pan/zoom frame (see the `VizBandsOverlay`/`MarkLayer` memoization below),
-  // so it's memoized on `points` alone rather than re-scanning on every one
-  // of those.
-  const sets = useMemo(() => availableSets(points), [points]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const closeWithReveal = useFullscreenReveal(rootRef);
@@ -502,7 +497,10 @@ export function VizFullscreen() {
 
   const heat = state.chart === "heat";
   const stageBackground = heat ? HEAT_APRON_FILL : APRON_FILL;
-  const applied = activeFilterEntries(state);
+  const applied = activeFilterEntries(state, {
+    you: you.shortName,
+    opponent: opp.shortName,
+  });
   const pillLabel =
     applied.length > 0 ? applied[0].label : `All ${result.noun}`;
   // P2e/P2f: a saved view that hasn't been edited since it loaded shows its
@@ -671,7 +669,6 @@ export function VizFullscreen() {
                 count={result.count}
                 total={result.total}
                 noun={result.noun}
-                sets={sets}
                 youName={you.name}
                 opponentName={opp.name}
                 tone="dark"

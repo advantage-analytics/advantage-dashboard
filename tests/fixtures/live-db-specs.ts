@@ -24,6 +24,7 @@ export const LIVE_DB_SPECS = [
   "claim-completion-rpc-live.spec.ts",
   "custom-org-join-request.spec.ts",
   "custom-program-search-rls.spec.ts",
+  "join-link-rls.spec.ts",
   "join-requests-staff-read.spec.ts",
   "leave-program.spec.ts",
   "match-share-browser.spec.ts",

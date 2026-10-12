@@ -135,6 +135,13 @@
   --danger-hover:#C41530;
   --danger-tint-15:rgba(229,24,55,0.15);
   --danger-tint-70:rgba(229,24,55,0.70);
+  /* Danger strip — the red twin of the warning triple above: a refusal or a
+     failure the person has to act on (the wizard's error notice strip). The
+     text half is --danger-hover, not --danger: at 11px on the 6% tint only
+     the darker red clears 4.5:1. Inline FIELD errors keep --error below. */
+  --danger-bg:rgba(229,24,55,0.06);
+  --danger-border:rgba(229,24,55,0.20);
+  --danger-text:var(--danger-hover);
   /* Inline form errors (auth vocabulary, iOS-red, distinct from Loss Red) */
   --error:#FF453A;
   --error-bg:rgba(255,69,58,0.08);
@@ -247,6 +254,9 @@
   --danger-hover:#FF8294;
   --danger-tint-15:rgba(255,100,120,0.18);
   --danger-tint-70:rgba(255,100,120,0.70);
+  --danger-bg:rgba(255,100,120,0.10);
+  --danger-border:rgba(255,100,120,0.24);
+  --danger-text:var(--danger-hover);
   /* Success #5DB955 holds — already clears 8:1 on dark */
   /* Player attribution — lifted like the blues */
   --player-1:#60A5FA;

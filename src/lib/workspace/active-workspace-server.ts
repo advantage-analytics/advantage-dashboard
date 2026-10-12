@@ -1,3 +1,4 @@
+import { toSquad } from "@/lib/data/squad";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
@@ -149,7 +150,7 @@ async function listProgramWorkspaces(
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, time_zone, crest_path)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
@@ -178,6 +179,7 @@ async function listProgramWorkspaces(
           upload_policy: string;
           events_policy: string;
           org_type: string;
+          pilot_eligible: boolean;
           time_zone: string;
           crest_path: string | null;
         }
@@ -189,19 +191,17 @@ async function listProgramWorkspaces(
         id: program.id,
         kind: "team" as const,
         name: program.school_name,
-        // Null for a custom org (club/high school/academy), which fields no
-        // squad — `teamLabel(null)` then renders the name alone rather than
-        // inventing "Men's" for a workspace that never chose one.
-        team:
-          program.team === "womens"
-            ? ("womens" as const)
-            : program.team === "mens"
-              ? ("mens" as const)
-              : null,
+        // Null for a custom org that never said — `teamLabel(null)` then
+        // renders the name alone rather than inventing "Men's" for a
+        // workspace that never chose one.
+        team: toSquad(program.team),
         // NOT NULL with default 'college' in the schema, and the CHECK pins
         // the value set, so the cast is a naming ceremony rather than a guess.
         // The quota tier hangs off this — see `quotaTierFor()`.
         orgType: program.org_type as ProgramOrgType,
+        // NOT NULL with default false. The admin-granted half of the quota
+        // tier: a custom org on the program pool — see `quotaTierFor()`.
+        pilotEligible: program.pilot_eligible === true,
         // NOT NULL with default 'UTC', so a program that never set one still
         // reads as a real zone. Rides on the workspace for the reason the
         // fields around it do: "what day is it for this program" has to be
@@ -243,11 +243,13 @@ async function listProgramWorkspaces(
         memberUploadEnabled: Boolean(row.upload_enabled),
         // A player's matches carry their claimed profile's id; a player-role
         // member who never claimed one is listed under their user id (arm 3
-        // of `program_roster_full`). Staff have no player page of their own.
+        // of `program_roster_full`). Staff have a player page only once they
+        // have added themselves to the roster — and then it is that profile's
+        // id, never the login's: a staff login is not a player to fall back to.
         myPlayerId:
           row.role === "player"
             ? (claimedProfiles.get(program.id) ?? userId)
-            : null,
+            : (claimedProfiles.get(program.id) ?? null),
       },
     ];
   });

@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
-import { StatePill } from "@/components/ui/state-pill";
+import { RolePill } from "@/components/ui/role-pill";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import type { TeamListRow } from "@/lib/data/teams-server";
 import { teamLabel } from "@/lib/workspace/types";
-import { capitalize } from "@/lib/utils";
 
 /**
  * Settings › Teams — every program the viewer belongs to, one row each.
@@ -70,7 +69,7 @@ export function TeamsList({
               </span>
               <span className="text-[11px] text-[var(--ink-500)]">{meta}</span>
             </span>
-            <StatePill>{capitalize(row.role)}</StatePill>
+            <RolePill role={row.role} />
             <ChevronRight
               className="size-4 shrink-0 text-[var(--ink-300)]"
               strokeWidth={1.5}

@@ -1323,15 +1323,14 @@ export async function requestInvite(input: {
       }
     });
 
-    // The admin notice — separate from the owner notice above and NOT gated
-    // on `notifyTeamActivity` or on there being an owner at all. A program
-    // with no owner yet has nobody for the notice above to reach, but the
-    // request row still sits in the admin queue exactly like a claim would,
-    // and an admin working that queue needs to know it exists regardless of
-    // whether this particular program happens to have someone to tell.
+    // The admin notice — only for a program with no owner yet. A join request
+    // is the owner's decision; admins step in only when there is nobody to
+    // make it. Not gated on the owner's `notifyTeamActivity`: an owner who
+    // muted the mail still decides from the roster.
     if (filed.id) {
       const requestId = filed.id;
       after(async () => {
+        if (await getProgramOwner(program.id)) return;
         const requestDb = createAdminClient();
         await notifyAdminsReviewNeeded(requestDb, {
           kind: "request",

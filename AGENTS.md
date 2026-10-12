@@ -75,10 +75,12 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   area (`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace and role
   lookup it depends on. Webhook and cron routes are excluded from the matcher on
   purpose.
-- `/dashboard/statistics`, `/dashboard/team/statistics`, `/dashboard/ask`,
-  `/dashboard/team/ask` and `/dashboard/opponents` render `ComingSoonPage`. Their
-  shape is not settled, so there is no implementation behind them to revive — the
-  loaders in `opponents-server.ts` are the exception and are live elsewhere.
+- `/dashboard/statistics`, `/dashboard/team/statistics`, `/dashboard/ask` and
+  `/dashboard/team/ask` render `ComingSoonPage`, and so does `/dashboard/opponents`
+  in a **team** workspace only — in a personal workspace it is the built Opponents
+  page (`personal-opponents-server.ts`). Their shape is not settled, so there is no
+  implementation behind the stubs to revive — the loaders in `opponents-server.ts`
+  are the exception and are live elsewhere.
 - `/dashboard/team/schedule` is the opposite case: it renders `ComingSoonPage`
   while `SCHEDULE_ENABLED` (`src/lib/schedule/availability.ts`) is off, but the
   whole schedule is built and kept behind it. Its sub-routes redirect to the stub
@@ -147,8 +149,9 @@ mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the Op
 against Gemini (`gemini-3.5-flash-lite`), and production runs it.
 
 Match-report insights come from the `generate-insights` edge function (Gemini,
-`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash-lite`, since
-2.5-flash is refused to new keys; temperature 0.4, JSON `responseSchema`). The summary
+`GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash`, since
+2.5-flash is refused to new keys; JSON `responseSchema`, and no sampling parameters or
+`thinkingBudget` — Gemini is retiring both and will answer them with a 400). The summary
 voice is settled: **2–3 sentences under 350 characters**, spoken to the player, the first
 sentence the single takeaway, key percentages quoted inline, no greeting, headers or
 bullet lists. A 4–5 sentence / 600-character version (`b317a1fe`, reverted) read wordier

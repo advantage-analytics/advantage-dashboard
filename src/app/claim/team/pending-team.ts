@@ -1,3 +1,4 @@
+import { isSquadAllowed, toSquad, type Squad } from "@/lib/data/squad";
 import { cookies } from "next/headers";
 import {
   isCustomOrgType,
@@ -39,6 +40,8 @@ export interface PendingTeam {
   name: string;
   orgType: CustomOrgType;
   ownerName: string;
+  /** Men's, women's or co-ed — the setup form's required Team answer. */
+  team: Squad;
 }
 
 /** Longest value either text field may carry through the cookie. */
@@ -47,11 +50,15 @@ const MAX_TEXT = 200;
 /** Shape-check an untrusted value into a `PendingTeam`, or null. */
 export function toPendingTeam(value: unknown): PendingTeam | null {
   if (!value || typeof value !== "object") return null;
-  const { name, orgType, ownerName } = value as Record<string, unknown>;
+  const { name, orgType, ownerName, team } = value as Record<string, unknown>;
   if (typeof name !== "string" || typeof ownerName !== "string") return null;
   if (!isCustomOrgType(orgType)) return null;
   if (name.length > MAX_TEXT || ownerName.length > MAX_TEXT) return null;
-  return { name, orgType, ownerName };
+  // A cookie parked before the form asked carries no squad. It reads as no
+  // pending team at all, so the coach lands back on setup and answers.
+  const squad = toSquad(team);
+  if (!squad || !isSquadAllowed(orgType, squad)) return null;
+  return { name, orgType, ownerName, team: squad };
 }
 
 export async function readPendingTeam(): Promise<PendingTeam | null> {

@@ -76,6 +76,7 @@ import type { AttachmentTrimWindow } from "@/lib/match-video/trim-window";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
   focusRingCls,
+  errorStripCls,
   noteIconCls,
   noteStripCls,
   warningStripCls,
@@ -754,17 +755,17 @@ function AttachmentAlignmentStepImpl({
 
         {mediaStatus === "error" && (
           <div
-            className={noteStripCls}
+            className={errorStripCls}
             role="alert"
             data-testid="alignment-media-error"
           >
             <XCircle
-              className={`${noteIconCls} text-[var(--error)]`}
+              className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
             />
             <span>
-              <b className="font-medium text-[var(--ink-900)]">
+              <b className="font-medium">
                 This video can&apos;t be played here
               </b>
               {" — go back and choose a file your browser can play, since you"}
@@ -894,14 +895,14 @@ function AttachmentAlignmentStepImpl({
 
         {error && (
           <div
-            className={noteStripCls}
+            className={errorStripCls}
             role="alert"
             data-testid="alignment-error"
             data-error-code={error.code}
             data-trim={trimRefused ? "true" : undefined}
           >
             <XCircle
-              className={`${noteIconCls} text-[var(--error)]`}
+              className={noteIconCls}
               strokeWidth={1.5}
               aria-hidden="true"
             />

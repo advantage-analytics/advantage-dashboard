@@ -139,6 +139,7 @@ export function TeamDetail({
         canEdit={isStaff}
         isOwner={isOwner}
         ownerName={data.ownerName}
+        orgType={data.program.orgType}
         division={data.program.division}
         conferenceOptions={conferenceOptions}
         onCrestError={setError}
@@ -150,6 +151,8 @@ export function TeamDetail({
         isActiveWorkspace={isActiveWorkspace}
         members={data.members}
         invites={data.invites}
+        joinLink={data.joinLink}
+        playersCanUpload={data.program.playersCanUpload}
         seats={seats}
         viewerId={viewerId}
         viewerRole={viewerRole}

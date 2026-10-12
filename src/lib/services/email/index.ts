@@ -19,6 +19,7 @@
  * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
  * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
+ * | Upload paused           | `/api/cron/reap-stalled-uploads` (every 5 min, `pg_cron` → `pg_net`) — a job still `uploading` with no progress write for 20 minutes, to its `created_by` · pref `notifyAnalysisFailed`, `claimSend("upload_paused:<job_id>")` — WIRED once the schedule migration is applied |
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
@@ -35,7 +36,7 @@
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
  * | Match video expiry       | the daily cleanup cron (`/api/cron/cleanup-match-videos`), to the video's `uploaded_by`, once per retention clock via `claimSend("match_video_expiry:<attachment>:<clock date>")` — no pref, it is the only notice before a deletion — WIRED |
- * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
+ * | Admin review needed      | `notifyAdminsReviewNeeded()` — a claim lands in `pending_review`/`objected`, or a new open `program_requests` row (a join request only when the program has no owner to decide it) — to every `is_admin` user plus `INTERNAL_ALERTS_ADDRESS` — WIRED |
  * | Program went live (internal) | `notifyProgramWentLive()` — a claim lands live via `completeClaim()` / `completeClaimWithToken()` (path `auto`) or an admin's `approveClaim()` opens its objection window (path `reviewed`) — to `INTERNAL_ALERTS_ADDRESS` only, once per program via `claimSend("program_live:<program_id>")` — WIRED |
  *
  * The claim and invite-request rows fire from
@@ -120,6 +121,7 @@ export {
   analysisReadyEmail,
   analysisFailedEmail,
   analysisFailedInternalEmail,
+  uploadPausedEmail,
   type AnalysisReadyInput,
   type AnalysisFailedInput,
   type AnalysisFailedInternalInput,

@@ -126,9 +126,9 @@ test("default and saved gallery navigation omits only the selected identity", as
   await expect(page.getByTestId("focused")).toBeVisible();
   await expect(defaultServe).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Saved serve/ })).toBeVisible();
-  await expect(gallery.getByRole("listitem")).toHaveCount(10);
+  await expect(gallery.getByRole("listitem")).toHaveCount(12);
   await page.getByRole("button", { name: "Filter set" }).click();
-  await expect(gallery.getByRole("listitem")).toHaveCount(10);
+  await expect(gallery.getByRole("listitem")).toHaveCount(12);
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(page.getByTestId("focused")).toContainText("saved-serve");
   await page.getByRole("button", { name: "Back to wall" }).click();

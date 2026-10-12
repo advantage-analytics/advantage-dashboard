@@ -29,6 +29,11 @@ import {
  *     actions the unmerged admin-console branch added live
  *     (`console.result_added`), and still rejects an unknown action — so the
  *     constraint was replaced, not dropped.
+ *  4. `admin_set_pilot_eligible` (`20261007142230_program_pilot_eligible.sql`)
+ *     refuses a non-admin and a college, grants a custom org the program pool
+ *     while stamping approver + end date, is idempotent, logs one
+ *     `pilot.eligibility_changed` row per effective call, and on revoke flips
+ *     only the flag.
  *
  * Two pool logins (`fixtures/live-db-pool`), never deleted: `afterAll`
  * deletes this run's program by id and demotes the admin through the service
@@ -60,6 +65,8 @@ test.describe("Admin pilot RPC gates (live)", () => {
   let stranger: Session; // not an admin, no membership anywhere
 
   let programId: string;
+  /** A custom org (org_type 'club', no program_key) for the eligibility tests. */
+  let clubId: string;
 
   const auditRows = (action: string) =>
     admin
@@ -75,6 +82,23 @@ test.describe("Admin pilot RPC gates (live)", () => {
       .eq("id", programId)
       .single();
 
+  const clubRow = () =>
+    admin
+      .from("programs")
+      .select(
+        "pilot_eligible, pilot_ends_on, pilot_ended_at, pilot_approved_by, pilot_approved_at",
+      )
+      .eq("id", clubId)
+      .single();
+
+  const clubAudit = () =>
+    admin
+      .from("program_audit_log")
+      .select("actor_user_id, details")
+      .eq("program_id", clubId)
+      .eq("action", "pilot.eligibility_changed")
+      .order("created_at", { ascending: true });
+
   test.beforeAll(async () => {
     test.setTimeout(180_000);
     admin = createAdminClient();
@@ -85,6 +109,13 @@ test.describe("Admin pilot RPC gates (live)", () => {
       .delete()
       .like("program_key", "admin-pilot-%");
     if (stale.error) throw new Error(`programs sweep: ${stale.error.message}`);
+    // Custom orgs carry no program_key, so the club is swept by name.
+    const staleClubs = await admin
+      .from("programs")
+      .delete()
+      .like("school_name", "Admin Pilot Club admin-pilot-%");
+    if (staleClubs.error)
+      throw new Error(`club sweep: ${staleClubs.error.message}`);
 
     [adminSession, stranger] = await poolLogins(admin, SLOTS);
 
@@ -110,17 +141,28 @@ test.describe("Admin pilot RPC gates (live)", () => {
       .single();
     if (prog.error) throw new Error(`program: ${prog.error.message}`);
     programId = prog.data.id;
+
+    // No pilot record at all: the grant has to supply approver and end date.
+    const club = await admin
+      .from("programs")
+      .insert({
+        org_type: "club",
+        school_name: `Admin Pilot Club ${MARK}`,
+        status: "active",
+      })
+      .select("id")
+      .single();
+    if (club.error) throw new Error(`club: ${club.error.message}`);
+    clubId = club.data.id;
   });
 
   test.afterAll(async () => {
     if (!admin) return;
     const demoteError = await demotePoolAdmin(admin, adminSession);
-    if (programId) {
-      await admin
-        .from("program_audit_log")
-        .delete()
-        .eq("program_id", programId);
-      await admin.from("programs").delete().eq("id", programId);
+    for (const id of [programId, clubId]) {
+      if (!id) continue;
+      await admin.from("program_audit_log").delete().eq("program_id", id);
+      await admin.from("programs").delete().eq("id", id);
     }
     if (demoteError) throw new Error(demoteError);
   });
@@ -230,6 +272,108 @@ test.describe("Admin pilot RPC gates (live)", () => {
 
     const audit = await auditRows("pilot.end_changed");
     expect(audit.data).toHaveLength(2);
+  });
+
+  // ── admin_set_pilot_eligible ──────────────────────────────────────────────
+
+  test("a non-admin gets 42501 from admin_set_pilot_eligible and nothing changes", async () => {
+    const result = await stranger.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: clubId,
+      p_eligible: true,
+    });
+    expect(result.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const row = await clubRow();
+    expect(row.data?.pilot_eligible).toBe(false);
+    expect(row.data?.pilot_ends_on).toBeNull();
+    expect((await clubAudit()).data).toHaveLength(0);
+  });
+
+  test("a college is refused with 22023: it draws the pool from org_type alone", async () => {
+    const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: programId,
+      p_eligible: true,
+    });
+    expect(result.error?.code).toBe("22023");
+    const row = await admin
+      .from("programs")
+      .select("pilot_eligible")
+      .eq("id", programId)
+      .single();
+    expect(row.data?.pilot_eligible).toBe(false);
+  });
+
+  test("granting a custom org sets the flag, stamps approver and the collegiate end date, logs one row", async () => {
+    const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: clubId,
+      p_eligible: true,
+    });
+    expect(result.error).toBeNull();
+
+    const row = await clubRow();
+    expect(row.data?.pilot_eligible).toBe(true);
+    expect(row.data?.pilot_ends_on).toBe("2026-12-31");
+    expect(row.data?.pilot_ended_at).toBeNull();
+    expect(row.data?.pilot_approved_by).toBe(adminSession.userId);
+    expect(row.data?.pilot_approved_at).not.toBeNull();
+
+    const audit = await clubAudit();
+    expect(audit.data).toHaveLength(1);
+    expect(audit.data![0]).toMatchObject({
+      actor_user_id: adminSession.userId,
+      details: { from: false, to: true, by_admin: true, stamped: true },
+    });
+  });
+
+  test("a repeat grant is a no-op and logs nothing more", async () => {
+    const before = await clubRow();
+    const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: clubId,
+      p_eligible: true,
+    });
+    expect(result.error).toBeNull();
+    expect((await clubRow()).data).toEqual(before.data);
+    expect((await clubAudit()).data).toHaveLength(1);
+  });
+
+  test("revoking flips only the flag — approver and dates stay — and logs one more row", async () => {
+    const before = await clubRow();
+    const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: clubId,
+      p_eligible: false,
+    });
+    expect(result.error).toBeNull();
+
+    const row = await clubRow();
+    expect(row.data?.pilot_eligible).toBe(false);
+    expect(row.data?.pilot_ends_on).toBe(before.data?.pilot_ends_on);
+    expect(row.data?.pilot_approved_by).toBe(before.data?.pilot_approved_by);
+    expect(row.data?.pilot_approved_at).toBe(before.data?.pilot_approved_at);
+
+    const audit = await clubAudit();
+    expect(audit.data).toHaveLength(2);
+    expect(audit.data![1]).toMatchObject({
+      actor_user_id: adminSession.userId,
+      details: { from: true, to: false, by_admin: true, stamped: false },
+    });
+  });
+
+  test("re-granting with a record already in place does not re-stamp", async () => {
+    const before = await clubRow();
+    const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
+      p_program_id: clubId,
+      p_eligible: true,
+    });
+    expect(result.error).toBeNull();
+
+    const row = await clubRow();
+    expect(row.data?.pilot_eligible).toBe(true);
+    expect(row.data?.pilot_approved_at).toBe(before.data?.pilot_approved_at);
+    expect(row.data?.pilot_ends_on).toBe(before.data?.pilot_ends_on);
+
+    const audit = await clubAudit();
+    expect(audit.data).toHaveLength(3);
+    expect(audit.data![2].details).toMatchObject({ stamped: false });
   });
 
   // ── Audit vocabulary ──────────────────────────────────────────────────────

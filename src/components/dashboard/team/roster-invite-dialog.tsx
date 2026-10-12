@@ -6,6 +6,7 @@ import {
   Link as LinkIcon,
   Link2,
   Loader2,
+  Mail,
   Users,
   X,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import {
 } from "@/components/dashboard/settings/settings-card";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { advButton } from "@/lib/ui/adv-button";
+import { RolePill } from "@/components/ui/role-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   inviteMember,
@@ -25,6 +27,7 @@ import {
   SeatNote,
   DialogProblem,
   LOOKS_LIKE_EMAIL,
+  MethodPills,
   RoleCard,
   RoleChoice,
   RosterDialog,
@@ -33,7 +36,14 @@ import {
   InviteTargetPicker,
   type ManagedPlayer,
 } from "@/components/dashboard/team/invite-target-picker";
+import { JoinLinkPanel } from "@/components/dashboard/settings/teams/join-link-popover";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
+import type { TeamJoinLink } from "@/lib/data/team-settings-server";
+import {
+  OwnAddressNotice,
+  isOwnAddress,
+  type OwnAddressOffer,
+} from "./add-self-dialog";
 
 /**
  * Designs 6b, 7a and 7b — one dialog, not three.
@@ -115,6 +125,7 @@ export function RosterInviteDialog({
    * two different addresses must remount it (`key`) rather than swap the prop.
    */
   initialEmail = "",
+  self = null,
   /**
    * Offer the coach the other capability, when the address they have typed is
    * not going to anybody this dialog can bind to.
@@ -129,9 +140,21 @@ export function RosterInviteDialog({
    * so there is no name to carry and none is invented.
    */
   onHandOffToAddPlayer,
+  /**
+   * The program's live join link, or null. The dialog's second half —
+   * "Join link" beside "Email invite" — is `JoinLinkPanel` drawn in place, so
+   * the link is managed here rather than in a popover the dialog had to close
+   * to open.
+   */
+  joinLink,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Staff inviting their own address as a player are offered "Add yourself as
+   * a player" instead of `create_program_invite`'s refusal.
+   */
+  self?: OwnAddressOffer;
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
   /**
@@ -150,9 +173,15 @@ export function RosterInviteDialog({
   initialTarget?: ManagedPlayer | null;
   initialEmail?: string;
   onHandOffToAddPlayer?: (email: string) => void;
+  joinLink: TeamJoinLink | null;
 }) {
   const [target, setTarget] = useState<ManagedPlayer | null>(initialTarget);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /**
+   * Which way in the dialog is showing. Switching keeps everything typed on
+   * the email side: the two are halves of one dialog, not a hand-off.
+   */
+  const [method, setMethod] = useState<"email" | "link">("email");
   const [email, setEmail] = useState(initialTarget?.email ?? initialEmail);
   /**
    * Addresses that have already parsed, held apart from the one being typed.
@@ -249,6 +278,7 @@ export function RosterInviteDialog({
   function reset() {
     setTarget(initialTarget);
     setPickerOpen(false);
+    setMethod("email");
     setEmail(initialTarget?.email ?? initialEmail);
     setEmails([]);
     setEmailEdited(false);
@@ -438,16 +468,35 @@ export function RosterInviteDialog({
   // warning, send the first address and refuse the rest one by one. Refused
   // here instead, before anything is sent — the database still re-checks.
   const overCap = newSeats > remaining;
+  // A player invitation to the viewer's own address: the database refuses it
+  // ("that person is already on this roster"), so the dialog offers the door
+  // that works. Staff and coach invitations keep the refusal — there is no
+  // inviting yourself into a role. Advisory, like every note in this dialog:
+  // it adds no condition to `ready`, and Send pressed anyway gets the
+  // database's own sentence beside this one.
+  const ownAddress =
+    role === "player" && addresses.some((a) => isOwnAddress(self, a));
   const ready = addresses.length > 0 && !pending && !overCap;
+  /**
+   * The pair is offered only where both halves apply: not on the receipt, and
+   * not when the dialog was opened for one roster row ("Invite to claim") —
+   * a join link cannot bind a login to a chosen profile.
+   */
+  const showMethods = sent === null && initialTarget === null;
+  const onLink = showMethods && method === "link";
 
   return (
     <RosterDialog
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(next) : close())}
       title={`Invite to ${active.name}`}
-      description="Link the invite to a player you've added, or start fresh."
+      description={
+        showMethods
+          ? "Send an email invitation, or share one link with the whole squad."
+          : "Link the invite to a player you've added, or start fresh."
+      }
       footer={
-        sent ? (
+        sent || onLink ? (
           <>
             <div className="flex-1" />
             <button
@@ -460,7 +509,6 @@ export function RosterInviteDialog({
           </>
         ) : (
           <>
-            <CopyInviteLink />
             <div className="flex-1" />
             <button
               type="button"
@@ -489,7 +537,38 @@ export function RosterInviteDialog({
         )
       }
     >
-      {sent ? (
+      {showMethods && (
+        <MethodPills
+          label="How to invite"
+          value={method}
+          onValueChange={setMethod}
+          options={[
+            { value: "email", label: "Email invite", icon: Mail },
+            { value: "link", label: "Join link", icon: LinkIcon },
+          ]}
+        />
+      )}
+
+      {/* Mounted for as long as the pair is offered and hidden while the other
+          half shows, never unmounted on a switch: the panel holds the rung
+          just chosen and a link just minted until the refresh that confirms
+          them, and a remount would reseed from the stale `joinLink` and offer
+          to mint a second one. */}
+      {showMethods && (
+        <div role="tabpanel" aria-label="Join link" hidden={!onLink}>
+          <JoinLinkPanel
+            variant="dialog"
+            programId={active.id}
+            programName={active.name}
+            joinLink={joinLink}
+            role={active.role}
+            playersCanUpload={playersCanUpload}
+            seats={seats}
+          />
+        </div>
+      )}
+
+      {onLink ? null : sent ? (
         <>
           {sent.delivered.length > 0 && (
             <p className="text-[12px] leading-[1.6] text-[var(--ink-700)]">
@@ -507,7 +586,11 @@ export function RosterInviteDialog({
           ))}
         </>
       ) : (
-        <>
+        <div
+          role={showMethods ? "tabpanel" : undefined}
+          aria-label={showMethods ? "Email invite" : undefined}
+          className="flex flex-col gap-[18px]"
+        >
           {/* 7a lives here. Hidden entirely when there is nobody to target —
               a picker offering one option is a control that asks a question
               with no alternatives — and while a list is in the field, because
@@ -656,16 +739,14 @@ export function RosterInviteDialog({
             <div className="flex flex-col gap-1.5">
               <span className="text-[11px] text-[var(--ink-600)]">Role</span>
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-[22px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2.5 text-[11px] font-medium text-[var(--ink-700)]">
-                  Player
-                </span>
+                <RolePill role="player" />
                 <span className="text-[11px] text-[var(--ink-400)]">
                   set by the profile
                 </span>
               </div>
             </div>
           ) : (
-            <RoleChoice columns={isOwner ? 3 : 2}>
+            <RoleChoice columns={isOwner ? 3 : 2} layout="stack">
               <RoleCard
                 checked={role === "player"}
                 onSelect={() => setRole("player")}
@@ -817,6 +898,10 @@ export function RosterInviteDialog({
             </DialogInfoRow>
           )}
 
+          {ownAddress && self && (
+            <OwnAddressNotice onAddSelf={self.onAddSelf} />
+          )}
+
           <DialogProblem message={error} />
 
           {linked ? (
@@ -897,51 +982,8 @@ export function RosterInviteDialog({
               )}
             </SeatNote>
           )}
-        </>
+        </div>
       )}
     </RosterDialog>
-  );
-}
-
-/**
- * 9b's left-hand footer action — and it is disabled, deliberately.
- *
- * ── Why there is no URL to copy ─────────────────────────────────────────────
- * An invite link is `${emailOrigin()}/join/<token>`, and that token exists for
- * exactly one instant in one place: `inviteMember()` (`settings/team-actions.ts`)
- * mints it with `generateToken()`, hands it to `programInviteEmail()`, and
- * passes only `hashToken(token)` to `create_program_invite` — whose signature
- * is `p_token_hash text`. Nothing but the SHA-256 digest is ever stored, and
- * the action's return type (`InviteResult`) carries no token either. That is a
- * stated rule, not an oversight: a database dump must not be a set of working
- * links into somebody's program, and a token that reaches the browser has been
- * handed to whoever is looking at the screen rather than to the person invited.
- *
- * So before Send there is no invite row and no token; after Send the row exists
- * but its token is unrecoverable — the digest is one-way. Both of the ways to
- * light this control up are worse than leaving it dark: minting an invitation
- * the coach has not asked for yet, or returning the raw token to a client
- * component. It renders as the affordance the design draws, disabled, saying
- * where the link actually goes, rather than putting a dead `/join/…` URL on
- * somebody's clipboard.
- *
- * When it can be enabled: a server action that returns a link for an invite
- * that already exists — minting a fresh token, storing the new hash through the
- * same upsert `inviteMember` uses, and handing back the one-time URL. That is a
- * new server-side capability with its own trade-off to weigh, not a copy
- * button.
- */
-function CopyInviteLink() {
-  const reason = "The link is emailed to them — it is never shown here.";
-  return (
-    <button
-      type="button"
-      disabled
-      className="inline-flex cursor-not-allowed items-center gap-1.5 text-[11px] font-medium text-[var(--ink-400)]"
-    >
-      <LinkIcon className="size-3.5" strokeWidth={1.5} aria-hidden />
-      Copy invite link
-      <span className="sr-only"> — unavailable. {reason}</span>
-    </button>
   );
 }

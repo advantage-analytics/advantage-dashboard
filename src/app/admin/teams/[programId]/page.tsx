@@ -144,9 +144,14 @@ export default async function AdminTeamPage({
         programName={data.program.schoolName}
         usage={data.usage}
         pilot={data.pilot}
+        orgType={data.program.orgType}
+        pilotEligible={data.program.pilotEligible}
         teamPool={
-          quotaTierFor({ kind: "team", orgType: data.program.orgType }) ===
-          "program"
+          quotaTierFor({
+            kind: "team",
+            orgType: data.program.orgType,
+            pilotEligible: data.program.pilotEligible,
+          }) === "program"
         }
       />
     ),
@@ -154,6 +159,7 @@ export default async function AdminTeamPage({
       <AdminUsageCard
         usage={data.usage}
         orgType={data.program.orgType}
+        pilotEligible={data.program.pilotEligible}
         members={data.members}
       />
     ),

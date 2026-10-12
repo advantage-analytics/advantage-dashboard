@@ -90,7 +90,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildSplitStepJobRequest } from "./job-request";
+import { buildSplitStepJobRequest, vendorRequestRecord } from "./job-request";
 import type { SplitStepJobRequest } from "./job-request";
 import { parseWebhookPayload } from "./webhook-payload";
 import { resolveSplitstepDeploymentConfig } from "./deployment-config";
@@ -767,21 +767,32 @@ export async function resubmitJob(params: {
   }
 
   // 8. Submit. Mirrors api/splitstep/jobs steps 7–8 — annotated there too.
+  let posted = false;
   try {
-    await supabase
+    // Checked: a write that fails here would otherwise leave the child at
+    // `uploaded` with no billable seconds and no recorded body while the
+    // vendor still got the job. Throwing hands the reservation back instead.
+    const { error: submittingError } = await supabase
       .from("processing_jobs")
       .update({
         status: "submitting",
         billable_seconds: billableSeconds,
         attempt_count: 1,
+        vendor_request: vendorRequestRecord(vendorRequest),
       })
       .eq("id", childId);
+    if (submittingError) {
+      throw new Error(
+        `Could not record the submission: ${submittingError.message}`,
+      );
+    }
 
     const vendorUrl = await io.mintVendorUrl({
       jobId: childId,
       objectKey: parent.video_object_key,
     });
 
+    posted = true;
     const response = await io.submitToVendor({
       apiUrl: config.apiUrl,
       apiKey: config.apiKey,
@@ -893,7 +904,12 @@ export async function resubmitJob(params: {
     }
     await supabase
       .from("processing_jobs")
-      .update({ status: "failed", error_message: message })
+      .update({
+        status: "failed",
+        error_message: message,
+        // Never sent, so not a record of anything — see the submit route.
+        ...(posted ? {} : { vendor_request: null }),
+      })
       .eq("id", childId);
 
     return {
@@ -1067,7 +1083,7 @@ async function resolveAutoRetryWorkspace(params: {
   const { data, error } = await supabase
     .from("program_members")
     .select(
-      "role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type)",
+      "role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type, pilot_eligible)",
     )
     .eq("program_id", programId)
     .eq("user_id", userId)
@@ -1084,12 +1100,14 @@ async function resolveAutoRetryWorkspace(params: {
           players_can_upload: boolean;
           upload_policy: string;
           org_type: string;
+          pilot_eligible: boolean;
         }
       | {
           status: string;
           players_can_upload: boolean;
           upload_policy: string;
           org_type: string;
+          pilot_eligible: boolean;
         }[];
   };
   const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
@@ -1104,10 +1122,12 @@ async function resolveAutoRetryWorkspace(params: {
     // `reserveQuota()`, which never asks what day it is. UTC rather than a
     // second read for a field this path does not use.
     timeZone: "UTC",
-    // The real value, not a guess: this workspace goes straight into
-    // `reserveQuota()`, and a custom org auto-retrying must draw its reduced
-    // tier exactly as a fresh manual submission would — see `quotaTierFor()`.
+    // The real values, not guesses: this workspace goes straight into
+    // `reserveQuota()`, and a custom org auto-retrying must draw the same
+    // tier a fresh manual submission would — reduced, or the program pool
+    // once an admin granted it — see `quotaTierFor()`.
     orgType: program.org_type as Workspace["orgType"],
+    pilotEligible: program.pilot_eligible === true,
     role: row.role as Workspace["role"],
     mark: "",
     // Same rule listProgramWorkspaces() uses: 'active' means the claim

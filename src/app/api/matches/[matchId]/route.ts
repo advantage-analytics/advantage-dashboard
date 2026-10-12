@@ -85,7 +85,7 @@ function notFound() {
 
 /** DELETE's answer when the admin console's purge guard refuses the match. */
 const PURGE_PROTECTED_MESSAGE =
-  "Matches recorded or analyzed through the admin console cannot be deleted here.";
+  "Matches recorded, analyzed or hand-labeled through the admin console cannot be deleted here.";
 
 /** DELETE's answer when that guard could not be checked, or anything else threw. */
 const PURGE_UNAVAILABLE_MESSAGE = "Match deletion is unavailable. Try again.";

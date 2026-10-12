@@ -143,6 +143,8 @@ resolved in T8 and its `test.fail()` removed; #2 keeps its annotation.
    are spread after the draft. **Proposed fix:** spread `draft?.formData` only on the
    first seed (`!seededRef.current`). **Why it was not shipped:** it changes the
    draft-resume path, which the task puts out of scope for a trivial fix.
+   **Fixed 2026-10-07:** the draft is seeded once per draft id (`seededDraftIdRef`),
+   which also stops a server re-render of the page re-seeding it.
 
 ## Resolved in T8
 

@@ -46,8 +46,10 @@ import {
   type MatchLineProps,
 } from "../match-line";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { UploadKeepOpenNote } from "../upload-keep-open-note";
 import { UPLOADING_COPY } from "../upload-progress-copy";
 import { RecoveryAction } from "./recovery-action";
+import { RestartUpload } from "./restart-upload";
 import {
   CancelAnalysisDialog,
   requestResubmit,
@@ -254,12 +256,33 @@ function StepBody({
               {body.eta}
             </p>
           )}
-          <div className="mt-1 flex flex-col gap-0.5">
-            <p className={cn(NOTE, "text-[var(--ink-700)]")}>
-              {UPLOADING_COPY.notes.keepTabOpen}
-            </p>
-            <p className={NOTE}>{UPLOADING_COPY.notes.keepUsing}</p>
-          </div>
+          <UploadKeepOpenNote />
+        </>
+      );
+
+    case "paused":
+      return (
+        <>
+          {/* Frozen where it stopped: grey, no sheen. Blue and movement both
+              say "being measured right now", and nothing is. */}
+          <AnalysisProgressTrack
+            percent={body.percent}
+            tone="var(--ink-300)"
+            label={STEPPER_COPY.steps.videoPaused}
+          />
+          <p className={cn(NOTE, "mt-1")}>
+            {canAct ? STEPPER_COPY.paused.note : STEPPER_COPY.paused.noteViewer}
+          </p>
+          {/* Only the person who started it: restarting ends their job. */}
+          {canAct && jobId && (
+            <div className="mt-1 flex">
+              <RestartUpload
+                jobId={jobId}
+                matchId={matchId}
+                pausedSince={body.since}
+              />
+            </div>
+          )}
         </>
       );
 

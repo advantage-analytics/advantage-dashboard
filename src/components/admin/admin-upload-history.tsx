@@ -1,3 +1,4 @@
+import { squadLabel, toSquad } from "@/lib/data/squad";
 import Link from "next/link";
 import { Upload } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -30,6 +31,12 @@ const KINDS = {
   analysis_attachment: "Analysis attachment",
 };
 const COLUMNS = ["Date", "Team", "Kind", "What", "Added by", "State"];
+
+/** "Men's tennis"; an unrecognised stored value is shown as-is. */
+function sideLabel(side: string): string {
+  const label = squadLabel(toSquad(side));
+  return label ? `${label} tennis` : side;
+}
 
 export function historyHref(cursor: string) {
   return `/admin/uploads?${new URLSearchParams({ cursor })}`;
@@ -136,11 +143,7 @@ export function AdminUploadHistory({
                       {row.team.name}
                       {row.team.side && (
                         <p className="mt-1 text-[11px] font-normal text-[var(--ink-500)]">
-                          {row.team.side === "mens"
-                            ? "Men’s tennis"
-                            : row.team.side === "womens"
-                              ? "Women’s tennis"
-                              : row.team.side}
+                          {sideLabel(row.team.side)}
                         </p>
                       )}
                     </td>

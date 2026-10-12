@@ -1,3 +1,4 @@
+import { toSquad, type Squad } from "@/lib/data/squad";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
@@ -49,7 +50,7 @@ export interface AdminClaimRequestDetail {
   claimId: string;
   programId: string;
   schoolName: string;
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   division: string | null;
   state: string | null;
   staffPageUrl: string | null;
@@ -77,7 +78,7 @@ export interface AdminRequestRequestDetail {
   kind: string;
   programId: string | null;
   schoolName: string | null;
-  team: "mens" | "womens" | null;
+  team: Squad | null;
   division: string | null;
   state: string | null;
   staffPageUrl: string | null;
@@ -211,10 +212,6 @@ function programOf(
   return Array.isArray(raw) ? (raw[0] ?? null) : raw;
 }
 
-function teamOf(value: string | null): "mens" | "womens" | null {
-  return value === "womens" ? "womens" : value === "mens" ? "mens" : null;
-}
-
 interface RawClaimRow {
   id: string;
   status: string;
@@ -282,7 +279,7 @@ function toClaimRow(
 ): AdminRequestRow {
   const program = programOf(claim.programs);
   const schoolName = program?.school_name ?? claim.claimed_email;
-  const team = teamOf(program?.team ?? null);
+  const team = toSquad(program?.team ?? null);
 
   const detail: AdminClaimRequestDetail = {
     source: "claim",
@@ -378,7 +375,7 @@ function toRequestRow(
 ): AdminRequestRow {
   const program = programOf(request.programs);
   const schoolName = program?.school_name ?? request.school_name;
-  const team = teamOf(program?.team ?? request.team);
+  const team = toSquad(program?.team ?? request.team);
 
   const detail: AdminRequestRequestDetail = {
     source: "request",

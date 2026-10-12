@@ -13,6 +13,7 @@ import { FileStepContent } from "./FileStepContent";
 import { ImportIdentityNotice } from "./ImportIdentityNotice";
 import { SourceStepContent } from "./SourceStepContent";
 import { TrimStepContent } from "./TrimStepContent";
+import { useAddSelfOffer } from "./useAddSelfOffer";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { WizardNotice } from "./WizardNotice";
 
@@ -92,17 +93,20 @@ export function ProviderStep() {
       providerQuotaRefusal,
     },
   } = useUploadWizard();
+  const addSelf = useAddSelfOffer(whoPlayed);
   return (
     <div className="flex flex-col gap-9">
       <SourceStepContent
         selectedProvider={selectedProvider}
         onProviderSelect={handleProviderSelect}
         whoPlayed={whoPlayed}
+        addSelf={addSelf.offer}
         /* Null for an import source and while the allowance is still
            loading — the hook decides both, so this step never has to. */
         quotaRefusal={providerQuotaRefusal}
       />
       <WizardEligibilityNotice />
+      {addSelf.dialog}
     </div>
   );
 }
@@ -126,6 +130,7 @@ export function FileStep() {
     uploadedFile,
     videoProbe,
     videoWarnings,
+    videoNotes,
     isProbing,
     isUploading,
     parsingState,
@@ -178,6 +183,7 @@ export function FileStep() {
         uploadedFile={uploadedFile}
         probe={videoProbe}
         warnings={isProcessingProvider ? videoWarnings : []}
+        notes={isProcessingProvider ? videoNotes : []}
         busy={isProbing || isUploading || parsingState.isParsing}
         error={uploadError}
         parsingState={parsingState}
@@ -294,6 +300,8 @@ export function MatchStep() {
       handleScoreChange,
       handleTiebreakChange,
       isProcessingProvider,
+      uploadedFile,
+      videoProbe,
       whoPlayed,
       attachedLine,
       attachLine,
@@ -301,7 +309,7 @@ export function MatchStep() {
       parsingState,
       error,
     },
-    view: { scoreCheckVisible, oneSetSettled },
+    view: { scoreCheckVisible, oneSetSettled, trimSelected },
     actions: { dismissScoreCheck, chooseOneSet, undoOneSet },
     meta: { workspaceKind, preset },
   } = useUploadWizard();
@@ -347,6 +355,25 @@ export function MatchStep() {
     workspaces.viewer.id,
     workspaces.active,
   ]);
+
+  // Stable for the same reason as `subject`. Only while the File itself is
+  // held: a restored draft brings back the form, not the video.
+  const heldFile = isProcessingProvider ? (uploadedFile?.file ?? null) : null;
+  const videoName = uploadedFile?.name;
+  const videoSize = uploadedFile?.size;
+  const video = useMemo(
+    () =>
+      heldFile
+        ? {
+            file: heldFile,
+            name: videoName ?? heldFile.name,
+            size: videoSize ?? "",
+            probe: videoProbe,
+            keptSeconds: trimSelected > 0 ? trimSelected : null,
+          }
+        : null,
+    [heldFile, videoName, videoSize, videoProbe, trimSelected],
+  );
 
   if (admin?.attachment)
     return (
@@ -430,6 +457,7 @@ export function MatchStep() {
       oneSetSettled={oneSetSettled}
       onOneSet={chooseOneSet}
       onUndoOneSet={undoOneSet}
+      video={video}
     />
   );
 }
