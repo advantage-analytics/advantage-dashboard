@@ -73,6 +73,11 @@ export interface TeamIdentity {
   /** Who may change the schedule — the second policy row. */
   eventsPolicy: EventsPolicy;
   /**
+   * Players may put a match's video on its public share link. Staff always
+   * may; off by default. Saved on change, not through the settings draft.
+   */
+  playersCanShareVideo: boolean;
+  /**
    * Object key in the `program-crests` bucket, or null for the initials mark.
    * A key, never a URL — see `crestUrl()` in `teams-server.ts`.
    */
@@ -221,7 +226,7 @@ export async function getTeamSettings(
       supabase
         .from("programs")
         .select(
-          "id, school_name, team, org_type, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+          "id, school_name, team, org_type, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, players_can_share_video, time_zone, crest_path",
         )
         .eq("id", programId)
         .maybeSingle(),
@@ -314,6 +319,7 @@ export async function getTeamSettings(
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
       eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
+      playersCanShareVideo: row.players_can_share_video === true,
       crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
     },

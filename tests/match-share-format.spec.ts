@@ -5,6 +5,7 @@ import {
   realTournamentName,
   sharedMatchPair,
   sharedMatchWinner,
+  sharedVideoAllowed,
   shareScopeLabel,
 } from "@/lib/data/match-share-format";
 
@@ -73,6 +74,72 @@ test("the Unknown Event placeholder reads as no tournament", () => {
 });
 
 test("a link's scope is named the same way wherever it is printed", () => {
-  expect(shareScopeLabel(false)).toBe("Statistics only");
-  expect(shareScopeLabel(true)).toBe("No video");
+  expect(shareScopeLabel({ visualizations: false, video: false })).toBe(
+    "Statistics only",
+  );
+  expect(shareScopeLabel({ visualizations: true, video: false })).toBe(
+    "No video",
+  );
+  // The video is the fact worth the line, with or without the charts.
+  for (const visualizations of [true, false])
+    expect(shareScopeLabel({ visualizations, video: true })).toBe("With video");
+});
+
+test("the video stays on a link only while its maker may still share it", () => {
+  const maker = "11111111-2222-4333-8444-555555555555";
+  const program = "99999999-2222-4333-8444-555555555555";
+  const team = { makerId: maker, programId: program };
+
+  // A personal match was the maker's to share.
+  expect(
+    sharedVideoAllowed({
+      makerId: maker,
+      programId: null,
+      makerRole: null,
+      playersCanShareVideo: false,
+    }),
+  ).toBe(true);
+
+  // A team match: staff always, in any of the three staff roles.
+  for (const makerRole of ["owner", "coach", "staff"])
+    expect(
+      sharedVideoAllowed({ ...team, makerRole, playersCanShareVideo: false }),
+    ).toBe(true);
+
+  // A player only while the program lets players share video — so turning
+  // the setting off takes the video off the links players made.
+  expect(
+    sharedVideoAllowed({
+      ...team,
+      makerRole: "player",
+      playersCanShareVideo: true,
+    }),
+  ).toBe(true);
+  expect(
+    sharedVideoAllowed({
+      ...team,
+      makerRole: "player",
+      playersCanShareVideo: false,
+    }),
+  ).toBe(false);
+
+  // A coach who left the staff, or the team altogether.
+  expect(
+    sharedVideoAllowed({
+      ...team,
+      makerRole: null,
+      playersCanShareVideo: false,
+    }),
+  ).toBe(false);
+
+  // A maker whose account is gone can vouch for nothing, on any match.
+  for (const programId of [null, program])
+    expect(
+      sharedVideoAllowed({
+        makerId: null,
+        programId,
+        makerRole: "owner",
+        playersCanShareVideo: true,
+      }),
+    ).toBe(false);
 });

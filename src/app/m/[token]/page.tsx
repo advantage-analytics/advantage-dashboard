@@ -25,6 +25,7 @@ import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/re
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { SharedByFooter } from "@/components/public/shared-by-footer";
 import {
+  FilmPanePending,
   MatchReportPending,
   VisualizationsPanePending,
 } from "@/components/dashboard/loading/match-report-pending";
@@ -39,15 +40,22 @@ import { formatScoreText, playedSets } from "@/lib/ui/score-format";
  * from the same parts — the rail scoreboard, the title row, the Statistics
  * view — under `MatchReportProvider readOnly`. What is left out is everything
  * that acts or leads back into the app: Share, Compare, the More menu (review
- * score, delete), the Video view (the video is a short-lived signed URL, and
- * bookmarks write), and the awaiting-analysis progress with its retry.
+ * score, delete), and the awaiting-analysis progress with its retry.
  *
  * The Visualizations view is on the page when the link's maker left it on
  * (`includesVisualizations`), and the rail then grows the view switcher with
  * those two rows. It is the dashboard's `ShotsTab` under `readOnly`: the
  * default cuts, filters and the fullscreen viewer, with nothing a workspace
  * owns (saved views, band editing). A link without it has one view and no
- * switcher, as before. A match still analysing draws
+ * switcher, as before.
+ *
+ * The Video view is on the page only when `getSharedMatchData` resolved a
+ * video: the link carries it, whoever made the link may still share it, and
+ * a playable file exists. It is the dashboard's `FilmTab` under `readOnly` —
+ * it plays, steps and filters, with no bookmarks and nothing to add, replace
+ * or adjust — and it renews its thirty-minute URL through
+ * `/api/share/<token>/video`, the token-gated twin of the match's own route.
+ * No video, no Video row: an anonymous reader is never shown an empty player. A match still analysing draws
  * the scoreboard and an empty Statistics view rather than a pipeline state.
  *
  * `force-dynamic`: the answer depends on a row that is deleted the moment the
@@ -67,8 +75,25 @@ const ShotsTab = nextDynamic(
   { loading: () => <VisualizationsPanePending /> },
 );
 
-const STATISTICS_ONLY: readonly ReportView[] = ["statistics"];
-const WITH_VISUALIZATIONS: readonly ReportView[] = ["statistics", "shots"];
+const FilmTab = nextDynamic(
+  () =>
+    import("@/components/dashboard/matches/match-detail/film/film-tab").then(
+      (m) => m.FilmTab,
+    ),
+  { loading: () => <FilmPanePending /> },
+);
+
+/** The views a link offers, in rail order. Statistics is always there. */
+function sharedViews(
+  includesVisualizations: boolean,
+  hasVideo: boolean,
+): readonly ReportView[] {
+  return [
+    "statistics",
+    ...(includesVisualizations ? (["shots"] as const) : []),
+    ...(hasVideo ? (["film"] as const) : []),
+  ];
+}
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -132,8 +157,10 @@ export default async function SharedMatchPage({ params }: PageProps) {
     summary,
     sharedBy,
     includesVisualizations,
+    video,
     bandSettings,
   } = data;
+  const views = sharedViews(includesVisualizations, video !== null);
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
   const statsPublished = Boolean(p1 && p2);
@@ -160,15 +187,13 @@ export default async function SharedMatchPage({ params }: PageProps) {
             canCompare={false}
             isDerived={isDerived}
             statsPublished={statsPublished}
-            hasPlayableVideo={false}
+            hasPlayableVideo={video !== null}
             savedViews={[]}
             workspaceRole="player"
             workspaceKind="personal"
             workspaceName=""
             bandSettings={bandSettings}
-            views={
-              includesVisualizations ? WITH_VISUALIZATIONS : STATISTICS_ONLY
-            }
+            views={views}
             canEditBands={false}
             unit="ft"
             defaultView="statistics"
@@ -177,11 +202,12 @@ export default async function SharedMatchPage({ params }: PageProps) {
             <MatchReportFrame>
               <MatchReportRail>
                 <MatchReportScoreboard />
-                {includesVisualizations && <MatchReportViewSwitcher />}
+                {views.length > 1 && <MatchReportViewSwitcher />}
                 <MatchReportSpacer />
                 <SharedByFooter
                   sharedBy={sharedBy}
                   includesVisualizations={includesVisualizations}
+                  includesVideo={video !== null}
                 />
               </MatchReportRail>
 
@@ -199,6 +225,16 @@ export default async function SharedMatchPage({ params }: PageProps) {
                 {includesVisualizations && (
                   <MatchReportWhen view="shots">
                     <ShotsTab />
+                  </MatchReportWhen>
+                )}
+                {video && (
+                  <MatchReportWhen view="film" scrollsInside>
+                    <FilmTab
+                      video={video}
+                      unit="ft"
+                      readOnly
+                      playbackEndpoint={`/api/share/${encodeURIComponent(token)}/video`}
+                    />
                   </MatchReportWhen>
                 )}
               </MatchReportPane>

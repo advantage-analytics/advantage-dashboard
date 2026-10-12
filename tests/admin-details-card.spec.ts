@@ -65,6 +65,7 @@ const BASE: AdminTeamProgram = {
   playersCanUpload: true,
   uploadPolicy: "everyone",
   eventsPolicy: "staff",
+  playersCanShareVideo: false,
   crestPath: null,
   timeZone: "America/New_York",
   status: "active",

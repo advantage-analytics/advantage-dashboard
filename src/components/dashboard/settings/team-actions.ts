@@ -783,6 +783,41 @@ export async function setPlayersCanUpload(
   return { ok: true };
 }
 
+/**
+ * "Players can share match video publicly" — the third policy row.
+ *
+ * Its own action and its own RPC (`set_program_players_can_share_video`)
+ * rather than an eleventh argument to `update_program_settings`: the switch
+ * saves on change, outside the settings draft, and unlike the two ladders
+ * above it any staff may move it — the RPC checks `is_program_staff` and
+ * writes the audit row. Nothing here re-derives that rule.
+ *
+ * Turning it off does not edit any link: the public page asks again on every
+ * read whether the link's maker may still share the video.
+ */
+export async function setPlayersCanShareVideo(
+  programId: string,
+  next: boolean,
+): Promise<ActionResult> {
+  const member = await memberWorkspace(programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_players_can_share_video", {
+    p_program_id: programId,
+    p_enabled: next === true,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change that setting."),
+    };
+  }
+
+  revalidatePath(SETTINGS_PATH, "layout");
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Join links — one reusable link per program (`program_join_links`)
 // ---------------------------------------------------------------------------

@@ -5,7 +5,10 @@ import {
   SettingsCardRow,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
+import { useState, useTransition } from "react";
+import { AdvSwitch } from "@/components/ui/adv-switch";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
+import { setPlayersCanShareVideo } from "@/components/dashboard/settings/team-actions";
 import {
   EVENTS_POLICIES,
   UPLOAD_POLICIES,
@@ -68,6 +71,12 @@ function withOwnerNote(base: string, canEdit: boolean): string {
  * because a coach who could edit one could lift an owner-only rule off
  * themselves. Everyone else on staff sees them, disabled, so the rules they are
  * working under are never a mystery.
+ *
+ * "Players can share match video publicly" is the exception on both counts,
+ * by decision (2026-10-11): any staff may move it, and it is a switch that
+ * saves on change rather than riding the page's draft and Save bar — it is a
+ * yes/no with no ladder to it, and the card is only drawn for staff, so
+ * everyone who sees the switch may use it.
  */
 export function TeamPoliciesCard({
   uploadPolicy,
@@ -75,7 +84,12 @@ export function TeamPoliciesCard({
   eventsPolicy,
   onEventsPolicyChange,
   canEditPolicies,
+  programId,
+  playersCanShareVideo,
 }: {
+  programId: string;
+  /** `programs.players_can_share_video`, as the server last rendered it. */
+  playersCanShareVideo: boolean;
   uploadPolicy: UploadPolicy;
   onUploadPolicyChange: (next: UploadPolicy) => void;
   eventsPolicy: EventsPolicy;
@@ -83,6 +97,25 @@ export function TeamPoliciesCard({
   /** The owner's alone — the RPC refuses anyone else for both ladders. */
   canEditPolicies: boolean;
 }) {
+  // Optimistic: the switch moves at once and steps back, with the reason, if
+  // the save is refused.
+  const [shareVideo, setShareVideo] = useState(playersCanShareVideo);
+  const [shareVideoError, setShareVideoError] = useState<string | null>(null);
+  const [savingShareVideo, startShareVideo] = useTransition();
+
+  const changeShareVideo = (next: boolean) => {
+    if (savingShareVideo) return;
+    setShareVideoError(null);
+    setShareVideo(next);
+    startShareVideo(async () => {
+      const result = await setPlayersCanShareVideo(programId, next);
+      if (!result.ok) {
+        setShareVideo(!next);
+        setShareVideoError(result.error);
+      }
+    });
+  };
+
   return (
     <SettingsCard className="gap-3.5">
       <SettingsCardTitle>Policies</SettingsCardTitle>
@@ -119,6 +152,26 @@ export function TeamPoliciesCard({
             onChange={onEventsPolicyChange}
             disabled={!canEditPolicies}
             note="Deleting an event also needs an owner or coach."
+          />
+        }
+      />
+
+      <SettingsCardRow
+        label="Players can share match video publicly"
+        description={
+          shareVideoError ? (
+            <span role="alert" className="text-[var(--danger)]">
+              {shareVideoError}
+            </span>
+          ) : (
+            "On a match's public link. Staff always can; turning this off takes the video off links players made."
+          )
+        }
+        control={
+          <AdvSwitch
+            label="Players can share match video publicly"
+            checked={shareVideo}
+            onCheckedChange={changeShareVideo}
           />
         }
       />

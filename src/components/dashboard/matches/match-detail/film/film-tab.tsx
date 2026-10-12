@@ -53,7 +53,11 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { FilmFilterStrip } from "./film-filter-strip";
-import { useAttachmentPlayback } from "./use-attachment-playback";
+import {
+  fetchPlaybackSource,
+  useAttachmentPlayback,
+} from "./use-attachment-playback";
+import { FilmReadOnlyContext, useFilmReadOnly } from "./film-read-only";
 import { recordMatchVideoView } from "./record-video-view";
 import {
   filmDraftCount,
@@ -105,9 +109,24 @@ export function FilmTab({
   video,
   entry = NO_FILM_ENTRY,
   unit,
+  readOnly = false,
+  playbackEndpoint,
 }: {
   video: MatchVideo | null;
   entry?: MatchFilmEntry;
+  /**
+   * The public share page (`/m/[token]`): a reader with a link and no
+   * account. The room plays, steps and filters as it does on the dashboard
+   * and loses everything that writes or needs a session — bookmarks, the
+   * view report, the ball-path fetch (`film-read-only.ts`). The page passes
+   * no `entry`, so there is nothing to add, replace or adjust either.
+   */
+  readOnly?: boolean;
+  /**
+   * Where the player renews its playback URL, when not the match's own
+   * route: the share page's `/api/share/<token>/video`.
+   */
+  playbackEndpoint?: string;
   /**
    * The viewer's Units preference (Stage 2C), from the match page. Threaded
    * as a PROP rather than read off `useMatchReport()`: the film subtree
@@ -121,9 +140,16 @@ export function FilmTab({
   // another view (which unmounts this tab) always leaves it shut.
   if (video) {
     return (
-      <FilterRailProvider>
-        <FilmRoom video={video} entry={entry} unit={unit} />
-      </FilterRailProvider>
+      <FilmReadOnlyContext value={readOnly}>
+        <FilterRailProvider>
+          <FilmRoom
+            video={video}
+            entry={entry}
+            unit={unit}
+            playbackEndpoint={playbackEndpoint}
+          />
+        </FilterRailProvider>
+      </FilmReadOnlyContext>
     );
   }
   const view = filmEntryView(entry);
@@ -150,11 +176,14 @@ function FilmRoom({
   video,
   entry,
   unit,
+  playbackEndpoint,
 }: {
   video: MatchVideo;
   entry: MatchFilmEntry;
   unit: DistanceUnit;
+  playbackEndpoint?: string;
 }) {
+  const readOnly = useFilmReadOnly();
   // The points and their saved flags come from `MatchDataProvider`, not from
   // a `useState` here: `MatchReportWhen` UNMOUNTS this view when the viewer
   // switches to Statistics or Shots, so state held here would be re-seeded
@@ -314,11 +343,40 @@ function FilmRoom({
    * Advantage Intelligence lineage gets the same two values out of its
    * passthrough branch, built from exactly the same `filmClock` fields.
    */
+  // The share page renews through its own token route. Memoised so the
+  // hook's controller is handed one stable seam.
+  const playbackDeps = useMemo(
+    () =>
+      playbackEndpoint
+        ? {
+            fetchPlayback: (id: string, signal: AbortSignal | undefined) =>
+              fetchPlaybackSource(
+                id,
+                (...args: Parameters<typeof fetch>) =>
+                  globalThis.fetch(...args),
+                signal,
+                playbackEndpoint,
+              ),
+          }
+        : undefined,
+    [playbackEndpoint],
+  );
   const playback = useAttachmentPlayback({
     matchId: match.id,
     video,
     points,
+    deps: playbackDeps,
   });
+  // "Sign in again" is no help to a reader who never signed in: on a shared
+  // link a refused renewal means the link stopped carrying the video.
+  const problem =
+    readOnly && playback.problem?.reason === "denied"
+      ? {
+          ...playback.problem,
+          message:
+            "This link no longer includes the video. Ask whoever shared it for a new one.",
+        }
+      : playback.problem;
   const clock = playback.clock;
   const stops = playback.stops;
   const {
@@ -361,11 +419,15 @@ function FilmRoom({
   const passthrough = playback.passthrough;
   const recordFirstPlay = useCallback(
     (played: number) => {
+      // A reader on a shared link reports nothing: the route would refuse
+      // them, and watching through a link does not restart the retention
+      // clock.
+      if (readOnly) return;
       if (passthrough || viewedGenerationRef.current === played) return;
       viewedGenerationRef.current = played;
       recordMatchVideoView(match.id);
     },
-    [passthrough, match.id],
+    [passthrough, match.id, readOnly],
   );
 
   /**
@@ -626,6 +688,10 @@ function FilmRoom({
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
+      // No account, no bookmarks: the controls are not drawn
+      // (`film-read-only.ts`), and this keeps the `S` key from flipping a
+      // flag the database would refuse.
+      if (readOnly) return;
       const before = pointsRef.current.find((p) => p.id === pointId);
       if (!before) return;
       const nextSaved = !before.saved;
@@ -652,7 +718,7 @@ function FilmRoom({
       );
       setPoints(reverted);
     },
-    [supabase, pointsRef, setPoints],
+    [supabase, pointsRef, setPoints, readOnly],
   );
 
   const activePointId = activePoint?.id ?? null;
@@ -897,7 +963,7 @@ function FilmRoom({
             url={playback.url}
             generation={generation}
             resume={resume}
-            problem={playback.problem}
+            problem={problem}
             passthrough={playback.passthrough}
             // While the room is up it is the surface being watched: this player
             // keeps its playhead through a refresh but stays silent, and the room
@@ -972,7 +1038,7 @@ function FilmRoom({
             url={playback.url}
             generation={generation}
             resume={resume}
-            problem={playback.problem}
+            problem={problem}
             passthrough={playback.passthrough}
             onPlaybackTime={reportTime}
             onPlaybackPlaying={reportPlaying}

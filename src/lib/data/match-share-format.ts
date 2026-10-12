@@ -72,13 +72,46 @@ export function realTournamentName(
 }
 
 /**
+ * May a public link show the match's video right now? Asked every time the
+ * link is read, about the person who MADE it — the database asked the same
+ * question of them when they ticked the box (`can_share_match_video`), and
+ * this is what takes the video back off the page when the answer changes: a
+ * program that turns "players can share video" off, a coach who leaves the
+ * staff, an account that is gone.
+ *
+ *   - a maker who no longer exists → never;
+ *   - a personal match → yes, it was theirs to share;
+ *   - a team match → the maker is on the program's staff today, or the
+ *     program lets its players share video.
+ */
+export function sharedVideoAllowed(link: {
+  makerId: string | null;
+  programId: string | null;
+  /** The maker's role on the match's program today; null when not a member. */
+  makerRole: string | null;
+  playersCanShareVideo: boolean;
+}): boolean {
+  if (!link.makerId) return false;
+  if (!link.programId) return true;
+  const isStaff =
+    link.makerRole === "owner" ||
+    link.makerRole === "coach" ||
+    link.makerRole === "staff";
+  return isStaff || link.playersCanShareVideo;
+}
+
+/**
  * What a public link shows, in words — the rail footer on `/m/[token]` and
  * the Share popover's closing note print the same phrase, after a date, in
- * about 220px. A link with the visualizations holds everything but the video,
- * and the rail's own switcher already names both views, so it says what is
- * missing rather than listing what is there ("Statistics and visualizations"
- * wrapped the footer onto a second line).
+ * about 220px, so it names the one fact the rail's own switcher does not
+ * make obvious rather than listing every view ("Statistics and
+ * visualizations" wrapped the footer onto a second line): whether the video
+ * is there.
  */
-export function shareScopeLabel(includesVisualizations: boolean): string {
-  return includesVisualizations ? "No video" : "Statistics only";
+export function shareScopeLabel(scope: {
+  visualizations: boolean;
+  video: boolean;
+}): string {
+  if (scope.video) return "With video";
+  return scope.visualizations ? "No video" : "Statistics only";
 }

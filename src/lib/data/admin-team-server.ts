@@ -382,7 +382,8 @@ interface AdminTeamData {
 const PROGRAM_SELECT = `
   id, program_key, school_name, team, conference, conference_id, division,
   city, state, staff_page_url, home_venue, default_surface, roster_public,
-  players_can_upload, upload_policy, events_policy, time_zone, crest_path,
+  players_can_upload, upload_policy, events_policy, players_can_share_video,
+  time_zone, crest_path,
   status, org_type, pilot_eligible, primary_domain, seats, created_at,
   claimed_at, pilot_ends_on, pilot_approved_by, pilot_approved_at,
   pilot_ended_at
@@ -413,6 +414,7 @@ interface RawProgram {
   players_can_upload: boolean;
   upload_policy: string | null;
   events_policy: string | null;
+  players_can_share_video: boolean | null;
   time_zone: string;
   crest_path: string | null;
   status: string;
@@ -1328,6 +1330,7 @@ export const getAdminTeam = cache(
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
       eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
+      playersCanShareVideo: row.players_can_share_video === true,
       crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
       status: row.status,

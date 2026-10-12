@@ -42,6 +42,7 @@ const loader = createLoader({
       enableMatchShare: async () => ({ ok: true, url: null }),
       disableMatchShare: async () => ({ ok: true, url: null }),
       setMatchShareVisualizations: async () => ({ ok: true, url: null }),
+      setMatchShareVideo: async () => ({ ok: true, url: null }),
     },
   },
 });
@@ -52,11 +53,17 @@ const { SharePopoverPanel } = loader.load(
   SharePopoverPanel: React.ComponentType<{
     match: Match;
     share: {
-      link: { url: string; includesVisualizations: boolean } | null;
+      link: {
+        url: string;
+        includesVisualizations: boolean;
+        includesVideo: boolean;
+      } | null;
       canShare: boolean;
+      canShareVideo: boolean;
       publicLinkOn: boolean;
       audience: unknown;
     };
+    hasVideo?: boolean;
     onClose: () => void;
   }>;
 };
@@ -92,22 +99,40 @@ const TEAM = {
 };
 
 function render(
-  shareLink: { url: string; includesVisualizations?: boolean } | null,
+  shareLink: {
+    url: string;
+    includesVisualizations?: boolean;
+    includesVideo?: boolean;
+  } | null,
   {
     canShare = true,
+    canShareVideo = canShare,
+    hasVideo = false,
     audience = { kind: "personal" },
     publicLinkOn = shareLink !== null,
-  }: { canShare?: boolean; audience?: unknown; publicLinkOn?: boolean } = {},
+  }: {
+    canShare?: boolean;
+    canShareVideo?: boolean;
+    hasVideo?: boolean;
+    audience?: unknown;
+    publicLinkOn?: boolean;
+  } = {},
 ) {
   return renderToStaticMarkup(
     React.createElement(SharePopoverPanel, {
       match: MATCH,
       share: {
-        link: shareLink && { includesVisualizations: false, ...shareLink },
+        link: shareLink && {
+          includesVisualizations: false,
+          includesVideo: false,
+          ...shareLink,
+        },
         canShare,
+        canShareVideo,
         audience,
         publicLinkOn,
       },
+      hasVideo,
       onClose: () => {},
     }),
   );
@@ -135,7 +160,7 @@ test("personal, private: Only you is chosen and no link of any kind is offered",
     { label: "Only you", checked: true },
     { label: "Anyone with the link", checked: false },
   ]);
-  expect(html).toContain("Links never include the video.");
+  expect(html).toContain("A link shows the video only if it is added.");
   // The link's option belongs to the link: no box without one.
   expect(html).not.toContain("Include visualizations");
   expect(html).not.toContain("mailto:");
@@ -233,8 +258,13 @@ test("the email subject never carries the Unknown Event placeholder", () => {
     React.createElement(SharePopoverPanel, {
       match: { ...MATCH, tournamentName: "Unknown Event" },
       share: {
-        link: { url: PUBLIC_URL, includesVisualizations: false },
+        link: {
+          url: PUBLIC_URL,
+          includesVisualizations: false,
+          includesVideo: false,
+        },
         canShare: true,
+        canShareVideo: true,
         publicLinkOn: true,
         audience: { kind: "personal" },
       },
@@ -265,4 +295,53 @@ test("a teammate who cannot publish is not offered the link's option", () => {
     publicLinkOn: true,
   });
   expect(html).not.toContain("Include visualizations");
+});
+
+/** The checkbox inputs on the panel, in order, as "checked" booleans. */
+function boxes(html: string): boolean[] {
+  return (html.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? []).map((tag) =>
+    tag.includes('checked=""'),
+  );
+}
+
+test("the video option is drawn only for a match that has a video", () => {
+  const without = render({ url: PUBLIC_URL });
+  expect(without).not.toContain("Include video");
+
+  const withVideo = render({ url: PUBLIC_URL }, { hasVideo: true });
+  expect(withVideo).toContain("Include video");
+  // Visualizations, then video — and a new link never starts with the video.
+  expect(boxes(withVideo)).toEqual([false, false]);
+
+  const on = render(
+    { url: PUBLIC_URL, includesVisualizations: true, includesVideo: true },
+    { hasVideo: true },
+  );
+  expect(boxes(on)).toEqual([true, true]);
+  // No maker to name on this fixture, so the scope shows through the boxes;
+  // the note's own wording is `shareScopeLabel`'s (match-share-format.spec).
+});
+
+test("a player who may share the match but not its video sees the option unavailable, with the reason", () => {
+  const html = render(
+    { url: PUBLIC_URL, includesVisualizations: true },
+    { hasVideo: true, canShareVideo: false, audience: TEAM },
+  );
+  expect(html).toContain("Include video");
+  expect(html).toContain("Only team staff can share the video");
+  // Only the visualizations box is a live input; the video row is a
+  // described, focusable, unavailable checkbox — never a silent `disabled`.
+  expect(boxes(html)).toEqual([true]);
+  expect(html).toMatch(/role="checkbox"[^>]*aria-disabled="true"/);
+  expect(html).not.toMatch(/<input[^>]*\sdisabled=""/);
+});
+
+test("anyone who may share the match can take the video back off", () => {
+  // Staff put the video on; a seated player may not add it, but may remove it.
+  const html = render(
+    { url: PUBLIC_URL, includesVideo: true },
+    { hasVideo: true, canShareVideo: false, audience: TEAM },
+  );
+  expect(boxes(html)).toEqual([false, true]);
+  expect(html).not.toContain("Only team staff can share the video");
 });

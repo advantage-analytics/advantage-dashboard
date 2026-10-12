@@ -1,5 +1,6 @@
 "use client";
 
+import { useFilmReadOnly } from "./film-read-only";
 import { memo, useState } from "react";
 import {
   ChevronDown,
@@ -67,6 +68,7 @@ export const FilmQuickFilters = memo(function FilmQuickFilters({
   tone: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
+  const readOnly = useFilmReadOnly();
 
   const { shared, setShared, setSavedOnly } = filmFilters;
   const show = quickShow(filmFilters);
@@ -105,11 +107,16 @@ export const FilmQuickFilters = memo(function FilmQuickFilters({
       chosen: show === "break",
       onSelect: () => pickShow("break"),
     },
-    {
-      label: "Saved only",
-      chosen: show === "saved",
-      onSelect: () => pickShow("saved"),
-    },
+    // A shared link's reader has no bookmarks (`film-read-only.ts`).
+    ...(readOnly
+      ? []
+      : [
+          {
+            label: "Saved only",
+            chosen: show === "saved",
+            onSelect: () => pickShow("saved"),
+          },
+        ]),
   ];
   const serveRows = [
     {

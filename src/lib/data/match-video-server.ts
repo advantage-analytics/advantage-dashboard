@@ -220,7 +220,7 @@ const NO_EXPIRY = {
  */
 async function readExpiry(
   row: PlaybackAttachmentRow,
-  deps: MatchVideoDeps,
+  deps: Pick<MatchVideoDeps, "loadRetention" | "now">,
 ): Promise<
   Pick<MatchVideoAttachment, "expiresAt" | "monthsUnwatched" | "expiryWarning">
 > {
@@ -280,8 +280,27 @@ export async function resolveMatchVideo(
     }
     return null;
   }
-  const id = access.value.match.id;
+  return resolveAuthorizedMatchVideo(access.value.match.id, deps);
+}
 
+/** The seams below the visibility check — none of them asks "may you". */
+type AuthorizedMatchVideoDeps = Omit<
+  MatchVideoDeps,
+  keyof MatchVideoAccessDeps
+>;
+
+/**
+ * The ladder below the gate: which video, is it really there, sign it.
+ *
+ * Called with a match id somebody has ALREADY been cleared for — by
+ * {@link resolveMatchVideo}'s visibility check, or by a public share link
+ * whose maker put the video on it ({@link getSharedMatchVideo}). It asks no
+ * access question of its own, so it must never be reached any other way.
+ */
+async function resolveAuthorizedMatchVideo(
+  id: string,
+  deps: AuthorizedMatchVideoDeps,
+): Promise<MatchVideo | null> {
   let loaded: HttpResult<PlaybackAttachmentRow | null>;
   try {
     loaded = await deps.loadActiveAttachment(id);
@@ -493,3 +512,27 @@ export const getMatchVideo = cache(async function getMatchVideo(
     loadRetention: supabaseRetention(adminProxy),
   });
 });
+
+/**
+ * The video behind a public share link (`/m/[token]`), for a match the caller
+ * has already resolved FROM that link and whose link carries the video
+ * (`sharedVideoMatchId` in `match-share-server.ts` is the only caller's gate).
+ *
+ * There is no session to ask, so there is no visibility check here: the token
+ * is the authorisation, exactly as it is for the rest of the shared report.
+ * Everything below it is the same ladder a signed-in viewer gets. Two things
+ * are left out on purpose: the retention clock (an anonymous reader is not
+ * offered "Keep this video", and watching through a link does not restart
+ * it), and `cache()` — the share loader that calls this is itself cached.
+ */
+export async function getSharedMatchVideo(
+  matchId: string,
+): Promise<MatchVideo | null> {
+  if (!resolveAzureStorageConfig().ok) return null;
+  return resolveAuthorizedMatchVideo(matchId, {
+    loadActiveAttachment: activeAttachment,
+    finalObjectExists,
+    mintPlayback: azurePlaybackStorage().mintPlayback,
+    loadProviderVideo: supabaseProviderVideo(lazyAdminClient()),
+  });
+}

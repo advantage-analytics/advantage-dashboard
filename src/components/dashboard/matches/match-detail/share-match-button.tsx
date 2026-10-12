@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { FloatMenuDivider } from "@/components/ui/float-menu";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox, CheckboxMark } from "@/components/ui/checkbox";
 import {
   AccessOption,
   SECONDARY_BUTTON,
@@ -29,6 +29,7 @@ import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import {
   disableMatchShare,
   enableMatchShare,
+  setMatchShareVideo,
   setMatchShareVisualizations,
 } from "@/app/dashboard/matches/(detail)/[matchId]/share-actions";
 import { advButton } from "@/lib/ui/adv-button";
@@ -80,6 +81,11 @@ interface ShareMatchButtonProps {
    * whether a link exists at all, and who can open the match without one.
    */
   share: MatchShareState;
+  /**
+   * The match has a video this viewer can play (`getMatchVideo` in
+   * `page.tsx`). Without one the link's "Include video" option is not drawn.
+   */
+  hasVideo?: boolean;
 }
 
 /**
@@ -97,6 +103,7 @@ export function ShareMatchButton({
   side = "bottom",
   align = "end",
   share,
+  hasVideo = false,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
   const [open, setOpen] = useState(false);
@@ -137,6 +144,7 @@ export function ShareMatchButton({
         <SharePopoverPanel
           match={match}
           share={share}
+          hasVideo={hasVideo}
           onClose={() => setOpen(false)}
         />
       </PopoverContent>
@@ -235,9 +243,14 @@ export function ShareRailTrigger({
  * "Anyone" — and under a second hairline one closing sentence: who made the
  * link and when, or that links never carry the video.
  *
- * "Include visualizations" is the link's one option: Statistics are always on
- * it, and the court charts ride along unless the box is cleared. It edits the
- * link in place — the URL already handed out keeps working either way.
+ * The link has two options, both edited in place — the URL already handed
+ * out keeps working either way. Statistics are always on it. "Include
+ * visualizations" adds the court charts and starts ticked. "Include video"
+ * adds the match video, starts clear, and is drawn only for a match that has
+ * one; on a team match it is the staff's to tick unless the program lets its
+ * players (`share.canShareVideo`), and a viewer who may not sees the row
+ * unavailable with the reason under it. Anyone who may share the match can
+ * take the video back off.
  *
  * Choosing the public rung turns the link on at once (optimistic, settling on
  * the server's answer). Stepping back down asks first, in place of the link
@@ -252,13 +265,21 @@ export function ShareRailTrigger({
 export function SharePopoverPanel({
   match,
   share,
+  hasVideo = false,
   onClose,
 }: {
   match: Match;
   share: MatchShareState;
+  hasVideo?: boolean;
   onClose: () => void;
 }) {
-  const { link: shareLink, canShare, publicLinkOn, audience } = share;
+  const {
+    link: shareLink,
+    canShare,
+    canShareVideo,
+    publicLinkOn,
+    audience,
+  } = share;
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [link, setLink] = useState<MatchShareLink | null>(shareLink);
   const [error, setError] = useState<string | null>(null);
@@ -320,6 +341,7 @@ export function SharePopoverPanel({
           ? {
               url: result.url,
               includesVisualizations: result.includesVisualizations,
+              includesVideo: result.includesVideo,
             }
           : null,
       );
@@ -341,6 +363,28 @@ export function SharePopoverPanel({
       }
     });
   }
+
+  function setVideo(next: boolean) {
+    if (!link || pending) return;
+    const before = link;
+    setError(null);
+    setLink({ ...before, includesVideo: next });
+    startTransition(async () => {
+      const result = await setMatchShareVideo(match.id, next);
+      if (!result.ok) {
+        setLink(before);
+        setError(
+          result.error === "forbidden"
+            ? "Only team staff can share this match's video."
+            : "Couldn't update the link. Try again.",
+        );
+      }
+    });
+  }
+
+  // Adding the video is the staff's unless the program lets players; taking
+  // it off is anyone's who may share the match, so a ticked box stays live.
+  const videoRowLive = canShareVideo || link?.includesVideo === true;
 
   async function nativeShare() {
     try {
@@ -438,6 +482,44 @@ export function SharePopoverPanel({
             </span>
           </span>
         </label>
+        {hasVideo &&
+          (videoRowLive ? (
+            <label className="flex cursor-pointer items-start gap-2">
+              <Checkbox
+                checked={link.includesVideo}
+                onChange={setVideo}
+                className="mt-px"
+              />
+              <span className="flex min-w-0 flex-col gap-px">
+                <span className="text-[12px] leading-[16px] text-[var(--ink-700)]">
+                  Include video
+                </span>
+                <span className="text-micro leading-[15px] text-[var(--ink-500)]">
+                  Anyone with the link can watch the match
+                </span>
+              </span>
+            </label>
+          ) : (
+            // Unavailable, not removed: still a tab stop, and it says why
+            // (DS › Settings: never a bare `disabled`, the reason beside it).
+            <div
+              role="checkbox"
+              aria-checked={false}
+              aria-disabled="true"
+              tabIndex={0}
+              className="flex items-start gap-2 rounded-[var(--radius-cell)]"
+            >
+              <CheckboxMark checked={false} disabled className="mt-px" />
+              <span className="flex min-w-0 flex-col gap-px">
+                <span className="text-[12px] leading-[16px] text-[var(--ink-500)]">
+                  Include video
+                </span>
+                <span className="text-micro leading-[15px] text-[var(--ink-500)]">
+                  Only team staff can share the video
+                </span>
+              </span>
+            </div>
+          ))}
       </ActionBlock>
     );
   } else if (team?.teamUrl && (locked || !isPublic)) {
@@ -476,13 +558,16 @@ export function SharePopoverPanel({
         />
         {`Made ${link.madeOn ? `${link.madeOn} ` : ""}by ${
           link.madeBy.isViewer ? "you" : link.madeBy.name
-        } · ${shareScopeLabel(link.includesVisualizations)}`}
+        } · ${shareScopeLabel({
+          visualizations: link.includesVisualizations,
+          video: hasVideo && link.includesVideo,
+        })}`}
       </>
     );
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
-    note = "Links never include the video.";
+    note = "A link shows the video only if it is added.";
   }
 
   return (

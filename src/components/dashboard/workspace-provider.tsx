@@ -26,6 +26,16 @@ export function WorkspaceProvider({
   );
 }
 
+/**
+ * The workspace, or null outside the dashboard shell. For the few components
+ * that also render on the public share page (`/m/[token]`), where there is no
+ * signed-in viewer and so no workspace — they draw without it rather than
+ * throw. Everything under `/dashboard` uses `useWorkspace`.
+ */
+export function useOptionalWorkspace(): WorkspaceContextValue | null {
+  return useContext(WorkspaceContext);
+}
+
 export function useWorkspace(): WorkspaceContextValue {
   const context = useContext(WorkspaceContext);
   if (!context) {
