@@ -35,7 +35,7 @@ import {
 import {
   openFlags,
   scoreStop,
-  slotStops,
+  type ScoreStop,
 } from "@/lib/services/labels/flag-nav";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
@@ -153,6 +153,7 @@ export function LabelBlackRail({
   onSetGameServer,
   onFixTiebreakServe,
   onMoveGameBoundary,
+  slotStops,
   onSetGameType,
   openGhostIds = NO_IDS,
   onToggleGhost,
@@ -218,6 +219,12 @@ export function LabelBlackRail({
    * passed move into the neighbouring game. Absent, the bands do not drag.
    */
   onMoveGameBoundary?: (game: LabelGame, beforePointId: string) => void;
+  /**
+   * Every amber slot between the rows as a stop (flag-nav.ts `slotStops`),
+   * computed once by the console for its `]` / `[` keys and handed here for
+   * the header's count and jumps. Absent: none.
+   */
+  slotStops?: readonly ScoreStop[];
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   /** Ghosts shown as their struck-through row (the console's state). */
   openGhostIds?: ReadonlySet<string>;
@@ -392,11 +399,6 @@ export function LabelBlackRail({
       tiebreakServeBeforePoints(editable ? tiebreakServeOrders(points) : []),
     [editable, points],
   );
-  // Every slot between the rows as a stop for the header's jumps.
-  const slotJumpStops = useMemo(
-    () => (editable ? slotStops(points, adScoring) : []),
-    [editable, points, adScoring],
-  );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
@@ -465,7 +467,7 @@ export function LabelBlackRail({
               onGoToPoint={onGoToPoint}
               tone={tone}
               scoreStop={setScoreStop}
-              extraStops={slotJumpStops}
+              extraStops={slotStops}
               score={
                 mismatch
                   ? (close) => (

@@ -82,8 +82,8 @@ export function tiebreakServeStops(
  * last row, which the slot follows), the tiebreak at 6–6 (on the first point
  * it would fold) and a tiebreak off its serve order. Read off the rows alone,
  * so there on a session labelled without marks too. `]` and `[` land on
- * each; the header's total does not count them, and the slot itself says
- * what to do.
+ * each; the header's total stays the marks and the score, and its jump's
+ * tooltip says how many slots there are beside them.
  */
 export function slotStops(
   points: readonly LabelPoint[],

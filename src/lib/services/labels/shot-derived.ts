@@ -106,6 +106,13 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
  * bounce: the console says so on the open point (marks-state.ts
  * `serveInLandingOut`) and the publish writes the serve without it
  * (apply.ts).
+ *
+ * `"net"` is read from which side of the net the CONTACT is on, so a contact
+ * stored on the wrong side would make a good landing read as one. Measured
+ * 2026-10-11 over the checked points of six hand-labelled sessions: every in
+ * serve whose landing read net (9 of 9) was one the vendor itself had called
+ * a net hit — a near-side bounce, not a mis-sided contact — so both readings
+ * are treated alike.
  */
 export function inServeLandingMiss(shot: {
   stroke?: LabelShot["stroke"];

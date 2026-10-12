@@ -92,7 +92,8 @@ export function LabelFlagSummary({
   scoreStop?: ScoreStop | null;
   /**
    * Further stops read off the rows (the rail's amber slots): the jumps
-   * land on each, and its slot says the rest. Not in the total.
+   * land on each and the jump's tooltip counts them; the total stays the
+   * marks and the score.
    */
   extraStops?: readonly ScoreStop[];
   tone?: RailTone;
@@ -103,9 +104,12 @@ export function LabelFlagSummary({
     ...(scoreStop ? [scoreStop] : []),
     ...extraStops,
   ];
-  // The total is the marks and the score: a slot between rows is a place the
-  // jumps stop at, not a flag the header counts.
+  // The total is the marks and the score — "Nothing left to check" means no
+  // flag is open. A slot between rows is a place the jumps also stop at; the
+  // jump's tooltip says how many there are, so the two numbers never
+  // disagree unexplained.
   const count = openMarks.length + (scoreStop ? 1 : 0);
+  const slots = extraStops.length;
   // Points carrying an open mark: the score stop's point carries none.
   const openPoints = new Set(openMarks.map((f) => f.pointId)).size;
   const next = stepFlag(stops, points, fromPointId, 1);
@@ -179,6 +183,13 @@ export function LabelFlagSummary({
             [toCheckLabel(count), onPointsDetail(openPoints)?.toLowerCase()]
               .filter(Boolean)
               .join(" "),
+            ...(slots > 0
+              ? [
+                  slots === 1
+                    ? "and 1 question between rows"
+                    : `and ${slots} questions between rows`,
+                ]
+              : []),
           ]}
           shortcut="]"
           side="bottom"

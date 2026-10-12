@@ -1604,6 +1604,8 @@ export function LabelConsole({
    * would leave a game a point short between two writes, and the slots that
    * read the score would ask about a state the run is only passing through.
    * The writes then go in order; a refused one puts it and the rest back.
+   * A tiebreak on either side of the boundary then has its serve order put
+   * right.
    */
   async function moveBoundary(to: LabelGame, pointIds: readonly string[]) {
     if (!operations) return;
@@ -1645,6 +1647,19 @@ export function LabelConsole({
       setPoints((current) => pointMoveSettled(current, before.id, result));
     }
     dispatchSave({ type: "success", at: Date.now() });
+    // A tiebreak that gained or lost points has every turn behind them
+    // shifted, and a move gives each point the game's one server: its order
+    // is put right in the same gesture (`fixTiebreakServe`, which does
+    // nothing for an ordinary game or a tiebreak still in order).
+    const source = steps[0]?.before;
+    const games: LabelGame[] = [to];
+    if (source && source.setNumber !== null && source.gameNumber !== null) {
+      games.push({
+        setNumber: source.setNumber,
+        gameNumber: source.gameNumber,
+      });
+    }
+    for (const game of games) await fixTiebreakServe(game, rows);
   }
 
   /**
@@ -1739,14 +1754,17 @@ export function LabelConsole({
    * players, one write each; then the game's server from the order's first
    * server, planned over the rows with those switches on them.
    */
-  async function fixTiebreakServe(game: LabelGame) {
-    const order = tiebreakServeOrders(points).find(
+  async function fixTiebreakServe(
+    game: LabelGame,
+    from: readonly LabelPoint[] = points,
+  ) {
+    const order = tiebreakServeOrders(from).find(
       (o) =>
         o.game.setNumber === game.setNumber &&
         o.game.gameNumber === game.gameNumber,
     );
     if (!order || !operations) return;
-    let rows: LabelPoint[] = points;
+    let rows: LabelPoint[] = [...from];
     for (const off of order.off.filter(servedRightHitWrong)) {
       const point = rows.find((p) => p.id === off.pointId);
       const plan = point ? planPlayerSwitch(point) : null;
@@ -1997,11 +2015,14 @@ export function LabelConsole({
   const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
   // The marks, the set that doesn't add up and every amber slot between the
   // rows, as the rail's header steps them (`slotStops`).
+  // The rail's amber slots as stops, read off the rows once for the keys
+  // here and the rail's header — marks or none.
+  const slotJumpStops = useMemo(
+    () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
+    [operable, points, session.adScoring],
+  );
   const openMarks = useMemo(() => {
-    // The rail's amber slots are read off the rows, marks or none.
-    const slots: FlagStop[] = operable
-      ? slotStops(points, session.adScoring)
-      : [];
+    const slots: readonly FlagStop[] = slotJumpStops;
     if (!liveMarks) return slots;
     const marked: FlagStop[] = openFlags(points, liveMarks);
     const stop = scoreStop(
@@ -2021,8 +2042,7 @@ export function LabelConsole({
     scores,
     sessionFields,
     session.matchScore,
-    session.adScoring,
-    operable,
+    slotJumpStops,
   ]);
   useEffect(() => {
     checkOpenPoint.current = () => {
@@ -2193,6 +2213,7 @@ export function LabelConsole({
       onRestoreShots={operable ? railHandlers.restoreShots : undefined}
       onSetGameServer={operable ? railHandlers.setGameServer : undefined}
       onFixTiebreakServe={operable ? railHandlers.fixTiebreakServe : undefined}
+      slotStops={slotJumpStops}
       onMoveGameBoundary={operable ? railHandlers.moveGameBoundary : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
       onPullGame={operable ? railHandlers.pullGamePoints : undefined}
@@ -2515,6 +2536,8 @@ function replacePoint(
 ): LabelPoint[] {
   return points.map((point) => (point.id === pointId ? change(point) : point));
 }
+
+const NO_SLOT_STOPS: ReturnType<typeof slotStops> = [];
 
 /** A planned point move (`planPointMove`), as the rows take it at once. */
 function pointMoved(
