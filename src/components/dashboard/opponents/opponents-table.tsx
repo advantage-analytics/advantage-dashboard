@@ -60,7 +60,7 @@ export function OpponentsTable({
    * one. `viaKeyboard` is true for Enter/Space on the name, so the drawer can
    * take focus for the person who cannot click into it.
    */
-  onToggle: (opponent: PersonalOpponent, viaKeyboard: boolean) => void;
+  onToggle: (key: string, viaKeyboard: boolean) => void;
   /**
    * What the body shows when a chip or filter leaves no rows — a
    * `TableEmptyBody`. It is drawn under the column headers: the card and its
@@ -116,7 +116,7 @@ function OpponentRow({
   opponent: PersonalOpponent;
   selected: boolean;
   compact: boolean;
-  onToggle: (opponent: PersonalOpponent, viaKeyboard: boolean) => void;
+  onToggle: (key: string, viaKeyboard: boolean) => void;
 }) {
   const hand = opponentHandLabel(opponent.hand);
   const backhand = opponentBackhandLabel(opponent.backhand);
@@ -128,7 +128,7 @@ function OpponentRow({
     <div
       id={opponentRowId(opponent.key)}
       // `detail` is 0 for a click the keyboard made (Enter/Space on the name).
-      onClick={(event) => onToggle(opponent, event.detail === 0)}
+      onClick={(event) => onToggle(opponent.key, event.detail === 0)}
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,

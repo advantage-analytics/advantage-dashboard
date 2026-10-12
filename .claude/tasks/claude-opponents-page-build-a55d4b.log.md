@@ -84,3 +84,16 @@ is the runner's. Newest entries at the bottom.
 
 1. AGENTS.md / memory: "every new column needs a column grant" is true for `users` only (the one table with column-scoped grants).
 2. `program_event_entries.opponent_program_id` and the new `matches` pair can disagree for a match with an `event_entry_id` (0 such matches today) — decide which wins, or backfill.
+
+## T7 · Lift the personal page's selection model onto `useRowSelection` — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: no loading, empty or error state touched (selection logic only)
+
+**changed:** New `src/components/dashboard/schedule/row-selection-model.ts` (pure reducer: `initialRowSelection`, `rowSelectionReducer` with select / toggle / close / step / cutHid / finishClose). `use-row-selection.ts` is now a thin wrapper over it with `rowId` and `focusTarget` options and a `[data-row-keys="ignore"]` stand-down. `opponents-page-content.tsx` drops its hand-copied model and calls the hook; `opponents-table.tsx`'s `onToggle` takes `(key, viaKeyboard)`; the Opponents toolbar root and `MatchesFilterPanel`'s `PopoverContent` carry `data-row-keys="ignore"`. Behaviour notes: for existing hook callers (dual and tournament detail) a row that leaves `ids` during the close slide-out now finishes sliding out rather than vanishing; on Opponents, keys also stand down inside alert dialogs, an `?opponent=` naming no listed row is stripped from the URL on mount, and a refresh that leaves the selection outside the current cut clears the drawer at once. Not opened in a browser.
+
+**follow-ups:**
+
+1. Eyes-on for Opponents: deep link, cut-hides-row slide-out, Esc focus return, arrows on a chip or sort trigger not stepping the drawer.
+2. `close()` with nothing open still sets `closing` for 240ms — could be a no-op in the model.
+3. `team/roster-view.tsx` and the Matches page keep their own copies and lack the `data-row-keys` guard — a separate branch.
+4. `schedule/README.md` could mention `row-selection-model.ts`.

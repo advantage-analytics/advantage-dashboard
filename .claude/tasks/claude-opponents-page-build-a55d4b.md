@@ -103,7 +103,7 @@ ready).
 
 ## T7 · Lift the personal page's selection model onto `useRowSelection`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/schedule/use-row-selection.ts` (gains options), new `src/components/dashboard/schedule/row-selection-model.ts` (pure reducer, no React/DOM), `src/components/dashboard/opponents/opponents-page-content.tsx` (deletes its hand copy), `src/components/dashboard/opponents/opponents-toolbar.tsx` and `src/components/dashboard/matches/matches-filter-panel.tsx` (one data attribute each); read `src/components/dashboard/team/roster-view.tsx` lines 90–210 and 360–415 for the roster copy you are NOT changing
 - **routes:** /dashboard/opponents, /dashboard/opponents?opponent=<key>

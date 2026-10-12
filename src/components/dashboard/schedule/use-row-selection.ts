@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
+import {
+  initialRowSelection,
+  rowSelectionReducer,
+  type RowSelectionAction,
+  type RowSelectionState,
+} from "@/components/dashboard/schedule/row-selection-model";
 
 /**
  * The DOM id of one event-page row, so the selection can return focus to it
@@ -43,8 +49,10 @@ export interface RowSelection {
 
 /**
  * The peek-drawer selection model, lifted from `static/static-schedule.tsx`
- * so the event pages' tables behave exactly as the Schedule, Roster and
- * Matches rails do.
+ * so every table on it behaves exactly as the Schedule, Roster and Matches
+ * rails do. The transitions themselves are `row-selection-model.ts`, a pure
+ * reducer; this hook owns only the `useState`, the URL mirror, the close timer
+ * and the DOM calls (focus return, scroll-into-view, the window key listener).
  *
  * - A row click selects; clicking the selected row again closes.
  * - Esc closes; ↑/↓ step through `ids` — the rows ON SCREEN, in their
@@ -53,10 +61,25 @@ export interface RowSelection {
  *   never `router.replace`, which the App Router treats as a navigation and
  *   re-renders from the server for a change to one query string.
  * - The keys stand down inside fields, modal and alert dialogs, any dialog
- *   that is not the peek drawer (told apart by `DRAWER_ATTR`) and Radix
- *   poppers — an open menu owns its own arrows.
- * - A cut that hides the selected row clears the selection, adjusted during
- *   render so nothing paints a drawer for a row that is no longer listed.
+ *   that is not the peek drawer (told apart by `DRAWER_ATTR`), Radix poppers
+ *   — an open menu owns its own arrows — and anything under
+ *   `[data-row-keys="ignore"]`, which a toolbar or filter panel stamps on its
+ *   root so its own controls keep ↑/↓/Esc.
+ * - A row that leaves `ids` loses the drawer, by one of two paths:
+ *   1. **The caller's slide-out close.** A page that wants the drawer to
+ *      slide shut when a chip, filter or sort hides the selected row calls
+ *      `close(null)` in the same event, BEFORE applying the cut. `closing` is
+ *      then true when the shorter `ids` arrives, and path 2 stands down so
+ *      the slide-out finishes before `drawerId` is dropped.
+ *   2. **The render-time clear.** A row that left the list with no close in
+ *      flight — the data itself changed, or the caller did not close first —
+ *      is cleared during render, so nothing paints a drawer for a row that
+ *      is no longer listed.
+ *
+ * `rowId` maps an id to its row's DOM id (default `eventRowId`), used to
+ * scroll a stepped-to row into view and to return focus on close.
+ * `focusTarget` picks what inside that row takes the returned focus — the row
+ * element itself when omitted. Pass both as stable references.
  *
  * `initialId` arrives as a prop, never from `useSearchParams()`: the page
  * reads `?<param>=` on the server, and it is ignored unless it names a row.
@@ -65,24 +88,32 @@ export function useRowSelection({
   ids,
   initialId,
   param,
+  rowId = eventRowId,
+  focusTarget,
 }: {
   ids: readonly string[];
   initialId: string | null;
   param: string;
+  rowId?: (id: string) => string;
+  focusTarget?: (row: HTMLElement) => HTMLElement | null;
 }): RowSelection {
-  const initial = initialId && ids.includes(initialId) ? initialId : null;
-  const [selectedId, setSelectedId] = useState<string | null>(initial);
-  const [drawerId, setDrawerId] = useState<string | null>(initial);
-  const [closing, setClosing] = useState(false);
-  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
+  const [state, setState] = useState<RowSelectionState>(() =>
+    initialRowSelection(ids, initialId),
+  );
 
-  // A cut hid the row the drawer described. Adjusted during render rather
-  // than in an effect, so no frame paints a drawer for a row that is gone.
-  if (drawerId !== null && !ids.includes(drawerId)) {
-    setSelectedId(null);
-    setDrawerId(null);
-    setClosing(false);
-  }
+  // Path 2 above: the drawer's row is not listed and no slide-out is playing.
+  // Adjusted during render rather than in an effect, so no frame paints a
+  // drawer for a row that is gone. While `closing` is true the reducer returns
+  // the state untouched — that is path 1, the caller's `close(null)` ahead of
+  // its cut — and `finishClose` drops `drawerId` when the slide-out ends.
+  const reconciled = rowSelectionReducer(state, { type: "cutHid", ids });
+  if (reconciled !== state) setState(reconciled);
+
+  const { selectedId, drawerId, closing, openedByKeyboard } = reconciled;
+
+  const dispatch = useCallback((action: RowSelectionAction) => {
+    setState((current) => rowSelectionReducer(current, action));
+  }, []);
 
   // The URL follows the selection — including the render-time clear above,
   // which cannot touch `history` itself.
@@ -90,10 +121,10 @@ export function useRowSelection({
     syncUrl(param, selectedId);
   }, [param, selectedId]);
 
-  const finishClose = useCallback(() => {
-    setDrawerId(null);
-    setClosing(false);
-  }, []);
+  const finishClose = useCallback(
+    () => dispatch({ type: "finishClose" }),
+    [dispatch],
+  );
 
   // `onAnimationEnd` normally finishes a close; this covers reduced motion,
   // where no animation runs, and is harmless when both fire.
@@ -103,39 +134,53 @@ export function useRowSelection({
     return () => clearTimeout(timer);
   }, [closing, finishClose]);
 
-  const select = useCallback((id: string, viaKeyboard: boolean) => {
-    setClosing(false);
-    setSelectedId(id);
-    setDrawerId(id);
-    setOpenedByKeyboard(viaKeyboard);
-  }, []);
+  const select = useCallback(
+    (id: string, viaKeyboard: boolean) =>
+      dispatch({ type: "select", id, viaKeyboard }),
+    [dispatch],
+  );
 
-  const close = useCallback((returnFocusTo: string | null = null) => {
-    setSelectedId(null);
-    setClosing(true);
-    if (returnFocusTo)
-      document.getElementById(eventRowId(returnFocusTo))?.focus();
-  }, []);
+  const returnFocus = useCallback(
+    (id: string) => {
+      const row = document.getElementById(rowId(id));
+      if (!row) return;
+      (focusTarget ? focusTarget(row) : row)?.focus();
+    },
+    [rowId, focusTarget],
+  );
+
+  const close = useCallback(
+    (returnFocusTo: string | null = null) => {
+      dispatch({ type: "close" });
+      if (returnFocusTo) returnFocus(returnFocusTo);
+    },
+    [dispatch, returnFocus],
+  );
 
   const toggle = useCallback(
     (id: string, viaKeyboard: boolean) => {
-      if (selectedId === id) close(viaKeyboard ? id : null);
-      else select(id, viaKeyboard);
+      dispatch({ type: "toggle", id, viaKeyboard });
+      // The toggle closed the drawer: a keyboard press gets its focus back.
+      if (selectedId === id && viaKeyboard) returnFocus(id);
     },
-    [selectedId, select, close],
+    [selectedId, dispatch, returnFocus],
   );
 
   const step = useCallback(
     (delta: -1 | 1) => {
-      if (!selectedId) return;
-      const next = ids[ids.indexOf(selectedId) + delta];
-      if (!next) return;
-      select(next, true);
+      const action: RowSelectionAction = { type: "step", delta, ids };
+      // Run once here only to learn where the step lands, for the scroll.
+      const next = rowSelectionReducer(
+        { selectedId, drawerId, closing, openedByKeyboard },
+        action,
+      );
+      if (!next.selectedId || next.selectedId === selectedId) return;
+      dispatch(action);
       document
-        .getElementById(eventRowId(next))
+        .getElementById(rowId(next.selectedId))
         ?.scrollIntoView({ block: "nearest" });
     },
-    [ids, selectedId, select],
+    [ids, selectedId, drawerId, closing, openedByKeyboard, dispatch, rowId],
   );
 
   useEffect(() => {
@@ -164,6 +209,8 @@ export function useRowSelection({
         )
           return;
         if (target.closest("[data-radix-popper-content-wrapper]")) return;
+        // A toolbar or filter panel that keeps its own ↑/↓/Esc.
+        if (target.closest('[data-row-keys="ignore"]')) return;
       }
 
       if (event.key === "Escape") {

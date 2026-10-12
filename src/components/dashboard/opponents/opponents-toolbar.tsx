@@ -118,7 +118,9 @@ export function OpponentsToolbar({
   totalCount: number;
 }) {
   return (
-    <div className={TOOLBAR_ROW}>
+    // `data-row-keys`: ↑/↓/Esc on a chip, the Filters trigger or the sort
+    // belong to that control, not to the open drawer (`useRowSelection`).
+    <div className={TOOLBAR_ROW} data-row-keys="ignore">
       {/* A fixed view switcher, not filter chips: no counts, no dots (law 7). */}
       <div className={TOOLBAR_GROUP} role="group" aria-label="View">
         {OPPONENT_VIEWS.map((option) => (
