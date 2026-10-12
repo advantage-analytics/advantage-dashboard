@@ -163,7 +163,7 @@ function gameFor(
  * hitter in an ordinary game; in a tiebreak, whichever start of the 1-2-2
  * order lands on them.
  */
-export function firstServerFor(
+function firstServerFor(
   live: readonly GameServerPoint[],
   type: LabelGameType,
   pointId: string,

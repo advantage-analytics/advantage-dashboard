@@ -196,7 +196,7 @@ export async function writeShotSwaps(
  * stroke of every point it moves: a few hundred ids is past what the gateway
  * takes, and the write is refused after the points before it have landed.
  */
-export const ID_CHUNK = 100;
+const ID_CHUNK = 100;
 export function idChunks(ids: readonly string[]): string[][] {
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += ID_CHUNK) {

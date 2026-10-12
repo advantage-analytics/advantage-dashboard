@@ -305,9 +305,6 @@ type ShotRow = LabelShotValues & {
   seed: unknown;
 };
 
-/** The value fields a stroke's place in the rally and its ending are read from. */
-const MOVES_ENDING = SHOT_FIELDS_MOVING_ENDING;
-
 /**
  * Validate, then write `patch` and its status to one shot; then the ghost a
  * serve relabelled in frees, and the point's ending. Never throws.
@@ -326,7 +323,7 @@ export async function writeLabelShotEdit(params: {
   const { patch } = parsed;
   // Only these can change what the strokes say about how the point ended, so
   // only they read the point's rows and settle its ending.
-  const settles = MOVES_ENDING.some((field) => field in patch);
+  const settles = SHOT_FIELDS_MOVING_ENDING.some((field) => field in patch);
 
   try {
     // The session's gate, read once with the first attempt, and, when the

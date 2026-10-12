@@ -1567,9 +1567,7 @@ export function LabelConsole({
     await runOperation(
       (rows) =>
         applyShotSwaps(
-          replacePoint([...rows], pointId, (p) =>
-            applyPointMove(p, plan.write),
-          ),
+          replacePoint(rows, pointId, (p) => applyPointMove(p, plan.write)),
           plan.shots,
         ),
       () => operations.movePoint(pointId, to, switchServer),
@@ -2571,11 +2569,6 @@ function replacePoint(
 }
 
 /**
- * The point as the server left it once its ending followed the rows
- * (ending-session.ts): the ending, who ended it, the winner and the status
- * it implies. Unchanged when the write moved none of them.
- */
-/**
  * The ending a shot change calls for (`endingPatchForShotChange`, the rule
  * the server settles it by), applied at once and taken back as it was read:
  * while a write is in flight the stored ending must not disagree with the
@@ -2608,6 +2601,11 @@ function endingFollow(
   };
 }
 
+/**
+ * The point as the server left it once its ending followed the rows
+ * (ending-session.ts): the ending, who ended it, the winner and the status
+ * it implies. Unchanged when the write moved none of them.
+ */
 function applyEndingSync(
   point: LabelPoint,
   synced: LabelPointEndingSynced | undefined,

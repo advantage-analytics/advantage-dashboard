@@ -58,6 +58,8 @@ const ROW_INK: Record<
   },
 };
 
+const NO_STOPS: readonly ScoreStop[] = [];
+
 /**
  * The header's open marks: today's flag and count, now the jump to the next open
  * flag after `fromPointId` (`]`, and `[` back, are the console's keys for the
@@ -68,8 +70,6 @@ const ROW_INK: Record<
  * land on it. It was a 6 px dot by the chevron until 2026-10-10, and a set
  * labelled 5–5 against a 6–4 record went to publish unnoticed.
  */
-const NO_STOPS: readonly ScoreStop[] = [];
-
 export function LabelFlagSummary({
   openMarks,
   points,
