@@ -5,6 +5,7 @@ import type { DbPersonalMatch } from "@/lib/data/personal-matches-server";
 import {
   ASK_CANNOT_ANSWER_MESSAGE,
   ASK_DROPPED_DIGITS_LOG,
+  ASK_DROPPED_VISUALS_LOG,
   ASK_LLM_UNAVAILABLE_MESSAGE,
   ASK_NO_DATA_MESSAGE,
   ASK_SAVE_FAILED_MESSAGE,
@@ -21,7 +22,7 @@ import {
   reserveAskQuestion,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
-import type { AskEvent } from "@/lib/services/ask/events";
+import type { AskEvent, AskVisual } from "@/lib/services/ask/events";
 import {
   ASK_MOCK_ANSWER_TEMPLATE,
   ASK_MOCK_PLAN,
@@ -353,7 +354,9 @@ test.describe("a completed answer", () => {
     expect(save.args?.p_answer).toEqual({
       headline: "Your second serve has held up across these matches.",
       figures: [{ label: "Second-serve points won", value: "41.2%" }],
+      visual: null,
       body: ANSWER_RENDERED,
+      noAdvice: false,
       sources: [
         {
           matchId: MATCH_A,
@@ -752,7 +755,7 @@ test.describe("the other failures", () => {
 // ── The no-advice sentence ──────────────────────────────────────────────────
 
 test.describe("a question that asks for advice", () => {
-  test("gets the fixed sentence after the model's text, in the stream and the saved body", async () => {
+  test("gets a no_advice notice after the model's text, and noAdvice saved — the sentence is no longer in the body", async () => {
     const { db, saves } = fakeDb();
     const { model } = fakeModel([
       JSON.stringify({ ...PLAN, asks_for_advice: true }),
@@ -761,22 +764,24 @@ test.describe("a question that asks for advice", () => {
 
     const events = await collect(askQuestion(input({ db, model })));
 
-    const texts = events.filter((event) => event.type === "text");
-    expect(texts[texts.length - 1]).toEqual({
-      type: "text",
-      delta: `\n\n${ASK_NO_ADVICE_SENTENCE}`,
-    });
-    expect(text(events)).toBe(
-      `${ANSWER_RENDERED}\n\n${ASK_NO_ADVICE_SENTENCE}`,
-    );
-    expect((saves()[0].args?.p_answer as AskSavedAnswer).body).toBe(
-      `${ANSWER_RENDERED}\n\n${ASK_NO_ADVICE_SENTENCE}`,
-    );
-    // After the sentence comes only sources and done.
-    expect(events.slice(-2).map((event) => event.type)).toEqual([
+    expect(events.map((event) => event.type)).toEqual([
+      "status",
+      "status",
+      "status",
+      "headline",
+      "figure",
+      "text",
+      "notice",
       "sources",
       "done",
     ]);
+    expect(events[6]).toEqual({ type: "notice", notice: "no_advice" });
+    expect(text(events)).toBe(ANSWER_RENDERED);
+    expect(text(events)).not.toContain(ASK_NO_ADVICE_SENTENCE);
+
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.body).toBe(ANSWER_RENDERED);
+    expect(saved.noAdvice).toBe(true);
   });
 
   test("the sentence is this module's: it appears in no prompt the model read", async () => {
@@ -804,9 +809,137 @@ test.describe("a question that asks for advice", () => {
     const events = await collect(askQuestion(input({ db, model })));
 
     expect(text(events)).toBe(ANSWER_RENDERED);
-    expect((saves()[0].args?.p_answer as AskSavedAnswer).body).toBe(
-      ANSWER_RENDERED,
+    expect(events.some((event) => event.type === "notice")).toBe(false);
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.body).toBe(ANSWER_RENDERED);
+    expect(saved.noAdvice).toBe(false);
+  });
+});
+
+// ── The visual block ────────────────────────────────────────────────────────
+
+const ANSWER_WITH_VISUAL = `Your second serve has held up across these matches.
+FIGURE: Second-serve points won = {{r1.second_serve_won_pct}}
+CHART: table | From {{r1.matches}} matches.
+COLUMNS: Matches | Second serve
+ROW: All | {{r1.matches}} | {{r1.second_serve_won_pct}}
+
+One paragraph.`;
+
+const VISUAL: AskVisual = {
+  kind: "table",
+  caption: "From 2 matches.",
+  columns: ["Matches", "Second serve"],
+  rows: [{ label: "All", cells: ["2", "41.2%"] }],
+};
+
+test.describe("an answer with a visual block", () => {
+  test("passes the visual event through, between the figures and the text, and saves it", async () => {
+    const { db, saves, releases } = fakeDb();
+    const { model } = fakeModel([JSON.stringify(PLAN), ANSWER_WITH_VISUAL]);
+    const warned: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warned.push(args);
+    };
+    let events: AskEvent[];
+    try {
+      events = await collect(askQuestion(input({ db, model })));
+    } finally {
+      console.warn = warn;
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      "status",
+      "status",
+      "status",
+      "headline",
+      "figure",
+      "visual",
+      "text",
+      "sources",
+      "done",
+    ]);
+    expect(events[5]).toEqual({ type: "visual", visual: VISUAL });
+    expect(text(events)).toBe("One paragraph.");
+    expect(warned).toEqual([]);
+    expect(releases()).toHaveLength(0);
+
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.visual).toEqual(VISUAL);
+    expect(saved.body).toBe("One paragraph.");
+    // What is saved is plain JSON: it survives the jsonb column.
+    expect(JSON.parse(JSON.stringify(saved.visual))).toEqual(VISUAL);
+  });
+
+  test("a dropped block is logged by count, reason and kind only, and the answer still completes", async () => {
+    const { db, saves } = fakeDb();
+    const { model } = fakeModel([
+      JSON.stringify(PLAN),
+      ANSWER_WITH_VISUAL.replace(
+        "{{r1.second_serve_won_pct}}\n\n",
+        "{{r1.aces}}\n\n",
+      ),
+    ]);
+    const warned: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warned.push(args);
+    };
+    let events: AskEvent[];
+    try {
+      events = await collect(askQuestion(input({ db, model })));
+    } finally {
+      console.warn = warn;
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      "status",
+      "status",
+      "status",
+      "headline",
+      "figure",
+      "text",
+      "sources",
+      "done",
+    ]);
+    expect(warned).toEqual([
+      [
+        ASK_DROPPED_VISUALS_LOG,
+        { count: 1, reasons: ["bad_reference"], kinds: ["table"] },
+      ],
+    ]);
+    const logged = JSON.stringify(warned);
+    expect(logged).not.toContain("second serve");
+    expect(logged).not.toContain("Matches");
+    expect(logged).not.toContain("aces");
+    expect(logged).not.toContain("41.2");
+
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.visual).toBeNull();
+    expect(saved.headline).toBe(
+      "Your second serve has held up across these matches.",
     );
+  });
+
+  test("an advice question with a block yields visual, text, then the notice", async () => {
+    const { db } = fakeDb();
+    const { model } = fakeModel([
+      JSON.stringify({ ...PLAN, asks_for_advice: true }),
+      ANSWER_WITH_VISUAL,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(events.map((event) => event.type).slice(3)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+      "notice",
+      "sources",
+      "done",
+    ]);
   });
 });
 
@@ -854,6 +987,19 @@ test.describe("mock mode (no provider configured)", () => {
     expect(
       events.filter((event) => event.type === "figure").map((f) => f.value),
     ).toEqual(["1", "0", "41.2%"]);
+    const visual = events.find((event) => event.type === "visual");
+    expect(visual).toEqual({
+      type: "visual",
+      visual: {
+        kind: "table",
+        caption: "Your record across 2 recorded matches.",
+        columns: ["Matches", "Wins", "Losses"],
+        rows: [{ label: "All matches", cells: ["2", "1", "0"] }],
+      },
+    });
+    expect((saves()[0].args?.p_answer as AskSavedAnswer).visual).toEqual(
+      visual?.type === "visual" ? visual.visual : null,
+    );
     expect(text(events)).toContain("This is a sample answer.");
     expect(last(events)).toEqual({
       type: "done",

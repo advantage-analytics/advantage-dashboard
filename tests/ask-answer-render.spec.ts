@@ -10,12 +10,37 @@ import {
   ASK_FIGURE_LINE_PREFIX,
   ASK_FIGURE_LINE_SYNTAX,
   ASK_NULL_CELL,
+  ASK_VISUAL_COLUMNS_PREFIX,
+  ASK_VISUAL_FIELD_SEPARATOR,
+  ASK_VISUAL_LINE_PREFIX,
+  ASK_VISUAL_LINE_SYNTAX,
+  ASK_VISUAL_PLOT_PREFIX,
+  ASK_VISUAL_ROW_PREFIX,
+  ASK_VISUAL_SERIES_PREFIX,
+  ASK_VISUAL_SYNTAX,
+  type AskVisualDropReason,
   MAX_ASK_FIGURES,
   type AskRow,
   formatAskCell,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
-import type { AskAnswerEvent, AskEvent } from "@/lib/services/ask/events";
+import {
+  ASK_VISUAL_KINDS,
+  type AskAnswerEvent,
+  type AskEvent,
+  type AskVisual,
+  MAX_ASK_BARS_ROWS,
+  MAX_ASK_FORM_RESULTS,
+  MAX_ASK_SERVE_COURTS,
+  MAX_ASK_SPLIT_PARTS,
+  MAX_ASK_TABLE_COLUMNS,
+  MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREND_POINTS,
+  MAX_ASK_VISUALS,
+  MIN_ASK_SPLIT_PARTS,
+  MIN_ASK_TREND_POINTS,
+  readAskVisual,
+} from "@/lib/services/ask/events";
 
 /**
  * Pure-logic spec for T7: the transform between the model's answer text and
@@ -73,6 +98,31 @@ test.describe("the syntax the answer prompt quotes", () => {
     expect(ASK_FIGURE_LINE_PREFIX).toBe("FIGURE:");
     expect(ASK_FIGURE_LINE_SYNTAX).toBe("FIGURE: <label> = {{rN.column}}");
     expect(MAX_ASK_FIGURES).toBe(3);
+  });
+
+  test("the visual block's keywords, separator and per-kind syntax are constants", () => {
+    expect(ASK_VISUAL_LINE_PREFIX).toBe("CHART:");
+    expect(ASK_VISUAL_SERIES_PREFIX).toBe("SERIES:");
+    expect(ASK_VISUAL_COLUMNS_PREFIX).toBe("COLUMNS:");
+    expect(ASK_VISUAL_ROW_PREFIX).toBe("ROW:");
+    expect(ASK_VISUAL_PLOT_PREFIX).toBe("PLOT:");
+    expect(ASK_VISUAL_FIELD_SEPARATOR).toBe("|");
+    expect(ASK_VISUAL_LINE_SYNTAX).toBe("CHART: <kind> | <caption>");
+    expect(MAX_ASK_VISUALS).toBe(1);
+    expect(Object.keys(ASK_VISUAL_SYNTAX).sort()).toEqual(
+      [...ASK_VISUAL_KINDS].sort(),
+    );
+    expect(ASK_VISUAL_SYNTAX.bars).toBe(
+      "CHART: bars | <caption>\n" +
+        "SERIES: <subject label> | <baseline label>\n" +
+        "ROW: <label> | {{rN.column}} | {{rN.column}}",
+    );
+    expect(ASK_VISUAL_SYNTAX.trend).toBe(
+      "CHART: trend | <caption>\nPLOT: <date column> | <value column>",
+    );
+    expect(ASK_VISUAL_SYNTAX.form).toBe(
+      "CHART: form | <caption>\nPLOT: <true-or-false column>",
+    );
   });
 });
 
@@ -206,8 +256,10 @@ test.describe("renderAskAnswer — shape", () => {
       text:
         "Across 9 matches you won 54.6% of second-serve points.\n\n" +
         "Against Sam Ortiz it was 41%.",
+      visual: null,
       droppedDigits: [],
       droppedFigures: [],
+      droppedVisuals: [],
       failure: null,
     });
   });
@@ -564,4 +616,822 @@ test.describe("ndjsonStreamResponse", () => {
     );
     expect(await response.text()).toBe("One sentence.");
   });
+});
+
+// ── The visual block ────────────────────────────────────────────────────────
+
+/** One row holding the same measures for a subject and a baseline. */
+const COMPARISON: AskRow[] = [
+  {
+    matches: 4,
+    first_serve_pct: 58.2,
+    all_first_serve_pct: 61.4,
+    second_serve_won_pct: 41.2,
+    all_second_serve_won_pct: 52.8,
+    double_faults: 4,
+    all_double_faults: 2.3,
+    double_faults_diff: 1.7,
+    serve_t: 13,
+    serve_body: 8,
+    serve_wide: 18,
+    winners: 8,
+    forced: 11,
+    unforced: 15,
+    big: 1204,
+    label_text: "Beau",
+    score: { sets: [] },
+  },
+];
+
+/** One row per match, in date order. */
+const PER_MATCH: AskRow[] = [
+  { played_on: "2026-06-04", first_serve_pct: 61, i_won: true },
+  { played_on: "2026-07-09", first_serve_pct: null, i_won: null },
+  { played_on: "2026-09-28", first_serve_pct: 37.5, i_won: false },
+];
+
+const HEAD = "Headline.\nFIGURE: Matches = {{r1.matches}}\n";
+
+function visualOf(events: AskAnswerEvent[]): AskVisual | null {
+  const event = events.find((event) => event.type === "visual");
+  return event?.type === "visual" ? event.visual : null;
+}
+
+test.describe("renderAskAnswer — the visual block, each kind", () => {
+  test("bars: labels, two percentages per row, raw and formatted", async () => {
+    const { events, result } = await render(
+      [
+        HEAD +
+          "CHART: bars | Share of points, from {{r1.matches}} matches.\n" +
+          "SERIES: Against left-handers | All matches\n" +
+          "ROW: First serves in | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\n" +
+          "ROW: Second-serve points won | {{r1.second_serve_won_pct}} | {{r1.all_second_serve_won_pct}}\n" +
+          "\nThe body.",
+      ],
+      COMPARISON,
+    );
+
+    const visual: AskVisual = {
+      kind: "bars",
+      caption: "Share of points, from 4 matches.",
+      subjectLabel: "Against left-handers",
+      baselineLabel: "All matches",
+      rows: [
+        {
+          label: "First serves in",
+          subject: { value: 58.2, text: "58.2%" },
+          baseline: { value: 61.4, text: "61.4%" },
+        },
+        {
+          label: "Second-serve points won",
+          subject: { value: 41.2, text: "41.2%" },
+          baseline: { value: 52.8, text: "52.8%" },
+        },
+      ],
+    };
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+    ]);
+    expect(visualOf(events)).toEqual(visual);
+    expect(result.visual).toEqual(visual);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.droppedDigits).toEqual([]);
+    expect(body(events)).toBe("The body.");
+    expect(readAskVisual(JSON.parse(JSON.stringify(visual)))).toEqual(visual);
+  });
+
+  test("table: headings and display strings, any cell type", async () => {
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: table | From {{r1.matches}} matches.\n" +
+          "COLUMNS: Against Beau | All matches | Difference\n" +
+          "ROW: First serves in | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}} | {{r1.double_faults_diff}}\n" +
+          "ROW: Opponent | {{r1.label_text}} | {{r1.matches}} | {{r1.double_faults}}\n" +
+          "Body.",
+      ],
+      COMPARISON,
+    );
+
+    expect(visualOf(events)).toEqual({
+      kind: "table",
+      caption: "From 4 matches.",
+      columns: ["Against Beau", "All matches", "Difference"],
+      rows: [
+        { label: "First serves in", cells: ["58.2%", "61.4%", "1.7"] },
+        { label: "Opponent", cells: ["Beau", "4", "4"] },
+      ],
+    });
+    expect(body(events)).toBe("Body.");
+  });
+
+  test("trend: one point per row with a value, dates shortened, nulls skipped", async () => {
+    const { events } = await render(
+      [
+        "Headline.\nCHART: trend | First serves in, one point per match.\nPLOT: played_on | first_serve_pct\n\nBody.",
+      ],
+      PER_MATCH,
+    );
+
+    expect(visualOf(events)).toEqual({
+      kind: "trend",
+      caption: "First serves in, one point per match.",
+      points: [
+        { label: "Jun 4", value: { value: 61, text: "61%" } },
+        { label: "Sep 28", value: { value: 37.5, text: "37.5%" } },
+      ],
+    });
+  });
+
+  test("trend: the year is added when the points span more than one", async () => {
+    const { events } = await render(
+      ["Headline.\nCHART: trend | Across two seasons.\nPLOT: played_on | aces"],
+      [
+        { played_on: "2025-11-02", aces: 3 },
+        { played_on: "2026-02-14", aces: 7 },
+      ],
+    );
+
+    expect(visualOf(events)).toMatchObject({
+      points: [
+        { label: "Nov 2, 2025", value: { value: 3, text: "3" } },
+        { label: "Feb 14, 2026", value: { value: 7, text: "7" } },
+      ],
+    });
+  });
+
+  test("split: parts with counts", async () => {
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: split | The points you won, by how they ended.\n" +
+          "ROW: Winners | {{r1.winners}}\n" +
+          "ROW: Opponent forced errors | {{r1.forced}}\n" +
+          "ROW: Opponent unforced errors | {{r1.unforced}}\n",
+      ],
+      COMPARISON,
+    );
+
+    expect(visualOf(events)).toEqual({
+      kind: "split",
+      caption: "The points you won, by how they ended.",
+      parts: [
+        { label: "Winners", count: { value: 8, text: "8" } },
+        { label: "Opponent forced errors", count: { value: 11, text: "11" } },
+        { label: "Opponent unforced errors", count: { value: 15, text: "15" } },
+      ],
+    });
+  });
+
+  test("serve: one court with T, body and wide counts", async () => {
+    const { events } = await render(
+      [
+        HEAD +
+          "CHART: serve | Where your serves went across {{r1.matches}} matches.\n" +
+          "ROW: All serves | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}\n",
+      ],
+      COMPARISON,
+    );
+
+    expect(visualOf(events)).toEqual({
+      kind: "serve",
+      caption: "Where your serves went across 4 matches.",
+      courts: [
+        {
+          label: "All serves",
+          t: { value: 13, text: "13" },
+          body: { value: 8, text: "8" },
+          wide: { value: 18, text: "18" },
+        },
+      ],
+    });
+  });
+
+  test("form: one result per row, an unknown result skipped, oldest first", async () => {
+    const { events } = await render(
+      [
+        "Headline.\nCHART: form | Your matches, oldest first.\nPLOT: i_won\n\nBody.",
+      ],
+      PER_MATCH,
+    );
+
+    expect(visualOf(events)).toEqual({
+      kind: "form",
+      caption: "Your matches, oldest first.",
+      results: [true, false],
+    });
+  });
+
+  test("the kind is read case-insensitively and figure lines may follow the block", async () => {
+    const { events, result } = await render(
+      [
+        "Headline.\nCHART: Form | Caption.\nPLOT: i_won\nFIGURE: Matches = {{r1.first_serve_pct}}\nBody.",
+      ],
+      PER_MATCH,
+    );
+
+    // The figure is sent when its line ends; the block when it closes.
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+    ]);
+    expect(result.visual?.kind).toBe("form");
+  });
+});
+
+test.describe("renderAskAnswer — the visual block across chunks", () => {
+  const ANSWER =
+    "Claim.\n" +
+    "FIGURE: Matches = {{r1.matches}}\n" +
+    "CHART: bars | From {{r1.matches}} matches.\n" +
+    "SERIES: You | Baseline\n" +
+    "ROW: First serves in | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\n" +
+    "\n" +
+    "You served well across {{r1.matches}} matches.\n\nSecond paragraph.";
+
+  test("the block is the same however the text is chunked, and never leaks into text", async () => {
+    const whole = await render([ANSWER], COMPARISON);
+    expect(whole.result.visual?.kind).toBe("bars");
+
+    for (const size of [1, 2, 3, 5, 11, 40]) {
+      const chunks: string[] = [];
+      for (let at = 0; at < ANSWER.length; at += size) {
+        chunks.push(ANSWER.slice(at, at + size));
+      }
+      const split = await render(chunks, COMPARISON);
+      expect(split.result, `chunk size ${size}`).toEqual(whole.result);
+      expect(
+        split.events.map((event) => event.type).filter((t) => t !== "text"),
+        `chunk size ${size}`,
+      ).toEqual(["headline", "figure", "visual"]);
+      const text = body(split.events);
+      expect(text, `chunk size ${size}`).toBe(whole.result.text);
+      expect(text).not.toContain("CHART");
+      expect(text).not.toContain("ROW");
+      expect(text).not.toContain("SERIES");
+    }
+    expect(whole.result.text).toBe(
+      "You served well across 4 matches.\n\nSecond paragraph.",
+    );
+  });
+
+  test("a block line split mid-reference still resolves", async () => {
+    const { result } = await render(
+      [
+        "Claim.\nCHART: split | Caption.\nROW: Winners | {{r1.win",
+        "ners}}\nROW: Errors | {",
+        "{r1.unforced}}\n",
+      ],
+      COMPARISON,
+    );
+    expect(result.visual).toMatchObject({
+      kind: "split",
+      parts: [
+        { label: "Winners", count: { value: 8 } },
+        { label: "Errors", count: { value: 15 } },
+      ],
+    });
+  });
+
+  test("the visual event is emitted before the first text delta", async () => {
+    const seen: string[] = [];
+    const { events } = renderAskAnswer(
+      chunksOf(
+        "Claim.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\n",
+        "The body ",
+        "continues.",
+      ),
+      COMPARISON,
+    );
+    for await (const event of events) seen.push(event.type);
+    expect(seen).toEqual(["headline", "visual", "text", "text"]);
+  });
+});
+
+test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone", () => {
+  const cases: [name: string, block: string, reason: AskVisualDropReason][] = [
+    [
+      "an unknown kind",
+      "CHART: pie | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "unknown_kind",
+    ],
+    [
+      "no caption",
+      "CHART: split |\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "malformed",
+    ],
+    [
+      "a keyword the kind does not take",
+      "CHART: split | Caption.\nSERIES: A | B\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "malformed",
+    ],
+    [
+      "bars with no SERIES line",
+      "CHART: bars | Caption.\nROW: A | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}",
+      "malformed",
+    ],
+    [
+      "a row with the wrong number of fields",
+      "CHART: bars | Caption.\nSERIES: A | B\nROW: A | {{r1.first_serve_pct}}",
+      "malformed",
+    ],
+    [
+      "a cell that is not exactly one reference",
+      "CHART: split | Caption.\nROW: A | {{r1.winners}} points\nROW: B | {{r1.forced}}",
+      "malformed",
+    ],
+    [
+      "a cell the model typed instead of referencing",
+      "CHART: split | Caption.\nROW: A | 12\nROW: B | {{r1.forced}}",
+      "malformed",
+    ],
+    [
+      "an empty label",
+      "CHART: split | Caption.\nROW: | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "malformed",
+    ],
+    [
+      "a table row with fewer cells than columns",
+      "CHART: table | Caption.\nCOLUMNS: A | B\nROW: X | {{r1.matches}}",
+      "malformed",
+    ],
+    [
+      "a trend PLOT with one column",
+      "CHART: trend | Caption.\nPLOT: first_serve_pct",
+      "malformed",
+    ],
+    [
+      "a reference to a column the result does not have",
+      "CHART: split | Caption.\nROW: A | {{r1.aces}}\nROW: B | {{r1.forced}}",
+      "bad_reference",
+    ],
+    [
+      "a reference to a row the result does not have",
+      "CHART: split | Caption.\nROW: A | {{r2.winners}}\nROW: B | {{r1.forced}}",
+      "bad_reference",
+    ],
+    [
+      "a bad reference in the caption",
+      "CHART: split | From {{r1.nope}} matches.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "bad_reference",
+    ],
+    [
+      "a bad reference in a label",
+      "CHART: split | Caption.\nROW: {{r1.nope}} | {{r1.winners}}\nROW: B | {{r1.forced}}",
+      "bad_reference",
+    ],
+    [
+      "a PLOT column the result does not have",
+      "CHART: form | Caption.\nPLOT: won",
+      "bad_reference",
+    ],
+    [
+      "a bar outside 0–100",
+      "CHART: bars | Caption.\nSERIES: A | B\nROW: A | {{r1.big}} | {{r1.all_first_serve_pct}}",
+      "bad_value",
+    ],
+    [
+      "a count that is a string",
+      "CHART: split | Caption.\nROW: A | {{r1.label_text}}\nROW: B | {{r1.forced}}",
+      "bad_value",
+    ],
+    [
+      "a count that is null",
+      "CHART: serve | Caption.\nROW: All | {{r1.serve_t}} | {{r1.missing}} | {{r1.serve_wide}}",
+      "bad_value",
+    ],
+    [
+      "a form column that is not boolean",
+      "CHART: form | Caption.\nPLOT: matches",
+      "bad_value",
+    ],
+    [
+      "too few split parts",
+      "CHART: split | Caption.\nROW: A | {{r1.winners}}",
+      "limit",
+    ],
+    [
+      "too many table columns",
+      "CHART: table | Caption.\nCOLUMNS: A | B | C | D\nROW: X | {{r1.matches}} | {{r1.matches}} | {{r1.matches}} | {{r1.matches}}",
+      "limit",
+    ],
+    [
+      "too few trend points",
+      "CHART: trend | Caption.\nPLOT: played_on | first_serve_pct",
+      "limit",
+    ],
+  ];
+
+  for (const [name, block, reason] of cases) {
+    test(`${name} → ${reason}; headline, figures and text still render`, async () => {
+      const rows: AskRow[] = [
+        { ...COMPARISON[0], missing: null, played_on: "2026-01-01" },
+      ];
+      const { events, result } = await render(
+        [`${HEAD}${block}\n\nThe body still shows.`],
+        rows,
+      );
+
+      expect(events.map((event) => event.type)).toEqual([
+        "headline",
+        "figure",
+        "text",
+      ]);
+      expect(body(events)).toBe("The body still shows.");
+      expect(result.visual).toBeNull();
+      expect(result.failure).toBeNull();
+      expect(result.droppedVisuals).toHaveLength(1);
+      expect(result.droppedVisuals[0].reason).toBe(reason);
+      expect(typeof result.droppedVisuals[0].detail).toBe("string");
+      // The drop names nothing the model wrote.
+      expect(JSON.stringify(result.droppedVisuals)).not.toContain("Caption");
+    });
+  }
+
+  test("the drop records the kind the block claimed", async () => {
+    const { result } = await render(
+      [`${HEAD}CHART: split | Caption.\nROW: A | {{r1.winners}}\n`],
+      COMPARISON,
+    );
+    expect(result.droppedVisuals).toEqual([
+      { reason: "limit", kind: "split", detail: expect.any(String) },
+    ]);
+  });
+
+  test("a second block is dropped as second_block; the first stands", async () => {
+    const { events, result } = await render(
+      [
+        HEAD +
+          "CHART: split | First.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\n" +
+          "CHART: serve | Second.\nROW: All | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}\n" +
+          "\nBody.",
+      ],
+      COMPARISON,
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "figure",
+      "visual",
+      "text",
+    ]);
+    expect(result.visual?.kind).toBe("split");
+    expect(result.droppedVisuals).toEqual([
+      { reason: "second_block", kind: "serve", detail: expect.any(String) },
+    ]);
+    expect(body(events)).toBe("Body.");
+  });
+
+  test("a bad reference inside a block drops the block, while one in prose still fails the answer", async () => {
+    const inBlock = await render(
+      [
+        "Claim.\nCHART: split | Caption.\nROW: A | {{r1.nope}}\nROW: B | {{r1.forced}}\nFine.",
+      ],
+      COMPARISON,
+    );
+    expect(inBlock.result.failure).toBeNull();
+    expect(inBlock.result.droppedVisuals[0].reason).toBe("bad_reference");
+    expect(body(inBlock.events)).toBe("Fine.");
+
+    const inProse = await render(
+      [
+        "Claim.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\nThen {{r1.nope}}.",
+      ],
+      COMPARISON,
+    );
+    expect(inProse.result.failure).toEqual({
+      kind: "missing_column",
+      reference: "{{r1.nope}}",
+    });
+    expect(inProse.events.at(-1)?.type).toBe("error");
+  });
+
+  test("a CHART line after body text has started is body text, not a block", async () => {
+    const { events, result } = await render(
+      [
+        "Claim.\n\nThe body first.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\n",
+      ],
+      COMPARISON,
+    );
+
+    expect(events.some((event) => event.type === "visual")).toBe(false);
+    expect(result.visual).toBeNull();
+    expect(result.droppedVisuals).toEqual([]);
+    expect(body(events)).toBe(
+      "The body first.\nCHART: split | Caption.\nROW: A | 8\nROW: B | 11",
+    );
+  });
+
+  test("digits typed in a label or caption are dropped, as in any other line", async () => {
+    const { result } = await render(
+      [
+        `${HEAD}CHART: split | Last 5 matches.\nROW: Top 3 | {{r1.winners}}\nROW: B | {{r1.forced}}\n`,
+      ],
+      COMPARISON,
+    );
+    expect(result.visual).toMatchObject({
+      caption: "Last matches.",
+      parts: [{ label: "Top" }, { label: "B" }],
+    });
+    expect(result.droppedDigits).toEqual(["5", "3"]);
+  });
+
+  test("a block with no lines after its header is dropped, and so is one at the very end", async () => {
+    const { result } = await render(
+      [`${HEAD}CHART: split | Caption.`],
+      COMPARISON,
+    );
+    expect(result.droppedVisuals[0].reason).toBe("limit");
+    expect(result.headline).toBe("Headline.");
+  });
+});
+
+test.describe("renderAskAnswer — the visual block's limits", () => {
+  function rowsOf(n: number, line: (i: number) => string): string {
+    return Array.from({ length: n }, (_, i) => line(i + 1)).join("\n");
+  }
+
+  test(`bars takes ${MAX_ASK_BARS_ROWS} rows and not one more`, async () => {
+    const block = (n: number) =>
+      `CHART: bars | Caption.\nSERIES: A | B\n${rowsOf(n, (i) => `ROW: Row ${"x".repeat(i)} | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}`)}\n`;
+    const ok = await render([`${HEAD}${block(MAX_ASK_BARS_ROWS)}`], COMPARISON);
+    expect(ok.result.visual?.kind).toBe("bars");
+    const over = await render(
+      [`${HEAD}${block(MAX_ASK_BARS_ROWS + 1)}`],
+      COMPARISON,
+    );
+    expect(over.result.droppedVisuals[0].reason).toBe("limit");
+  });
+
+  test(`table takes ${MAX_ASK_TABLE_ROWS} rows and ${MAX_ASK_TABLE_COLUMNS} columns`, async () => {
+    const block = (n: number) =>
+      `CHART: table | Caption.\nCOLUMNS: A | B | C\n${rowsOf(n, (i) => `ROW: Row ${"x".repeat(i)} | {{r1.matches}} | {{r1.matches}} | {{r1.matches}}`)}\n`;
+    const ok = await render(
+      [`${HEAD}${block(MAX_ASK_TABLE_ROWS)}`],
+      COMPARISON,
+    );
+    expect(ok.result.visual?.kind).toBe("table");
+    const over = await render(
+      [`${HEAD}${block(MAX_ASK_TABLE_ROWS + 1)}`],
+      COMPARISON,
+    );
+    expect(over.result.droppedVisuals[0].reason).toBe("limit");
+  });
+
+  test(`trend takes ${MIN_ASK_TREND_POINTS}–${MAX_ASK_TREND_POINTS} points`, async () => {
+    const rows = (n: number): AskRow[] =>
+      Array.from({ length: n }, (_, i) => ({
+        played_on: `2026-01-${String(i + 1).padStart(2, "0")}`,
+        aces: i,
+      }));
+    const block = "Claim.\nCHART: trend | Caption.\nPLOT: played_on | aces\n";
+    expect(
+      (await render([block], rows(MAX_ASK_TREND_POINTS))).result.visual?.kind,
+    ).toBe("trend");
+    expect(
+      (await render([block], rows(MAX_ASK_TREND_POINTS + 1))).result
+        .droppedVisuals[0].reason,
+    ).toBe("limit");
+    expect(
+      (await render([block], rows(MIN_ASK_TREND_POINTS - 1))).result
+        .droppedVisuals[0].reason,
+    ).toBe("limit");
+  });
+
+  test(`split takes ${MIN_ASK_SPLIT_PARTS}–${MAX_ASK_SPLIT_PARTS} parts`, async () => {
+    const block = (n: number) =>
+      `CHART: split | Caption.\n${rowsOf(n, (i) => `ROW: Part ${"x".repeat(i)} | {{r1.winners}}`)}\n`;
+    expect(
+      (await render([`${HEAD}${block(MAX_ASK_SPLIT_PARTS)}`], COMPARISON))
+        .result.visual?.kind,
+    ).toBe("split");
+    expect(
+      (await render([`${HEAD}${block(MAX_ASK_SPLIT_PARTS + 1)}`], COMPARISON))
+        .result.droppedVisuals[0].reason,
+    ).toBe("limit");
+  });
+
+  test(`serve takes up to ${MAX_ASK_SERVE_COURTS} courts`, async () => {
+    const block = (n: number) =>
+      `CHART: serve | Caption.\n${rowsOf(n, (i) => `ROW: Court ${"x".repeat(i)} | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}`)}\n`;
+    expect(
+      (await render([`${HEAD}${block(MAX_ASK_SERVE_COURTS)}`], COMPARISON))
+        .result.visual?.kind,
+    ).toBe("serve");
+    expect(
+      (await render([`${HEAD}${block(MAX_ASK_SERVE_COURTS + 1)}`], COMPARISON))
+        .result.droppedVisuals[0].reason,
+    ).toBe("limit");
+  });
+
+  test(`form takes up to ${MAX_ASK_FORM_RESULTS} results`, async () => {
+    const rows = (n: number): AskRow[] =>
+      Array.from({ length: n }, (_, i) => ({ i_won: i % 2 === 0 }));
+    const block = "Claim.\nCHART: form | Caption.\nPLOT: i_won\n";
+    expect(
+      (await render([block], rows(MAX_ASK_FORM_RESULTS))).result.visual?.kind,
+    ).toBe("form");
+    expect(
+      (await render([block], rows(MAX_ASK_FORM_RESULTS + 1))).result
+        .droppedVisuals[0].reason,
+    ).toBe("limit");
+    expect(
+      (await render([block], [{ i_won: null }])).result.droppedVisuals[0]
+        .reason,
+    ).toBe("limit");
+  });
+});
+
+test.describe("readAskVisual — a saved or streamed visual, defensively", () => {
+  const BARS: AskVisual = {
+    kind: "bars",
+    caption: "Caption.",
+    subjectLabel: "You",
+    baselineLabel: "All",
+    rows: [
+      {
+        label: "A",
+        subject: { value: 50, text: "50%" },
+        baseline: { value: 40.5, text: "40.5%" },
+      },
+    ],
+  };
+  const TABLE: AskVisual = {
+    kind: "table",
+    caption: "",
+    columns: ["A", "B"],
+    rows: [{ label: "X", cells: ["1", "—"] }],
+  };
+  const TREND: AskVisual = {
+    kind: "trend",
+    caption: "C",
+    points: [
+      { label: "Jun 4", value: { value: -2.5, text: "-2.5" } },
+      { label: "Jul 9", value: { value: 3, text: "3" } },
+    ],
+  };
+  const SPLIT: AskVisual = {
+    kind: "split",
+    caption: "C",
+    parts: [
+      { label: "A", count: { value: 0, text: "0" } },
+      { label: "B", count: { value: 3, text: "3" } },
+    ],
+  };
+  const SERVE: AskVisual = {
+    kind: "serve",
+    caption: "C",
+    courts: [
+      {
+        label: "All",
+        t: { value: 1, text: "1" },
+        body: { value: 2, text: "2" },
+        wide: { value: 3, text: "3" },
+      },
+    ],
+  };
+  const FORM: AskVisual = {
+    kind: "form",
+    caption: "C",
+    results: [true, false],
+  };
+
+  test("accepts each kind, round-tripped through JSON, and strips nothing it needs", () => {
+    for (const visual of [BARS, TABLE, TREND, SPLIT, SERVE, FORM]) {
+      expect(readAskVisual(JSON.parse(JSON.stringify(visual)))).toEqual(visual);
+    }
+  });
+
+  test("ignores keys it does not know", () => {
+    expect(readAskVisual({ ...FORM, extra: 1 })).toEqual(FORM);
+  });
+
+  const rejected: [name: string, value: unknown][] = [
+    ["null", null],
+    ["a string", "bars"],
+    ["an array", [BARS]],
+    ["an unknown kind", { ...BARS, kind: "pie" }],
+    ["no caption", { kind: "form", results: [true] }],
+    ["a caption that is not a string", { ...FORM, caption: 1 }],
+    ["bars with no rows", { ...BARS, rows: [] }],
+    [
+      "bars with too many rows",
+      { ...BARS, rows: Array(MAX_ASK_BARS_ROWS + 1).fill(BARS.rows[0]) },
+    ],
+    ["bars with an empty label", { ...BARS, subjectLabel: " " }],
+    [
+      "bars with a row label missing",
+      { ...BARS, rows: [{ ...BARS.rows[0], label: 3 }] },
+    ],
+    [
+      "a bar above 100",
+      {
+        ...BARS,
+        rows: [{ ...BARS.rows[0], subject: { value: 101, text: "101%" } }],
+      },
+    ],
+    [
+      "a bar below 0",
+      {
+        ...BARS,
+        rows: [{ ...BARS.rows[0], baseline: { value: -1, text: "-1%" } }],
+      },
+    ],
+    [
+      "a number with no text",
+      { ...BARS, rows: [{ ...BARS.rows[0], subject: { value: 5 } }] },
+    ],
+    [
+      "a number that is a string",
+      {
+        ...BARS,
+        rows: [{ ...BARS.rows[0], subject: { value: "5", text: "5" } }],
+      },
+    ],
+    [
+      "a table with one column",
+      { ...TABLE, columns: ["A"], rows: [{ label: "X", cells: ["1"] }] },
+    ],
+    [
+      "a table row with the wrong cell count",
+      { ...TABLE, rows: [{ label: "X", cells: ["1"] }] },
+    ],
+    [
+      "a table cell that is not a string",
+      { ...TABLE, rows: [{ label: "X", cells: [1, "2"] }] },
+    ],
+    [
+      "a table with too many rows",
+      { ...TABLE, rows: Array(MAX_ASK_TABLE_ROWS + 1).fill(TABLE.rows[0]) },
+    ],
+    ["a trend with one point", { ...TREND, points: TREND.points.slice(0, 1) }],
+    [
+      "a trend with too many points",
+      {
+        ...TREND,
+        points: Array(MAX_ASK_TREND_POINTS + 1).fill(TREND.points[0]),
+      },
+    ],
+    [
+      "a trend point with no label",
+      {
+        ...TREND,
+        points: [{ value: { value: 1, text: "1" } }, TREND.points[1]],
+      },
+    ],
+    ["a split with one part", { ...SPLIT, parts: SPLIT.parts.slice(0, 1) }],
+    [
+      "a split with too many parts",
+      { ...SPLIT, parts: Array(MAX_ASK_SPLIT_PARTS + 1).fill(SPLIT.parts[0]) },
+    ],
+    [
+      "a negative count",
+      {
+        ...SPLIT,
+        parts: [
+          SPLIT.parts[0],
+          { label: "B", count: { value: -1, text: "-1" } },
+        ],
+      },
+    ],
+    ["a serve with no courts", { ...SERVE, courts: [] }],
+    [
+      "a serve with too many courts",
+      {
+        ...SERVE,
+        courts: Array(MAX_ASK_SERVE_COURTS + 1).fill(SERVE.courts[0]),
+      },
+    ],
+    [
+      "a court missing a zone",
+      {
+        ...SERVE,
+        courts: [
+          {
+            label: "All",
+            t: { value: 1, text: "1" },
+            body: { value: 2, text: "2" },
+          },
+        ],
+      },
+    ],
+    ["a form with no results", { ...FORM, results: [] }],
+    [
+      "a form with too many results",
+      { ...FORM, results: Array(MAX_ASK_FORM_RESULTS + 1).fill(true) },
+    ],
+    ["a form result that is null", { ...FORM, results: [true, null] }],
+    ["a form result that is a string", { ...FORM, results: ["win"] }],
+  ];
+
+  for (const [name, value] of rejected) {
+    test(`rejects ${name}`, () => {
+      expect(readAskVisual(value)).toBeNull();
+    });
+  }
 });

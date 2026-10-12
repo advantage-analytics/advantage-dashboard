@@ -2,9 +2,29 @@ import {
   ASK_CELL_REFERENCE_SYNTAX,
   ASK_FIGURE_LINE_PREFIX,
   ASK_FIGURE_LINE_SYNTAX,
+  ASK_VISUAL_FIELD_SEPARATOR,
+  ASK_VISUAL_LINE_PREFIX,
+  ASK_VISUAL_LINE_SYNTAX,
+  ASK_VISUAL_PLOT_PREFIX,
+  ASK_VISUAL_SYNTAX,
   type AskRow,
   MAX_ASK_FIGURES,
 } from "@/lib/services/ask/answer-render";
+import {
+  ASK_NO_ADVICE_SENTENCE,
+  type AskVisualKind,
+  MAX_ASK_BARS_ROWS,
+  MAX_ASK_FORM_RESULTS,
+  MAX_ASK_SERVE_COURTS,
+  MAX_ASK_SPLIT_PARTS,
+  MAX_ASK_TABLE_COLUMNS,
+  MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREND_POINTS,
+  MAX_ASK_VISUALS,
+  MIN_ASK_SPLIT_PARTS,
+  MIN_ASK_TABLE_COLUMNS,
+  MIN_ASK_TREND_POINTS,
+} from "@/lib/services/ask/events";
 import { ASK_SCHEMA } from "@/lib/services/ask/schema";
 import {
   ASK_SQL_FUNCTION_ALLOWLIST,
@@ -54,13 +74,14 @@ export interface AskPlanRefusal {
 export type AskPlanReply = AskPlanQuery | AskPlanRefusal;
 
 /**
- * The sentence the server appends to an answer whose question asked for
- * advice (`asks_for_advice`). It is deliberately in neither prompt: a
+ * The sentence the client shows beside an answer whose question asked for
+ * advice (`asks_for_advice`; the `notice` event). It lives in the client-safe
+ * `events.ts` and is re-exported here for the server modules and the spec
+ * that holds it against both prompts: it is deliberately in neither, since a
  * sentence the model has read is a sentence the model will paraphrase, and
  * this one is not the model's to improvise.
  */
-export const ASK_NO_ADVICE_SENTENCE =
-  "Ask reports what your matches show; it does not recommend what to work on.";
+export { ASK_NO_ADVICE_SENTENCE };
 
 // ── Plan prompt ──────────────────────────────────────────────────────────────
 
@@ -228,6 +249,7 @@ Shape B, when they cannot:
 
 - One SELECT that computes the answer. It MUST read its matches from ${SCOPE_NAME}, which holds the match_id rows scope_sql returned: join ${SCOPE_NAME} on match_id, or filter with match_id in (select match_id from ${SCOPE_NAME}).
 - Return few rows: one row when you can, never more than ten. Aggregate; do not return one row per point or per shot.
+- The one exception: a question about a trend over time, or about a run of results (a record, a streak, "my last ten matches"), returns ONE ROW PER MATCH in played_on order, oldest first — played_on and the value for a trend, played_on and i_won for a record — never more than ${MAX_ASK_PROMPT_ROWS} rows. The answer step draws these as a line or a win/loss strip.
 - Name every output column with "as", in lowercase snake_case, each name different. The answer is written by referring to these names.
 - Every percentage is a number from 0 to 100, rounded to one decimal, and its column name MUST end in _pct (second_serve_won_pct, not second_serve_rate). A name ending in _pct is how the app knows to print a percent sign.
 - A percentage across several matches is computed from summed counters, never by averaging per-match _pct columns: round(100.0 * sum(second_serve_points_won) / nullif(sum(second_serves_in), 0), 1).
@@ -247,6 +269,7 @@ Shape B, when they cannot:
 - ask.points.is_pressure_point is never true. For pressure, use is_break_point, is_set_point and is_match_point.
 - Text values are capitalised exactly as the column descriptions list them: spin_type = 'Topspin', shot_type = 'First Serve', result = 'Out'. Compare opponent names with ilike.
 - Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero.
+- Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. No view records which court (deuce or ad) a serve was hit from; do not invent a column for it.
 
 ### When to use shape B
 
@@ -301,16 +324,123 @@ export const ASK_ANSWER_EXAMPLE_ROWS: readonly AskRow[] = [
 /**
  * The worked example of an answer. Rendered against
  * {@link ASK_ANSWER_EXAMPLE_ROWS} by the spec: no dropped digit, no failed
- * reference, three figures.
+ * reference, three figures, one `bars` block, one paragraph beneath it.
  */
 export const ASK_ANSWER_EXAMPLE_REPLY = `Your second serve wins fewer points against left-handers than it does across all your matches.
 ${ASK_FIGURE_LINE_PREFIX} Second-serve points won = {{r1.second_serve_won_pct}}
 ${ASK_FIGURE_LINE_PREFIX} Across all matches = {{r1.all_matches_second_serve_won_pct}}
 ${ASK_FIGURE_LINE_PREFIX} Matches against left-handers = {{r1.matches}}
+${ASK_VISUAL_LINE_PREFIX} bars ${ASK_VISUAL_FIELD_SEPARATOR} Second-serve points won, from {{r1.matches}} matches against left-handers and {{r1.all_matches}} overall.
+SERIES: Against left-handers ${ASK_VISUAL_FIELD_SEPARATOR} All matches
+ROW: Second-serve points won ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.second_serve_won_pct}} ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.all_matches_second_serve_won_pct}}
 
-Against left-handers you won {{r1.second_serve_won_pct}} of the points played on your second serve. Across all {{r1.all_matches}} of your matches the figure is {{r1.all_matches_second_serve_won_pct}}.
+Against left-handers you won {{r1.second_serve_won_pct}} of the points played on your second serve, below your figure across all {{r1.all_matches}} of your matches. This covers {{r1.matches}} matches, the most recent on {{r1.last_played_on}}.`;
 
-This covers {{r1.matches}} matches, the most recent on {{r1.last_played_on}}.`;
+/**
+ * One worked example per block kind: when it fits, the rows it is written
+ * against, and the block. Each renders through the real renderer in
+ * `tests/ask-prompt.spec.ts` to the visual the test expects — so the prompt
+ * can never teach a block the renderer would drop.
+ */
+export interface AskVisualExample {
+  /** The one line in the catalogue saying when this kind fits. */
+  when: string;
+  rows: readonly AskRow[];
+  block: string;
+}
+
+const S = ASK_VISUAL_FIELD_SEPARATOR;
+
+export const ASK_VISUAL_EXAMPLES: Record<AskVisualKind, AskVisualExample> = {
+  bars: {
+    when: `the same measures for the subject and a baseline, as percentages — this opponent against all matches, this year against last. Up to ${MAX_ASK_BARS_ROWS} rows, each two _pct cells.`,
+    rows: [
+      {
+        matches: 4,
+        first_serve_pct: 58.2,
+        all_first_serve_pct: 61.4,
+        second_serve_won_pct: 41.2,
+        all_second_serve_won_pct: 52.8,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} bars ${S} Share of points, from {{r1.matches}} matches against left-handers.
+SERIES: Against left-handers ${S} All matches
+ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.all_first_serve_pct}}
+ROW: Second-serve points won ${S} {{r1.second_serve_won_pct}} ${S} {{r1.all_second_serve_won_pct}}`,
+  },
+  table: {
+    when: `several unlike numbers side by side — counts next to percentages, with a baseline or a difference column. ${MIN_ASK_TABLE_COLUMNS} to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${MAX_ASK_TABLE_ROWS} rows, one cell per column.`,
+    rows: [
+      {
+        matches: 1,
+        first_serve_pct: 37.5,
+        all_first_serve_pct: 58.2,
+        first_serve_diff_pct: -20.7,
+        double_faults: 4,
+        all_double_faults: 2.3,
+        double_faults_diff: 1.7,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} table ${S} From {{r1.matches}} match, against all of yours.
+COLUMNS: Against Beau ${S} All matches ${S} Difference
+ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.all_first_serve_pct}} ${S} {{r1.first_serve_diff_pct}}
+ROW: Double faults ${S} {{r1.double_faults}} ${S} {{r1.all_double_faults}} ${S} {{r1.double_faults_diff}}`,
+  },
+  trend: {
+    when: `one value over time, when the result has one row per match in date order. ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS} rows; name the date column and the value column, and the app reads every row.`,
+    rows: [
+      { played_on: "2026-06-04", first_serve_pct: 61 },
+      { played_on: "2026-07-09", first_serve_pct: 63 },
+      { played_on: "2026-09-28", first_serve_pct: 37.5 },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} trend ${S} First serves in, one point per match since June.
+${ASK_VISUAL_PLOT_PREFIX} played_on ${S} first_serve_pct`,
+  },
+  split: {
+    when: `parts of a whole: counts that add up to a total, such as how the points you won ended. ${MIN_ASK_SPLIT_PARTS} to ${MAX_ASK_SPLIT_PARTS} rows, each one count cell.`,
+    rows: [
+      {
+        points_won: 34,
+        winners: 8,
+        opponent_forced_errors: 11,
+        opponent_unforced_errors: 15,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} split ${S} The {{r1.points_won}} points you won, by how they ended.
+ROW: Winners ${S} {{r1.winners}}
+ROW: Opponent forced errors ${S} {{r1.opponent_forced_errors}}
+ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
+  },
+  serve: {
+    when: `serve direction: the T, body and wide counts, in that order. One row for the serves it counts; a second row only when the result holds a second group (first serves and second serves). Never more than ${MAX_ASK_SERVE_COURTS}. The result does not record the deuce or ad court, so do not label a row with one.`,
+    rows: [{ matches: 22, serve_t: 13, serve_body: 8, serve_wide: 18 }],
+    block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where your serves went across {{r1.matches}} matches.
+ROW: All serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
+  },
+  form: {
+    when: `a record or a run of results, when the result has one row per match in date order with i_won. Up to ${MAX_ASK_FORM_RESULTS} rows; name the true-or-false column and the app reads every row, skipping an unknown result.`,
+    rows: [
+      { played_on: "2026-06-04", opponent_name: "Sam Ortiz", i_won: true },
+      { played_on: "2026-07-09", opponent_name: "Alex Rivera", i_won: false },
+      { played_on: "2026-09-28", opponent_name: "Sam Ortiz", i_won: true },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} form ${S} Your matches against left-handers, oldest first.
+${ASK_VISUAL_PLOT_PREFIX} i_won`,
+  },
+};
+
+/** The catalogue as the answer prompt prints it: when each kind fits, its syntax, its example. */
+function renderVisualCatalogue(): string {
+  return (Object.keys(ASK_VISUAL_EXAMPLES) as AskVisualKind[])
+    .map((kind) => {
+      const example = ASK_VISUAL_EXAMPLES[kind];
+      return `### ${kind} — ${example.when}
+${ASK_VISUAL_SYNTAX[kind]}
+Example:
+${example.block}`;
+    })
+    .join("\n\n");
+}
 
 function renderCell(value: unknown): string {
   if (value === null || value === undefined) return "null";
@@ -375,7 +505,16 @@ Line 1: the claim. One or two sentences saying what the result shows. NO digits 
 Then: up to ${MAX_ASK_FIGURES} figure lines, directly under the claim with no blank line between, each written exactly as
 ${ASK_FIGURE_LINE_SYNTAX}
 The label is a few plain words with no digits and no equals sign. Figure lines go only here, never further down.
-Then: a blank line, and at most three short paragraphs of evidence in plain sentences.
+Then, optionally: ONE visual block, directly under the figure lines (see below).
+Then: a blank line, and at most three short paragraphs of evidence in plain sentences — at most ONE short paragraph when a block carries the numbers.
+
+## The visual block
+
+The app draws a block from cells of the result; you choose its kind and write its labels. There are exactly six kinds. Pick the one the question fits, or none: no block is a fine answer, and the right one for a question with a single number in it. A block is lines, each starting with one keyword, its fields separated by ${ASK_VISUAL_FIELD_SEPARATOR}. The first line is always
+${ASK_VISUAL_LINE_SYNTAX}
+A cell is exactly one ${ASK_CELL_REFERENCE_SYNTAX} and nothing else. A label or caption is a few plain words with no digits; it may hold a reference ("From {{r1.matches}} matches"). A ${ASK_VISUAL_PLOT_PREFIX} line names columns of the result, not cells: the app reads them from every row, so you never write a reference per match.
+
+${renderVisualCatalogue()}
 
 ## Rules
 
@@ -385,6 +524,8 @@ The rules below are the product's promise to the player, not style preferences. 
 - NEVER TYPE A NUMBER. Every number, percentage, count and date is written as a reference to a cell of the result: ${ASK_CELL_REFERENCE_SYNTAX}, where N is the row number and column is a column name copied exactly, for example {{r1.second_serve_won_pct}}. The app replaces the reference with the value. A number you type yourself is a number nobody verified, so it is deleted before the player sees it.
 - Do not put a percent sign after a reference: a column ending in _pct already prints with one. Do not reformat a date: a date cell prints as a date.
 - Refer only to rows and columns shown above. A reference to anything else fails the whole answer. Do not refer to a cell whose value is null; say that it was not recorded.
+- AT MOST ${MAX_ASK_VISUALS} BLOCK, of one of the six kinds, with only cells and columns the result holds. A block that breaks its shape or names a cell the result does not have is left out on its own; the rest of the answer still shows. Figure lines stay allowed beside a block, still at most ${MAX_ASK_FIGURES} and always above it.
+- When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, saying what the block shows.
 - Write ordinals as words: "second serve", "first set", "third game". Never "2nd". Never spell out a value from the result in words in place of a reference.
 - COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher. You may say by how much only when the result has a column that holds that difference.
 - NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.

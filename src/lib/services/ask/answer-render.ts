@@ -1,7 +1,25 @@
-import type {
-  AskAnswerEvent,
-  AskErrorEvent,
-  AskFigureEvent,
+import {
+  ASK_VISUAL_KINDS,
+  type AskAnswerEvent,
+  type AskErrorEvent,
+  type AskFigureEvent,
+  type AskVisual,
+  type AskTrendVisual,
+  type AskVisualKind,
+  type AskVisualNumber,
+  MAX_ASK_BARS_ROWS,
+  MAX_ASK_FORM_RESULTS,
+  MAX_ASK_SERVE_COURTS,
+  MAX_ASK_SPLIT_PARTS,
+  MAX_ASK_TABLE_COLUMNS,
+  MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREND_POINTS,
+  MAX_ASK_VISUALS,
+  MIN_ASK_FORM_RESULTS,
+  MIN_ASK_SERVE_COURTS,
+  MIN_ASK_SPLIT_PARTS,
+  MIN_ASK_TABLE_COLUMNS,
+  MIN_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
 
 /**
@@ -21,7 +39,15 @@ import type {
  *   1. the first non-blank line                → one `headline` event
  *   2. the figure lines directly beneath it    → `figure` events, at most
  *      (`ASK_FIGURE_LINE_SYNTAX`)                `MAX_ASK_FIGURES`
- *   3. everything after                        → `text` deltas
+ *   3. an optional visual block                → one `visual` event, resolved
+ *      (`ASK_VISUAL_SYNTAX`)                      against the rows
+ *   4. everything after                        → `text` deltas
+ *
+ * A visual block that cannot be drawn — unknown kind, wrong shape, a cell the
+ * result does not hold, a value of the wrong type, a limit exceeded, or a
+ * second block — is dropped on its own and recorded in `droppedVisuals`; the
+ * headline, figures and text still render. A bad reference anywhere else
+ * still fails the whole answer, as it always has.
  *
  * Pure: no database, no network, no Next.js.
  */
@@ -52,6 +78,65 @@ export const ASK_FIGURE_LINE_SYNTAX = `${ASK_FIGURE_LINE_PREFIX} <label> ${ASK_F
 
 /** Figure lines beyond this many are dropped and reported. */
 export const MAX_ASK_FIGURES = 3;
+
+/**
+ * The visual block's lines. Each starts with one of these keywords, at the
+ * start of the line, case-sensitive, and holds fields separated by
+ * `ASK_VISUAL_FIELD_SEPARATOR`. The block opens with a `CHART:` line and
+ * runs until the first line that starts with none of them.
+ */
+export const ASK_VISUAL_LINE_PREFIX = "CHART:";
+export const ASK_VISUAL_SERIES_PREFIX = "SERIES:";
+export const ASK_VISUAL_COLUMNS_PREFIX = "COLUMNS:";
+export const ASK_VISUAL_ROW_PREFIX = "ROW:";
+export const ASK_VISUAL_PLOT_PREFIX = "PLOT:";
+export const ASK_VISUAL_FIELD_SEPARATOR = "|";
+
+/** The line every block opens with: the kind, then the caption. */
+export const ASK_VISUAL_LINE_SYNTAX = `${ASK_VISUAL_LINE_PREFIX} <kind> ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`;
+
+/**
+ * The whole block, per kind, as the answer prompt quotes it. A cell is one
+ * reference and nothing else; a label or caption is plain words, which may
+ * hold a reference. `PLOT:` names result columns, not cells: the server walks
+ * every row itself, so a trend or a form never needs thirty references.
+ */
+export const ASK_VISUAL_SYNTAX: Record<AskVisualKind, string> = {
+  bars: [
+    `${ASK_VISUAL_LINE_PREFIX} bars ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_SERIES_PREFIX} <subject label> ${ASK_VISUAL_FIELD_SEPARATOR} <baseline label>`,
+    `${ASK_VISUAL_ROW_PREFIX} <label> ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX}`,
+  ].join("\n"),
+  table: [
+    `${ASK_VISUAL_LINE_PREFIX} table ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_COLUMNS_PREFIX} <heading> ${ASK_VISUAL_FIELD_SEPARATOR} <heading> ${ASK_VISUAL_FIELD_SEPARATOR} <heading>`,
+    `${ASK_VISUAL_ROW_PREFIX} <label> ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX}`,
+  ].join("\n"),
+  trend: [
+    `${ASK_VISUAL_LINE_PREFIX} trend ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_PLOT_PREFIX} <date column> ${ASK_VISUAL_FIELD_SEPARATOR} <value column>`,
+  ].join("\n"),
+  split: [
+    `${ASK_VISUAL_LINE_PREFIX} split ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_ROW_PREFIX} <label> ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX}`,
+  ].join("\n"),
+  serve: [
+    `${ASK_VISUAL_LINE_PREFIX} serve ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_ROW_PREFIX} <court label> ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX}`,
+  ].join("\n"),
+  form: [
+    `${ASK_VISUAL_LINE_PREFIX} form ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_PLOT_PREFIX} <true-or-false column>`,
+  ].join("\n"),
+};
+
+const VISUAL_LINE_PREFIXES = [
+  ASK_VISUAL_LINE_PREFIX,
+  ASK_VISUAL_SERIES_PREFIX,
+  ASK_VISUAL_COLUMNS_PREFIX,
+  ASK_VISUAL_ROW_PREFIX,
+  ASK_VISUAL_PLOT_PREFIX,
+] as const;
 
 // ── Formatting ───────────────────────────────────────────────────────────────
 
@@ -103,6 +188,18 @@ function formatNumber(value: number, group: boolean): string {
   return `${sign}${digits}${fraction === 0 ? "" : `.${fraction}`}`;
 }
 
+/** The parts of a `YYYY-MM-DD` date, or a timestamp that starts with one; null otherwise. */
+function parseDate(
+  value: string,
+): { year: string; month: number; day: number } | null {
+  const match = ISO_DATE.exec(value);
+  if (!match) return null;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year: match[1], month, day };
+}
+
 /**
  * A `YYYY-MM-DD` date, or a timestamp that starts with one, as `Sep 14, 2026`.
  * Read from the characters as written — never through `Date`, so neither the
@@ -110,12 +207,9 @@ function formatNumber(value: number, group: boolean): string {
  * not a date.
  */
 function formatDate(value: string): string | null {
-  const match = ISO_DATE.exec(value);
-  if (!match) return null;
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  return `${MONTHS[month - 1]} ${day}, ${match[1]}`;
+  const date = parseDate(value);
+  if (!date) return null;
+  return `${MONTHS[date.month - 1]} ${date.day}, ${date.year}`;
 }
 
 /**
@@ -181,18 +275,55 @@ export type AskAnswerFailure =
   | { kind: "empty_answer" };
 
 /**
+ * Why a visual block was left out. Unlike a failure, a drop ends nothing:
+ * the rest of the answer renders without the block.
+ *
+ * - `unknown_kind` — the `CHART:` line names a kind outside the catalogue.
+ * - `malformed` — a line is the wrong shape for the kind: a keyword it does
+ *   not take, the wrong number of fields, an empty label or caption, a cell
+ *   that is not exactly one reference, or a required line missing.
+ * - `bad_reference` — a reference in the block names a row or column the
+ *   result does not have, or a `PLOT:` column is missing from a row.
+ * - `bad_value` — a cell is the wrong type for its place: a bar outside
+ *   0–100, a negative count, a value that is not a number, a form result
+ *   that is not a boolean.
+ * - `limit` — more rows, columns, parts, courts, points or results than the
+ *   kind takes, or fewer than it needs.
+ * - `second_block` — a block after the first (`MAX_ASK_VISUALS`).
+ */
+export type AskVisualDropReason =
+  | "unknown_kind"
+  | "malformed"
+  | "bad_reference"
+  | "bad_value"
+  | "limit"
+  | "second_block";
+
+export interface AskDroppedVisual {
+  reason: AskVisualDropReason;
+  /** The kind the block claimed, when it was one of the six. */
+  kind: AskVisualKind | null;
+  /** A fixed description of what was wrong. Never holds model text. */
+  detail: string;
+}
+
+/**
  * What the transform did, filled in as `events` is consumed and complete once
- * it is exhausted. `headline`, `figures` and `text` are the answer exactly as
- * it was sent, for the route to save.
+ * it is exhausted. `headline`, `figures`, `visual` and `text` are the answer
+ * exactly as it was sent, for the route to save.
  */
 export interface AskAnswerResult {
   headline: string;
   figures: Pick<AskFigureEvent, "label" | "value">[];
+  /** The visual block, resolved; null when the answer had none or it was dropped. */
+  visual: AskVisual | null;
   text: string;
   /** Every number the model typed instead of referencing, in order. All were dropped. */
   droppedDigits: string[];
   /** Figure lines left out: a fourth and later, or one with no label or no value. */
   droppedFigures: string[];
+  /** Visual blocks left out, with why. */
+  droppedVisuals: AskDroppedVisual[];
   /** Why the stream ended with an `error` event; null when it did not. */
   failure: AskAnswerFailure | null;
 }
@@ -210,6 +341,8 @@ export const ASK_ANSWER_FAILED_MESSAGE =
 const MAX_REFERENCE_LENGTH = 120;
 
 const REFERENCE_BODY = /^r([1-9]\d*)\.([A-Za-z_][A-Za-z0-9_]*)$/;
+
+const COLUMN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A typed number: digits, inner `.`/`,` groups, and a `%` directly after. */
 const TYPED_NUMBER = String.raw`\d+(?:[.,]\d+)*%?`;
@@ -230,61 +363,112 @@ const TYPED_NUMBER_IN_TEXT = new RegExp(
  */
 const UNSETTLED_TAIL = /[ ]?(?:\d[\d.,]*%?)?\{?$/;
 
+/**
+ * A resolved reference, as the substitution stage hands it to the line stage.
+ * The line stage prints `text` in prose, a headline or a figure, and reads
+ * `raw` in a visual block, where the component needs the number itself.
+ */
+type Token =
+  | {
+      ok: true;
+      reference: string;
+      column: string;
+      raw: unknown;
+      text: string;
+    }
+  | { ok: false; reference: string; failure: AskAnswerFailure };
+
+/**
+ * A token's place in the substituted text: two control characters around
+ * its index. Chosen because no model writes them; any that arrive in the
+ * literal text are stripped, so a token can never be forged.
+ */
+const TOKEN_OPEN = "\u0001";
+const TOKEN_CLOSE = "\u0002";
+const TOKEN = /\u0001(\d+)\u0002/g;
+const TOKEN_CHARS = /[\u0001\u0002]/g;
+
 function dropTypedNumbers(literal: string, result: AskAnswerResult): string {
-  return literal.replace(
-    TYPED_NUMBER_IN_TEXT,
-    (_match, spaced: string | undefined, bare: string | undefined) => {
-      result.droppedDigits.push(spaced ?? bare ?? "");
-      return "";
-    },
-  );
+  return literal
+    .replace(TOKEN_CHARS, "")
+    .replace(
+      TYPED_NUMBER_IN_TEXT,
+      (_match, spaced: string | undefined, bare: string | undefined) => {
+        result.droppedDigits.push(spaced ?? bare ?? "");
+        return "";
+      },
+    );
 }
 
-function resolveReference(
-  body: string,
-  rows: readonly AskRow[],
-): { value: string } | { failure: AskAnswerFailure } {
+function resolveReference(body: string, rows: readonly AskRow[]): Token {
   const reference = `${ASK_CELL_REFERENCE_OPEN}${body}${ASK_CELL_REFERENCE_CLOSE}`;
   const parsed = REFERENCE_BODY.exec(body.trim());
-  if (!parsed) return { failure: { kind: "malformed_reference", reference } };
+  if (!parsed) {
+    return {
+      ok: false,
+      reference,
+      failure: { kind: "malformed_reference", reference },
+    };
+  }
 
   const row = rows[Number(parsed[1]) - 1];
   if (row === undefined || row === null) {
-    return { failure: { kind: "missing_row", reference } };
+    return {
+      ok: false,
+      reference,
+      failure: { kind: "missing_row", reference },
+    };
   }
   const column = parsed[2];
   // Own properties only: `{{r1.constructor}}` is not a column.
   if (!Object.prototype.hasOwnProperty.call(row, column)) {
-    return { failure: { kind: "missing_column", reference } };
+    return {
+      ok: false,
+      reference,
+      failure: { kind: "missing_column", reference },
+    };
   }
-  const value = formatAskCell(column, row[column]);
-  if (value === null) {
-    return { failure: { kind: "unformattable_cell", reference } };
+  const raw = row[column];
+  const text = formatAskCell(column, raw);
+  if (text === null) {
+    return {
+      ok: false,
+      reference,
+      failure: { kind: "unformattable_cell", reference },
+    };
   }
-  return { value };
+  return { ok: true, reference, column, raw, text };
 }
 
 /**
- * Turn as much of `pending` as can be judged into display text: references
- * substituted, typed numbers dropped. `rest` is what must wait for the next
- * chunk. Substituted values are never scanned for digits — they are the
- * verified ones.
+ * Turn as much of `pending` as can be judged into line-stage text: typed
+ * numbers dropped, each reference resolved into a token and written as its
+ * marker. `rest` is what must wait for the next chunk. A reference that
+ * cannot be resolved becomes a failed token — whether that fails the answer
+ * or only drops a block is the line stage's call, since only it knows where
+ * the reference sits.
  */
 function substitute(
   pending: string,
   rows: readonly AskRow[],
   result: AskAnswerResult,
+  tokens: Token[],
   final: boolean,
-): { out: string; rest: string; failure: AskAnswerFailure | null } {
+): { out: string; rest: string } {
   let out = "";
   let rest = pending;
+
+  const mark = (token: Token): string => {
+    tokens.push(token);
+    return `${TOKEN_OPEN}${tokens.length - 1}${TOKEN_CLOSE}`;
+  };
 
   for (;;) {
     const open = rest.indexOf(ASK_CELL_REFERENCE_OPEN);
     if (open === -1) {
       const held = final ? "" : (UNSETTLED_TAIL.exec(rest)?.[0] ?? "");
       out += dropTypedNumbers(rest.slice(0, rest.length - held.length), result);
-      return { out, rest: held, failure: null };
+      return { out, rest: held };
     }
 
     out += dropTypedNumbers(rest.slice(0, open), result);
@@ -293,60 +477,520 @@ function substitute(
     if (close === -1) {
       const unclosed = rest.slice(open);
       if (final || unclosed.length > MAX_REFERENCE_LENGTH) {
-        return {
-          out,
-          rest: "",
-          failure: {
-            kind: "malformed_reference",
-            reference: unclosed.slice(0, MAX_REFERENCE_LENGTH),
-          },
-        };
+        const reference = unclosed.slice(0, MAX_REFERENCE_LENGTH);
+        out += mark({
+          ok: false,
+          reference,
+          failure: { kind: "malformed_reference", reference },
+        });
+        return { out, rest: "" };
       }
-      return { out, rest: unclosed, failure: null };
+      return { out, rest: unclosed };
     }
 
-    const resolved = resolveReference(rest.slice(bodyStart, close), rows);
-    if ("failure" in resolved) {
-      return { out, rest: "", failure: resolved.failure };
-    }
-    out += resolved.value;
+    out += mark(resolveReference(rest.slice(bodyStart, close), rows));
     rest = rest.slice(close + ASK_CELL_REFERENCE_CLOSE.length);
   }
 }
 
 /**
- * Splits substituted text into the headline, the figure lines beneath it and
- * the body. The headline and each figure are held until their line ends; the
- * body streams as it arrives, minus leading and trailing blank space.
+ * Line-stage text as the player reads it: every token replaced by its
+ * formatted value. Stops at the first failed token and names its failure.
  */
-function createLineStage(result: AskAnswerResult) {
-  let section: "headline" | "figures" | "text" = "headline";
+function expand(
+  text: string,
+  tokens: readonly Token[],
+): { text: string; failure: AskAnswerFailure | null } {
+  let failure: AskAnswerFailure | null = null;
+  const expanded = text.replace(TOKEN, (_match, index: string) => {
+    if (failure) return "";
+    const token = tokens[Number(index)];
+    if (!token) return "";
+    if (!token.ok) {
+      failure = token.failure;
+      return "";
+    }
+    return token.text;
+  });
+  return { text: expanded, failure };
+}
+
+// ── The visual block ─────────────────────────────────────────────────────────
+
+type BlockOutcome =
+  { ok: true; visual: AskVisual } | { ok: false; drop: AskDroppedVisual };
+
+/** The lone token a block cell must be, or why it is not one. */
+type CellRead =
+  | { ok: true; token: Extract<Token, { ok: true }> }
+  | { ok: false; reason: "malformed" | "bad_reference" };
+
+const LONE_TOKEN = /^\u0001(\d+)\u0002$/;
+
+function readCell(field: string, tokens: readonly Token[]): CellRead {
+  const match = LONE_TOKEN.exec(field.trim());
+  const token = match ? tokens[Number(match[1])] : undefined;
+  if (!token) return { ok: false, reason: "malformed" };
+  if (!token.ok) return { ok: false, reason: "bad_reference" };
+  return { ok: true, token };
+}
+
+/** `Sep 14`, or `Sep 14, 2026` when the series spans more than one year. */
+function trendLabel(column: string, value: unknown, withYear: boolean) {
+  if (typeof value === "string") {
+    const date = parseDate(value.trim());
+    if (date) {
+      const short = `${MONTHS[date.month - 1]} ${date.day}`;
+      return withYear ? `${short}, ${date.year}` : short;
+    }
+  }
+  return formatAskCell(column, value);
+}
+
+/**
+ * The block's lines, validated and resolved into an {@link AskVisual}, or the
+ * reason it was dropped. Every number comes from a token; every label and
+ * the caption are expanded text.
+ */
+function parseBlock(
+  lines: readonly string[],
+  tokens: readonly Token[],
+  rows: readonly AskRow[],
+): BlockOutcome {
+  const drop = (
+    reason: AskVisualDropReason,
+    kind: AskVisualKind | null,
+    detail: string,
+  ): BlockOutcome => ({ ok: false, drop: { reason, kind, detail } });
+
+  const [header, ...body] = lines;
+  const kind = kindOf(header);
+  if (!kind) return drop("unknown_kind", null, "kind is not in the catalogue");
+
+  const headerBody = header.slice(ASK_VISUAL_LINE_PREFIX.length);
+  const cut = headerBody.indexOf(ASK_VISUAL_FIELD_SEPARATOR);
+  const captionRead = expand(
+    cut === -1 ? "" : headerBody.slice(cut + ASK_VISUAL_FIELD_SEPARATOR.length),
+    tokens,
+  );
+  if (captionRead.failure) {
+    return drop("bad_reference", kind, "a reference in the caption");
+  }
+  const caption = captionRead.text.trim();
+  if (caption === "") return drop("malformed", kind, "no caption");
+
+  // The lines after the header, by keyword, in order. A keyword the kind
+  // does not take is a malformed block.
+  const series: string[][] = [];
+  const columns: string[][] = [];
+  const rowLines: string[][] = [];
+  const plots: string[][] = [];
+  const taken: Record<AskVisualKind, readonly string[]> = {
+    bars: [ASK_VISUAL_SERIES_PREFIX, ASK_VISUAL_ROW_PREFIX],
+    table: [ASK_VISUAL_COLUMNS_PREFIX, ASK_VISUAL_ROW_PREFIX],
+    trend: [ASK_VISUAL_PLOT_PREFIX],
+    split: [ASK_VISUAL_ROW_PREFIX],
+    serve: [ASK_VISUAL_ROW_PREFIX],
+    form: [ASK_VISUAL_PLOT_PREFIX],
+  };
+  for (const line of body) {
+    const keyword = VISUAL_LINE_PREFIXES.find((prefix) =>
+      line.startsWith(prefix),
+    );
+    if (!keyword || !taken[kind].includes(keyword)) {
+      return drop("malformed", kind, "a line this kind does not take");
+    }
+    const fields = line
+      .slice(keyword.length)
+      .split(ASK_VISUAL_FIELD_SEPARATOR)
+      .map((field) => field.trim());
+    if (keyword === ASK_VISUAL_SERIES_PREFIX) series.push(fields);
+    else if (keyword === ASK_VISUAL_COLUMNS_PREFIX) columns.push(fields);
+    else if (keyword === ASK_VISUAL_ROW_PREFIX) rowLines.push(fields);
+    else plots.push(fields);
+  }
+
+  /** Labels for a list of fields, or which drop they earn. */
+  const labels = (
+    fields: readonly string[],
+  ):
+    | { ok: true; labels: string[] }
+    | { ok: false; reason: AskVisualDropReason } => {
+    const out: string[] = [];
+    for (const field of fields) {
+      const read = expand(field, tokens);
+      if (read.failure) return { ok: false, reason: "bad_reference" };
+      const text = read.text.trim();
+      if (text === "") return { ok: false, reason: "malformed" };
+      out.push(text);
+    }
+    return { ok: true, labels: out };
+  };
+
+  const number = (
+    field: string,
+    check: (n: number) => boolean,
+  ):
+    | { ok: true; number: AskVisualNumber }
+    | { ok: false; reason: AskVisualDropReason } => {
+    const cell = readCell(field, tokens);
+    if (!cell.ok) return cell;
+    const { raw, text } = cell.token;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || !check(raw)) {
+      return { ok: false, reason: "bad_value" };
+    }
+    return { ok: true, number: { value: raw, text } };
+  };
+
+  const isPercent = (n: number) => n >= 0 && n <= 100;
+  const isCount = (n: number) => n >= 0;
+
+  switch (kind) {
+    case "bars": {
+      if (series.length !== 1) {
+        return drop("malformed", kind, "exactly one SERIES line is needed");
+      }
+      if (series[0].length !== 2) {
+        return drop("malformed", kind, "SERIES needs two labels");
+      }
+      const seriesLabels = labels(series[0]);
+      if (!seriesLabels.ok)
+        return drop(seriesLabels.reason, kind, "a series label");
+      if (rowLines.length < 1 || rowLines.length > MAX_ASK_BARS_ROWS) {
+        return drop("limit", kind, `rows must be 1 to ${MAX_ASK_BARS_ROWS}`);
+      }
+      const out: AskVisual = {
+        kind,
+        caption,
+        subjectLabel: seriesLabels.labels[0],
+        baselineLabel: seriesLabels.labels[1],
+        rows: [],
+      };
+      for (const fields of rowLines) {
+        if (fields.length !== 3) {
+          return drop("malformed", kind, "a ROW needs a label and two cells");
+        }
+        const rowLabel = labels([fields[0]]);
+        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a row label");
+        const subject = number(fields[1], isPercent);
+        if (!subject.ok) return drop(subject.reason, kind, "a subject cell");
+        const baseline = number(fields[2], isPercent);
+        if (!baseline.ok) return drop(baseline.reason, kind, "a baseline cell");
+        out.rows.push({
+          label: rowLabel.labels[0],
+          subject: subject.number,
+          baseline: baseline.number,
+        });
+      }
+      return { ok: true, visual: out };
+    }
+
+    case "table": {
+      if (columns.length !== 1) {
+        return drop("malformed", kind, "exactly one COLUMNS line is needed");
+      }
+      if (
+        columns[0].length < MIN_ASK_TABLE_COLUMNS ||
+        columns[0].length > MAX_ASK_TABLE_COLUMNS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `columns must be ${MIN_ASK_TABLE_COLUMNS} to ${MAX_ASK_TABLE_COLUMNS}`,
+        );
+      }
+      const headings = labels(columns[0]);
+      if (!headings.ok) return drop(headings.reason, kind, "a column heading");
+      if (rowLines.length < 1 || rowLines.length > MAX_ASK_TABLE_ROWS) {
+        return drop("limit", kind, `rows must be 1 to ${MAX_ASK_TABLE_ROWS}`);
+      }
+      const out: AskVisual = {
+        kind,
+        caption,
+        columns: headings.labels,
+        rows: [],
+      };
+      for (const fields of rowLines) {
+        if (fields.length !== headings.labels.length + 1) {
+          return drop(
+            "malformed",
+            kind,
+            "a ROW needs a label and one cell per column",
+          );
+        }
+        const rowLabel = labels([fields[0]]);
+        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a row label");
+        const cells: string[] = [];
+        for (const field of fields.slice(1)) {
+          const cell = readCell(field, tokens);
+          if (!cell.ok) return drop(cell.reason, kind, "a table cell");
+          cells.push(cell.token.text);
+        }
+        out.rows.push({ label: rowLabel.labels[0], cells });
+      }
+      return { ok: true, visual: out };
+    }
+
+    case "trend": {
+      if (plots.length !== 1) {
+        return drop("malformed", kind, "exactly one PLOT line is needed");
+      }
+      const [x, y] = plots[0];
+      if (
+        plots[0].length !== 2 ||
+        !COLUMN_NAME.test(x) ||
+        !COLUMN_NAME.test(y)
+      ) {
+        return drop(
+          "malformed",
+          kind,
+          "PLOT needs a date column and a value column",
+        );
+      }
+      const raw: { x: unknown; y: number; text: string }[] = [];
+      for (const row of rows) {
+        if (
+          !Object.prototype.hasOwnProperty.call(row, x) ||
+          !Object.prototype.hasOwnProperty.call(row, y)
+        ) {
+          return drop(
+            "bad_reference",
+            kind,
+            "a PLOT column the result does not have",
+          );
+        }
+        const value = row[y];
+        if (value === null || value === undefined) continue;
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          return drop("bad_value", kind, "a value that is not a number");
+        }
+        const text = formatAskCell(y, value);
+        if (text === null)
+          return drop("bad_value", kind, "a value with no reading");
+        raw.push({ x: row[x], y: value, text });
+      }
+      if (
+        raw.length < MIN_ASK_TREND_POINTS ||
+        raw.length > MAX_ASK_TREND_POINTS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `points must be ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS}`,
+        );
+      }
+      const years = new Set(
+        raw.map((point) =>
+          typeof point.x === "string"
+            ? parseDate(point.x.trim())?.year
+            : undefined,
+        ),
+      );
+      const withYear = years.size > 1;
+      const points: AskTrendVisual["points"] = [];
+      for (const point of raw) {
+        const pointLabel = trendLabel(x, point.x, withYear);
+        if (pointLabel === null) {
+          return drop("bad_value", kind, "a date cell with no reading");
+        }
+        points.push({
+          label: pointLabel,
+          value: { value: point.y, text: point.text },
+        });
+      }
+      return { ok: true, visual: { kind, caption, points } };
+    }
+
+    case "split": {
+      if (
+        rowLines.length < MIN_ASK_SPLIT_PARTS ||
+        rowLines.length > MAX_ASK_SPLIT_PARTS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `parts must be ${MIN_ASK_SPLIT_PARTS} to ${MAX_ASK_SPLIT_PARTS}`,
+        );
+      }
+      const out: AskVisual = { kind, caption, parts: [] };
+      for (const fields of rowLines) {
+        if (fields.length !== 2) {
+          return drop("malformed", kind, "a ROW needs a label and one cell");
+        }
+        const rowLabel = labels([fields[0]]);
+        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a part label");
+        const count = number(fields[1], isCount);
+        if (!count.ok) return drop(count.reason, kind, "a count cell");
+        out.parts.push({ label: rowLabel.labels[0], count: count.number });
+      }
+      return { ok: true, visual: out };
+    }
+
+    case "serve": {
+      if (
+        rowLines.length < MIN_ASK_SERVE_COURTS ||
+        rowLines.length > MAX_ASK_SERVE_COURTS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `courts must be ${MIN_ASK_SERVE_COURTS} to ${MAX_ASK_SERVE_COURTS}`,
+        );
+      }
+      const out: AskVisual = { kind, caption, courts: [] };
+      for (const fields of rowLines) {
+        if (fields.length !== 4) {
+          return drop(
+            "malformed",
+            kind,
+            "a ROW needs a label and three cells: T, body, wide",
+          );
+        }
+        const rowLabel = labels([fields[0]]);
+        if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a court label");
+        const t = number(fields[1], isCount);
+        if (!t.ok) return drop(t.reason, kind, "the T cell");
+        const bodyCount = number(fields[2], isCount);
+        if (!bodyCount.ok) return drop(bodyCount.reason, kind, "the body cell");
+        const wide = number(fields[3], isCount);
+        if (!wide.ok) return drop(wide.reason, kind, "the wide cell");
+        out.courts.push({
+          label: rowLabel.labels[0],
+          t: t.number,
+          body: bodyCount.number,
+          wide: wide.number,
+        });
+      }
+      return { ok: true, visual: out };
+    }
+
+    case "form": {
+      if (plots.length !== 1) {
+        return drop("malformed", kind, "exactly one PLOT line is needed");
+      }
+      const [column] = plots[0];
+      if (plots[0].length !== 1 || !COLUMN_NAME.test(column)) {
+        return drop("malformed", kind, "PLOT needs one column");
+      }
+      const results: boolean[] = [];
+      for (const row of rows) {
+        if (!Object.prototype.hasOwnProperty.call(row, column)) {
+          return drop(
+            "bad_reference",
+            kind,
+            "a PLOT column the result does not have",
+          );
+        }
+        const value = row[column];
+        if (value === null || value === undefined) continue;
+        if (typeof value !== "boolean") {
+          return drop("bad_value", kind, "a result that is not true or false");
+        }
+        results.push(value);
+      }
+      if (
+        results.length < MIN_ASK_FORM_RESULTS ||
+        results.length > MAX_ASK_FORM_RESULTS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `results must be ${MIN_ASK_FORM_RESULTS} to ${MAX_ASK_FORM_RESULTS}`,
+        );
+      }
+      return { ok: true, visual: { kind, caption, results } };
+    }
+  }
+}
+
+// ── The line stage ───────────────────────────────────────────────────────────
+
+/** Could `start`, the beginning of a line still arriving, turn out to open with `prefix`? */
+function couldBe(start: string, prefix: string): boolean {
+  return start.startsWith(prefix) || prefix.startsWith(start);
+}
+
+/**
+ * Splits substituted text into the headline, the figure lines beneath it,
+ * the visual block and the body. The headline, each figure and the whole
+ * block are held until their lines end; the body streams as it arrives,
+ * minus leading and trailing blank space. Nothing of a block ever reaches a
+ * `text` delta.
+ */
+function createLineStage(
+  result: AskAnswerResult,
+  tokens: readonly Token[],
+  rows: readonly AskRow[],
+) {
+  let section: "headline" | "figures" | "block" | "text" = "headline";
   let buffer = "";
   let textStarted = false;
   let heldSpace = "";
+  let blockLines: string[] = [];
+  let blocksSeen = 0;
 
   function figure(line: string): AskAnswerEvent[] {
     const body = line.slice(ASK_FIGURE_LINE_PREFIX.length);
     const cut = body.indexOf(ASK_FIGURE_LINE_SEPARATOR);
-    const label = (cut === -1 ? body : body.slice(0, cut)).trim();
-    const value =
-      cut === -1
-        ? ""
-        : body.slice(cut + ASK_FIGURE_LINE_SEPARATOR.length).trim();
+    const labelRead = expand(cut === -1 ? body : body.slice(0, cut), tokens);
+    const valueRead = expand(
+      cut === -1 ? "" : body.slice(cut + ASK_FIGURE_LINE_SEPARATOR.length),
+      tokens,
+    );
+    const failure = labelRead.failure ?? valueRead.failure;
+    if (failure) {
+      result.failure = failure;
+      return [];
+    }
+    const label = labelRead.text.trim();
+    const value = valueRead.text.trim();
     if (
       label === "" ||
       value === "" ||
       result.figures.length >= MAX_ASK_FIGURES
     ) {
-      result.droppedFigures.push(line);
+      result.droppedFigures.push(expand(line, tokens).text);
       return [];
     }
     result.figures.push({ label, value });
     return [{ type: "figure", label, value }];
   }
 
+  function openBlock(line: string): void {
+    blockLines = [line];
+    blocksSeen += 1;
+    section = "block";
+  }
+
+  function closeBlock(): AskAnswerEvent[] {
+    const lines = blockLines;
+    blockLines = [];
+    if (blocksSeen > MAX_ASK_VISUALS) {
+      result.droppedVisuals.push({
+        reason: "second_block",
+        kind: kindOf(lines[0]),
+        detail: `an answer carries at most ${MAX_ASK_VISUALS} block`,
+      });
+      return [];
+    }
+    const outcome = parseBlock(lines, tokens, rows);
+    if (!outcome.ok) {
+      result.droppedVisuals.push(outcome.drop);
+      return [];
+    }
+    result.visual = outcome.visual;
+    return [{ type: "visual", visual: outcome.visual }];
+  }
+
   function text(piece: string): AskAnswerEvent[] {
-    let incoming = piece;
+    const read = expand(piece, tokens);
+    if (read.failure) {
+      // Nothing of this piece is printed: not a blank where the number
+      // should be, and not the words that led up to it.
+      result.failure = read.failure;
+      return [];
+    }
+    let incoming = read.text;
     if (!textStarted) {
       incoming = incoming.trimStart();
       if (incoming === "") return [];
@@ -365,55 +1009,70 @@ function createLineStage(result: AskAnswerResult) {
   function push(piece: string, final: boolean): AskAnswerEvent[] {
     const events: AskAnswerEvent[] = [];
     buffer += piece;
+    if (final && section !== "text" && !buffer.endsWith("\n")) buffer += "\n";
 
-    while (section !== "text") {
+    while (section !== "text" && result.failure === null) {
       const newline = buffer.indexOf("\n");
 
       if (newline === -1) {
-        if (final) {
-          const line = buffer.trim();
-          buffer = "";
-          if (line === "") break;
-          if (section === "headline") {
-            result.headline = line;
-            events.push({ type: "headline", text: line });
-          } else if (line.startsWith(ASK_FIGURE_LINE_PREFIX)) {
-            events.push(...figure(line));
-          } else {
-            section = "text";
-            buffer = line;
-          }
-          break;
-        }
-        // A line under the headline that already cannot be a figure line is
-        // the body: stop holding it back.
+        // A line still arriving. Under the headline it is held only while it
+        // could still turn out to be a figure line or a block line; once it
+        // cannot, it is the body, and the body is not held back.
         const start = buffer.trimStart();
+        const candidates =
+          section === "figures"
+            ? [ASK_FIGURE_LINE_PREFIX, ASK_VISUAL_LINE_PREFIX]
+            : section === "block"
+              ? [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES]
+              : [];
         if (
-          section === "figures" &&
-          start.length >= ASK_FIGURE_LINE_PREFIX.length &&
-          !start.startsWith(ASK_FIGURE_LINE_PREFIX)
+          section !== "headline" &&
+          start !== "" &&
+          !candidates.some((prefix) => couldBe(start, prefix))
         ) {
+          if (section === "block") events.push(...closeBlock());
           section = "text";
         }
         break;
       }
 
       const line = buffer.slice(0, newline).trim();
-      if (line === "") {
-        buffer = buffer.slice(newline + 1);
-      } else if (section === "headline") {
-        buffer = buffer.slice(newline + 1);
-        result.headline = line;
-        events.push({ type: "headline", text: line });
+      buffer = buffer.slice(newline + 1);
+
+      if (line === "") continue;
+
+      if (section === "headline") {
+        const read = expand(line, tokens);
+        if (read.failure) {
+          result.failure = read.failure;
+          break;
+        }
+        result.headline = read.text.trim();
+        events.push({ type: "headline", text: result.headline });
         section = "figures";
       } else if (line.startsWith(ASK_FIGURE_LINE_PREFIX)) {
-        buffer = buffer.slice(newline + 1);
         events.push(...figure(line));
+      } else if (line.startsWith(ASK_VISUAL_LINE_PREFIX)) {
+        if (section === "block") events.push(...closeBlock());
+        openBlock(line);
+      } else if (
+        section === "block" &&
+        VISUAL_LINE_PREFIXES.some((prefix) => line.startsWith(prefix))
+      ) {
+        blockLines.push(line);
       } else {
+        if (section === "block") events.push(...closeBlock());
         section = "text";
+        buffer = `${line}\n${buffer}`;
       }
     }
 
+    if (result.failure) return events;
+
+    if (final && section === "block") {
+      events.push(...closeBlock());
+      section = "text";
+    }
     if (section === "text" && buffer !== "") {
       events.push(...text(buffer));
       buffer = "";
@@ -422,6 +1081,17 @@ function createLineStage(result: AskAnswerResult) {
   }
 
   return { push };
+}
+
+/** The kind a block's header claims, when it is one of the six. */
+function kindOf(header: string | undefined): AskVisualKind | null {
+  if (!header) return null;
+  const body = header.slice(ASK_VISUAL_LINE_PREFIX.length);
+  const cut = body.indexOf(ASK_VISUAL_FIELD_SEPARATOR);
+  const text = (cut === -1 ? body : body.slice(0, cut)).trim().toLowerCase();
+  return (ASK_VISUAL_KINDS as readonly string[]).includes(text)
+    ? (text as AskVisualKind)
+    : null;
 }
 
 function failed(): AskErrorEvent {
@@ -437,29 +1107,28 @@ async function* render(
   rows: readonly AskRow[],
   result: AskAnswerResult,
 ): AsyncGenerator<AskAnswerEvent, void, undefined> {
-  const lines = createLineStage(result);
+  const tokens: Token[] = [];
+  const lines = createLineStage(result, tokens, rows);
   let pending = "";
 
   for await (const chunk of chunks) {
-    const step = substitute(pending + chunk, rows, result, false);
+    const step = substitute(pending + chunk, rows, result, tokens, false);
     pending = step.rest;
-    if (step.failure) {
+    yield* lines.push(step.out, false);
+    if (result.failure) {
       // Returning here also closes the model stream: nothing after a bad
       // reference is worth paying for.
-      result.failure = step.failure;
       yield failed();
       return;
     }
-    yield* lines.push(step.out, false);
   }
 
-  const last = substitute(pending, rows, result, true);
-  if (last.failure) {
-    result.failure = last.failure;
+  const last = substitute(pending, rows, result, tokens, true);
+  yield* lines.push(last.out, true);
+  if (result.failure) {
     yield failed();
     return;
   }
-  yield* lines.push(last.out, true);
 
   if (result.headline === "") {
     result.failure = { kind: "empty_answer" };
@@ -471,10 +1140,12 @@ async function* render(
  * Render the model's answer text against the rows its query returned.
  *
  * `events` yields `headline`, then `figure` (at most `MAX_ASK_FIGURES`), then
- * `text` deltas. A reference to a row or column the result does not have ends
- * it with one `error` event instead — never a blank where a number should be.
- * An error thrown by `chunks` itself (the provider failing) is not caught: it
- * propagates to the consumer, whose failure it is to name.
+ * at most one `visual`, then `text` deltas. A reference to a row or column
+ * the result does not have ends it with one `error` event instead — never a
+ * blank where a number should be — unless the reference sits inside the
+ * visual block, which drops the block alone. An error thrown by `chunks`
+ * itself (the provider failing) is not caught: it propagates to the
+ * consumer, whose failure it is to name.
  *
  * `result` is live: read it after `events` is exhausted.
  */
@@ -485,9 +1156,11 @@ export function renderAskAnswer(
   const result: AskAnswerResult = {
     headline: "",
     figures: [],
+    visual: null,
     text: "",
     droppedDigits: [],
     droppedFigures: [],
+    droppedVisuals: [],
     failure: null,
   };
   return { events: render(chunks, rows, result), result };

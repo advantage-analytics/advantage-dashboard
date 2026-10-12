@@ -1,4 +1,8 @@
-import { ASK_FIGURE_LINE_PREFIX } from "@/lib/services/ask/answer-render";
+import {
+  ASK_FIGURE_LINE_PREFIX,
+  ASK_VISUAL_FIELD_SEPARATOR,
+  ASK_VISUAL_LINE_PREFIX,
+} from "@/lib/services/ask/answer-render";
 import type { AskPlanQuery } from "@/lib/services/ask/prompts";
 
 /**
@@ -46,13 +50,18 @@ join scope on scope.match_id = m.match_id`,
 /**
  * The answer mock mode streams in place of a model's. It is written against
  * the one row {@link ASK_MOCK_PLAN} returns and holds no digit of its own:
- * every figure is a cell reference. The last paragraph says what this is, so
- * a developer never mistakes it for a reading of the question they typed.
+ * every figure is a cell reference. It carries one `table` block over that
+ * row, so mock mode exercises the visual path too. The last paragraph says
+ * what this is, so a developer never mistakes it for a reading of the
+ * question they typed.
  */
 export const ASK_MOCK_ANSWER_TEMPLATE = `Here is your record and how your second serve has held up across every match you have recorded.
 ${ASK_FIGURE_LINE_PREFIX} Wins = {{r1.wins}}
 ${ASK_FIGURE_LINE_PREFIX} Losses = {{r1.losses}}
 ${ASK_FIGURE_LINE_PREFIX} Second-serve points won = {{r1.second_serve_won_pct}}
+${ASK_VISUAL_LINE_PREFIX} table ${ASK_VISUAL_FIELD_SEPARATOR} Your record across {{r1.matches}} recorded matches.
+COLUMNS: Matches ${ASK_VISUAL_FIELD_SEPARATOR} Wins ${ASK_VISUAL_FIELD_SEPARATOR} Losses
+ROW: All matches ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.matches}} ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.wins}} ${ASK_VISUAL_FIELD_SEPARATOR} {{r1.losses}}
 
 Across {{r1.matches}} recorded matches you have won {{r1.wins}} and lost {{r1.losses}}. You won {{r1.second_serve_won_pct}} of the points played on your second serve.
 

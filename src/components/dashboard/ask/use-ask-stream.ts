@@ -178,6 +178,11 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
       };
     case "text":
       return { ...answer, body: answer.body + event.delta };
+    case "visual":
+    case "notice":
+      // Not yet shown: the visual block and the no-advice notice land in a
+      // follow-up to the client; `parseAskEvent` does not read them yet.
+      return answer;
     case "sources":
       return { ...answer, sources: event.matches };
     case "done":

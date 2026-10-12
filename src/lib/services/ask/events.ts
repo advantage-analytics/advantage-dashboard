@@ -75,6 +75,181 @@ export interface AskTextEvent {
   delta: string;
 }
 
+// ── The visual block ─────────────────────────────────────────────────────────
+
+/**
+ * The six kinds of visual block an answer may carry, at most one per answer
+ * (`MAX_ASK_VISUALS`). The model chooses the kind, its caption and its
+ * labels; every number is a cell of the query result, resolved by the server
+ * (`answer-render.ts`) — never text the model typed.
+ */
+export const ASK_VISUAL_KINDS = [
+  "bars",
+  "table",
+  "trend",
+  "split",
+  "serve",
+  "form",
+] as const;
+
+export type AskVisualKind = (typeof ASK_VISUAL_KINDS)[number];
+
+/** An answer carries at most this many visual blocks; a second is dropped. */
+export const MAX_ASK_VISUALS = 1;
+
+/** `bars`: rows beyond this many drop the block. */
+export const MAX_ASK_BARS_ROWS = 6;
+/** `table`: rows beyond this many drop the block. */
+export const MAX_ASK_TABLE_ROWS = 8;
+/** `table`: column headings, inclusive. */
+export const MIN_ASK_TABLE_COLUMNS = 2;
+export const MAX_ASK_TABLE_COLUMNS = 3;
+/** `trend`: points (one per result row with a value), inclusive. */
+export const MIN_ASK_TREND_POINTS = 2;
+export const MAX_ASK_TREND_POINTS = 30;
+/** `split`: parts of the whole, inclusive. */
+export const MIN_ASK_SPLIT_PARTS = 2;
+export const MAX_ASK_SPLIT_PARTS = 4;
+/** `serve`: courts (rows of T / Body / Wide), inclusive. */
+export const MIN_ASK_SERVE_COURTS = 1;
+export const MAX_ASK_SERVE_COURTS = 2;
+/** `form`: results (one per result row with a known outcome), inclusive. */
+export const MIN_ASK_FORM_RESULTS = 1;
+export const MAX_ASK_FORM_RESULTS = 30;
+
+/**
+ * One resolved number: `value` is the cell as the database returned it, for
+ * the component that computes geometry from it; `text` is the same cell as
+ * the player reads it (`formatAskCell` rules — `54.6%`, `1,204`, `—`), for
+ * wherever the component prints it. The client never formats a value itself.
+ */
+export interface AskVisualNumber {
+  value: number;
+  text: string;
+}
+
+/**
+ * Comparison bars: one measure per row, the subject's bar over the
+ * baseline's. Both values are percentages, 0–100.
+ */
+export interface AskBarsVisual {
+  kind: "bars";
+  /** One line under the block, e.g. "Share of points, from 4 matches against 22." */
+  caption: string;
+  /** The key for the first (subject) series, e.g. "Against left-handers". */
+  subjectLabel: string;
+  /** The key for the second (baseline) series, e.g. "All matches". */
+  baselineLabel: string;
+  /** 1–`MAX_ASK_BARS_ROWS` rows. */
+  rows: {
+    label: string;
+    subject: AskVisualNumber;
+    baseline: AskVisualNumber;
+  }[];
+}
+
+/**
+ * Stat table: measures down the side, 2–3 columns across. Every cell is
+ * already a display string — the table only prints.
+ */
+export interface AskTableVisual {
+  kind: "table";
+  caption: string;
+  /** `MIN_ASK_TABLE_COLUMNS`–`MAX_ASK_TABLE_COLUMNS` headings. */
+  columns: string[];
+  /** 1–`MAX_ASK_TABLE_ROWS` rows, each with exactly `columns.length` cells. */
+  rows: { label: string; cells: string[] }[];
+}
+
+/**
+ * Trend line: one value per match in date order, oldest first — the order
+ * the query returned them.
+ */
+export interface AskTrendVisual {
+  kind: "trend";
+  caption: string;
+  /**
+   * `MIN_ASK_TREND_POINTS`–`MAX_ASK_TREND_POINTS` points. `label` is the x
+   * value as the axis shows it: a date as `Sep 14` (with the year added when
+   * the points span more than one), anything else by `formatAskCell`.
+   */
+  points: { label: string; value: AskVisualNumber }[];
+}
+
+/** Parts of a whole: counts that sum to the total. Each count is ≥ 0. */
+export interface AskSplitVisual {
+  kind: "split";
+  caption: string;
+  /** `MIN_ASK_SPLIT_PARTS`–`MAX_ASK_SPLIT_PARTS` parts. */
+  parts: { label: string; count: AskVisualNumber }[];
+}
+
+/**
+ * Serve placement: one bar per court (or per group of serves), split T /
+ * Body / Wide. Each count is ≥ 0. The views record no deuce/ad split, so a
+ * court is whatever the model labelled it: "All serves", "Second serves".
+ */
+export interface AskServeVisual {
+  kind: "serve";
+  caption: string;
+  /** `MIN_ASK_SERVE_COURTS`–`MAX_ASK_SERVE_COURTS` courts. */
+  courts: {
+    label: string;
+    t: AskVisualNumber;
+    body: AskVisualNumber;
+    wide: AskVisualNumber;
+  }[];
+}
+
+/** A win/loss strip, oldest first. `true` is a win. */
+export interface AskFormVisual {
+  kind: "form";
+  caption: string;
+  /** `MIN_ASK_FORM_RESULTS`–`MAX_ASK_FORM_RESULTS` results. */
+  results: boolean[];
+}
+
+/**
+ * The one visual block an answer may carry, told apart by `kind`. Resolved
+ * data, ready to draw, and plain JSON: it is what the `visual` event carries
+ * and what is saved with the answer.
+ */
+export type AskVisual =
+  | AskBarsVisual
+  | AskTableVisual
+  | AskTrendVisual
+  | AskSplitVisual
+  | AskServeVisual
+  | AskFormVisual;
+
+/** The answer's visual block. Sent once, whole, after the figures and before the text. */
+export interface AskVisualEvent {
+  type: "visual";
+  visual: AskVisual;
+}
+
+/**
+ * What a notice says. `no_advice`: the question asked what to do, which Ask
+ * does not answer; the client shows `ASK_NO_ADVICE_SENTENCE` beside the
+ * answer, not in its body.
+ */
+export type AskNoticeKind = "no_advice";
+
+/** A signal beside the answer, not part of its text. Sent after the text. */
+export interface AskNoticeEvent {
+  type: "notice";
+  notice: AskNoticeKind;
+}
+
+/**
+ * The sentence shown for a `no_advice` notice (design "Error handling"). It
+ * is the server's: it appears in neither prompt, since a sentence the model
+ * has read is a sentence the model will paraphrase. Answers saved before the
+ * notice existed carry it at the end of `body` instead.
+ */
+export const ASK_NO_ADVICE_SENTENCE =
+  "Ask reports what your matches show; it does not recommend what to work on.";
+
 /** The matches the answer was computed from. */
 export interface AskSourcesEvent {
   type: "sources";
@@ -100,11 +275,171 @@ export type AskEvent =
   | AskStatusEvent
   | AskHeadlineEvent
   | AskFigureEvent
+  | AskVisualEvent
   | AskTextEvent
+  | AskNoticeEvent
   | AskSourcesEvent
   | AskDoneEvent
   | AskErrorEvent;
 
 /** The subset the answer renderer produces from the model's text. */
 export type AskAnswerEvent =
-  AskHeadlineEvent | AskFigureEvent | AskTextEvent | AskErrorEvent;
+  | AskHeadlineEvent
+  | AskFigureEvent
+  | AskVisualEvent
+  | AskTextEvent
+  | AskErrorEvent;
+
+// ── Reading a visual back ────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isLabel(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function readNumber(
+  value: unknown,
+  check: (n: number) => boolean,
+): AskVisualNumber | null {
+  if (!isRecord(value)) return null;
+  const { value: n, text } = value;
+  if (typeof n !== "number" || !Number.isFinite(n) || !check(n)) return null;
+  if (typeof text !== "string") return null;
+  return { value: n, text };
+}
+
+function readList<T>(
+  value: unknown,
+  min: number,
+  max: number,
+  read: (item: unknown) => T | null,
+): T[] | null {
+  if (!Array.isArray(value) || value.length < min || value.length > max) {
+    return null;
+  }
+  const out: T[] = [];
+  for (const item of value) {
+    const read_ = read(item);
+    if (read_ === null) return null;
+    out.push(read_);
+  }
+  return out;
+}
+
+const isPercent = (n: number) => n >= 0 && n <= 100;
+const isCount = (n: number) => n >= 0;
+const anyNumber = () => true;
+
+/**
+ * `value` as an {@link AskVisual}, or null when it is not one: the wrong
+ * kind, a missing field, a label that is not a string, a number out of its
+ * range, or a list outside its limits. Pure and defensive — written for the
+ * saved-answer reader, which gets opaque jsonb nobody validated, and for the
+ * client, which gets a line of a stream.
+ */
+export function readAskVisual(value: unknown): AskVisual | null {
+  if (!isRecord(value) || typeof value.caption !== "string") return null;
+  const caption = value.caption;
+
+  switch (value.kind) {
+    case "bars": {
+      if (!isLabel(value.subjectLabel) || !isLabel(value.baselineLabel)) {
+        return null;
+      }
+      const rows = readList(value.rows, 1, MAX_ASK_BARS_ROWS, (row) => {
+        if (!isRecord(row) || !isLabel(row.label)) return null;
+        const subject = readNumber(row.subject, isPercent);
+        const baseline = readNumber(row.baseline, isPercent);
+        return subject && baseline
+          ? { label: row.label, subject, baseline }
+          : null;
+      });
+      return rows
+        ? {
+            kind: "bars",
+            caption,
+            subjectLabel: value.subjectLabel,
+            baselineLabel: value.baselineLabel,
+            rows,
+          }
+        : null;
+    }
+    case "table": {
+      const columns = readList(
+        value.columns,
+        MIN_ASK_TABLE_COLUMNS,
+        MAX_ASK_TABLE_COLUMNS,
+        (column) => (isLabel(column) ? column : null),
+      );
+      if (!columns) return null;
+      const rows = readList(value.rows, 1, MAX_ASK_TABLE_ROWS, (row) => {
+        if (!isRecord(row) || !isLabel(row.label)) return null;
+        const cells = readList(
+          row.cells,
+          columns.length,
+          columns.length,
+          (cell) => (typeof cell === "string" ? cell : null),
+        );
+        return cells ? { label: row.label, cells } : null;
+      });
+      return rows ? { kind: "table", caption, columns, rows } : null;
+    }
+    case "trend": {
+      const points = readList(
+        value.points,
+        MIN_ASK_TREND_POINTS,
+        MAX_ASK_TREND_POINTS,
+        (point) => {
+          if (!isRecord(point) || typeof point.label !== "string") return null;
+          const number = readNumber(point.value, anyNumber);
+          return number ? { label: point.label, value: number } : null;
+        },
+      );
+      return points ? { kind: "trend", caption, points } : null;
+    }
+    case "split": {
+      const parts = readList(
+        value.parts,
+        MIN_ASK_SPLIT_PARTS,
+        MAX_ASK_SPLIT_PARTS,
+        (part) => {
+          if (!isRecord(part) || !isLabel(part.label)) return null;
+          const count = readNumber(part.count, isCount);
+          return count ? { label: part.label, count } : null;
+        },
+      );
+      return parts ? { kind: "split", caption, parts } : null;
+    }
+    case "serve": {
+      const courts = readList(
+        value.courts,
+        MIN_ASK_SERVE_COURTS,
+        MAX_ASK_SERVE_COURTS,
+        (court) => {
+          if (!isRecord(court) || !isLabel(court.label)) return null;
+          const t = readNumber(court.t, isCount);
+          const body = readNumber(court.body, isCount);
+          const wide = readNumber(court.wide, isCount);
+          return t && body && wide
+            ? { label: court.label, t, body, wide }
+            : null;
+        },
+      );
+      return courts ? { kind: "serve", caption, courts } : null;
+    }
+    case "form": {
+      const results = readList(
+        value.results,
+        MIN_ASK_FORM_RESULTS,
+        MAX_ASK_FORM_RESULTS,
+        (result) => (typeof result === "boolean" ? result : null),
+      );
+      return results ? { kind: "form", caption, results } : null;
+    }
+    default:
+      return null;
+  }
+}

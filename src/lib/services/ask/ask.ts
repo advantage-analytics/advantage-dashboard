@@ -9,10 +9,10 @@ import type {
   AskErrorCode,
   AskEvent,
   AskSourceMatch,
+  AskVisual,
 } from "@/lib/services/ask/events";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import {
-  ASK_NO_ADVICE_SENTENCE,
   type AskPlanQuery,
   type AskPlanReply,
   type AskPromptTurn,
@@ -41,7 +41,8 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  *      a 500 before it answers with a stream.
  *   2. `askQuestion()` is an async generator of `AskEvent`s:
  *      `status: planning` → plan → guard → `status: querying` →
- *      `ask_run_query` → `status: writing` → the rendered answer → save →
+ *      `ask_run_query` → `status: writing` → the rendered answer (headline,
+ *      figures, visual, text) → `notice` when advice was asked → save →
  *      `sources` → `done`.
  *
  * "An answer the player received always costs one question; nothing else
@@ -51,9 +52,10 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  * reserves nothing, plans with `ASK_MOCK_PLAN` and answers with the mock
  * template; the query and the renderer still run for real.
  *
- * Privacy: nothing here logs the question, a tag name, a row or the model's
- * prose. Players may be minors (`adapter.ts`). The one log line is the count
- * of digits the renderer dropped, so prompt drift stays visible.
+ * Privacy: nothing here logs the question, a tag name, a row, a label or the
+ * model's prose. Players may be minors (`adapter.ts`). The two log lines are
+ * the count of digits the renderer dropped and the count and reasons of
+ * visual blocks it dropped, so prompt drift stays visible.
  */
 
 // ── What the caller hands in ─────────────────────────────────────────────────
@@ -135,8 +137,9 @@ export const ASK_ANSWER_USER_MESSAGE = "Write the answer now.";
 /** A planner's `cannot_answer` sentence longer than this is cut: it is one sentence by contract. */
 const MAX_CANNOT_ANSWER_LENGTH = 300;
 
-/** Stable prefix for the one log line this module writes. */
+/** Stable prefixes for the log lines this module writes. */
 export const ASK_DROPPED_DIGITS_LOG = "[ask] renderer dropped typed digits";
+export const ASK_DROPPED_VISUALS_LOG = "[ask] renderer dropped visual blocks";
 
 // ── Reserve ──────────────────────────────────────────────────────────────────
 
@@ -393,21 +396,28 @@ export async function* askQuestion(
         digits: answer.droppedDigits,
       });
     }
+    if (answer.droppedVisuals.length > 0) {
+      // Reasons and kinds only: a drop's detail is fixed text, but a block's
+      // labels and cells never leave the renderer.
+      console.warn(ASK_DROPPED_VISUALS_LOG, {
+        count: answer.droppedVisuals.length,
+        reasons: answer.droppedVisuals.map((drop) => drop.reason),
+        kinds: answer.droppedVisuals.map((drop) => drop.kind),
+      });
+    }
 
-    // The no-advice sentence is this module's, never the model's: appended
-    // after whatever the model wrote, as the last text the player sees.
-    let body = answer.text;
+    // The no-advice notice is this module's, never the model's: a signal
+    // beside the answer, after whatever the model wrote, which the client
+    // shows as `ASK_NO_ADVICE_SENTENCE`.
     if (plan.asks_for_advice) {
-      const delta = `${body === "" || /\n$/.test(body) ? "" : "\n\n"}${ASK_NO_ADVICE_SENTENCE}`;
-      body += delta;
-      yield { type: "text", delta };
+      yield { type: "notice", notice: "no_advice" };
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
     const saved = await rpc(db, "ask_save_exchange", {
       p_conversation_id: input.conversationId,
       p_question: savedQuestion(input.question, input.tags),
-      p_answer: savedAnswer(answer, body, result, plan, model.configured),
+      p_answer: savedAnswer(answer, result, plan, model.configured),
     });
     if (saved.error || typeof saved.data !== "string") {
       console.error("[ask] could not save the exchange", {
@@ -616,15 +626,24 @@ export interface AskSavedQuestion {
 }
 
 /**
- * The saved answer. `headline`, `figures`, `body` and `sources` are what
- * `readSavedAnswer()` shows; the rest is the audit trail — the matches the
- * answer was computed from and the SQL that produced it — under keys the
- * reader ignores. Nothing reads `sql` or `scopeSql` back to a player.
+ * The saved answer. `headline`, `figures`, `visual`, `body`, `noAdvice` and
+ * `sources` are what `readSavedAnswer()` shows; the rest is the audit trail —
+ * the matches the answer was computed from and the SQL that produced it —
+ * under keys the reader ignores. Nothing reads `sql` or `scopeSql` back to a
+ * player.
+ *
+ * Answers saved before `visual` and `noAdvice` existed have neither key, and
+ * carry `ASK_NO_ADVICE_SENTENCE` at the end of `body` instead of the flag;
+ * the reader shows them as saved. Nothing migrates them.
  */
 export interface AskSavedAnswer {
   headline: string;
   figures: AskAnswerResult["figures"];
+  /** The visual block, resolved; null when the answer had none. */
+  visual: AskVisual | null;
   body: string;
+  /** True when the question asked for advice: the client shows the no-advice notice. */
+  noAdvice: boolean;
   sources: AskSourceMatch[];
   matchIds: string[];
   sql: string;
@@ -642,7 +661,6 @@ function savedQuestion(
 
 function savedAnswer(
   answer: AskAnswerResult,
-  body: string,
   result: QueryResult,
   plan: AskPlanQuery,
   configured: boolean,
@@ -650,7 +668,9 @@ function savedAnswer(
   return {
     headline: answer.headline,
     figures: answer.figures,
-    body,
+    visual: answer.visual,
+    body: answer.text,
+    noAdvice: plan.asks_for_advice,
     sources: result.matches,
     matchIds: result.matches.map((match) => match.matchId),
     sql: plan.sql,

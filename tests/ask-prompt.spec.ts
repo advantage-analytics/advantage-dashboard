@@ -6,11 +6,19 @@ import { getLLMStream, isLLMConfigured } from "@/lib/llm/adapter";
 import {
   ASK_CELL_REFERENCE_SYNTAX,
   ASK_FIGURE_LINE_SYNTAX,
+  ASK_VISUAL_LINE_SYNTAX,
+  ASK_VISUAL_SYNTAX,
   type AskRow,
   MAX_ASK_FIGURES,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
-import type { AskAnswerEvent } from "@/lib/services/ask/events";
+import {
+  ASK_VISUAL_KINDS,
+  type AskAnswerEvent,
+  type AskVisual,
+  type AskVisualKind,
+  readAskVisual,
+} from "@/lib/services/ask/events";
 import {
   ASK_MOCK_ANSWER_TEMPLATE,
   ASK_MOCK_PLAN,
@@ -22,6 +30,7 @@ import {
   ASK_NO_ADVICE_SENTENCE,
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
+  ASK_VISUAL_EXAMPLES,
   type AskPlanPromptInput,
   MAX_ASK_PROMPT_ROWS,
   MAX_ASK_PROMPT_TURNS,
@@ -284,6 +293,39 @@ test.describe("buildPlanPrompt", () => {
     expect(prompt).toContain("Null is not a loss");
   });
 
+  test("keeps the few-rows default and names the one exception: one row per match for a trend or a run of results", () => {
+    expect(prompt).toContain(
+      "- Return few rows: one row when you can, never more than ten.",
+    );
+    expect(prompt).toContain(
+      `returns ONE ROW PER MATCH in played_on order, oldest first — played_on and the value for a trend, played_on and i_won for a record — never more than ${MAX_ASK_PROMPT_ROWS} rows.`,
+    );
+  });
+
+  test("says where serve direction comes from and that no view records the court", () => {
+    expect(prompt).toContain(
+      "Serve direction is serve_t, serve_body and serve_wide in ask.match_stats",
+    );
+    expect(prompt).toContain(
+      "No view records which court (deuce or ad) a serve was hit from; do not invent a column for it.",
+    );
+    // The columns it names exist.
+    const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
+    const shots = ASK_SCHEMA.find((view) => view.view === "shots");
+    for (const column of ["serve_t", "serve_body", "serve_wide"]) {
+      expect(
+        stats?.columns.some((c) => c.name === column),
+        column,
+      ).toBe(true);
+    }
+    for (const column of ["zone", "shot_type"]) {
+      expect(
+        shots?.columns.some((c) => c.name === column),
+        column,
+      ).toBe(true);
+    }
+  });
+
   test("lists the guard's function allowlist, whole", () => {
     const line = prompt
       .split("\n")
@@ -418,6 +460,30 @@ test.describe("buildAnswerPrompt", () => {
       { label: "Across all matches", value: "52.8%" },
       { label: "Matches against left-handers", value: "4" },
     ]);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual).toEqual({
+      kind: "bars",
+      caption:
+        "Second-serve points won, from 4 matches against left-handers and 13 overall.",
+      subjectLabel: "Against left-handers",
+      baselineLabel: "All matches",
+      rows: [
+        {
+          label: "Second-serve points won",
+          subject: { value: 41.2, text: "41.2%" },
+          baseline: { value: 52.8, text: "52.8%" },
+        },
+      ],
+    });
+    expect(events.map((event) => event.type).slice(0, 5)).toEqual([
+      "headline",
+      "figure",
+      "figure",
+      "figure",
+      "visual",
+    ]);
+    // One paragraph beneath the block, as the prompt's own rule asks.
+    expect(result.text).not.toContain("\n\n");
     expect(result.text).toContain("the most recent on Sep 14, 2026.");
     expect(events.some((event) => event.type === "error")).toBe(false);
 
@@ -429,6 +495,135 @@ test.describe("buildAnswerPrompt", () => {
       /\b(should|try|focus on|work on|keep it up|well done)\b/i,
     );
   });
+});
+
+test.describe("buildAnswerPrompt — the visual catalogue", () => {
+  const prompt = buildAnswerPrompt(ANSWER_INPUT);
+
+  test("lists exactly the six kinds, each with when it fits, its syntax and its example", () => {
+    const headings = [...prompt.matchAll(/^### (\w+) — /gm)].map((m) => m[1]);
+    expect(headings).toEqual([...ASK_VISUAL_KINDS]);
+    expect(Object.keys(ASK_VISUAL_EXAMPLES).sort()).toEqual(
+      [...ASK_VISUAL_KINDS].sort(),
+    );
+    for (const kind of ASK_VISUAL_KINDS) {
+      expect(prompt).toContain(
+        `### ${kind} — ${ASK_VISUAL_EXAMPLES[kind].when}\n${ASK_VISUAL_SYNTAX[kind]}\nExample:\n${ASK_VISUAL_EXAMPLES[kind].block}`,
+      );
+    }
+    expect(prompt).toContain(ASK_VISUAL_LINE_SYNTAX);
+  });
+
+  test("pins the block rules: at most one, none is fine, result cells only, one paragraph beneath, figures still allowed", () => {
+    expect(prompt).toContain(
+      "Pick the one the question fits, or none: no block is a fine answer, and the right one for a question with a single number in it.",
+    );
+    expect(prompt).toContain(
+      "- AT MOST 1 BLOCK, of one of the six kinds, with only cells and columns the result holds.",
+    );
+    expect(prompt).toContain(
+      "Figure lines stay allowed beside a block, still at most 3 and always above it.",
+    );
+    expect(prompt).toContain(
+      "- When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, saying what the block shows.",
+    );
+    expect(prompt).toContain(
+      "A cell is exactly one {{rN.column}} and nothing else.",
+    );
+  });
+
+  test("says the serve block has no deuce/ad court to draw", () => {
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "The result does not record the deuce or ad court, so do not label a row with one.",
+    );
+  });
+
+  const expected: Record<AskVisualKind, AskVisual> = {
+    bars: {
+      kind: "bars",
+      caption: "Share of points, from 4 matches against left-handers.",
+      subjectLabel: "Against left-handers",
+      baselineLabel: "All matches",
+      rows: [
+        {
+          label: "First serves in",
+          subject: { value: 58.2, text: "58.2%" },
+          baseline: { value: 61.4, text: "61.4%" },
+        },
+        {
+          label: "Second-serve points won",
+          subject: { value: 41.2, text: "41.2%" },
+          baseline: { value: 52.8, text: "52.8%" },
+        },
+      ],
+    },
+    table: {
+      kind: "table",
+      caption: "From 1 match, against all of yours.",
+      columns: ["Against Beau", "All matches", "Difference"],
+      rows: [
+        { label: "First serves in", cells: ["37.5%", "58.2%", "-20.7%"] },
+        { label: "Double faults", cells: ["4", "2.3", "1.7"] },
+      ],
+    },
+    trend: {
+      kind: "trend",
+      caption: "First serves in, one point per match since June.",
+      points: [
+        { label: "Jun 4", value: { value: 61, text: "61%" } },
+        { label: "Jul 9", value: { value: 63, text: "63%" } },
+        { label: "Sep 28", value: { value: 37.5, text: "37.5%" } },
+      ],
+    },
+    split: {
+      kind: "split",
+      caption: "The 34 points you won, by how they ended.",
+      parts: [
+        { label: "Winners", count: { value: 8, text: "8" } },
+        { label: "Opponent forced errors", count: { value: 11, text: "11" } },
+        { label: "Opponent unforced errors", count: { value: 15, text: "15" } },
+      ],
+    },
+    serve: {
+      kind: "serve",
+      caption: "Where your serves went across 22 matches.",
+      courts: [
+        {
+          label: "All serves",
+          t: { value: 13, text: "13" },
+          body: { value: 8, text: "8" },
+          wide: { value: 18, text: "18" },
+        },
+      ],
+    },
+    form: {
+      kind: "form",
+      caption: "Your matches against left-handers, oldest first.",
+      results: [true, false, true],
+    },
+  };
+
+  for (const kind of ASK_VISUAL_KINDS) {
+    test(`the ${kind} example renders through the real renderer to the expected visual`, async () => {
+      const example = ASK_VISUAL_EXAMPLES[kind];
+      const { events, result } = await render(
+        `Claim.\n${example.block}\n\nOne paragraph.`,
+        example.rows,
+      );
+      expect(result.failure).toBeNull();
+      expect(result.droppedDigits).toEqual([]);
+      expect(result.droppedVisuals).toEqual([]);
+      expect(result.visual).toEqual(expected[kind]);
+      expect(readAskVisual(result.visual)).toEqual(expected[kind]);
+      expect(events.map((event) => event.type)).toEqual([
+        "headline",
+        "visual",
+        "text",
+      ]);
+      // The example types no number of its own.
+      expect(example.block.replace(/\{\{[^}]*\}\}/g, "")).not.toMatch(/\d/);
+    });
+  }
 });
 
 test.describe("the fixed no-advice sentence", () => {
@@ -508,6 +703,30 @@ test.describe("mock mode", () => {
     );
     expect(result.text).toContain("No AI provider is configured");
     expect(seen.some((event) => event.type === "error")).toBe(false);
+  });
+
+  test("the fixed answer carries one table block over the mock row, so mock mode draws something", async () => {
+    const rows = [
+      { matches: 12, wins: 7, losses: 4, second_serve_won_pct: 48.3 },
+    ];
+    const { events, result } = renderAskAnswer(mockAskAnswerStream(), rows);
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual).toEqual({
+      kind: "table",
+      caption: "Your record across 12 recorded matches.",
+      columns: ["Matches", "Wins", "Losses"],
+      rows: [{ label: "All matches", cells: ["12", "7", "4"] }],
+    });
+    expect(seen.map((event) => event.type).slice(0, 5)).toEqual([
+      "headline",
+      "figure",
+      "figure",
+      "figure",
+      "visual",
+    ]);
   });
 
   test("the fixed answer still renders when there are no statistics yet", async () => {

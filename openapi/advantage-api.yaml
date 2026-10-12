@@ -2318,7 +2318,8 @@ paths:
         **The stream.** `200 application/x-ndjson`: one `AskEvent` JSON
         object per line, each line ended by `\n`. A completed answer is
         `status` (planning, querying, writing) → `headline` → zero to three
-        `figure` → `text` deltas → `sources` → `done`. A failed one ends with
+        `figure` → zero or one `visual` → `text` deltas → an optional
+        `notice` → `sources` → `done`. A failed one ends with
         a single `error` event instead of `sources` and `done`, and gives its
         question back: only an answer that reached `done` counts against the
         monthly limit. A client that stops reading before `done` is not
@@ -4774,6 +4775,244 @@ components:
       examples:
         - type: text
           delta: "Across 12 recorded matches you have won 8 and lost 4. "
+    AskVisualNumber:
+      type: object
+      description: >-
+        One resolved number of a visual block. `value` is the cell as the
+        database returned it, for a component that computes geometry from
+        it; `text` is the same cell formatted for display (`54.6%`, `1,204`,
+        `—`), for wherever the component prints it. The client never formats
+        a value itself.
+      required: [value, text]
+      properties:
+        value:
+          type: number
+        text:
+          type: string
+    AskVisualBars:
+      type: object
+      description: >-
+        Comparison bars: one measure per row, the subject's bar over the
+        baseline's. Both values are percentages, 0–100. 1–6 rows.
+      required: [kind, caption, subjectLabel, baselineLabel, rows]
+      properties:
+        kind:
+          type: string
+          const: bars
+        caption:
+          type: string
+        subjectLabel:
+          type: string
+        baselineLabel:
+          type: string
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            type: object
+            required: [label, subject, baseline]
+            properties:
+              label:
+                type: string
+              subject:
+                $ref: "#/components/schemas/AskVisualNumber"
+              baseline:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualTable:
+      type: object
+      description: >-
+        Stat table: measures down the side, 2–3 columns across, 1–8 rows.
+        Every cell is already a display string; each row has exactly one
+        cell per column.
+      required: [kind, caption, columns, rows]
+      properties:
+        kind:
+          type: string
+          const: table
+        caption:
+          type: string
+        columns:
+          type: array
+          minItems: 2
+          maxItems: 3
+          items:
+            type: string
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            required: [label, cells]
+            properties:
+              label:
+                type: string
+              cells:
+                type: array
+                items:
+                  type: string
+    AskVisualTrend:
+      type: object
+      description: >-
+        Trend line: one value per match in date order, oldest first, 2–30
+        points. `label` is the x value as the axis shows it — a date as
+        `Sep 14`, with the year added when the points span more than one.
+      required: [kind, caption, points]
+      properties:
+        kind:
+          type: string
+          const: trend
+        caption:
+          type: string
+        points:
+          type: array
+          minItems: 2
+          maxItems: 30
+          items:
+            type: object
+            required: [label, value]
+            properties:
+              label:
+                type: string
+              value:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualSplit:
+      type: object
+      description: Parts of a whole, 2–4 counts (each ≥ 0) that sum to the total.
+      required: [kind, caption, parts]
+      properties:
+        kind:
+          type: string
+          const: split
+        caption:
+          type: string
+        parts:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label:
+                type: string
+              count:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualServe:
+      type: object
+      description: >-
+        Serve placement: 1–2 bars, each split T / Body / Wide (counts ≥ 0).
+        The views record no deuce/ad split, so a court is whatever the
+        answer labelled it — "All serves", "Second serves".
+      required: [kind, caption, courts]
+      properties:
+        kind:
+          type: string
+          const: serve
+        caption:
+          type: string
+        courts:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: object
+            required: [label, t, body, wide]
+            properties:
+              label:
+                type: string
+              t:
+                $ref: "#/components/schemas/AskVisualNumber"
+              body:
+                $ref: "#/components/schemas/AskVisualNumber"
+              wide:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualForm:
+      type: object
+      description: A win/loss strip, oldest first, 1–30 results. `true` is a win.
+      required: [kind, caption, results]
+      properties:
+        kind:
+          type: string
+          const: form
+        caption:
+          type: string
+        results:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            type: boolean
+    AskVisual:
+      description: >-
+        The one visual block an answer may carry, told apart by `kind`
+        (`AskVisual` in `src/lib/services/ask/events.ts`). The model chose
+        the kind, the caption and the labels; every number is a cell of the
+        query result, resolved by the server. The same object is saved with
+        the answer.
+      oneOf:
+        - $ref: "#/components/schemas/AskVisualBars"
+        - $ref: "#/components/schemas/AskVisualTable"
+        - $ref: "#/components/schemas/AskVisualTrend"
+        - $ref: "#/components/schemas/AskVisualSplit"
+        - $ref: "#/components/schemas/AskVisualServe"
+        - $ref: "#/components/schemas/AskVisualForm"
+      discriminator:
+        propertyName: kind
+        mapping:
+          bars: "#/components/schemas/AskVisualBars"
+          table: "#/components/schemas/AskVisualTable"
+          trend: "#/components/schemas/AskVisualTrend"
+          split: "#/components/schemas/AskVisualSplit"
+          serve: "#/components/schemas/AskVisualServe"
+          form: "#/components/schemas/AskVisualForm"
+    AskVisualEvent:
+      type: object
+      description: >-
+        The answer's visual block, at most one per answer. Sent once, whole,
+        after the figures and before the text. A block the server could not
+        resolve — a cell the result does not hold, a value of the wrong
+        type, a limit exceeded — is left out, and the answer streams without
+        it.
+      required: [type, visual]
+      properties:
+        type:
+          type: string
+          const: visual
+        visual:
+          $ref: "#/components/schemas/AskVisual"
+      examples:
+        - type: visual
+          visual:
+            kind: bars
+            caption: Share of points, from 4 matches against left-handers.
+            subjectLabel: Against left-handers
+            baselineLabel: All matches
+            rows:
+              - label: First serves in
+                subject: { value: 58.2, text: 58.2% }
+                baseline: { value: 61.4, text: 61.4% }
+    AskNoticeEvent:
+      type: object
+      description: >-
+        A signal beside the answer, not part of its text. Sent after the text
+        deltas. `no_advice`: the question asked what to do, which Ask does
+        not answer; the client shows the fixed no-advice sentence
+        (`ASK_NO_ADVICE_SENTENCE` in `src/lib/services/ask/events.ts`) next
+        to the answer. Before this event existed the sentence was appended to
+        the body text; answers saved then still carry it there.
+      required: [type, notice]
+      properties:
+        type:
+          type: string
+          const: notice
+        notice:
+          type: string
+          enum: [no_advice]
+      examples:
+        - type: notice
+          notice: no_advice
     AskSourceMatch:
       type: object
       description: One match the answer was computed from.
@@ -4887,7 +5126,9 @@ components:
         - $ref: "#/components/schemas/AskStatusEvent"
         - $ref: "#/components/schemas/AskHeadlineEvent"
         - $ref: "#/components/schemas/AskFigureEvent"
+        - $ref: "#/components/schemas/AskVisualEvent"
         - $ref: "#/components/schemas/AskTextEvent"
+        - $ref: "#/components/schemas/AskNoticeEvent"
         - $ref: "#/components/schemas/AskSourcesEvent"
         - $ref: "#/components/schemas/AskDoneEvent"
         - $ref: "#/components/schemas/AskErrorEvent"
@@ -4897,7 +5138,9 @@ components:
           status: "#/components/schemas/AskStatusEvent"
           headline: "#/components/schemas/AskHeadlineEvent"
           figure: "#/components/schemas/AskFigureEvent"
+          visual: "#/components/schemas/AskVisualEvent"
           text: "#/components/schemas/AskTextEvent"
+          notice: "#/components/schemas/AskNoticeEvent"
           sources: "#/components/schemas/AskSourcesEvent"
           done: "#/components/schemas/AskDoneEvent"
           error: "#/components/schemas/AskErrorEvent"
