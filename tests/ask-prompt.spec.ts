@@ -2,6 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
+import { parsePlanReply } from "@/lib/services/ask/ask";
+import { compareSql } from "@/lib/services/ask/compare";
+
 import { getLLMStream, isLLMConfigured } from "@/lib/llm/adapter";
 import {
   ASK_CELL_REFERENCE_SYNTAX,
@@ -28,9 +31,12 @@ import {
 import {
   ASK_ANSWER_EXAMPLE_REPLY,
   ASK_FOLLOW_UP_KEEPS_COLUMNS,
+  ASK_FOLLOW_UP_KEEPS_SHAPE,
   ASK_ANSWER_EXAMPLE_ROWS,
   ASK_NO_ADVICE_SENTENCE,
-  ASK_PLAN_EXAMPLE_DIAGNOSTIC,
+  ASK_PLAN_EXAMPLE_BASELINE,
+  ASK_PLAN_EXAMPLE_COMPARE,
+  ASK_PLAN_EXAMPLE_NAMES,
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
   ASK_PLAN_EXAMPLE_REVIEW,
@@ -38,7 +44,9 @@ import {
   ASK_TEAM_ANSWER_EXAMPLE_REPLY,
   ASK_TEAM_ANSWER_EXAMPLE_ROWS,
   ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
+  ASK_TEAM_PLAN_EXAMPLE_OPPONENT,
   ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+  ASK_TEAM_PLAN_EXAMPLE_PLAYERS,
   ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL,
   ASK_TEAM_PLAN_EXAMPLE_REFUSAL,
   ASK_TEAM_PLAN_EXAMPLE_REVIEW,
@@ -287,21 +295,31 @@ test.describe("buildPlanPrompt", () => {
       `- NEVER count the matches in scope, and never name a column matches. The app counts them itself and adds the column ${ASK_SCOPE_COUNT_COLUMN} to every row; that is the only match count the answer may use.`,
     );
     expect(ASK_PLAN_EXAMPLE_QUERY.sql).not.toMatch(/\bas matches\b/);
-    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).not.toMatch(/\bas matches\b/);
   });
 
-  test("plans a diagnostic question as one row of me_ and opp_ columns, advice questions included", () => {
+  test("hands a diagnostic question to the app's own comparison, advice questions included", () => {
+    // Shape D replaced the me_/opp_ query the planner used to write: it
+    // once divided the wrong counters for the opponent and printed 100%.
+    expect(prompt).toContain("### Comparisons the app computes (shape D)");
+    expect(prompt).toContain("For these questions you write NO sql.");
     expect(prompt).toContain(
-      "### Diagnostic questions: compare the player with the opponent",
+      `- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened"`,
     );
     expect(prompt).toContain(
-      "columns named me_<measure> and opp_<measure>. The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct.",
+      `- "baseline": the figures over the matches in scope_sql beside the same figures over ALL the player's matches.`,
     );
     expect(prompt).toContain(
-      '"How do I beat this opponent?" is the diagnostic query over the matches against them.',
+      `a list of any of "serve", "return", "pressure", "rallies", "net", "points", or a column of ask.match_stats such as "double_faults"`,
     );
     expect(prompt).toContain(
-      "A question that asks for advice is ALWAYS answered with shape A or shape C whenever the views hold facts on its subject",
+      "- NEVER reply shape B to a question shape D covers.",
+    );
+    expect(prompt).not.toContain("### Diagnostic questions");
+    expect(prompt).toContain(
+      '"How do I beat this opponent?" is shape D, "compare": "opponent", over the matches against them.',
+    );
+    expect(prompt).toContain(
+      "A question that asks for advice is ALWAYS answered with shape A, C or D whenever the views hold facts on its subject",
     );
   });
 
@@ -310,14 +328,18 @@ test.describe("buildPlanPrompt", () => {
       "A follow-up that names no match, opponent or period of its own keeps the scope of the previous player turn — reuse its match ids, or its opponent with opponent_name ilike.",
     );
     expect(prompt).toContain(
-      "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it (ilike '%timof%' finds Timofey and a misspelt Timofy) and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
+      "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
     );
     expect(prompt).toContain(
-      'A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal',
+      'and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another.',
     );
     expect(prompt).toContain(
-      "- Never for a question that is short, vague or misspelt: those get shape A over all matches.",
+      "- Never for a question that is short, vague or misspelt: those get shape D over all matches.",
     );
+    expect(prompt).toContain(
+      '- Never for "what should I practise / work on / fix / improve / do differently": that is the review, shape C.',
+    );
+    expect(prompt).toContain(ASK_FOLLOW_UP_KEEPS_SHAPE);
   });
 
   test("requires side on every sum over ask.match_stats", () => {
@@ -457,48 +479,43 @@ test.describe("buildPlanPrompt", () => {
 
   test("its worked examples are in the prompt and the query ones pass the guard", () => {
     expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_QUERY));
-    expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_DIAGNOSTIC));
+    expect(prompt).toContain(
+      `Question: "Why did I lose to OpponentX?" (tagged match 9b1e5d2c-2f6a-4e0b-8a3c-5d7e9f1a2b3c against OpponentX)\n${JSON.stringify(ASK_PLAN_EXAMPLE_COMPARE)}`,
+    );
+    expect(prompt).toContain(
+      `Question: "How was my serve in August?" (asked on 2026-10-11)\n${JSON.stringify(ASK_PLAN_EXAMPLE_BASELINE)}`,
+    );
     expect(prompt).toContain(JSON.stringify(ASK_PLAN_EXAMPLE_REFUSAL));
-    for (const example of [
-      ASK_PLAN_EXAMPLE_QUERY,
-      ASK_PLAN_EXAMPLE_DIAGNOSTIC,
-    ]) {
-      expect(
-        checkAskSql({ scopeSql: example.scope_sql, sql: example.sql }),
-      ).toEqual({ ok: true });
-    }
+    expect(
+      checkAskSql({
+        scopeSql: ASK_PLAN_EXAMPLE_QUERY.scope_sql,
+        sql: ASK_PLAN_EXAMPLE_QUERY.sql,
+      }),
+    ).toEqual({ ok: true });
     // The examples obey the prompt's own naming rules.
     expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(" as second_serve_won_pct,");
     expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(" as all_matches,");
     expect(ASK_PLAN_EXAMPLE_REFUSAL.cannot_answer).not.toMatch(/\d/);
-    // The diagnostic one: every measure twice, me_ then opp_, both sides named.
-    const columns = [
-      ...ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql.matchAll(/ as (\w+)/g),
-    ].map((match) => match[1]);
-    expect(columns).toEqual([
-      "me_first_serve_pct",
-      "opp_first_serve_pct",
-      "me_second_serve_won_pct",
-      "opp_second_serve_won_pct",
-      "me_return_won_pct",
-      "opp_return_won_pct",
-      "me_break_points_converted",
-      "me_break_point_opportunities",
-      "opp_break_points_converted",
-      "opp_break_point_opportunities",
-      "me_winners",
-      "opp_winners",
-      "me_unforced_errors",
-      "opp_unforced_errors",
-      "me_total_points_won_pct",
-      "opp_total_points_won_pct",
-    ]);
-    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain("s.side = 'me'");
-    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain("s.side = 'opponent'");
-    // Its percentages use the pairs the Percentages section lists.
-    expect(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql).toContain(
-      "s.first_serves_in else 0 end) / nullif(sum(case when s.side = 'me' then s.first_serves else 0 end), 0), 1) as me_first_serve_pct",
-    );
+    // The comparison ones: a kind, a scope the guard passes with the app's
+    // own query, and no sql of the planner's.
+    for (const example of [
+      ASK_PLAN_EXAMPLE_COMPARE,
+      ASK_PLAN_EXAMPLE_BASELINE,
+    ]) {
+      expect(example).not.toHaveProperty("sql");
+      expect(
+        checkAskSql({
+          scopeSql: example.scope_sql,
+          sql: compareSql(example.compare, false),
+        }),
+      ).toEqual({ ok: true });
+      expect(parsePlanReply(JSON.stringify(example))).toEqual(example);
+    }
+    expect(ASK_PLAN_EXAMPLE_COMPARE.compare).toBe("opponent");
+    // No measures in an example: the server reads them from the question,
+    // and a list in an example gets copied under other questions.
+    expect(ASK_PLAN_EXAMPLE_BASELINE.compare).toBe("baseline");
+    expect(ASK_PLAN_EXAMPLE_BASELINE).not.toHaveProperty("measures");
   });
 });
 
@@ -1139,7 +1156,10 @@ test.describe("buildPlanPrompt — team scope", () => {
       'A question about "the team", "we", "us", "our players" or naming nobody covers every match.',
     );
     expect(prompt).toContain(
-      "is a per-player breakdown: group by player_name, one row per player.",
+      'A question that compares players or asks "who" ("PlayerA versus PlayerB", "who has the best return") is shape D with "compare": "players".',
+    );
+    expect(prompt).toContain(
+      "as a per-player breakdown: group by player_name, one row per player.",
     );
     expect(prompt).toContain(
       `ONE ROW PER PLAYER, player_name as the first column, joined from ask.matches, where player_name is not null, ordered by the measure asked about with the best first, never more than ${MAX_ASK_TEAM_BREAKDOWN_ROWS} rows.`,
@@ -1214,7 +1234,11 @@ test.describe("buildPlanPrompt — team scope", () => {
       /^The program's matches do not record /,
     );
     expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.cannot_answer).not.toMatch(/\d/);
-    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.asks_for_advice).toBe(true);
+    // Footwork, not practice: "what should … practice" is the review, and an
+    // example that refused the word taught the planner to refuse it.
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.cannot_answer).toMatch(/footwork/);
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.cannot_answer).not.toMatch(/practi/);
+    expect(ASK_TEAM_PLAN_EXAMPLE_REFUSAL.asks_for_advice).toBe(false);
   });
 
   test("its worked examples are in the prompt and the query ones pass the guard", () => {
@@ -1225,38 +1249,83 @@ test.describe("buildPlanPrompt — team scope", () => {
     expect(prompt).not.toContain(JSON.stringify(ASK_PLAN_EXAMPLE_QUERY));
     expect(prompt).not.toContain(JSON.stringify(ASK_PLAN_EXAMPLE_REFUSAL));
 
-    for (const example of [
-      ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
-      ASK_TEAM_PLAN_EXAMPLE_PLAYER,
-    ]) {
-      expect(
-        checkAskSql({ scopeSql: example.scope_sql, sql: example.sql }),
-      ).toEqual({ ok: true });
-      expect(example.sql).toContain("s.side = 'me'");
-      expect(example.sql).toContain("select match_id from scope");
-      expect(example.sql).not.toMatch(/ as matches\b/);
-    }
-    // The breakdown: one row per player, the name first, the best first, capped.
-    expect(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN.sql).toMatch(
-      /^select m\.player_name, /,
-    );
-    expect(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN.sql).toContain(
-      `group by m.player_name order by second_serve_won_pct desc nulls last limit ${MAX_ASK_TEAM_BREAKDOWN_ROWS}`,
-    );
-    // One player: found by name, compared with the team's own figure.
-    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYER.scope_sql).toContain(
-      "player_name ilike '%sokol%'",
-    );
+    const breakdown = ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN;
     expect(
-      [...ASK_TEAM_PLAN_EXAMPLE_PLAYER.sql.matchAll(/ as (\w+)/g)].map(
-        (match) => match[1],
-      ),
-    ).toEqual([
-      "first_serve_pct",
-      "team_first_serve_pct",
-      "second_serve_won_pct",
-      "team_second_serve_won_pct",
-    ]);
+      checkAskSql({ scopeSql: breakdown.scope_sql, sql: breakdown.sql }),
+    ).toEqual({ ok: true });
+    expect(breakdown.sql).toContain("select match_id from scope");
+    expect(breakdown.sql).not.toMatch(/ as matches\b/);
+    // The breakdown the planner still writes is a record: one row per
+    // player, the name first, the most wins first, capped.
+    expect(breakdown.sql).toMatch(/^select m\.player_name, /);
+    expect(breakdown.sql).toContain(
+      `group by m.player_name order by wins desc nulls last limit ${MAX_ASK_TEAM_BREAKDOWN_ROWS}`,
+    );
+    expect(breakdown.sql).toContain(" as player_matches ");
+    // The three comparisons: a kind and a scope, no sql of the planner's.
+    expect(prompt).toContain(
+      `Question: "Compare PlayerA and PlayerB on serve"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_PLAYERS)}`,
+    );
+    expect(prompt).toContain(
+      `Question: "How should PlayerA play against OpponentX?"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_OPPONENT)}`,
+    );
+    for (const example of [
+      ASK_TEAM_PLAN_EXAMPLE_PLAYERS,
+      ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+      ASK_TEAM_PLAN_EXAMPLE_OPPONENT,
+    ]) {
+      expect(example).not.toHaveProperty("sql");
+      expect(
+        checkAskSql({
+          scopeSql: example.scope_sql,
+          sql: compareSql(example.compare, true),
+        }),
+      ).toEqual({ ok: true });
+      expect(parsePlanReply(JSON.stringify(example))).toEqual(example);
+    }
+    // One player: found by name, compared with the team by the app's query.
+    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYER.compare).toBe("baseline");
+    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYER).not.toHaveProperty("measures");
+    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYERS).not.toHaveProperty("measures");
+    expect(ASK_TEAM_PLAN_EXAMPLE_PLAYER.scope_sql).toContain(
+      "player_name ilike '%playera%'",
+    );
+    // A player against an opponent: both filters, and advice flagged.
+    expect(ASK_TEAM_PLAN_EXAMPLE_OPPONENT.scope_sql).toContain(
+      "player_name ilike '%playera%' and opponent_name ilike '%opponentx%'",
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_OPPONENT.asks_for_advice).toBe(true);
+  });
+
+  test("the worked examples name nobody: every name in them is a declared placeholder", () => {
+    // A small model copies literals out of examples; "sokol" reached a real
+    // query that way. Placeholders are recognisable — to it and to the
+    // server's guard (`foreignScopeName`).
+    const names = ASK_PLAN_EXAMPLE_NAMES.map((name) => name.toLowerCase());
+    // Without tags or a conversation, so every name in the text is the
+    // prompt's own.
+    const bare = { today: "2026-10-11", tags: [], conversation: [] };
+    for (const text of [
+      buildPlanPrompt({ ...bare, scope: TEAM_PLAN_INPUT.scope }),
+      buildPlanPrompt(bare),
+    ]) {
+      const literals = [
+        ...text.matchAll(/(?:player_name|opponent_name) ilike '%([^%']+)%'/g),
+      ].map((match) => match[1]);
+      for (const literal of literals) {
+        expect([...names, "name"]).toContain(literal);
+      }
+      for (const old of [
+        "Sokolov",
+        "sokol",
+        "Reyes",
+        "Marek",
+        "Beau",
+        "Timof",
+      ]) {
+        expect(text).not.toContain(old);
+      }
+    }
   });
 });
 
@@ -1481,15 +1550,13 @@ test.describe("the plan prompts — naming compared columns, baselines and group
     expect(computeAskFacts([columns(ASK_PLAN_EXAMPLE_QUERY.sql)])).toContain(
       "r1.second_serve_won_pct (1) is EQUAL to r1.all_matches_second_serve_won_pct (1).",
     );
-    const player = computeAskFacts([columns(ASK_TEAM_PLAN_EXAMPLE_PLAYER.sql)]);
-    expect(player).toContain(
+    // The app's own baseline query follows the same convention.
+    const baseline = computeAskFacts([columns(compareSql("baseline", true))]);
+    expect(baseline).toContain(
       "r1.first_serve_pct (1) is EQUAL to r1.team_first_serve_pct (1).",
     );
-    expect(player).toContain(
-      "r1.second_serve_won_pct (1) is EQUAL to r1.team_second_serve_won_pct (1).",
-    );
     expect(
-      computeAskFacts([columns(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql)]).length,
+      computeAskFacts([columns(compareSql("opponent", false))]).length,
     ).toBeGreaterThanOrEqual(8);
   });
 
@@ -1503,15 +1570,10 @@ test.describe("the plan prompts — naming compared columns, baselines and group
       );
     }
     // The examples the rule points at do exactly that.
-    for (const example of [
-      ASK_PLAN_EXAMPLE_QUERY,
-      ASK_TEAM_PLAN_EXAMPLE_PLAYER,
-    ]) {
-      expect(example.sql).toContain(
-        "from ask.match_stats s where s.side = 'me'",
-      );
-      expect(example.sql).not.toMatch(/join scope/);
-    }
+    expect(ASK_PLAN_EXAMPLE_QUERY.sql).toContain(
+      "from ask.match_stats s where s.side = 'me'",
+    );
+    expect(ASK_PLAN_EXAMPLE_QUERY.sql).not.toMatch(/join scope/);
   });
 
   test("asks for each group's own match count under a name the server reads as one", () => {
@@ -1546,9 +1608,10 @@ test.describe("the plan prompts — the review, shape C", () => {
   const personal = buildPlanPrompt(base);
   const team = buildPlanPrompt({ ...base, scope: TEAM });
 
-  test("the reply contract has three shapes, the third with no sql", () => {
+  test("the reply contract has four shapes, the third and fourth with no sql", () => {
     for (const prompt of [personal, team]) {
-      expect(prompt).toContain("It has one of three shapes.");
+      expect(prompt).toContain("It has one of four shapes.");
+      expect(prompt).toContain("Shape D, a comparison the app computes itself");
       expect(prompt).toContain(
         '{"review": true, "scope_sql": "...", "asks_for_advice": true}',
       );
@@ -1563,7 +1626,7 @@ test.describe("the plan prompts — the review, shape C", () => {
       '"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practise", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match.',
     );
     expect(personal).toContain(
-      '- A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat Marek") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A.',
+      '- A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat this opponent") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A or shape D.',
     );
     expect(personal).toContain(
       "NEVER limit it to the last match; the app finds the last match itself.",
@@ -1591,7 +1654,7 @@ test.describe("the plan prompts — the review, shape C", () => {
       `Question: "How can I improve for my next match?"\n${JSON.stringify(ASK_PLAN_EXAMPLE_REVIEW)}`,
     );
     expect(team).toContain(
-      `Question: "How can Sokolov improve for the next match?"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REVIEW)}`,
+      `Question: "How can PlayerA improve for the next match?"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REVIEW)}`,
     );
     for (const example of [
       ASK_PLAN_EXAMPLE_REVIEW,
@@ -1629,7 +1692,12 @@ test.describe("the team plan prompt — lineup positions are not recorded", () =
     expect(prompt).toContain(
       "NEVER answer by picking the player with the best record or the most matches.",
     );
-    expect(prompt).toContain("rankings, seeds, lineups, practice");
+    expect(prompt).toContain("rankings, seeds, lineups, drills");
+    // A quality or a measure is not a position: the app compares the players
+    // and says which measure it used.
+    expect(prompt).toContain(
+      '(A question that names a measure or a quality — "who has the best first serve percentage", "who is our most consistent player" — is shape D, "compare": "players".)',
+    );
   });
 
   test("the refusal is a worked example, with no digit and no advice flag", () => {

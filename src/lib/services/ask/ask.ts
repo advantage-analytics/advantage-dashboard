@@ -20,10 +20,30 @@ import {
   withOrderSummary,
   withoutColumns,
 } from "@/lib/services/ask/facts";
+import {
+  type AskCompareKind,
+  ASK_COMPARE_KINDS,
+  ASK_COMPARE_OPPONENT_SQL,
+  askQuality,
+  asksForStrengths,
+  asksToComparePlayers,
+  asksWhatHappened,
+  asksWhatToWorkOn,
+  baselineIsWholeScope,
+  compareMisfit,
+  movesPreviousQuestion,
+  compareColumn,
+  compareKindOfSql,
+  compareSql,
+  projectCompareRows,
+  qualityNote,
+  selectCompareMeasures,
+} from "@/lib/services/ask/compare";
 import { askMeasure } from "@/lib/services/ask/measures";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import type { AskScope } from "@/lib/services/ask/scope";
 import {
+  ASK_PLAN_EXAMPLE_NAMES,
   ASK_SCOPE_COUNT_COLUMN,
   type AskPlanQuery,
   type AskPlanReply,
@@ -41,11 +61,15 @@ import {
   reviewAnswerRow,
 } from "@/lib/services/ask/review";
 import {
+  absentMatchupLead,
   buildMatchListAnswer,
   buildPairedAnswer,
+  buildPlayersAnswer,
   buildTrendAnswer,
   buildTwoGroupAnswer,
+  namedPlayerRows,
   onlyName,
+  pairLabel,
 } from "@/lib/services/ask/paired";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
@@ -103,6 +127,20 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  * PAIR-SHAPED result — one row of me_/opp_ or measure/baseline pairs — is
  * answered by `paired.ts` the way a review is: the server writes the
  * comparison, and the answer model is not called.
+ *
+ * Three more things are the server's and not the planner's (`compare.ts`).
+ * A COMPARISON — the player against the opponents, the program's players
+ * side by side, a narrower set of matches against all of them — is chosen
+ * by the planner (`{"compare": …}`) and computed by a constant query, then
+ * written by `paired.ts`: the planner once divided the wrong counters for an
+ * opponent and printed 100% where the match held 71.4%. A follow-up keeps
+ * its subject mechanically: a scope that names somebody neither the
+ * question, its tags nor the conversation mentions is sent back and then
+ * replaced, and a scope that finds no match falls back to the previous
+ * turn's. And three refusals are not accepted: "what should … practise"
+ * gets the review, a comparison of players gets the players query, and a
+ * player-against-opponent scope that finds nothing is retried on the
+ * opponent alone, with a first sentence that says the two never met.
  *
  * Privacy: nothing here logs the question, a tag name, a row, a label or the
  * model's prose. Players may be minors (`adapter.ts`). The two log lines are
@@ -190,6 +228,25 @@ export const ASK_TEAM_CANNOT_ANSWER_MESSAGE =
   "The program's match data can't answer that.";
 export const ASK_TEAM_NO_DATA_MESSAGE =
   "None of the program's matches fit that question, so there was nothing to compute.";
+export const ASK_NO_STATS_MESSAGE =
+  "The matches that fit that question have no statistics recorded for it, so there was nothing to compare.";
+
+/**
+ * The no-data sentence with what was looked for, read from the scope's own
+ * name filters: "… Looked for: an opponent named like "eli"." The names are
+ * the planner's reading of the question, so they are the asker's own words.
+ */
+export function noDataMessage(team: boolean, scopeSql: string): string {
+  const base = team ? ASK_TEAM_NO_DATA_MESSAGE : ASK_NO_DATA_MESSAGE;
+  const looked = scopeNameFilters(scopeSql).map(
+    (filter) =>
+      `${filter.column === "player_name" ? "a player" : "an opponent"} named like "${filter.core}"`,
+  );
+  if (/\bplayed_on\b/i.test(scopeSql)) looked.push("the period asked about");
+  return looked.length === 0
+    ? base
+    : `${base} Looked for: ${looked.slice(0, 3).join(", ")}.`;
+}
 export const ASK_LLM_UNAVAILABLE_MESSAGE =
   "Ask is unavailable right now. Your question is still in the composer.";
 export const ASK_SAVE_FAILED_MESSAGE =
@@ -333,6 +390,58 @@ export function withoutOutOfRangePercentages(
   return withoutColumns(rows, [...bad]);
 }
 
+/** A match count over everything, not over one row's group: it may exceed the scope. */
+const WHOLE_COUNT = /^(?:all|total|overall|team|program|career|every)_/;
+const MATCH_COUNT = /^[a-z0-9_]+_(?:matches|match_count)$/;
+
+/**
+ * A per-group match count holding more matches than the scope selected, by
+ * column name; null when every count fits. "Hard Court: 18 matches" over a
+ * scope of ten is rows counted, not matches.
+ */
+export function overcountedMatches(
+  rows: readonly AskRow[],
+  matchCount: number,
+): string | null {
+  for (const row of rows) {
+    for (const [column, value] of Object.entries(row)) {
+      if (column === ASK_SCOPE_COUNT_COLUMN || WHOLE_COUNT.test(column))
+        continue;
+      if (!MATCH_COUNT.test(column) || typeof value !== "number") continue;
+      if (value > matchCount) return column;
+    }
+  }
+  return null;
+}
+
+const WON_WORD = /^(?:w|win|won|victory)$/i;
+const LOST_WORD = /^(?:l|loss|lost|defeat)$/i;
+
+/**
+ * A list of matches whose result came back as a word — `result: 'Win'` —
+ * with `i_won` beside it, so the server's own retelling of a match list
+ * (`buildMatchListAnswer`) and the win/loss strip can read it. Rows that
+ * already carry `i_won`, or are not matches, are returned as they are.
+ */
+export function withResultFlags(rows: readonly AskRow[]): AskRow[] {
+  const worded = rows.every(
+    (row) =>
+      !("i_won" in row) &&
+      typeof row.played_on === "string" &&
+      typeof row.opponent_name === "string" &&
+      (row.result === null ||
+        (typeof row.result === "string" &&
+          (WON_WORD.test(row.result.trim()) ||
+            LOST_WORD.test(row.result.trim())))),
+  );
+  if (!worded || rows.length === 0) return [...rows];
+  return rows.map((row) => ({
+    ...row,
+    i_won:
+      typeof row.result === "string" ? WON_WORD.test(row.result.trim()) : null,
+  }));
+}
+
 /** The rows with {@link ASK_SCOPE_COUNT_COLUMN} set on every one of them. */
 export function withScopeCount(
   rows: readonly AskRow[],
@@ -417,18 +526,152 @@ export function droppedPlayerFilter(
   scopeSql: string,
 ): string | null {
   if (!previous) return null;
-  const filter = /player_name\s+ilike\s+'([^']+)'/i.exec(previous.scope_sql);
-  if (!filter) return null;
-  if (!/\b(?:she|he|her|hers|his|him|they|their|them)\b/i.test(question)) {
-    return null;
-  }
+  if (!refersBack(question)) return null;
   if (
     /player_name/i.test(scopeSql) ||
     /match_id\s+in\s*\(\s*'/i.test(scopeSql)
   ) {
     return null;
   }
+  const filter = /player_name\s+ilike\s+'([^']+)'/i.exec(previous.scope_sql);
+  if (!filter) {
+    // The previous scope was a tag's match ids: the same rule, with the ids.
+    const ids = /match_id\s+in\s*\(\s*'[^)]*\)/i.exec(previous.scope_sql);
+    return ids
+      ? `scope_sql does not keep the matches of the previous question, but the question refers back to them. A follow-up that names no player keeps the previous scope: restrict scope_sql to ${ids[0]}.`
+      : null;
+  }
   return `scope_sql does not filter on player_name, but the question refers back to the player of the previous question (player_name ilike '${filter[1]}'). A follow-up that names no player keeps the previous scope's player: add player_name ilike '${filter[1]}' to scope_sql.`;
+}
+
+/** Whether a question points back at the previous one's player or matches with a pronoun. */
+export function refersBack(question: string): boolean {
+  return /\b(?:she|he|her|hers|his|him|they|their|them)\b/i.test(question);
+}
+
+// ── Names in a scope ─────────────────────────────────────────────────────────
+
+/** A name a scope filters on: `player_name ilike '%rudy%'` → `rudy`. */
+export interface AskScopeNameFilter {
+  column: "player_name" | "opponent_name";
+  /** The literal without its wildcards, lowercased. */
+  core: string;
+}
+
+/** Every player or opponent name `scope_sql` filters on. */
+export function scopeNameFilters(scopeSql: string): AskScopeNameFilter[] {
+  const filters: AskScopeNameFilter[] = [];
+  for (const match of scopeSql.matchAll(
+    /\b(player_name|opponent_name)\s+(?:not\s+)?(?:i?like|=)\s+'([^']*)'/gi,
+  )) {
+    const core = match[2].replace(/[%_]/g, " ").trim().toLowerCase();
+    if (core.length < 2) continue;
+    filters.push({
+      column: match[1].toLowerCase() as AskScopeNameFilter["column"],
+      core,
+    });
+  }
+  return filters;
+}
+
+function isExampleName(core: string): boolean {
+  return ASK_PLAN_EXAMPLE_NAMES.some((name) => {
+    const example = name.toLowerCase();
+    return (
+      example.startsWith(core) || (core.length >= 4 && core.startsWith(example))
+    );
+  });
+}
+
+/**
+ * A name `scope_sql` filters on that the planner cannot have read anywhere:
+ * not in the question, its tags, the conversation or the previous scope.
+ * `known` is all of those as one string. A planner only knows the names it
+ * was shown, so such a name was made up or — `example` — copied out of the
+ * prompt's own worked examples. Null when every name is accounted for; the
+ * first four letters are enough, since the prompt asks for a name's opening
+ * letters and a typed name may be misspelt.
+ */
+export function foreignScopeName(
+  scopeSql: string,
+  known: string,
+): { core: string; example: boolean } | null {
+  const text = known.toLowerCase();
+  for (const { core } of scopeNameFilters(scopeSql)) {
+    if (text.includes(core)) continue;
+    // A placeholder is matched whole: "playera" is not accounted for by the
+    // word "player" in a tag's label.
+    const example = isExampleName(core);
+    if (!example && core.length >= 4 && text.includes(core.slice(0, 4))) {
+      continue;
+    }
+    return { core, example };
+  }
+  return null;
+}
+
+/** What the planner is told about a name in its scope that nobody mentioned. */
+export function foreignNameReason(core: string): string {
+  return `scope_sql filters on the name '${core}', which is not in the question, its tags or the conversation. Names in the examples (PlayerA, PlayerB, OpponentX) are placeholders, never data. Filter only on a name the question or the conversation gives; a follow-up that names nobody keeps the previous scope_sql, and a question that names nobody at all is about every match.`;
+}
+
+/** Scope columns that mean the question chose its own matches; a scope naming one is never swapped for the previous turn's. */
+const OWN_FILTER =
+  /\b(?:played_on|court_type|match_type|opponent_hand|opponent_backhand|tournament|round|i_won|score_text|limit)\b/i;
+
+/**
+ * Whether a follow-up whose scope found no match may be rerun over the
+ * previous turn's scope: the question has no tag, the scope names nobody the
+ * question itself names, and it filters on nothing but names and ids — no
+ * period, surface or other filter of its own.
+ */
+export function inheritsPreviousScope(
+  question: string,
+  hasTags: boolean,
+  previous: AskPreviousPlan | null,
+  scopeSql: string,
+): boolean {
+  if (!previous || hasTags) return false;
+  if (previous.scope_sql.trim() === scopeSql.trim()) return false;
+  if (OWN_FILTER.test(scopeSql)) return false;
+  const text = question.toLowerCase();
+  return scopeNameFilters(scopeSql).every(
+    (filter) =>
+      !text.includes(filter.core) &&
+      !(filter.core.length >= 4 && text.includes(filter.core.slice(0, 4))),
+  );
+}
+
+/**
+ * A team scope that asks for one player's matches against one opponent:
+ * both names (the player's null when it came from a tag's match ids), or
+ * null for any other scope.
+ */
+export function playerOpponentScope(
+  scopeSql: string,
+): { player: string | null; opponent: string; opponentPattern: string } | null {
+  const opponent = /\bopponent_name\s+ilike\s+'([^']+)'/i.exec(scopeSql);
+  if (!opponent) return null;
+  const player = /\bplayer_name\s+ilike\s+'([^']+)'/i.exec(scopeSql);
+  if (!player && !/match_id\s+in\s*\(\s*'/i.test(scopeSql)) return null;
+  if (/\bor\b/i.test(scopeSql)) return null;
+  return {
+    player: player ? player[1] : null,
+    opponent: opponent[1].replace(/[%_]/g, " ").trim(),
+    opponentPattern: opponent[1],
+  };
+}
+
+export const ASK_ALL_MATCHES_SCOPE = "select match_id from ask.matches";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The scope a question's tags name — exactly their match ids — or null without tags. */
+export function scopeFromTags(tags: AskResolvedTags): string | null {
+  const ids = tags.matchIds.filter((id) => UUID.test(id));
+  return ids.length === 0
+    ? null
+    : `${ASK_ALL_MATCHES_SCOPE} where match_id in (${ids.map((id) => `'${id}'`).join(", ")})`;
 }
 
 /** What the planner is told about a percentage with no documented definition and no counts beside it. */
@@ -452,14 +695,34 @@ export function previousPlanFromMessages(
     const scopeSql = stringOrNull(record?.scopeSql);
     const sql = stringOrNull(record?.sql);
     if (!scopeSql || !sql || record?.mock === true) return null;
-    return { scope_sql: scopeSql, sql: sql === ASK_REVIEW_SQL ? null : sql };
+    const compare = compareKindOfSql(sql);
+    return compare
+      ? { scope_sql: scopeSql, sql: null, compare }
+      : { scope_sql: scopeSql, sql: sql === ASK_REVIEW_SQL ? null : sql };
   }
   return null;
 }
 
+/** A comparison the planner chose: which one, and what it asked to narrow the measures to. */
+interface CompareRequest {
+  kind: AskCompareKind;
+  measures: unknown;
+}
+
 type PlanStep =
-  /** `review` marks a plan whose sql is the server's own `ASK_REVIEW_SQL`. */
-  | { ok: true; plan: AskPlanQuery; review: boolean; reply: string }
+  /**
+   * `review` marks a plan whose sql is the server's own `ASK_REVIEW_SQL`;
+   * `compare` one whose sql is a comparison query of `compare.ts`.
+   */
+  | {
+      ok: true;
+      plan: AskPlanQuery;
+      review: boolean;
+      compare: CompareRequest | null;
+      reply: string;
+      /** True when the server chose the plan itself: nothing to send back to the planner. */
+      forced?: boolean;
+    }
   | { ok: false; refusal: string; advice: boolean }
   | { ok: false; problem: PlanProblem; reply: string }
   | { ok: false; unavailable: true };
@@ -530,6 +793,274 @@ export async function* askQuestion(
     // try fails in any way, this is the answer: a result without a baseline
     // is better than no answer.
     let fallback: { plan: AskPlanQuery; result: QueryResult } | null = null;
+    /** Why a result with matches in scope could still not be answered. */
+    let emptyReason: string | null = null;
+    let foreignSentBack = false;
+    let misfitSentBack = false;
+    let overcountSentBack = false;
+    const previous = input.previousPlan ?? null;
+    const hasTags = input.tags.prompt.length > 0;
+    const tagScope = scopeFromTags(input.tags);
+    /** Everything a name in a scope could have been read from. */
+    const known = [
+      input.question,
+      ...input.tags.prompt.map((tag) =>
+        tag.kind === "player"
+          ? tag.playerName
+          : tag.kind === "opponent"
+            ? tag.opponentName
+            : `${tag.opponentName ?? ""} ${tag.playerName ?? ""}`,
+      ),
+      ...input.conversation.map((turn) => turn.content),
+      previous?.scope_sql ?? "",
+    ].join("\n");
+
+    // "And against right-handers?": a follow-up that only moves the
+    // previous question. What it measures is read from that question.
+    const moved = previous !== null && movesPreviousQuestion(input.question);
+    const measureText = moved
+      ? `${[...input.conversation].reverse().find((turn) => turn.role === "user")?.content ?? ""} ${input.question}`
+      : input.question;
+
+    // Three refusals the server does not accept, and one choice it makes
+    // itself (`compare.ts`). Never in mock mode, whose plan is fixed.
+    const reroute = (step: PlanStep): PlanStep => {
+      if (!model.configured) return step;
+      const refused = !step.ok && "refusal" in step;
+      const forced = (
+        plan: AskPlanQuery,
+        review: boolean,
+        compare: CompareRequest | null,
+      ): PlanStep => ({
+        ok: true,
+        plan,
+        review,
+        compare,
+        forced: true,
+        reply: JSON.stringify(
+          review
+            ? { review: true, scope_sql: plan.scope_sql }
+            : { compare: compare?.kind, scope_sql: plan.scope_sql },
+        ),
+      });
+      // "What should Rudy practice?" is the review of that scope, never
+      // "practice sessions are not recorded".
+      if (refused && asksWhatToWorkOn(input.question)) {
+        return forced(
+          {
+            scope_sql: tagScope ?? ASK_ALL_MATCHES_SCOPE,
+            sql: ASK_REVIEW_SQL,
+            asks_for_advice: true,
+          },
+          true,
+          null,
+        );
+      }
+      if (team && asksToComparePlayers(input.question)) {
+        // A comparison of players is never refused, and a vague quality
+        // word ("most consistent") is never the planner's to interpret.
+        const players = (scopeSql: string, advice: boolean) =>
+          forced(
+            {
+              scope_sql: scopeSql,
+              sql: compareSql("players", true),
+              asks_for_advice: advice,
+            },
+            false,
+            { kind: "players", measures: null },
+          );
+        if (refused) return players(tagScope ?? ASK_ALL_MATCHES_SCOPE, false);
+        if (
+          step.ok &&
+          !step.review &&
+          step.compare?.kind !== "players" &&
+          askQuality(input.question) !== null
+        ) {
+          return players(step.plan.scope_sql, step.plan.asks_for_advice);
+        }
+      }
+      // "What happened in …", "why did we lose": the comparison with the
+      // opponents over the planner's own scope, not a query it made up.
+      if (
+        step.ok &&
+        !step.review &&
+        step.compare === null &&
+        asksWhatHappened(input.question)
+      ) {
+        return forced(
+          {
+            scope_sql: step.plan.scope_sql,
+            sql: compareSql("opponent", team),
+            asks_for_advice: step.plan.asks_for_advice,
+          },
+          false,
+          { kind: "opponent", measures: null },
+        );
+      }
+      return step;
+    };
+
+    /**
+     * A comparison's answer from the rows its query returned. A kind that
+     * cannot be written falls through to the next: players (fewer than two
+     * with statistics) → that scope against all matches → against the
+     * opponents. Null when no match in scope has the figures asked for.
+     */
+    const compareAnswer = async (
+      request: CompareRequest,
+      planned: AskPlanQuery,
+      first: QueryResult,
+      extra: { lead?: string[]; extraRow?: AskRow },
+    ): Promise<{
+      plan: AskPlanQuery;
+      result: QueryResult;
+      text: string;
+    } | null> => {
+      const selection = selectCompareMeasures(measureText, request.measures);
+      let kind: AskCompareKind =
+        !team && request.kind === "players" ? "opponent" : request.kind;
+      let current = planned;
+      // Strengths and weaknesses are read against the opponents, whatever
+      // the planner chose.
+      if (kind === "baseline" && asksForStrengths(measureText)) {
+        kind = "opponent";
+        current = { ...current, sql: compareSql(kind, team) };
+        const again = await runQuery(db, current, scope);
+        if (!again.ok || again.result.matches.length === 0) return null;
+        first = again.result;
+      }
+      let ran = first;
+      for (let hop = 0; hop < ASK_COMPARE_KINDS.length; hop += 1) {
+        const matchCount = ran.matches.length;
+        const perMatch = kind === "opponent" && selection.perMatch;
+        const rows = withScopeCount(
+          projectCompareRows(
+            ran.rows,
+            kind,
+            selection.measures,
+            team,
+            perMatch,
+          ),
+          matchCount,
+        );
+        const columns = selection.measures.map((measure) => ({
+          column: compareColumn(measure, kind, perMatch),
+          percentage: measure.denominator !== undefined,
+        }));
+        const notes = selection.quality
+          ? [
+              qualityNote(
+                selection.quality,
+                columns.map((entry) => {
+                  const label = pairLabel(entry.column);
+                  return label.charAt(0).toLowerCase() + label.slice(1);
+                }),
+              ),
+            ]
+          : [];
+        let written: { text: string; rows: AskRow[] } | null = null;
+        if (kind === "players") {
+          written = buildPlayersAnswer(namedPlayerRows(rows, input.question), {
+            matchCount,
+            measures: columns,
+            explicit: selection.explicit,
+            notes,
+          });
+        } else if (
+          kind === "opponent" ||
+          (scopeIsNarrowed(current.scope_sql) &&
+            !baselineIsWholeScope(ran.rows[0]) &&
+            equalBaselineColumns(rows, 1) === null)
+        ) {
+          written = buildPairedAnswer(rows, {
+            team,
+            matchCount,
+            opponentName: onlyName(
+              ran.matches.map((match) => match.opponentName),
+            ),
+            playerName: team
+              ? onlyName(ran.matches.map((match) => match.playerName))
+              : null,
+            notes,
+            ...(extra.lead
+              ? { lead: extra.lead, extraRow: extra.extraRow ?? {} }
+              : {
+                  record: {
+                    won: ran.matches.filter((match) => match.iWon === true)
+                      .length,
+                    lost: ran.matches.filter((match) => match.iWon === false)
+                      .length,
+                  },
+                }),
+          });
+        }
+        if (written !== null) {
+          return {
+            plan: current,
+            result: { matches: ran.matches, rows: written.rows },
+            text: written.text,
+          };
+        }
+        if (kind === "opponent") return null;
+        kind = kind === "players" ? "baseline" : "opponent";
+        current = { ...current, sql: compareSql(kind, team) };
+        const next = await runQuery(db, current, scope);
+        if (!next.ok || next.result.matches.length === 0) return null;
+        ran = next.result;
+      }
+      return null;
+    };
+
+    /**
+     * "How should Rudy play against Eli?" when the two never met: the
+     * program's matches against that opponent, compared with the fixed
+     * query, behind a first sentence that says so. Null when the opponent
+     * is in none of the program's matches either.
+     */
+    const absentMatchup = async (
+      matchup: NonNullable<ReturnType<typeof playerOpponentScope>>,
+      planned: AskPlanQuery,
+    ) => {
+      const scopeSql = `${ASK_ALL_MATCHES_SCOPE} where opponent_name ilike '${matchup.opponentPattern}'`;
+      const retry: AskPlanQuery = {
+        scope_sql: scopeSql,
+        sql: ASK_COMPARE_OPPONENT_SQL,
+        asks_for_advice: planned.asks_for_advice,
+      };
+      if (!checkAskSql({ scopeSql, sql: retry.sql }).ok) return null;
+      const against = await runQuery(db, retry, scope);
+      if (!against.ok || against.result.matches.length === 0) return null;
+      // The player's name as the roster spells it: from the tag, or from
+      // the matches their own filter finds.
+      let absentName: string | null =
+        input.tags.prompt.flatMap((tag) =>
+          tag.kind === "player" ? [tag.playerName] : [],
+        )[0] ?? null;
+      if (absentName === null && matchup.player !== null) {
+        const theirs = await runQuery(
+          db,
+          {
+            scope_sql: `${ASK_ALL_MATCHES_SCOPE} where player_name ilike '${matchup.player}'`,
+            sql: "select count(*) as scope_matches from scope",
+            asks_for_advice: false,
+          },
+          scope,
+        );
+        absentName = theirs.ok
+          ? onlyName(theirs.result.matches.map((match) => match.playerName))
+          : null;
+      }
+      const newestFirst = [...against.result.matches].sort((a, b) =>
+        String(b.playedOn ?? "").localeCompare(String(a.playedOn ?? "")),
+      );
+      const ordered = { matches: newestFirst, rows: against.result.rows };
+      return compareAnswer(
+        { kind: "opponent", measures: null },
+        retry,
+        ordered,
+        absentMatchupLead(newestFirst, absentName),
+      );
+    };
 
     // Two tries for a query that ran and was sent back for what it measured.
     // A third only for a query that never ran: one refused by the guard or
@@ -540,7 +1071,9 @@ export async function* askQuestion(
       attempt < MAX_PLAN_ATTEMPTS && result === null;
       attempt += 1
     ) {
-      const step = await planOnce(model, systemPrompt, messages, cannotAnswer);
+      const step = reroute(
+        await planOnce(model, systemPrompt, messages, cannotAnswer, team),
+      );
       if (!step.ok && fallback) {
         ({ plan, result } = fallback);
         break;
@@ -582,9 +1115,48 @@ export async function* askQuestion(
 
       // The stored spelling of the shot values, whatever case the planner
       // typed: `zone = 't'` matches no row and reads as "no serves went there".
-      if (!step.review) {
+      // "And against right-handers?" after a query the planner wrote keeps
+      // that query: a comparison chosen instead would measure something
+      // else under the same question.
+      // After one of the app's own comparisons it keeps that comparison,
+      // with the measures the earlier question named.
+      if (!step.review && !step.forced && moved && previous !== null) {
+        if (previous.sql !== null && step.compare !== null) {
+          step.plan.sql = previous.sql;
+          step.compare = null;
+        } else if (previous.compare) {
+          const kind: AskCompareKind =
+            !team && previous.compare === "players"
+              ? "opponent"
+              : previous.compare;
+          step.plan.sql = compareSql(kind, team);
+          step.compare = { kind, measures: null };
+        }
+      }
+      const free = !step.review && step.compare === null;
+      if (free) {
         step.plan.sql = withStoredSpelling(step.plan.sql);
         step.plan.scope_sql = withStoredSpelling(step.plan.scope_sql);
+      }
+      // A follow-up about "his" or "her" whose scope came back as every
+      // match keeps the previous turn's scope: there is nothing in the new
+      // one to keep.
+      if (
+        previous &&
+        !hasTags &&
+        refersBack(input.question) &&
+        !scopeIsNarrowed(step.plan.scope_sql) &&
+        scopeIsNarrowed(previous.scope_sql)
+      ) {
+        step.plan.scope_sql = previous.scope_sql;
+      }
+      // A name nobody mentioned. Sent back once; an example's placeholder
+      // that comes back again is replaced by the previous turn's scope, the
+      // tags' or every match.
+      const foreign = foreignScopeName(step.plan.scope_sql, known);
+      if (foreign !== null && foreignSentBack && foreign.example) {
+        step.plan.scope_sql =
+          previous?.scope_sql ?? tagScope ?? ASK_ALL_MATCHES_SCOPE;
       }
       const guard = checkAskSql({
         scopeSql: step.plan.scope_sql,
@@ -603,17 +1175,30 @@ export async function* askQuestion(
               step.plan.scope_sql,
             )
           : null;
+      // A comparison the planner chose for a question it cannot answer —
+      // two groups of matches against each other, or where a ball was hit.
+      // Told back once; the second time it stands.
+      const misfit =
+        step.compare !== null && !step.forced && !misfitSentBack
+          ? compareMisfit(input.question)
+          : null;
       const check: typeof guard = !guard.ok
         ? guard
-        : !step.review && namesScopeCountColumn(step.plan.sql)
+        : free && namesScopeCountColumn(step.plan.sql)
           ? { ok: false, reason: SCOPE_COUNT_COLUMN_REASON }
-          : lostPlayer !== null
-            ? { ok: false, reason: lostPlayer }
-            : attempt === 0 &&
-                !step.review &&
-                ignoresBigPoints(input.question, step.plan.sql)
-              ? { ok: false, reason: BIG_POINTS_REASON }
-              : guard;
+          : foreign !== null && !foreignSentBack
+            ? { ok: false, reason: foreignNameReason(foreign.core) }
+            : misfit !== null
+              ? { ok: false, reason: misfit }
+              : lostPlayer !== null
+                ? { ok: false, reason: lostPlayer }
+                : attempt === 0 &&
+                    free &&
+                    ignoresBigPoints(input.question, step.plan.sql)
+                  ? { ok: false, reason: BIG_POINTS_REASON }
+                  : guard;
+      if (guard.ok && foreign !== null) foreignSentBack = true;
+      if (misfit !== null) misfitSentBack = true;
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -659,7 +1244,53 @@ export async function* askQuestion(
         yield await fail("cannot_answer", cannotAnswer);
         return;
       }
-      let resultRows = run.result.rows;
+      // ── No match in scope: two things to try before "no data" ──
+      let ran = run.result;
+      if (ran.matches.length === 0 && model.configured) {
+        const matchup = team ? playerOpponentScope(step.plan.scope_sql) : null;
+        if (matchup !== null) {
+          // The player has never played that opponent. What IS recorded is
+          // the program's matches against them.
+          const absent = await absentMatchup(matchup, step.plan);
+          if (absent !== null) {
+            ({ plan, result } = absent);
+            reviewText = absent.text;
+            break;
+          }
+        } else if (
+          inheritsPreviousScope(
+            input.question,
+            hasTags,
+            previous,
+            step.plan.scope_sql,
+          ) &&
+          previous
+        ) {
+          const again = await runQuery(
+            db,
+            { ...step.plan, scope_sql: previous.scope_sql },
+            scope,
+          );
+          if (again.ok && again.result.matches.length > 0) {
+            step.plan.scope_sql = previous.scope_sql;
+            ran = again.result;
+          }
+        }
+      }
+      if (step.compare !== null && ran.matches.length > 0) {
+        // The server's own query: nothing to send back to the planner.
+        const compared = await compareAnswer(step.compare, step.plan, ran, {});
+        if (compared === null) {
+          plan = step.plan;
+          result = { matches: ran.matches, rows: [] };
+          emptyReason = ASK_NO_STATS_MESSAGE;
+          break;
+        }
+        ({ plan, result } = compared);
+        reviewText = compared.text;
+        break;
+      }
+      let resultRows = ran.rows;
       const same =
         attempt === 0 && !fallback ? identicalSiblings(resultRows) : null;
       if (same !== null) {
@@ -708,6 +1339,34 @@ export async function* askQuestion(
       // "order by loss_pct desc limit 1" with a null in front: Postgres puts
       // rows with no figure first when descending, so the top row is one
       // with nothing to rank. Sent back once; a second time it stands.
+      // A group's match count above the number of matches in scope has
+      // counted rows, not matches: ask.match_stats has two a match. Sent
+      // back once; a second time the column is left out.
+      const overcounted =
+        step.review || !model.configured
+          ? null
+          : overcountedMatches(resultRows, ran.matches.length);
+      if (overcounted !== null) {
+        if (
+          !overcountSentBack &&
+          attempt < MAX_PLAN_ATTEMPTS - 1 &&
+          !fallback
+        ) {
+          overcountSentBack = true;
+          messages.push(
+            { role: "assistant", content: step.reply },
+            {
+              role: "user",
+              content: feedback({
+                kind: "database",
+                detail: `The query ran, but ${overcounted} holds more matches than scope selected: it counted rows, and ask.match_stats has two rows per match. Count matches as count(distinct m.match_id), or filter s.side = 'me' before counting.`,
+              }),
+            },
+          );
+          continue;
+        }
+        resultRows = withoutColumns(resultRows, [overcounted]);
+      }
       const unranked = step.review
         ? null
         : topRowHasNoRankingFigure(step.plan.sql, resultRows);
@@ -742,10 +1401,10 @@ export async function* askQuestion(
             : "team";
         const rows = withScopeCount(
           [reviewAnswerRow(review)],
-          run.result.matches.length,
+          ran.matches.length,
         );
         reviewText = buildReviewAnswer(review, classifyReview(review, mode));
-        result = { matches: run.result.matches, rows };
+        result = { matches: ran.matches, rows };
         break;
       }
 
@@ -754,7 +1413,7 @@ export async function* askQuestion(
       // back once; the second time the baseline columns are left out.
       // Per-match rows the query returned newest first are turned round:
       // the trend and the win/loss strip are drawn oldest first.
-      let rows = oldestFirst(resultRows);
+      let rows = oldestFirst(withResultFlags(resultRows));
       const narrowed = scopeIsNarrowed(step.plan.scope_sql);
       // Over every match, an all-matches baseline is the figure a second
       // time by definition: one equal pair is enough, and there is nothing
@@ -766,11 +1425,8 @@ export async function* askQuestion(
           fallback = {
             plan: step.plan,
             result: {
-              matches: run.result.matches,
-              rows: withScopeCount(
-                withOrderSummary(rows),
-                run.result.matches.length,
-              ),
+              matches: ran.matches,
+              rows: withScopeCount(withOrderSummary(rows), ran.matches.length),
             },
           };
           messages.push(
@@ -800,11 +1456,8 @@ export async function* askQuestion(
       const answered = {
         plan: step.plan,
         result: {
-          matches: run.result.matches,
-          rows: withScopeCount(
-            withOrderSummary(rows),
-            run.result.matches.length,
-          ),
+          matches: ran.matches,
+          rows: withScopeCount(withOrderSummary(rows), ran.matches.length),
         },
       };
       if (problem !== null && attempt === 0 && !fallback) {
@@ -824,10 +1477,11 @@ export async function* askQuestion(
     }
 
     if (result.matches.length === 0) {
-      yield await fail(
-        "no_data",
-        team ? ASK_TEAM_NO_DATA_MESSAGE : ASK_NO_DATA_MESSAGE,
-      );
+      yield await fail("no_data", noDataMessage(team, plan.scope_sql));
+      return;
+    }
+    if (emptyReason !== null) {
+      yield await fail("no_data", emptyReason);
       return;
     }
 
@@ -991,12 +1645,14 @@ async function planOnce(
   systemPrompt: string,
   messages: ChatMessage[],
   cannotAnswer: string,
+  team: boolean,
 ): Promise<PlanStep> {
   if (!model.configured) {
     return {
       ok: true,
       plan: ASK_MOCK_PLAN,
       review: false,
+      compare: null,
       reply: JSON.stringify(ASK_MOCK_PLAN),
     };
   }
@@ -1019,7 +1675,7 @@ async function planOnce(
       problem: {
         kind: "unparseable",
         detail:
-          "The reply was not one JSON object with scope_sql and sql, with review and scope_sql, or with cannot_answer.",
+          "The reply was not one JSON object with scope_sql and sql, with compare and scope_sql, with review and scope_sql, or with cannot_answer.",
       },
     };
   }
@@ -1040,10 +1696,29 @@ async function planOnce(
         asks_for_advice: true,
       },
       review: true,
+      compare: null,
       reply,
     };
   }
-  return { ok: true, plan: parsed, review: false, reply };
+  if ("compare" in parsed) {
+    // The planner chose the comparison and the matches; the query is the
+    // server's. A personal scope has one player: "players" there is the
+    // comparison with the opponents.
+    const kind: AskCompareKind =
+      !team && parsed.compare === "players" ? "opponent" : parsed.compare;
+    return {
+      ok: true,
+      plan: {
+        scope_sql: parsed.scope_sql,
+        sql: compareSql(kind, team),
+        asks_for_advice: parsed.asks_for_advice,
+      },
+      review: false,
+      compare: { kind, measures: parsed.measures ?? null },
+      reply,
+    };
+  }
+  return { ok: true, plan: parsed, review: false, compare: null, reply };
 }
 
 const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
@@ -1086,6 +1761,28 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
     record.scope_sql.trim() !== ""
   ) {
     return { review: true, scope_sql: record.scope_sql, asks_for_advice: true };
+  }
+  // A comparison: `compare` one of the three kinds and a scope. Any `sql`
+  // beside it is ignored — the query is never the planner's.
+  if (
+    typeof record.compare === "string" &&
+    (ASK_COMPARE_KINDS as readonly string[]).includes(
+      record.compare.trim().toLowerCase(),
+    ) &&
+    typeof record.scope_sql === "string" &&
+    record.scope_sql.trim() !== ""
+  ) {
+    const measures = Array.isArray(record.measures)
+      ? record.measures.filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [];
+    return {
+      compare: record.compare.trim().toLowerCase() as AskCompareKind,
+      scope_sql: record.scope_sql,
+      ...(measures.length > 0 ? { measures } : {}),
+      asks_for_advice: advice,
+    };
   }
   if (
     typeof record.scope_sql === "string" &&

@@ -30,6 +30,8 @@ import {
   misranksSiblings,
   recitesOneCell,
   renderAskAnswer,
+  statedRows,
+  columnLabel,
   siblingHeadline,
   statedFigures,
 } from "@/lib/services/ask/answer-render";
@@ -61,6 +63,9 @@ import {
  */
 
 /** The result rows every case below renders against. */
+/** A result with nothing to state: the renderer adds no figures of its own to an answer over it. */
+const NO_FIGURES: AskRow[] = [{ opponent_name: "Alex Rivera", i_won: true }];
+
 const ROWS: AskRow[] = [
   {
     matches: 9,
@@ -309,7 +314,9 @@ test.describe("renderAskAnswer — shape", () => {
   });
 
   test("a headline alone, with no line break, is still a headline", async () => {
-    const { events, result } = await render(["Just the claim."]);
+    // Rows with no figure: a bare claim over rows that hold one gets the
+    // figures stated beneath it (see "an answer that ends with no figure").
+    const { events, result } = await render(["Just the claim."], NO_FIGURES);
 
     expect(events).toEqual([{ type: "headline", text: "Just the claim." }]);
     expect(result.failure).toBeNull();
@@ -318,11 +325,10 @@ test.describe("renderAskAnswer — shape", () => {
   test("text streams a sentence at a time instead of waiting for the end", async () => {
     // A sentence is held until it ends, so one that cites the same cell as
     // both ends of a range can be left out whole (`citesSameCellAsRange`).
-    const { events } = await render([
-      "Headline.\n",
-      "The first sentence. The ",
-      "second one.",
-    ]);
+    const { events } = await render(
+      ["Headline.\n", "The first sentence. The ", "second one."],
+      NO_FIGURES,
+    );
 
     expect(events).toEqual([
       { type: "headline", text: "Headline." },
@@ -422,11 +428,10 @@ test.describe("renderAskAnswer — typed numbers", () => {
   });
 
   test("a typed number split across chunks is dropped as one number", async () => {
-    const { events, result } = await render([
-      "Headline.\nYou won 5",
-      "4.",
-      "6% of points.",
-    ]);
+    const { events, result } = await render(
+      ["Headline.\nYou won 5", "4.", "6% of points."],
+      NO_FIGURES,
+    );
 
     expect(body(events)).toBe("You won of points.");
     expect(result.droppedDigits).toEqual(["54.6%"]);
@@ -1435,7 +1440,9 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     );
     expect(inBlock.result.failure).toBeNull();
     expect(inBlock.result.droppedVisuals[0].reason).toBe("bad_reference");
-    expect(body(inBlock.events)).toBe("Fine.");
+    // The block was the answer's only figures, so the server states them.
+    expect(body(inBlock.events)).toBe(`Fine.\n\n${statedRows(COMPARISON)}`);
+    expect(statedRows(COMPARISON)).toMatch(/^Matches: 4\. First serves in: /);
 
     const inProse = await render(
       [
@@ -2648,7 +2655,10 @@ test.describe("a superlative given to the wrong serve direction or rally length"
     );
     expect(result.headline).toBe(siblingHeadline(ranking));
     expect(result.droppedSentences).toBe(1);
-    expect(result.text).toBe("These figures cover the matches.");
+    // Nothing in the answer cited a figure, so the server states them.
+    expect(result.text).toMatch(
+      /^These figures cover the matches\.\n\nBreak point serve t: 38\.7%\./,
+    );
   });
 
   test("a body sentence that does it is dropped; a right one stays", async () => {

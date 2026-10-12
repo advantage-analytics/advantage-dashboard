@@ -1998,6 +1998,106 @@ export function statedFigures(row: AskRow): string {
   return sentences.join(" ");
 }
 
+/** At most this many rows, and this many figures of each, are stated for an answer that ended with none. */
+const MAX_STATED_ROWS = 6;
+const MAX_STATED_ROW_FIGURES = 3;
+
+const DIGIT_WORDS = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+];
+
+/** Columns whose number places a row in time or in a match; never a figure to state. */
+const POSITION_COLUMN =
+  /^(?:year|month|week|quarter|day|set_number|game_number|point_number|shot_number|rn|rank|ord|position)$/;
+
+/**
+ * A column's name as a label, for a figure the dictionary cannot place:
+ * `set_1_win_pct` → "Set one win". A digit is spelt out, since the renderer
+ * deletes typed digits and "Set win" beside "Later sets win" would say less.
+ */
+export function columnLabel(column: string): string {
+  const measure = askMeasure(column);
+  if (measure) return askMeasureFullLabel(measure);
+  const words = column
+    .replace(/_(?:pct|percent|percentage)$/, "")
+    .split("_")
+    .filter((word) => word !== "")
+    .map((word) =>
+      /^\d+$/.test(word) ? (DIGIT_WORDS[Number(word)] ?? "") : word,
+    )
+    .filter((word) => word !== "")
+    .join(" ")
+    .replace(/\d+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return words === ""
+    ? "Figure"
+    : words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * A result's figures as plain sentences with the values already printed, for
+ * an answer that ended with no figure, no chart and no number in its text —
+ * a bare claim ("Rudy records a higher win percentage in the first set").
+ * One row: "Set one win: 53.2%. Later sets win: 51.6%." Several rows with a
+ * label column: "Hard Court: Wins 6, Losses 2." — each row's own figures
+ * under that row's own label. "" when the result holds no figure to state,
+ * or more rows than can be read as sentences.
+ */
+export function statedRows(rows: readonly AskRow[]): string {
+  if (rows.length === 0 || rows.length > MAX_STATED_ROWS) return "";
+  const columns = Object.keys(rows[0]).filter(
+    (column) =>
+      column !== SCOPE_TOTAL_COLUMN &&
+      !POSITION_COLUMN.test(column) &&
+      rows.some((row) => typeof row[column] === "number") &&
+      rows.every(
+        (row) => row[column] === null || typeof row[column] === "number",
+      ),
+  );
+  if (columns.length === 0) return "";
+  const figure = (row: AskRow, column: string): string | null => {
+    const value = row[column];
+    if (typeof value !== "number") return null;
+    return formatAskCell(column, value);
+  };
+  if (rows.length === 1) {
+    return columns
+      .slice(0, MAX_STATED_FIGURES)
+      .flatMap((column) => {
+        const text = figure(rows[0], column);
+        return text === null ? [] : [`${columnLabel(column)}: ${text}.`];
+      })
+      .join(" ");
+  }
+  const label = rowLabelColumn(rows);
+  if (label === null) return "";
+  return rows
+    .flatMap((row) => {
+      const name = formatAskCell(label, row[label]);
+      const figures = columns
+        .slice(0, MAX_STATED_ROW_FIGURES)
+        .flatMap((column) => {
+          const text = figure(row, column);
+          return text === null ? [] : [`${columnLabel(column)} ${text}`];
+        });
+      return name === null || name === ASK_NULL_CELL || figures.length === 0
+        ? []
+        : [`${name}: ${figures.join(", ")}.`];
+    })
+    .join(" ");
+}
+
 function failed(): AskErrorEvent {
   return {
     type: "error",
@@ -2037,6 +2137,26 @@ async function* render(
   if (result.headline === "") {
     result.failure = { kind: "empty_answer" };
     yield failed();
+    return;
+  }
+
+  // The answer as it ended: no figure line, no chart that survived, and no
+  // number in the headline or the body. Whatever was cited was dropped on
+  // the way (a chart with a bad value, a sentence that recited one cell), so
+  // the reader is left with a bare claim. The server states the figures.
+  if (
+    result.figures.length === 0 &&
+    result.visual === null &&
+    !/\d/.test(result.headline) &&
+    !/\d/.test(result.text)
+  ) {
+    const stated = statedRows(rows);
+    if (stated !== "") {
+      const delta = result.text.trim() === "" ? stated : `\n\n${stated}`;
+      result.text += delta;
+      result.renamedLabels += 1;
+      yield { type: "text", delta };
+    }
   }
 }
 

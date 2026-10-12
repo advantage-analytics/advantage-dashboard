@@ -9,6 +9,11 @@
  * are the team ones, and the query runs through `ask_run_team_query`. The
  * account must be a member of the program (the verifier is a coach on the ZZ
  * Test Program). `scripts/ask-eval-team.json` is the coach's question list.
+ * The names in it are placeholders — players Sokolov and Reyes, opponents
+ * Okafor and Lindqvist — because a roster is not something to commit: copy
+ * the file, put the program's own names in, and run the copy. A `players`
+ * or `opponents` tag that names nobody on the roster is reported as
+ * `TAG REFUSED` and its question skipped.
  *
  * It signs in as the eyes-on verifier account (EYES_ON_EMAIL /
  * EYES_ON_PASSWORD), builds that account's tag options, and for each question

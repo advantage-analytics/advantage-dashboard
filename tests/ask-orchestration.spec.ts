@@ -2288,8 +2288,17 @@ test.describe("a review question", () => {
         }),
       ]);
 
+      // The question names the player: a scope naming somebody it does not
+      // is sent back (see "a name nobody mentioned").
       const events = await collect(
-        askQuestion(input({ db, model, scope: TEAM })),
+        askQuestion(
+          input({
+            db,
+            model,
+            scope: TEAM,
+            question: "How can Sokolov improve for the next match?",
+          }),
+        ),
       );
 
       expect(events.find((event) => event.type === "headline")).toEqual({
@@ -3049,7 +3058,7 @@ test.describe("a follow-up about 'she' whose scope lost the player", () => {
         input({
           db: first.db,
           model: told.model,
-          question: "Why did she lose her last match?",
+          question: "How did she serve in her last match?",
           previousPlan: PREVIOUS,
         }),
       ),
@@ -3071,7 +3080,7 @@ test.describe("a follow-up about 'she' whose scope lost the player", () => {
         input({
           db: second.db,
           model: again.model,
-          question: "Why did she lose her last match?",
+          question: "How did she serve in her last match?",
           previousPlan: PREVIOUS,
         }),
       ),
@@ -3166,7 +3175,10 @@ test.describe("a pair-shaped result", () => {
 
     const events = await collect(
       askQuestion(
-        input({ db, model, question: "Why do I keep losing to Marek?" }),
+        // Not "why do I keep losing": that wording is routed to the app's
+        // own comparison (tests/ask-compare.spec.ts). This is the planner's
+        // query coming back pair-shaped.
+        input({ db, model, question: "How do I match up with Marek?" }),
       ),
     );
 

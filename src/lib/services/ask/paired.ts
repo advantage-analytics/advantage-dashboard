@@ -4,6 +4,7 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import {
+  MAX_ASK_TABLE_COLUMNS,
   MAX_ASK_TABLE_ROWS,
   MAX_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
@@ -79,6 +80,27 @@ const SCOPE_COUNT_COLUMN = "matches_in_scope";
 const NOT_A_MEASURE =
   /^(?:n|matches|played|match_count|matches_played|num_matches|n_matches|[a-z0-9_]+_matches|matches_[a-z0-9_]+|[a-z0-9_]+_match_count)$|_(?:diff|diff_pct|delta|change|gap)$/;
 
+/** A count returned as a per-match mean says so in its column name (`compare.ts`). */
+const PER_MATCH = /_per_match$/;
+const PER_MATCH_NOTE = "Counts are per-match averages.";
+
+/**
+ * The smallest figure a count's gap is measured against. Gaps are ordered by
+ * their share of the larger figure, and without a floor one ace against none
+ * is the widest gap there can be and heads every answer.
+ */
+const MIN_COUNT_SCALE = 5;
+
+/** The gap between two printed figures as a share of the larger: what the measures are ordered by. */
+function relativeGap(a: number, b: number, percentage: boolean): number {
+  const larger = Math.max(
+    Math.abs(a),
+    Math.abs(b),
+    percentage ? 0 : MIN_COUNT_SCALE,
+  );
+  return larger === 0 ? 0 : Math.abs(a - b) / larger;
+}
+
 function printed(value: number): number {
   const rounded = Math.round(Math.abs(value) * 10) / 10;
   return value < 0 && rounded > 0 ? -rounded : rounded;
@@ -92,6 +114,11 @@ function isNumber(value: unknown): value is number {
 export function pairLabel(measure: string): string {
   const known = askMeasure(measure);
   if (known) return known.label;
+  // A count returned as a per-match mean keeps the measure's own name.
+  if (PER_MATCH.test(measure)) {
+    const base = askMeasure(measure.replace(PER_MATCH, ""));
+    if (base) return `${base.label} per match`;
+  }
   const words = measure
     .replace(/_(?:pct|percent|percentage)$/, "")
     .replace(/_/g, " ")
@@ -144,15 +171,15 @@ export function pairedShape(rows: readonly AskRow[]): AskPairedShape | null {
     if (!isNumber(a) || !isNumber(b)) continue;
     const subjectValue = printed(a);
     const otherValue = printed(b);
-    const larger = Math.max(Math.abs(subjectValue), Math.abs(otherValue));
+    const percentage = /(?:^|_)(?:pct|percent|percentage)$/.test(pair.measure);
     pairs.push({
       measure: pair.measure,
       subject: pair.subject,
       other: pair.other,
       subjectValue,
       otherValue,
-      percentage: /(?:^|_)(?:pct|percent|percentage)$/.test(pair.measure),
-      gap: larger === 0 ? 0 : Math.abs(subjectValue - otherValue) / larger,
+      percentage,
+      gap: relativeGap(subjectValue, otherValue, percentage),
       label: pairLabel(pair.measure),
     });
   }
@@ -203,10 +230,24 @@ export interface AskPairedContext {
   opponentName: string | null;
   /** Team scope: the one player every match in scope belongs to, or null. */
   playerName: string | null;
+  /**
+   * Server-written sentences that go before the comparison: the first is the
+   * answer's headline, the rest open the body, and the comparison's own
+   * headline follows them. In the renderer's syntax, no typed digit.
+   */
+  lead?: readonly string[];
+  /** Server-written sentences added to the body after the comparison. */
+  notes?: readonly string[];
+  /** Columns the lead cites, added to the row the answer is rendered against. */
+  extraRow?: AskRow;
+  /** How the matches in scope ended, when the body should say so: counted from the matches, never by a model. */
+  record?: { won: number; lost: number };
 }
 
 /** The columns the server adds to the row so a name is cited, never typed. */
 export const PAIRED_NAME_PREFIX = "paired_";
+const RECORD_WON_COLUMN = `${PAIRED_NAME_PREFIX}won`;
+const RECORD_LOST_COLUMN = `${PAIRED_NAME_PREFIX}lost`;
 const SUBJECT_NAME_COLUMN = `${PAIRED_NAME_PREFIX}subject_name`;
 const OTHER_NAME_COLUMN = `${PAIRED_NAME_PREFIX}other_name`;
 
@@ -280,7 +321,14 @@ function sides(
         }
       : { name: "The team", lower: "the team", was: "was", heading: "Team" };
   if (shape.kind === "baseline") {
-    const baseline = baselineNames(shape.otherQualifier);
+    // "For the team" names the other side only when the subject is one
+    // player; a set of the team's own matches is set against all of them.
+    const baseline =
+      context.team &&
+      !context.playerName &&
+      /^(?:team_|_team)$/.test(shape.otherQualifier)
+        ? { phrase: "across all the team's matches", heading: "All matches" }
+        : baselineNames(shape.otherQualifier);
     return {
       subject: {
         ...subject,
@@ -416,10 +464,16 @@ export function buildPairedAnswer(
   const level = shape.pairs.filter(
     (pair) => pair.subjectValue === pair.otherValue,
   );
+  // A baseline's clauses name no subject ("first serves in was lower than
+  // for the team"); in a team scope the player they are about goes first.
+  const whose =
+    shape.kind === "baseline" && context.team && context.playerName
+      ? `For ${subject.name}, `
+      : "";
   const clauses = (pairs: readonly AskPair[]) =>
     shape.kind === "opponent"
       ? opponentClauses(pairs, subject, other)
-      : baselineClauses(pairs, other);
+      : `${whose}${whose === "" ? baselineClauses(pairs, other) : lowerFirst(baselineClauses(pairs, other))}`;
 
   // ── Headline: the widest gaps, each with its direction and both figures ──
   const lead = stated.slice(0, MAX_PAIRED_HEADLINE);
@@ -458,13 +512,37 @@ export function buildPairedAnswer(
   for (const entry of shape.unpaired.slice(0, MAX_UNPAIRED)) {
     body.push(`${entry.label}: ${cell(entry.column)}.`);
   }
+  if (shape.pairs.some((pair) => PER_MATCH.test(pair.measure))) {
+    body.push(PER_MATCH_NOTE);
+  }
+  body.push(...(context.notes ?? []));
+  const record = context.record;
+  if (record && record.won + record.lost > 0) {
+    body.push(
+      context.matchCount === 1
+        ? `${subject.name} ${record.won === 1 ? "won" : "lost"} the match.`
+        : `${subject.name} won ${cell(RECORD_WON_COLUMN)} and lost ${cell(RECORD_LOST_COLUMN)} of these matches.`,
+    );
+  }
   body.push(context.matchCount === 1 ? "This is one match." : `From ${count}.`);
 
+  const opening = context.lead ?? [];
+  const first = opening.length > 0 ? opening[0] : headline;
+  const paragraphs =
+    opening.length > 0 ? [...opening.slice(1), headline, ...body] : body;
+
   return {
-    text: `${headline}\n${table.join("\n")}\n\n${body.join(" ")}`,
+    text: `${first}\n${table.join("\n")}\n\n${paragraphs.join(" ")}`,
     rows: [
       {
         ...rows[0],
+        ...(context.extraRow ?? {}),
+        ...(record
+          ? {
+              [RECORD_WON_COLUMN]: record.won,
+              [RECORD_LOST_COLUMN]: record.lost,
+            }
+          : {}),
         ...(context.team && context.playerName
           ? { [SUBJECT_NAME_COLUMN]: context.playerName }
           : {}),
@@ -542,22 +620,30 @@ export function buildTwoGroupAnswer(
     }
     const left = printed(a);
     const right = printed(b);
-    const larger = Math.max(Math.abs(left), Math.abs(right));
+    const percentage = /_(?:pct|percent|percentage)$/.test(column);
     measures.push({
       column,
       name: pairLabel(column),
-      percentage: /_(?:pct|percent|percentage)$/.test(column),
+      percentage,
       leader: left === right ? 0 : left > right ? 1 : 2,
-      gap: larger === 0 ? 0 : Math.abs(left - right) / larger,
+      gap: relativeGap(left, right, percentage),
     });
   }
   if (measures.length < MIN_TWO_GROUP_MEASURES) return null;
   measures.sort((x, y) => y.gap - x.gap);
 
+  // Two people are the subject of their own sentences ("Reyes had more
+  // aces"); two surfaces or two hands are not ("aces was greater for clay").
+  const people = label === "player_name" || label === "opponent_name";
   const clause = (entry: (typeof measures)[number]): string => {
     const hi = entry.leader === 1 ? 1 : 2;
     const lo = hi === 1 ? 2 : 1;
     const figures = `(${ref(hi, entry.column)} to ${ref(lo, entry.column)})`;
+    if (people) {
+      return entry.percentage
+        ? `${ref(hi, label)} was higher on ${lowerFirst(entry.name)} ${figures}`
+        : `${ref(hi, label)} had more ${lowerFirst(entry.name)} ${figures}`;
+    }
     return entry.percentage
       ? `${lowerFirst(entry.name)} was higher for ${ref(hi, label)} ${figures}`
       : `${lowerFirst(entry.name)} was greater for ${ref(hi, label)} ${figures}`;
@@ -603,6 +689,311 @@ export function buildTwoGroupAnswer(
   return {
     text: `${headline}\n${table.join("\n")}\n\n${body.join(" ")}`,
     rows: [...rows],
+  };
+}
+
+// ── Players side by side ─────────────────────────────────────────────────────
+
+/** One measure of a players comparison, as `compare.ts` chose it. */
+export interface AskPlayersMeasure {
+  /** The column every row holds it under. */
+  column: string;
+  /** True for a `_pct` measure: highest / lowest. False for a count: most / fewest. */
+  percentage: boolean;
+}
+
+export interface AskPlayersContext {
+  /** How many matches the scope selected. */
+  matchCount: number;
+  /** The measures to show, in the order to show them. */
+  measures: readonly AskPlayersMeasure[];
+  /** True when the question named the measures: two players are then compared in that order. */
+  explicit: boolean;
+  /** Server-written sentences added to the body: what a vague word was read as. */
+  notes?: readonly string[];
+}
+
+/** At most this many measures get a highest-and-lowest sentence. */
+const MAX_PLAYERS_STATED = 4;
+
+/**
+ * The rows of the players the question names, when it names two or more of
+ * them; otherwise every row. "Rudy versus Emon" over a scope that holds a
+ * third player is about two people.
+ */
+export function namedPlayerRows(
+  rows: readonly AskRow[],
+  question: string,
+): AskRow[] {
+  const text = question.toLowerCase();
+  const named = rows.filter((row) => {
+    if (typeof row.player_name !== "string") return false;
+    const words = row.player_name
+      .toLowerCase()
+      .split(/[^a-zÀ-ɏ]+/)
+      .filter((word) => word.length >= 3);
+    const ends = [words[0], words[words.length - 1]].filter(
+      (word): word is string => word !== undefined,
+    );
+    return ends.some((word) =>
+      new RegExp(`(?:^|[^a-z])${word}(?:[^a-z]|$)`).test(text),
+    );
+  });
+  return named.length >= 2 ? named : [...rows];
+}
+
+/**
+ * The server-written answer for a comparison of players: one row per
+ * `player_name`, each with `group_matches` and the same measures.
+ *
+ * Two players are written the way a player and an opponent are — who was
+ * higher on each measure, both figures beside the word — with one table
+ * column each. Three or more get a table and a headline that names the
+ * highest and the lowest for the FIRST measure, by that measure's name, so a
+ * question such as "who is our most consistent player" is answered with what
+ * was measured and never with an opinion.
+ *
+ * Null unless at least two rows name a player and share a measure with a
+ * figure in two of them.
+ */
+export function buildPlayersAnswer(
+  rows: readonly AskRow[],
+  context: AskPlayersContext,
+): AskPairedAnswer | null {
+  const measures = context.measures.filter(
+    (measure) =>
+      rows.filter((row) => isNumber(row[measure.column])).length >= 2,
+  );
+  if (measures.length === 0) return null;
+  const players = rows
+    .filter(
+      (row) =>
+        typeof row.player_name === "string" &&
+        measures.some((measure) => isNumber(row[measure.column])),
+    )
+    .slice(0, MAX_ASK_TABLE_ROWS);
+  if (players.length < 2) return null;
+
+  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const perMatch = measures.some((measure) => PER_MATCH.test(measure.column));
+  const tail = (ordered: readonly AskRow[]): string[] => [
+    ...(ordered.every((row) => isNumber(row.group_matches))
+      ? [
+          `Matches with statistics: ${joined(ordered.map((_, index) => `{{r${index + 1}.player_name}} {{r${index + 1}.group_matches}}`))}.`,
+        ]
+      : []),
+    ...(perMatch ? [PER_MATCH_NOTE] : []),
+    ...(context.notes ?? []),
+    `From ${count} in all.`,
+  ];
+  const ref = (row: number, column: string) => `{{r${row}.${column}}}`;
+
+  // ── Two players: who was higher on each measure ──
+  if (players.length === 2) {
+    const entries = measures.flatMap((measure) => {
+      const a = players[0][measure.column];
+      const b = players[1][measure.column];
+      if (!isNumber(a) || !isNumber(b)) return [];
+      const left = printed(a);
+      const right = printed(b);
+      return [
+        {
+          measure,
+          name: pairLabel(measure.column),
+          leader: left === right ? 0 : left > right ? 1 : 2,
+          gap: relativeGap(left, right, measure.percentage),
+        },
+      ];
+    });
+    if (entries.length === 0) return null;
+    if (!context.explicit) entries.sort((x, y) => y.gap - x.gap);
+    const stated = entries.filter((entry) => entry.leader !== 0);
+    const level = entries.filter((entry) => entry.leader === 0);
+    const clauses = (list: typeof entries): string => {
+      const groups: { leader: number; clauses: string[] }[] = [];
+      for (const entry of list) {
+        const hi = entry.leader;
+        const lo = hi === 1 ? 2 : 1;
+        const figures = `(${ref(hi, entry.measure.column)} to ${ref(lo, entry.measure.column)})`;
+        const clause = entry.measure.percentage
+          ? `was higher on ${lowerFirst(entry.name)} ${figures}`
+          : `had more ${lowerFirst(entry.name)} ${figures}`;
+        const group = groups.find((item) => item.leader === hi);
+        if (group) group.clauses.push(clause);
+        else groups.push({ leader: hi, clauses: [clause] });
+      }
+      return groups
+        .map(
+          (group) =>
+            `${ref(group.leader, "player_name")} ${joined(group.clauses)}`,
+        )
+        .join("; ");
+    };
+    const lead = stated.slice(0, MAX_PAIRED_HEADLINE);
+    const headline =
+      lead.length > 0
+        ? `${clauses(lead)}.`
+        : "The two players were level on every measure compared.";
+    const table = [
+      `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared${context.explicit ? "" : ", widest gap first"}.`,
+      `COLUMNS: ${ref(1, "player_name")} ${S} ${ref(2, "player_name")}`,
+      ...entries
+        .slice(0, MAX_ASK_TABLE_ROWS)
+        .map(
+          (entry) =>
+            `ROW: ${entry.name} ${S} ${ref(1, entry.measure.column)} ${S} ${ref(2, entry.measure.column)}`,
+        ),
+    ];
+    const body: string[] = [];
+    const rest = stated.slice(
+      MAX_PAIRED_HEADLINE,
+      MAX_PAIRED_HEADLINE + MAX_PAIRED_BODY,
+    );
+    if (rest.length > 0) body.push(`${clauses(rest)}.`);
+    if (level.length > 0 && lead.length > 0) {
+      body.push(
+        `Level: ${joined(level.map((entry) => `${lowerFirst(entry.name)} (${ref(1, entry.measure.column)})`))}.`,
+      );
+    }
+    body.push(...tail(players));
+    return {
+      text: `${headline}\n${table.join("\n")}\n\n${body.join(" ")}`,
+      rows: players.map((row) => ({ ...row })),
+    };
+  }
+
+  // ── Three or more: the highest and the lowest of each measure, by name ──
+  const lead = measures[0];
+  const ordered = [...players].sort((a, b) => {
+    const x = a[lead.column];
+    const y = b[lead.column];
+    if (!isNumber(x)) return isNumber(y) ? 1 : 0;
+    if (!isNumber(y)) return -1;
+    return y - x;
+  });
+  const extremes = (measure: AskPlayersMeasure): string | null => {
+    const held = ordered
+      .map((row, index) => ({ n: index + 1, value: row[measure.column] }))
+      .filter((entry): entry is { n: number; value: number } =>
+        isNumber(entry.value),
+      );
+    if (held.length < 2) return null;
+    const high = held.reduce((best, entry) =>
+      printed(entry.value) > printed(best.value) ? entry : best,
+    );
+    const low = held.reduce((best, entry) =>
+      printed(entry.value) < printed(best.value) ? entry : best,
+    );
+    const name = pairLabel(measure.column);
+    if (printed(high.value) === printed(low.value)) {
+      return `${name}: the same for every player compared (${ref(high.n, measure.column)}).`;
+    }
+    return measure.percentage
+      ? `${name}: ${ref(high.n, "player_name")} was highest (${ref(high.n, measure.column)}) and ${ref(low.n, "player_name")} lowest (${ref(low.n, measure.column)}).`
+      : `${name}: ${ref(high.n, "player_name")} had the most (${ref(high.n, measure.column)}) and ${ref(low.n, "player_name")} the fewest (${ref(low.n, measure.column)}).`;
+  };
+  const headline = extremes(lead);
+  if (headline === null) return null;
+
+  const byPlayer = ordered.length <= MAX_ASK_TABLE_COLUMNS;
+  const tabled = byPlayer
+    ? measures.slice(0, MAX_ASK_TABLE_ROWS)
+    : measures.slice(0, MAX_ASK_TABLE_COLUMNS);
+  const table = byPlayer
+    ? [
+        `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, one column for each player.`,
+        `COLUMNS: ${ordered.map((_, index) => ref(index + 1, "player_name")).join(` ${S} `)}`,
+        ...tabled.map(
+          (measure) =>
+            `ROW: ${pairLabel(measure.column)} ${S} ${ordered.map((_, index) => ref(index + 1, measure.column)).join(` ${S} `)}`,
+        ),
+      ]
+    : [
+        `${ASK_VISUAL_LINE_PREFIX} table ${S} One row for each player, ordered by ${lowerFirst(pairLabel(lead.column))}.`,
+        `COLUMNS: ${tabled.map((measure) => pairLabel(measure.column)).join(` ${S} `)}`,
+        ...ordered.map(
+          (_, index) =>
+            `ROW: ${ref(index + 1, "player_name")} ${S} ${tabled.map((measure) => ref(index + 1, measure.column)).join(` ${S} `)}`,
+        ),
+      ];
+  const body = [
+    ...measures
+      .slice(1, MAX_PLAYERS_STATED)
+      .flatMap((measure) => extremes(measure) ?? []),
+    ...tail(ordered),
+  ];
+  return {
+    text: `${headline}\n${table.join("\n")}\n\n${body.join(" ")}`,
+    rows: ordered.map((row) => ({ ...row })),
+  };
+}
+
+// ── A matchup that was never played ──────────────────────────────────────────
+
+/** One match as the lead retells it; structurally an `AskSourceMatch`. */
+export interface AskLeadMatch {
+  playedOn: string | null;
+  opponentName: string | null;
+  playerName: string | null;
+  iWon: boolean | null;
+  scoreText: string | null;
+}
+
+/** At most this many of the program's matches are retold before the comparison. */
+export const MAX_LEAD_MATCHES = 3;
+
+const ABSENT_NAME_COLUMN = `${PAIRED_NAME_PREFIX}absent_name`;
+
+/**
+ * "How should Rudy play against Eli?" when Rudy has never played him: the
+ * sentences that say so and retell what IS recorded — the program's matches
+ * against that opponent, who played and how each ended — with the columns
+ * they cite. The comparison over those matches follows (`buildPairedAnswer`
+ * with this as its `lead`). Every name, date and score is a cell reference.
+ */
+export function absentMatchupLead(
+  matches: readonly AskLeadMatch[],
+  absentPlayer: string | null,
+): { lead: string[]; extraRow: AskRow } {
+  const opponent = onlyName(matches.map((match) => match.opponentName));
+  const other = opponent ? cell(OTHER_NAME_COLUMN) : "that opponent";
+  const extraRow: AskRow = absentPlayer
+    ? { [ABSENT_NAME_COLUMN]: absentPlayer }
+    : {};
+  const who = absentPlayer ? cell(ABSENT_NAME_COLUMN) : "That player";
+  const retold = matches.slice(0, MAX_LEAD_MATCHES).map((match, index) => {
+    const key = `${PAIRED_NAME_PREFIX}m${index + 1}`;
+    extraRow[`${key}_played_on`] = match.playedOn;
+    extraRow[`${key}_player_name`] = match.playerName;
+    extraRow[`${key}_opponent_name`] = match.opponentName;
+    extraRow[`${key}_score_text`] = match.scoreText;
+    const player = match.playerName
+      ? cell(`${key}_player_name`)
+      : "the program's player";
+    const verb =
+      match.iWon === true
+        ? "won against"
+        : match.iWon === false
+          ? "lost to"
+          : "played";
+    const against = match.opponentName
+      ? cell(`${key}_opponent_name`)
+      : "an unnamed opponent";
+    const score =
+      match.scoreText && match.scoreText.trim() !== ""
+        ? `, ${cell(`${key}_score_text`)}`
+        : "";
+    const date = match.playedOn ? `${cell(`${key}_played_on`)}: ` : "";
+    return `${date}${player} ${verb} ${against}${score}.`;
+  });
+  const one = matches.length === 1;
+  const many = matches.length > MAX_LEAD_MATCHES;
+  return {
+    lead: [
+      `${who} has no recorded match against ${other}.`,
+      `${one ? `The program's one match against ${other}` : `The program has {{r1.${SCOPE_COUNT_COLUMN}}} matches against ${other}${many ? "; the most recent" : ""}`}: ${upperFirst(retold.join(" "))}`,
+    ],
+    extraRow,
   };
 }
 

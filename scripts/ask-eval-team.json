@@ -71,5 +71,68 @@
   {
     "q": "How can Sokolov improve for the next match?",
     "want": "the review of one player: her last match against her own previous-five and overall averages, third person, no advice"
+  },
+  {
+    "q": "How is Sokolov playing versus Reyes",
+    "players": ["Sokolov", "Reyes"],
+    "want": "the players comparison: each player's own figures side by side, both named; never one player's figures under the other's name"
+  },
+  {
+    "q": "Compare Sokolov and Reyes on serve",
+    "want": "the players comparison on the serve measures; never refused"
+  },
+  {
+    "q": "How should Sokolov play against Okafor?",
+    "want": "no advice; the opponent comparison when Sokolov has played Okafor; otherwise a first sentence saying the two never met, then the program's matches against Okafor; the notice"
+  },
+  {
+    "q": "How do we beat Lindqvist?",
+    "want": "no advice; the opponent comparison over the matches against Lindqvist; the notice"
+  },
+  {
+    "q": "What should Sokolov practice?",
+    "players": ["Sokolov"],
+    "want": "the review of that player's last match against their own averages; never refused; no advice; the notice"
+  },
+  {
+    "q": "How is Reyes doing?",
+    "players": ["Reyes"],
+    "want": "Reyes's figures beside the team's, named, with the record of those matches"
+  },
+  {
+    "q": "And how about his return?",
+    "after": 23,
+    "want": "keeps Reyes: the return figures, never another player's and never an example's placeholder name"
+  },
+  {
+    "q": "How did we do in the last two weeks?",
+    "want": "the matches in the window, or a plain 'no data' that says a period was looked for"
+  },
+  {
+    "q": "How did we do on September 25?",
+    "want": "the matches of that day: the team beside its opponents, and the record"
+  },
+  {
+    "q": "Who has the best footwork on the team?",
+    "want": "refused: footwork is not recorded"
+  },
+  {
+    "q": "How did Sokolov do against Lindqvist?",
+    "players": ["Sokolov"],
+    "opponents": ["Lindqvist"],
+    "want": "that matchup from the app's own query; the same figures as 'How do we beat Lindqvist?' when it is the same match"
+  },
+  {
+    "q": "Who is our most consistent player?",
+    "want": "the players comparison; the headline names the measure it used (unforced errors per match) and the body says what 'consistent' was read as; nobody crowned by opinion"
+  },
+  {
+    "q": "Does Sokolov play better in the first set or later sets?",
+    "players": ["Sokolov"],
+    "want": "points won by set from ask.points, with the figures stated: never a bare claim"
+  },
+  {
+    "q": "Which of our players wins the most long rallies?",
+    "want": "the players comparison on long rallies won, with each player's matches"
   }
 ]

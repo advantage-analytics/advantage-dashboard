@@ -365,8 +365,9 @@ test.describe("buildPairedAnswer — a measure against its baseline", () => {
         playerName: "Rudy Quan",
       },
     );
+    // The clauses name no subject, so the player they are about goes first.
     expect(result.headline).toBe(
-      "There were fewer double faults than for the team (1 to 6); first serves in was lower (64.1% to 65.5%).",
+      "For Rudy Quan, there were fewer double faults than for the team (1 to 6); first serves in was lower (64.1% to 65.5%).",
     );
     expect(table(result.visual).columns).toEqual(["Rudy Quan", "Team"]);
   });
