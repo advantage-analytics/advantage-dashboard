@@ -125,7 +125,9 @@ function serveHitterCopy(
       ? `Every other shot in point ${pointNumber} changes hands, and so does who won it.`
       : follow.point === "shots"
         ? `Every other shot in point ${pointNumber} changes hands.`
-        : "";
+        : follow.point === "winner"
+          ? `Who won point ${pointNumber} changes with it.`
+          : "";
   const base = {
     pendingLabel: "Switching…",
     tone: "primary" as const,
@@ -134,7 +136,10 @@ function serveHitterCopy(
   if (!follow.game) {
     return {
       ...base,
-      title: `${player} served point ${pointNumber}, switch the other shots?`,
+      title:
+        follow.point === "winner"
+          ? `${player} served point ${pointNumber}, switch who won it?`
+          : `${player} served point ${pointNumber}, switch the other shots?`,
       description: rest,
       confirmLabel: "Switch players",
     };

@@ -40,10 +40,11 @@ export interface ServeHitterFollow {
   hitter: LabelSide;
   /**
    * What of the point follows the serve: its other strokes, and the winner
-   * too when the point has one. Null when its rows already disagree with the
+   * too when the point has one — the winner alone on a point that is only
+   * its serve. Null when its rows already disagree with the
    * old hitter, or there is nothing else on it to change.
    */
-  point: "shots" | "shots-and-winner" | null;
+  point: "shots" | "shots-and-winner" | "winner" | null;
   /** The game whose server changes; null when the point's already is `hitter`. */
   game: {
     game: LabelGame;
@@ -92,13 +93,15 @@ export function planServeHitterFollow(
   const hasOthers = point.shots.some(
     (s) => s.id !== shotId && s.hitter !== null,
   );
-  const follows = agrees
-    ? hasWinner
-      ? "shots-and-winner"
+  const follows = !agrees
+    ? null
+    : hasWinner
+      ? hasOthers
+        ? "shots-and-winner"
+        : "winner"
       : hasOthers
         ? "shots"
-        : null
-    : null;
+        : null;
 
   const game = point.server === hitter ? null : gameChange(points, point);
   if (game) {

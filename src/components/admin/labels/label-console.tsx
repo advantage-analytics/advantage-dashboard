@@ -135,7 +135,10 @@ import {
   type LabelSessionFieldsPatch,
 } from "@/lib/services/labels/session-fields";
 import type { LabelSessionFieldsResult } from "@/lib/services/labels/session-fields-session";
-import { endingPatchForShotChange } from "@/lib/services/labels/ending-derived";
+import {
+  endingPatchForShotChange,
+  SHOT_FIELDS_MOVING_ENDING,
+} from "@/lib/services/labels/ending-derived";
 import { planGameBoundary } from "@/lib/services/labels/game-boundary";
 import {
   servedRightHitWrong,
@@ -773,7 +776,9 @@ export function LabelConsole({
       // The ending the server will settle in this same call, now.
       const ownerRead = pointOfShot(rows, shotId);
       const ending = endingFollow(
-        MOVES_ENDING.some((field) => field in patch) ? ownerRead : null,
+        SHOT_FIELDS_MOVING_ENDING.some((field) => field in patch)
+          ? ownerRead
+          : null,
         ownerRead ? change([ownerRead])[0] : null,
         drawsGhosts(marks),
       );
@@ -2602,9 +2607,6 @@ function endingFollow(
       })),
   };
 }
-
-/** The shot fields whose change the server settles the point's ending after. */
-const MOVES_ENDING = ["hitter", "stroke", "result", "video_time"] as const;
 
 function applyEndingSync(
   point: LabelPoint,

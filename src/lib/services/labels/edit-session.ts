@@ -60,6 +60,7 @@ import {
   type LabelDeleteReason,
   type LabelShotRemoved,
 } from "./operations";
+import { SHOT_FIELDS_MOVING_ENDING } from "./ending-derived";
 import { applySiteRemovalRestore, ghostFreedByServeIn } from "./site-removal";
 
 const LOG = "[labels:edit]";
@@ -305,7 +306,7 @@ type ShotRow = LabelShotValues & {
 };
 
 /** The value fields a stroke's place in the rally and its ending are read from. */
-const MOVES_ENDING = ["hitter", "stroke", "result", "video_time"] as const;
+const MOVES_ENDING = SHOT_FIELDS_MOVING_ENDING;
 
 /**
  * Validate, then write `patch` and its status to one shot; then the ghost a

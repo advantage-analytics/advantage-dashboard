@@ -599,3 +599,28 @@ test.describe("a serve stored in whose landing is outside the box", () => {
     ).toBeNull();
   });
 });
+
+test("a lone serve with a winner: the confirm names the winner, not shots that are not there", () => {
+  const ace = point(0, "p2", "p1");
+  const follow = planServeHitterFollow(
+    [{ ...ace, shots: ace.shots.slice(0, 1) }],
+    "p1-s",
+    "p2",
+  )!;
+  expect(follow).toMatchObject({ point: "winner", run: "switch-point" });
+  expect(
+    labelConfirmCopy(
+      {
+        kind: "serve-hitter",
+        shotId: "p1-s",
+        pointNumber: 1,
+        gameInSet: 1,
+        follow,
+      },
+      NAMES,
+    ),
+  ).toMatchObject({
+    title: "Kim served point 1, switch who won it?",
+    description: "Who won point 1 changes with it.",
+  });
+});

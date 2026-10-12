@@ -115,6 +115,18 @@ function lostBy(hitter: LabelSide | null): LabelSide | null {
 }
 
 /**
+ * The shot fields whose change can move what the strokes say about how the
+ * point ended: the only ones a shot write settles the ending after
+ * (edit-session.ts), and the only ones the console settles it ahead of.
+ */
+export const SHOT_FIELDS_MOVING_ENDING = [
+  "hitter",
+  "stroke",
+  "result",
+  "video_time",
+] as const;
+
+/**
  * The point patch a shot change calls for, or `null`. `before` and `after` are
  * the same point around one shot change.
  *
