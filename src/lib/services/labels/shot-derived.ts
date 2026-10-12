@@ -99,6 +99,34 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
 }
 
 /**
+ * What the landing of a serve stored `in` reads as when it contradicts that:
+ * `"out"` or `"net"`, else null — for a serve whose landing agrees or is not
+ * placed, a serve not stored in, and any other stroke. An in serve cannot
+ * have come down outside the service box, so such a landing is the wrong
+ * bounce: the console says so on the open point (marks-state.ts
+ * `serveInLandingOut`) and the publish writes the serve without it
+ * (apply.ts).
+ */
+export function inServeLandingMiss(shot: {
+  stroke?: LabelShot["stroke"];
+  result?: LabelShot["result"];
+  contactX?: number | null;
+  contactY?: number | null;
+  landingX?: number | null;
+  landingY?: number | null;
+}): "out" | "net" | null {
+  if (shot.result !== "in" || !isServeStroke(shot.stroke)) return null;
+  const landing = deriveShotResult({
+    stroke: shot.stroke ?? null,
+    contact_x: shot.contactX ?? null,
+    contact_y: shot.contactY ?? null,
+    landing_x: shot.landingX ?? null,
+    landing_y: shot.landingY ?? null,
+  });
+  return landing === "out" || landing === "net" ? landing : null;
+}
+
+/**
  * In, out or net as the stroke's own coordinates say it, when all four are
  * placed; the stored result until then. The one reading the marks and the
  * suggestions share, so a placed landing outranks a stale stored call — but

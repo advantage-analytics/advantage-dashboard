@@ -62,7 +62,7 @@ test.describe("pointEndedEarly", () => {
     });
     expect(hintLabel(one!)).toBe("Did the point end here? 1 shot follows");
     expect(markHover(one!, NAMES)).toBe(
-      "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
+      "This shot reads as out, yet one more stroke follows it. If the point ended here, answer yes to mark it out and remove that stroke, or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
     );
 
     const three = pointEndedEarly(

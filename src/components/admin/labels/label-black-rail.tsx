@@ -32,7 +32,11 @@ import {
   scoreMismatchDetail,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
-import { openFlags, scoreStop } from "@/lib/services/labels/flag-nav";
+import {
+  openFlags,
+  scoreStop,
+  slotStops,
+} from "@/lib/services/labels/flag-nav";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   bandsBeforePoints,
@@ -57,7 +61,15 @@ import { LabelFollowPill } from "./label-follow-pill";
 import { useRowInView } from "./use-row-in-view";
 import { LabelFlagSummary } from "./label-flag-summary";
 import { BlackTextAction, gameSlot } from "./label-black-parts";
+import {
+  dropBeforePoint,
+  planGameBoundary,
+} from "@/lib/services/labels/game-boundary";
 import { tiebreakFolds } from "@/lib/services/labels/tiebreak-fold";
+import {
+  tiebreakServeBeforePoints,
+  tiebreakServeOrders,
+} from "@/lib/services/labels/tiebreak-serve";
 import { LabelGameBand } from "./label-game-band";
 import {
   BlackGameUnderflow,
@@ -68,6 +80,7 @@ import {
   BlackDeletedPoint,
   BlackGameOverflow,
   BlackTiebreakFold,
+  BlackTiebreakServe,
   BlackPointRow,
   BlackSuggestedPoint,
   openPointSuggestions,
@@ -138,6 +151,8 @@ export function LabelBlackRail({
   onRemoveShotsAfter,
   onRestoreShots,
   onSetGameServer,
+  onFixTiebreakServe,
+  onMoveGameBoundary,
   onSetGameType,
   openGhostIds = NO_IDS,
   onToggleGhost,
@@ -196,6 +211,13 @@ export function LabelBlackRail({
   onRemoveShotsAfter?: EditContext["onRemoveShotsAfter"];
   onRestoreShots?: EditContext["onRestoreShots"];
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+  /** "Fix serve order" on a tiebreak off its order (tiebreak-serve.ts). */
+  onFixTiebreakServe?: (game: LabelGame) => void;
+  /**
+   * A game band dropped above a point (game-boundary.ts): the points it
+   * passed move into the neighbouring game. Absent, the bands do not drag.
+   */
+  onMoveGameBoundary?: (game: LabelGame, beforePointId: string) => void;
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   /** Ghosts shown as their struck-through row (the console's state). */
   openGhostIds?: ReadonlySet<string>;
@@ -328,6 +350,56 @@ export function LabelBlackRail({
       ),
     [editable, points, adScoring],
   );
+  // A game band in the air, and the point its drop would land above — set
+  // only where `planGameBoundary` has something to move.
+  const [bandDrag, setBandDrag] = useState<{
+    game: LabelGame;
+    before: string | null;
+  } | null>(null);
+  const draggedGame = bandDrag?.game ?? null;
+  const bandDragHandlers = useMemo(
+    () =>
+      editable && onMoveGameBoundary
+        ? {
+            onStart: (game: LabelGame, event: React.DragEvent) => {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", "");
+              setBandDrag({ game, before: null });
+            },
+            onEnd: () => setBandDrag(null),
+          }
+        : null,
+    [editable, onMoveGameBoundary],
+  );
+  const dropTarget = (event: React.DragEvent): string | null => {
+    if (!draggedGame || !(event.target instanceof Element)) return null;
+    const row = event.target.closest<HTMLElement>('[data-row="point"]');
+    const id = row?.dataset.pointId;
+    if (!row || !id) return null;
+    const { top, height } = row.getBoundingClientRect();
+    const before = dropBeforePoint(
+      points,
+      id,
+      event.clientY < top + Math.min(height, 44) / 2,
+    );
+    if (before === null) return null;
+    const plan = planGameBoundary(points, draggedGame, before);
+    return "ok" in plan && plan.write.pointIds.length > 0 ? before : null;
+  };
+  // The tiebreaks off their serve order, by the first point that is off it.
+  const serveOrders = useMemo(
+    () => (editable ? tiebreakServeOrders(points) : []),
+    [editable, points],
+  );
+  const serveOrderBefore = useMemo(
+    () => tiebreakServeBeforePoints(serveOrders),
+    [serveOrders],
+  );
+  // Every slot between the rows as a stop for the header's jumps.
+  const serveStops = useMemo(
+    () => (editable ? slotStops(points, adScoring) : []),
+    [editable, points, adScoring],
+  );
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
@@ -396,6 +468,7 @@ export function LabelBlackRail({
               onGoToPoint={onGoToPoint}
               tone={tone}
               scoreStop={setScoreStop}
+              extraStops={serveStops}
               score={
                 mismatch
                   ? (close) => (
@@ -474,6 +547,31 @@ export function LabelBlackRail({
               ref={scrollerRef}
               data-label-rail-scroller=""
               className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2"
+              onDragOver={
+                bandDrag
+                  ? (event) => {
+                      const before = dropTarget(event);
+                      if (before !== null) {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }
+                      if (before !== bandDrag.before) {
+                        setBandDrag({ game: bandDrag.game, before });
+                      }
+                    }
+                  : undefined
+              }
+              onDrop={
+                bandDrag
+                  ? (event) => {
+                      const before = dropTarget(event);
+                      setBandDrag(null);
+                      if (before === null) return;
+                      event.preventDefault();
+                      onMoveGameBoundary?.(bandDrag.game, before);
+                    }
+                  : undefined
+              }
             >
               {points.map((point) => {
                 if (point.status === "deleted") {
@@ -489,10 +587,20 @@ export function LabelBlackRail({
                 const slot = slotBefore.get(point.id);
                 const overflow = overflowBefore.get(point.id);
                 const fold = foldBefore.get(point.id);
+                const serveOrder = serveOrderBefore.get(point.id);
                 const short = underflowAfter.get(point.id);
                 const open = point.id === expandedPointId;
                 return (
                   <Fragment key={point.id}>
+                    {bandDrag?.before === point.id ? (
+                      <div
+                        data-game-drop=""
+                        aria-hidden="true"
+                        className="pointer-events-none relative h-0"
+                      >
+                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[var(--blue)]" />
+                      </div>
+                    ) : null}
                     {band ? (
                       <LabelGameBand
                         band={band}
@@ -505,6 +613,16 @@ export function LabelBlackRail({
                         }
                         onSetGameType={editable ? onSetGameType : undefined}
                         onSetGameServer={editable ? onSetGameServer : undefined}
+                        drag={
+                          bandDragHandlers && band !== scores.games[0]
+                            ? bandDragHandlers
+                            : undefined
+                        }
+                        gripTrack={bandDragHandlers !== null}
+                        dragging={
+                          draggedGame?.setNumber === band.setNumber &&
+                          draggedGame.gameNumber === band.gameNumber
+                        }
                         menu={tone}
                       />
                     ) : null}
@@ -528,6 +646,13 @@ export function LabelBlackRail({
                         summary={overflow.summary}
                         point={point}
                         edit={edit}
+                      />
+                    ) : null}
+                    {serveOrder ? (
+                      <BlackTiebreakServe
+                        order={serveOrder}
+                        names={names}
+                        onFix={onFixTiebreakServe}
                       />
                     ) : null}
                     <BlackPointRow

@@ -68,6 +68,8 @@ const ROW_INK: Record<
  * land on it. It was a 6 px dot by the chevron until 2026-10-10, and a set
  * labelled 5–5 against a 6–4 record went to publish unnoticed.
  */
+const NO_STOPS: readonly ScoreStop[] = [];
+
 export function LabelFlagSummary({
   openMarks,
   points,
@@ -75,6 +77,7 @@ export function LabelFlagSummary({
   onGoToPoint,
   score,
   scoreStop = null,
+  extraStops = NO_STOPS,
   tone = "dark",
 }: {
   /** `openFlags(points, marks)`. */
@@ -87,13 +90,22 @@ export function LabelFlagSummary({
   score: ((close: () => void) => ReactNode) | null;
   /** The mismatch as a stop (`scoreStop`, flag-nav.ts); null when it adds up. */
   scoreStop?: ScoreStop | null;
+  /**
+   * Further stops read off the rows (the rail's amber slots): the jumps
+   * land on each, and its slot says the rest. Not in the total.
+   */
+  extraStops?: readonly ScoreStop[];
   tone?: RailTone;
 }) {
   const [open, setOpen] = useState(false);
-  const stops: readonly FlagStop[] = scoreStop
-    ? [...openMarks, scoreStop]
-    : openMarks;
-  const count = stops.length;
+  const stops: readonly FlagStop[] = [
+    ...openMarks,
+    ...(scoreStop ? [scoreStop] : []),
+    ...extraStops,
+  ];
+  // The total is the marks and the score: a slot between rows is a place the
+  // jumps stop at, not a flag the header counts.
+  const count = openMarks.length + (scoreStop ? 1 : 0);
   // Points carrying an open mark: the score stop's point carries none.
   const openPoints = new Set(openMarks.map((f) => f.pointId)).size;
   const next = stepFlag(stops, points, fromPointId, 1);

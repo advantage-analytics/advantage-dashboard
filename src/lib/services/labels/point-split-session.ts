@@ -5,7 +5,9 @@
  * Its writes, in order, on `label_points` and `label_shots` only: one UPDATE of
  * `point_index` per later point, HIGHEST first (the rail numbers rows by it);
  * one INSERT of the new row; one UPDATE moving the shots (`label_point_id`, by
- * id list), their statuses untouched; one compare-and-set UPDATE of the
+ * id list), their statuses untouched; one UPDATE per opening serve of the new
+ * point that takes a new number (`serveRestrokes`), with the status the stroke
+ * implies against its seed; one compare-and-set UPDATE of the
  * anchor's status and rally ids (`updateIfUnchanged` — the writes before it
  * stand when it misses); then each half's ending as its rows now derive it
  * (`reconcileEnding`, ending-session.ts) — the new point's, which starts
@@ -14,6 +16,12 @@
  */
 
 import type { AdminClient } from "@/lib/supabase/admin";
+import {
+  LABEL_SHOT_VALUE_FIELDS,
+  labelShotStatusAfterPatch,
+  parseLabelShotSeed,
+  type LabelShotValues,
+} from "./edit";
 import {
   defaultLabelWriteDependencies,
   readSessionGate,
@@ -60,16 +68,16 @@ const POINT_INDEX_COLUMNS =
  * PostgREST hands a JSON text path back: a string, or null on an added
  * stroke, which carries no `vendor`.
  */
-interface ShotRow {
+type ShotRow = LabelShotValues & {
   id: string;
-  video_time: number | null;
   event_id: number | null;
   status: LabelShotStatus;
+  /** Raw jsonb — parsed before the status rule trusts it. */
+  seed: unknown;
   rally: string | null;
-}
+};
 
-const SHOT_COLUMNS =
-  "id, video_time, event_id, status, rally:vendor->>pred_rally_id";
+const SHOT_COLUMNS = `id, event_id, status, seed, ${LABEL_SHOT_VALUE_FIELDS.join(", ")}, rally:vendor->>pred_rally_id`;
 
 /**
  * The session's points as the plan reads them. Only the anchor's shots are
@@ -100,6 +108,8 @@ function toSplittableShot(shot: ShotRow): SplittableShot {
     videoTime: shot.video_time,
     eventId: shot.event_id,
     status: shot.status,
+    stroke: shot.stroke,
+    result: shot.result,
     vendorRallyId: rallyId(shot.rally),
   };
 }
@@ -208,6 +218,27 @@ export async function writeLabelPointSplit(params: {
     return { error: `Could not move the shots: ${moveError.message}` };
   }
 
+  // The new point opens on a first serve: its serves renumbered, each with
+  // the status its new stroke implies. Before the endings are read below — a
+  // second serve made a first no longer ends the point by missing.
+  const serves: NonNullable<PointSplitSaved["serves"]> = [];
+  for (const serve of write.serves) {
+    const row = (shotRows ?? []).find((shot) => shot.id === serve.id);
+    if (!row) continue;
+    const status = labelShotStatusAfterPatch(
+      { ...row, seed: parseLabelShotSeed(row.seed) },
+      { stroke: serve.stroke },
+    );
+    const { error: serveError } = await supabase
+      .from("label_shots")
+      .update({ stroke: serve.stroke, status })
+      .eq("id", serve.id);
+    if (serveError) {
+      return { error: `Could not renumber the serve: ${serveError.message}` };
+    }
+    serves.push({ ...serve, status });
+  }
+
   // Compare-and-set on the anchor's status as read: a race here leaves the
   // shifted rows, the new point and its moved shots as they are, and says so.
   const anchorFailed = await updateIfUnchanged(
@@ -250,6 +281,7 @@ export async function writeLabelPointSplit(params: {
           winner: split.point.winner,
         }
       : point,
+    ...(serves.length > 0 ? { serves } : {}),
     anchor: {
       id: pointId,
       ...write.anchor,

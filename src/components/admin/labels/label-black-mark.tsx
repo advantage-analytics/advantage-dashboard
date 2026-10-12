@@ -27,12 +27,13 @@ import {
   pointRowMarkList,
   secondServeAsFirst,
   serveAfterServeIn,
+  serveInLandingOut,
   rollupMarks,
   stateHoverParts,
   type MarkHoverParts,
   type MarkState,
 } from "@/lib/services/labels/marks-state";
-import type { LabelPoint } from "@/lib/services/labels/session";
+import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
 import {
   isSuggestionKey,
   pointEndedKey,
@@ -343,7 +344,7 @@ export type HintEdit = Pick<
 >;
 
 /**
- * The open point's hints: the marks' own, then the five read off the rows —
+ * The open point's hints: the marks' own, then the six read off the rows —
  * "Point ended here", "Different ending?", "Second serve?", "No landing on
  * the last shot" and "Serve after a serve in play". Each carries its answers
  * when `edit` can write them (`hintActions`). Nothing without marks: a
@@ -364,6 +365,7 @@ export function pointHints(
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
+    serveInLandingOut(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
   // "Was the last ball in?" is a chip; its answer is offered on this line
@@ -455,12 +457,21 @@ function hintActions(
     }
     case "shot_after_point_end": {
       const { shotId, after } = mark.params;
+      // Yes: the ball is out as stored, not only by its landing. Marking it
+      // out takes the stroke after it in the same write (operations.ts
+      // `deadBallsAfterMiss`) and settles the ending; one stored as a miss
+      // already has only the stroke after it left to go.
+      const stored = point.shots.find((shot) => shot.id === shotId)?.result;
+      const marksOut = onPatchShot && !isMissedResult(stored);
       return [
         ...(onRemoveShotsAfter
           ? [
               {
                 label: removeAfterLabel(after.length),
-                run: () => onRemoveShotsAfter(point.id, shotId),
+                run: () =>
+                  marksOut
+                    ? onPatchShot(shotId, { result: "out" })
+                    : onRemoveShotsAfter(point.id, shotId),
               },
             ]
           : []),

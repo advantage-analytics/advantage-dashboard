@@ -10,6 +10,9 @@ import { MARK_LABEL } from "./marks-copy";
 import { markStates, pointRowMarkList } from "./marks-state";
 import type { LabelPoint } from "./session";
 import type { LabelScoreMismatch } from "./set-scores";
+import { gameOverflow, gameUnderflow } from "./game-shift";
+import { tiebreakFolds } from "./tiebreak-fold";
+import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 
 /** One open mark on one point. */
 export interface OpenFlag {
@@ -59,6 +62,55 @@ export function scoreStop(
   };
 }
 
+/**
+ * Each tiebreak off its serve order (tiebreak-serve.ts) as a stop: on the
+ * first point that is off it, where the rail draws its slot.
+ */
+export function tiebreakServeStops(
+  orders: readonly TiebreakServeOrder[],
+): ScoreStop[] {
+  return orders.map((order) => ({
+    pointId: order.off[0].pointId,
+    pointNumber: order.off[0].pointNumber,
+    label: `${order.type === "tiebreak" ? "Tiebreak" : "Match tiebreak"} serve order is off`,
+  }));
+}
+
+/**
+ * Every amber slot the rail draws between rows, as stops: a game already won
+ * with rows after it (on its first leftover), a game that ends short (on its
+ * last row, which the slot follows), the tiebreak at 6–6 (on the first point
+ * it would fold) and a tiebreak off its serve order. Read off the rows alone,
+ * so there on a session labelled without marks too. `]` and `[` land on
+ * each; the header's total does not count them, and the slot itself says
+ * what to do.
+ */
+export function slotStops(
+  points: readonly LabelPoint[],
+  adScoring: boolean,
+): ScoreStop[] {
+  const numberOf = new Map(points.map((p) => [p.id, p.pointIndex + 1]));
+  const stop = (pointId: string | undefined, label: string): ScoreStop[] =>
+    pointId === undefined
+      ? []
+      : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
+  return [
+    ...gameOverflow(points, adScoring).flatMap((game) =>
+      stop(game.leftovers[0]?.id, "Game already won, with points after it"),
+    ),
+    ...gameUnderflow(points, adScoring).flatMap((game) =>
+      stop(
+        game.lastPointId,
+        `Game ${game.gameInSet} isn’t finished at ${game.score}`,
+      ),
+    ),
+    ...tiebreakFolds(points, adScoring).flatMap((fold) =>
+      stop(fold.pointIds[0], "Tiebreak at 6–6?"),
+    ),
+    ...tiebreakServeStops(tiebreakServeOrders(points)),
+  ];
+}
+
 /** What a stop is called in a tooltip: its mark's words, or the score's. */
 export function flagStopLabel(stop: FlagStop): string {
   return "code" in stop ? MARK_LABEL[stop.code] : stop.label;
@@ -99,7 +151,14 @@ const KINDS: readonly { name: string; codes: readonly LabelMarkCode[] }[] = [
     ],
   },
   { name: "Missing shot", codes: ["same_player_consecutive"] },
-  { name: "Serve", codes: ["reserve_after_in", "service_court_repeat"] },
+  {
+    name: "Serve",
+    codes: [
+      "reserve_after_in",
+      "service_court_repeat",
+      "first_serve_fault_alone",
+    ],
+  },
   {
     name: "Score",
     codes: [

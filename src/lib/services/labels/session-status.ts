@@ -6,7 +6,8 @@
  * rows leave unfinished or run past its end (`labelSetScores`, which takes in
  * the session's last game too), and the entered score the labelled sets
  * disagree with (`scoreMismatch`) — not once the labeller has said the video
- * ends early, as the rail's chip. Last, how the publish will read each point
+ * ends early, as the rail's chip — and each tiebreak off its serve order
+ * (`tiebreakServeOrders`). Last, how the publish will read each point
  * with no ending stored (`publishEnding`, the rule apply.ts writes by): taken
  * from its strokes, written as score only off the video, or refused.
  */
@@ -19,6 +20,7 @@ import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
 import type { MatchScore } from "@/lib/services/splitstep/derivation";
 import { isNonPointEnding, labelProgress, type LabelPoint } from "./session";
+import { tiebreakServeOrders } from "./tiebreak-serve";
 
 export interface CompleteWarningInput {
   points: readonly LabelPoint[];
@@ -77,6 +79,16 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
         `${where(game.gameInSet)} has ${plural(game.extra, "extra point")}`,
       );
     }
+  }
+
+  for (const order of tiebreakServeOrders(points)) {
+    const name =
+      order.type === "tiebreak"
+        ? `Set ${order.game.setNumber}'s tiebreak`
+        : "The match tiebreak";
+    warnings.push(
+      `${name} is off its serve order on ${plural(order.off.length, "point")}`,
+    );
   }
 
   if (input.videoEndsEarly !== true) {

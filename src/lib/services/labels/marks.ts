@@ -70,6 +70,10 @@ export const LABEL_ONLY_FLAGS = {
   LAST_LANDING_MISSING: "last_landing_missing",
   /** The point's last stroke has neither a landing nor a result. */
   LAST_SHOT_UNRESOLVED: "last_shot_unresolved",
+  /** A serve stored in whose landing sits outside the service box. */
+  SERVE_IN_LANDING_OUT: "serve_in_landing_out",
+  /** The point's last stroke is a first serve that missed: no second serve. */
+  FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
   /**
@@ -117,6 +121,10 @@ export const LABEL_MARK_META = {
   [POINT_FLAGS.SERVICE_COURT_REPEAT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SAME_PLAYER_CONSECUTIVE]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_SHOT_UNRESOLVED]: { tier: "count", scope: "point" },
+  [LABEL_ONLY_FLAGS.FIRST_SERVE_FAULT_ALONE]: {
+    tier: "count",
+    scope: "point",
+  },
   [POINT_FLAGS.WINNER_GUESSED]: { tier: "count", scope: "point" },
   [LABEL_ONLY_FLAGS.LAST_CALL_OVERRULED]: { tier: "count", scope: "point" },
   [POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS]: { tier: "count", scope: "point" },
@@ -127,6 +135,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
@@ -189,6 +198,9 @@ export interface LabelMarkParams {
   second_serve_as_first: { shotId: string };
   last_landing_missing: NoParams;
   last_shot_unresolved: NoParams;
+  first_serve_fault_alone: NoParams;
+  /** The serve, and what its landing reads as. */
+  serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
   net_hit_contradicts_height: NoParams;

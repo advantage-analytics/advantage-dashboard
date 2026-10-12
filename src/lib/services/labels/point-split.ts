@@ -7,7 +7,10 @@
  * `vendor_rally_ids` are the rallies its moved vendor shots came from (each
  * frozen stroke's `pred_rally_id`), so the derivation's marks still find a
  * label point for every rally; the anchor loses a rally id only when no shot of
- * that rally stays behind. Shot statuses are untouched. The anchor becomes
+ * that rally stays behind. Shot statuses are untouched, but for the serves
+ * that open the new point: a point starts on a first serve, so those are
+ * renumbered first, then second (`serveRestrokes`) — two serves split apart
+ * leave the second one a first serve of its own point. The anchor becomes
  * `edited` (`added` stays `added`), and the menu holds its Reset back while
  * another live point shares one of its rallies (`sharesVendorRally`).
  *
@@ -15,7 +18,7 @@
  * `planPointSplit`.
  */
 
-import type { LabelPointFields } from "./edit";
+import { applyLabelShotPatch, type LabelPointFields } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyInsertedPoint,
@@ -25,10 +28,13 @@ import {
   type PointShift,
 } from "./point-insert";
 import {
+  isLetServe,
+  isServeStroke,
   orderLabelShots,
   type LabelGameType,
   type LabelPoint,
   type LabelShot,
+  type LabelShotStatus,
   type LabelSide,
 } from "./session";
 
@@ -43,7 +49,38 @@ export type SplittableShot = Pick<
    * labeller-added stroke and in the console, which never loads `vendor`.
    */
   vendorRallyId?: number | null;
-};
+} & Partial<Pick<LabelShot, "stroke" | "result">>;
+
+/** A serve of the new point given its number: first, then second. */
+export interface ServeRestroke {
+  id: string;
+  stroke: "first_serve" | "second_serve";
+}
+
+/**
+ * The serves that open `moved` (the new point's shots, in video order) whose
+ * number is not the one their place gives them: the first live serve is a
+ * first serve, the one after it a second. A let is replayed, so the serve
+ * after it keeps the let's number. Stops at the first live stroke that is
+ * not a serve; a point that opens on a rally ball changes nothing.
+ */
+export function serveRestrokes(
+  moved: readonly SplittableShot[],
+): ServeRestroke[] {
+  const restrokes: ServeRestroke[] = [];
+  let next: ServeRestroke["stroke"] = "first_serve";
+  for (const shot of moved) {
+    if (shot.status === "deleted") continue;
+    if (!isServeStroke(shot.stroke)) break;
+    if (shot.stroke !== next) restrokes.push({ id: shot.id, stroke: next });
+    const replayed = isLetServe({
+      stroke: shot.stroke ?? null,
+      result: shot.result ?? null,
+    });
+    if (!replayed) next = "second_serve";
+  }
+  return restrokes;
+}
 
 /** What the plan reads of a point. A `LabelPoint` satisfies it. */
 export type SplittablePoint = InsertablePoint &
@@ -72,6 +109,8 @@ export interface PointSplitPlan {
   shifts: PointShift[];
   /** The shot rows moving to the new point, in video order. */
   movedShotIds: string[];
+  /** The new point's opening serves that take a new number; often none. */
+  serves: ServeRestroke[];
   anchor: SplitAnchorWrite;
 }
 
@@ -123,6 +162,7 @@ export function planPointSplit(
       },
       shifts: inserted.write.shifts,
       movedShotIds: moved.map((shot) => shot.id),
+      serves: serveRestrokes(moved),
       anchor: {
         status: anchor.status === "added" ? "added" : "edited",
         vendor_rally_ids: anchor.vendorRallyIds.filter(
@@ -208,7 +248,8 @@ export function draftSplitPoint(
 /**
  * The console's rows after the split: the moved shots leave the anchor for
  * `draft` (their `labelPointId` follows), the anchor takes the plan's status
- * and rally ids, and the draft goes in right after it — every later point
+ * and rally ids, the new point's opening serves take their numbers (and the
+ * status that implies), and the draft goes in right after it — every later point
  * renumbered at once (`applyInsertedPoint`). `points` are in `point_index`
  * order and come back that way; the anchor keeps its place, so a caller
  * holding `[anchor]` alone reads the anchor at index 0.
@@ -217,14 +258,20 @@ export function applyPointSplit(
   points: readonly LabelPoint[],
   anchorPointId: string,
   draft: LabelPoint,
-  plan: Pick<PointSplitPlan, "movedShotIds" | "anchor">,
+  plan: Pick<PointSplitPlan, "movedShotIds" | "anchor"> &
+    Partial<Pick<PointSplitPlan, "serves">>,
 ): LabelPoint[] {
   const anchor = points.find((point) => point.id === anchorPointId);
   if (!anchor) return [...points];
   const moving = new Set(plan.movedShotIds);
+  const stroke = new Map(plan.serves?.map((s) => [s.id, s.stroke]));
   const moved = anchor.shots
     .filter((shot) => moving.has(shot.id))
-    .map((shot) => ({ ...shot, labelPointId: draft.id }));
+    .map((shot) => {
+      const next = stroke.get(shot.id);
+      const row = next ? applyLabelShotPatch(shot, { stroke: next }) : shot;
+      return { ...row, labelPointId: draft.id };
+    });
   const row: LabelPoint = { ...draft, shots: orderLabelShots(moved) };
   const split = points.map((point) =>
     point.id === anchorPointId
@@ -241,19 +288,22 @@ export function applyPointSplit(
 
 /**
  * `applyPointSplit` undone: the split row's shots go back to the anchor (in
- * video order), the anchor gets `before`'s status and rally ids, and the row
+ * video order, each as `before.shots` had it when given — a renumbered serve
+ * gets its stroke and status back), the anchor gets `before`'s status and rally ids, and the row
  * is withdrawn with the later points renumbered back. What the console does
  * when the write fails; unchanged when no such row is there.
  */
 export function withdrawPointSplit(
   points: readonly LabelPoint[],
-  before: Pick<LabelPoint, "id" | "status" | "vendorRallyIds">,
+  before: Pick<LabelPoint, "id" | "status" | "vendorRallyIds"> &
+    Partial<Pick<LabelPoint, "shots">>,
   splitPointId: string,
 ): LabelPoint[] {
   const row = points.find((point) => point.id === splitPointId);
   if (!row) return [...points];
+  const was = new Map(before.shots?.map((shot) => [shot.id, shot]));
   const returned = row.shots.map((shot) => ({
-    ...shot,
+    ...(was.get(shot.id) ?? shot),
     labelPointId: before.id,
   }));
   return withdrawInsertedPoint(points, splitPointId).map((point) =>
@@ -276,13 +326,16 @@ export function withdrawPointSplit(
  */
 export interface PointSplitSaved {
   point: LabelPoint;
+  /** The new point's serves as renumbered, each with the status written. */
+  serves?: (ServeRestroke & { status: LabelShotStatus })[];
   anchor: { id: string } & SplitAnchorWrite &
     Partial<Pick<LabelPointFields, "winner" | "ending" | "ended_by">>;
 }
 
 /**
  * The draft row replaced by the saved one — its id on the row and on every
- * moved shot, its rally ids, its ending — and the anchor confirmed as the
+ * moved shot, its rally ids, its ending, its renumbered serves' statuses —
+ * and the anchor confirmed as the
  * server wrote it, ending included when the split moved it. The draft's shots
  * stay: the server moved exactly those rows.
  */
@@ -293,13 +346,18 @@ export function settlePointSplit(
 ): LabelPoint[] {
   return points.map((point) => {
     if (point.id === draftId) {
+      const serves = new Map(saved.serves?.map((s) => [s.id, s]));
       return {
         ...saved.point,
         pointIndex: point.pointIndex,
-        shots: point.shots.map((shot) => ({
-          ...shot,
-          labelPointId: saved.point.id,
-        })),
+        shots: point.shots.map((shot) => {
+          const serve = serves.get(shot.id);
+          return {
+            ...shot,
+            ...(serve ? { stroke: serve.stroke, status: serve.status } : {}),
+            labelPointId: saved.point.id,
+          };
+        }),
       };
     }
     if (point.id === saved.anchor.id) {

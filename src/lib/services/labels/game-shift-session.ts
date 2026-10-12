@@ -42,6 +42,7 @@ import {
 } from "./game-shift";
 import {
   gated,
+  idChunks,
   normaliseId,
   withShots,
   writeShotSwaps,
@@ -233,17 +234,19 @@ async function runGamePlan(
     shiftPoints.map((point) => [point.id, point.status]),
   );
   for (const group of groupWrites(planned.writes, statusOf)) {
-    const { data, error: writeError } = await supabase
-      .from("label_points")
-      .update(group.values)
-      .in("id", group.ids)
-      .eq("status", group.was)
-      .select("id");
-    if (writeError) {
-      return { error: `${failed}: ${writeError.message}` };
-    }
-    if (!data || data.length !== group.ids.length) {
-      return { error: racedMessage("row") };
+    for (const ids of idChunks(group.ids)) {
+      const { data, error: writeError } = await supabase
+        .from("label_points")
+        .update(group.values)
+        .in("id", ids)
+        .eq("status", group.was)
+        .select("id");
+      if (writeError) {
+        return { error: `${failed}: ${writeError.message}` };
+      }
+      if (!data || data.length !== ids.length) {
+        return { error: racedMessage("row") };
+      }
     }
   }
   const swapFailed = await writeShotSwaps(

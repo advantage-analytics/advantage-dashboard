@@ -61,6 +61,8 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   second_serve_as_first: { shotId: "s-2" },
   last_landing_missing: {},
   last_shot_unresolved: {},
+  first_serve_fault_alone: {},
+  serve_in_landing_out: { shotId: "s-1", landing: "out" },
   serve_after_serve_in: { shotId: "s-2" },
   pick_winner: {},
   net_hit_contradicts_height: {},
@@ -128,6 +130,8 @@ test.describe("mark copy", () => {
       second_serve_as_first: "Second serve?",
       last_landing_missing: "No landing on the last shot",
       last_shot_unresolved: "Ending can’t be read",
+      first_serve_fault_alone: "Fault, no second serve",
+      serve_in_landing_out: "Serve in, landing outside the box",
       serve_after_serve_in: "Serve after a serve in play",
       pick_winner: "Pick the winner",
       last_call_overruled: "Was the last ball in?",
@@ -189,7 +193,7 @@ test.describe("mark copy", () => {
       "Follows a faulted serve, so it is the second serve.",
     );
     expect(markHover(sample("shot_after_point_end"), names)).toBe(
-      "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
+      "This shot reads as out, yet one more stroke follows it. If the point ended here, answer yes to mark it out and remove that stroke, or split it into its own point. If the call is wrong, fix the landing or dismiss this.",
     );
     expect(markHover(sample("last_landing_missing"), names)).toBe(
       "Place the last bounce to settle Out, Net or In.",
@@ -221,8 +225,8 @@ test.describe("mark copy", () => {
       shot_after_point_end: "Split here",
       serve_after_serve_in: "Split here",
     });
-    expect(removeAfterLabel(1)).toBe("Remove 1");
-    expect(removeAfterLabel(3)).toBe("Remove 3");
+    expect(removeAfterLabel(1)).toBe("Yes, remove 1");
+    expect(removeAfterLabel(3)).toBe("Yes, remove 3");
   });
 
   test("a mark the derivation could not fill still reads as a sentence", () => {
