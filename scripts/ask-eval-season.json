@@ -33,8 +33,14 @@
     "q": "What should I work on?",
     "want": "second serve vs left-handers, break-point conversion, short rallies; notice"
   },
-  { "q": "What is my record this year?", "want": "8-6 with a form strip" },
-  { "q": "Which opponent gives me the most trouble?", "want": "Dvorsky 0-3" },
+  {
+    "q": "What is my record this year?",
+    "want": "8-6 with a form strip"
+  },
+  {
+    "q": "Which opponent gives me the most trouble?",
+    "want": "Dvorsky 0-3"
+  },
   {
     "q": "How did my last five matches go?",
     "want": "the five most recent, in order"
@@ -68,5 +74,17 @@
   {
     "q": "What happened in my three-set matches?",
     "want": "record in three-setters and how the deciding sets went"
+  },
+  {
+    "q": "How can I improve for my next match?",
+    "want": "the review: last match against the previous-five and overall averages, a table, no advice, the notice"
+  },
+  {
+    "q": "What went wrong in my last match?",
+    "want": "the review: the measures of the last match that were worse than both of the player's own averages; no advice"
+  },
+  {
+    "q": "Where has my game slipped recently?",
+    "want": "the review: what the previous five matches ran below the overall average on; no advice"
   }
 ]

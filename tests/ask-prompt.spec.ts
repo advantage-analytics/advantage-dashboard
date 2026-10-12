@@ -32,12 +32,15 @@ import {
   ASK_PLAN_EXAMPLE_DIAGNOSTIC,
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
+  ASK_PLAN_EXAMPLE_REVIEW,
   ASK_SCOPE_COUNT_COLUMN,
   ASK_TEAM_ANSWER_EXAMPLE_REPLY,
   ASK_TEAM_ANSWER_EXAMPLE_ROWS,
   ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
   ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+  ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL,
   ASK_TEAM_PLAN_EXAMPLE_REFUSAL,
+  ASK_TEAM_PLAN_EXAMPLE_REVIEW,
   ASK_TEAM_VISUAL_EXAMPLES,
   ASK_VISUAL_EXAMPLES,
   type AskPlanPromptInput,
@@ -49,6 +52,12 @@ import {
   renderAskPercentageBlock,
   renderAskSchemaBlock,
 } from "@/lib/services/ask/prompts";
+import {
+  ASK_COMPARED_PREFIXES,
+  ASK_FACTS_HEADING,
+  computeAskFacts,
+  renderAskFactsBlock,
+} from "@/lib/services/ask/facts";
 import {
   ASK_PERCENTAGE_DEFINITIONS,
   ASK_SCHEMA,
@@ -290,7 +299,7 @@ test.describe("buildPlanPrompt", () => {
       '"How do I beat this opponent?" is the diagnostic query over the matches against them.',
     );
     expect(prompt).toContain(
-      "A question that asks for advice is ALWAYS answered with shape A whenever the views hold facts on its subject",
+      "A question that asks for advice is ALWAYS answered with shape A or shape C whenever the views hold facts on its subject",
     );
   });
 
@@ -1417,5 +1426,328 @@ test.describe("mock mode — team scope", () => {
       for await (const chunk of stream) chunks.push(chunk);
       expect(chunks.join("")).toBe(ASK_MOCK_ANSWER_TEMPLATE);
     }
+  });
+});
+
+// ── Stated facts, the review intent and the lineup refusal ──────────────────
+
+test.describe("the plan prompts — naming compared columns, baselines and group counts", () => {
+  const TEAM: AskScope = {
+    kind: "team",
+    programId: "eeeeeeee-0000-4000-8000-000000000005",
+    programName: "Westbrook College",
+  };
+  const base: AskPlanPromptInput = {
+    today: "2026-10-11",
+    tags: [],
+    conversation: [],
+  };
+  const personal = buildPlanPrompt(base);
+  const team = buildPlanPrompt({ ...base, scope: TEAM });
+
+  test("states the naming convention the server pairs columns by, with prefixes facts.ts knows", () => {
+    for (const prompt of [personal, team]) {
+      expect(prompt).toContain("- NAME COMPARED COLUMNS BY THE CONVENTION.");
+      expect(prompt).toContain("me_<measure> and opp_<measure>");
+      const rule =
+        prompt
+          .split("\n")
+          .find((line) =>
+            line.startsWith("- NAME COMPARED COLUMNS BY THE CONVENTION."),
+          ) ?? "";
+      const named = [...rule.matchAll(/\b([a-z0-9]+(?:_matches)?_)<measure>/g)]
+        .map((match) => match[1])
+        .filter((prefix) => prefix !== "me_" && prefix !== "opp_");
+      expect(named.length).toBeGreaterThanOrEqual(8);
+      for (const prefix of named) {
+        expect(ASK_COMPARED_PREFIXES, prefix).toContain(prefix);
+      }
+    }
+    expect(personal).toContain(
+      "second_serve_won_pct beside all_second_serve_won_pct is compared",
+    );
+    expect(team).toContain(
+      "first_serve_pct beside team_first_serve_pct is compared",
+    );
+  });
+
+  test("the worked examples follow the convention: their baselines pair with their figures", () => {
+    const columns = (sql: string) =>
+      Object.fromEntries(
+        [...sql.matchAll(/ as ([a-z0-9_]+)/g)].map((match) => [match[1], 1]),
+      );
+    expect(computeAskFacts([columns(ASK_PLAN_EXAMPLE_QUERY.sql)])).toContain(
+      "r1.second_serve_won_pct (1) is EQUAL to r1.all_matches_second_serve_won_pct (1).",
+    );
+    const player = computeAskFacts([columns(ASK_TEAM_PLAN_EXAMPLE_PLAYER.sql)]);
+    expect(player).toContain(
+      "r1.first_serve_pct (1) is EQUAL to r1.team_first_serve_pct (1).",
+    );
+    expect(player).toContain(
+      "r1.second_serve_won_pct (1) is EQUAL to r1.team_second_serve_won_pct (1).",
+    );
+    expect(
+      computeAskFacts([columns(ASK_PLAN_EXAMPLE_DIAGNOSTIC.sql)]).length,
+    ).toBeGreaterThanOrEqual(8);
+  });
+
+  test("says how a baseline is written: from the view, never through scope", () => {
+    for (const prompt of [personal, team]) {
+      expect(prompt).toContain(
+        "- THE BASELINE COLUMN COVERS EVERY MATCH. The query still reads scope for the scoped figure, as every query must; only the baseline column beside it is summed over every row of the view (from ask.match_stats s where s.side = 'me')",
+      );
+      expect(prompt).toContain(
+        "A baseline that is itself joined to scope, or filtered by match_id in (select match_id from scope), is the scoped figure a second time: the two columns come out equal and the query is sent back.",
+      );
+    }
+    // The examples the rule points at do exactly that.
+    for (const example of [
+      ASK_PLAN_EXAMPLE_QUERY,
+      ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+    ]) {
+      expect(example.sql).toContain(
+        "from ask.match_stats s where s.side = 'me'",
+      );
+      expect(example.sql).not.toMatch(/join scope/);
+    }
+  });
+
+  test("asks for each group's own match count under a name the server reads as one", () => {
+    expect(personal).toContain(
+      "carries each group's own number of matches in a column named group_matches",
+    );
+    expect(team).toContain(
+      "carries each group's own number of matches in a column named group_matches",
+    );
+    expect(
+      computeAskFacts([
+        { court_type: "Hard", group_matches: 9, matches_in_scope: 14 },
+        { court_type: "Clay", group_matches: 5, matches_in_scope: 14 },
+      ])[0],
+    ).toBe(
+      'Matches per row, from group_matches: r1 "Hard" = 9; r2 "Clay" = 5. This is each row\'s OWN count.',
+    );
+  });
+});
+
+test.describe("the plan prompts — the review, shape C", () => {
+  const TEAM: AskScope = {
+    kind: "team",
+    programId: "eeeeeeee-0000-4000-8000-000000000005",
+    programName: "Westbrook College",
+  };
+  const base: AskPlanPromptInput = {
+    today: "2026-10-11",
+    tags: [],
+    conversation: [],
+  };
+  const personal = buildPlanPrompt(base);
+  const team = buildPlanPrompt({ ...base, scope: TEAM });
+
+  test("the reply contract has three shapes, the third with no sql", () => {
+    for (const prompt of [personal, team]) {
+      expect(prompt).toContain("It has one of three shapes.");
+      expect(prompt).toContain(
+        '{"review": true, "scope_sql": "...", "asks_for_advice": true}',
+      );
+      expect(prompt).toContain("### The review (shape C)");
+      expect(prompt).toContain("Reply with shape C and write no sql.");
+      expect(prompt).toContain("- asks_for_advice is true in shape C.");
+    }
+  });
+
+  test("says exactly when: improvement or what went wrong, naming no statistic, opponent or tagged match", () => {
+    expect(personal).toContain(
+      '"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practise", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match.',
+    );
+    expect(personal).toContain(
+      '- A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat Marek") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A.',
+    );
+    expect(personal).toContain(
+      "NEVER limit it to the last match; the app finds the last match itself.",
+    );
+    expect(personal).toContain(
+      '"What should I work on?" is the review, shape C.',
+    );
+    // "work on" is no longer a diagnostic row.
+    expect(personal).not.toContain('"what should I work on", or any other');
+    expect(personal).not.toContain('For "strengths" or "work on"');
+  });
+
+  test("the team wording: the last five against the earlier ones, or one named player's last match", () => {
+    expect(team).toContain(
+      "With no player named it sets the program's last five matches against every earlier one, measure by measure. With one player named it sets that player's last match against the average of their five matches before it and of all their earlier matches.",
+    );
+    expect(team).toContain(
+      "One player: select match_id from ask.matches where player_name ilike '%name%', or the match ids of a tagged player.",
+    );
+    expect(team).toContain('"What should we work on?" is the review, shape C.');
+  });
+
+  test("its examples are in the prompts and their scopes pass the guard", () => {
+    expect(personal).toContain(
+      `Question: "How can I improve for my next match?"\n${JSON.stringify(ASK_PLAN_EXAMPLE_REVIEW)}`,
+    );
+    expect(team).toContain(
+      `Question: "How can Sokolov improve for the next match?"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REVIEW)}`,
+    );
+    for (const example of [
+      ASK_PLAN_EXAMPLE_REVIEW,
+      ASK_TEAM_PLAN_EXAMPLE_REVIEW,
+    ]) {
+      expect(example.review).toBe(true);
+      expect(example.asks_for_advice).toBe(true);
+      expect("sql" in example).toBe(false);
+      expect(
+        checkAskSql({
+          scopeSql: example.scope_sql,
+          sql: "select count(*) as n from scope",
+        }),
+      ).toEqual({ ok: true });
+    }
+  });
+});
+
+test.describe("the team plan prompt — lineup positions are not recorded", () => {
+  const prompt = buildPlanPrompt({
+    today: "2026-10-11",
+    tags: [],
+    conversation: [],
+    scope: {
+      kind: "team",
+      programId: "eeeeeeee-0000-4000-8000-000000000005",
+      programName: "Westbrook College",
+    },
+  });
+
+  test("a question about the number one player is refused, never answered with the best record", () => {
+    expect(prompt).toContain(
+      "- LINEUP POSITION IS NOT RECORDED. No view says who plays number one, first singles, the top of the lineup, or where anyone is ranked or seeded.",
+    );
+    expect(prompt).toContain(
+      "NEVER answer by picking the player with the best record or the most matches.",
+    );
+    expect(prompt).toContain("rankings, seeds, lineups, practice");
+  });
+
+  test("the refusal is a worked example, with no digit and no advice flag", () => {
+    expect(prompt).toContain(
+      `Question: "How is our number one player doing?"\n${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL)}`,
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL.cannot_answer).not.toMatch(
+      /\d/,
+    );
+    expect(ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL.asks_for_advice).toBe(false);
+  });
+});
+
+test.describe("the answer prompts — what the numbers show", () => {
+  const TEAM: AskScope = {
+    kind: "team",
+    programId: "eeeeeeee-0000-4000-8000-000000000005",
+    programName: "Westbrook College",
+  };
+  const rows: AskRow[] = [
+    {
+      me_first_serve_pct: 64.1,
+      team_first_serve_pct: 65.5,
+      [ASK_SCOPE_COUNT_COLUMN]: 6,
+    },
+  ];
+  const personal = buildAnswerPrompt({
+    question: "Serve?",
+    rows,
+    matchCount: 6,
+  });
+  const team = buildAnswerPrompt({
+    question: "Serve?",
+    rows,
+    matchCount: 6,
+    scope: TEAM,
+  });
+
+  test("prints the server's statements for the result in a delimited block, between the result and the scope", () => {
+    for (const prompt of [personal, team]) {
+      const block = renderAskFactsBlock(computeAskFacts(rows));
+      expect(block).toBe(
+        `<<< ${ASK_FACTS_HEADING}\n- r1.me_first_serve_pct (64.1) is LOWER than r1.team_first_serve_pct (65.5), a gap of 1.4.\n>>>`,
+      );
+      expect(prompt).toContain(`## What the numbers show`);
+      expect(prompt).toContain(block);
+      expect(prompt.indexOf("## The result")).toBeLessThan(
+        prompt.indexOf(block),
+      );
+      expect(prompt.indexOf(block)).toBeLessThan(
+        prompt.indexOf("## The scope"),
+      );
+      expect(prompt).toContain(
+        "Every statement below is true: never write a sentence that contradicts one. The numbers in the statements are there for checking only — in your answer every number is still a {{rN.column}} reference, and a gap is written only when a column of the result holds it.",
+      );
+    }
+  });
+
+  test("pins the comparative rule: a direction word only where a statement gives it", () => {
+    const rule =
+      '- COMPARATIVE WORDS FOLLOW THE STATEMENTS. Higher, lower, more, fewer, better, worse, rose, fell, climbed, dropped, improved, declined, best, worst, most, least, equal, level, exceeds, ahead, behind: use one only when a statement under "What the numbers show" gives that direction for those figures, and use the direction it gives. Where no statement compares two figures, put them side by side with no comparative word. A figure the statements call missing is never compared, and a count the statements give for one row is never given to another.';
+    expect(personal).toContain(rule);
+    expect(team).toContain(rule);
+    expect(personal).toContain(
+      "You may say which of two referenced values is higher as the statements give it",
+    );
+  });
+
+  test("says so when nothing in the result was compared", () => {
+    expect(
+      buildAnswerPrompt({
+        question: "Aces?",
+        rows: [{ aces: 12, [ASK_SCOPE_COUNT_COLUMN]: 3 }],
+        matchCount: 3,
+      }),
+    ).toContain(
+      "(nothing in this result was compared: state its figures without a comparative word)",
+    );
+  });
+
+  test("the worked examples carry their own statements, and the example answers agree with them", () => {
+    const example = renderAskFactsBlock(
+      computeAskFacts(ASK_ANSWER_EXAMPLE_ROWS),
+    );
+    expect(personal).toContain(`Example statements:\n${example}`);
+    // "Your first serve landed more often than Beau's", "he hit more" winners.
+    expect(example).toContain(
+      "r1.me_first_serve_pct (68.5) is HIGHER than r1.opp_first_serve_pct (58.3)",
+    );
+    expect(example).toContain(
+      "r1.me_winners (15) is LOWER than r1.opp_winners (24)",
+    );
+    const teamExample = renderAskFactsBlock(
+      computeAskFacts(ASK_TEAM_ANSWER_EXAMPLE_ROWS),
+    );
+    expect(team).toContain(`Example statements:\n${teamExample}`);
+    // "Sokolov wins the largest share … with Brooks the lowest of the three."
+    expect(teamExample).toContain(
+      'second_serve_won_pct: HIGHEST is r1 "Mara Sokolov" (58.4); LOWEST is r3 "Dana Brooks" (44.7).',
+    );
+    // "Sokolov also hit the most second serves of the three, and Brooks the fewest."
+    expect(teamExample).toContain(
+      'second_serves_in: HIGHEST is r1 "Mara Sokolov" (137); LOWEST is r3 "Dana Brooks" (85).',
+    );
+  });
+
+  test("statements are only made about the rows the prompt shows", () => {
+    const many: AskRow[] = Array.from(
+      { length: MAX_ASK_PROMPT_ROWS + 5 },
+      (_, n) => ({
+        played_on: `2026-01-${String((n % 28) + 1).padStart(2, "0")}`,
+        aces: n,
+        team_aces: 1,
+      }),
+    );
+    const prompt = buildAnswerPrompt({
+      question: "Aces?",
+      rows: many,
+      matchCount: 35,
+    });
+    expect(prompt).not.toContain(`r${MAX_ASK_PROMPT_ROWS + 1}.aces`);
   });
 });

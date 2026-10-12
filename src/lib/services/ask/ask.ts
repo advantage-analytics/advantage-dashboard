@@ -11,6 +11,12 @@ import type {
   AskSourceMatch,
   AskVisual,
 } from "@/lib/services/ask/events";
+import {
+  equalBaselineColumns,
+  scopeIsNarrowed,
+  withOrderSummary,
+  withoutColumns,
+} from "@/lib/services/ask/facts";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import type { AskScope } from "@/lib/services/ask/scope";
 import {
@@ -21,6 +27,14 @@ import {
   buildAnswerPrompt,
   buildPlanPrompt,
 } from "@/lib/services/ask/prompts";
+import {
+  ASK_REVIEW_SQL,
+  type AskReviewMode,
+  buildReviewAnswer,
+  classifyReview,
+  readAskReview,
+  reviewAnswerRow,
+} from "@/lib/services/ask/review";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -61,6 +75,19 @@ import type { AskResolvedTags } from "@/lib/services/ask/tags";
  * against `auth.uid()` — is planned and answered with the team prompts, and
  * saves with `p_program_id` so the conversation belongs to that workspace.
  * The quota is the asker's own in both.
+ *
+ * Two things the server does to a plan beyond checking it. A result whose
+ * every baseline equals the figure it is compared with — "August against all
+ * matches" as two identical bars — is sent back to the planner once, and if
+ * it comes back the same the baseline columns are left out of what the answer
+ * step sees (`equalBaselineColumns`). And a REVIEW ("how can I improve for my
+ * next match?") is not planned at all: the planner chooses the matches, the
+ * query is the constant `ASK_REVIEW_SQL`, and the answer is written by
+ * `review.ts` from the server's own classification — no answer model call,
+ * the same renderer, the same events, and always the no-advice notice. A
+ * result in date order also gets each measure's first, last, lowest and
+ * highest value copied onto its first row (`withOrderSummary`), so the
+ * answer can cite them without having to name the right row.
  *
  * Privacy: nothing here logs the question, a tag name, a row, a label or the
  * model's prose. Players may be minors (`adapter.ts`). The two log lines are
@@ -156,6 +183,8 @@ const MAX_CANNOT_ANSWER_LENGTH = 300;
 /** Stable prefixes for the log lines this module writes. */
 export const ASK_DROPPED_DIGITS_LOG = "[ask] renderer dropped typed digits";
 export const ASK_DROPPED_VISUALS_LOG = "[ask] renderer dropped visual blocks";
+export const ASK_DROPPED_SENTENCES_LOG =
+  "[ask] renderer dropped same-cell range sentences";
 
 // ── Reserve ──────────────────────────────────────────────────────────────────
 
@@ -221,9 +250,17 @@ function readLimitDetail(message: string) {
 
 /** Why a plan could not be used, told back to the planner once. */
 type PlanProblem = {
-  kind: "unparseable" | "guard" | "database" | "range";
+  kind: "unparseable" | "guard" | "database" | "range" | "baseline";
   detail: string;
 };
+
+/**
+ * What the planner is told when every baseline in its result equals the
+ * figure beside it. Names the columns; says how a baseline is written.
+ */
+export function equalBaselineDetail(columns: readonly string[]): string {
+  return `The baseline ${columns.length === 1 ? "column" : "columns"} ${columns.join(", ")} came out exactly equal to the scoped ${columns.length === 1 ? "figure" : "figures"}, so the baseline was computed over scope. A baseline must be computed over all matches, not joined to scope: sum it straight from the view (from ask.match_stats s where s.side = 'me', with no join to scope and no match_id in (select match_id from scope) around it), and put the scoped figure beside it as sum(case when s.match_id in (select match_id from scope) then … else 0 end).`;
+}
 
 /**
  * The one column this module adds to every result row
@@ -262,7 +299,8 @@ export function withScopeCount(
 }
 
 type PlanStep =
-  | { ok: true; plan: AskPlanQuery; reply: string }
+  /** `review` marks a plan whose sql is the server's own `ASK_REVIEW_SQL`. */
+  | { ok: true; plan: AskPlanQuery; review: boolean; reply: string }
   | { ok: false; refusal: string; advice: boolean }
   | { ok: false; problem: PlanProblem; reply: string }
   | { ok: false; unavailable: true };
@@ -322,10 +360,22 @@ export async function* askQuestion(
 
     let plan: AskPlanQuery | null = null;
     let result: QueryResult | null = null;
+    let reviewed = false;
+    /** The review's answer, written by the server in the renderer's syntax. */
+    let reviewText: string | null = null;
     let queried = false;
+    // A first result that ran but whose baselines all equalled the scoped
+    // figures, with those columns already left out. If the planner's second
+    // try fails in any way, this is the answer: a result without a baseline
+    // is better than no answer.
+    let fallback: { plan: AskPlanQuery; result: QueryResult } | null = null;
 
     for (let attempt = 0; attempt < 2 && result === null; attempt += 1) {
       const step = await planOnce(model, systemPrompt, messages, cannotAnswer);
+      if (!step.ok && fallback) {
+        ({ plan, result } = fallback);
+        break;
+      }
       if (!step.ok) {
         if ("unavailable" in step) {
           yield await fail("llm_unavailable", ASK_LLM_UNAVAILABLE_MESSAGE);
@@ -351,6 +401,10 @@ export async function* askQuestion(
         sql: step.plan.sql,
       });
       if (!check.ok) {
+        if (fallback) {
+          ({ plan, result } = fallback);
+          break;
+        }
         if (attempt === 0) {
           messages.push(
             { role: "assistant", content: step.reply },
@@ -371,6 +425,10 @@ export async function* askQuestion(
       }
       const run = await runQuery(db, step.plan, scope);
       if (!run.ok) {
+        if (fallback) {
+          ({ plan, result } = fallback);
+          break;
+        }
         if (attempt === 0) {
           messages.push(
             { role: "assistant", content: step.reply },
@@ -386,6 +444,10 @@ export async function* askQuestion(
       }
       const badColumn = percentageOutOfRange(run.result.rows);
       if (badColumn !== null) {
+        if (fallback) {
+          ({ plan, result } = fallback);
+          break;
+        }
         if (attempt === 0) {
           messages.push(
             { role: "assistant", content: step.reply },
@@ -402,10 +464,69 @@ export async function* askQuestion(
         yield await fail("cannot_answer", cannotAnswer);
         return;
       }
+      if (step.review) {
+        // The server's own query: nothing to send back to the planner. No
+        // match with statistics in scope is "no data", decided below.
+        const review = readAskReview(run.result.rows);
+        plan = step.plan;
+        reviewed = true;
+        if (review === null) {
+          result = { matches: [], rows: [] };
+          break;
+        }
+        const mode: AskReviewMode = !team
+          ? "personal"
+          : scopeIsNarrowed(step.plan.scope_sql) && review.players === 1
+            ? "player"
+            : "team";
+        const rows = withScopeCount(
+          [reviewAnswerRow(review)],
+          run.result.matches.length,
+        );
+        reviewText = buildReviewAnswer(review, classifyReview(review, mode));
+        result = { matches: run.result.matches, rows };
+        break;
+      }
+
+      // Every baseline equal to the figure it is compared with, over a scope
+      // narrower than all matches: the baseline was summed over scope. Sent
+      // back once; the second time the baseline columns are left out.
+      let rows = run.result.rows;
+      const narrowed = scopeIsNarrowed(step.plan.scope_sql);
+      // Over every match, an all-matches baseline is the figure a second
+      // time by definition: one equal pair is enough, and there is nothing
+      // to send back — the columns are simply left out.
+      const equal = equalBaselineColumns(rows, narrowed ? 2 : 1);
+      if (equal !== null) {
+        rows = withoutColumns(rows, equal);
+        if (narrowed && attempt === 0) {
+          fallback = {
+            plan: step.plan,
+            result: {
+              matches: run.result.matches,
+              rows: withScopeCount(
+                withOrderSummary(rows),
+                run.result.matches.length,
+              ),
+            },
+          };
+          messages.push(
+            { role: "assistant", content: step.reply },
+            {
+              role: "user",
+              content: feedback({
+                kind: "baseline",
+                detail: equalBaselineDetail(equal),
+              }),
+            },
+          );
+          continue;
+        }
+      }
       plan = step.plan;
       result = {
         matches: run.result.matches,
-        rows: withScopeCount(run.result.rows, run.result.matches.length),
+        rows: withScopeCount(withOrderSummary(rows), run.result.matches.length),
       };
     }
 
@@ -426,7 +547,11 @@ export async function* askQuestion(
     yield { type: "status", stage: "writing" };
 
     let chunks: AsyncIterable<string>;
-    if (model.configured) {
+    if (reviewText !== null) {
+      // A review is written by the server, not the model: the same syntax,
+      // through the same renderer.
+      chunks = oneChunk(reviewText);
+    } else if (model.configured) {
       try {
         chunks = await model.stream(
           buildAnswerPrompt({
@@ -493,7 +618,16 @@ export async function* askQuestion(
     // The no-advice notice is this module's, never the model's: a signal
     // beside the answer, after whatever the model wrote, which the client
     // shows as `ASK_NO_ADVICE_SENTENCE`.
-    if (plan.asks_for_advice) {
+    if (answer.droppedSentences > 0) {
+      console.warn(ASK_DROPPED_SENTENCES_LOG, {
+        count: answer.droppedSentences,
+      });
+    }
+
+    // A review always carries the notice: it answers "how can I improve"
+    // with what the matches show, whatever the planner flagged.
+    const noAdvice = plan.asks_for_advice || reviewed;
+    if (noAdvice) {
       yield { type: "notice", notice: "no_advice" };
     }
 
@@ -501,7 +635,7 @@ export async function* askQuestion(
     const saved = await rpc(db, "ask_save_exchange", {
       p_conversation_id: input.conversationId,
       p_question: savedQuestion(input.question, input.tags),
-      p_answer: savedAnswer(answer, result, plan, model.configured),
+      p_answer: savedAnswer(answer, result, plan, noAdvice, model.configured),
       // Named only for a team question: a personal save is the three
       // arguments it always was.
       ...(scope.kind === "team" ? { p_program_id: scope.programId } : {}),
@@ -541,6 +675,7 @@ async function planOnce(
     return {
       ok: true,
       plan: ASK_MOCK_PLAN,
+      review: false,
       reply: JSON.stringify(ASK_MOCK_PLAN),
     };
   }
@@ -563,7 +698,7 @@ async function planOnce(
       problem: {
         kind: "unparseable",
         detail:
-          "The reply was not one JSON object with scope_sql and sql, or with cannot_answer.",
+          "The reply was not one JSON object with scope_sql and sql, with review and scope_sql, or with cannot_answer.",
       },
     };
   }
@@ -574,7 +709,20 @@ async function planOnce(
       advice: parsed.asks_for_advice,
     };
   }
-  return { ok: true, plan: parsed, reply };
+  if ("review" in parsed) {
+    // The planner chose the matches; the query is the server's.
+    return {
+      ok: true,
+      plan: {
+        scope_sql: parsed.scope_sql,
+        sql: ASK_REVIEW_SQL,
+        asks_for_advice: true,
+      },
+      review: true,
+      reply,
+    };
+  }
+  return { ok: true, plan: parsed, review: false, reply };
 }
 
 const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
@@ -583,7 +731,8 @@ const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
  * The planner's reply as an {@link AskPlanReply}, or null when it is not
  * one. A fenced code block around the object is tolerated, and so is a
  * missing `asks_for_advice` (read as false): the contract asks for both to
- * be absent, and a small model forgets.
+ * be absent, and a small model forgets. `{"review": true, "scope_sql"}` is
+ * the review intent, whose `asks_for_advice` is always true.
  */
 export function parsePlanReply(reply: string): AskPlanReply | null {
   const text = FENCE.exec(reply)?.[1] ?? reply;
@@ -607,6 +756,15 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
   const advice = record.asks_for_advice === true;
   if (typeof record.cannot_answer === "string") {
     return { cannot_answer: record.cannot_answer, asks_for_advice: advice };
+  }
+  // The review: `review` exactly true and a scope. Any `sql` beside it is
+  // ignored — the query is never the planner's.
+  if (
+    record.review === true &&
+    typeof record.scope_sql === "string" &&
+    record.scope_sql.trim() !== ""
+  ) {
+    return { review: true, scope_sql: record.scope_sql, asks_for_advice: true };
   }
   if (
     typeof record.scope_sql === "string" &&
@@ -632,7 +790,9 @@ function feedback(problem: PlanProblem): string {
         ? "That query was refused before it ran."
         : problem.kind === "range"
           ? "That query returned a percentage outside 0 to 100."
-          : "That reply could not be read.";
+          : problem.kind === "baseline"
+            ? "That query's baseline is the same as the figure it is compared with."
+            : "That reply could not be read.";
   return `${lead} ${oneLine(problem.detail)} Reply again with ONE JSON object and nothing else, following every rule.`;
 }
 
@@ -700,6 +860,11 @@ function sourceMatch(value: unknown, team: boolean): AskSourceMatch | null {
 
 // ── Answer step ──────────────────────────────────────────────────────────────
 
+/** Server-written answer text as the one-chunk stream the renderer takes. */
+async function* oneChunk(text: string): AsyncIterable<string> {
+  yield text;
+}
+
 /** Marks a provider error raised while the answer was streaming. */
 class ProviderFailure extends Error {}
 
@@ -766,6 +931,7 @@ function savedAnswer(
   answer: AskAnswerResult,
   result: QueryResult,
   plan: AskPlanQuery,
+  noAdvice: boolean,
   configured: boolean,
 ): AskSavedAnswer {
   return {
@@ -773,7 +939,7 @@ function savedAnswer(
     figures: answer.figures,
     visual: answer.visual,
     body: answer.text,
-    noAdvice: plan.asks_for_advice,
+    noAdvice,
     sources: result.matches,
     matchIds: result.matches.map((match) => match.matchId),
     sql: plan.sql,

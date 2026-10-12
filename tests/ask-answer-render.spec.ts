@@ -22,6 +22,8 @@ import {
   MAX_ASK_FIGURES,
   type AskRow,
   formatAskCell,
+  citesSameCellAsRange,
+  recitesOneCell,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
 import {
@@ -262,6 +264,7 @@ test.describe("renderAskAnswer — shape", () => {
       droppedFigures: [],
       droppedVisuals: [],
       droppedVisualRows: 0,
+      droppedSentences: 0,
       failure: null,
     });
   });
@@ -303,17 +306,19 @@ test.describe("renderAskAnswer — shape", () => {
     expect(result.failure).toBeNull();
   });
 
-  test("text streams as it arrives instead of waiting for the end", async () => {
+  test("text streams a sentence at a time instead of waiting for the end", async () => {
+    // A sentence is held until it ends, so one that cites the same cell as
+    // both ends of a range can be left out whole (`citesSameCellAsRange`).
     const { events } = await render([
       "Headline.\n",
-      "The first part ",
-      "and the second part.",
+      "The first sentence. The ",
+      "second one.",
     ]);
 
     expect(events).toEqual([
       { type: "headline", text: "Headline." },
-      { type: "text", delta: "The first part" },
-      { type: "text", delta: " and the second part." },
+      { type: "text", delta: "The first sentence." },
+      { type: "text", delta: " The second one." },
     ]);
   });
 
@@ -906,8 +911,8 @@ test.describe("renderAskAnswer — the visual block across chunks", () => {
     const { events } = renderAskAnswer(
       chunksOf(
         "Claim.\nCHART: split | Caption.\nROW: A | {{r1.winners}}\nROW: B | {{r1.forced}}\n",
-        "The body ",
-        "continues.",
+        "The body. ",
+        "It continues.",
       ),
       COMPARISON,
     );
@@ -1755,4 +1760,155 @@ test.describe("readAskVisual — a saved or streamed visual, defensively", () =>
       expect(readAskVisual(value)).toBeNull();
     });
   }
+});
+
+// ── One cell as both ends of a range ────────────────────────────────────────
+
+test.describe("a sentence that cites one cell as both ends of a range", () => {
+  const TREND: AskRow[] = [
+    { played_on: "2026-02-03", first_serve_pct: 54.2 },
+    { played_on: "2026-09-28", first_serve_pct: 68 },
+  ];
+
+  async function run(chunks: string[]) {
+    const { events, result } = renderAskAnswer(chunksOf(...chunks), TREND);
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+    return {
+      result,
+      text: seen
+        .flatMap((event) => (event.type === "text" ? [event.delta] : []))
+        .join(""),
+    };
+  }
+
+  test("citesSameCellAsRange: the identical reference after 'from' and after 'to', and nothing looser", () => {
+    expect(
+      citesSameCellAsRange(
+        "It climbed from {{r1.first_serve_pct}} in February to {{r1.first_serve_pct}} by September.",
+      ),
+    ).toBe(true);
+    expect(
+      citesSameCellAsRange(
+        "It went From {{ r1.first_serve_pct }} to {{r1.first_serve_pct}}.",
+      ),
+    ).toBe(true);
+    // Two different cells — even two that hold the same value — are a range.
+    expect(
+      citesSameCellAsRange(
+        "It climbed from {{r1.first_serve_pct}} to {{r2.first_serve_pct}}.",
+      ),
+    ).toBe(false);
+    // The same cell twice without a from … to is repetition, not a claim.
+    expect(
+      citesSameCellAsRange(
+        "You landed {{r1.first_serve_pct}}, and {{r1.first_serve_pct}} is the figure to read.",
+      ),
+    ).toBe(false);
+    // "to" before "from" is not the pair.
+    expect(
+      citesSameCellAsRange(
+        "Up to {{r1.first_serve_pct}}, from {{r2.first_serve_pct}}.",
+      ),
+    ).toBe(false);
+  });
+
+  test("drops that sentence and keeps the ones around it", async () => {
+    const { result, text } = await run([
+      "Your first serve rose over the season.\n\n",
+      "It climbed from {{r1.first_serve_pct}} at the start of February to {{r1.first_serve_pct}} by late September. ",
+      "The latest match was {{r2.first_serve_pct}}.",
+    ]);
+    expect(text).toBe("The latest match was 68%.");
+    expect(result.droppedSentences).toBe(1);
+    expect(result.failure).toBeNull();
+    expect(result.headline).toBe("Your first serve rose over the season.");
+  });
+
+  test("keeps the paragraph break when the dropped sentence ended a paragraph", async () => {
+    const { text } = await run([
+      "Headline.\n\nFirst paragraph. It went from {{r1.first_serve_pct}} to {{r1.first_serve_pct}}.\n\nSecond paragraph.",
+    ]);
+    expect(text).toBe("First paragraph.\n\nSecond paragraph.");
+  });
+
+  test("finds the sentence across chunk boundaries, and a full stop inside a reference ends nothing", async () => {
+    const { result, text } = await run([
+      "Headline.\n\nBefore. It went from {{r1.first_",
+      "serve_pct}} to {{r1.first_serve",
+      "_pct}}. After {{r2.first_serve_pct}}.",
+    ]);
+    expect(text).toBe("Before. After 68%.");
+    expect(result.droppedSentences).toBe(1);
+  });
+
+  test("never touches a figure line or a block line", async () => {
+    const { result, text } = await run([
+      "The first serve changed.\n",
+      "FIGURE: From first to last = {{r1.first_serve_pct}}\n",
+      "CHART: table | From {{r1.first_serve_pct}} to {{r1.first_serve_pct}}.\n",
+      "COLUMNS: Value\n",
+      "ROW: From start to end | {{r1.first_serve_pct}}\n",
+      "\nThe body.",
+    ]);
+    expect(result.figures).toEqual([
+      { label: "From first to last", value: "54.2%" },
+    ]);
+    expect(result.visual?.kind).toBe("table");
+    expect(text).toBe("The body.");
+    expect(result.droppedSentences).toBe(0);
+  });
+
+  test("the headline is never dropped: only the range itself is cut out of it", async () => {
+    const { result } = await run([
+      "Your first serve percentage rose over the season from {{r1.played_on}} to {{r1.played_on}}.\n\nThe body.",
+    ]);
+    expect(result.headline).toBe(
+      "Your first serve percentage rose over the season.",
+    );
+    expect(result.droppedSentences).toBe(1);
+
+    const kept = await run([
+      "It rose from {{r1.first_serve_pct}} to {{r2.first_serve_pct}}.\n\nThe body.",
+    ]);
+    expect(kept.result.headline).toBe("It rose from 54.2% to 68%.");
+    expect(kept.result.droppedSentences).toBe(0);
+  });
+
+  test("recitesOneCell: one cell three times or more in a sentence, never twice", () => {
+    expect(
+      recitesOneCell(
+        "It climbed to {{r1.first_serve_pct}} on {{r1.played_on}}, {{r1.first_serve_pct}} on {{r1.played_on}}, and {{r1.first_serve_pct}} on {{r1.played_on}}.",
+      ),
+    ).toBe(true);
+    expect(
+      recitesOneCell(
+        "You landed {{r1.first_serve_pct}}, and {{r1.first_serve_pct}} is the figure to read.",
+      ),
+    ).toBe(false);
+    expect(
+      recitesOneCell(
+        "{{r1.first_serve_pct}}, {{r2.first_serve_pct}} and {{r3.first_serve_pct}}.",
+      ),
+    ).toBe(false);
+  });
+
+  test("drops a sentence that recites one cell for every row, and keeps the rest", async () => {
+    const { result, text } = await run([
+      "Your first serve rose.\n\n",
+      "It climbed to {{r1.first_serve_pct}} on {{r1.played_on}}, {{r1.first_serve_pct}} on {{r1.played_on}}, and {{r1.first_serve_pct}} on {{r1.played_on}}. ",
+      "These figures cover two matches.",
+    ]);
+    expect(text).toBe("These figures cover two matches.");
+    expect(result.droppedSentences).toBe(1);
+  });
+
+  test("an answer whose whole body was that sentence keeps its headline and does not fail", async () => {
+    const { result, text } = await run([
+      "Your first serve changed.\n\nIt went from {{r1.first_serve_pct}} to {{r1.first_serve_pct}}.",
+    ]);
+    expect(text).toBe("");
+    expect(result.headline).toBe("Your first serve changed.");
+    expect(result.failure).toBeNull();
+  });
 });

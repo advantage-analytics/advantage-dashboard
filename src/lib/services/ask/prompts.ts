@@ -24,6 +24,7 @@ import {
   MIN_ASK_SPLIT_PARTS,
   MIN_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
+import { computeAskFacts, renderAskFactsBlock } from "@/lib/services/ask/facts";
 import {
   ASK_PERCENTAGE_DEFINITIONS,
   ASK_SCHEMA,
@@ -59,6 +60,15 @@ import {
  * in scope (`ASK_SCOPE_COUNT_COLUMN` is the server's); a follow-up keeps the
  * earlier turn's scope; the headline never mentions sample size.
  *
+ * What the season and team runs after it changed, also pinned: the answer
+ * prompts carry the server's own comparison of the result ("What the numbers
+ * show", `facts.ts`) and a comparative word may only follow one of its
+ * statements; the planner is told the column-naming convention those
+ * statements are read from, how a baseline is written, and to give each
+ * group its own match count; a third reply shape, the review, hands "how can
+ * I improve" to the server's fixed query (`review.ts`); and the team planner
+ * refuses a lineup position rather than picking the best record.
+ *
  * Each prompt has a second, TEAM wording (`scope.kind === "team"`): the same
  * views read for a program, where "me" is the program's own player in each
  * match and the reader is a coach. It is a separate template rather than the
@@ -88,7 +98,19 @@ export interface AskPlanRefusal {
   asks_for_advice: boolean;
 }
 
-export type AskPlanReply = AskPlanQuery | AskPlanRefusal;
+/**
+ * The planner's reply when the question is a review — "how can I improve",
+ * "what went wrong in my last match". It chooses the matches and nothing
+ * else: the query is the server's own (`ASK_REVIEW_SQL`, `review.ts`).
+ */
+export interface AskPlanReview {
+  review: true;
+  /** The matches the averages may be drawn from; the server finds the last one itself. */
+  scope_sql: string;
+  asks_for_advice: boolean;
+}
+
+export type AskPlanReply = AskPlanQuery | AskPlanRefusal | AskPlanReview;
 
 /**
  * The sentence the client shows beside an answer whose question asked for
@@ -185,6 +207,13 @@ export const ASK_PLAN_EXAMPLE_DIAGNOSTIC: AskPlanQuery = {
     "select match_id from ask.matches where match_id in ('9b1e5d2c-2f6a-4e0b-8a3c-5d7e9f1a2b3c')",
   sql: "select round(100.0 * sum(case when s.side = 'me' then s.first_serves_in else 0 end) / nullif(sum(case when s.side = 'me' then s.first_serves else 0 end), 0), 1) as me_first_serve_pct, round(100.0 * sum(case when s.side = 'opponent' then s.first_serves_in else 0 end) / nullif(sum(case when s.side = 'opponent' then s.first_serves else 0 end), 0), 1) as opp_first_serve_pct, round(100.0 * sum(case when s.side = 'me' then s.second_serve_points_won else 0 end) / nullif(sum(case when s.side = 'me' then s.second_serves_in else 0 end), 0), 1) as me_second_serve_won_pct, round(100.0 * sum(case when s.side = 'opponent' then s.second_serve_points_won else 0 end) / nullif(sum(case when s.side = 'opponent' then s.second_serves_in else 0 end), 0), 1) as opp_second_serve_won_pct, round(100.0 * sum(case when s.side = 'me' then s.first_return_points_won + s.second_return_points_won else 0 end) / nullif(sum(case when s.side = 'me' then s.first_returns + s.second_returns else 0 end), 0), 1) as me_return_won_pct, round(100.0 * sum(case when s.side = 'opponent' then s.first_return_points_won + s.second_return_points_won else 0 end) / nullif(sum(case when s.side = 'opponent' then s.first_returns + s.second_returns else 0 end), 0), 1) as opp_return_won_pct, sum(case when s.side = 'me' then s.break_points_converted else 0 end) as me_break_points_converted, sum(case when s.side = 'me' then s.break_point_opportunities else 0 end) as me_break_point_opportunities, sum(case when s.side = 'opponent' then s.break_points_converted else 0 end) as opp_break_points_converted, sum(case when s.side = 'opponent' then s.break_point_opportunities else 0 end) as opp_break_point_opportunities, sum(case when s.side = 'me' then s.winners else 0 end) as me_winners, sum(case when s.side = 'opponent' then s.winners else 0 end) as opp_winners, sum(case when s.side = 'me' then s.unforced_errors else 0 end) as me_unforced_errors, sum(case when s.side = 'opponent' then s.unforced_errors else 0 end) as opp_unforced_errors, round(100.0 * sum(case when s.side = 'me' then s.total_points_won else 0 end) / nullif(sum(case when s.side = 'me' then s.total_points else 0 end), 0), 1) as me_total_points_won_pct, round(100.0 * sum(case when s.side = 'opponent' then s.total_points_won else 0 end) / nullif(sum(case when s.side = 'opponent' then s.total_points else 0 end), 0), 1) as opp_total_points_won_pct from ask.match_stats s where s.match_id in (select match_id from scope)",
   asks_for_advice: false,
+};
+
+/** The worked example of a review reply in the plan prompt. Its scope passes `checkAskSql`. */
+export const ASK_PLAN_EXAMPLE_REVIEW: AskPlanReview = {
+  review: true,
+  scope_sql: "select match_id from ask.matches",
+  asks_for_advice: true,
 };
 
 /** The worked example of a refusal reply in the plan prompt. */
@@ -334,13 +363,16 @@ ${renderConversation(input.conversation)}
 
 ## What to reply
 
-Reply with ONE JSON object and nothing else: no markdown, no code fence, no commentary. It has one of two shapes.
+Reply with ONE JSON object and nothing else: no markdown, no code fence, no commentary. It has one of three shapes.
 
 Shape A, when the views can answer the question:
 {"scope_sql": "...", "sql": "...", "asks_for_advice": false}
 
 Shape B, when they cannot:
 {"cannot_answer": "...", "asks_for_advice": false}
+
+Shape C, the review, when the player asks how to improve or what has gone wrong without naming one statistic, opponent or match (see "The review" below):
+{"review": true, "scope_sql": "...", "asks_for_advice": true}
 
 ### scope_sql
 
@@ -361,10 +393,20 @@ Shape B, when they cannot:
 - NEVER count the matches in ${SCOPE_NAME}, and never name a column matches. The app counts them itself and adds the column ${ASK_SCOPE_COUNT_COLUMN} to every row; that is the only match count the answer may use. A count of all the player's matches, for a baseline, is fine as all_matches.
 - Compute every comparison and every difference here, in SQL. The answer step cannot subtract, add, average or rank. To compare against the player's own average, return the figure for the matches in ${SCOPE_NAME} and the same figure across all their matches as separate columns, as the first example does. A difference gets its own column ending in _diff.
 - When the question is about one thing with nothing to compare it to, add the same figure across all the player's matches as the comparison.
+- NAME COMPARED COLUMNS BY THE CONVENTION. The app reads column names to work out which of two figures is higher and tells the answer step, so two columns holding the same measure must share its name. The player's figure and the opponent's: me_<measure> and opp_<measure>. A figure and its baseline: <measure> and the same name behind ONE prefix — all_<measure> or all_matches_<measure> (every match of the player's), season_<measure>, overall_<measure>, avg_<measure>, baseline_<measure>, prev5_<measure> (the five matches before) or last_<measure>. second_serve_won_pct beside all_second_serve_won_pct is compared; second_serve_won_pct beside usual_rate is not, and the answer may then not say which is higher.
+- THE BASELINE COLUMN COVERS EVERY MATCH. The query still reads ${SCOPE_NAME} for the scoped figure, as every query must; only the baseline column beside it is summed over every row of the view (from ask.match_stats s where s.side = 'me'), with the scoped figure written as sum(case when s.match_id in (select match_id from ${SCOPE_NAME}) then … else 0 end), as the first example does. A baseline that is itself joined to ${SCOPE_NAME}, or filtered by match_id in (select match_id from ${SCOPE_NAME}), is the scoped figure a second time: the two columns come out equal and the query is sent back.
+- A result with one row per group (per surface, per opponent, per hand, per month) carries each group's own number of matches in a column named group_matches, so the answer never has to guess how many matches a row covers.
 
 ### Diagnostic questions: compare the player with the opponent
 
-"Why did I lose/win", "what did I do to win", "what happened", "how to beat this opponent", "summarize this match", "what are my strengths", "what should I work on", or any other question about a match or opponent that does not name one statistic: return ONE row holding the player's figure and the opponent's figure, side by side, for every standard measure the matches in ${SCOPE_NAME} hold — columns named me_<measure> and opp_<measure>. The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct. Add more only when the question names them (rally length bands, net points, aces and double faults). Write each as sum(case when s.side = 'me' then … else 0 end) and sum(case when s.side = 'opponent' then … else 0 end), as the second example does. For "strengths" or "work on" with no opponent, the same row across all the player's matches (both me_ and opp_ columns, still read from ${SCOPE_NAME}), so the answer can rank the player's own measures against the opponents'. A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal: answer it across all the player's matches with the standard measures of that subject, me_ and opp_.
+"Why did I lose/win", "what did I do to win", "what happened", "how to beat this opponent", "summarize this match", "what are my strengths", or any other question about a match or opponent that does not name one statistic: return ONE row holding the player's figure and the opponent's figure, side by side, for every standard measure the matches in ${SCOPE_NAME} hold — columns named me_<measure> and opp_<measure>. The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct. Add more only when the question names them (rally length bands, net points, aces and double faults). Write each as sum(case when s.side = 'me' then … else 0 end) and sum(case when s.side = 'opponent' then … else 0 end), as the second example does. For "strengths" with no opponent, the same row across all the player's matches (both me_ and opp_ columns, still read from ${SCOPE_NAME}), so the answer can rank the player's own measures against the opponents'. A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal: answer it across all the player's matches with the standard measures of that subject, me_ and opp_.
+
+### The review (shape C)
+
+"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practise", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match. Reply with shape C and write no sql. The app runs its own fixed query: the player's last match, measure by measure, against the average of the five matches before it and of every earlier match.
+- scope_sql is every match those averages may be drawn from: select match_id from ask.matches, narrowed only by a period the question names ("this season"). NEVER limit it to the last match; the app finds the last match itself.
+- asks_for_advice is true in shape C.
+- A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat Marek") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A.
 
 ### Rules for both
 
@@ -394,7 +436,7 @@ Shape B, when they cannot:
 
 - true when the question asks what to do: what to work on, improve, practise, change or fix, how to beat someone, which tactic or strategy to use, or whether something is good enough.
 - false when it only asks what happened.
-- A question that asks for advice is ALWAYS answered with shape A whenever the views hold facts on its subject: write the query for the factual part and set asks_for_advice to true. "How do I beat this opponent?" is the diagnostic query over the matches against them. "What should I work on?" is the diagnostic row across all matches. Never choose shape B only because advice was asked.
+- A question that asks for advice is ALWAYS answered with shape A or shape C whenever the views hold facts on its subject: write the query for the factual part and set asks_for_advice to true. "How do I beat this opponent?" is the diagnostic query over the matches against them. "What should I work on?" is the review, shape C. Never choose shape B only because advice was asked.
 
 ## Examples
 
@@ -403,6 +445,9 @@ ${JSON.stringify(ASK_PLAN_EXAMPLE_QUERY)}
 
 Question: "Why did I lose to Beau?" (tagged match 9b1e5d2c-2f6a-4e0b-8a3c-5d7e9f1a2b3c against Beau Lin)
 ${JSON.stringify(ASK_PLAN_EXAMPLE_DIAGNOSTIC)}
+
+Question: "How can I improve for my next match?"
+${JSON.stringify(ASK_PLAN_EXAMPLE_REVIEW)}
 
 Question: "How do I fix my footwork?"
 ${JSON.stringify(ASK_PLAN_EXAMPLE_REFUSAL)}`;
@@ -647,6 +692,12 @@ Each block is one row. r1 is the first row, r2 the second. Each line is a column
 
 ${renderRows(input.rows)}
 
+## What the numbers show
+
+The app has already compared the figures in the result. Every statement below is true: never write a sentence that contradicts one. The numbers in the statements are there for checking only — in your answer every number is still a {{rN.column}} reference, and a gap is written only when a column of the result holds it. A statement's rN.column is the exact reference for that figure: copy it with its own row number, and do not recite rows the statements do not name.
+
+${renderAskFactsBlock(computeAskFacts(input.rows.slice(0, MAX_ASK_PROMPT_ROWS)))}
+
 ## The scope
 
 ${renderScope(input.matchCount)}
@@ -681,7 +732,8 @@ The rules below are the product's promise to the player, not style preferences. 
 - AT MOST ${MAX_ASK_VISUALS} BLOCK, of one of the six kinds, with only cells and columns the result holds. A block that breaks its shape or names a cell the result does not have is left out on its own; the rest of the answer still shows. Figure lines stay allowed beside a block, still at most ${MAX_ASK_FIGURES} and always above it.
 - When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, adding what the block does not show — which measures were level, what the numbers the block leaves out say — not reciting its cells.
 - Write ordinals as words: "second serve", "first set", "third game". Never "2nd". Never spell out a value from the result in words in place of a reference.
-- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher, and for me_ and opp_ columns you may say which measures differ most. You may say by how much only when the result has a column that holds that difference.
+- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher as the statements give it, and for me_ and opp_ columns you may say which measures differ most. You may say by how much only when the result has a column that holds that difference.
+- COMPARATIVE WORDS FOLLOW THE STATEMENTS. Higher, lower, more, fewer, better, worse, rose, fell, climbed, dropped, improved, declined, best, worst, most, least, equal, level, exceeds, ahead, behind: use one only when a statement under "What the numbers show" gives that direction for those figures, and use the direction it gives. Where no statement compares two figures, put them side by side with no comparative word. A figure the statements call missing is never compared, and a count the statements give for one row is never given to another.
 - NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about the opponent, no claim about matches outside it.
@@ -693,6 +745,9 @@ The example uses its own result. Its columns are not your columns.
 
 Example result:
 ${renderRows(ASK_ANSWER_EXAMPLE_ROWS)}
+
+Example statements:
+${renderAskFactsBlock(computeAskFacts(ASK_ANSWER_EXAMPLE_ROWS))}
 
 Example question: "Why did I lose to Beau?" (computed from one match)
 
@@ -726,6 +781,21 @@ export const ASK_TEAM_PLAN_EXAMPLE_PLAYER: AskPlanQuery = {
   scope_sql:
     "select match_id from ask.matches where player_name ilike '%sokol%' and played_on >= date '2026-08-01'",
   sql: "select round(100.0 * sum(case when s.match_id in (select match_id from scope) then s.first_serves_in else 0 end) / nullif(sum(case when s.match_id in (select match_id from scope) then s.first_serves else 0 end), 0), 1) as first_serve_pct, round(100.0 * sum(s.first_serves_in) / nullif(sum(s.first_serves), 0), 1) as team_first_serve_pct, round(100.0 * sum(case when s.match_id in (select match_id from scope) then s.second_serve_points_won else 0 end) / nullif(sum(case when s.match_id in (select match_id from scope) then s.second_serves_in else 0 end), 0), 1) as second_serve_won_pct, round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as team_second_serve_won_pct from ask.match_stats s where s.side = 'me'",
+  asks_for_advice: false,
+};
+
+/** The team plan prompt's worked example of a review of one player. Its scope passes `checkAskSql`. */
+export const ASK_TEAM_PLAN_EXAMPLE_REVIEW: AskPlanReview = {
+  review: true,
+  scope_sql:
+    "select match_id from ask.matches where player_name ilike '%sokol%'",
+  asks_for_advice: true,
+};
+
+/** The refusal for a lineup position, which no view records: never answered by picking the best record. */
+export const ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL: AskPlanRefusal = {
+  cannot_answer:
+    "The program's matches do not record lineup positions, so they cannot say who plays number one.",
   asks_for_advice: false,
 };
 
@@ -790,13 +860,16 @@ ${renderConversation(input.conversation, "Coach")}
 
 ## What to reply
 
-Reply with ONE JSON object and nothing else: no markdown, no code fence, no commentary. It has one of two shapes.
+Reply with ONE JSON object and nothing else: no markdown, no code fence, no commentary. It has one of three shapes.
 
 Shape A, when the views can answer the question:
 {"scope_sql": "...", "sql": "...", "asks_for_advice": false}
 
 Shape B, when they cannot:
 {"cannot_answer": "...", "asks_for_advice": false}
+
+Shape C, the review, when the coach asks how the team or one player can improve or what has gone wrong without naming one statistic, opponent or match (see "The review" below):
+{"review": true, "scope_sql": "...", "asks_for_advice": true}
 
 ### scope_sql
 
@@ -818,10 +891,20 @@ Shape B, when they cannot:
 - NEVER count the matches in ${SCOPE_NAME}, and never name a column matches. The app counts them itself and adds the column ${ASK_SCOPE_COUNT_COLUMN} to every row; that is the only match count the answer may use. In a per-player breakdown, each player's own number of matches is fine as player_matches. A count of all the program's matches, for a baseline, is fine as all_matches.
 - Compute every comparison and every difference here, in SQL. The answer step cannot subtract, add, average or rank. To compare one player against the team, return the figure for the matches in ${SCOPE_NAME} and the same figure across all the program's matches as separate columns named team_<measure>, as the second example does. A difference gets its own column ending in _diff.
 - When the question is about one player or one thing with nothing to compare it to, add the same figure across all the program's matches as the comparison.
+- NAME COMPARED COLUMNS BY THE CONVENTION. The app reads column names to work out which of two figures is higher and tells the answer step, so two columns holding the same measure must share its name. The program's figure and the opponents': me_<measure> and opp_<measure>. A figure and its baseline: <measure> and the same name behind ONE prefix — team_<measure> (every match of the program's), all_<measure>, season_<measure>, overall_<measure>, avg_<measure>, baseline_<measure>, prev5_<measure> (the five matches before) or last_<measure>. first_serve_pct beside team_first_serve_pct is compared; first_serve_pct beside usual_rate is not, and the answer may then not say which is higher.
+- THE BASELINE COLUMN COVERS EVERY MATCH. The query still reads ${SCOPE_NAME} for the scoped figure, as every query must; only the baseline column beside it is summed over every row of the view (from ask.match_stats s where s.side = 'me'), with the scoped figure written as sum(case when s.match_id in (select match_id from ${SCOPE_NAME}) then … else 0 end), as the second example does. A baseline that is itself joined to ${SCOPE_NAME}, or filtered by match_id in (select match_id from ${SCOPE_NAME}), is the scoped figure a second time: the two columns come out equal and the query is sent back.
+- A result with one row per group that is not a player (per surface, per opponent, per match type, per month) carries each group's own number of matches in a column named group_matches, so the answer never has to guess how many matches a row covers.
 
 ### Diagnostic questions: compare the program's players with their opponents
 
-"Why did we lose/win", "what happened", "how did Sokolov do", "summarize this match", "what are our strengths", "what should we work on", or any other question about a match, a player or the team that does not name one statistic: return ONE row holding the program's figure and the opponents' figure, side by side, for every standard measure the matches in ${SCOPE_NAME} hold — columns named me_<measure> (the program's players) and opp_<measure> (their opponents). The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct. Add more only when the question names them (rally length bands, net points, aces and double faults). Write each as sum(case when s.side = 'me' then … else 0 end) and sum(case when s.side = 'opponent' then … else 0 end) from ask.match_stats s where s.match_id in (select match_id from ${SCOPE_NAME}). For "strengths" or "work on" with no player named, the same row across all the program's matches. A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal: answer it across all the program's matches with the standard measures of that subject, me_ and opp_.
+"Why did we lose/win", "what happened", "how did Sokolov do", "summarize this match", "what are our strengths", or any other question about a match, a player or the team that does not name one statistic: return ONE row holding the program's figure and the opponents' figure, side by side, for every standard measure the matches in ${SCOPE_NAME} hold — columns named me_<measure> (the program's players) and opp_<measure> (their opponents). The standard measures, in this order: first_serve_pct, first_serve_won_pct, second_serve_won_pct, return_won_pct (both serves), break_points_converted with break_point_opportunities (counts), winners, unforced_errors, total_points_won_pct. Add more only when the question names them (rally length bands, net points, aces and double faults). Write each as sum(case when s.side = 'me' then … else 0 end) and sum(case when s.side = 'opponent' then … else 0 end) from ask.match_stats s where s.match_id in (select match_id from ${SCOPE_NAME}). For "strengths" with no player named, the same row across all the program's matches. A one-word or very short question ("serve?", "returns", "clay") names a subject, not a refusal: answer it across all the program's matches with the standard measures of that subject, me_ and opp_.
+
+### The review (shape C)
+
+"How can we improve", "how can we improve for our next match", "what should we work on", "what do we need to fix", "what should we practice this week", "what went wrong lately", "where are we slipping", "what got worse", and the same asked of one player ("how can Sokolov improve for the next match", "what should Reyes work on"): a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match. Reply with shape C and write no sql. The app runs its own fixed query. With no player named it sets the program's last five matches against every earlier one, measure by measure. With one player named it sets that player's last match against the average of their five matches before it and of all their earlier matches.
+- scope_sql is every match those averages may be drawn from. The team: select match_id from ask.matches, narrowed only by a period the question names. One player: select match_id from ask.matches where player_name ilike '%name%', or the match ids of a tagged player. NEVER limit it to the last match; the app finds the last matches itself.
+- asks_for_advice is true in shape C.
+- A question that names a statistic ("how can we improve our returns"), an opponent ("how do we beat this team") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A.
 
 ### Rules for both
 
@@ -843,7 +926,8 @@ Shape B, when they cannot:
 
 ### When to use shape B
 
-- The views have no column for what is asked (footwork, fitness, weather, rankings, lineups, practice, recruiting, video, anything about how a player felt).
+- The views have no column for what is asked (footwork, fitness, weather, rankings, seeds, lineups, practice, recruiting, video, anything about how a player felt).
+- LINEUP POSITION IS NOT RECORDED. No view says who plays number one, first singles, the top of the lineup, or where anyone is ranked or seeded. "How is our number one player doing?", "who is our best player", "our top seed" asked as a position: shape B, saying the lineup order is not recorded. NEVER answer by picking the player with the best record or the most matches. (A question that names its own measure — "who has the best first serve percentage" — is a per-player breakdown, shape A.)
 - The question is about matches that are not this program's: another team's results, a professional, an opponent's matches against other teams.
 - The question is not about the program's tennis matches at all.
 - Never for a question that is short, vague or misspelt: those get shape A over all matches.
@@ -853,7 +937,7 @@ Shape B, when they cannot:
 
 - true when the question asks what to do: what to work on, improve, practise, change or fix, how to beat someone, which lineup, tactic or strategy to use, or whether something is good enough.
 - false when it only asks what happened.
-- A question that asks for advice is ALWAYS answered with shape A whenever the views hold facts on its subject: write the query for the factual part and set asks_for_advice to true. "How do we beat this team?" is the diagnostic query over the matches against them. "What should we work on?" is the diagnostic row across all matches. Never choose shape B only because advice was asked.
+- A question that asks for advice is ALWAYS answered with shape A or shape C whenever the views hold facts on its subject: write the query for the factual part and set asks_for_advice to true. "How do we beat this team?" is the diagnostic query over the matches against them. "What should we work on?" is the review, shape C. Never choose shape B only because advice was asked.
 
 ## Examples
 
@@ -862,6 +946,12 @@ ${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN)}
 
 Question: "How is Sokolov serving this season?" (asked on 2026-10-11)
 ${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_PLAYER)}
+
+Question: "How can Sokolov improve for the next match?"
+${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REVIEW)}
+
+Question: "How is our number one player doing?"
+${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL)}
 
 Question: "Which drills should we run in practice?"
 ${JSON.stringify(ASK_TEAM_PLAN_EXAMPLE_REFUSAL)}`;
@@ -1028,6 +1118,12 @@ Each block is one row. r1 is the first row, r2 the second. Each line is a column
 
 ${renderRows(input.rows)}
 
+## What the numbers show
+
+The app has already compared the figures in the result. Every statement below is true: never write a sentence that contradicts one. The numbers in the statements are there for checking only — in your answer every number is still a {{rN.column}} reference, and a gap is written only when a column of the result holds it. A statement's rN.column is the exact reference for that figure: copy it with its own row number, and do not recite rows the statements do not name.
+
+${renderAskFactsBlock(computeAskFacts(input.rows.slice(0, MAX_ASK_PROMPT_ROWS)))}
+
 ## The scope
 
 ${renderTeamScope(input.matchCount)}
@@ -1062,7 +1158,8 @@ The rules below are the product's promise to the program, not style preferences.
 - AT MOST ${MAX_ASK_VISUALS} BLOCK, of one of the six kinds, with only cells and columns the result holds. A block that breaks its shape or names a cell the result does not have is left out on its own; the rest of the answer still shows. Figure lines stay allowed beside a block, still at most ${MAX_ASK_FIGURES} and always above it.
 - When a block carries the numbers, do not repeat every one of them in prose: one short paragraph beneath it, adding what the block does not show — which measures were level, what the numbers the block leaves out say — not reciting its cells.
 - Write ordinals as words: "second serve", "first set", "third game". Never "2nd". Never spell out a value from the result in words in place of a reference.
-- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher, the order the result's rows are already in, and for me_ and opp_ columns which measures differ most. You may say by how much only when the result has a column that holds that difference.
+- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher as the statements give it, the order the result's rows are already in, and for me_ and opp_ columns which measures differ most. You may say by how much only when the result has a column that holds that difference.
+- COMPARATIVE WORDS FOLLOW THE STATEMENTS. Higher, lower, more, fewer, better, worse, rose, fell, climbed, dropped, improved, declined, best, worst, most, least, equal, level, exceeds, ahead, behind: use one only when a statement under "What the numbers show" gives that direction for those figures, and use the direction it gives. Where no statement compares two figures, put them side by side with no comparative word. A figure the statements call missing is never compared, and a count the statements give for one row is never given to another.
 - NO ADVICE. No recommendation, drill, lineup, tactic, strategy, encouragement or praise. Never "you should", "the team should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about an opponent, no claim about matches outside it.
@@ -1075,6 +1172,9 @@ The example uses its own result. Its columns are not your columns.
 
 Example result:
 ${renderRows(ASK_TEAM_ANSWER_EXAMPLE_ROWS)}
+
+Example statements:
+${renderAskFactsBlock(computeAskFacts(ASK_TEAM_ANSWER_EXAMPLE_ROWS))}
 
 Example question: "Who wins the most points behind their second serve?" (computed from fourteen matches)
 

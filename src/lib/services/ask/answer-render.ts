@@ -345,6 +345,13 @@ export interface AskAnswerResult {
    * a reference the result does not have. A count only — never model text.
    */
   droppedVisualRows: number;
+  /**
+   * Body sentences left out because they cited one cell as both ends of a
+   * range ("from 54.2% … to 54.2%") or recited one cell three times or more,
+   * plus a headline that had such a range cut out of it. A count only —
+   * never model text.
+   */
+  droppedSentences: number;
   /** Why the stream ended with an `error` event; null when it did not. */
   failure: AskAnswerFailure | null;
 }
@@ -1311,6 +1318,160 @@ function kindOf(header: string | undefined): AskVisualKind | null {
     : null;
 }
 
+// ── Sentences that cite one cell as a range ──────────────────────────────────
+
+/**
+ * "from {{r1.x}} … to {{r1.x}}": one cell written as both ends of a change.
+ * The model has a single figure and narrates it as a climb or a fall — "from
+ * 54.2% at the start of February to 54.2% by late September". Nothing
+ * changed; the sentence says something did.
+ */
+const SAME_CELL_RANGE =
+  /\bfrom\b[^]*?\{\{\s*(r\d+\.[A-Za-z_][A-Za-z0-9_]*)\s*\}\}[^]*?\bto\b[^]*?\{\{\s*\1\s*\}\}/i;
+
+/** Whether a sentence of raw answer text cites the identical cell as the start and the end of a range. */
+export function citesSameCellAsRange(sentence: string): boolean {
+  return SAME_CELL_RANGE.test(sentence);
+}
+
+/** One cell cited this many times in a sentence is a list of one figure, not of several. */
+export const MAX_SAME_CELL_CITATIONS = 2;
+
+const ANY_REFERENCE = /\{\{\s*(r\d+\.[A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+/**
+ * Whether a sentence cites one cell more than {@link MAX_SAME_CELL_CITATIONS}
+ * times: "54.2% on Feb 7, 54.2% on Feb 7, 54.2% on Feb 7" — a model reciting
+ * a result row by row and writing the first row's reference for each.
+ */
+export function recitesOneCell(sentence: string): boolean {
+  const seen = new Map<string, number>();
+  for (const match of sentence.matchAll(ANY_REFERENCE)) {
+    const count = (seen.get(match[1]) ?? 0) + 1;
+    if (count > MAX_SAME_CELL_CITATIONS) return true;
+    seen.set(match[1], count);
+  }
+  return false;
+}
+
+/**
+ * The same range inside a headline, which is never dropped: the span from
+ * "from" to the second reference, when nothing but plain words lies between.
+ * Cutting it leaves "… rose over the season." where the model wrote
+ * "… rose over the season from Feb 7 to Feb 7."
+ */
+const SAME_CELL_SPAN =
+  /\s*,?\s*\bfrom\s+(?:[^{}.,;]*?\s)?\{\{\s*(r\d+\.[A-Za-z_][A-Za-z0-9_]*)\s*\}\}[^{}.;]*?\bto\s+(?:[^{}.,;]*?\s)?\{\{\s*\1\s*\}\}/i;
+
+/**
+ * Raw answer text cut into sentences, each with the blank space after it. A
+ * full stop inside a reference (`{{r1.column}}`) ends nothing. Unless
+ * `final`, the last piece — a sentence that may still be arriving — is
+ * handed back as `rest`.
+ */
+function splitSentences(
+  text: string,
+  final: boolean,
+): { sentences: string[]; rest: string } {
+  const sentences: string[] = [];
+  let start = 0;
+  let inReference = false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.startsWith(ASK_CELL_REFERENCE_OPEN, index)) inReference = true;
+    else if (text.startsWith(ASK_CELL_REFERENCE_CLOSE, index)) {
+      inReference = false;
+    }
+    if (inReference || !".!?".includes(text[index])) continue;
+    let end = index + 1;
+    if (end >= text.length || !/\s/.test(text[end])) continue;
+    while (end < text.length && /\s/.test(text[end])) end += 1;
+    sentences.push(text.slice(start, end));
+    start = end;
+    index = end - 1;
+  }
+  const rest = text.slice(start);
+  if (final && rest !== "")
+    return { sentences: [...sentences, rest], rest: "" };
+  return { sentences, rest };
+}
+
+/** The lines the sentence filter never reads: figure lines and block lines. */
+const STRUCTURAL_PREFIXES = [ASK_FIGURE_LINE_PREFIX, ...VISUAL_LINE_PREFIXES];
+
+/**
+ * The model's chunks, minus every body sentence that cites one cell as both
+ * ends of a range (`citesSameCellAsRange()`) or recites one cell three times
+ * or more (`recitesOneCell()`). Deliberately narrow: a figure or block line
+ * is never touched, the headline — the first line — only loses the range
+ * itself, and a sentence is dropped only for the IDENTICAL reference, never
+ * for two cells that happen to hold the same value. A dropped sentence keeps
+ * any paragraph break that followed it.
+ *
+ * The body is passed on a sentence at a time rather than a chunk at a time,
+ * since a sentence cannot be judged until it has ended.
+ */
+async function* dropSameCellRanges(
+  chunks: AsyncIterable<string>,
+  result: AskAnswerResult,
+): AsyncGenerator<string, void, undefined> {
+  let buffer = "";
+  let headlineSeen = false;
+
+  const kept = (sentences: readonly string[]): string =>
+    sentences
+      .map((sentence) => {
+        if (!citesSameCellAsRange(sentence) && !recitesOneCell(sentence)) {
+          return sentence;
+        }
+        result.droppedSentences += 1;
+        const space = /\s*$/.exec(sentence)?.[0] ?? "";
+        return space.includes("\n") ? space : "";
+      })
+      .join("");
+
+  /** One whole line, its newline included, or the last line of the stream. */
+  const line = (text: string): string => {
+    if (text.trim() === "") return text;
+    if (!headlineSeen) {
+      headlineSeen = true;
+      // The headline is never dropped; a same-cell range in it is cut out.
+      if (!SAME_CELL_SPAN.test(text)) return text;
+      result.droppedSentences += 1;
+      return text.replace(SAME_CELL_SPAN, "");
+    }
+    const start = text.trimStart();
+    if (STRUCTURAL_PREFIXES.some((prefix) => start.startsWith(prefix))) {
+      return text;
+    }
+    return kept(splitSentences(text, true).sentences);
+  };
+
+  for await (const chunk of chunks) {
+    buffer += chunk;
+    let out = "";
+    for (;;) {
+      const newline = buffer.indexOf("\n");
+      if (newline === -1) break;
+      out += line(buffer.slice(0, newline + 1));
+      buffer = buffer.slice(newline + 1);
+    }
+    // A line still arriving: body text goes on sentence by sentence; the
+    // headline and anything that may yet be a figure or block line waits.
+    const start = buffer.trimStart();
+    if (
+      headlineSeen &&
+      start !== "" &&
+      !STRUCTURAL_PREFIXES.some((prefix) => couldBe(start, prefix))
+    ) {
+      const split = splitSentences(buffer, false);
+      out += kept(split.sentences);
+      buffer = split.rest;
+    }
+    if (out !== "") yield out;
+  }
+  if (buffer !== "") yield line(buffer);
+}
+
 function failed(): AskErrorEvent {
   return {
     type: "error",
@@ -1328,7 +1489,7 @@ async function* render(
   const lines = createLineStage(result, tokens, rows);
   let pending = "";
 
-  for await (const chunk of chunks) {
+  for await (const chunk of dropSameCellRanges(chunks, result)) {
     const step = substitute(pending + chunk, rows, result, tokens, false);
     pending = step.rest;
     yield* lines.push(step.out, false);
@@ -1379,6 +1540,7 @@ export function renderAskAnswer(
     droppedFigures: [],
     droppedVisuals: [],
     droppedVisualRows: 0,
+    droppedSentences: 0,
     failure: null,
   };
   return { events: render(chunks, rows, result), result };

@@ -25,6 +25,7 @@ import {
   type AskSavedQuestion,
   askQuestion,
   conversationTurnsFromMessages,
+  equalBaselineDetail,
   parsePlanReply,
   percentageOutOfRange,
   reserveAskQuestion,
@@ -39,6 +40,7 @@ import {
   ASK_NO_ADVICE_SENTENCE,
   type AskPlanQuery,
 } from "@/lib/services/ask/prompts";
+import { ASK_REVIEW_MEASURES, ASK_REVIEW_SQL } from "@/lib/services/ask/review";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import { resolveAskTags, type AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -772,7 +774,7 @@ test.describe("the other failures", () => {
         call += 1;
         if (call === 1) return planModel.stream(system, messages);
         return brokenMidStream(
-          "Your second serve held.\nFIGURE: Points won = {{r1.second_serve_won_pct}}\n\nYou won ",
+          "Your second serve held.\nFIGURE: Points won = {{r1.second_serve_won_pct}}\n\nYou won points. And ",
         );
       },
     };
@@ -1886,5 +1888,567 @@ test.describe("resolveAskTags — a team scope", () => {
         content: "How is she serving? (about: player Mara Sokolov)",
       },
     ]);
+  });
+});
+
+// ── The review ──────────────────────────────────────────────────────────────
+
+/** `ASK_REVIEW_SQL`'s rows: every measure the same three figures, with the meta columns. */
+function reviewRows(
+  over: Record<string, unknown> = {},
+  values: Record<string, [number, number, number]> = {},
+) {
+  return ASK_REVIEW_MEASURES.map((measure, index) => {
+    const [last, prev5, season] = values[measure.key] ?? [50, 50, 50];
+    return {
+      ord: index + 1,
+      measure: measure.key,
+      higher_is_better: measure.higherIsBetter,
+      last_match: last,
+      prev5_avg: prev5,
+      season_avg: season,
+      recent5_avg: last,
+      earlier_avg: season,
+      last_matches: 1,
+      prev5_matches: 5,
+      season_matches: 9,
+      recent5_matches: 5,
+      earlier_matches: 5,
+      last_played_on: "2026-09-14",
+      last_opponent_name: "Anna Lee",
+      last_player_name: "Mara Sokolov",
+      players: 1,
+      ...over,
+    };
+  });
+}
+
+const REVIEW_REPLY = JSON.stringify({
+  review: true,
+  scope_sql: "select match_id from ask.matches",
+  asks_for_advice: true,
+});
+
+test.describe("parsePlanReply — the review intent", () => {
+  test("reads { review: true, scope_sql }, with asks_for_advice always true", () => {
+    expect(parsePlanReply(REVIEW_REPLY)).toEqual({
+      review: true,
+      scope_sql: "select match_id from ask.matches",
+      asks_for_advice: true,
+    });
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          review: true,
+          scope_sql: "select match_id from ask.matches",
+          asks_for_advice: false,
+        }),
+      ),
+    ).toMatchObject({ review: true, asks_for_advice: true });
+    expect(parsePlanReply(`\`\`\`json\n${REVIEW_REPLY}\n\`\`\``)).toMatchObject(
+      {
+        review: true,
+      },
+    );
+  });
+
+  test("ignores any sql written beside it: the query is never the planner's", () => {
+    const parsed = parsePlanReply(
+      JSON.stringify({
+        review: true,
+        scope_sql: "select match_id from ask.matches",
+        sql: "select 1 as x from scope",
+      }),
+    );
+    expect(parsed).toEqual({
+      review: true,
+      scope_sql: "select match_id from ask.matches",
+      asks_for_advice: true,
+    });
+  });
+
+  test("review without a scope, or not exactly true, is not the intent", () => {
+    expect(parsePlanReply(JSON.stringify({ review: true }))).toBeNull();
+    expect(
+      parsePlanReply(JSON.stringify({ review: true, scope_sql: " " })),
+    ).toBeNull();
+    // `review: "yes"` beside a full plan is an ordinary plan.
+    expect(parsePlanReply(JSON.stringify({ ...PLAN, review: "yes" }))).toEqual(
+      PLAN,
+    );
+    // A refusal wins over a stray review flag.
+    expect(
+      parsePlanReply(JSON.stringify({ cannot_answer: "No.", review: true })),
+    ).toEqual({ cannot_answer: "No.", asks_for_advice: false });
+  });
+});
+
+test.describe("a review question", () => {
+  const REVIEW_RUN: AskRpcResult = {
+    data: {
+      matches: MATCH_ROWS,
+      rows: reviewRows({}, { second_serve_won_pct: [38, 50, 52] }),
+    },
+    error: null,
+  };
+
+  test("runs the server's own query, writes the answer without the model, and always carries the notice", async () => {
+    const { db, calls, releases, saves } = fakeDb({ run: [REVIEW_RUN] });
+    const { model, calls: modelCalls } = fakeModel([REVIEW_REPLY]);
+
+    const events = await collect(
+      askQuestion(
+        input({ db, model, question: "How can I improve for my next match?" }),
+      ),
+    );
+
+    // One model call: the plan. The answer is the server's.
+    expect(modelCalls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      fn: "ask_run_query",
+      args: {
+        scope_sql: "select match_id from ask.matches",
+        sql: ASK_REVIEW_SQL,
+      },
+    });
+    // The body arrives as several text deltas; they are one step here.
+    expect(
+      events
+        .map((event) => event.type)
+        .filter((type, index, types) => type !== types[index - 1]),
+    ).toEqual([
+      "status",
+      "headline",
+      "visual",
+      "text",
+      "notice",
+      "sources",
+      "done",
+    ]);
+    expect(events[3]).toEqual({
+      type: "headline",
+      text: "Second-serve points won was worse than both of your own averages in your last match.",
+    });
+    const visual = events.find((event) => event.type === "visual");
+    expect(visual).toMatchObject({
+      visual: {
+        kind: "table",
+        columns: ["Last match", "Previous five", "Overall"],
+        rows: expect.arrayContaining([
+          { label: "Second-serve points won", cells: ["38%", "50%", "52%"] },
+        ]),
+      },
+    });
+    expect(text(events)).toContain(
+      "Your last match with statistics was against Anna Lee on Sep 14, 2026.",
+    );
+    expect(text(events)).toContain(
+      "second-serve points won at 38% (previous five 50%, overall 52%)",
+    );
+    expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
+
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.noAdvice).toBe(true);
+    expect(saved.sql).toBe(ASK_REVIEW_SQL);
+    expect(saved.scopeSql).toBe("select match_id from ask.matches");
+    expect(saved.visual?.kind).toBe("table");
+    expect(saved.mock).toBe(false);
+    // The saved shape is the one every answer has.
+    expect(Object.keys(saved).sort()).toEqual(
+      [
+        "body",
+        "figures",
+        "headline",
+        "matchIds",
+        "mock",
+        "noAdvice",
+        "scopeSql",
+        "sources",
+        "sql",
+        "visual",
+      ].sort(),
+    );
+    expect(releases()).toHaveLength(0);
+  });
+
+  test("the planner's scope is still guarded, and a refused one is told back once", async () => {
+    const { db, calls } = fakeDb({ run: [REVIEW_RUN] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify({
+        review: true,
+        scope_sql: "select id as match_id from public.matches",
+      }),
+      REVIEW_REPLY,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls).toHaveLength(2);
+    expect(modelCalls[1].messages[2].content).toContain(
+      "That query was refused before it ran.",
+    );
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+  });
+
+  test("no match with statistics in scope is no_data, and releases", async () => {
+    const { db, releases, saves } = fakeDb({
+      run: [{ data: { matches: MATCH_ROWS, rows: [] }, error: null }],
+    });
+    const { model } = fakeModel([REVIEW_REPLY]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events)).toEqual({
+      type: "error",
+      code: "no_data",
+      error: ASK_NO_DATA_MESSAGE,
+    });
+    expect(releases()).toHaveLength(1);
+    expect(saves()).toHaveLength(0);
+  });
+
+  test("mock mode never reviews: the fixed plan and the template, as before", async () => {
+    const { db, calls } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              { matches: 2, wins: 1, losses: 0, second_serve_won_pct: 41.2 },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([], false);
+
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          reservation: null,
+          question: "How can I improve for my next match?",
+        }),
+      ),
+    );
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls).toHaveLength(0);
+    expect(calls[0].args).toEqual({
+      scope_sql: ASK_MOCK_PLAN.scope_sql,
+      sql: ASK_MOCK_PLAN.sql,
+    });
+    expect(events.some((event) => event.type === "notice")).toBe(false);
+  });
+
+  test.describe("in a team scope", () => {
+    const TEAM = {
+      kind: "team",
+      programId: "eeeeeeee-0000-4000-8000-000000000005",
+      programName: "Westbrook College",
+    } as const;
+
+    function teamDb(rows: unknown[]) {
+      const inner = fakeDb();
+      const db: AskDatabase = {
+        rpc: async (fn, args) => {
+          if (fn !== "ask_run_team_query") return inner.db.rpc(fn, args);
+          inner.calls.push({ fn, args });
+          return { data: { matches: MATCH_ROWS, rows }, error: null };
+        },
+      };
+      return { ...inner, db };
+    }
+
+    test("the whole team: its last five matches against the earlier ones, third person", async () => {
+      const { db, calls } = teamDb(
+        reviewRows({ players: 3, recent5_avg: 40, earlier_avg: 55 }),
+      );
+      const { model } = fakeModel([REVIEW_REPLY]);
+
+      const events = await collect(
+        askQuestion(input({ db, model, scope: TEAM })),
+      );
+
+      expect(last(events).type).toBe("done");
+      expect(calls[0]).toMatchObject({
+        fn: "ask_run_team_query",
+        args: { p_program_id: TEAM.programId, sql: ASK_REVIEW_SQL },
+      });
+      expect(events.find((event) => event.type === "visual")).toMatchObject({
+        visual: { columns: ["Last five", "Earlier"] },
+      });
+      const words = `${events.find((event) => event.type === "headline")?.text} ${text(events)}`;
+      expect(words).toContain("the team's last five matches");
+      expect(words).not.toMatch(/\byou(r)?\b/i);
+      expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
+    });
+
+    test("narrowed to one player: that player's last match against their own averages", async () => {
+      const { db } = teamDb(
+        reviewRows({ players: 1 }, { winners: [10, 20, 20] }),
+      );
+      const { model } = fakeModel([
+        JSON.stringify({
+          review: true,
+          scope_sql:
+            "select match_id from ask.matches where player_name ilike '%sokol%'",
+        }),
+      ]);
+
+      const events = await collect(
+        askQuestion(input({ db, model, scope: TEAM })),
+      );
+
+      expect(events.find((event) => event.type === "headline")).toEqual({
+        type: "headline",
+        text: "Winners was worse than both of their own averages in Mara Sokolov's last match.",
+      });
+      expect(events.find((event) => event.type === "visual")).toMatchObject({
+        visual: { columns: ["Last match", "Previous five", "Overall"] },
+      });
+    });
+
+    test("an unnarrowed scope stays a team review even when one player has every match", async () => {
+      const { db } = teamDb(reviewRows({ players: 1 }));
+      const { model } = fakeModel([REVIEW_REPLY]);
+
+      const events = await collect(
+        askQuestion(input({ db, model, scope: TEAM })),
+      );
+
+      expect(events.find((event) => event.type === "visual")).toMatchObject({
+        visual: { columns: ["Last five", "Earlier"] },
+      });
+    });
+  });
+});
+
+// ── A baseline equal to the thing it is compared with ───────────────────────
+
+test.describe("a baseline that equals the scoped figure", () => {
+  const AUGUST: AskPlanQuery = {
+    scope_sql:
+      "select match_id from ask.matches where played_on >= date '2026-08-01'",
+    sql: "select round(100.0 * sum(s.first_serves_in) / nullif(sum(s.first_serves), 0), 1) as first_serve_pct, round(100.0 * sum(s.first_serves_in) / nullif(sum(s.first_serves), 0), 1) as all_first_serve_pct, round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as second_serve_won_pct, round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as all_second_serve_won_pct from ask.match_stats s join scope on scope.match_id = s.match_id where s.side = 'me'",
+    asks_for_advice: false,
+  };
+  const EQUAL_ROWS = [
+    {
+      first_serve_pct: 65.8,
+      all_first_serve_pct: 65.8,
+      second_serve_won_pct: 47.4,
+      all_second_serve_won_pct: 47.4,
+    },
+  ];
+  const FIXED_ROWS = [
+    {
+      first_serve_pct: 65.8,
+      all_first_serve_pct: 62.2,
+      second_serve_won_pct: 47.4,
+      all_second_serve_won_pct: 49.2,
+    },
+  ];
+  const run = (rows: unknown[]): AskRpcResult => ({
+    data: { matches: MATCH_ROWS, rows },
+    error: null,
+  });
+  const SERVE_ANSWER = `Your first serve landed at this rate in August.
+FIGURE: First serves in = {{r1.first_serve_pct}}
+
+You won {{r1.second_serve_won_pct}} of second-serve points.`;
+
+  test("is sent back to the planner once, naming the columns and how a baseline is written", async () => {
+    const { db, calls } = fakeDb({ run: [run(EQUAL_ROWS), run(FIXED_ROWS)] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(AUGUST),
+      JSON.stringify(AUGUST),
+      SERVE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+    const told = modelCalls[1].messages[2].content;
+    expect(told).toBe(
+      `That query's baseline is the same as the figure it is compared with. ${equalBaselineDetail(["all_first_serve_pct", "all_second_serve_won_pct"])} Reply again with ONE JSON object and nothing else, following every rule.`,
+    );
+    expect(told).toContain(
+      "A baseline must be computed over all matches, not joined to scope",
+    );
+    // The second result differs, so the answer step sees its baselines.
+    expect(modelCalls[2].system).toContain("all_first_serve_pct: 62.2");
+  });
+
+  test("still equal on the second try: the baseline columns are left out of what the answer step sees", async () => {
+    const { db, saves } = fakeDb({ run: [run(EQUAL_ROWS)] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(AUGUST),
+      JSON.stringify(AUGUST),
+      SERVE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    const answerPrompt = modelCalls[2].system;
+    expect(answerPrompt).toContain("first_serve_pct: 65.8");
+    expect(answerPrompt).not.toContain("all_first_serve_pct: 65.8");
+    expect(answerPrompt).not.toContain("all_second_serve_won_pct: 47.4");
+    expect(saves()).toHaveLength(1);
+  });
+
+  test("a second try that fails falls back to the first result without its baselines, not to a refusal", async () => {
+    for (const second of [
+      "not json at all",
+      JSON.stringify(PLAN_REFUSED),
+      JSON.stringify({ cannot_answer: "No.", asks_for_advice: false }),
+    ]) {
+      const { db, releases } = fakeDb({ run: [run(EQUAL_ROWS)] });
+      const { model, calls: modelCalls } = fakeModel([
+        JSON.stringify(AUGUST),
+        second,
+        SERVE_ANSWER,
+      ]);
+
+      const events = await collect(askQuestion(input({ db, model })));
+
+      expect(last(events).type, second).toBe("done");
+      expect(modelCalls[2].system).not.toContain("all_first_serve_pct: 65.8");
+      expect(releases()).toHaveLength(0);
+    }
+  });
+
+  test("a database error on the second try falls back too", async () => {
+    const { db } = fakeDb({ run: [run(EQUAL_ROWS), RUN_FAILED] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(AUGUST),
+      JSON.stringify(AUGUST),
+      SERVE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(modelCalls[2].system).not.toContain("all_first_serve_pct: 65.8");
+  });
+
+  test("over a scope of every match an all-matches baseline is the figure again: left out, with no retry", async () => {
+    const { db, calls } = fakeDb({ run: [run(EQUAL_ROWS)] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify({
+        ...AUGUST,
+        scope_sql: "select match_id from ask.matches",
+      }),
+      SERVE_ANSWER,
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+    expect(modelCalls).toHaveLength(2);
+    expect(modelCalls[1].system).toContain("first_serve_pct: 65.8");
+    expect(modelCalls[1].system).not.toContain("all_first_serve_pct: 65.8");
+    // Nothing is left to call "equal".
+    expect(modelCalls[1].system).not.toContain("is EQUAL to");
+  });
+
+  test("over every match one redundant baseline is enough to leave out; a differing one stays", async () => {
+    const all = { ...AUGUST, scope_sql: "select match_id from ask.matches" };
+    const one = fakeDb({
+      run: [run([{ first_serve_pct: 65.8, all_first_serve_pct: 65.8 }])],
+    });
+    const first = fakeModel([
+      JSON.stringify(all),
+      SERVE_ANSWER.split("\n\n")[0],
+    ]);
+    await collect(askQuestion(input({ db: one.db, model: first.model })));
+    expect(first.calls[1].system).not.toContain("all_first_serve_pct: 65.8");
+
+    const differing = fakeDb({ run: [run(FIXED_ROWS)] });
+    const second = fakeModel([JSON.stringify(all), SERVE_ANSWER]);
+    await collect(
+      askQuestion(input({ db: differing.db, model: second.model })),
+    );
+    expect(second.calls[1].system).toContain("all_first_serve_pct: 62.2");
+  });
+
+  test("one equal baseline among differing ones is left alone", async () => {
+    const { db, calls } = fakeDb({
+      run: [run([{ ...FIXED_ROWS[0], all_first_serve_pct: 65.8 }])],
+    });
+    const { model } = fakeModel([JSON.stringify(AUGUST), SERVE_ANSWER]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(last(events).type).toBe("done");
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+  });
+});
+
+// ── The stated facts reach the answer step ──────────────────────────────────
+
+test.describe("the stated facts", () => {
+  test("the answer prompt carries the server's comparison of the result's own columns", async () => {
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [{ me_first_serve_pct: 64.1, team_first_serve_pct: 65.5 }],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      "The first serve landed at this rate.\n\nIt was {{r1.me_first_serve_pct}}.",
+    ]);
+
+    await collect(askQuestion(input({ db, model })));
+
+    expect(modelCalls[1].system).toContain(
+      "- r1.me_first_serve_pct (64.1) is LOWER than r1.team_first_serve_pct (65.5), a gap of 1.4.",
+    );
+  });
+});
+
+test.describe("a result in date order", () => {
+  test("reaches the answer step and the renderer with its first, last, lowest and highest on r1", async () => {
+    const { db } = fakeDb({
+      run: [
+        {
+          data: {
+            matches: MATCH_ROWS,
+            rows: [
+              { played_on: "2026-02-07", unforced_errors: 24 },
+              { played_on: "2026-05-09", unforced_errors: 57 },
+              { played_on: "2026-09-28", unforced_errors: 5 },
+            ],
+          },
+          error: null,
+        },
+      ],
+    });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      "Unforced errors fell over the season.\n\nThey started at {{r1.start_unforced_errors}} on {{r1.start_unforced_errors_date}} and ended at {{r1.end_unforced_errors}} on {{r1.end_unforced_errors_date}}, with a high of {{r1.high_unforced_errors}}.",
+    ]);
+
+    const events = await collect(askQuestion(input({ db, model })));
+
+    expect(modelCalls[1].system).toContain(
+      "unforced_errors STARTED at r1.start_unforced_errors = 24 (r1.start_unforced_errors_date = 2026-02-07) and ENDED at r1.end_unforced_errors = 5 (r1.end_unforced_errors_date = 2026-09-28): it FELL from the first to the last.",
+    );
+    expect(text(events)).toBe(
+      "They started at 24 on Feb 7, 2026 and ended at 5 on Sep 28, 2026, with a high of 57.",
+    );
+    expect(last(events).type).toBe("done");
   });
 });
