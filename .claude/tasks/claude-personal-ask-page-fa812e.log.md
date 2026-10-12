@@ -303,3 +303,21 @@ is the runner's. Newest entries at the bottom.
 3. One new lint warning, `react-hooks/set-state-in-effect` in `ask-rail.tsx` (the mount effect that reads the stored rail state).
 4. `askTagMeta` in `ask-tag-menu.tsx` has no caller now.
 5. T12–T15's log entries above describe the right-rail layout this replaces.
+
+## Change outside the queue · Ask answers: chart blocks and footer signature — done
+
+**gate:** full `npm test` green on each half (server: 6200 passed; client: 6233 passed, 415 skipped), typecheck and lint clean. No completion review: not a queue task. Built in session on 2026-10-11 from the approved plan (`~/.claude/plans/can-we-improve-the-moonlit-tower.md`) after the author picked from the mockups at `/design/ask/answers`.
+
+**changed (server, `5687d9aa`):** an answer may carry one visual block of six kinds (`bars`, `table`, `trend`, `split`, `serve`, `form`). The model writes `CHART:` / `SERIES:` / `COLUMNS:` / `ROW:` / `PLOT:` lines naming cells or columns of its query result; `answer-render.ts` validates the block and resolves every number from the rows, and a bad block is dropped without failing the answer. `events.ts` adds `AskVisual`, `readAskVisual()`, the `visual` event and a `notice` event that replaces appending the no-advice sentence to the body. Prompts carry the catalogue with one worked example per kind; saved answers gain `visual` and `noAdvice`.
+
+**changed (client):** `src/components/dashboard/ask/visuals/` holds the six blocks and `AskVisualBlock`; `ask-answer.tsx` drops the byline and mark above the answer, draws the block between the figures and the paragraphs, and signs in the footer ("Advantage Intelligence", plus the no-advice sentence when flagged); `use-ask-stream.ts` folds the two events into state and rehydrates saved answers. Old saved answers still read as they were.
+
+**follow-ups:**
+
+1. No real model has produced a block yet. Whether the model picks sensible blocks, and whether the plan step returns one row per match for a trend, is unverified until real questions are asked.
+2. The `ask` views have no deuce/ad split, so the serve block shows one bar for all serves (or first vs. second), not two courts as the mockup drew.
+3. Derived numbers were removed from the blocks (split and serve percentages, serve totals): only database cells are printed.
+4. The footer signature shows only on a finished answer; none while streaming or on an error.
+5. Headline and figure tiles kept their built sizes; the mockups' larger claim was not adopted.
+6. Not looked at below 1440px, nor inside the signed-in page.
+7. `/design/ask/answers` still shows the four numbered design sheets beside the new "As built" sheet; they are historical now.

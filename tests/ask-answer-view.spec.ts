@@ -122,7 +122,14 @@ async function openFixture(page: Page, query = "") {
     .toBe("true");
 }
 
+/** The footer's sentence for a question that asked what to do. */
+const NO_ADVICE =
+  "Ask reports what your matches show; it does not recommend what to work on.";
+
 const figures = (page: Page) => page.locator("[data-ask-figure]");
+const answer = (page: Page) => page.locator("[data-ask-answer]");
+const signature = (page: Page) => page.locator("[data-ask-signature]");
+const visual = (page: Page) => page.locator("figure[data-ask-visual]");
 const sourceLinks = (page: Page) => page.getByRole("list").getByRole("link");
 const allControl = (page: Page) => page.getByRole("button", { name: /^All / });
 
@@ -134,13 +141,14 @@ async function expectNoProgress(page: Page) {
 }
 
 test.describe("a full answer", () => {
-  test("names the engine, then the headline, three figures and the evidence", async ({
+  test("opens on the headline, then three figures and the evidence", async ({
     page,
   }) => {
     await openFixture(page, "?case=full");
 
-    await expect(page.getByText("Advantage Intelligence")).toBeVisible();
     await expect(page.getByText(HEADLINE)).toBeVisible();
+    // No byline: the claim is the first thing in the answer.
+    await expect(answer(page).locator("> *").first()).toHaveText(HEADLINE);
 
     // Four were sent; an answer carries at most three.
     await expect(figures(page)).toHaveCount(3);
@@ -172,6 +180,69 @@ test.describe("a full answer", () => {
     await expect(page.getByRole("status")).toHaveCount(0);
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expectNoProgress(page);
+  });
+
+  test("is signed in the footer, under the sources, and nowhere above", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full");
+
+    // The name appears once, and that once is the footer.
+    await expect(
+      page.getByText("Advantage Intelligence", { exact: false }),
+    ).toHaveCount(1);
+    await expect(signature(page)).toHaveText("Advantage Intelligence");
+
+    const heading = await page
+      .getByRole("heading", { name: "Computed from 4 matches" })
+      .boundingBox();
+    const claim = await page.getByText(HEADLINE).boundingBox();
+    const foot = await signature(page).boundingBox();
+    expect(claim!.y).toBeLessThan(heading!.y);
+    expect(heading!.y).toBeLessThan(foot!.y);
+
+    // No engine mark and no gutter: the only drawings in the answer are the
+    // source rows' own marks.
+    await expect(
+      answer(page).locator("svg:not(li svg), img, [data-engine-mark]"),
+    ).toHaveCount(0);
+    const column = await answer(page).boundingBox();
+    expect(claim!.x).toBe(column!.x);
+
+    // Nothing asked for advice, so the footer is the name alone.
+    await expect(page.getByText(NO_ADVICE)).toHaveCount(0);
+  });
+
+  test("a question that asked for advice is told so in the footer, not the body", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&advice=1");
+
+    await expect(signature(page)).toHaveText(
+      `Advantage Intelligence · ${NO_ADVICE}`,
+    );
+    // Once: in the footer, and in none of the evidence paragraphs.
+    await expect(page.getByText(NO_ADVICE, { exact: false })).toHaveCount(1);
+    await expect(
+      answer(page).locator("p:not([data-ask-signature])", {
+        hasText: NO_ADVICE,
+      }),
+    ).toHaveCount(0);
+  });
+
+  test("an answer saved before the notice keeps the sentence in its body, untouched", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=old");
+
+    await expect(
+      answer(page).locator("p:not([data-ask-signature])", {
+        hasText: NO_ADVICE,
+      }),
+    ).toHaveText(NO_ADVICE);
+    // Not said twice, and nothing stripped: the footer is the name alone.
+    await expect(signature(page)).toHaveText("Advantage Intelligence");
+    await expect(visual(page)).toHaveCount(0);
   });
 
   test("figure tiles are ink, never an outcome colour", async ({ page }) => {
@@ -309,7 +380,9 @@ test.describe("in flight", () => {
       await openFixture(page, `?case=streaming&stage=${stage}`);
 
       await expect(page.getByRole("status")).toHaveText(label);
-      await expect(page.getByText("Advantage Intelligence")).toBeVisible();
+      // Nothing signs an answer that has not finished.
+      await expect(signature(page)).toHaveCount(0);
+      await expect(page.getByText("Advantage Intelligence")).toHaveCount(0);
       // The real step, in words: no bar, no percentage, no spinner.
       await expectNoProgress(page);
       await expect(page.getByRole("status")).not.toContainText("%");
@@ -324,6 +397,21 @@ test.describe("in flight", () => {
     await expect(page.getByRole("status")).toHaveText("Sending your question");
     await expectNoProgress(page);
   });
+
+  test("a block that has arrived is drawn while the rest is still coming", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=streaming&stage=writing&visual=bars");
+    await expect(visual(page)).toHaveCount(1);
+    await expect(page.getByRole("status")).toHaveText("Writing the answer");
+    await expect(signature(page)).toHaveCount(0);
+  });
+
+  test("no block has arrived: nothing holds its place", async ({ page }) => {
+    await openFixture(page, "?case=streaming&stage=writing");
+    await expect(visual(page)).toHaveCount(0);
+    await expect(page.locator("figure, [aria-busy]")).toHaveCount(0);
+  });
 });
 
 test.describe("a failed answer", () => {
@@ -331,7 +419,8 @@ test.describe("a failed answer", () => {
     test(`${code} renders its fixed copy and no figure tiles`, async ({
       page,
     }) => {
-      await openFixture(page, `?case=error&code=${code}`);
+      // Whatever had arrived is dropped — a block and a notice included.
+      await openFixture(page, `?case=error&code=${code}&visual=bars&advice=1`);
 
       const alert = page.getByRole("alert");
       await expect(alert).toHaveCount(1);
@@ -347,9 +436,11 @@ test.describe("a failed answer", () => {
       await expect(page.getByText(/Computed from/)).toHaveCount(0);
       await expect(page.getByRole("link")).toHaveCount(0);
       await expect(page.getByRole("status")).toHaveCount(0);
-      await expect(
-        page.getByText("Advantage Intelligence").first(),
-      ).toBeVisible();
+      // No block, and no footer: a failed answer has nothing to sign.
+      await expect(visual(page)).toHaveCount(0);
+      await expect(signature(page)).toHaveCount(0);
+      await expect(page.getByText(NO_ADVICE)).toHaveCount(0);
+      await expect(answer(page).locator("> *")).toHaveCount(1);
     });
   }
 
@@ -370,5 +461,228 @@ test.describe("a failed answer", () => {
     );
     await expect(figures(page)).toHaveCount(0);
     await expect(page.getByRole("link")).toHaveCount(0);
+    await expect(signature(page)).toHaveCount(0);
   });
+});
+
+test.describe("the visual block", () => {
+  test("an answer with no block draws none", async ({ page }) => {
+    await openFixture(page, "?case=full");
+    await expect(visual(page)).toHaveCount(0);
+    await expect(page.locator("figure, table, figcaption")).toHaveCount(0);
+  });
+
+  test("sits after the figures and before the evidence", async ({ page }) => {
+    await openFixture(page, "?case=full&visual=bars");
+
+    const tiles = await page
+      .getByRole("list", { name: "Figures" })
+      .boundingBox();
+    const block = await visual(page).boundingBox();
+    const prose = await page
+      .getByText("On Sep 14 you won 55% of second-serve points", {
+        exact: false,
+      })
+      .boundingBox();
+    expect(tiles!.y).toBeLessThan(block!.y);
+    expect(block!.y + block!.height).toBeLessThanOrEqual(prose!.y);
+    await expect(visual(page)).toHaveCount(1);
+  });
+
+  test("bars: caption, both series named, and the server's text beside each bar", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=bars");
+    const block = visual(page);
+
+    await expect(block).toHaveAttribute("data-ask-visual", "bars");
+    await expect(block.locator("figcaption")).toHaveText(
+      "Share of points, from 4 matches against 22.",
+    );
+    await expect(block.getByText("First serves in")).toBeVisible();
+    await expect(block.getByText("Break points saved")).toBeVisible();
+    // Printed as sent — "37,5 %", not a client's own formatting of 37.5.
+    for (const text of ["37,5 %", "58,2 %", "0 %", "100 %"]) {
+      await expect(block).toContainText(text);
+    }
+    await expect(block).not.toContainText("37.5");
+    // Each value says whose it is, in words as well as colour.
+    const firstRow = block.locator("li", { hasText: "First serves in" });
+    await expect(firstRow).toContainText("Against left-handers: 37,5 %");
+    await expect(firstRow).toContainText("All matches: 58,2 %");
+    const lastRow = block.locator("li", { hasText: "Break points saved" });
+    await expect(lastRow).toContainText("Against left-handers: 0 %");
+    await expect(lastRow).toContainText("All matches: 100 %");
+    // Geometry from the value: an empty bar and a full one, inside the track.
+    const widths = await block
+      .locator("li", { hasText: "Break points saved" })
+      .locator("[aria-hidden] > span")
+      .evaluateAll((bars) =>
+        bars.map((bar) => (bar as HTMLElement).style.width),
+      );
+    expect(widths).toEqual(["0%", "100%"]);
+  });
+
+  test("table: a real table with header cells, printing the cells as sent", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=table");
+    const block = visual(page);
+
+    await expect(block.locator("figcaption")).toHaveText(
+      "From 1 match against 22.",
+    );
+    await expect(block.getByRole("table")).toHaveCount(1);
+    await expect(block.locator('thead th[scope="col"]')).toHaveText([
+      "Measure",
+      "Sep 28",
+      "All matches",
+      "Difference",
+    ]);
+    await expect(block.locator('tbody th[scope="row"]')).toHaveText([
+      "First serves in",
+      "Double faults",
+    ]);
+    await expect(block.locator("tbody tr").nth(0).locator("td")).toHaveText([
+      "37.5%",
+      "58.2%",
+      "−20.7",
+    ]);
+    await expect(block.locator("tbody tr").nth(1).locator("td")).toHaveText([
+      "4",
+      "2.3",
+      "+1.7",
+    ]);
+    await expect(
+      block.getByRole("columnheader", { name: "All matches" }),
+    ).toHaveCount(1);
+    await expect(
+      block.getByRole("rowheader", { name: "Double faults" }),
+    ).toHaveCount(1);
+  });
+
+  test("trend: every point in words, the ends on the axis, and no average printed", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=trend");
+    const block = visual(page);
+
+    await expect(block.locator("figcaption")).toHaveText(
+      "First serves in, 3 matches since Jun 4.",
+    );
+    await expect(block.locator("ol li")).toHaveText([
+      "Jun 4: 61,0 %",
+      "Jul 9: 63,0 %",
+      "Sep 28: 37,5 %",
+    ]);
+    // The drawing is not what a screen reader is given.
+    await expect(block.locator("[aria-hidden] svg")).toHaveCount(1);
+    await expect(block.locator("svg circle")).toHaveCount(3);
+    await expect(block.locator("[data-ask-trend-last]")).toHaveText("37,5 %");
+    // The key names the dashed rule; nothing prints its value (53.83…).
+    await expect(block.getByText("Your average")).toBeVisible();
+    await expect(block).not.toContainText("53");
+    await expect(block).not.toContainText("37.5");
+  });
+
+  test("split: each part's count as sent, and no share of the whole", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=split");
+    const block = visual(page);
+
+    await expect(block.locator("figcaption")).toHaveText(
+      "The 34 points you won, by how they ended.",
+    );
+    await expect(block.locator("ul > li")).toHaveText([
+      "Winners8 pts",
+      "Forced errors11 pts",
+      "Unforced errors15 pts",
+    ]);
+    // A percentage here would be a number the database never returned.
+    await expect(block).not.toContainText("%");
+    const grows = await block
+      .locator("[aria-hidden].flex > span")
+      .evaluateAll((parts) =>
+        parts.map((part) => (part as HTMLElement).style.flexGrow),
+      );
+    expect(grows).toEqual(["8", "11", "15"]);
+  });
+
+  test("serve: each court's three counts as sent, with no total and no share", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=serve");
+    const block = visual(page);
+
+    await expect(block.locator("figcaption")).toHaveText(
+      "39 serves on break points.",
+    );
+    const courts = block.locator("ul").nth(1).locator("> li");
+    await expect(courts).toHaveCount(2);
+    await expect(courts.nth(0)).toContainText("First serves");
+    await expect(courts.nth(0)).toContainText("T 9 srv");
+    await expect(courts.nth(0)).toContainText("Body 3 srv");
+    await expect(courts.nth(0)).toContainText("Wide 6 srv");
+    await expect(courts.nth(1)).toContainText("Second serves");
+    await expect(courts.nth(1)).toContainText("Wide 12 srv");
+    await expect(block).not.toContainText("%");
+    // 9 + 3 + 6 and 4 + 5 + 12: totals nobody queried.
+    await expect(block).not.toContainText("18");
+    await expect(block).not.toContainText("21");
+  });
+
+  test("form: the strip in words, and the record counted from it", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=form");
+    const block = visual(page);
+
+    await expect(block.locator("figcaption")).toHaveText(
+      "8 matches against left-handed opponents, oldest first.",
+    );
+    await expect(block.getByText("Last 8: W L L W L W W W")).toHaveCount(1);
+    await expect(block.locator("p")).toHaveText("Won 5–, lost 3");
+    // The one block that may use the outcome colours.
+    const colours = await block
+      .locator("[aria-hidden] > span")
+      .evaluateAll((ticks) =>
+        ticks.map((tick) => (tick as HTMLElement).style.background),
+      );
+    expect(colours).toHaveLength(8);
+    expect(colours[0]).toContain("--viz-good");
+    expect(colours[1]).toContain("--viz-bad");
+  });
+
+  test("only the form strip names an outcome colour", async ({ page }) => {
+    for (const kind of ["bars", "table", "trend", "split", "serve"]) {
+      await openFixture(page, `?case=full&visual=${kind}`);
+      const markup = await visual(page).evaluate((node) => node.outerHTML);
+      expect(markup, kind).not.toMatch(/viz-good|viz-bad|success|danger/);
+    }
+  });
+
+  for (const [name, kind] of [
+    ["empty-split", "split"],
+    ["empty-serve", "serve"],
+    ["flat-trend", "trend"],
+  ] as const) {
+    test(`${name}: nothing to divide still draws, with no NaN`, async ({
+      page,
+    }) => {
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      await openFixture(page, `?case=full&visual=${name}`);
+
+      const block = visual(page);
+      await expect(block).toHaveAttribute("data-ask-visual", kind);
+      await expect(block.locator("figcaption")).toBeVisible();
+      const markup = await block.evaluate((node) => node.outerHTML);
+      expect(markup).not.toMatch(/NaN|Infinity|undefined/);
+      expect(errors).toEqual([]);
+    });
+  }
 });

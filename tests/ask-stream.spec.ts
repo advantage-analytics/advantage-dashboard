@@ -6,6 +6,7 @@ import {
   askThreadReducer,
   emptyAskThread,
   exchangesFromMessages,
+  parseAskEvent,
   readAskEvents,
   streamAsk,
   type AskQuestion,
@@ -13,7 +14,11 @@ import {
   type AskThreadState,
 } from "@/components/dashboard/ask/use-ask-stream";
 import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
-import type { AskEvent } from "@/lib/services/ask/events";
+import {
+  ASK_NO_ADVICE_SENTENCE,
+  type AskEvent,
+  type AskVisual,
+} from "@/lib/services/ask/events";
 
 /**
  * `use-ask-stream.ts` — how the Ask page reads `POST /api/ask`. Offline: the
@@ -38,6 +43,20 @@ const SOURCE = {
   playedOn: "2026-09-14",
   iWon: true,
   scoreText: "6-4 6-3",
+};
+
+const VISUAL: AskVisual = {
+  kind: "bars",
+  caption: "Share of points, from 1 match against 22.",
+  subjectLabel: "Sep 14 vs. Marcus",
+  baselineLabel: "All matches",
+  rows: [
+    {
+      label: "2nd serve points won",
+      subject: { value: 55, text: "55%" },
+      baseline: { value: 48, text: "48%" },
+    },
+  ],
 };
 
 const ANSWER: AskEvent[] = [
@@ -192,7 +211,9 @@ test.describe("a streamed answer", () => {
         { label: "2nd serve points won", value: "55%" },
         { label: "All matches", value: "48%" },
       ],
+      visual: null,
       body: "Against Marcus you won more than half.\n\nThat is above your average.",
+      noAdvice: false,
       sources: [SOURCE],
       error: null,
     });
@@ -216,6 +237,134 @@ test.describe("a streamed answer", () => {
       emptyAskThread({ conversationId: "conversation-1" }),
     );
     expect(sent[0].body).toMatchObject({ conversationId: "conversation-1" });
+  });
+
+  test("a `visual` and a `notice` fold into the answer", async () => {
+    const bytes = await wire([
+      { type: "status", stage: "writing" },
+      { type: "headline", text: "It held up." },
+      { type: "figure", label: "2nd serve points won", value: "55%" },
+      { type: "visual", visual: VISUAL },
+      // The server may send a figure after the block; the answer's layout,
+      // not the order of arrival, decides where each is drawn.
+      { type: "figure", label: "All matches", value: "48%" },
+      { type: "text", delta: "Against Marcus you won more than half." },
+      { type: "notice", notice: "no_advice" },
+      { type: "sources", matches: [SOURCE] },
+      { type: "done", conversationId: "conversation-1", used: 9, cap: 20 },
+    ]);
+    // Cut small, so the block's one long line arrives in many pieces.
+    const { state, outcome } = await askAgainst(
+      () => new Response(chunked(bytes, Array(400).fill(7)), { status: 200 }),
+    );
+
+    expect(outcome.status).toBe("done");
+    expect(state.exchanges[0].answer).toEqual({
+      status: "done",
+      stage: null,
+      headline: "It held up.",
+      figures: [
+        { label: "2nd serve points won", value: "55%" },
+        { label: "All matches", value: "48%" },
+      ],
+      visual: VISUAL,
+      body: "Against Marcus you won more than half.",
+      noAdvice: true,
+      sources: [SOURCE],
+      error: null,
+    });
+    // The sentence is the footer's to print: it is never put into the body.
+    expect(state.exchanges[0].answer.body).not.toContain(
+      ASK_NO_ADVICE_SENTENCE,
+    );
+  });
+
+  test("the block is in the thread as soon as its event lands", () => {
+    let state = askThreadReducer(emptyAskThread(), {
+      type: "asked",
+      id: "asked-1",
+      question: QUESTION,
+    });
+    expect(state.exchanges[0].answer).toMatchObject({
+      visual: null,
+      noAdvice: false,
+    });
+    state = askThreadReducer(state, {
+      type: "event",
+      event: { type: "visual", visual: VISUAL },
+    });
+    expect(state.inFlight).toBe(true);
+    expect(state.exchanges[0].answer.visual).toEqual(VISUAL);
+
+    // One block per answer: a second never replaces the first.
+    state = askThreadReducer(state, {
+      type: "event",
+      event: {
+        type: "visual",
+        visual: { kind: "form", caption: "", results: [true] },
+      },
+    });
+    expect(state.exchanges[0].answer.visual).toEqual(VISUAL);
+  });
+
+  test("an invalid visual line is ignored and the stream reads on", async () => {
+    const line = (value: unknown) => JSON.stringify(value);
+    const lines = [
+      line({ type: "headline", text: "It held up." }),
+      // Not a block: no rows, a percentage out of range, an unknown kind,
+      // no `visual` at all.
+      line({ type: "visual", visual: { ...VISUAL, rows: [] } }),
+      line({
+        type: "visual",
+        visual: {
+          ...VISUAL,
+          rows: [
+            {
+              label: "2nd serve points won",
+              subject: { value: 140, text: "140%" },
+              baseline: { value: 48, text: "48%" },
+            },
+          ],
+        },
+      }),
+      line({ type: "visual", visual: { kind: "pie", caption: "No." } }),
+      line({ type: "visual" }),
+      // A notice this build does not know.
+      line({ type: "notice", notice: "from-a-newer-server" }),
+      line({ type: "text", delta: "Still read." }),
+      line({
+        type: "done",
+        conversationId: "conversation-1",
+        used: 1,
+        cap: 20,
+      }),
+      "",
+    ];
+    for (const bad of lines.slice(1, 6)) {
+      expect(parseAskEvent(bad), bad).toBeNull();
+    }
+
+    const bytes = new TextEncoder().encode(lines.join("\n"));
+    const { state, outcome } = await askAgainst(
+      () => new Response(chunked(bytes, [23]), { status: 200 }),
+    );
+    expect(outcome.status).toBe("done");
+    expect(state.exchanges[0].answer).toMatchObject({
+      status: "done",
+      headline: "It held up.",
+      visual: null,
+      body: "Still read.",
+      noAdvice: false,
+    });
+  });
+
+  test("a visual line reads back as the block the route sent", () => {
+    expect(
+      parseAskEvent(JSON.stringify({ type: "visual", visual: VISUAL })),
+    ).toEqual({ type: "visual", visual: VISUAL });
+    expect(
+      parseAskEvent(JSON.stringify({ type: "notice", notice: "no_advice" })),
+    ).toEqual({ type: "notice", notice: "no_advice" });
   });
 
   test("the status line follows the route's real step", () => {
@@ -468,7 +617,9 @@ test.describe("a saved conversation", () => {
           stage: null,
           headline: "It held up.",
           figures: [{ label: "2nd serve points won", value: "55%" }],
+          visual: null,
           body: "Against Marcus you won more than half.",
+          noAdvice: false,
           sources: [SOURCE],
           error: null,
         },
@@ -481,12 +632,81 @@ test.describe("a saved conversation", () => {
           stage: null,
           headline: null,
           figures: [],
+          visual: null,
           body: "",
+          noAdvice: false,
           sources: null,
           error: null,
         },
       },
     ]);
+  });
+
+  test("a saved answer with a block and the notice reopens with both", () => {
+    const [exchange] = exchangesFromMessages([
+      { id: "m1", role: "user", content: { text: "What should I work on?" } },
+      {
+        id: "m2",
+        role: "assistant",
+        content: {
+          headline: "It held up.",
+          figures: [],
+          visual: VISUAL,
+          body: "Against Marcus you won more than half.",
+          noAdvice: true,
+          sources: [SOURCE],
+        },
+      },
+    ]);
+    expect(exchange.answer.visual).toEqual(VISUAL);
+    expect(exchange.answer.noAdvice).toBe(true);
+    expect(exchange.answer.body).toBe("Against Marcus you won more than half.");
+  });
+
+  test("a saved block that no longer reads back is left out, the answer kept", () => {
+    const [exchange] = exchangesFromMessages([
+      { id: "m1", role: "user", content: { text: "Q" } },
+      {
+        id: "m2",
+        role: "assistant",
+        content: {
+          headline: "It held up.",
+          visual: { kind: "bars", caption: "Half a block" },
+          // Only `true` is the notice; anything else is not.
+          noAdvice: "yes",
+        },
+      },
+    ]);
+    expect(exchange.answer).toMatchObject({
+      headline: "It held up.",
+      visual: null,
+      noAdvice: false,
+    });
+  });
+
+  test("an answer saved before the block and the notice reads as it was", () => {
+    const body = `Against Marcus you won more than half.\n\n${ASK_NO_ADVICE_SENTENCE}`;
+    const [exchange] = exchangesFromMessages([
+      { id: "m1", role: "user", content: { text: "What should I work on?" } },
+      {
+        id: "m2",
+        role: "assistant",
+        content: { headline: "It held up.", body, sources: [SOURCE] },
+      },
+    ]);
+    // Neither key: no block, no notice, and the sentence stays where it was
+    // written — in the body, neither stripped nor said again.
+    expect(exchange.answer).toEqual({
+      status: "done",
+      stage: null,
+      headline: "It held up.",
+      figures: [],
+      visual: null,
+      body,
+      noAdvice: false,
+      sources: [SOURCE],
+      error: null,
+    });
   });
 
   test("never carries the saved SQL into the thread", () => {

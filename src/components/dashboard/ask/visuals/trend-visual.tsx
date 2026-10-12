@@ -1,0 +1,105 @@
+import type { AskTrendVisual } from "@/lib/services/ask/events";
+import { TREND_BOX, trendGeometry } from "./visual-geometry";
+import { VisualFrame, VisualKey } from "./visual-frame";
+
+const percent = (n: number, of: number) => `${(n / of) * 100}%`;
+
+/**
+ * Trend line: one value per match in date order, with the mean of the drawn
+ * values as a dashed rule so a point reads as above or below the player's own
+ * level.
+ *
+ * The rule is geometry and is never printed as a number: the average is not a
+ * cell of the query result, so the key names it and stops there. The one
+ * figure on the plot is the last point's, in the server's own text.
+ *
+ * The drawing is hidden from assistive technology; the list under it carries
+ * every point in words.
+ */
+export function TrendVisual({ visual }: { visual: AskTrendVisual }) {
+  const { points } = visual;
+  const geometry = trendGeometry(points.map((point) => point.value.value));
+  const last = points.length - 1;
+  const lastAt = geometry.points[last];
+
+  return (
+    <VisualFrame kind="trend" caption={visual.caption}>
+      <VisualKey
+        items={[
+          { label: "Each match", color: "var(--viz-you)" },
+          { label: "Your average", color: "var(--viz-opp-mid)", dashed: true },
+        ]}
+      />
+      <div className="flex flex-col gap-1">
+        <div aria-hidden="true" className="relative">
+          <svg
+            viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
+            className="block w-full overflow-visible"
+          >
+            <line
+              x1={TREND_BOX.left}
+              x2={TREND_BOX.width - TREND_BOX.right}
+              y1={geometry.averageY}
+              y2={geometry.averageY}
+              stroke="var(--viz-opp-mid)"
+              strokeWidth={1}
+              strokeDasharray="3 4"
+              vectorEffect="non-scaling-stroke"
+            />
+            <path
+              d={geometry.path}
+              fill="none"
+              stroke="var(--viz-you)"
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            {geometry.points.map((point, index) => (
+              <circle
+                key={index}
+                cx={point.x}
+                cy={point.y}
+                r={index === last ? 3.5 : 2.5}
+                fill={index === last ? "var(--viz-you)" : "var(--surface-card)"}
+                stroke="var(--viz-you)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+          {lastAt && (
+            <span
+              data-ask-trend-last=""
+              className="absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
+              style={{
+                left: percent(lastAt.x, TREND_BOX.width),
+                top: percent(lastAt.y, TREND_BOX.height),
+              }}
+            >
+              {points[last].value.text}
+            </span>
+          )}
+        </div>
+        <div
+          aria-hidden="true"
+          className="flex justify-between gap-4 text-[10px] text-[var(--ink-500)] tabular-nums"
+          style={{
+            paddingLeft: percent(TREND_BOX.left, TREND_BOX.width),
+            paddingRight: percent(TREND_BOX.right, TREND_BOX.width),
+          }}
+        >
+          <span>{points[0].label}</span>
+          <span>{points[last].label}</span>
+        </div>
+      </div>
+      <ol className="sr-only">
+        {points.map((point, index) => (
+          <li key={index}>
+            {point.label}: {point.value.text}
+          </li>
+        ))}
+      </ol>
+    </VisualFrame>
+  );
+}

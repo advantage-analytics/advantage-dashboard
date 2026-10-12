@@ -208,6 +208,8 @@ const ANSWER: AskAnswerState = {
     { label: "Difference", value: "7" },
   ],
   body: "On Sep 14 you won 55% of the points played on your second serve. Across all 22 recorded matches the figure is 48%.\n\nThe difference came on the ad court, where you won 61% of second-serve points in that match against 44% across all matches.",
+  visual: null,
+  noAdvice: false,
   sources: TAG_OPTIONS.matches,
   error: null,
 };
@@ -320,7 +322,9 @@ function Thread({ composer }: { composer: ReactNode }) {
               stage: "querying",
               headline: null,
               figures: [],
+              visual: null,
               body: "",
+              noAdvice: false,
               sources: null,
               error: null,
             }}

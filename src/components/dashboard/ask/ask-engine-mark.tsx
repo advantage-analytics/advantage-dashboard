@@ -4,12 +4,12 @@
  * `InsightMark` draws beside small text.
  *
  * Decoration, always: on this page the engine's name is visible text next to
- * it (the composer's label, the answer's byline), so the mark carries no name
- * of its own.
+ * it (the composer's label), so the mark carries no name of its own. The
+ * answer no longer draws it: an answer is signed by name, in its footer.
  *
  * Not `InsightMark` itself because that one draws the swoosh with
  * `next/image`, which reads `process.env` under the offline component
- * harness the composer and the answer are both rendered by. The swoosh here
+ * harness the composer is rendered by. The swoosh here
  * is the same file, cut out of white by a CSS mask.
  */
 export function AskEngineMark() {

@@ -3,20 +3,19 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { AskAnswer } from "@/components/dashboard/ask/ask-answer";
 import { AskEngineMark } from "@/components/dashboard/ask/ask-engine-mark";
 import { AskPrompt } from "@/components/dashboard/ask/ask-prompt";
 import { AskSources } from "@/components/dashboard/ask/ask-sources";
+import type { AskAnswerState } from "@/components/dashboard/ask/use-ask-stream";
+import { AskVisualBlock } from "@/components/dashboard/ask/visuals/ask-visual";
 import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
-import type { AskSourceMatch } from "@/lib/services/ask/events";
-import { cn } from "@/lib/utils";
 import {
-  ComparisonBars,
-  FormStrip,
-  ServePlacement,
-  SplitBar,
-  StatTable,
-  TrendLine,
-} from "./chart-blocks";
+  ASK_NO_ADVICE_SENTENCE,
+  type AskSourceMatch,
+  type AskVisual,
+} from "@/lib/services/ask/events";
+import { cn } from "@/lib/utils";
 
 export type AnswerDesign = "1" | "2" | "3" | "4";
 export type AnswerByline = "none" | "footer" | "mark" | "current";
@@ -77,15 +76,113 @@ const DETAIL: string[] = [
   "You hit 8 winners and made 13 unforced errors. You converted 66.7% of your break points and saved 25% of the ones you faced, and won 54.8% of all points.",
 ];
 
-const NO_ADVICE =
-  "Ask reports what your matches show; it does not recommend what to work on.";
+const NO_ADVICE = ASK_NO_ADVICE_SENTENCE;
 
-const BARS = [
-  { label: "First serves in", you: 37.5, base: 58.2 },
-  { label: "First-serve points won", you: 66.7, base: 64.1 },
-  { label: "Second-serve points won", you: 50, base: 47.9 },
-  { label: "Total points won", you: 54.8, base: 51.3 },
-];
+// ── The six blocks, as the server sends them ────────────────────────────────
+// `AskVisual`-shaped: `value` is the cell, `text` the same cell as the server
+// formatted it. The blocks below are the shipped components, not sketches.
+
+const pct = (value: number) => ({ value, text: `${value}%` });
+const count = (value: number) => ({ value, text: String(value) });
+
+const BARS: AskVisual = {
+  kind: "bars",
+  caption: "Share of points, from 1 match against 22.",
+  subjectLabel: "Sep 28 vs. Beau",
+  baselineLabel: "All 22 matches",
+  rows: [
+    { label: "First serves in", subject: pct(37.5), baseline: pct(58.2) },
+    {
+      label: "First-serve points won",
+      subject: pct(66.7),
+      baseline: pct(64.1),
+    },
+    { label: "Second-serve points won", subject: pct(50), baseline: pct(47.9) },
+    { label: "Total points won", subject: pct(54.8), baseline: pct(51.3) },
+  ],
+};
+
+const SPLIT: AskVisual = {
+  kind: "split",
+  caption: "The 34 points you won, by how they ended.",
+  parts: [
+    { label: "Winners", count: count(8) },
+    { label: "Opponent forced errors", count: count(11) },
+    { label: "Opponent unforced errors", count: count(15) },
+  ],
+};
+
+const TREND: AskVisual = {
+  kind: "trend",
+  caption: "First serves in, 8 matches since Jun 4.",
+  points: [
+    { label: "Jun 4", value: pct(61) },
+    { label: "Jun 20", value: pct(57) },
+    { label: "Jul 9", value: pct(63) },
+    { label: "Jul 27", value: pct(55) },
+    { label: "Aug 12", value: pct(59) },
+    { label: "Aug 30", value: pct(52) },
+    { label: "Sep 14", value: pct(48) },
+    { label: "Sep 28", value: pct(37.5) },
+  ],
+};
+
+const TABLE: AskVisual = {
+  kind: "table",
+  caption: "From 1 match against 22.",
+  columns: ["Sep 28", "All matches", "Difference"],
+  rows: [
+    { label: "First serves in", cells: ["37.5%", "58.2%", "−20.7"] },
+    { label: "First-serve points won", cells: ["66.7%", "64.1%", "+2.6"] },
+    { label: "Second-serve points won", cells: ["50%", "47.9%", "+2.1"] },
+    { label: "Double faults", cells: ["4", "2.3", "+1.7"] },
+  ],
+};
+
+const EVIDENCE_TABLE: AskVisual = {
+  kind: "table",
+  caption: "Differences are in percentage points.",
+  columns: ["Sep 28", "All matches", "Difference"],
+  rows: [
+    { label: "First serves in", cells: ["37.5%", "58.2%", "−20.7"] },
+    { label: "First-serve points won", cells: ["66.7%", "64.1%", "+2.6"] },
+    { label: "Second-serve points won", cells: ["50%", "47.9%", "+2.1"] },
+    { label: "Break points converted", cells: ["66.7%", "41.2%", "+25.5"] },
+    { label: "Total points won", cells: ["54.8%", "51.3%", "+3.5"] },
+  ],
+};
+
+const SERVE: AskVisual = {
+  kind: "serve",
+  caption: "39 serves on break points, across 22 matches.",
+  courts: [
+    { label: "First serves", t: count(9), body: count(3), wide: count(6) },
+    { label: "Second serves", t: count(4), body: count(5), wide: count(12) },
+  ],
+};
+
+const FORM: AskVisual = {
+  kind: "form",
+  caption: "8 matches against left-handed opponents, oldest first.",
+  results: [true, false, false, true, false, true, true, false],
+};
+
+/** The answer as it ships: the real `AskAnswer`, on a saved-answer state. */
+const BUILT: AskAnswerState = {
+  status: "done",
+  stage: null,
+  headline: CLAIM,
+  figures: [
+    { label: "First serves in", value: "37.5%" },
+    { label: "First-serve points won", value: "66.7%" },
+    { label: "Total points won", value: "54.8%" },
+  ],
+  visual: BARS,
+  body: DETAIL.join("\n\n"),
+  noAdvice: true,
+  sources: SOURCES,
+  error: null,
+};
 
 // ── The page ────────────────────────────────────────────────────────────────
 
@@ -132,6 +229,21 @@ export function AskAnswersPreview({
       </header>
 
       <main className="flex flex-col gap-6 p-6">
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1 px-1">
+            <h2 className="text-title">As built</h2>
+            <p className="text-body-sm max-w-[75ch]">
+              The shipped answer component on a saved answer: no byline, the
+              block between the figures and the evidence, the signature in the
+              footer. The sheets under it are the designs it was chosen from.
+            </p>
+          </div>
+          <Sheet>
+            <AskPrompt text={QUESTION} tags={[]} />
+            <AskAnswer answer={BUILT} />
+          </Sheet>
+        </section>
+
         <Sheet>
           <AskPrompt text={QUESTION} tags={[]} />
           <Signed byline={byline}>
@@ -146,9 +258,10 @@ export function AskAnswersPreview({
           <div className="flex flex-col gap-1 px-1">
             <h2 className="text-title">Chart blocks</h2>
             <p className="text-body-sm max-w-[75ch]">
-              The set an answer could draw from. The AI names a block and the
-              columns of its query result that feed it; the numbers come from
-              the database, never from what it types.
+              The six blocks an answer can carry, one per answer — the shipped
+              components, fed the shape the server sends. The AI names a block
+              and the columns of its query result that feed it; the numbers come
+              from the database, never from what it types.
             </p>
           </div>
           <div className="grid gap-6 xl:grid-cols-2">
@@ -156,95 +269,34 @@ export function AskAnswersPreview({
               name="Comparison bars"
               question="How did my second serve hold up against Marcus?"
             >
-              <ComparisonBars
-                rows={BARS}
-                youLabel="Sep 28 vs. Beau"
-                baseLabel="All 22 matches"
-                caption="Share of points, from 1 match against 22."
-              />
+              <AskVisualBlock visual={BARS} />
             </BlockSheet>
             <BlockSheet name="Split bar" question="Where did my points end?">
-              <SplitBar
-                segments={[
-                  { label: "Winners", value: 8 },
-                  { label: "Opponent forced errors", value: 11 },
-                  { label: "Opponent unforced errors", value: 15 },
-                ]}
-                caption="The 34 points you won, by how they ended."
-              />
+              <AskVisualBlock visual={SPLIT} />
             </BlockSheet>
             <BlockSheet
               name="Trend line"
               question="How has my first serve gone since June?"
             >
-              <TrendLine
-                points={[
-                  { label: "Jun 4", value: 61 },
-                  { label: "Jun 20", value: 57 },
-                  { label: "Jul 9", value: 63 },
-                  { label: "Jul 27", value: 55 },
-                  { label: "Aug 12", value: 59 },
-                  { label: "Aug 30", value: 52 },
-                  { label: "Sep 14", value: 48 },
-                  { label: "Sep 28", value: 37.5 },
-                ]}
-                averageLabel="Your average"
-                caption="First serves in, 8 matches since Jun 4."
-              />
+              <AskVisualBlock visual={TREND} />
             </BlockSheet>
             <BlockSheet
               name="Stat table"
               question="Give me my serve numbers against Beau."
             >
-              <StatTable
-                columns={["Sep 28", "All matches", "Difference"]}
-                rows={[
-                  {
-                    label: "First serves in",
-                    values: ["37.5%", "58.2%", "−20.7"],
-                  },
-                  {
-                    label: "First-serve points won",
-                    values: ["66.7%", "64.1%", "+2.6"],
-                  },
-                  {
-                    label: "Second-serve points won",
-                    values: ["50%", "47.9%", "+2.1"],
-                  },
-                  { label: "Double faults", values: ["4", "2.3", "+1.7"] },
-                ]}
-                caption="From 1 match against 22."
-              />
+              <AskVisualBlock visual={TABLE} />
             </BlockSheet>
             <BlockSheet
               name="Serve placement"
               question="Where do I serve on break points?"
             >
-              <ServePlacement
-                courts={[
-                  { name: "Deuce court", t: 9, body: 3, wide: 6 },
-                  { name: "Ad court", t: 4, body: 5, wide: 12 },
-                ]}
-                caption="39 serves on break points, across 22 matches."
-              />
+              <AskVisualBlock visual={SERVE} />
             </BlockSheet>
             <BlockSheet
               name="Form strip"
               question="What is my record against left-handers?"
             >
-              <FormStrip
-                form={[
-                  "win",
-                  "loss",
-                  "loss",
-                  "win",
-                  "loss",
-                  "win",
-                  "win",
-                  "loss",
-                ]}
-                caption="8 matches against left-handed opponents, oldest first."
-              />
+              <AskVisualBlock visual={FORM} />
             </BlockSheet>
           </div>
         </section>
@@ -466,26 +518,7 @@ function EvidenceTable() {
   return (
     <>
       <Claim>{CLAIM}</Claim>
-      <StatTable
-        columns={["Sep 28", "All matches", "Difference"]}
-        rows={[
-          { label: "First serves in", values: ["37.5%", "58.2%", "−20.7"] },
-          {
-            label: "First-serve points won",
-            values: ["66.7%", "64.1%", "+2.6"],
-          },
-          {
-            label: "Second-serve points won",
-            values: ["50%", "47.9%", "+2.1"],
-          },
-          {
-            label: "Break points converted",
-            values: ["66.7%", "41.2%", "+25.5"],
-          },
-          { label: "Total points won", values: ["54.8%", "51.3%", "+3.5"] },
-        ]}
-        caption="Differences are in percentage points."
-      />
+      <AskVisualBlock visual={EVIDENCE_TABLE} />
       <p className="text-body max-w-[66ch]" style={{ lineHeight: 1.65 }}>
         You hit 8 winners and made 13 unforced errors.
       </p>
@@ -499,12 +532,7 @@ function VisualFirst() {
   return (
     <>
       <Claim>{CLAIM}</Claim>
-      <ComparisonBars
-        rows={BARS}
-        youLabel="Sep 28 vs. Beau"
-        baseLabel="All 22 matches"
-        caption="Share of points, from 1 match against 22."
-      />
+      <AskVisualBlock visual={BARS} />
       <details className="group">
         <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-[var(--radius-button)] text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] [&::-webkit-details-marker]:hidden">
           <ChevronRight

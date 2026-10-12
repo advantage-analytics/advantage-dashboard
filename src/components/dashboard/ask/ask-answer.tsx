@@ -1,9 +1,13 @@
 "use client";
 
-import type { AskErrorCode, AskStatusStage } from "@/lib/services/ask/events";
-import { AskEngineMark } from "./ask-engine-mark";
+import {
+  ASK_NO_ADVICE_SENTENCE,
+  type AskErrorCode,
+  type AskStatusStage,
+} from "@/lib/services/ask/events";
 import { AskSources } from "./ask-sources";
 import type { AskAnswerState } from "./use-ask-stream";
+import { AskVisualBlock } from "./visuals/ask-visual";
 
 export interface AskAnswerProps {
   /**
@@ -17,6 +21,9 @@ export interface AskAnswerProps {
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
 export const ASK_FIGURE_TILES = 3;
+
+/** Who signs a finished answer, in its footer. */
+export const ASK_SIGNATURE = "Advantage Intelligence";
 
 /** The real step the route is on — never a percentage, never a guess. */
 const STAGE_LABEL: Record<AskStatusStage, string> = {
@@ -57,45 +64,52 @@ export const ASK_ERROR_COPY: Record<
 };
 
 /**
- * One answer from Advantage Intelligence: the engine's mark and name, then the
- * claim, up to three figures, the evidence, and the matches it was computed
- * from.
+ * One answer from Advantage Intelligence, flush with the column's left edge:
+ * the claim, up to three figures, the visual block when the answer carries
+ * one, the evidence, the matches it was computed from, and a one-line footer
+ * that signs it.
+ *
+ * ── No byline ───────────────────────────────────────────────────────────────
+ * Nothing sits above the claim and there is no mark gutter. Prompts are on
+ * the right, so the left of the column already says "this is the answer"; the
+ * engine's name is the footer's, in micro type, under the sources.
+ *
+ * ── The footer ──────────────────────────────────────────────────────────────
+ * The signature, and — when the question asked what to do — the sentence that
+ * says Ask does not recommend (`noAdvice`). It signs a finished answer only:
+ * one still arriving has its status line, and a failed one has nothing to
+ * sign.
  *
  * ── In flight ───────────────────────────────────────────────────────────────
  * A `role="status"` line names the step the route says it is on. Text only —
  * no bar, no percentage, no spinner: the route knows which step it is in and
- * nothing about how long that step has left.
+ * nothing about how long that step has left. The visual block appears when
+ * its event arrives; there is no placeholder for a block that may never come.
  *
  * ── Failed ──────────────────────────────────────────────────────────────────
  * The fixed copy for the stream's `code` and nothing else. Whatever had
- * arrived before the failure is dropped, figures first: a tile from an answer
- * that never finished is a number nobody stands behind. A failure with no
- * code is an interruption, and shows the sentence the stream reader wrote for
- * it.
+ * arrived before the failure is dropped, figures and block first: a number
+ * from an answer that never finished is one nobody stands behind. A failure
+ * with no code is an interruption, and shows the sentence the stream reader
+ * wrote for it.
  *
  * ── Colour ──────────────────────────────────────────────────────────────────
- * Ink throughout. Green and red belong to the outcome marks in the source
- * rows; a figure is not good or bad, and a failed answer is not a loss.
+ * Ink throughout the claim, figures and prose. Green and red belong to the
+ * outcome marks in the source rows and the form strip; a figure is not good
+ * or bad, and a failed answer is not a loss. The visual block's blue and
+ * slate are roles (`visuals/ask-visual.tsx`).
  *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it is
  * rendered by an offline component harness (`tests/ask-answer-view.spec.ts`).
  */
 export function AskAnswer({ answer }: AskAnswerProps) {
   return (
-    <div className="flex gap-2.5">
-      <div className="flex w-[26px] shrink-0 justify-center pt-1">
-        <AskEngineMark />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-3.5">
-        <span className="pt-[3px] text-[12px] text-[var(--ink-700)]">
-          Advantage Intelligence
-        </span>
-        {answer.status === "error" ? (
-          <AnswerError error={answer.error} />
-        ) : (
-          <AnswerBody answer={answer} />
-        )}
-      </div>
+    <div data-ask-answer="" className="flex min-w-0 flex-col gap-5">
+      {answer.status === "error" ? (
+        <AnswerError error={answer.error} />
+      ) : (
+        <AnswerBody answer={answer} />
+      )}
     </div>
   );
 }
@@ -154,17 +168,23 @@ function AnswerBody({ answer }: { answer: AskAnswerState }) {
         </ul>
       )}
 
-      {paragraphs.map((paragraph, index) => (
-        // `text-body` is unlayered and would beat a `leading-*` utility, so
-        // the reading line height is set inline.
-        <p
-          key={index}
-          className="text-body text-pretty"
-          style={{ lineHeight: 1.65 }}
-        >
-          {paragraph}
-        </p>
-      ))}
+      {answer.visual && <AskVisualBlock visual={answer.visual} />}
+
+      {paragraphs.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {paragraphs.map((paragraph, index) => (
+            // `text-body` is unlayered and would beat a `leading-*` utility,
+            // so the reading line height is set inline.
+            <p
+              key={index}
+              className="text-body max-w-[66ch] text-pretty"
+              style={{ lineHeight: 1.65 }}
+            >
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      )}
 
       {answer.status === "streaming" && (
         <p role="status" className="text-body-sm">
@@ -172,7 +192,18 @@ function AnswerBody({ answer }: { answer: AskAnswerState }) {
         </p>
       )}
 
-      {answer.sources && <AskSources matches={answer.sources} />}
+      {(answer.sources || answer.status === "done") && (
+        <div className="flex flex-col gap-3">
+          {answer.sources && <AskSources matches={answer.sources} />}
+          {answer.status === "done" && (
+            <p data-ask-signature="" className="text-micro max-w-[60ch]">
+              {/* `text-micro` is unlayered and would beat a colour utility. */}
+              <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
+              {answer.noAdvice && ` · ${ASK_NO_ADVICE_SENTENCE}`}
+            </p>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -16,8 +16,11 @@ import {
  *
  *   ?by=none | footer | mark | current — the "Advantage Intelligence" line
  *
- * The prompt and the source rows are the real components; the answers and the
- * chart blocks are sketches on fixed numbers. Reads no data, needs no session.
+ * The decision is made and built: the first sheet is the shipped `AskAnswer`,
+ * and the chart blocks are the shipped components
+ * (`components/dashboard/ask/visuals/`) on fixed numbers. The four numbered
+ * answers stay as the sketches it was chosen from. Reads no data, needs no
+ * session.
  *
  * Gated like `/design`: a 404 on the production deployment only.
  */

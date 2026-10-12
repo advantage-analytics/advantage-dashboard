@@ -36,6 +36,8 @@ import {
   type AskEvent,
   type AskSourceMatch,
   type AskStatusStage,
+  type AskVisual,
+  readAskVisual,
 } from "@/lib/services/ask/events";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -83,8 +85,16 @@ export interface AskAnswerState {
   stage: AskStatusStage | null;
   headline: string | null;
   figures: AskFigure[];
+  /** The answer's one visual block, resolved by the server. Null when it has none. */
+  visual: AskVisual | null;
   /** The evidence paragraphs, as one string; blank lines separate them. */
   body: string;
+  /**
+   * The question asked what to do, which Ask does not answer: the footer says
+   * so (`ASK_NO_ADVICE_SENTENCE`). False for answers saved before the notice
+   * existed — those carry the sentence at the end of `body`, left as it is.
+   */
+  noAdvice: boolean;
   /** Null until the route says which matches it computed from. */
   sources: AskSourceMatch[] | null;
   error: AskAnswerError | null;
@@ -147,7 +157,9 @@ function pendingAnswer(): AskAnswerState {
     stage: null,
     headline: null,
     figures: [],
+    visual: null,
     body: "",
+    noAdvice: false,
     sources: null,
     error: null,
   };
@@ -179,10 +191,14 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
     case "text":
       return { ...answer, body: answer.body + event.delta };
     case "visual":
+      // One block per answer (`MAX_ASK_VISUALS`): were a second ever sent, the
+      // first stands. Its place in the answer is the layout's, not the order
+      // the events came in — a figure may still arrive after it.
+      return answer.visual ? answer : { ...answer, visual: event.visual };
     case "notice":
-      // Not yet shown: the visual block and the no-advice notice land in a
-      // follow-up to the client; `parseAskEvent` does not read them yet.
-      return answer;
+      return event.notice === "no_advice"
+        ? { ...answer, noAdvice: true }
+        : answer;
     case "sources":
       return { ...answer, sources: event.matches };
     case "done":
@@ -357,6 +373,16 @@ export function parseAskEvent(line: string): AskEvent | null {
     case "text":
       return typeof value.delta === "string"
         ? { type: "text", delta: value.delta }
+        : null;
+    case "visual": {
+      // A block that does not read back whole is not drawn in part: the line
+      // is skipped and the answer goes on without it.
+      const visual = readAskVisual(value.visual);
+      return visual ? { type: "visual", visual } : null;
+    }
+    case "notice":
+      return value.notice === "no_advice"
+        ? { type: "notice", notice: "no_advice" }
         : null;
     case "sources": {
       const matches = readSourceMatches(value.matches);
@@ -594,7 +620,8 @@ export function readSavedQuestion(content: unknown): AskQuestion {
 }
 
 /**
- * A saved answer: headline, figures, body and sources, each optional.
+ * A saved answer: headline, figures, visual block, body and sources, each
+ * optional.
  *
  * The row is opaque jsonb the database does not validate, so every field is
  * read defensively and a missing one is simply absent. The saved SQL is in
@@ -613,7 +640,12 @@ export function readSavedAnswer(content: unknown): AskAnswerState {
     stage: null,
     headline: stringOrNull(record.headline),
     figures: readFigures(record.figures),
+    // A block that no longer reads back whole is left out, not half drawn.
+    visual: readAskVisual(record.visual),
+    // The body is shown as saved: an answer from before the notice existed
+    // has the sentence in it, and nothing here strips or adds one.
     body: stringOrNull(record.body) ?? "",
+    noAdvice: record.noAdvice === true,
     sources: readSourceMatches(sources),
     error: null,
   };
@@ -624,7 +656,9 @@ const NO_SAVED_ANSWER: AskAnswerState = {
   stage: null,
   headline: null,
   figures: [],
+  visual: null,
   body: "",
+  noAdvice: false,
   sources: null,
   error: null,
 };
