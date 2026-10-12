@@ -18,10 +18,9 @@ import {
 } from "@/components/ui/popover";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { FloatMenuDivider } from "@/components/ui/float-menu";
-import { Checkbox, CheckboxMark } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AccessOption,
-  SECONDARY_BUTTON,
   UrlRow,
   moveFocusBetweenRungs,
 } from "@/components/ui/share-panel";
@@ -40,10 +39,9 @@ import type {
   MatchShareState,
   SharePerson,
 } from "@/lib/data/match-share-server";
-import {
-  realTournamentName,
-  shareScopeLabel,
-} from "@/lib/data/match-share-format";
+import { realTournamentName } from "@/lib/data/match-share-format";
+import { VIEW_ICONS } from "@/components/dashboard/matches/match-detail/report-view-switcher";
+import type { ReportView } from "@/components/dashboard/matches/match-detail/report-view";
 
 type PopoverContentProps = ComponentProps<typeof PopoverContent>;
 
@@ -237,20 +235,29 @@ export function ShareRailTrigger({
  *     headcount.
  *   - "Anyone with the link": the public `/m/<token>` link.
  *
- * Below a hairline sits whatever the chosen rung can hand out — nothing for
- * "Only you", the `/dashboard` URL for a team (members sign in to open it),
- * the public link, Email and More options, and what the link includes for
- * "Anyone" — and under a second hairline one closing sentence: who made the
- * link and when, or that links never carry the video.
+ * Each section opens on a quiet sentence-case label ("Who can open it", "On
+ * the link", "Team link") — the popover has three short jobs and the label is
+ * what keeps the option rows from reading as loose controls.
  *
- * The link has two options, both edited in place — the URL already handed
- * out keeps working either way. Statistics are always on it. "Include
- * visualizations" adds the court charts and starts ticked. "Include video"
- * adds the match video, starts clear, and is drawn only for a match that has
- * one; on a team match it is the staff's to tick unless the program lets its
- * players (`share.canShareVideo`), and a viewer who may not sees the row
- * unavailable with the reason under it. Anyone who may share the match can
- * take the video back off.
+ * Below a hairline sits whatever the chosen rung can hand out. "Only you":
+ * nothing. A team: the `/dashboard` URL (members sign in to open it). "Anyone
+ * with the link":
+ *
+ *   - what the link shows, one menu row per view with the rail switcher's own
+ *     glyph: Statistics ("Always"), then Visualizations and Video with a box
+ *     at the right edge. Both are edited in place — the URL already handed
+ *     out keeps working. Visualizations starts ticked. Video starts clear and
+ *     is drawn only for a match that has one; on a team match it is the
+ *     staff's to tick unless the program lets its players
+ *     (`share.canShareVideo`), and a viewer who may not sees the row
+ *     unavailable with "Team staff only" where the box would be. Anyone who
+ *     may share the match can take the video back off.
+ *   - the link and Copy — the popover's ONE button.
+ *   - the other ways out as menu rows, not buttons: "Email the link" and,
+ *     where the browser can, "More ways to share…".
+ *
+ * Under a second hairline, one closing sentence: who made the link and when,
+ * or what a link would carry.
  *
  * Choosing the public rung turns the link on at once (optimistic, settling on
  * the server's answer). Stepping back down asks first, in place of the link
@@ -434,99 +441,111 @@ export function SharePopoverPanel({
     );
   } else if (on) {
     body = (
-      <ActionBlock>
-        <UrlRow url={url} />
-        {/* The other ways out, one row of equal halves under the link — the
-            same 32px and edges as Copy, so the link row stays the lead. */}
-        <div className="flex gap-2">
+      <>
+        <SectionLabel>On the link</SectionLabel>
+        {/* What the link shows, one menu row each: the view's own glyph (the
+            rail switcher's), its name, and at the right edge the thing that
+            decides it — "Always" for Statistics, a box for the two options. */}
+        <div
+          role="group"
+          aria-label="What the link shows"
+          className="flex flex-col"
+        >
+          <div className={SCOPE_ROW}>
+            <ScopeGlyph view="statistics" />
+            <span className={SCOPE_NAME}>Statistics</span>
+            <span className="text-micro text-[var(--ink-600)]">Always</span>
+          </div>
+          <label className={cn(SCOPE_ROW, ROW_HOVER, "cursor-pointer")}>
+            <ScopeGlyph view="shots" />
+            <span className={SCOPE_NAME}>Visualizations</span>
+            <Checkbox
+              checked={link.includesVisualizations}
+              onChange={setVisualizations}
+            />
+          </label>
+          {hasVideo &&
+            (videoRowLive ? (
+              <label className={cn(SCOPE_ROW, ROW_HOVER, "cursor-pointer")}>
+                <ScopeGlyph view="film" />
+                <span className={SCOPE_NAME}>Video</span>
+                <Checkbox checked={link.includesVideo} onChange={setVideo} />
+              </label>
+            ) : (
+              // Unavailable, not removed: still a tab stop, and it says why
+              // (DS › Settings: never a bare `disabled`, the reason beside it).
+              <div
+                role="checkbox"
+                aria-checked={false}
+                aria-disabled="true"
+                tabIndex={0}
+                className={cn(
+                  SCOPE_ROW,
+                  "outline-none focus-visible:shadow-[var(--focus-ring)]",
+                )}
+              >
+                <ScopeGlyph view="film" muted />
+                <span className={cn(SCOPE_NAME, "text-[var(--ink-600)]")}>
+                  Video
+                </span>
+                <span className="text-micro inline-flex items-center gap-[5px] text-[var(--ink-600)]">
+                  <Lock
+                    className="size-[11px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Team staff only
+                </span>
+              </div>
+            ))}
+        </div>
+        <div className="px-2.5 pt-2 pb-2.5">
+          <UrlRow url={url} />
+        </div>
+        {/* The other ways out are menu rows, not a second set of buttons:
+            Copy is the popover's one button. */}
+        <div className="-mt-1 flex flex-col pb-0.5">
           <a
             href={buildMailtoHref(match, url)}
-            className={cn(SECONDARY_BUTTON, "flex-1")}
+            className={cn(SCOPE_ROW, ROW_HOVER, SCOPE_NAME, "no-underline")}
           >
             <Mail
-              className="size-3.5 text-[var(--nav-fg)]"
+              className="size-[13px] shrink-0 text-[var(--ink-400)]"
               strokeWidth={1.5}
               aria-hidden="true"
             />
-            Email
+            Email the link
           </a>
           {canNativeShare && (
             <button
               type="button"
               onClick={nativeShare}
-              className={cn(SECONDARY_BUTTON, "flex-1")}
+              className={cn(
+                SCOPE_ROW,
+                ROW_HOVER,
+                SCOPE_NAME,
+                "w-full cursor-pointer text-left",
+              )}
             >
               <ArrowUpRight
-                className="size-3.5 text-[var(--nav-fg)]"
+                className="size-[13px] shrink-0 text-[var(--ink-400)]"
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              More options
+              More ways to share…
             </button>
           )}
         </div>
-        {/* A form row (DS › Checkbox): the label carries the sentence and
-            toggles the box. */}
-        <label className="flex cursor-pointer items-start gap-2 pt-0.5">
-          <Checkbox
-            checked={link.includesVisualizations}
-            onChange={setVisualizations}
-            className="mt-px"
-          />
-          <span className="flex min-w-0 flex-col gap-px">
-            <span className="text-[12px] leading-[16px] text-[var(--ink-700)]">
-              Include visualizations
-            </span>
-            <span className="text-micro leading-[15px] text-[var(--ink-500)]">
-              Serve, return and rally court charts
-            </span>
-          </span>
-        </label>
-        {hasVideo &&
-          (videoRowLive ? (
-            <label className="flex cursor-pointer items-start gap-2">
-              <Checkbox
-                checked={link.includesVideo}
-                onChange={setVideo}
-                className="mt-px"
-              />
-              <span className="flex min-w-0 flex-col gap-px">
-                <span className="text-[12px] leading-[16px] text-[var(--ink-700)]">
-                  Include video
-                </span>
-                <span className="text-micro leading-[15px] text-[var(--ink-500)]">
-                  Anyone with the link can watch the match
-                </span>
-              </span>
-            </label>
-          ) : (
-            // Unavailable, not removed: still a tab stop, and it says why
-            // (DS › Settings: never a bare `disabled`, the reason beside it).
-            <div
-              role="checkbox"
-              aria-checked={false}
-              aria-disabled="true"
-              tabIndex={0}
-              className="flex items-start gap-2 rounded-[var(--radius-cell)] outline-none focus-visible:shadow-[var(--focus-ring)]"
-            >
-              <CheckboxMark checked={false} disabled className="mt-px" />
-              <span className="flex min-w-0 flex-col gap-px">
-                <span className="text-[12px] leading-[16px] text-[var(--ink-500)]">
-                  Include video
-                </span>
-                <span className="text-micro leading-[15px] text-[var(--ink-500)]">
-                  Only team staff can share the video
-                </span>
-              </span>
-            </div>
-          ))}
-      </ActionBlock>
+      </>
     );
   } else if (team?.teamUrl && (locked || !isPublic)) {
     body = (
-      <ActionBlock>
-        <UrlRow url={team.teamUrl} />
-      </ActionBlock>
+      <>
+        <SectionLabel>Team link</SectionLabel>
+        <div className="px-2.5 pt-1.5 pb-2.5">
+          <UrlRow url={team.teamUrl} />
+        </div>
+      </>
     );
   }
 
@@ -558,10 +577,7 @@ export function SharePopoverPanel({
         />
         {`Made ${link.madeOn ? `${link.madeOn} ` : ""}by ${
           link.madeBy.isViewer ? "you" : link.madeBy.name
-        } · ${shareScopeLabel({
-          visualizations: link.includesVisualizations,
-          video: hasVideo && link.includesVideo,
-        })}`}
+        }`}
       </>
     );
   } else if (team?.teamUrl && !isPublic) {
@@ -576,6 +592,7 @@ export function SharePopoverPanel({
 
   return (
     <div className="flex flex-col">
+      <SectionLabel>Who can open it</SectionLabel>
       <div
         role="radiogroup"
         aria-label="Who can open this match"
@@ -617,13 +634,37 @@ export function SharePopoverPanel({
 }
 
 /**
- * The block between the hairlines. Its 10px side inset puts every edge in it
- * — the pill, Copy, the send buttons — on the same verticals as the radio
- * dots and the note above and below.
+ * A section's name, in the menu's own quiet label: sentence case, 11px — the
+ * popover has three short sections (who, what, the link) and without a word
+ * over each the option rows read as loose controls under the link.
  */
-function ActionBlock({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 px-2.5 pt-2 pb-2.5">{children}</div>
+    <div className="px-2.5 pt-2 pb-0.5 text-[11px] leading-[14px] text-[var(--ink-600)]">
+      {children}
+    </div>
+  );
+}
+
+/** One 32px menu row: 10px inset, on the radio dots' vertical. */
+const SCOPE_ROW =
+  "flex h-8 items-center gap-2.5 rounded-[var(--radius-element)] px-2.5";
+const ROW_HOVER =
+  "transition-colors duration-100 hover:bg-[var(--surface-subtle)]";
+const SCOPE_NAME = "flex-1 text-[13px] leading-[18px] text-[var(--ink-900)]";
+
+/** The view's glyph, the one the report's rail switcher draws for it. */
+function ScopeGlyph({ view, muted }: { view: ReportView; muted?: boolean }) {
+  const Icon = VIEW_ICONS[view];
+  return (
+    <Icon
+      className={cn(
+        "size-[13px] shrink-0",
+        muted ? "text-[var(--ink-300)]" : "text-[var(--ink-400)]",
+      )}
+      strokeWidth={1.5}
+      aria-hidden="true"
+    />
   );
 }
 
