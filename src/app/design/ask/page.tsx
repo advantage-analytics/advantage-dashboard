@@ -1,30 +1,28 @@
 import { notFound } from "next/navigation";
-import {
-  AskLayoutsPreview,
-  type AskLayoutVariant,
-} from "./ask-layouts-preview";
+import { AskLayoutsPreview, type AskRailVariant } from "./ask-layouts-preview";
 
 /**
- * Three layouts for the personal Ask page, side by side for a decision:
- * where the list of earlier questions lives, and what is left on the right.
+ * The personal Ask page as a chat: earlier questions in a left rail, the
+ * player's prompts on the right of the thread, answers on the left. Three
+ * ways to organise the rail, for a decision:
  *
- *   ?v=a  chat list on the left, no right rail
- *   ?v=b  chat list on the left, a slim right rail for tags and the limit
- *   ?v=c  the layout as built: everything in the right rail
+ *   ?v=1  by month — one line per question, date at the edge
+ *   ?v=2  with context — two lines: the question, then what it was about
+ *   ?v=3  by opponent — grouped under who the question was about
  *
- * The composer, the answer and the right rail are the real components on
- * fixed inputs; the left chat list is a sketch that exists only here. Reads no
- * data and needs no session.
+ * `&rail=closed` shows the rail collapsed. The composer and the answer are
+ * the real components on fixed inputs; the rail and the prompt bubble are
+ * sketches that exist only here. Reads no data and needs no session.
  *
  * Gated like `/design`: a 404 on the production deployment only.
  */
 export default async function AskDesignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ v?: string }>;
+  searchParams: Promise<{ v?: string; rail?: string }>;
 }) {
   if (process.env.VERCEL_ENV === "production") notFound();
-  const { v } = await searchParams;
-  const variant: AskLayoutVariant = v === "b" || v === "c" ? v : "a";
-  return <AskLayoutsPreview variant={variant} />;
+  const { v, rail } = await searchParams;
+  const variant: AskRailVariant = v === "2" || v === "3" ? v : "1";
+  return <AskLayoutsPreview variant={variant} railClosed={rail === "closed"} />;
 }

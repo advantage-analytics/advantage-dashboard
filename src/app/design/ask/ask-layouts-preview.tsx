@@ -2,13 +2,19 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { PanelLeftClose, PanelLeftOpen, SquarePen, Trash2 } from "lucide-react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  SquarePen,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { AskAnswer } from "@/components/dashboard/ask/ask-answer";
 import {
   AskComposer,
   type AskQuotaView,
 } from "@/components/dashboard/ask/ask-composer";
-import { AskRail } from "@/components/dashboard/ask/ask-rail";
+import { ASK_TAG_ICON } from "@/components/dashboard/ask/ask-tag-menu";
 import type {
   AskAnswerState,
   AskQuestion,
@@ -16,35 +22,34 @@ import type {
 } from "@/components/dashboard/ask/use-ask-stream";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { AskConversationSummary } from "@/lib/data/ask-server";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
-export type AskLayoutVariant = "a" | "b" | "c";
+export type AskRailVariant = "1" | "2" | "3";
 
 const VARIANTS: readonly {
-  id: AskLayoutVariant;
+  id: AskRailVariant;
   name: string;
   summary: string;
 }[] = [
   {
-    id: "a",
-    name: "A · Left list, no right rail",
+    id: "1",
+    name: "1 · By month",
     summary:
-      "Earlier questions and New question move to a left column. Tags stay as chips in the composer and the limit sits at the foot of the list, so the answer has the rest of the width.",
+      "The quietest rail. One line per question under a month label, the date at the edge. On hover the date gives way to delete, so the row never shifts.",
   },
   {
-    id: "b",
-    name: "B · Left list, slim right rail",
+    id: "2",
+    name: "2 · With context",
     summary:
-      "Earlier questions move left. The right rail narrows to 260px and keeps what describes this question: its tags and the month's limit.",
+      "Two lines per question: what was asked, then who or which match it was about. Slower to scan, but a question is recognisable without opening it.",
   },
   {
-    id: "c",
-    name: "C · As built",
+    id: "3",
+    name: "3 · By opponent",
     summary:
-      "One 340px right rail holds the tags, the limit and earlier questions. New question sits beside the page title.",
+      "Grouped under the opponent a question tagged, with untagged questions last. Built for how players return to this page: before a rematch.",
   },
 ];
 
@@ -101,36 +106,82 @@ const TAGS: AskTag[] = [
 
 const QUOTA: AskQuotaView = { used: 8, cap: 20, resetsOn: "2026-11-01" };
 
-const CONVERSATIONS: AskConversationSummary[] = [
+interface Chat {
+  id: string;
+  title: string;
+  /** Short date as the rail prints it. */
+  date: string;
+  month: string;
+  /** Who the question tagged; null when it tagged nobody. */
+  opponent: string | null;
+  /** The rest of the context line: a match, a period, a count. */
+  context: string;
+  kind: "opponent" | "match";
+}
+
+const CHATS: readonly Chat[] = [
   {
     id: "c-1",
     title: "Second serve against Marcus",
-    updatedAt: "2026-10-07T15:00:00Z",
+    date: "Oct 7",
+    month: "October",
+    opponent: "Marcus Hale",
+    context: "Sep 14 · Fall Open",
+    kind: "match",
   },
   {
     id: "c-2",
     title: "Why I lose long rallies to Theo",
-    updatedAt: "2026-09-29T15:00:00Z",
+    date: "Sep 29",
+    month: "September",
+    opponent: "Theo Lindqvist",
+    context: "4 matches",
+    kind: "opponent",
   },
   {
     id: "c-3",
     title: "Serve placement on break points",
-    updatedAt: "2026-09-20T15:00:00Z",
+    date: "Sep 20",
+    month: "September",
+    opponent: null,
+    context: "All 22 matches",
+    kind: "match",
   },
   {
     id: "c-4",
     title: "What changed between sets at the Fall Open",
-    updatedAt: "2026-09-15T15:00:00Z",
+    date: "Sep 15",
+    month: "September",
+    opponent: "Marcus Hale",
+    context: "Sep 14 · Fall Open",
+    kind: "match",
   },
   {
     id: "c-5",
     title: "First serve trend since June",
-    updatedAt: "2026-09-02T15:00:00Z",
+    date: "Sep 2",
+    month: "September",
+    opponent: null,
+    context: "Since Jun 1",
+    kind: "match",
   },
   {
     id: "c-6",
-    title: "Return depth against left-handers",
-    updatedAt: "2026-08-21T15:00:00Z",
+    title: "Return depth against Theo's second serve",
+    date: "Aug 21",
+    month: "August",
+    opponent: "Theo Lindqvist",
+    context: "4 matches",
+    kind: "opponent",
+  },
+  {
+    id: "c-7",
+    title: "Net points won on the ladder",
+    date: "Aug 12",
+    month: "August",
+    opponent: "Daniel Okafor",
+    context: "Aug 30 · Club ladder",
+    kind: "match",
   },
 ];
 
@@ -153,26 +204,34 @@ const ANSWER: AskAnswerState = {
   error: null,
 };
 
-const deleteNothing = async () => true;
+const FOLLOW_UP = "And on break points?";
 
 // ── The page ────────────────────────────────────────────────────────────────
 
-export function AskLayoutsPreview({ variant }: { variant: AskLayoutVariant }) {
+export function AskLayoutsPreview({
+  variant,
+  railClosed,
+}: {
+  variant: AskRailVariant;
+  railClosed: boolean;
+}) {
   const current = VARIANTS.find((entry) => entry.id === variant) ?? VARIANTS[0];
+  const [open, setOpen] = useState(!railClosed);
+  const [draft, setDraft] = useState<AskQuestion>({ text: "", tags: [] });
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen flex-col bg-[var(--surface-page)]">
+      <div className="flex min-h-screen flex-col bg-[var(--surface-page)] selection:bg-[var(--blue-soft)]">
         <header className="flex flex-col gap-3 border-b border-[var(--border-hairline)] bg-[var(--surface-card)] px-6 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-title-lg mr-3">Ask page layouts</h1>
+            <h1 className="text-title mr-3">Ask · left rail</h1>
             {VARIANTS.map((entry) => (
               <Link
                 key={entry.id}
                 href={`/design/ask?v=${entry.id}`}
                 aria-current={entry.id === variant ? "page" : undefined}
                 className={cn(
-                  "flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors duration-[var(--duration-hover)]",
+                  "flex h-8 items-center rounded-[var(--radius-pill)] px-3 text-[12px] font-medium transition-colors duration-[var(--duration-hover)]",
                   entry.id === variant
                     ? "bg-[var(--ink-900)] text-[var(--surface-card)]"
                     : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
@@ -182,15 +241,33 @@ export function AskLayoutsPreview({ variant }: { variant: AskLayoutVariant }) {
               </Link>
             ))}
           </div>
-          <p className="text-body-sm max-w-[80ch]">{current.summary}</p>
+          <p className="text-body-sm max-w-[75ch]">{current.summary}</p>
         </header>
 
         <div className="flex flex-1 p-6">
-          <div className="flex min-h-[820px] w-full overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)]">
+          <div className="flex h-[860px] w-full overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)]">
             <DashboardRailStub />
             <div className="flex min-w-0 flex-1 flex-col">
               <DashboardHeaderStub />
-              <Layout variant={variant} />
+              <div className="flex min-h-0 flex-1">
+                <ChatRail
+                  variant={variant}
+                  open={open}
+                  onToggle={() => setOpen((value) => !value)}
+                />
+                <Thread
+                  composer={
+                    <AskComposer
+                      value={draft}
+                      onChange={setDraft}
+                      onSubmit={() => {}}
+                      tagOptions={TAG_OPTIONS}
+                      quota={QUOTA}
+                      pending={false}
+                    />
+                  }
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -199,8 +276,8 @@ export function AskLayoutsPreview({ variant }: { variant: AskLayoutVariant }) {
   );
 }
 
-/** The dashboard's own icon rail, as grey blocks: it is what a left chat
- *  list would sit beside. */
+/** The dashboard's own icon rail, as grey blocks: what the chat rail sits
+ *  beside. */
 function DashboardRailStub() {
   return (
     <div
@@ -229,164 +306,101 @@ function DashboardHeaderStub() {
   );
 }
 
-function Layout({ variant }: { variant: AskLayoutVariant }) {
-  const [draft, setDraft] = useState<AskQuestion>({
-    text: "And on break points?",
-    tags: TAGS,
-  });
-  const [listOpen, setListOpen] = useState(true);
+// ── The thread: prompts on the right, answers on the left ───────────────────
 
-  const composer = (
-    <AskComposer
-      value={draft}
-      onChange={setDraft}
-      onSubmit={() => {}}
-      tagOptions={TAG_OPTIONS}
-      quota={QUOTA}
-      pending={false}
-    />
-  );
+const COLUMN = "mx-auto w-full max-w-[720px]";
 
-  if (variant === "c") {
-    return (
-      <div className="flex min-h-0 flex-1">
-        <Centre composer={composer} showNewQuestion />
-        <aside
-          aria-label="Question context"
-          className="flex w-[340px] shrink-0 flex-col gap-7 border-l border-[var(--border-hairline)] px-[22px] py-6"
-        >
-          <AskRail
-            tags={draft.tags}
-            tagOptions={TAG_OPTIONS}
-            quota={QUOTA}
-            conversations={CONVERSATIONS}
-            activeConversationId={ACTIVE_ID}
-            onDeleteConversation={deleteNothing}
-          />
-        </aside>
-      </div>
-    );
-  }
-
+function Thread({ composer }: { composer: ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1">
-      <ChatList
-        open={listOpen}
-        onToggle={() => setListOpen((value) => !value)}
-        showLimit={variant === "a"}
-      />
-      <Centre composer={composer} centred={variant === "a"} />
-      {variant === "b" && (
-        <aside
-          aria-label="Question context"
-          className="flex w-[260px] shrink-0 flex-col gap-7 border-l border-[var(--border-hairline)] px-[22px] py-6"
-        >
-          <AskRail
-            tags={draft.tags}
-            tagOptions={TAG_OPTIONS}
-            quota={QUOTA}
-            conversations={[]}
-            activeConversationId={ACTIVE_ID}
-            onDeleteConversation={deleteNothing}
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-10 pt-7 [scrollbar-color:var(--ink-200)_transparent] [scrollbar-width:thin]">
+        <div className={cn(COLUMN, "flex flex-col gap-8")}>
+          <Prompt text={QUESTION_TEXT} tags={TAGS} />
+          <AskAnswer answer={ANSWER} />
+          <Prompt text={FOLLOW_UP} tags={[]} />
+          <AskAnswer
+            answer={{
+              status: "streaming",
+              stage: "querying",
+              headline: null,
+              figures: [],
+              body: "",
+              sources: null,
+              error: null,
+            }}
           />
-        </aside>
+        </div>
+      </div>
+      <div className="px-10 pt-3 pb-6">
+        <div className={COLUMN}>{composer}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The player's own words, set against the right edge. A neutral wash, never
+ * blue: blue is for actions, and this is something already said. Capped at
+ * 80% of the column so a long prompt still reads as theirs and an answer
+ * never has to share its left edge with one.
+ */
+function Prompt({ text, tags }: { text: string; tags: AskTag[] }) {
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <h3 className="sr-only">You asked</h3>
+      <p className="max-w-[80%] rounded-[var(--radius-card)] rounded-br-[var(--radius-cell)] bg-[var(--surface-subtle)] px-3.5 py-2.5 text-[13px] leading-[1.55] whitespace-pre-wrap text-[var(--ink-900)]">
+        {text}
+      </p>
+      {tags.length > 0 && (
+        <ul aria-label="Tagged" className="flex flex-wrap justify-end gap-1.5">
+          {tags.map((tag) => {
+            const Icon = ASK_TAG_ICON[tag.kind];
+            return (
+              <li
+                key={`${tag.kind}:${tag.id}`}
+                className="flex h-[22px] items-center gap-1.5 rounded-[var(--radius-button)] px-1 text-[11px] text-[var(--ink-600)]"
+              >
+                <Icon
+                  aria-hidden="true"
+                  className="size-3 text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                />
+                {tag.label}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
 }
 
-// ── Centre column ───────────────────────────────────────────────────────────
+// ── The left rail (a sketch: exists only on this page) ──────────────────────
 
-function Centre({
-  composer,
-  showNewQuestion = false,
-  centred = false,
-}: {
-  composer: ReactNode;
-  showNewQuestion?: boolean;
-  centred?: boolean;
-}) {
-  const column = cn("w-full max-w-[720px]", centred && "mx-auto");
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-6 px-14 pt-5">
-      <div
-        className={cn("flex flex-wrap items-end gap-2.5", centred && column)}
-      >
-        <div className="min-w-0 flex-1">
-          <h2 className="text-display">Ask</h2>
-          <div className="mt-[9px] flex h-[18px] items-baseline">
-            <span className="text-body-sm truncate">
-              Second serve against Marcus
-            </span>
-          </div>
-        </div>
-        {showNewQuestion && (
-          <button type="button" className={advButton("ghost")}>
-            New question
-          </button>
-        )}
-      </div>
+const ICON_BUTTON =
+  "flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]";
 
-      <article className={cn(column, "flex flex-col gap-4")}>
-        <div className="flex flex-col gap-2">
-          <h3 className="text-data" style={{ fontWeight: 500 }}>
-            {QUESTION_TEXT}
-          </h3>
-          <ul aria-label="Tagged" className="flex flex-wrap gap-1.5">
-            {TAGS.map((tag) => (
-              <li
-                key={`${tag.kind}:${tag.id}`}
-                className="flex h-[22px] items-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] px-2 text-[12px] text-[var(--ink-700)]"
-              >
-                {tag.label}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <AskAnswer answer={ANSWER} />
-      </article>
-
-      <div className={cn(column, "mt-auto pt-3 pb-8")}>{composer}</div>
-    </div>
-  );
-}
-
-// ── The left chat list (a sketch: exists only on this page) ─────────────────
-
-function ChatList({
+function ChatRail({
+  variant,
   open,
   onToggle,
-  showLimit,
 }: {
+  variant: AskRailVariant;
   open: boolean;
   onToggle: () => void;
-  showLimit: boolean;
 }) {
   if (!open) {
     return (
       <nav
         aria-label="Earlier questions"
-        className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-[var(--border-hairline)] py-4"
+        className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-[var(--border-hairline)] py-3"
       >
-        <ChromeTooltip label="Show earlier questions" side="right">
-          <button
-            type="button"
-            aria-label="Show earlier questions"
-            onClick={onToggle}
-            className="flex size-7 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
-          >
-            <PanelLeftOpen className="size-[15px]" strokeWidth={1.5} />
-          </button>
-        </ChromeTooltip>
-        <ChromeTooltip label="New question" side="right">
-          <button
-            type="button"
-            aria-label="New question"
-            className="flex size-7 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
-          >
-            <SquarePen className="size-[15px]" strokeWidth={1.5} />
-          </button>
-        </ChromeTooltip>
+        <RailIconButton
+          label="Show earlier questions"
+          icon={PanelLeftOpen}
+          onClick={onToggle}
+        />
+        <RailIconButton label="New question" icon={SquarePen} />
       </nav>
     );
   }
@@ -394,116 +408,262 @@ function ChatList({
   return (
     <nav
       aria-label="Earlier questions"
-      className="flex w-[264px] shrink-0 flex-col border-r border-[var(--border-hairline)]"
+      className="flex w-[280px] shrink-0 flex-col border-r border-[var(--border-hairline)]"
     >
-      <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+      <div className="flex items-center gap-1.5 px-3 pt-3 pb-2">
         <button
           type="button"
-          className={cn(advButton("ghost", "sm"), "flex-1 gap-1.5")}
+          className={cn(
+            advButton("ghost", "sm"),
+            "flex-1 justify-start gap-2 px-2.5",
+          )}
         >
           <SquarePen
             aria-hidden="true"
-            className="size-3.5"
+            className="size-3.5 text-[var(--ink-500)]"
             strokeWidth={1.5}
           />
           New question
         </button>
-        <ChromeTooltip label="Hide earlier questions" side="bottom">
-          <button
-            type="button"
-            aria-label="Hide earlier questions"
-            onClick={onToggle}
-            className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
-          >
-            <PanelLeftClose className="size-[15px]" strokeWidth={1.5} />
-          </button>
-        </ChromeTooltip>
+        <RailIconButton
+          label="Hide earlier questions"
+          icon={PanelLeftClose}
+          side="bottom"
+          onClick={onToggle}
+        />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-        <ChatGroup title="This month" rows={CONVERSATIONS.slice(0, 1)} />
-        <ChatGroup title="September" rows={CONVERSATIONS.slice(1, 5)} />
-        <ChatGroup title="August" rows={CONVERSATIONS.slice(5)} />
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pt-2 pb-4 [scrollbar-color:var(--ink-200)_transparent] [scrollbar-width:thin]">
+        {variant === "3" ? (
+          <ByOpponent />
+        ) : (
+          <ByMonth twoLine={variant === "2"} />
+        )}
       </div>
 
-      {showLimit && (
-        <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] px-4 py-4">
-          <p className="text-[12px] font-medium text-[var(--ink-900)] tabular-nums">
-            {QUOTA.cap - QUOTA.used} questions left
-          </p>
-          <span
-            role="img"
-            aria-label={`${QUOTA.used} of ${QUOTA.cap} questions used`}
-            className="flex flex-wrap gap-[3px]"
-          >
-            {Array.from({ length: QUOTA.cap }, (_, index) => (
-              <span
-                key={index}
-                className={cn(
-                  "size-2 rounded-[2px]",
-                  index < QUOTA.used
-                    ? "bg-[var(--blue)]"
-                    : "shadow-[inset_0_0_0_1px_var(--ink-300)]",
-                )}
-              />
-            ))}
-          </span>
-          <p
-            aria-hidden="true"
-            className="font-mono text-[11px] text-[var(--ink-600)] tabular-nums"
-          >
-            {QUOTA.used} / {QUOTA.cap}
-            {" · Resets on the 1st"}
-          </p>
-        </div>
-      )}
+      <RailLimit />
     </nav>
   );
 }
 
-function ChatGroup({
-  title,
-  rows,
+function RailIconButton({
+  label,
+  icon: Icon,
+  side = "right",
+  onClick,
 }: {
-  title: string;
-  rows: AskConversationSummary[];
+  label: string;
+  icon: LucideIcon;
+  side?: "right" | "bottom";
+  onClick?: () => void;
 }) {
-  if (rows.length === 0) return null;
   return (
-    <section className="flex flex-col gap-0.5">
-      <h3 className="eyebrow-sm pb-1.5">{title}</h3>
-      <ul className="flex flex-col gap-0.5">
-        {rows.map((row) => {
-          const active = row.id === ACTIVE_ID;
-          return (
-            <li
-              key={row.id}
-              className={cn(
-                "group -mx-2 flex h-9 items-center rounded-[var(--radius-element)] pr-1 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
-                active && "bg-[var(--surface-subtle)]",
-              )}
-            >
-              <span
-                aria-current={active ? "page" : undefined}
-                className="flex h-full min-w-0 flex-1 items-center pr-1 pl-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
-                  {row.title}
-                </span>
-              </span>
-              <ChromeTooltip label="Delete" side="top">
-                <button
-                  type="button"
-                  aria-label={`Delete ${row.title}`}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] opacity-0 transition-opacity duration-[var(--duration-hover)] group-focus-within:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-[13px]" strokeWidth={1.5} />
-                </button>
-              </ChromeTooltip>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <ChromeTooltip label={label} side={side}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        className={ICON_BUTTON}
+      >
+        <Icon className="size-[15px]" strokeWidth={1.5} />
+      </button>
+    </ChromeTooltip>
+  );
+}
+
+function groupBy<K extends string>(
+  rows: readonly Chat[],
+  key: (row: Chat) => K,
+): [K, Chat[]][] {
+  const groups = new Map<K, Chat[]>();
+  for (const row of rows) {
+    const name = key(row);
+    groups.set(name, [...(groups.get(name) ?? []), row]);
+  }
+  return [...groups];
+}
+
+function ByMonth({ twoLine }: { twoLine: boolean }) {
+  return (
+    <>
+      {groupBy(CHATS, (row) => row.month).map(([month, rows]) => (
+        <section key={month} className="flex flex-col gap-0.5">
+          <h3 className="eyebrow-sm px-2 pb-1.5">{month}</h3>
+          <ul className="flex flex-col gap-0.5">
+            {rows.map((row) =>
+              twoLine ? (
+                <ContextRow key={row.id} row={row} />
+              ) : (
+                <LineRow key={row.id} row={row} />
+              ),
+            )}
+          </ul>
+        </section>
+      ))}
+    </>
+  );
+}
+
+function ByOpponent() {
+  const groups = groupBy(CHATS, (row) => row.opponent ?? "");
+  // Untagged questions last: they are the ones a name cannot find.
+  const ordered = [
+    ...groups.filter(([name]) => name !== ""),
+    ...groups.filter(([name]) => name === ""),
+  ];
+  const OpponentIcon = ASK_TAG_ICON.opponent;
+  return (
+    <>
+      {ordered.map(([name, rows]) => (
+        <section key={name || "all"} className="flex flex-col gap-0.5">
+          <h3 className="flex items-center gap-2 px-2 pb-1.5">
+            {name !== "" && (
+              <OpponentIcon
+                aria-hidden="true"
+                className="size-3 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+              />
+            )}
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--ink-700)]">
+              {name || "All matches"}
+            </span>
+            <span className="font-mono text-[10px] text-[var(--ink-500)] tabular-nums">
+              {rows.length}
+            </span>
+          </h3>
+          <ul className="flex flex-col gap-0.5">
+            {rows.map((row) => (
+              <LineRow key={row.id} row={row} />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
+  );
+}
+
+const ROW =
+  "group relative flex items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]";
+
+/** One line: the question, the date at the edge. On hover and focus-within
+ *  the date fades and delete takes its place, so nothing in the row moves. */
+function LineRow({ row }: { row: Chat }) {
+  const active = row.id === ACTIVE_ID;
+  return (
+    <li className={cn(ROW, "h-9", active && "bg-[var(--surface-subtle)]")}>
+      <span
+        aria-current={active ? "page" : undefined}
+        className="flex h-full min-w-0 flex-1 items-center gap-2 pr-14 pl-2"
+      >
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[12px]",
+            active
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-700)]",
+          )}
+        >
+          {row.title}
+        </span>
+      </span>
+      <RowEdge row={row} />
+    </li>
+  );
+}
+
+/** Two lines: the question, then what it was about. */
+function ContextRow({ row }: { row: Chat }) {
+  const active = row.id === ACTIVE_ID;
+  const Icon = ASK_TAG_ICON[row.kind];
+  return (
+    <li className={cn(ROW, "h-[52px]", active && "bg-[var(--surface-subtle)]")}>
+      <span
+        aria-current={active ? "page" : undefined}
+        className="flex h-full min-w-0 flex-1 flex-col justify-center gap-0.5 pr-14 pl-2"
+      >
+        <span
+          className={cn(
+            "truncate text-[12px]",
+            active
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-700)]",
+          )}
+        >
+          {row.title}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--ink-500)]">
+          <Icon
+            aria-hidden="true"
+            className="size-3 shrink-0 text-[var(--ink-400)]"
+            strokeWidth={1.5}
+          />
+          <span className="truncate">
+            {row.opponent ? `${row.opponent} · ${row.context}` : row.context}
+          </span>
+        </span>
+      </span>
+      <RowEdge row={row} />
+    </li>
+  );
+}
+
+function RowEdge({ row }: { row: Chat }) {
+  return (
+    <span className="absolute inset-y-0 right-1 flex w-12 items-center justify-end">
+      <span
+        aria-hidden="true"
+        className="pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-[var(--duration-hover)] group-focus-within:opacity-0 group-hover:opacity-0"
+      >
+        {row.date}
+      </span>
+      <span className="absolute right-0 opacity-0 transition-opacity duration-[var(--duration-hover)] group-focus-within:opacity-100 group-hover:opacity-100">
+        <ChromeTooltip label="Delete" side="top">
+          <button
+            type="button"
+            aria-label={`Delete ${row.title}`}
+            className="flex size-7 items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-card)] hover:text-[var(--danger)]"
+          >
+            <Trash2 className="size-[13px]" strokeWidth={1.5} />
+          </button>
+        </ChromeTooltip>
+      </span>
+    </span>
+  );
+}
+
+/** The month's allowance, at the foot of the rail where it is always in
+ *  reach and never between the player and an answer. */
+function RailLimit() {
+  const left = QUOTA.cap - QUOTA.used;
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] px-5 pt-3.5 pb-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] text-[var(--ink-900)] tabular-nums">
+          {left} questions left
+        </p>
+        <p
+          aria-hidden="true"
+          className="font-mono text-[10px] text-[var(--ink-500)] tabular-nums"
+        >
+          {QUOTA.used} / {QUOTA.cap}
+        </p>
+      </div>
+      <span
+        role="img"
+        aria-label={`${QUOTA.used} of ${QUOTA.cap} questions used`}
+        className="flex gap-[3px]"
+      >
+        {Array.from({ length: QUOTA.cap }, (_, index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-1 flex-1 rounded-[1px]",
+              index < QUOTA.used ? "bg-[var(--blue)]" : "bg-[var(--ink-100)]",
+            )}
+          />
+        ))}
+      </span>
+      <p className="text-[11px] text-[var(--ink-500)]">Resets on the 1st</p>
+    </div>
   );
 }
