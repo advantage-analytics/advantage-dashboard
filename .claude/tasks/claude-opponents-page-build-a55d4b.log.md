@@ -216,3 +216,15 @@ is the runner's. Newest entries at the bottom.
 3. Sparkline hover tips print the opponent's name on every point; in the "All" scope the roster player's name would say more.
 4. The sparkline's left date label prints the full date where recent rows use the short form (both drawers).
 5. A typed-school opponent has no route to a directory program — decide whether it gets a "Change" action.
+
+## T19 · `set_opponent_team` RPC: staff set an opponent's team on any of the program's matches — done
+
+**gate:** mechanical pass · completion pass (function body, definer flag, search_path and grants checked against the live database)
+
+**changed:** New `supabase/migrations/20261012071550_set_opponent_team.sql`, applied live as version `20261012071550`: `public.set_opponent_team(p_program_id, p_match_ids, p_opponent_program_id, p_opponent_school) returns setof uuid`, plpgsql, SECURITY DEFINER, `search_path = ''`. Refuses a signed-out caller (28000), anyone whose role on the program is not owner / coach / staff (42501), both-or-neither team inputs, an empty or over-200 id list, or the caller's own program as the opponent (22023), an unknown opponent program (23503), and any id that is not one of the program's matches (42501, nothing written — counted under `for update` before the update). Updates only the two columns; returns the ids changed. `revoke all from public, anon; grant execute to authenticated, service_role` — live: anon false, authenticated true, service_role true. No policy changed. New `tests/set-opponent-team-rls.spec.ts` (7 cases; staff / player / stranger / mixed-program / both inputs / anon) registered in `LIVE_DB_SPECS`. The spec SKIPS against production, so it has not executed; the function was not called on real rows. Additions beyond the criteria: null and duplicate ids are stripped before counting.
+
+**follow-ups:**
+
+1. Run the spec once against a non-production project (export the three Supabase keys for it) — the only way it executes.
+2. Consider a `program_audit_log` row from the function, as `add_self_as_program_player` writes.
+3. `contribute_opponent_player` gates on the schedule helper; the same role-vs-`events_policy` reasoning may apply there.

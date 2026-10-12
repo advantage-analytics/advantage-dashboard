@@ -271,7 +271,7 @@ ready).
 
 ## T19 · `set_opponent_team` RPC: staff set an opponent's team on any of the program's matches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T6
 - **files:** (guess) new `supabase/migrations/<live-version>_set_opponent_team.sql`, new `tests/set-opponent-team-rls.spec.ts`, `tests/fixtures/live-db-specs.ts` (register the spec); read `supabase/migrations/20261008160418_add_self_as_program_player.sql` and the live `contribute_opponent_player` definition for house style, `tests/match-share-links-rls.spec.ts` for the spec shape
