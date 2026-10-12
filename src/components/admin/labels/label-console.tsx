@@ -194,7 +194,7 @@ import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
 import {
   openFlags,
   scoreStop,
-  tiebreakServeStops,
+  slotStops,
   stepFlag,
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
@@ -1545,28 +1545,28 @@ export function LabelConsole({
     pointId: string,
     to: LabelGame,
     switchServer: boolean,
-    from: readonly LabelPoint[] = points,
-  ): Promise<LabelPoint[] | null> {
-    const before = from.find((p) => p.id === pointId);
-    if (!before || !operations) return null;
+  ): Promise<void> {
+    const before = points.find((p) => p.id === pointId);
+    if (!before || !operations) return;
     const plan = planPointMove(
       before,
       to,
-      destinationServerIn(from, pointId, to),
+      destinationServerIn(points, pointId, to),
       switchServer,
     );
     if ("error" in plan) {
       refuse(plan.error);
-      return null;
+      return;
     }
     const shotsBefore = shotSwapsOf(before.shots);
-    const moved = (rows: readonly LabelPoint[]) =>
-      applyShotSwaps(
-        replacePoint([...rows], pointId, (p) => applyPointMove(p, plan.write)),
-        plan.shots,
-      );
-    const result = await runOperation(
-      moved,
+    await runOperation(
+      (rows) =>
+        applyShotSwaps(
+          replacePoint([...rows], pointId, (p) =>
+            applyPointMove(p, plan.write),
+          ),
+          plan.shots,
+        ),
       () => operations.movePoint(pointId, to, switchServer),
       (rows, result) =>
         applyShotSwaps(
@@ -1595,8 +1595,6 @@ export function LabelConsole({
           shotsBefore,
         ),
     );
-    // The rows the next move of a run is planned from.
-    return result ? moved(from) : null;
   }
 
   /**
@@ -2046,14 +2044,14 @@ export function LabelConsole({
   const checkOpenPoint = useRef<() => void>(() => {});
   // `]` and `[`: the next and previous open flag, as the header's flag does.
   const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
-  // The marks, and the set that doesn't add up as one more stop — as the
-  // rail's header counts and steps them.
+  // The marks, the set that doesn't add up and every amber slot between the
+  // rows, as the rail's header steps them (`slotStops`).
   const openMarks = useMemo(() => {
-    // A tiebreak off its serve order is read off the rows, marks or none.
-    const serve: FlagStop[] = operable
-      ? tiebreakServeStops(tiebreakServeOrders(points))
+    // The rail's amber slots are read off the rows, marks or none.
+    const slots: FlagStop[] = operable
+      ? slotStops(points, session.adScoring)
       : [];
-    if (!liveMarks) return serve;
+    if (!liveMarks) return slots;
     const marked: FlagStop[] = openFlags(points, liveMarks);
     const stop = scoreStop(
       sessionScoreMismatch({
@@ -2065,8 +2063,16 @@ export function LabelConsole({
       }),
       points,
     );
-    return [...marked, ...(stop ? [stop] : []), ...serve];
-  }, [points, liveMarks, scores, sessionFields, session.matchScore, operable]);
+    return [...marked, ...(stop ? [stop] : []), ...slots];
+  }, [
+    points,
+    liveMarks,
+    scores,
+    sessionFields,
+    session.matchScore,
+    session.adScoring,
+    operable,
+  ]);
   useEffect(() => {
     checkOpenPoint.current = () => {
       if (!operable || confirm || !expanded || expanded.checkedAt) return;

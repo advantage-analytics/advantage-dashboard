@@ -387,16 +387,13 @@ export function LabelBlackRail({
     return "ok" in plan && plan.write.pointIds.length > 0 ? before : null;
   };
   // The tiebreaks off their serve order, by the first point that is off it.
-  const serveOrders = useMemo(
-    () => (editable ? tiebreakServeOrders(points) : []),
+  const serveOrderBefore = useMemo(
+    () =>
+      tiebreakServeBeforePoints(editable ? tiebreakServeOrders(points) : []),
     [editable, points],
   );
-  const serveOrderBefore = useMemo(
-    () => tiebreakServeBeforePoints(serveOrders),
-    [serveOrders],
-  );
   // Every slot between the rows as a stop for the header's jumps.
-  const serveStops = useMemo(
+  const slotJumpStops = useMemo(
     () => (editable ? slotStops(points, adScoring) : []),
     [editable, points, adScoring],
   );
@@ -468,7 +465,7 @@ export function LabelBlackRail({
               onGoToPoint={onGoToPoint}
               tone={tone}
               scoreStop={setScoreStop}
-              extraStops={serveStops}
+              extraStops={slotJumpStops}
               score={
                 mismatch
                   ? (close) => (
