@@ -1,5 +1,5 @@
 import { Suspense, type ReactNode } from "react";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   canManageTeamSchedule,
@@ -163,9 +163,17 @@ export default async function TeamHomePage() {
       <History resources={resources} teamName={active.name} />,
     ),
   );
-  const setupLine = isStaff
-    ? region("Getting set up", null, <Setup resources={resources} />)
-    : null;
+  // No skeleton and no retry, deliberately. The pointer trails the title's
+  // summary line, so its arrival moves nothing; for a program that finished
+  // setup it never renders, and a bar there would promise something that is
+  // not coming. A failed read is an absent pointer (`Setup` answers null) —
+  // the cards whose data failed show their own retries, and the checklist is
+  // still in the activity tray.
+  const setupLine = isStaff ? (
+    <Suspense fallback={null}>
+      <Setup resources={resources} />
+    </Suspense>
+  ) : null;
 
   return (
     <>
@@ -175,9 +183,8 @@ export default async function TeamHomePage() {
         title={region(
           "Team summary",
           <TeamTitlePending action={action} />,
-          <Title resources={resources} action={action} />,
+          <Title resources={resources} action={action} setup={setupLine} />,
         )}
-        setupLine={setupLine}
         kpis={kpis}
         dual={dual}
         movers={movers}
@@ -203,9 +210,11 @@ function awaiting(data: Awaited<Resources["analytics"]>) {
 async function Title({
   resources,
   action,
+  setup,
 }: {
   resources: Resources;
   action: ReactNode;
+  setup: ReactNode;
 }) {
   const [data, usage] = await Promise.all([
     resources.analytics,
@@ -219,6 +228,7 @@ async function Title({
       usage={usage}
       awaitingReport={awaiting(data)}
       action={action}
+      setup={setup}
     />
   );
 }
@@ -339,15 +349,21 @@ async function Footer({ resources }: { resources: Resources }) {
   );
 }
 async function Setup({ resources }: { resources: Resources }) {
-  const [roster, analytics] = await Promise.all([
+  const facts = await Promise.all([
     resources.roster,
     resources.analytics,
-  ]);
-  // Not read while the Schedule is closed: `TeamSetupLine` drops the step
-  // (`lib/schedule/availability.ts`).
-  const schedule =
-    SCHEDULE_ENABLED &&
-    (await resources.schedule).scheduleRows.some((row) => row.kind === "dual");
+    // Not read while the Schedule is closed: `TeamSetupLine` drops the step
+    // (`lib/schedule/availability.ts`).
+    SCHEDULE_ENABLED ? resources.schedule : null,
+  ]).catch((error: unknown) => {
+    unstable_rethrow(error);
+    return null;
+  });
+  if (!facts) return null;
+  const [roster, analytics, scheduleData] = facts;
+  const schedule = Boolean(
+    scheduleData?.scheduleRows.some((row) => row.kind === "dual"),
+  );
   return (
     <TeamSetupLine
       setup={{
