@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import {
+  Check,
   CornerDownRight,
   EyeOff,
   Plus,
@@ -1073,7 +1074,7 @@ function BlackEndedSuggestion({
         <BlackTextAction
           key={action.label}
           ink="plain"
-          icon={isSplit(action.label) ? Split : X}
+          icon={isSplit(action.label) ? Split : isYes(action.label) ? Check : X}
           shrinks
           small
           data-point-hint-action={hint.code}
@@ -1110,6 +1111,9 @@ function BlackEndedSuggestion({
 
 /** Whether a hint's answer is its split ("Split here"). */
 const isSplit = (label: string) => label.startsWith("Split");
+
+/** Whether a hint's answer is its yes ("Yes, remove 1"). */
+const isYes = (label: string) => label.startsWith("Yes");
 
 /** A ghost row's value: struck through, or an unstruck em dash for none. */
 function Struck({

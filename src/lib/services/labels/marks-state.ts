@@ -30,7 +30,11 @@ import {
   type LabelPoint,
   type LabelShot,
 } from "./session";
-import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
+import {
+  effectiveShotResult,
+  inServeLandingMiss,
+  type ResultReadableShot,
+} from "./shot-derived";
 import {
   addedPointBetween,
   pointEndedKey,
@@ -154,6 +158,13 @@ export function markState(
     if (slots.length > 0 && slots.every((s) => s === "dismissed")) {
       return "dismissed";
     }
+  }
+
+  // Read off the rows as they stand, so while it is there it is still true:
+  // an edit that leaves the point stopping on a missed first serve has not
+  // settled it.
+  if (mark.code === "first_serve_fault_alone") {
+    return checked ? "checked-as-is" : "open";
   }
 
   if (pointChanged(point)) return checked ? "checked" : "settled";
@@ -378,6 +389,77 @@ export function lastShotUnresolved(
     scope: "point",
     params: {},
   };
+}
+
+/**
+ * "Fault, no second serve": the point's last live stroke is a first serve
+ * stored out or in the net (by its landing, with nothing stored), so the rows stop
+ * where a point cannot — a second serve followed, or the serve was in and a
+ * rally did. A `count` mark, raised live by score-marks.ts; gone once a
+ * stroke follows it or its call changes. Never on a replayed let or a
+ * non-point, whose ending says the rows do not decide it, nor on the serve
+ * "Second serve?" already asks about.
+ */
+export function firstServeFaultAlone(
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "ending">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "first_serve_fault_alone" }> | null {
+  if (isNonPointEnding(point.ending ?? null)) return null;
+  // Cheap exit before the sort: some stroke must be a first serve.
+  if (!point.shots.some((shot) => shot.stroke === "first_serve")) return null;
+  const last = liveShotsInOrder(point, ghosts).at(-1);
+  if (!last || last.stroke !== "first_serve") return null;
+  // The result the row shows and the publish writes: the stored one. A serve
+  // stored in with a landing outside the box is "Serve in, landing outside
+  // the box" (`serveInLandingOut`), not a fault.
+  if (!isMissedResult(last.result ?? effectiveShotResult(last))) return null;
+  // After an earlier fault it is the second serve under the wrong name:
+  // "Second serve?" asks that, and retyping it makes a double fault.
+  if (secondServeAsFirst(point, ghosts)?.params.shotId === last.id) {
+    return null;
+  }
+  return {
+    code: "first_serve_fault_alone",
+    tier: "count",
+    scope: "point",
+    params: {},
+  };
+}
+
+/**
+ * "Serve in, landing outside the box": a live serve stored `in` whose own
+ * coordinates read out or net (`deriveShotResult`). The seed stores a first
+ * serve as in when a rally follows it with no second serve — it must have
+ * been — but keeps the vendor's bounce, which is often the wrong one; the
+ * publish writes such a serve as in with no landing and no placement
+ * (apply.ts) until the bounce is placed in the box. Measured 2026-10-11 over the checked points of six
+ * hand-labelled sessions: 60 such serves, the landing re-placed on 5. A
+ * quiet hint, never counted: the score is right either way. The first such
+ * serve in video order; a let is replayed and not read.
+ */
+export function serveInLandingOut(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "serve_in_landing_out" }> | null {
+  // Cheap exit before the sort: some serve must be stored in.
+  if (
+    !point.shots.some(
+      (shot) => shot.result === "in" && isServeStroke(shot.stroke),
+    )
+  ) {
+    return null;
+  }
+  for (const shot of liveShotsInOrder(point, ghosts)) {
+    const landing = inServeLandingMiss(shot);
+    if (landing === null) continue;
+    return {
+      code: "serve_in_landing_out",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: shot.id, landing },
+    };
+  }
+  return null;
 }
 
 /**

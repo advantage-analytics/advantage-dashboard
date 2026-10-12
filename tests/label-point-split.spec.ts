@@ -7,6 +7,7 @@ import {
   canSplitAtShot,
   draftSplitPoint,
   planPointSplit,
+  serveRestrokes,
   settlePointSplit,
   sharesVendorRally,
   withdrawPointSplit,
@@ -43,6 +44,101 @@ const NEW_ID = "p-split";
 
 const points = () => labelSessionFixture().points;
 const pointOf = (id: string) => points().find((p) => p.id === id)!;
+
+// ── The new point's serves ──────────────────────────────────────────────────
+
+test.describe("a split renumbers the serves that open the new point", () => {
+  const serve = (
+    id: string,
+    stroke: "first_serve" | "second_serve" | "forehand",
+    fields: { result?: "let" | "out"; status?: "kept" | "deleted" } = {},
+  ) => ({
+    id,
+    videoTime: null,
+    eventId: null,
+    status: fields.status ?? ("kept" as const),
+    stroke,
+    result: fields.result ?? null,
+  });
+
+  test("first, then second; a rally ball ends the run; a let is replayed", () => {
+    // Two serves split apart: the second is a first serve of its own point.
+    expect(serveRestrokes([serve("b", "second_serve")])).toEqual([
+      { id: "b", stroke: "first_serve" },
+    ]);
+    expect(
+      serveRestrokes([
+        serve("a", "second_serve"),
+        serve("gone", "first_serve", { status: "deleted" }),
+        serve("b", "first_serve"),
+        serve("c", "forehand"),
+        serve("d", "second_serve"),
+      ]),
+    ).toEqual([
+      { id: "a", stroke: "first_serve" },
+      { id: "b", stroke: "second_serve" },
+    ]);
+    expect(
+      serveRestrokes([
+        serve("a", "second_serve", { result: "let" }),
+        serve("b", "second_serve"),
+        serve("c", "second_serve"),
+      ]),
+    ).toEqual([
+      { id: "a", stroke: "first_serve" },
+      { id: "b", stroke: "first_serve" },
+    ]);
+    // Already in order, or opening on a rally ball: nothing.
+    expect(
+      serveRestrokes([serve("a", "first_serve"), serve("b", "second_serve")]),
+    ).toEqual([]);
+    expect(
+      serveRestrokes([serve("a", "forehand"), serve("b", "second_serve")]),
+    ).toEqual([]);
+  });
+
+  test("the console's rows take the new number, and give it back when the write fails", () => {
+    const anchor = pointOf(P1);
+    const live = anchor.shots.filter((shot) => shot.status !== "deleted");
+    const [first, second] = live;
+    const rows = points().map((point) =>
+      point.id === P1
+        ? {
+            ...point,
+            shots: point.shots.map((shot) =>
+              shot.id === first.id
+                ? { ...shot, stroke: "first_serve" as const }
+                : shot.id === second.id
+                  ? { ...shot, stroke: "second_serve" as const }
+                  : shot,
+            ),
+          }
+        : point,
+    );
+    const before = rows.find((point) => point.id === P1)!;
+    const plan = planPointSplit(rows, P1, second.id);
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.write.serves).toEqual([
+      { id: second.id, stroke: "first_serve" },
+    ]);
+    const split = applyPointSplit(
+      rows,
+      P1,
+      draftSplitPoint(plan.write.insert, NEW_ID),
+      plan.write,
+    );
+    const moved = split.find((point) => point.id === NEW_ID)!;
+    expect(moved.shots.find((shot) => shot.id === second.id)?.stroke).toBe(
+      "first_serve",
+    );
+    const back = withdrawPointSplit(split, before, NEW_ID);
+    expect(
+      back
+        .find((point) => point.id === P1)!
+        .shots.find((shot) => shot.id === second.id),
+    ).toEqual(before.shots.find((shot) => shot.id === second.id));
+  });
+});
 
 // ── The plan ───────────────────────────────────────────────────────────────
 

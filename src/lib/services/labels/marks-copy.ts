@@ -34,6 +34,8 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   second_serve_as_first: "Second serve?",
   last_landing_missing: "No landing on the last shot",
   last_shot_unresolved: "Ending can’t be read",
+  first_serve_fault_alone: "Fault, no second serve",
+  serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
@@ -155,9 +157,12 @@ export function lastCallAction(call: "in" | "out" | "net"): string {
   return call === "net" ? "Make it a net" : `Make it ${call}`;
 }
 
-/** "Point ended here"'s other answer: drop the N strokes after the out ball. */
+/**
+ * "Did the point end here?"'s yes: the ball stays (or is made) out and the N
+ * strokes after it go.
+ */
 export function removeAfterLabel(count: number): string {
-  return `Remove ${count}`;
+  return `Yes, remove ${count}`;
 }
 
 // ── The rail header's total ─────────────────────────────────────────────────
@@ -256,7 +261,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
-      return "This shot reads as out, yet one more stroke follows it. If the point ended here, remove that stroke or split it into its own point. If the call is wrong, fix the landing or dismiss this.";
+      return "This shot reads as out, yet one more stroke follows it. If the point ended here, answer yes to mark it out and remove that stroke, or split it into its own point. If the call is wrong, fix the landing or dismiss this.";
     case "last_call_overruled": {
       if (mark.params.vendorCall === "in") {
         return "The last ball is out by its landing, but the vendor called it in. Watch the bounce: if it was in, change the result.";
@@ -277,6 +282,12 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "Place the last bounce to settle Out, Net or In.";
     case "last_shot_unresolved":
       return "The last shot has no landing and no result, so the point’s ending is unknown.";
+    case "first_serve_fault_alone":
+      return "The point stops on a first serve that missed. Most often the serve was in: place its landing in the box. If it did miss, add the second serve.";
+    case "serve_in_landing_out":
+      return mark.params.landing === "net"
+        ? "The serve counts as in, but its landing is on the server’s side of the net. It publishes as in with no placement: place the bounce in the box to count where it went."
+        : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
     case "phantom_strokes_dropped": {

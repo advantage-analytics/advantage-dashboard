@@ -1247,7 +1247,12 @@ test.describe("how it ended follows the shot rows", () => {
     expect(start).toBeGreaterThan(-1);
     const body = source.slice(start, end);
     const awaitAt = body.indexOf("await settle(onSaveShot(");
-    expect(body.slice(0, awaitAt)).not.toContain("pointOfShot(rows, shotId)");
+    // Before the await the owner is read only to plan what the write will
+    // take with it (the dead balls, the ending) — applied at once, and put
+    // back by the owner as it stands, never by the id read here.
+    expect(body.slice(0, awaitAt)).toContain(
+      "const owner = pointOfShot(current, shotId);",
+    );
     const updater = body.slice(body.indexOf("setPoints((current) =>", awaitAt));
     expect(updater).toContain("const owner = pointOfShot(current, shotId);");
   });

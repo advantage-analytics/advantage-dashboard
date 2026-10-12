@@ -37,6 +37,7 @@ import {
   syncEndingAfterShotChange,
   type LabelPointEndingSynced,
 } from "./ending-session";
+import { chunksOf } from "./chunks";
 import { LABEL_SHOT_COLUMNS, toLabelShot, type LabelShotRow } from "./rows";
 import {
   applyShotsRemoved,
@@ -176,16 +177,29 @@ export async function writeShotSwaps(
     else groups.set(key, { values, was, ids: [id] });
   }
   for (const group of groups.values()) {
-    const { data, error } = await supabase
-      .from("label_shots")
-      .update(group.values)
-      .in("id", group.ids)
-      .eq("status", group.was)
-      .select("id");
-    if (error) return `Could not ${what}: ${error.message}`;
-    if (!data || data.length !== group.ids.length) return racedMessage("row");
+    for (const ids of idChunks(group.ids)) {
+      const { data, error } = await supabase
+        .from("label_shots")
+        .update(group.values)
+        .in("id", ids)
+        .eq("status", group.was)
+        .select("id");
+      if (error) return `Could not ${what}: ${error.message}`;
+      if (!data || data.length !== ids.length) return racedMessage("row");
+    }
   }
   return null;
+}
+
+/**
+ * `ids` in runs short enough for one request. An `.in()` filter travels in
+ * the URL, a uuid is 37 characters of it, and a long cascade flips every
+ * stroke of every point it moves: a few hundred ids is past what the gateway
+ * takes, and the write is refused after the points before it have landed.
+ */
+const ID_CHUNK = 100;
+export function idChunks(ids: readonly string[]): string[][] {
+  return chunksOf(ids, ID_CHUNK);
 }
 
 /** `points` each with its strokes from `shots`, matched on `labelPointId`. */
