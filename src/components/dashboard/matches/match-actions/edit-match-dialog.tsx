@@ -67,7 +67,14 @@ import {
   firstInvalidSet,
   type ScoreValue,
 } from "./edit-match-score";
-import { EditMatchPlayers, type PlayerFields } from "./edit-match-players";
+import {
+  EditMatchPlayers,
+  type OpponentTeamValue,
+  type PlayerFields,
+} from "./edit-match-players";
+import { opponentTeamColumns } from "@/components/dashboard/matches/new-match-wizard/opponent-team";
+import { CRESTS_BUCKET } from "@/lib/data/programs-server";
+import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { workspaceLabel } from "@/components/dashboard/matches/new-match-wizard/RosterMenu";
 import {
@@ -106,6 +113,55 @@ interface RawMatch {
   program_id: string | null;
   event_entry_id: string | null;
   source_provider: string | null;
+  /** Their team: a directory program OR a school as typed, never both. */
+  opponent_program_id: string | null;
+  opponent_school: string | null;
+  /** The program row behind `opponent_program_id`, where the viewer can read it. */
+  opponent_program: {
+    id: string;
+    school_name: string;
+    school_abbrev: string | null;
+    crest_path: string | null;
+    conference: string | null;
+    division: string | null;
+    team: string | null;
+  } | null;
+}
+
+/** The opponent's team as the field holds it, without its change handler. */
+type OpponentTeamState = Omit<OpponentTeamValue, "onChange">;
+
+const NO_OPPONENT_TEAM: OpponentTeamState = {
+  program: null,
+  school: null,
+  source: null,
+};
+
+/**
+ * The match's stored team, as the field reads it. The crest bucket is public,
+ * so its URL is a function of the key — the same rule `crestUrl()` follows.
+ */
+function storedOpponentTeam(m: RawMatch): OpponentTeamState {
+  const row = m.opponent_program;
+  if (row) {
+    return {
+      program: {
+        id: row.id,
+        schoolName: row.school_name,
+        shortCode: row.school_abbrev,
+        crestUrl: row.crest_path
+          ? createClient()
+              .storage.from(CRESTS_BUCKET)
+              .getPublicUrl(row.crest_path).data.publicUrl
+          : null,
+        conference: row.conference,
+        division: row.division,
+      },
+      school: null,
+      source: null,
+    };
+  }
+  return { ...NO_OPPONENT_TEAM, school: m.opponent_school?.trim() || null };
 }
 
 interface EventContext {
@@ -281,6 +337,15 @@ export function EditMatchDialog({
     null,
   );
 
+  /**
+   * Their team, and whether this dialog changed it. Save sends the two team
+   * columns only when it did: a row whose program this viewer cannot read
+   * shows no team here, and must not lose it to a save that never touched it.
+   */
+  const [opponentTeam, setOpponentTeam] =
+    useState<OpponentTeamState>(NO_OPPONENT_TEAM);
+  const [opponentTeamTouched, setOpponentTeamTouched] = useState(false);
+
   /** A line chosen but not saved (Add to an event, states 5–7). */
   const [pendingLine, setPendingLine] = useState<AttachLine | null>(null);
   const [picking, setPicking] = useState(false);
@@ -367,6 +432,8 @@ export function EditMatchDialog({
         );
         setPlayer({ name: m.player1_name, ...p.next });
         setOpponent({ name: m.player2_name, ...o.next });
+        setOpponentTeam(storedOpponentTeam(m));
+        setOpponentTeamTouched(false);
         setPlayerPrefill(
           p.used ? { ...suggestions!.playerStyle!, ...p.next } : null,
         );
@@ -663,6 +730,21 @@ export function EditMatchDialog({
         // The attach sets it too; sent so the round is judged as a tournament's.
         match_type: "Tournament",
       });
+    }
+    // Their team goes only when it was changed here, and then as BOTH
+    // columns — one value, the other null — so the either/or CHECK never
+    // meets a leftover on the row.
+    if (opponentTeamTouched) {
+      const team = opponentTeamColumns({
+        opponentTeamProgram: opponentTeam.program,
+        opponentTeamSchool: opponentTeam.school ?? undefined,
+      });
+      if (
+        team.opponent_program_id !== (match.opponent_program_id ?? null) ||
+        team.opponent_school !== (match.opponent_school?.trim() || null)
+      ) {
+        Object.assign(body, team);
+      }
     }
     if (formatEditable) {
       body.format = {
@@ -1079,6 +1161,17 @@ export function EditMatchDialog({
             playerChanged={playerChanged}
             playerNote={styleNote(player, playerPrefill)}
             opponentNote={styleNote(opponent, opponentPrefill)}
+            opponentTeam={
+              match.program_id && workspace.active.kind === "team"
+                ? {
+                    ...opponentTeam,
+                    onChange: (next) => {
+                      setOpponentTeam(next);
+                      setOpponentTeamTouched(true);
+                    },
+                  }
+                : null
+            }
             rosterLabel={
               inMatchProgram
                 ? `Roster · ${workspaceLabel(workspace.active)}`

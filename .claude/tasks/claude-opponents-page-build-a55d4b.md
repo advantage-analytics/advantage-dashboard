@@ -158,7 +158,7 @@ ready).
 
 ## T11 · Edit-match dialog: the same team line in the opponent row
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T10
 - **files:** (guess) `src/components/dashboard/matches/match-actions/edit-match-players.tsx` (opponent row ~330–360), `edit-match-dialog.tsx` (RawMatch ~90–125, load ~330–380, save body ~636–690), `src/lib/matches/patch-match.ts` (TEXT_FIELDS ~142, normalizer), `src/app/api/matches/[matchId]/route.ts` (`MATCH_COLUMNS` ~45, PATCH ~331–460)

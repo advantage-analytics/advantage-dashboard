@@ -152,3 +152,18 @@ is the runner's. Newest entries at the bottom.
 5. `OpponentTeamProgram` / `OpponentTeamSource` could move out of the wizard's `types.ts` now that T11 and T15 reuse the field.
 6. An offline spec for the field's three states.
 7. The hand/backhand provenance line can sit directly above "From your last match against {name}" — check on screen.
+
+## T11 · Edit-match dialog: the same team line in the opponent row — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: loading ✓ (the dialog's existing load state covers the new fields), empty ✓ ("Add their team" link), error ✓ (team-key refusals reach the dialog's error line)
+
+**changed:** `GET /api/matches/[matchId]` selects `opponent_program_id`, `opponent_school` and the `opponent_program:programs!matches_opponent_program_id_fkey(...)` embed (the FK hint is required: `matches` has two foreign keys to `programs`). `normalizeMatchPatch` accepts the two keys (uuid or null; text trimmed, ≤120, or null), refuses both non-null with 400 `opponent_team_exclusive`, and nulls the other key when only one is set. The PATCH route checks the program exists before writing (422 `opponent_program_not_found`); ownership filters unchanged. `EditMatchPlayers` mounts `OpponentTeamField` in its own row under the opponent, for a team match in a team workspace only; the dialog sends the pair only when the field was touched and differs from the stored row. New `tests/patch-match-opponent-team.spec.ts` (8 tests) and five route cases in `tests/match-route-guards.spec.ts`; `openapi/advantage-api.yaml` updated; `CRESTS_BUCKET` exported from `programs-server.ts`. Route not converted to `errorResponse()` (that helper cannot carry `field`). Not opened in a browser.
+
+**follow-ups:**
+
+1. Hand check in a team workspace: Matches → row menu → Edit match (no team, search, pick, as typed, save, reopen).
+2. Decide whether a match on a dual line should read its team back locked and be refused server-side.
+3. A team pointing at a program the viewer cannot read shows "Add their team" — a server-resolved name would let it read back.
+4. Field-level errors for the team keys land in the dialog's general error line, not under the field.
+5. Convert this route to `errorResponse()` once that helper can carry `field` and non-video codes.
+6. One constant for the crest bucket name (`programs-server.ts` and `teams-server.ts`).

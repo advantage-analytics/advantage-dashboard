@@ -264,7 +264,7 @@ export async function searchPrograms(
  * `teams-server.ts`, repeated because this module is imported by client
  * components for its labels and that one opens the cookie client.
  */
-const CRESTS_BUCKET = "program-crests";
+export const CRESTS_BUCKET = "program-crests";
 
 /**
  * Add `id`, `schoolAbbrev` and `crestUrl` to a page of search results.

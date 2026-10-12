@@ -13,10 +13,29 @@ import {
   ROSTER_MENU_CLS,
   RosterMenuList,
 } from "@/components/dashboard/matches/new-match-wizard/RosterMenu";
+import {
+  OpponentTeamField,
+  type OpponentTeamChange,
+} from "@/components/dashboard/matches/opponent-team-field";
+import type {
+  OpponentTeamProgram,
+  OpponentTeamSource,
+} from "@/components/dashboard/matches/new-match-wizard/types";
 import { cn } from "@/lib/utils";
 import { BACKHAND_OPTIONS, HAND_OPTIONS } from "@/lib/matches/hand-options";
 import type { Backhand, Hand } from "@/lib/matches/patch-match";
 import type { EditRosterPlayer } from "@/lib/matches/edit-match-suggestions";
+
+/**
+ * The opponent's team as the dialog holds it — a directory program or a
+ * school as typed — and how a pick is handed back.
+ */
+export interface OpponentTeamValue {
+  program: OpponentTeamProgram | null;
+  school: string | null;
+  source: OpponentTeamSource | null;
+  onChange: (next: OpponentTeamChange) => void;
+}
 
 export interface PlayerFields {
   name: string;
@@ -160,6 +179,10 @@ function RosterPicker({
  * player it was analyzed for, so both read back instead.
  * Hands the dialog filled in from something already known carry a grey note
  * saying where from, until either select is changed.
+ *
+ * A team match in a team workspace also says which program the opponent plays
+ * for, as one line under their name (`OpponentTeamField`) — never a fourth
+ * column. A personal match has no such line.
  */
 export function EditMatchPlayers({
   player,
@@ -177,6 +200,7 @@ export function EditMatchPlayers({
   playerChanged,
   playerNote,
   opponentNote,
+  opponentTeam,
   rosterLabel,
   viewerId,
   myPlayerId,
@@ -204,6 +228,11 @@ export function EditMatchPlayers({
   /** "Right, two-handed · from their last match", while prefilled. */
   playerNote: string | null;
   opponentNote: string | null;
+  /**
+   * "Their team", under the opponent's name. Null where it is not asked: a
+   * personal match, or any match outside a team workspace.
+   */
+  opponentTeam?: OpponentTeamValue | null;
   /** The roster menu's section label — "Roster · Cardinal · M". */
   rosterLabel: string;
   viewerId: string;
@@ -355,6 +384,16 @@ export function EditMatchPlayers({
             {errors.opponent}
           </span>
           {note(opponentNote, "col-span-2 mt-0")}
+        </div>
+      )}
+      {opponentTeam && (
+        <div className="col-span-3 -mt-1.5 flex min-w-0" inert={disabled}>
+          <OpponentTeamField
+            program={opponentTeam.program}
+            school={opponentTeam.school}
+            source={opponentTeam.source}
+            onChange={opponentTeam.onChange}
+          />
         </div>
       )}
     </section>
