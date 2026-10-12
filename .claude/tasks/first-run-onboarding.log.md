@@ -190,3 +190,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The link's classes duplicate `QuietAction`'s — share them if either changes.
+
+## T20 · Add workspace_hint_done_at and activity_hint_done_at with column grant; extend seen-state plumbing to hints — done
+
+**gate:** mechanical pass (typecheck clean, lint 0 errors, format clean; full suite 5704 passed, 339 failed — all "Executable doesn't exist", environmental per the standing ruling); completion `VERDICT: pass`.
+**changed:** Migration `20261012224442_users_onboarding_hints.sql` (two `users` columns + column-scoped `grant update` to `authenticated`), applied live via the Supabase MCP and verified (`authenticated` UPDATE on both, `anon` nothing). `HintId`/`SeenId` and two `TOUR_COLUMN` entries in `tours.ts`; `markTourDone`/`getTourDoneAt` take `SeenId`; `getWorkspaceContext` selects the two columns into `Viewer.workspaceHintDoneAt`/`activityHintDoneAt`; Viewer fixtures updated.
+**follow-ups:**
+
+1. `getWorkspaceContext` ignores a failed `users` select, so a column added in code before its migration silently redirects every dashboard request to `/onboarding`. Log the error (as `listProgramWorkspaces` does). Any non-prod DB must apply `20261012224442` before this code runs.

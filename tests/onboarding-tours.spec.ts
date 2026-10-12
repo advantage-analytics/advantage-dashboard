@@ -64,10 +64,12 @@ test.describe("TOURS", () => {
     }
   });
 
-  test("each tour stamps its own users column", () => {
+  test("each tour and hint stamps its own users column", () => {
     expect(TOUR_COLUMN).toEqual({
       sample: "sample_tour_done_at",
       "first-report": "first_report_tour_done_at",
+      "workspace-switcher": "workspace_hint_done_at",
+      "activity-tray": "activity_hint_done_at",
     });
   });
 

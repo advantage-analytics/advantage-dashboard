@@ -106,6 +106,8 @@ const WORKSPACE: WorkspaceContextValue = {
     memberSince: null,
     onboardedAt: null,
     recordingSource: null,
+    workspaceHintDoneAt: null,
+    activityHintDoneAt: null,
   },
 };
 

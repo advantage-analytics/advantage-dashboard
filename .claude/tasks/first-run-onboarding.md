@@ -269,7 +269,7 @@ ready).
 
 ## T20 · Add workspace_hint_done_at and activity_hint_done_at with column grant; extend seen-state plumbing to hints
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<YYYYMMDDHHMMSS>_users_onboarding_hints.sql (new), src/lib/onboarding/tours.ts, src/app/dashboard/onboarding-actions.ts, src/lib/data/tour-done-server.ts, src/lib/workspace/active-workspace-server.ts, src/lib/workspace/types.ts, tests/onboarding-tours.spec.ts — guess
 - **done when:**

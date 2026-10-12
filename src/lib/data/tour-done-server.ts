@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { TOUR_COLUMN, type TourId } from "@/lib/onboarding/tours";
+import { TOUR_COLUMN, type SeenId } from "@/lib/onboarding/tours";
 
 /**
- * When the viewer finished (or skipped) a first-run report tour — the
+ * When the viewer finished (or skipped) a first-run report tour or hint — the
  * `users.<tour>_done_at` column `markTourDone` stamps, named through the same
  * `TOUR_COLUMN` map so the read and the write can never disagree.
  *
@@ -22,7 +22,7 @@ import { TOUR_COLUMN, type TourId } from "@/lib/onboarding/tours";
  */
 export async function getTourDoneAt(
   viewerId: string,
-  tour: TourId,
+  tour: SeenId,
 ): Promise<string | null | undefined> {
   const column = TOUR_COLUMN[tour];
   try {

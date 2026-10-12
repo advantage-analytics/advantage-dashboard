@@ -14,6 +14,16 @@ import type { WorkspaceKind } from "@/lib/workspace/types";
 export type TourId = "sample" | "first-report";
 
 /**
+ * The one-card hints the shell shows once: the workspace switcher in the
+ * sidebar and the activity tray in the header. Not tours — one card, no
+ * steps — but they stamp a `users` column exactly as a tour does.
+ */
+export type HintId = "workspace-switcher" | "activity-tray";
+
+/** Anything whose seen-state is a `users` column: a tour or a hint. */
+export type SeenId = TourId | HintId;
+
+/**
  * The `data-tour="<id>"` attribute values a report renders. Adding these
  * attributes is the only change the tour makes to existing report components.
  */
@@ -45,16 +55,19 @@ export const TOUR_TARGET_VIEW: Record<TourTarget, TourTab | null> = {
 };
 
 /**
- * `users` column each tour stamps when it is finished or skipped. Shared by
- * the `markTourDone` action (the write) and `getTourDoneAt` (the read), so
- * the two can never name different columns. Exported from here, a plain
- * module, because the action file is `"use server"` and may export only
- * async functions.
+ * `users` column each tour or hint stamps when it is finished or skipped.
+ * Shared by the `markTourDone` action (the write) and `getTourDoneAt` (the
+ * read), so the two can never name different columns. Exported from here, a
+ * plain module, because the action file is `"use server"` and may export
+ * only async functions. The hint columns are also read by
+ * `getWorkspaceContext`, which the shell already calls once per request.
  */
 export const TOUR_COLUMN = {
   sample: "sample_tour_done_at",
   "first-report": "first_report_tour_done_at",
-} as const satisfies Record<TourId, string>;
+  "workspace-switcher": "workspace_hint_done_at",
+  "activity-tray": "activity_hint_done_at",
+} as const satisfies Record<SeenId, string>;
 
 export interface TourStep {
   target: TourTarget;

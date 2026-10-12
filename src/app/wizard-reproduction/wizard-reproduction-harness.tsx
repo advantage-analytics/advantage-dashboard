@@ -64,6 +64,8 @@ const workspace: WorkspaceContextValue = {
     memberSince: null,
     onboardedAt: "2026-09-10T00:00:00.000Z",
     recordingSource: null,
+    workspaceHintDoneAt: null,
+    activityHintDoneAt: null,
   },
 };
 

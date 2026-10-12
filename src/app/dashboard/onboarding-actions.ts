@@ -1,11 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { TOUR_COLUMN, type TourId } from "@/lib/onboarding/tours";
+import { TOUR_COLUMN, type SeenId } from "@/lib/onboarding/tours";
 
 /**
  * Record that the signed-in player has finished (or skipped) a first-run
- * report tour. Design: `work/first-run-onboarding/02_design/output/design.md`
+ * report tour or dismissed a shell hint. Design:
+ * `work/first-run-onboarding/02_design/output/design.md`
  * §6 — either is set on Done OR Skip, and no partial step index is kept.
  *
  * Writes with the cookie client, so `users`' own-row ALL policy
@@ -35,9 +36,9 @@ export interface MarkTourDoneResult {
     | "unexpected";
 }
 
-export async function markTourDone(tour: TourId): Promise<MarkTourDoneResult> {
+export async function markTourDone(tour: SeenId): Promise<MarkTourDoneResult> {
   // A server action's argument is whatever the network sent, so the type is
-  // re-checked here against the two columns that exist.
+  // re-checked here against the columns that exist.
   const column =
     typeof tour === "string" && Object.hasOwn(TOUR_COLUMN, tour)
       ? TOUR_COLUMN[tour]
