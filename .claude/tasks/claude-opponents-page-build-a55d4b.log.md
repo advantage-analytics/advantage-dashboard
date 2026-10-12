@@ -110,3 +110,19 @@ is the runner's. Newest entries at the bottom.
 2. Make `finishClose` stand down unless `closing` is true (a stray `onClosed` can leave a selected row with no drawer).
 3. Decide whether `step` from a selection not in `ids` should be a no-op in both directions (today ↓ lands on the first row, ↑ does nothing).
 4. `use-row-selection.ts`'s DOM side (key-guard selectors, URL mirror, focus return) has no direct test.
+
+## T9 · Wizard data: team keys, persistence, history prefill, richer directory search — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: no loading, empty or error state touched (`DetailsStepContent.tsx` changed in callbacks and a prop type only, no markup)
+
+**changed:** New `new-match-wizard/opponent-team.ts` (pure: `opponentTeamColumns` for inserts, `opponentTeamUpdate` for updates, `opponentTeamFromHistory`) and `tests/opponent-team.spec.ts` (23 tests). `formData` gains `opponentTeamProgram` / `opponentTeamSchool` / `opponentTeamSource`, reset with Start over and on a line swap; the line's own `opponentProgramKey` / `opponentSchool` are only read. Save: inserts write both columns (explicit nulls when empty); a reuse-update writes both when the field is set or a dual line's program resolves, and NEITHER when the field is empty — amended after the first handback so a wizard re-save cannot wipe a team set later from the edit dialog or the drawer (differs from the criterion's literal "writes the same two keys"; reviewer accepted). `opponentsPlayed` rows carry the most recent match's team via the `matches_opponent_program_id_fkey` embed; picking or typing a known opponent prefills with source "history". `searchPrograms` and `/api/programs/search` return `id`, `schoolAbbrev`, `crestUrl` through a follow-up `programs` read (the `search_programs` RPC was not widened — that needs DDL and resets its anon grant). Guardrail-protected inputs untouched. The FK embed has not been exercised against live PostgREST.
+
+**follow-ups:**
+
+1. A dual line with a hand-typed school and no program key saves no team — `line.opponentSchool` could fall back into `opponent_school`.
+2. "Most recent match" is literal: a newer match with no team makes history forget an older one.
+3. The line fallback does not exclude the workspace's own program id (`program_event_entries` has such a CHECK, `matches` does not).
+4. `tests/fixtures/local-supabase/live-baseline.sql` lacks the two new `matches` columns.
+5. `tests/upload-start-over.spec.ts`'s `RESET_FIELDS` could list the three new keys.
+6. Fold `id` / abbrev / crest into `search_programs` in a later migration to drop the second read.
+7. Confirm the `opponent_program:programs!matches_opponent_program_id_fkey` embed on a real request (eyes-on, team wizard).

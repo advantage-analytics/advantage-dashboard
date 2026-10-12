@@ -84,7 +84,9 @@ import {
   type LineOffer,
   type MatchDraft,
   type IdentityMatchStatus,
+  type OpponentTeamProgram,
 } from "./types";
+import { opponentTeamIsEmpty, opponentTeamUpdate } from "./opponent-team";
 import {
   deleteMatchDraft,
   deleteMatchDraftsForMatch,
@@ -186,6 +188,11 @@ const START_OVER_FIELDS = [
   "opponentStyleSource",
   "opponentProgramKey",
   "opponentSchool",
+  // The "their team" field — an answer about THIS opponent, so it goes with
+  // them. Distinct from the line's pair above (`types.ts`).
+  "opponentTeamProgram",
+  "opponentTeamSchool",
+  "opponentTeamSource",
   "playerScores",
   "opponentScores",
   "playerTiebreaks",
@@ -223,6 +230,11 @@ const LINE_SWAP_FIELDS = [
   "opponentBackhand",
   "opponentStyleSource",
   "opponentPlayerId",
+  // Line A's opponent's team. Line B names a different opponent, and an empty
+  // field is what lets the save fall back to line B's own program.
+  "opponentTeamProgram",
+  "opponentTeamSchool",
+  "opponentTeamSource",
   "playerTiebreaks",
   "opponentTiebreaks",
 ] as const satisfies readonly (keyof MatchFormData)[];
@@ -644,7 +656,7 @@ export interface UseUploadMatchWizardReturn {
   // Form handling
   handleInputChange: (
     field: keyof MatchFormData,
-    value: string | number | boolean | null | undefined,
+    value: string | number | boolean | OpponentTeamProgram | null | undefined,
   ) => void;
   /**
    * Applies a format change after DetailsStepContent has confirmed any score
@@ -2982,7 +2994,7 @@ export function useUploadMatchWizard({
   const handleInputChange = useCallback(
     (
       field: keyof MatchFormData,
-      value: string | number | boolean | null | undefined,
+      value: string | number | boolean | OpponentTeamProgram | null | undefined,
     ) => {
       // Answering the top-player question re-anchors the baseline the trim
       // step's clear is measured from, so the distance is always "how far has
@@ -3384,6 +3396,9 @@ export function useUploadMatchWizard({
         // A row picked from the opponent's roster already IS an identity, and it
         // travelled with the click. Only a typed name goes through the RPC.
         let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
+        // The lookup below, kept so the team fallback further down does not
+        // repeat it for the same key.
+        let resolvedProgram: { key: string; id: string } | null = null;
         if (
           !opponentPlayerId &&
           activeWorkspace.kind === "team" &&
@@ -3398,6 +3413,12 @@ export function useUploadMatchWizard({
 
             const opponentProgramId =
               (program as { id: string } | null)?.id ?? null;
+            if (opponentProgramId) {
+              resolvedProgram = {
+                key: formData.opponentProgramKey,
+                id: opponentProgramId,
+              };
+            }
             const parts = formData.opponentName.trim().split(/\s+/);
 
             // Both names or nothing. `contribute_opponent_player` requires them,
@@ -3424,6 +3445,33 @@ export function useUploadMatchWizard({
           }
         }
 
+        // Their team, from the line. A match filed under a DUAL line is
+        // against that dual's program, so when the "their team" field was left
+        // empty the line answers for it — the same `program_key` → id lookup
+        // as above, reused when it already ran for this key. Read off the line
+        // itself, never off `formData.opponentProgramKey`. Best-effort like the
+        // identity: a failed read costs the match its team, not the upload.
+        const lineProgramKey =
+          line?.eventKind === "dual" ? line.opponentProgramKey : null;
+        let lineOpponentProgramId: string | null = null;
+        if (lineProgramKey && opponentTeamIsEmpty(formData)) {
+          if (resolvedProgram?.key === lineProgramKey) {
+            lineOpponentProgramId = resolvedProgram.id;
+          } else {
+            try {
+              const { data: program } = await supabase
+                .from("programs")
+                .select("id")
+                .eq("program_key", lineProgramKey)
+                .maybeSingle();
+              lineOpponentProgramId =
+                (program as { id: string } | null)?.id ?? null;
+            } catch {
+              // See above — the team is an enrichment, never a precondition.
+            }
+          }
+        }
+
         const metadata: MatchMetadata = {
           userId,
           sourceProvider: selectedProvider,
@@ -3438,6 +3486,7 @@ export function useUploadMatchWizard({
           programId:
             activeWorkspace.kind === "team" ? activeWorkspace.id : null,
           opponentPlayerId,
+          lineOpponentProgramId,
         };
 
         const stopped = undecided && isStoppedResult(formData.result);
@@ -3523,6 +3572,11 @@ export function useUploadMatchWizard({
                 ...(opponentPlayerId
                   ? { opponent_player_id: opponentPlayerId }
                   : {}),
+                // Their team: both keys together when this pass has one to
+                // write (the field's, or the dual line's program), neither when
+                // it has none — an empty field must not clear a team another
+                // path set on this row (`opponentTeamUpdate`).
+                ...opponentTeamUpdate(formData, lineOpponentProgramId),
                 // Required answers on the details step, so they are written
                 // here as on an insert — this branch used to drop all four,
                 // leaving a filled line's match with no style at all.

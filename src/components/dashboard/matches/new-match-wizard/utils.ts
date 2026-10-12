@@ -9,6 +9,7 @@ import {
   UploadedFile,
   withoutVideoCheck,
 } from "./types";
+import { opponentTeamColumns } from "./opponent-team";
 import { lastEnteredSet, retiredWinner } from "./score-state";
 import type { StopReason } from "./score-state";
 
@@ -125,6 +126,12 @@ export interface MatchMetadata {
    * 20260823090000 carries the long version.
    */
   opponentPlayerId?: string | null;
+  /**
+   * The program behind the dual line this match is filed under, already
+   * resolved from the line's `opponentProgramKey`. Used only when the "their
+   * team" field is empty — see `opponentTeamColumns`.
+   */
+  lineOpponentProgramId?: string | null;
 }
 
 /**
@@ -184,6 +191,9 @@ export function buildMatchData(
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
     opponent_player_id: metadata.opponentPlayerId ?? null,
+    // Always both keys, null included: an upload that named no team writes
+    // null/null, so the row's shape never depends on the answer.
+    ...opponentTeamColumns(formData, metadata.lineOpponentProgramId),
     program_id: metadata.programId ?? null,
     tournament_name: formData.eventName || null,
     round: formData.round || null,

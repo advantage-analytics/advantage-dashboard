@@ -129,7 +129,7 @@ ready).
 
 ## T9 · Wizard data: team keys, persistence, history prefill, richer directory search
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess) `src/components/dashboard/matches/new-match-wizard/types.ts` (~65–72, ~178–222), `useUploadMatchWizard.ts` (persist keys ~187; save ~3380–3560), `utils.ts` (`buildMatchData` ~170–235), `src/lib/wizard/actions.ts` (`opponentsPlayed` ~317–360), `src/lib/data/programs-server.ts` (`ProgramDirectoryRow`, `searchPrograms`), `src/app/api/programs/search/route.ts`; read `docs/ui-revamp-guardrails.md` §2–§4 first

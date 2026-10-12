@@ -98,7 +98,14 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { rankLineOffers } from "./offer-match";
-import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
+import type {
+  EventPreset,
+  FormData,
+  LineOffer,
+  OpponentTeamProgram,
+  ValueSource,
+} from "./types";
+import { opponentTeamFromHistory } from "./opponent-team";
 import {
   floatMenuCls,
   floatMenuDividerCls,
@@ -139,7 +146,7 @@ export interface DetailsStepContentProps {
   formData: FormData;
   onInputChange: (
     field: keyof FormData,
-    value: string | number | boolean | null | undefined,
+    value: string | number | boolean | OpponentTeamProgram | null | undefined,
   ) => void;
   /** Called only after a format reduction's score-loss choice is resolved. */
   onFormatChange: (bestOf: string) => void;
@@ -1236,11 +1243,39 @@ function DetailsStepContentImpl({
   const playerHand = formData.playerHand as Hand | undefined;
   const playerBackhand = formData.playerBackhand as Backhand | undefined;
 
+  // Their team, as the last match against this opponent recorded it — the
+  // field's three keys with source "history", or cleared when the team on the
+  // form was the PREVIOUS opponent's remembered one (`opponentTeamFromHistory`).
+  // Never the line's `opponentProgramKey` / `opponentSchool`.
+  const currentTeam = useMemo(
+    () => ({
+      opponentTeamProgram: formData.opponentTeamProgram,
+      opponentTeamSchool: formData.opponentTeamSchool,
+      opponentTeamSource: formData.opponentTeamSource,
+    }),
+    [
+      formData.opponentTeamProgram,
+      formData.opponentTeamSchool,
+      formData.opponentTeamSource,
+    ],
+  );
+  const rememberTeam = useCallback(
+    (seen: OpponentPlayed | undefined) => {
+      const team = opponentTeamFromHistory(currentTeam, seen);
+      if (!team) return;
+      onInputChange("opponentTeamProgram", team.opponentTeamProgram);
+      onInputChange("opponentTeamSchool", team.opponentTeamSchool);
+      onInputChange("opponentTeamSource", team.opponentTeamSource);
+    },
+    [currentTeam, onInputChange],
+  );
+
   const pickPlayed = useCallback(
     (row: OpponentPlayed) => {
       onInputChange("opponentName", row.name);
       onInputChange("opponentSource", "history");
       onInputChange("opponentPlayerId", row.playerId);
+      rememberTeam(row);
       const hand =
         row.hand === "right" || row.hand === "left" ? row.hand : undefined;
       const backhand =
@@ -1256,7 +1291,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange],
+    [onInputChange, rememberTeam],
   );
 
   const pickRoster = useCallback(
@@ -1268,6 +1303,7 @@ function DetailsStepContentImpl({
       const seen = played.find(
         (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
       );
+      rememberTeam(seen);
       const hand =
         seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
       const backhand =
@@ -1283,7 +1319,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange, played],
+    [onInputChange, played, rememberTeam],
   );
 
   const createOpponent = useCallback(
@@ -1291,6 +1327,14 @@ function DetailsStepContentImpl({
       onInputChange("opponentName", name);
       onInputChange("opponentSource", "new");
       onInputChange("opponentPlayerId", null);
+      // A typed name that IS someone already played — the list had not loaded
+      // or the row was not the one clicked — still gets their remembered team.
+      const typedKey = normalizedPersonName(name);
+      rememberTeam(
+        typedKey
+          ? played.find((p) => normalizedPersonName(p.name) === typedKey)
+          : undefined,
+      );
       onInputChange("opponentHand", undefined);
       onInputChange("opponentBackhand", undefined);
       onInputChange("opponentStyleSource", undefined);
@@ -1309,7 +1353,15 @@ function DetailsStepContentImpl({
         if (result.saved) setSavedSchool(lineSchool);
       }
     },
-    [inDual, lineProgramKey, lineSchool, onInputChange, admin],
+    [
+      inDual,
+      lineProgramKey,
+      lineSchool,
+      onInputChange,
+      admin,
+      played,
+      rememberTeam,
+    ],
   );
 
   const saveProfile = async () => {

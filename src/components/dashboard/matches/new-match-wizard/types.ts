@@ -25,6 +25,28 @@ export type Step = "provider" | "file" | "trim" | "match";
 export type ValueSource =
   "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
 
+/**
+ * A program as the wizard's "their team" field carries it: the id the match
+ * row points at, plus the published facts a result or read-back row draws —
+ * so neither a pick nor a resumed draft needs a second read.
+ */
+export interface OpponentTeamProgram {
+  id: string;
+  schoolName: string;
+  /** `programs.school_abbrev` — "UCLA". Null where the directory has none. */
+  shortCode: string | null;
+  crestUrl: string | null;
+  conference: string | null;
+  division: string | null;
+}
+
+/**
+ * Where the "their team" answer came from: the scheduled `line` the match is
+ * filed under, a directory row that was `picked`, a school that was `typed`,
+ * or the `history` of matches against the same opponent.
+ */
+export type OpponentTeamSource = "line" | "picked" | "typed" | "history";
+
 /** Form data structure for match details */
 export interface FormData {
   eventName: string;
@@ -58,6 +80,19 @@ export interface FormData {
   playerName: string;
   opponentName: string;
   /**
+   * TWO pairs on this form describe "the other side's school", and they are
+   * not interchangeable:
+   *
+   * - `opponentProgramKey` / `opponentSchool` (directly below) are the
+   *   scheduled dual LINE's. A preset or an accepted line offer seeds them,
+   *   and they drive the opponent picker's roster and the pooled-identity
+   *   contribution on save. Nothing about the "their team" field writes them.
+   * - `opponentTeamProgram` / `opponentTeamSchool` / `opponentTeamSource`
+   *   (after them) are the FIELD's — the optional "their team" answer about
+   *   this one opponent, and the only pair that reaches
+   *   `matches.opponent_program_id` / `matches.opponent_school`
+   *   (`opponentTeamColumns`, `opponent-team.ts`).
+   *
    * The opponent's program, when the uploader named one. Optional everywhere —
    * a hitting partner has no program, and the name alone stays the only
    * requirement.
@@ -70,6 +105,21 @@ export interface FormData {
   opponentProgramKey?: string;
   /** Display name for the above, so the field can render without a re-fetch. */
   opponentSchool?: string;
+  /**
+   * The opponent's team as the "their team" field holds it — a program from
+   * the directory, with what a row needs to draw it. The FIELD's, not the
+   * line's: see the note on `opponentProgramKey`. Saved as
+   * `matches.opponent_program_id`.
+   */
+  opponentTeamProgram?: OpponentTeamProgram | null;
+  /**
+   * Their school as typed, for a team the directory does not hold. Saved as
+   * `matches.opponent_school`, and only when no program is set — the column
+   * pair is either/or (`matches_opponent_program_or_school_check`).
+   */
+  opponentTeamSchool?: string;
+  /** How the two keys above were filled. Undefined while the field is empty. */
+  opponentTeamSource?: OpponentTeamSource;
   playerScores: (number | null)[];
   opponentScores: (number | null)[];
   playerTiebreaks: (number | null)[];
@@ -176,6 +226,13 @@ export interface MatchData {
    * `player2_id` directly above, which grants read access to this match.
    */
   opponent_player_id: string | null;
+  /**
+   * The opponent's team: a program we know, or the school as typed — never
+   * both (`matches_opponent_program_or_school_check`). Both null when the
+   * uploader named neither, which is every match before the field existed.
+   */
+  opponent_program_id: string | null;
+  opponent_school: string | null;
   /** Workspace the match belongs to. NULL = personal workspace. */
   program_id: string | null;
   tournament_name: string | null;
