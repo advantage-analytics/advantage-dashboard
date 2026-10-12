@@ -2498,9 +2498,11 @@ test.describe("a result in date order", () => {
           data: {
             matches: MATCH_ROWS,
             rows: [
-              { played_on: "2026-02-07", unforced_errors: 24 },
-              { played_on: "2026-05-09", unforced_errors: 57 },
-              { played_on: "2026-09-28", unforced_errors: 5 },
+              // Two measures: one alone is written by the server
+              // (`buildTrendAnswer()`), and this is the model's path.
+              { played_on: "2026-02-07", unforced_errors: 24, winners: 20 },
+              { played_on: "2026-05-09", unforced_errors: 57, winners: 21 },
+              { played_on: "2026-09-28", unforced_errors: 5, winners: 22 },
             ],
           },
           error: null,

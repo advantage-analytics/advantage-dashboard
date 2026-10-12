@@ -3,7 +3,10 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import {
+  MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREND_POINTS,
+} from "@/lib/services/ask/events";
 import { comparedPairs } from "@/lib/services/ask/facts";
 import { askMeasure } from "@/lib/services/ask/measures";
 
@@ -685,5 +688,92 @@ export function buildMatchListAnswer(
         ? { ...row, [LIST_WON_COLUMN]: won, [LIST_LOST_COLUMN]: lost }
         : { ...row },
     ),
+  };
+}
+
+// ── A measure over time ──────────────────────────────────────────────────────
+
+/** The fewest dated rows a trend is written for. */
+export const MIN_TREND_ROWS = 3;
+
+/**
+ * "How has my first serve changed this season?" comes back as one row per
+ * match or month with one measure. Which row is the start, the end, the low
+ * and the high is the thing a model gets wrong — "ended at its lowest
+ * point" over a series that ended at its highest — so the server writes it,
+ * citing each of the four from the row it is in.
+ *
+ * Null unless every row has the same date-like text column and the result
+ * carries exactly one measure, with a figure in at least
+ * {@link MIN_TREND_ROWS} rows.
+ */
+export function buildTrendAnswer(
+  rows: readonly AskRow[],
+  context: { matchCount: number },
+): AskPairedAnswer | null {
+  if (rows.length < MIN_TREND_ROWS) return null;
+  const keys = Object.keys(rows[0]);
+  const dates = keys.filter((column) =>
+    rows.every(
+      (row) =>
+        typeof row[column] === "string" && DATE_LIKE.test(String(row[column])),
+    ),
+  );
+  const date = dates.includes("played_on") ? "played_on" : dates[0];
+  if (date === undefined) return null;
+  const measures = keys.filter(
+    (column) =>
+      column !== SCOPE_COUNT_COLUMN &&
+      !NOT_A_MEASURE.test(column) &&
+      rows.some((row) => isNumber(row[column])) &&
+      rows.every((row) => row[column] === null || isNumber(row[column])),
+  );
+  if (measures.length !== 1) return null;
+  const measure = measures[0];
+
+  const ordered = [...rows].sort((a, b) =>
+    String(a[date]).localeCompare(String(b[date])),
+  );
+  const points = ordered
+    .map((row, index) => ({ n: index + 1, value: row[measure] }))
+    .filter((point): point is { n: number; value: number } =>
+      isNumber(point.value),
+    );
+  if (points.length < MIN_TREND_ROWS) return null;
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  // The earliest row holding the extreme: a tie is cited once, at its first.
+  const low = points.reduce((best, point) =>
+    printed(point.value) < printed(best.value) ? point : best,
+  );
+  const high = points.reduce((best, point) =>
+    printed(point.value) > printed(best.value) ? point : best,
+  );
+  const at = (point: { n: number }) =>
+    `{{r${point.n}.${measure}}} on {{r${point.n}.${date}}}`;
+  const name = pairLabel(measure);
+  const start = printed(first.value);
+  const end = printed(last.value);
+  const headline =
+    end > start
+      ? `${name} rose from ${at(first)} to ${at(last)}.`
+      : end < start
+        ? `${name} fell from ${at(first)} to ${at(last)}.`
+        : `${name} was the same at the start and at the end: ${at(first)} and ${at(last)}.`;
+  const chart =
+    points.length <= MAX_ASK_TREND_POINTS
+      ? `\n${ASK_VISUAL_LINE_PREFIX} trend ${S} ${name} over time, oldest first.\nPLOT: ${date} ${S} ${measure}`
+      : "";
+  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const body = [
+    `Lowest: ${at(low)}.`,
+    `Highest: ${at(high)}.`,
+    `From ${count}.`,
+  ];
+
+  return {
+    text: `${headline}${chart}\n\n${body.join(" ")}`,
+    rows: ordered.map((row) => ({ ...row })),
   };
 }

@@ -7,6 +7,7 @@ import {
   MAX_PAIRED_HEADLINE,
   buildMatchListAnswer,
   buildPairedAnswer,
+  buildTrendAnswer,
   buildTwoGroupAnswer,
   onlyName,
   pairLabel,
@@ -527,6 +528,72 @@ test.describe("buildMatchListAnswer — a short list of matches", () => {
       buildMatchListAnswer(
         Array.from({ length: 11 }, () => LIST[0]),
         { team: false },
+      ),
+    ).toBeNull();
+  });
+});
+
+test.describe("buildTrendAnswer — one measure over time", () => {
+  const SERIES: AskRow[] = [
+    { played_on: "2026-09-28", first_serve_pct: 91.7, matches_in_scope: 4 },
+    { played_on: "2026-02-07", first_serve_pct: 54.2, matches_in_scope: 4 },
+    { played_on: "2026-05-09", first_serve_pct: 60.4, matches_in_scope: 4 },
+    { played_on: "2026-09-05", first_serve_pct: 91.7, matches_in_scope: 4 },
+  ];
+
+  async function trended(rows: AskRow[]) {
+    const answer = buildTrendAnswer(rows, { matchCount: 4 });
+    if (!answer) throw new Error("not a trend");
+    const { events, result } = renderAskAnswer(
+      (async function* chunks() {
+        yield answer.text;
+      })(),
+      answer.rows,
+    );
+    for await (const event of events) void event;
+    return result;
+  }
+
+  test("start, end, low and high are each cited from their own row", async () => {
+    const result = await trended(SERIES);
+    expect(result.headline).toBe(
+      "First serves in rose from 54.2% on Feb 7, 2026 to 91.7% on Sep 28, 2026.",
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual?.kind).toBe("trend");
+    expect(result.text).toBe(
+      "Lowest: 54.2% on Feb 7, 2026. Highest: 91.7% on Sep 5, 2026. From 4 matches.",
+    );
+  });
+
+  test("a count that went down fell", async () => {
+    const result = await trended([
+      { played_on: "2026-02-07", unforced_errors: 24, matches_in_scope: 4 },
+      { played_on: "2026-05-09", unforced_errors: 57, matches_in_scope: 4 },
+      { played_on: "2026-09-28", unforced_errors: 5, matches_in_scope: 4 },
+    ]);
+    expect(result.headline).toBe(
+      "Unforced errors fell from 24 on Feb 7, 2026 to 5 on Sep 28, 2026.",
+    );
+  });
+
+  test("not for two measures, two rows, or rows without dates", () => {
+    const context = { matchCount: 4 };
+    expect(
+      buildTrendAnswer(
+        SERIES.map((row) => ({ ...row, aces: 2 })),
+        context,
+      ),
+    ).toBeNull();
+    expect(buildTrendAnswer(SERIES.slice(0, 2), context)).toBeNull();
+    expect(
+      buildTrendAnswer(
+        [
+          { player_name: "A", first_serve_pct: 1 },
+          { player_name: "B", first_serve_pct: 2 },
+          { player_name: "C", first_serve_pct: 3 },
+        ],
+        context,
       ),
     ).toBeNull();
   });

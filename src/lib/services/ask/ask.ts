@@ -43,6 +43,7 @@ import {
 import {
   buildMatchListAnswer,
   buildPairedAnswer,
+  buildTrendAnswer,
   buildTwoGroupAnswer,
   onlyName,
 } from "@/lib/services/ask/paired";
@@ -830,7 +831,11 @@ export async function* askQuestion(
           matchCount: result.matches.length,
         }) ??
         // Or a short list of matches to retell.
-        buildMatchListAnswer(result.rows, { team });
+        buildMatchListAnswer(result.rows, { team }) ??
+        // Or one measure over time.
+        buildTrendAnswer(result.rows, {
+          matchCount: result.matches.length,
+        });
       if (written !== null) {
         reviewText = written.text;
         result = { matches: result.matches, rows: written.rows };
