@@ -126,3 +126,13 @@ is the runner's. Newest entries at the bottom.
 5. `tests/upload-start-over.spec.ts`'s `RESET_FIELDS` could list the three new keys.
 6. Fold `id` / abbrev / crest into `search_programs` in a later migration to drop the second read.
 7. Confirm the `opponent_program:programs!matches_opponent_program_id_fkey` embed on a real request (eyes-on, team wizard).
+
+## T16 · ProgramCrest: short code, fixed letters, three characters, never wraps — done
+
+**gate:** mechanical pass · completion pass · widget-states audit: no loading, empty or error state touched (a presentational tile)
+
+**changed:** New `src/lib/ui/crest-letters.ts` (`crestLetters(shortCode, name)`: a 1–3 character short code uppercased, else `getInitials(name)` capped at three) and `tests/crest-letters.spec.ts`. `ProgramCrest` takes `shortCode?`, sets letters at 9px / 0.2px tracking in the 26px tile (10px at 38 and 52, 16px at 64, unchanged), and the tile is `flex-none overflow-hidden whitespace-nowrap leading-none`. No caller edited; none passes `shortCode` yet. Visible change for existing callers: 26px tiles go from 10px to 9px letters. A one-word name with no usable short code still gives one letter ("Stanford" → "S") because `getInitials` was kept unchanged.
+
+**follow-ups:**
+
+1. If one-word names should show three letters ("STA"), that changes every existing caller — its own task.

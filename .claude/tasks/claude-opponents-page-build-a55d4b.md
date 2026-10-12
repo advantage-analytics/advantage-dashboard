@@ -231,7 +231,7 @@ ready).
 
 ## T16 · ProgramCrest: short code, fixed letters, three characters, never wraps
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/components/dashboard/settings/teams/program-crest.tsx`, new `src/lib/ui/crest-letters.ts` (pure), new `tests/crest-letters.spec.ts`; callers to leave visually unchanged apart from the 26px letter size: `grep -rn "ProgramCrest" src`
 - **done when:**
