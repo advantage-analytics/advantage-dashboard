@@ -11,7 +11,7 @@ import {
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { PlayerMark } from "@/components/ui/player-mark";
 import { StatePill } from "@/components/ui/state-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * `formatShortDate` stamps the year once a match is not from this year
+ * `formatMatchDayShortYear` stamps the year once a match is not from this year
  * ("Nov 13, 2025", ~80px), which at 72px runs into the Event cell. Each row is
  * its own grid, so the track cannot size to its content and still line up:
  * `MatchesGrid` measures the list once and sets `--date-col` on the card when
@@ -166,7 +166,7 @@ export function MatchCardList({
         className="tabular text-[12px] whitespace-nowrap"
         style={{ color: "var(--ink-700)" }}
       >
-        {formatShortDate(match.date)}
+        {formatMatchDayShortYear(match.date)}
       </span>
 
       {/* Player — the roster's name column: the 26px mark, then the name.

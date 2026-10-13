@@ -1,5 +1,6 @@
 import { formatMatchDuration } from "@/lib/format/duration";
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
+import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 
 export interface DbMatch {
@@ -32,6 +33,12 @@ export interface DisplayMatch {
   id: string;
   /** Null when the match was filed with no event — the row renders "No event". */
   tournamentName: string | null;
+  /**
+   * The day the match was played, already printed: "September 28, 2026"
+   * (`formatMatchDayLong`). A label, not a timestamp — shorten it with the
+   * `formatMatchDay*` helpers in `@/lib/data/match-day`, which read it back
+   * without `new Date()`.
+   */
   date: string;
   matchType: string;
   courtType?: string;
@@ -83,19 +90,6 @@ export interface DisplayMatch {
   };
 }
 
-export function formatDisplayDate(isoDate: string): string {
-  try {
-    const d = new Date(isoDate);
-    return d.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
 export function transformDbMatch(
   row: DbMatch,
   _userId: string,
@@ -115,7 +109,7 @@ export function transformDbMatch(
   return {
     id: row.id,
     tournamentName: row.tournament_name,
-    date: formatDisplayDate(row.date),
+    date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
     verificationStatus: row.verified ? "Verified result" : undefined,

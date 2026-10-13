@@ -3,10 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
 import { normalizedPersonName } from "@/lib/data/person-name";
+import { formatMatchDayShort } from "@/lib/data/match-day";
 import {
   buildScoreString,
   matchOutcome,
-  shortDate,
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
@@ -536,7 +536,7 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
     roster,
   ).map((m) => ({
     matchId: m.id,
-    date: shortDate(m.date),
+    date: formatMatchDayShort(m.date),
     opponentName: (m.player2_name ?? "").trim(),
     score: buildScoreString(m.score, true),
     won: matchOutcome(m.score, true),

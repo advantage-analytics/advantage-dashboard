@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { useReducedMotion } from "framer-motion";
 import { VIZ_BLUE } from "@/lib/design/data-viz";
+import { formatMatchDayShort, matchDay } from "@/lib/data/match-day";
 import type { KpiFormat } from "@/lib/data/performance-server";
 
 export interface KpiDetailPoint {
@@ -36,11 +37,9 @@ function formatValue(value: number, format?: KpiFormat): string {
   return value.toFixed(1);
 }
 
+/** A point's `date` is the match's stored date — its day, by `match-day.ts`. */
 function formatDate(date: string): string {
-  if (!date) return "";
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return matchDay(date) ? formatMatchDayShort(date) : "";
 }
 
 interface ChartDatum extends KpiDetailPoint {
