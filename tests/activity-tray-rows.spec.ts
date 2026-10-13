@@ -110,7 +110,7 @@ function item(
   return { matchId, title, analysis, at: "2026-09-28T12:00:00Z" };
 }
 
-function render(items: ActivityItem[]) {
+function render(items: ActivityItem[], setup: unknown[] = []) {
   return renderToStaticMarkup(
     React.createElement(ActivityTray, {
       feed: { items },
@@ -118,6 +118,7 @@ function render(items: ActivityItem[]) {
       approvedInviteIds: [],
       elsewhere: [],
       joins: [],
+      setup,
     }),
   );
 }
@@ -281,4 +282,48 @@ test("failed rows carry no blue and no bordered button", () => {
     expect(row.inner).not.toContain("border-[var(--border-medium)]");
   }
   expect(html).toContain('aria-label="Activity, 2 failed"');
+});
+
+const ROSTER_DONE = {
+  key: "roster",
+  label: "Add players to the roster",
+  done: true,
+  href: "/dashboard/team/roster",
+  action: "Roster",
+};
+const MATCH_OPEN = {
+  key: "match",
+  label: "Send a first match",
+  done: false,
+  href: "/dashboard/matches/new",
+  action: "New match",
+};
+
+test("an open setup step is a link; a done one is a ticked line", () => {
+  const html = render([], [ROSTER_DONE, MATCH_OPEN]);
+  expect(html).toContain("Getting set up");
+  expect(html).toContain("1 of 2");
+
+  const open = links(html).find((l) => l.text.includes("Send a first match"));
+  expect(open).toBeDefined();
+  expect(open!.href).toBe("/dashboard/matches/new");
+  expect(open!.text).toContain("New match");
+
+  expect(html).toContain("Add players to the roster");
+  expect(
+    links(html).some((l) => l.text.includes("Add players to the roster")),
+  ).toBe(false);
+});
+
+test("setup never lights the dot or enters the tooltip's count", () => {
+  const html = render([], [ROSTER_DONE, MATCH_OPEN]);
+  expect(html).toContain('aria-label="Activity, Nothing in flight"');
+  expect(html).not.toContain("top-[3px] right-[3px]");
+  // The feed's own empty state still prints under the section.
+  expect(html).toContain("Nothing running here.");
+});
+
+test("a finished setup renders no section at all", () => {
+  const html = render([], [ROSTER_DONE, { ...MATCH_OPEN, done: true }]);
+  expect(html).not.toContain("Getting set up");
 });

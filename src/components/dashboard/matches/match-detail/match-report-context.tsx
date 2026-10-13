@@ -10,6 +10,7 @@ import {
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  ALL_REPORT_VIEWS,
   parseReportView,
   reportViewQuery,
   type ReportView,
@@ -60,7 +61,7 @@ export interface MatchReportActions {
    * shell player starts on the first point the list admits. The film tab
    * consumes it once (`film-cut-context.tsx`, `landFilmCut`).
    * A no-op without a playable video — there is no Video view to open, and
-   * `/m/[token]` never has one.
+   * `/m/[token]` has one only when its link carries the video.
    */
   watchCut(cut: FilmCut, label: string): void;
   collapseInsight(): void;
@@ -172,6 +173,12 @@ export interface MatchReportMeta {
    * id names no row. `null` means the match's own route. Defaults to `null`.
    */
   playbackEndpoint: string | null;
+  /**
+   * The views this report offers, in rail order. All three under
+   * `/dashboard`; on `/m/[token]` only what the link carries. The rail
+   * switcher draws these rows and `?tab=` cannot open anything else.
+   */
+  views: readonly ReportView[];
 }
 
 export interface MatchReportContextValue {
@@ -212,7 +219,10 @@ export interface MatchReportProviderProps extends Omit<
   | "playbackEndpoint"
   | "statsUnavailable"
   | "foldUnreconciled"
+  | "views"
 > {
+  /** See `MatchReportMeta.views`. Defaults to every view. */
+  views?: readonly ReportView[];
   /** See `MatchReportMeta.statsUnavailable`. Defaults to `false`. */
   statsUnavailable?: boolean;
   /** See `MatchReportMeta.foldUnreconciled`. Defaults to `false`. */
@@ -250,13 +260,14 @@ export function MatchReportProvider({
   readOnly = false,
   sample = false,
   playbackEndpoint = null,
+  views = ALL_REPORT_VIEWS,
   defaultView = "statistics",
   children,
 }: MatchReportProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // Anything that is not a known view reads as the default, never an error.
-  const view = parseReportView(searchParams.get("tab"), defaultView);
+  const view = parseReportView(searchParams.get("tab"), defaultView, views);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
@@ -327,6 +338,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      views,
     }),
     [
       matchId,
@@ -347,6 +359,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      views,
     ],
   );
 

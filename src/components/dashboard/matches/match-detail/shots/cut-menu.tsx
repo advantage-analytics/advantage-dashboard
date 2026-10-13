@@ -189,7 +189,7 @@ export function CutMenu({
         onSelect={() => selectCut("errors")}
       />
 
-      <FloatMenuDivider />
+      {onSaveRequest && <FloatMenuDivider />}
 
       {onSaveRequest && (
         <FloatMenuItem
@@ -212,10 +212,12 @@ export function CutMenu({
         />
       )}
 
-      <FloatMenuNote>
-        A view saves the cut, the chart and the filters. Depth bands are not
-        part of it — they belong to the workspace.
-      </FloatMenuNote>
+      {onSaveRequest && (
+        <FloatMenuNote>
+          A view saves the cut, the chart and the filters. Depth bands are not
+          part of it — they belong to the workspace.
+        </FloatMenuNote>
+      )}
     </FloatMenu>
   );
 }

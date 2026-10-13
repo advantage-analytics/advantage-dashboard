@@ -96,7 +96,10 @@ export function VizFocused({
   workspaceName,
   hasPlayableVideo = false,
   onWatchPoint,
+  readOnly = false,
 }: {
+  /** The public share page: nothing here saves (`shots-tab.tsx`). */
+  readOnly?: boolean;
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
   /** `shotsWriteAccess(meta).canSaveViews` — `false` on a read-only report
@@ -408,7 +411,9 @@ export function VizFocused({
       <VizToolbar
         className="viz-vt-toolbar"
         savedViews={savedViews}
-        onSaveRequest={canSaveViews ? () => setSaveDialogOpen(true) : undefined}
+        onSaveRequest={
+          canSaveViews && !readOnly ? () => setSaveDialogOpen(true) : undefined
+        }
         cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
@@ -608,7 +613,9 @@ export function VizFocused({
                   className="text-micro max-w-[240px]"
                   style={{ color: "var(--ink-600)" }}
                 >
-                  Choose a view, a chart and filters — then save it.
+                  {readOnly
+                    ? "Choose a view, a chart and filters."
+                    : "Choose a view, a chart and filters — then save it."}
                 </p>
                 <button
                   type="button"
@@ -681,7 +688,7 @@ export function VizFocused({
 
       {savedViewsBand}
 
-      {canSaveViews && (
+      {canSaveViews && !readOnly && (
         <SaveViewDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}

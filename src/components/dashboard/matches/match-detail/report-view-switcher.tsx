@@ -36,12 +36,14 @@ export function viewRowClass(isActive: boolean): string {
  * (`match-tabs.tsx`) and keeps its semantics — a vertical tablist whose rows
  * are tabs — while the labels, the order and the `?tab=` rule come from
  * `REPORT_VIEWS`, and the active view and the history push from
- * `useMatchReport()`. Nothing here knows the view lives in the URL.
+ * `useMatchReport()`. Nothing here knows the view lives in the URL. A report
+ * that offers fewer views (`meta.views`, the public share page) draws fewer
+ * rows.
  *
  * No focus classes: every row is a `<button>`, and `focus.css` rings buttons.
  */
 export function MatchReportViewSwitcher() {
-  const { state, actions } = useMatchReport();
+  const { state, actions, meta } = useMatchReport();
 
   return (
     <div
@@ -50,34 +52,36 @@ export function MatchReportViewSwitcher() {
       aria-label="Match report views"
       className="flex flex-col gap-0.5 px-3 pt-2.5"
     >
-      {REPORT_VIEWS.map((view) => {
-        const Icon = VIEW_ICONS[view.value];
-        const isActive = view.value === state.view;
-        return (
-          <button
-            key={view.value}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            data-tour={
-              view.value === "shots" || view.value === "film"
-                ? view.value
-                : undefined
-            }
-            onClick={() => actions.selectView(view.value)}
-            className={viewRowClass(isActive)}
-          >
-            <span className="flex size-10 shrink-0 items-center justify-center">
-              <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />
-            </span>
-            {/* `text-left`: a button centres its label by default, and this
+      {REPORT_VIEWS.filter((view) => meta.views.includes(view.value)).map(
+        (view) => {
+          const Icon = VIEW_ICONS[view.value];
+          const isActive = view.value === state.view;
+          return (
+            <button
+              key={view.value}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              data-tour={
+                view.value === "shots" || view.value === "film"
+                  ? view.value
+                  : undefined
+              }
+              onClick={() => actions.selectView(view.value)}
+              className={viewRowClass(isActive)}
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center">
+                <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              </span>
+              {/* `text-left`: a button centres its label by default, and this
                 one fills the row. */}
-            <span className="min-w-0 flex-1 truncate text-left">
-              {view.label}
-            </span>
-          </button>
-        );
-      })}
+              <span className="min-w-0 flex-1 truncate text-left">
+                {view.label}
+              </span>
+            </button>
+          );
+        },
+      )}
     </div>
   );
 }

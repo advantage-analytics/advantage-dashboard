@@ -804,7 +804,10 @@ export function VizFullscreen() {
                 menu's own "Edit bands…" row renders disabled for a viewer
                 who cannot change this workspace's bands, and `enterEdit`
                 refuses them as well. */}
-              {bandKindFor(cut) !== null && (
+              {/* Not on the public share page: the menu's rows change or
+                  explain a workspace's bands, and a reader there has no
+                  workspace. The bands themselves still draw. */}
+              {bandKindFor(cut) !== null && !meta.readOnly && (
                 <>
                   <SlabDivider />
                   <span ref={bandsTriggerRef} className="contents">

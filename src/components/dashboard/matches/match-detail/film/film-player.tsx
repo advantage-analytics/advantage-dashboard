@@ -52,6 +52,7 @@ import type {
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
 import { useSeekSettling } from "./use-seek-settling";
+import { useFilmReadOnly } from "./film-read-only";
 
 /**
  * The match video with the room's transport under it, in the tab.
@@ -309,6 +310,8 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
+    // A shared link's reader has no bookmarks to keep (`film-read-only.ts`).
+    const readOnly = useFilmReadOnly();
     /** The generation whose first `play` has already been reported. */
     const firstPlayRef = useRef<number | null>(null);
 
@@ -865,7 +868,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
 
               <div className="flex-1" />
 
-              {onToggleSaved && (
+              {!readOnly && onToggleSaved && (
                 <Glyph
                   label={saved ? "Saved — remove bookmark" : "Save point"}
                   shortcut="S"

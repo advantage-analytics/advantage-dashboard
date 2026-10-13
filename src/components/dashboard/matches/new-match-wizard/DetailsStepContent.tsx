@@ -102,9 +102,12 @@ import type {
   EventPreset,
   FormData,
   LineOffer,
+  OpponentTeamProgram,
   ValueSource,
   VideoProbeSummary,
 } from "./types";
+import { opponentTeamFromHistory, opponentTeamIsEmpty } from "./opponent-team";
+import { OpponentTeamField } from "@/components/dashboard/matches/opponent-team-field";
 import {
   CheckedFileRow,
   VideoFileLead,
@@ -152,7 +155,7 @@ export interface DetailsStepContentProps {
   formData: FormData;
   onInputChange: (
     field: keyof FormData,
-    value: string | number | boolean | null | undefined,
+    value: string | number | boolean | OpponentTeamProgram | null | undefined,
   ) => void;
   /** Called only after a format reduction's score-loss choice is resolved. */
   onFormatChange: (bestOf: string) => void;
@@ -1270,11 +1273,58 @@ function DetailsStepContentImpl({
   const playerHand = formData.playerHand as Hand | undefined;
   const playerBackhand = formData.playerBackhand as Backhand | undefined;
 
+  // Their team, as the last match against this opponent recorded it — the
+  // field's three keys with source "history", or cleared when the team on the
+  // form was the PREVIOUS opponent's remembered one (`opponentTeamFromHistory`).
+  // Never the line's `opponentProgramKey` / `opponentSchool`.
+  const currentTeam = useMemo(
+    () => ({
+      opponentTeamProgram: formData.opponentTeamProgram,
+      opponentTeamSchool: formData.opponentTeamSchool,
+      opponentTeamSource: formData.opponentTeamSource,
+    }),
+    [
+      formData.opponentTeamProgram,
+      formData.opponentTeamSchool,
+      formData.opponentTeamSource,
+    ],
+  );
+  // Only where the "their team" field is on screen — a team workspace, not the
+  // admin console. Anywhere else a remembered team would be written to the
+  // match with no field to see it in or clear it from.
+  const teamFieldShown = workspaceKind === "team" && !admin;
+  const rememberTeam = useCallback(
+    (seen: OpponentPlayed | undefined) => {
+      if (!teamFieldShown) return;
+      const team = opponentTeamFromHistory(currentTeam, seen);
+      if (!team) return;
+      onInputChange("opponentTeamProgram", team.opponentTeamProgram);
+      onInputChange("opponentTeamSchool", team.opponentTeamSchool);
+      onInputChange("opponentTeamSource", team.opponentTeamSource);
+    },
+    [currentTeam, onInputChange, teamFieldShown],
+  );
+
+  // What the "their team" line under the opponent's name reads back. The
+  // field's own answer first. With the field empty, a match filed under a dual
+  // line takes that line's program when it is saved — `line.opponentProgramKey`
+  // on `preset ?? attachedLine`, the same line and the same test the save in
+  // `useUploadMatchWizard` uses — so the line's school is shown as the answer,
+  // read-only: nothing puts source "line" into the form, the line decides it.
+  const savingLine = preset ?? attachedLine;
+  const lineTeamSchool =
+    savingLine?.eventKind === "dual" && savingLine.opponentProgramKey
+      ? savingLine.opponentSchool?.trim() || null
+      : null;
+  const teamFromLine =
+    opponentTeamIsEmpty(currentTeam) && lineTeamSchool !== null;
+
   const pickPlayed = useCallback(
     (row: OpponentPlayed) => {
       onInputChange("opponentName", row.name);
       onInputChange("opponentSource", "history");
       onInputChange("opponentPlayerId", row.playerId);
+      rememberTeam(row);
       const hand =
         row.hand === "right" || row.hand === "left" ? row.hand : undefined;
       const backhand =
@@ -1290,7 +1340,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange],
+    [onInputChange, rememberTeam],
   );
 
   const pickRoster = useCallback(
@@ -1302,6 +1352,7 @@ function DetailsStepContentImpl({
       const seen = played.find(
         (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
       );
+      rememberTeam(seen);
       const hand =
         seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
       const backhand =
@@ -1317,7 +1368,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange, played],
+    [onInputChange, played, rememberTeam],
   );
 
   const createOpponent = useCallback(
@@ -1325,6 +1376,14 @@ function DetailsStepContentImpl({
       onInputChange("opponentName", name);
       onInputChange("opponentSource", "new");
       onInputChange("opponentPlayerId", null);
+      // A typed name that IS someone already played — the list had not loaded
+      // or the row was not the one clicked — still gets their remembered team.
+      const typedKey = normalizedPersonName(name);
+      rememberTeam(
+        typedKey
+          ? played.find((p) => normalizedPersonName(p.name) === typedKey)
+          : undefined,
+      );
       onInputChange("opponentHand", undefined);
       onInputChange("opponentBackhand", undefined);
       onInputChange("opponentStyleSource", undefined);
@@ -1343,7 +1402,15 @@ function DetailsStepContentImpl({
         if (result.saved) setSavedSchool(lineSchool);
       }
     },
-    [inDual, lineProgramKey, lineSchool, onInputChange, admin],
+    [
+      inDual,
+      lineProgramKey,
+      lineSchool,
+      onInputChange,
+      admin,
+      played,
+      rememberTeam,
+    ],
   );
 
   const saveProfile = async () => {
@@ -1908,6 +1975,33 @@ function DetailsStepContentImpl({
                   <span className="text-micro whitespace-nowrap">
                     {opponentProvenance}
                   </span>
+                )}
+                {/* Their team — optional, a team workspace's question only,
+                    and under the name like everything else this row says
+                    beyond its three answers. */}
+                {teamFieldShown && (
+                  <OpponentTeamField
+                    className="mt-1"
+                    program={teamFromLine ? null : formData.opponentTeamProgram}
+                    school={
+                      teamFromLine
+                        ? lineTeamSchool
+                        : formData.opponentTeamSchool
+                    }
+                    source={teamFromLine ? "line" : formData.opponentTeamSource}
+                    opponentFirstName={firstNameOf(formData.opponentName)}
+                    onChange={(team) => {
+                      onInputChange(
+                        "opponentTeamProgram",
+                        team.program ?? undefined,
+                      );
+                      onInputChange(
+                        "opponentTeamSchool",
+                        team.school ?? undefined,
+                      );
+                      onInputChange("opponentTeamSource", team.source);
+                    }}
+                  />
                 )}
               </span>
             )}

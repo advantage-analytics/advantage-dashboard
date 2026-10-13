@@ -44,6 +44,11 @@ or tab that no URL opens, rather than reporting it not covered. Name only
 controls that open or switch something; never one that sends, saves, deletes
 or confirms.
 
+A path outside `/dashboard/team` can still be captured in the team workspace by
+prefixing it with `team:` — `team:/dashboard/opponents`, or with clicks
+`team:/dashboard/matches/new::Add their team`; `report.json` records
+`workspace: "team" | "personal"` for each page.
+
 `$OUT` is a scratch directory the orchestrator names. The script starts (or
 attaches to) a local dev server, signs in as the verifier account, and writes
 one full-page PNG per path plus `report.json` — final URL, HTTP status,
@@ -64,8 +69,8 @@ do not try another way in.
    an id. Take it from the `links` array of the index page you already
    captured — the first matching href — and run the harness again for those.
    Never guess an id. If the account has no such entity, that route is
-   `[not covered]`, not an error. Paths under `/dashboard/team` are captured
-   in the configured team workspace automatically; a `note` on such a page
+   `[not covered]`, not an error. Paths under `/dashboard/team` (and any path
+   prefixed `team:`) are captured in the configured team workspace; a `note` on such a page
    saying the workspace was unset or not applied is a harness gap, not an
    app finding — report it under `## Not covered`.
 4. **Judge each screen against the intent.** For every `done when:` line that

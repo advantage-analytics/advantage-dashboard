@@ -54,7 +54,11 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { FilmFilterStrip } from "./film-filter-strip";
-import { useAttachmentPlayback } from "./use-attachment-playback";
+import {
+  fetchPlaybackSource,
+  useAttachmentPlayback,
+} from "./use-attachment-playback";
+import { FilmReadOnlyContext, useFilmReadOnly } from "./film-read-only";
 import { recordMatchVideoView } from "./record-video-view";
 import {
   filmDraftCount,
@@ -106,9 +110,24 @@ export function FilmTab({
   video,
   entry = NO_FILM_ENTRY,
   unit,
+  readOnly: readOnlyProp = false,
+  playbackEndpoint: playbackEndpointProp,
 }: {
   video: MatchVideo | null;
   entry?: MatchFilmEntry;
+  /**
+   * The public share page (`/m/[token]`): a reader with a link and no
+   * account. The room plays, steps and filters as it does on the dashboard
+   * and loses everything that writes or needs a session — bookmarks, the
+   * view report, the ball-path fetch (`film-read-only.ts`). The page passes
+   * no `entry`, so there is nothing to add, replace or adjust either.
+   */
+  readOnly?: boolean;
+  /**
+   * Where the player renews its playback URL, when not the match's own
+   * route: the share page's `/api/share/<token>/video`.
+   */
+  playbackEndpoint?: string;
   /**
    * The viewer's Units preference (Stage 2C), from the match page. Threaded
    * as a PROP rather than read off `useMatchReport()`: the film subtree
@@ -127,23 +146,27 @@ export function FilmTab({
   // fetch, the maintenance links; `playbackEndpoint` is where the sample's
   // credential is renewed, since its placeholder id names no `/api/matches`
   // row.
+  // The share page says so by prop (it mounts no report provider of its
+  // own meta); the sample says so through the report's meta.
   const report = useOptionalMatchReport();
-  const readOnly = report?.meta.readOnly ?? false;
-  const playbackEndpoint = report?.meta.playbackEndpoint ?? null;
+  const readOnly = readOnlyProp || (report?.meta.readOnly ?? false);
+  const playbackEndpoint =
+    playbackEndpointProp ?? report?.meta.playbackEndpoint ?? null;
 
   // The filters drawer's open state lives with the room, so a switch to
   // another view (which unmounts this tab) always leaves it shut.
   if (video) {
     return (
-      <FilterRailProvider>
-        <FilmRoom
-          video={video}
-          entry={entry}
-          unit={unit}
-          readOnly={readOnly}
-          playbackEndpoint={playbackEndpoint}
-        />
-      </FilterRailProvider>
+      <FilmReadOnlyContext value={readOnly}>
+        <FilterRailProvider>
+          <FilmRoom
+            video={video}
+            entry={entry}
+            unit={unit}
+            playbackEndpoint={playbackEndpoint}
+          />
+        </FilterRailProvider>
+      </FilmReadOnlyContext>
     );
   }
   // The no-video states honour `readOnly` the same way the room does: each
@@ -183,23 +206,19 @@ function FilmRoom({
   video,
   entry,
   unit,
-  readOnly,
   playbackEndpoint,
 }: {
   video: MatchVideo;
   entry: MatchFilmEntry;
   unit: DistanceUnit;
   /**
-   * `MatchReportMeta.readOnly`, resolved by `FilmTab`. Nothing on a read-only
-   * report belongs to the viewer, so nothing here may write: no view is
-   * counted, no bookmark is sent (and no control offers one), no ball-paths
-   * file is asked for, and the Replace/Align row is not drawn. Watching —
-   * seeking, filtering, the room — is untouched.
+   * Where the player renews its playback URL, resolved by `FilmTab`: the
+   * share page's `/api/share/<token>/video`, the sample's
+   * `/api/sample-match/video`, or `null` for the match's own route.
    */
-  readOnly: boolean;
-  /** `MatchReportMeta.playbackEndpoint`, resolved by `FilmTab`. */
   playbackEndpoint: string | null;
 }) {
+  const readOnly = useFilmReadOnly();
   // The points and their saved flags come from `MatchDataProvider`, not from
   // a `useState` here: `MatchReportWhen` UNMOUNTS this view when the viewer
   // switches to Statistics or Shots, so state held here would be re-seeded
@@ -243,7 +262,9 @@ function FilmRoom({
     setFilmRemainder,
   } = useMatchFilters();
   const [savedOnly, setSavedOnly] = useState<boolean>(
-    () => parseLegacyFilmQuery(searchParams)?.savedOnly ?? false,
+    // Never on a shared link: its reader has no bookmarks, so a pasted
+    // `?saved` would open on "You haven't saved a point yet".
+    () => !readOnly && (parseLegacyFilmQuery(searchParams)?.savedOnly ?? false),
   );
   // The pure input shape the list's rules take.
   const local = useMemo<FilmLocalFilters>(
@@ -365,6 +386,22 @@ function FilmRoom({
     points,
     endpoint: playbackEndpoint,
   });
+  // On a shared link a refused renewal means the link stopped carrying the
+  // video — turned off, the video taken off it, or its sharer no longer
+  // allowed. The token route answers all three with one 404, which the hook
+  // reads as "removed" ("no longer attached to the match") — false here, the
+  // file is still attached — and "Sign in again" (`denied`) is no help to a
+  // reader who never signed in. Both say what actually happened instead.
+  const problem =
+    readOnly &&
+    (playback.problem?.reason === "removed" ||
+      playback.problem?.reason === "denied")
+      ? {
+          ...playback.problem,
+          message:
+            "This link no longer includes the video. Ask whoever shared it for a new one.",
+        }
+      : playback.problem;
   const clock = playback.clock;
   const stops = playback.stops;
   const {
@@ -409,13 +446,15 @@ function FilmRoom({
   const passthrough = playback.passthrough;
   const recordFirstPlay = useCallback(
     (played: number) => {
-      if (readOnly || passthrough || viewedGenerationRef.current === played) {
-        return;
-      }
+      // A reader on a shared link reports nothing: the route would refuse
+      // them, and watching through a link does not restart the retention
+      // clock.
+      if (readOnly) return;
+      if (passthrough || viewedGenerationRef.current === played) return;
       viewedGenerationRef.current = played;
       recordMatchVideoView(match.id);
     },
-    [readOnly, passthrough, match.id],
+    [passthrough, match.id, readOnly],
   );
 
   /**
@@ -680,6 +719,9 @@ function FilmRoom({
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
+      // No account, no bookmarks: the controls are not drawn
+      // (`film-read-only.ts`), and this keeps the `S` key from flipping a
+      // flag the database would refuse.
       if (readOnly) return;
       const before = pointsRef.current.find((p) => p.id === pointId);
       if (!before) return;
@@ -707,7 +749,7 @@ function FilmRoom({
       );
       setPoints(reverted);
     },
-    [readOnly, supabase, pointsRef, setPoints],
+    [supabase, pointsRef, setPoints, readOnly],
   );
   /**
    * What the surfaces get: the toggle, or nothing. A surface given no
@@ -962,7 +1004,7 @@ function FilmRoom({
             url={playback.url}
             generation={generation}
             resume={resume}
-            problem={playback.problem}
+            problem={problem}
             passthrough={playback.passthrough}
             // While the room is up it is the surface being watched: this player
             // keeps its playhead through a refresh but stays silent, and the room
@@ -1037,7 +1079,7 @@ function FilmRoom({
             url={playback.url}
             generation={generation}
             resume={resume}
-            problem={playback.problem}
+            problem={problem}
             passthrough={playback.passthrough}
             onPlaybackTime={reportTime}
             onPlaybackPlaying={reportPlaying}

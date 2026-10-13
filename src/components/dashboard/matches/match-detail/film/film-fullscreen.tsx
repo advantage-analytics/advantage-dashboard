@@ -109,6 +109,7 @@ import type {
 } from "./use-attachment-playback";
 import { useBallPaths } from "./use-ball-paths";
 import { useSeekSettling } from "./use-seek-settling";
+import { useFilmReadOnly } from "./film-read-only";
 
 /**
  * The fullscreen film room (Film Room Fullscreen handoff, F1–F5).
@@ -389,6 +390,7 @@ function roomTravel(root: HTMLElement, originRect: () => Rect | null) {
 
 export function FilmFullscreen(p: FilmFullscreenProps) {
   const { match } = useMatchData();
+  const readOnly = useFilmReadOnly();
   const sides = useMatchSides();
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -612,7 +614,8 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // bounce exactly as it does today.
   const ballPaths = useBallPaths({
     matchId: match.id,
-    enabled: !p.readOnly && courtOn && match.sourceProvider === "splitstep",
+    // Not on a shared link: the route asks for a session and would refuse.
+    enabled: courtOn && match.sourceProvider === "splitstep" && !readOnly,
     clock: p.clock,
   });
   // Both sides are film seconds: `ShotStop.start` already is, and the paths

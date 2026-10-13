@@ -7,15 +7,25 @@ import {
   OPPONENT_SORTS,
   OPPONENT_VIEWS,
   RESTING_OPPONENT_CUT,
+  NO_PROGRAM_KEY,
   applyOpponentCut,
   describeOpponentFilters,
   emptyOpponentCut,
+  hasOpponentFilters,
   matchesBackhandFilter,
+  matchesFacedByFilter,
   matchesHandFilter,
   matchesOpponentFilters,
   matchesOpponentView,
+  matchesProgramFilter,
+  opponentFacedByChoices,
+  opponentProgramChoices,
+  opponentProgramKey,
   opponentSortTriggerLabel,
   sortOpponents,
+  teamOpponentsFooter,
+  teamOpponentsSubline,
+  toggleFacetValue,
   type OpponentFilters,
   type OpponentView,
 } from "@/components/dashboard/opponents/opponents-views";
@@ -23,6 +33,12 @@ import {
   groupPersonalOpponents,
   type PersonalOpponentMatchInput,
 } from "@/lib/data/personal-opponents";
+import {
+  groupTeamOpponents,
+  type TeamOpponentMatchInput,
+  type TeamOpponentProgram,
+  type TeamOpponentRosterPlayer,
+} from "@/lib/data/team-opponents";
 
 /**
  * The Opponents toolbar's chips, filter facets and sort, with no page behind
@@ -208,7 +224,11 @@ test.describe("filter facets", () => {
   });
 
   test("the two facets AND", () => {
-    const filters: OpponentFilters = { hand: "left", backhand: "two-handed" };
+    const filters: OpponentFilters = {
+      ...NO_OPPONENT_FILTERS,
+      hand: "left",
+      backhand: "two-handed",
+    };
     expect(
       names(OPPONENTS.filter((o) => matchesOpponentFilters(o, filters))),
     ).toEqual(["Bea Dorn"]);
@@ -216,11 +236,15 @@ test.describe("filter facets", () => {
 
   test("the strip states the cut in capitalised phrases joined by middots", () => {
     expect(
-      describeOpponentFilters({ hand: "left", backhand: "two-handed" }),
+      describeOpponentFilters({
+        ...NO_OPPONENT_FILTERS,
+        hand: "left",
+        backhand: "two-handed",
+      }),
     ).toBe("Left-handed · Two-handed");
-    expect(describeOpponentFilters({ hand: "right", backhand: null })).toBe(
-      "Right-handed",
-    );
+    expect(
+      describeOpponentFilters({ ...NO_OPPONENT_FILTERS, hand: "right" }),
+    ).toBe("Right-handed");
     expect(describeOpponentFilters(NO_OPPONENT_FILTERS)).toBe("");
   });
 });
@@ -275,7 +299,7 @@ test.describe("chip, filter and sort together", () => {
   test("the filter's N of M reads against the chip's set", () => {
     const { visible, inView: held } = applyOpponentCut(OPPONENTS, {
       view: "never-beaten",
-      filters: { hand: "left", backhand: "one-handed" },
+      filters: { ...NO_OPPONENT_FILTERS, hand: "left", backhand: "one-handed" },
       sort: "name",
     });
     expect(names(visible)).toEqual(["Cara Ellis"]);
@@ -285,7 +309,7 @@ test.describe("chip, filter and sort together", () => {
   test("a cut that leaves nothing names itself and offers one way out", () => {
     const cut = {
       view: "this-season",
-      filters: { hand: "left", backhand: "one-handed" },
+      filters: { ...NO_OPPONENT_FILTERS, hand: "left", backhand: "one-handed" },
       sort: "last-played",
     } as const;
     expect(applyOpponentCut(OPPONENTS, cut).visible).toEqual([]);
@@ -311,5 +335,279 @@ test.describe("chip, filter and sort together", () => {
       label: "Show all opponents",
       undo: { view: "all", filters: NO_OPPONENT_FILTERS },
     });
+  });
+});
+
+/**
+ * The team page's two checklist facets, over four opponents grouped by the
+ * real team grouping.
+ *
+ * | Opponent     | Program (kind)            | Faced by   |
+ * | ------------ | ------------------------- | ---------- |
+ * | Ana Castillo | State University (listed) | Ada, Bea   |
+ * | Bea Dorn     | Harbor College (typed)    | Bea        |
+ * | Cara Ellis   | —                         | Cy         |
+ * | Dina Frost   | State University (listed) | Ada        |
+ */
+test.describe("the team page's Program and Faced-by facets", () => {
+  const ROSTER: TeamOpponentRosterPlayer[] = [
+    { playerId: "p-ada", userId: null, name: "Ada Okafor", photoUrl: null },
+    { playerId: "p-bea", userId: null, name: "Bea Lindqvist", photoUrl: null },
+    { playerId: "p-cy", userId: null, name: "Cy Abara", photoUrl: null },
+  ];
+
+  const STATE: TeamOpponentProgram = {
+    id: "prog-state",
+    schoolName: "State University",
+    shortCode: "STU",
+    crestUrl: null,
+    conference: null,
+    division: null,
+  };
+
+  let teamId = 0;
+  function teamMatch(
+    overrides: Partial<TeamOpponentMatchInput>,
+  ): TeamOpponentMatchInput {
+    teamId += 1;
+    return {
+      id: `t${teamId}`,
+      date: "2026-09-01",
+      player1_id: "p-ada",
+      player1_name: "Ada Okafor",
+      player2_name: "Ana Castillo",
+      created_by: null,
+      opponent_player_id: null,
+      opponent_hand: null,
+      opponent_backhand: null,
+      score: WON,
+      values: null,
+      opponent_program: null,
+      opponent_school: null,
+      ...overrides,
+    };
+  }
+
+  const { opponents: TEAM, totals } = groupTeamOpponents(
+    [
+      teamMatch({ opponent_program: STATE, date: "2026-09-20" }),
+      teamMatch({
+        player1_id: "p-bea",
+        opponent_program: STATE,
+        date: "2026-09-12",
+      }),
+      teamMatch({
+        player1_id: "p-bea",
+        player2_name: "Bea Dorn",
+        opponent_school: "Harbor  College",
+        opponent_hand: "left",
+        date: "2026-09-10",
+      }),
+      teamMatch({
+        player1_id: "p-cy",
+        player2_name: "Cara Ellis",
+        date: "2026-09-05",
+      }),
+      teamMatch({
+        player2_name: "Dina Frost",
+        opponent_program: STATE,
+        date: "2026-08-15",
+      }),
+    ],
+    ROSTER,
+    SEASON,
+  );
+
+  const STATE_KEY = "id:prog-state";
+  const HARBOR_KEY = "name:harbor college";
+
+  const inPrograms = (programs: readonly string[]) =>
+    names(TEAM.filter((o) => matchesProgramFilter(o, programs))).sort();
+  const facedBy = (players: readonly string[]) =>
+    names(TEAM.filter((o) => matchesFacedByFilter(o, players))).sort();
+
+  test("a program is keyed by id, a typed school by its name, neither by the none key", () => {
+    const key = (name: string) =>
+      opponentProgramKey(TEAM.find((o) => o.name === name)!);
+    expect(key("Ana Castillo")).toBe(STATE_KEY);
+    expect(key("Bea Dorn")).toBe(HARBOR_KEY);
+    expect(key("Cara Ellis")).toBe(NO_PROGRAM_KEY);
+  });
+
+  test("the Program checklist is one row per place, A–Z, then No team", () => {
+    expect(opponentProgramChoices(TEAM)).toEqual([
+      { value: HARBOR_KEY, label: "Harbor College" },
+      { value: STATE_KEY, label: "State University" },
+      { value: NO_PROGRAM_KEY, label: "No team" },
+    ]);
+    // As many places as the title row counts.
+    expect(opponentProgramChoices(TEAM).length - 1).toBe(totals.programs);
+  });
+
+  test("Program: nothing ticked keeps everybody", () => {
+    expect(inPrograms([])).toHaveLength(4);
+  });
+
+  test("Program: a directory program keeps the opponents who play there", () => {
+    expect(inPrograms([STATE_KEY])).toEqual(["Ana Castillo", "Dina Frost"]);
+  });
+
+  test("Program: a typed school is its own place, not No team", () => {
+    expect(inPrograms([HARBOR_KEY])).toEqual(["Bea Dorn"]);
+    expect(inPrograms([NO_PROGRAM_KEY])).toEqual(["Cara Ellis"]);
+  });
+
+  test("Program: several ticks OR", () => {
+    expect(inPrograms([STATE_KEY, NO_PROGRAM_KEY])).toEqual([
+      "Ana Castillo",
+      "Cara Ellis",
+      "Dina Frost",
+    ]);
+  });
+
+  test("the Faced-by checklist is one row per roster player present, A–Z", () => {
+    expect(opponentFacedByChoices(TEAM)).toEqual([
+      { value: "p-ada", label: "Ada Okafor" },
+      { value: "p-bea", label: "Bea Lindqvist" },
+      { value: "p-cy", label: "Cy Abara" },
+    ]);
+  });
+
+  test("Faced by: nothing ticked keeps everybody", () => {
+    expect(facedBy([])).toHaveLength(4);
+  });
+
+  test("Faced by: one player keeps every opponent they met", () => {
+    expect(facedBy(["p-bea"])).toEqual(["Ana Castillo", "Bea Dorn"]);
+    expect(facedBy(["p-cy"])).toEqual(["Cara Ellis"]);
+  });
+
+  test("Faced by: several ticks OR", () => {
+    expect(facedBy(["p-ada", "p-cy"])).toEqual([
+      "Ana Castillo",
+      "Cara Ellis",
+      "Dina Frost",
+    ]);
+  });
+
+  test("a personal row, which carries neither field, matches no tick", () => {
+    const kept = (filters: Partial<OpponentFilters>) =>
+      OPPONENTS.filter((o) =>
+        matchesOpponentFilters(o, { ...NO_OPPONENT_FILTERS, ...filters }),
+      ).length;
+    expect(kept({ facedBy: ["p-ada"] })).toBe(0);
+    expect(kept({ programs: [STATE_KEY] })).toBe(0);
+    // …and reads as "No team", which is true of it.
+    expect(kept({ programs: [NO_PROGRAM_KEY] })).toBe(OPPONENTS.length);
+  });
+
+  test("the facets AND with each other and with Hand", () => {
+    const cut = applyOpponentCut(TEAM, {
+      ...RESTING_OPPONENT_CUT,
+      filters: {
+        ...NO_OPPONENT_FILTERS,
+        programs: [STATE_KEY, HARBOR_KEY],
+        facedBy: ["p-bea"],
+      },
+      sort: "name",
+    });
+    expect(names(cut.visible)).toEqual(["Ana Castillo", "Bea Dorn"]);
+    expect(cut.inView).toBe(4);
+
+    expect(
+      names(
+        TEAM.filter((o) =>
+          matchesOpponentFilters(o, {
+            ...NO_OPPONENT_FILTERS,
+            hand: "left",
+            facedBy: ["p-bea"],
+          }),
+        ),
+      ),
+    ).toEqual(["Bea Dorn"]);
+  });
+
+  test("a tick counts as a filter, and toggling returns a new list", () => {
+    expect(hasOpponentFilters(NO_OPPONENT_FILTERS)).toBe(false);
+    expect(
+      hasOpponentFilters({ ...NO_OPPONENT_FILTERS, programs: [STATE_KEY] }),
+    ).toBe(true);
+    expect(
+      hasOpponentFilters({ ...NO_OPPONENT_FILTERS, facedBy: ["p-ada"] }),
+    ).toBe(true);
+
+    const ticked: readonly string[] = ["p-ada"];
+    expect(toggleFacetValue(ticked, "p-bea")).toEqual(["p-ada", "p-bea"]);
+    expect(toggleFacetValue(ticked, "p-ada")).toEqual([]);
+    expect(ticked).toEqual(["p-ada"]);
+  });
+
+  test("the strip names the ticked players and places", () => {
+    const choices = {
+      programs: opponentProgramChoices(TEAM),
+      facedBy: opponentFacedByChoices(TEAM),
+    };
+    expect(
+      describeOpponentFilters(
+        {
+          hand: "left",
+          backhand: null,
+          programs: [NO_PROGRAM_KEY, STATE_KEY],
+          facedBy: ["p-bea"],
+        },
+        choices,
+      ),
+    ).toBe(
+      "Faced by Bea Lindqvist · State University or No team · Left-handed",
+    );
+    expect(
+      describeOpponentFilters(
+        { ...NO_OPPONENT_FILTERS, facedBy: ["p-cy", "p-ada"] },
+        choices,
+      ),
+    ).toBe("Faced by Ada Okafor or Cy Abara");
+  });
+
+  test("an empty team cut says a filter emptied it and clears it", () => {
+    const empty = emptyOpponentCut({
+      view: "all",
+      filters: {
+        ...NO_OPPONENT_FILTERS,
+        programs: [HARBOR_KEY],
+        facedBy: ["p-cy"],
+      },
+    });
+    expect(empty.title).toBe("No opponents in this filter");
+    expect(empty.action).toEqual({
+      label: "Clear filter",
+      undo: { view: "all", filters: NO_OPPONENT_FILTERS },
+    });
+  });
+
+  test("the title subline and the footer read the loader's totals", () => {
+    expect(teamOpponentsSubline(totals)).toBe(
+      "4 opponents · 2 programs · 5 matches",
+    );
+    expect(
+      teamOpponentsSubline({ opponents: 1, programs: 1, matches: 1 }),
+    ).toBe("1 opponent · 1 program · 1 match");
+    expect(
+      teamOpponentsFooter(3, {
+        opponents: 7,
+        matches: 23,
+        analyzed: 18,
+        unattributed: 0,
+      }),
+    ).toBe("3 of 7 opponents · 18 of 23 matches analyzed");
+    expect(
+      teamOpponentsFooter(1, {
+        opponents: 1,
+        matches: 1,
+        analyzed: 0,
+        unattributed: 2,
+      }),
+    ).toBe(
+      "1 of 1 opponent · 0 of 1 match analyzed · 2 more matches with no roster player",
+    );
   });
 });

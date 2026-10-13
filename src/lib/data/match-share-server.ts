@@ -29,8 +29,21 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import {
   realTournamentName,
   sharedMatchWinner,
+  sharedVideoAllowed,
 } from "@/lib/data/match-share-format";
 import type { Match } from "@/lib/data/types";
+import { matchPageKind, withStatsPublished } from "@/lib/data/match-analysis";
+import {
+  analysisFor,
+  loadMatchAnalysis,
+} from "@/lib/data/match-analysis-server";
+import {
+  DEFAULT_BANDS,
+  rowToBandSettings,
+  type BandSettings,
+  type BandSettingsDbRow,
+} from "@/lib/data/viz-bands";
+import { BAND_COLUMNS } from "@/lib/data/viz-bands-write";
 
 /**
  * Public read-only match links (`/m/[token]`).
@@ -55,6 +68,13 @@ import type { Match } from "@/lib/data/types";
  * shared by a coach falls to the roster seat, exactly as the coach sees it.
  * The columns are read as stored and never reordered (guardrails §4).
  *
+ * A link carries the Statistics view always and the Visualizations view when
+ * its maker left that on (`include_visualizations`); the shot rows the court
+ * charts read are sent only then. The match video is on it only when someone
+ * allowed to (`can_share_match_video`: staff, or players where the program
+ * lets them) ticked `include_video` — and only while `sharedVideoAllowed`
+ * still holds for that person (`video_shared_by`), asked again on every read.
+ *
  * What the public page does NOT get: point bookmarks (they carry teammates'
  * user ids), the viewer's averages and KPI history (an anonymous reader has
  * no baseline), and nothing from `processing_jobs` beyond the analysed window
@@ -71,6 +91,10 @@ export interface SharePerson {
 export interface MatchShareLink {
   /** The absolute public URL, from `siteUrl()` — the one to copy and mail. */
   url: string;
+  /** The link also shows the Visualizations view (`include_visualizations`). */
+  includesVisualizations: boolean;
+  /** The link also shows the match video (`include_video`). */
+  includesVideo: boolean;
   /**
    * Who turned the link on and when ("Sep 26"), for the popover's closing
    * note. Null right after the viewer turns it on — the action hands back
@@ -135,6 +159,13 @@ export interface MatchShareState {
    * match that is in fact public. Carries no token.
    */
   publicLinkOn: boolean;
+  /**
+   * May this viewer put the match's video on its public link? The database's
+   * rule (`can_share_match_video`), asked rather than re-derived: on a team
+   * match that is the program's staff, and its players only where the program
+   * allows it. Taking the video off again is anyone's who `canShare`.
+   */
+  canShareVideo: boolean;
   audience: ShareAudience;
 }
 
@@ -237,23 +268,34 @@ export async function getMatchShareState(
   matchId: string,
 ): Promise<MatchShareState> {
   const supabase = await createClient();
-  const [linkResult, canShareResult, matchResult, workspace] =
-    await Promise.all([
-      supabase
-        .from("match_share_links")
-        .select("token, created_by, created_at")
-        .eq("match_id", matchId)
-        .maybeSingle(),
-      supabase.rpc("can_share_match", { p_match_id: matchId }),
-      supabase
-        .from("matches")
-        .select("program_id")
-        .eq("id", matchId)
-        .maybeSingle(),
-      getWorkspaceContext(),
-    ]);
+  const [
+    linkResult,
+    canShareResult,
+    canShareVideoResult,
+    matchResult,
+    workspace,
+  ] = await Promise.all([
+    supabase
+      .from("match_share_links")
+      .select(
+        "token, created_by, created_at, include_visualizations, include_video",
+      )
+      .eq("match_id", matchId)
+      .maybeSingle(),
+    supabase.rpc("can_share_match", { p_match_id: matchId }),
+    supabase.rpc("can_share_match_video", { p_match_id: matchId }),
+    supabase
+      .from("matches")
+      .select("program_id")
+      .eq("id", matchId)
+      .maybeSingle(),
+    getWorkspaceContext(),
+  ]);
   logShareError("read the share link", linkResult.error, { matchId });
   logShareError("read share permission", canShareResult.error, { matchId });
+  logShareError("read video share permission", canShareVideoResult.error, {
+    matchId,
+  });
   logShareError("read the match's program", matchResult.error, { matchId });
   const canShare = canShareResult.data === true;
   const visible = Boolean(matchResult.data);
@@ -285,11 +327,15 @@ export async function getMatchShareState(
     link: token
       ? {
           url: matchShareUrl(token),
+          includesVisualizations:
+            linkResult.data?.include_visualizations === true,
+          includesVideo: linkResult.data?.include_video === true,
           madeBy,
           madeOn: createdAt ? shortDate(createdAt) : null,
         }
       : null,
     canShare,
+    canShareVideo: canShare && canShareVideoResult.data === true,
     publicLinkOn: Boolean(token) || linkExists,
     audience,
   };
@@ -331,6 +377,27 @@ export interface SharedMatchData {
   match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
+  /**
+   * The link also shows the Visualizations view — its option is on AND the
+   * match is past analysis (see the `settled` note). `points` carry their shots
+   * when it does, or when `videoShared` (the film room reads them too).
+   */
+  includesVisualizations: boolean;
+  /**
+   * The link carries the match video AND whoever added it may still share it
+   * (`sharedVideoAllowed`) AND the match is past analysis — the page's leave
+   * to call `getSharedMatchVideo`.
+   * Nothing is signed here: this loader also feeds the layout, the page
+   * metadata and the Open Graph image, none of which play anything.
+   */
+  videoShared: boolean;
+  /**
+   * The depth/contact bands the Visualizations view buckets by: the ones the
+   * match's own workspace follows (its program's, or the sharer's personal
+   * ones), so the public court reads as the sharer's does. `DEFAULT_BANDS`
+   * when that workspace never saved any, or the link has no visualizations.
+   */
+  bandSettings: BandSettings;
   /** The sharer's insight summary, already `sides.pick`ed; null when none. */
   summary: string | null;
   /**
@@ -406,6 +473,137 @@ async function resolveSharerIds(
 }
 
 /**
+ * The bands of the workspace a shared match lives in — `viz_band_settings`
+ * is keyed by `Workspace.id`, the program's id for a team match and the
+ * user's own for a personal one. Any miss is `DEFAULT_BANDS`, as in
+ * `getBandSettings`.
+ */
+async function resolveSharedBands(
+  admin: SupabaseClient,
+  accountId: string | null,
+): Promise<BandSettings> {
+  if (!accountId) return DEFAULT_BANDS;
+  const { data, error } = await admin
+    .from("viz_band_settings")
+    .select(BAND_COLUMNS)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (error) {
+    logShareError("read the shared match's bands", error, { accountId });
+    return DEFAULT_BANDS;
+  }
+  return rowToBandSettings((data as BandSettingsDbRow | null) ?? null);
+}
+
+/** What `videoStillAllowed` reads off the match and its link. */
+interface SharedVideoSubject {
+  /** `match_share_links.video_shared_by` — who added the video. */
+  sharerId: string | null;
+  match: Pick<
+    DbMatch,
+    "created_by" | "player1_id" | "player2_id" | "program_id"
+  >;
+}
+
+/**
+ * `sharedVideoAllowed` over the live rows, on the service role: the
+ * service-role spelling of `can_share_match_video` for an explicit user,
+ * since that function reads `auth.uid()` and an anonymous request has none.
+ * It asks about whoever ADDED the video — their seat on the match (their
+ * login or a roster profile they claimed, as `my_player_ids()` names them),
+ * their role on the match's program, and the program's own setting. A failed
+ * read is "not allowed": the video is the one thing here that must not be
+ * shown on a guess.
+ */
+async function videoStillAllowed(
+  admin: SupabaseClient,
+  { sharerId, match }: SharedVideoSubject,
+): Promise<boolean> {
+  if (!sharerId) return false;
+  const programId = match.program_id;
+  const [profiles, member, program] = await Promise.all([
+    admin
+      .from("program_players")
+      .select("id")
+      .eq("claimed_by_user_id", sharerId)
+      .is("merged_into_id", null),
+    programId
+      ? admin
+          .from("program_members")
+          .select("role")
+          .eq("program_id", programId)
+          .eq("user_id", sharerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    programId
+      ? admin
+          .from("programs")
+          .select("players_can_share_video")
+          .eq("id", programId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  const failed = profiles.error ?? member.error ?? program.error;
+  if (failed) {
+    logShareError("read who may share the video", failed, { programId });
+    return false;
+  }
+  const playerIds = new Set<string>([
+    sharerId,
+    ...(profiles.data ?? []).map((row) => row.id as string),
+  ]);
+  return sharedVideoAllowed({
+    sharerId,
+    programId,
+    sharerRole: (member.data?.role as string | undefined) ?? null,
+    sharerOnMatch:
+      match.created_by === sharerId ||
+      (match.player1_id !== null && playerIds.has(match.player1_id)) ||
+      (match.player2_id !== null && playerIds.has(match.player2_id)),
+    playersCanShareVideo: program.data?.players_can_share_video === true,
+  });
+}
+
+/**
+ * The match a share token may play the video of, or null — the gate in front
+ * of `getSharedMatchVideo` and of `GET /api/share/[token]/video`. One null
+ * covers a bad token, a link without the video and a link whose video was
+ * added by someone who may no longer share it, so the route cannot tell a
+ * stranger which it was.
+ */
+export async function sharedVideoMatchId(
+  token: string,
+): Promise<string | null> {
+  if (!token || token.length > 128) return null;
+  const admin = lazyAdminClient();
+  const { data: link, error } = await admin
+    .from("match_share_links")
+    .select("match_id, video_shared_by, include_video")
+    .eq("token", token)
+    .maybeSingle();
+  if (error) {
+    logShareError("resolve a share token for video", error, {});
+    return null;
+  }
+  if (!link || link.include_video !== true) return null;
+  const matchId = link.match_id as string;
+  const { data: match, error: matchError } = await admin
+    .from("matches")
+    .select("created_by, player1_id, player2_id, program_id")
+    .eq("id", matchId)
+    .maybeSingle();
+  if (matchError || !match) {
+    logShareError("read the shared match's program", matchError, { matchId });
+    return null;
+  }
+  const allowed = await videoStillAllowed(admin, {
+    sharerId: (link.video_shared_by as string | null) ?? null,
+    match: match as SharedVideoSubject["match"],
+  });
+  return allowed ? matchId : null;
+}
+
+/**
  * The match behind a share token, or null. `cache()`d so `page.tsx`,
  * `generateMetadata` and `opengraph-image.tsx` share one read per request.
  */
@@ -416,7 +614,9 @@ export const getSharedMatchData = cache(
 
     const { data: link, error: linkError } = await admin
       .from("match_share_links")
-      .select("match_id, created_by, created_at")
+      .select(
+        "match_id, created_by, created_at, include_visualizations, include_video, video_shared_by",
+      )
       .eq("token", token)
       .maybeSingle();
     if (linkError) {
@@ -447,6 +647,7 @@ export const getSharedMatchData = cache(
       (id): id is string => id != null,
     );
     const sharerUserId = (link.created_by as string | null) ?? null;
+    const includesVisualizations = link.include_visualizations === true;
     const [
       statsResult,
       points,
@@ -455,6 +656,9 @@ export const getSharedMatchData = cache(
       profileResult,
       windowSeconds,
       sharedBy,
+      bandSettings,
+      videoAllowed,
+      jobs,
     ] = await Promise.all([
       getMatchStatisticsFromSupabase(matchId, admin),
       getMatchPointsFromSupabase(matchId, admin, { includeBookmarks: false }),
@@ -471,6 +675,18 @@ export const getSharedMatchData = cache(
           }),
       resolveAnalysedWindowSeconds(dbRow),
       resolveSharedBy(admin, sharerUserId, link.created_at as string),
+      includesVisualizations
+        ? resolveSharedBands(admin, dbRow.program_id ?? sharerUserId)
+        : Promise.resolve(DEFAULT_BANDS),
+      link.include_video === true
+        ? videoStillAllowed(admin, {
+            sharerId: (link.video_shared_by as string | null) ?? null,
+            match: dbRow,
+          })
+        : Promise.resolve(false),
+      // The job's state, read as the dashboard reads it — never reaped or
+      // reconciled from here: an anonymous page view must not move a job.
+      loadMatchAnalysis(admin, [matchId]),
     ]);
 
     // A failed points read is unknown, not zero points: same as every other
@@ -512,18 +728,49 @@ export const getSharedMatchData = cache(
     );
     const summary = insight?.summary?.trim() || null;
 
-    // Shot rows stay on the server. Only the Video and Visualizations views
-    // read `point.shots`, and the public page renders neither — shipping
-    // every shot of a full match to the browser would be most of the page's
-    // serialized payload for nothing. `shots` is optional on `MatchPoint`.
-    const pagePoints = points.map((point) => ({ ...point, shots: undefined }));
-
     const winner = sharedMatchWinner(dbRow.score, match.matchContext);
+
+    // Guardrails §3.3, for a reader with a link. The dashboard stops at the
+    // analysis steps while a match is in flight or failed, and never draws
+    // its views; this page has no steps to show, so it keeps to Statistics
+    // (which says there is no point-by-point data yet) and offers neither the
+    // courts nor the film. The same predicates as `matches/[matchId]/page.tsx`
+    // — a match can already hold points and a file mid-derivation, so "has
+    // points" alone would let both views through.
+    const jobAnalysis = analysisFor(jobs, {
+      id: matchId,
+      sourceProvider: match.sourceProvider,
+      verificationStatus: match.verificationStatus,
+    });
+    const statsPublished = Boolean(
+      statsResult?.statistics?.player1Stats &&
+      statsResult?.statistics?.player2Stats,
+    );
+    const settled =
+      matchPageKind({
+        ...jobAnalysis,
+        status: withStatsPublished(jobAnalysis.status, statsPublished),
+      }) !== "steps";
+    const showsVisualizations = includesVisualizations && settled;
+    const videoShared = videoAllowed && settled;
+
+    // Shot rows stay on the server unless a view that reads `point.shots` is
+    // on the page — Visualizations, or the Video view's point card and court.
+    // Shipping every shot of a full match to the browser would otherwise be
+    // most of the page's serialized payload for nothing. `shots` is optional
+    // on `MatchPoint`.
+    const pagePoints =
+      showsVisualizations || videoShared
+        ? points
+        : points.map((point) => ({ ...point, shots: undefined }));
 
     return {
       match,
       statsResult,
       points: pagePoints,
+      includesVisualizations: showsVisualizations,
+      videoShared,
+      bandSettings,
       summary,
       sharedBy,
       winner,

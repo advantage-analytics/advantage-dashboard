@@ -821,6 +821,31 @@ test.describe("GET /api/matches/[matchId]/video", () => {
     ).toMatchObject({ kind: "unavailable" });
   });
 
+  test("a share link's player asks its own route, and reads the same envelope", async () => {
+    // `/m/<token>` has no session, so the match's own route would refuse it;
+    // the room is handed the token route instead (`FilmTab playbackEndpoint`).
+    const asked: string[] = [];
+    const recording = (async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify({ attachment: null }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    await fetchPlaybackSource(MATCH, recording);
+    await fetchPlaybackSource(
+      MATCH,
+      recording,
+      undefined,
+      "/api/share/tok/video",
+    );
+    expect(asked).toEqual([
+      `/api/matches/${MATCH}/video`,
+      "/api/share/tok/video",
+    ]);
+  });
+
   test("a transport failure is unavailable, never a deletion", async () => {
     const thrower = (() =>
       Promise.reject(new Error("offline"))) as unknown as typeof fetch;

@@ -54,6 +54,11 @@ import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/
  * own Save dialog and takes only that one flag plus the workspace facts the
  * dialog's "Share with team" row depends on. Reading is untouched.
  *
+ * The public share page (`meta.readOnly`) draws the same courts with nothing
+ * that writes or belongs to a workspace: no Saved collection, no "Create
+ * view", no Save dialog — the default cuts, their filters and the fullscreen
+ * viewer only.
+ *
  * `VizStateProvider` (`viz-state-context.tsx`) is mounted ONCE here, around
  * the whole wall/focused tree, so every descendant's `useVizState()` reads
  * the SAME store — a click in the filters popover and a click in the
@@ -149,6 +154,7 @@ function ShotsTabBody() {
       workspaceKind={meta.workspaceKind}
       canSaveViews={canSaveViews}
       variant={state.cut === null ? "wall" : "focused"}
+      readOnly={meta.readOnly}
     />
   );
   // The wall's Saved collection would be an empty grid on a read-only report
@@ -173,7 +179,7 @@ function ShotsTabBody() {
       <div inert={viewerOpen || undefined}>
         {state.cut === null ? (
           <VizWall
-            savedViewsBand={wallSavedViewsBand}
+            savedViewsBand={meta.readOnly ? undefined : wallSavedViewsBand}
             collection={wallCollection}
             onCollectionChange={setWallCollection}
           />
@@ -186,6 +192,7 @@ function ShotsTabBody() {
             workspaceName={meta.workspaceName}
             hasPlayableVideo={meta.hasPlayableVideo}
             onWatchPoint={actions.watchPoint}
+            readOnly={meta.readOnly}
           />
         )}
       </div>

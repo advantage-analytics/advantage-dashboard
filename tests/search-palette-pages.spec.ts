@@ -40,6 +40,7 @@ test("a team workspace lists its live rail pages first, under its own name", () 
     "Team home",
     "Matches",
     "Roster",
+    "Opponents",
   ]);
   expect(workspace.every((page) => page.area === "UCLA")).toBe(true);
 });
@@ -52,13 +53,12 @@ test("coming-soon pages are never shortcuts", () => {
     }
   }
 
-  // Opponents is a stub for a team only: the personal page has shipped.
-  expect(pagesFor("team", true).map((page) => page.label)).not.toContain(
-    "Opponents",
-  );
-  expect(pagesFor("personal", true).map((page) => page.label)).toContain(
-    "Opponents",
-  );
+  // Opponents is built in both workspaces, so it is a shortcut in both.
+  for (const kind of ["team", "personal"] as const) {
+    expect(pagesFor(kind, true).map((page) => page.label)).toContain(
+      "Opponents",
+    );
+  }
 });
 
 test("account pages are the settings sections, then Help Center", () => {

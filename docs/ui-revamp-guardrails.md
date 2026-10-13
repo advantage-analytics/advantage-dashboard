@@ -204,6 +204,28 @@ be. Doubles teams and existing users depend on it.
 > match (the Details form) passes as before. Migration:
 > `supabase/migrations/20260929215610_set_match_round_on_line.sql`.
 
+> **A sixth reviewed exception, added 2026-10-12: `set_opponent_team`.**
+>
+> The team Opponents drawer's "Add their team" names the program an opponent
+> plays for on matches that were saved before the wizard asked. Allowed
+> because it is metadata about the OTHER side and touches no fact a statistic
+> is computed from: a single explicit action by the program's owner, a coach
+> or staff (the raw role, not the schedule policy — this is not a schedule
+> setting); scoped to matches of that one program, every id re-verified
+> against `program_id` under a row lock, at most 200 per call, all or nothing;
+> touching **only** `opponent_program_id` and `opponent_school` — **never**
+> `player1_id`, `player2_id`, `player2_name`, `score`, `format`, `program_id`,
+> `event_entry_id`, or anything under `match_stats`, `points` or `shots`. A
+> player keeps the plain client UPDATE under the creator-only policy, on the
+> same two columns, for matches they recorded. The wizard and the Edit Match
+> dialog write the same two columns on their own match. Unlike the earlier
+> exceptions this one writes **no** `program_audit_log` row yet — a known gap,
+> to close before the action is offered beyond the drawer. Migrations:
+> `supabase/migrations/20261012003309_matches_opponent_program.sql` (the
+> columns), `20261012071550_set_opponent_team.sql` and
+> `20261012080828_set_opponent_team_lock_fix.sql` (the function; the first
+> version's lock-on-aggregate statement failed every call and was replaced).
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

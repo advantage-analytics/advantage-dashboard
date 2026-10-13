@@ -21,7 +21,7 @@ export interface ClaimPreviewInput {
 export interface ClaimPreview {
   /** "Stanford Women's Tennis" — the program, as a name. */
   program: string;
-  /** Blue eyebrow on the image. */
+  /** The blue line under the school's name on the image. */
   eyebrow: string;
   /** Page title and og:title, before the "· Advantage" template. */
   title: string;

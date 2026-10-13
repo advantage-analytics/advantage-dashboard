@@ -94,7 +94,14 @@ export function SavedViewsBand({
   workspaceKind,
   canSaveViews,
   variant = "wall",
+  readOnly = false,
 }: {
+  /**
+   * The public share page: the focused "Views" grid keeps its default tiles
+   * and loses everything a workspace owns — saved views, Manage, "Create
+   * view". The wall never mounts the band there at all.
+   */
+  readOnly?: boolean;
   views: SavedViewRow[];
   workspaceRole: ProgramRole;
   workspaceKind: WorkspaceKind;
@@ -207,7 +214,7 @@ export function SavedViewsBand({
         .map((v) => v.id),
     [optimisticViews, workspaceRole, canSaveViews],
   );
-  const canManageAny = manageableIds.length > 0;
+  const canManageAny = !readOnly && manageableIds.length > 0;
 
   function tileDataFor(view: SavedViewRow) {
     const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
@@ -1044,7 +1051,7 @@ export function SavedViewsBand({
             );
           })}
 
-          {canSaveViews && (
+          {canSaveViews && !readOnly && (
             <div role="listitem">
               <NewViewTile hrefFor={hrefFor} />
             </div>

@@ -9,13 +9,15 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import {
   OPPONENTS_CARD_PADDING,
-  OPPONENTS_COLUMNS,
   OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
   OPPONENTS_PAGE_COLUMN,
   OPPONENTS_PAGE_FRAME,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
+  TEAM_OPPONENTS_GRID_COLS,
+  TEAM_OPPONENTS_MIN_WIDTH,
+  type OpponentsScope,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 import { OpponentsToolbarStatic } from "./opponents-toolbar";
@@ -28,10 +30,10 @@ import { OpponentsToolbarStatic } from "./opponents-toolbar";
  * One sentence and one action. An opponent is not something a player adds;
  * they arrive with a match, so the action is "New match" and nothing else.
  * Below it the page's own shape at 0.32 and `inert`: the toolbar at rest and
- * the table card carrying its eight real column labels over five ghost rows.
- * The labels are the honest payload — Hand · Backhand · Record · Form says
- * what an opponent's row becomes with no figure invented — and the rows are
- * the shape of one, each value replaced by a rule.
+ * the table card carrying its four real column labels over five ghost rows.
+ * The labels are the honest payload — Plays · Record · Last match says what
+ * an opponent's row becomes with no figure invented — and the rows are the
+ * shape of one, each value replaced by a rule.
  *
  * No title row: the offer carries the page's one primary, and the title
  * returns with the first opponent.
@@ -39,6 +41,10 @@ import { OpponentsToolbarStatic } from "./opponents-toolbar";
  * The grid, the labels and the row box come from `opponents-table-layout` by
  * import, so a moved track cannot leave the ghost table standing in for an
  * earlier one.
+ *
+ * `scope="team"` is the same composition over the team table's six tracks,
+ * with the team's words: the sentence is about the program, never "you", and
+ * the action is still "New match".
  */
 
 type Rule = React.ComponentProps<typeof GhostRule>;
@@ -46,37 +52,68 @@ type Rule = React.ComponentProps<typeof GhostRule>;
 /**
  * One rule per track, in `OPPONENTS_COLUMNS` order. Opponent is the fluid
  * track, so its rule is a fixed width — a percentage of a column that takes
- * the page's slack would draw a name 300px long on a wide screen. Form is the
- * five-tick strip's footprint; Result is `ResultMark`'s 14px dot.
+ * the page's slack would draw a name 300px long on a wide screen. The other
+ * three are shares of fixed tracks — the team ghost's own shares for the same
+ * three cells, since the tracks are the same widths.
  */
 const ROW_RULES: readonly Rule[] = [
   { width: "128px", tone: "200", shape: "tall" }, // Opponent — the name
-  { width: "76%" }, // Hand
-  { width: "72%" }, // Backhand
-  { width: "46%" }, // Record
-  { width: "25px" }, // Form
-  { width: "58%" }, // Last match
-  { width: "14px", shape: "dot" }, // Result
-  { width: "62%" }, // Score
+  { width: "62%" }, // Plays
+  { width: "64%" }, // Record — the figure and its ticks
+  { width: "72%" }, // Last match — date, result and score
 ];
 
-function GhostRow({ opacity }: { opacity: number }) {
+/**
+ * One rule per track, in `TEAM_OPPONENTS_COLUMNS` order. Only Opponent is
+ * fluid, so only its rule is a fixed width; the other five are shares of
+ * bounded tracks.
+ */
+const TEAM_ROW_RULES: readonly Rule[] = [
+  { width: "128px", tone: "200", shape: "tall" }, // Opponent — the name
+  { width: "70%" }, // Program
+  { width: "48%" }, // Faced by
+  { width: "62%" }, // Plays
+  { width: "64%" }, // Record — the figure and its ticks
+  { width: "72%" }, // Last match — date, result and score
+];
+
+function GhostRow({
+  opacity,
+  scope,
+}: {
+  opacity: number;
+  scope: OpponentsScope;
+}) {
+  const team = scope === "team";
   return (
     <div
       className={cn(OPPONENTS_ROW_FRAME, OPPONENTS_ROW_BOX)}
-      style={{ ...OPPONENTS_GRID_COLS, opacity }}
+      style={{
+        ...(team ? TEAM_OPPONENTS_GRID_COLS : OPPONENTS_GRID_COLS),
+        opacity,
+      }}
       aria-hidden="true"
     >
-      {ROW_RULES.map((rule, i) => (
+      {(team ? TEAM_ROW_RULES : ROW_RULES).map((rule, i) => (
         <GhostRule key={i} {...rule} />
       ))}
     </div>
   );
 }
 
+/** What the dimmed shape below the offer is, said once for a screen reader. */
+const SHAPE_DESCRIPTION: Record<OpponentsScope, string> = {
+  personal:
+    "Once you have a match against a named opponent this page lists each one with how they play, your record against them and your last match. Nothing below is real data yet.",
+  team: "Once the team has a match against a named opponent this page lists each one with their program, who on the roster faced them, how they play, the team's record against them and the last match. Nothing below is real data yet.",
+};
+
 export function OpponentsDayZero({
   unnamedMatches = 0,
+  scope = "personal",
 }: {
+  /** Which page this is the day zero of; the team's words name the program. */
+  scope?: OpponentsScope;
   /**
    * Matches the account has that name no opponent. With any, this is not an
    * empty account: the offer says what is missing instead of inviting a first
@@ -84,7 +121,10 @@ export function OpponentsDayZero({
    */
   unnamedMatches?: number;
 }) {
-  const hasUnnamed = unnamedMatches > 0;
+  const team = scope === "team";
+  // The team loader does not count unnamed matches, so the team offer is
+  // always the invitation to a first match.
+  const hasUnnamed = !team && unnamedMatches > 0;
   return (
     <div className={OPPONENTS_PAGE_FRAME}>
       <div className={OPPONENTS_PAGE_COLUMN}>
@@ -95,7 +135,9 @@ export function OpponentsDayZero({
                 ? unnamedMatches === 1
                   ? "Your match does not name an opponent yet."
                   : `None of your ${unnamedMatches} matches name an opponent yet.`
-                : "Everyone you play is kept here."
+                : team
+                  ? "Everyone the team plays is kept here."
+                  : "Everyone you play is kept here."
             }
             headlineMeasure="30ch"
             actions={
@@ -118,7 +160,7 @@ export function OpponentsDayZero({
           />
 
           <DayZeroShape
-            description="Once you have a match against a named opponent this page lists each one with their hand, backhand, your record against them, recent form and your last match. Nothing below is real data yet."
+            description={SHAPE_DESCRIPTION[scope]}
             className="flex flex-col gap-3"
           >
             <OpponentsToolbarStatic />
@@ -129,11 +171,15 @@ export function OpponentsDayZero({
               className="surface-card overflow-x-auto"
               style={{ padding: OPPONENTS_CARD_PADDING }}
             >
-              <div className={OPPONENTS_MIN_WIDTH}>
-                <OpponentsTableHeader />
+              <div
+                className={
+                  team ? TEAM_OPPONENTS_MIN_WIDTH : OPPONENTS_MIN_WIDTH
+                }
+              >
+                <OpponentsTableHeader scope={scope} />
                 <div>
                   {GHOST_OPACITY.map((opacity) => (
-                    <GhostRow key={opacity} opacity={opacity} />
+                    <GhostRow key={opacity} opacity={opacity} scope={scope} />
                   ))}
                 </div>
               </div>

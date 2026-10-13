@@ -314,6 +314,7 @@ export default async function MatchDetailPage({
         side="top"
         align="start"
         share={shareState}
+        hasVideo={Boolean(video)}
       />
     </MatchReportRailFooter>
   );

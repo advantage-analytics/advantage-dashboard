@@ -1,11 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PersonalOpponentTotals } from "@/lib/data/personal-opponents";
-
-function count(n: number, singular: string, plural: string): string {
-  return `${n} ${n === 1 ? singular : plural}`;
-}
 
 /**
  * The Opponents page header — `MatchesTitleRow`'s composition: the
@@ -20,10 +15,13 @@ function count(n: number, singular: string, plural: string): string {
  * tomorrow for part of every day and then correct itself on hydration.
  */
 export function OpponentsTitleRow({
-  totals,
+  subline,
 }: {
-  /** `getPersonalOpponents().totals` — matches against a named opponent. */
-  totals: PersonalOpponentTotals;
+  /**
+   * The counts under the title, already in words — `personalOpponentsSubline`
+   * or `teamOpponentsSubline` (`opponents-views.ts`), over the loader's totals.
+   */
+  subline: string;
 }) {
   const [dateText, setDateText] = useState("");
   useEffect(() => {
@@ -35,12 +33,6 @@ export function OpponentsTitleRow({
       }),
     );
   }, []);
-
-  const subline = [
-    count(totals.opponents, "opponent", "opponents"),
-    count(totals.matches, "match", "matches"),
-    `${totals.won} won`,
-  ].join(" · ");
 
   return (
     <div className="flex items-end gap-2.5">
