@@ -42,7 +42,18 @@ function harness(
         ? { data: null, error: { message: rpcError } }
         : { data: { match_id: id(5), job_id: id(6) }, error: null };
     },
-    from: () => ({
+    from: (table: string) => ({
+      update: (values: Record<string, unknown>) => ({
+        eq: (_: string, matchId: string) => ({
+          eq: async (__: string, programId: string) => {
+            calls.push({
+              name: `update:${table}`,
+              args: { values, matchId, programId },
+            });
+            return { error: null };
+          },
+        }),
+      }),
       select: () => ({
         eq: () => ({
           maybeSingle: async () => ({
@@ -228,4 +239,68 @@ test("video admission preserves wizard court labels and permits unanswered optio
       (h.calls[0].args.p_request as Record<string, unknown>).courtType,
     ).toBe(court || null);
   }
+});
+test("their team is saved on the new match alone, and refused when malformed or on an attachment", async () => {
+  const picked = harness();
+  expect(
+    (
+      await submitAdminMatchVideo(
+        { ...input, opponentProgramId: id(7).toUpperCase() },
+        picked.deps,
+      )
+    ).ok,
+  ).toBe(true);
+  expect(picked.calls.map((c) => c.name)).toEqual([
+    "admin_submit_match_video",
+    "update:matches",
+  ]);
+  expect(picked.calls[1].args).toEqual({
+    values: { opponent_program_id: id(7), opponent_school: null },
+    matchId: id(5),
+    programId: id(3),
+  });
+  const typed = harness();
+  await submitAdminMatchVideo(
+    { ...input, opponentSchool: "  Rival College " },
+    typed.deps,
+  );
+  expect(typed.calls[1].args.values).toEqual({
+    opponent_program_id: null,
+    opponent_school: "Rival College",
+  });
+  for (const bad of [
+    { opponentProgramId: "not-a-program" },
+    { opponentProgramId: id(7), opponentSchool: "Rival College" },
+    { opponentSchool: "x".repeat(121) },
+    { opponentSchool: 7 },
+  ]) {
+    const h = harness();
+    expect(
+      (await submitAdminMatchVideo({ ...input, ...bad }, h.deps)).ok,
+      JSON.stringify(bad),
+    ).toBe(false);
+    expect(h.calls).toEqual([]);
+  }
+  const attached = harness();
+  expect(
+    (
+      await submitAdminMatchVideo(
+        {
+          operationId: id(1),
+          itemId: id(2),
+          programId: id(3),
+          matchId: id(5),
+          fingerprint: "a".repeat(32),
+          startSeconds: 90,
+          endSeconds: 4000,
+          initialTopPlayerIsPlayer1: false,
+          adScoring: true,
+          fixedCamera: false,
+          opponentSchool: "Rival College",
+        },
+        attached.deps,
+      )
+    ).ok,
+  ).toBe(false);
+  expect(attached.calls).toEqual([]);
 });

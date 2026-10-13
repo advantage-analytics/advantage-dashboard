@@ -7,6 +7,10 @@ import { getImportProviderStrategy } from "@/lib/services/upload/providers";
 import { getParser } from "@/lib/services/upload/parsers";
 import { validateSwingVisionFile } from "@/lib/services/upload/validators/swingvision-validator";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
+import {
+  readAdminOpponentTeam,
+  saveAdminOpponentTeam,
+} from "@/lib/admin/uploads/opponent-team";
 const refusals: Record<string, string> = {
   "player-mismatch":
     "The file's players do not match the recorded players or selected roster athlete. Choose the matching file; recorded players were not changed.",
@@ -55,6 +59,8 @@ export async function submitAdminMatchFile(
     "date",
     "matchType",
     "courtType",
+    "opponentProgramId",
+    "opponentSchool",
   ];
   if (
     [...form.keys()].some(
@@ -74,6 +80,13 @@ export async function submitAdminMatchFile(
   const matchType = string("matchType");
   const courtType = adminUploadCourt(string("courtType"));
   const file = form.get("file");
+  const opponentTeam = readAdminOpponentTeam(
+    string("opponentProgramId"),
+    string("opponentSchool"),
+  );
+  // An attachment keeps the recorded match as it is, their team included.
+  if (!opponentTeam.ok || (matchId && opponentTeam.team))
+    return failure("Choose their team from the directory, or type a school.");
   if (
     ![operationId, itemId, programId].every((id) => uuid.test(id)) ||
     (matchId &&
@@ -185,6 +198,14 @@ export async function submitAdminMatchFile(
         : "Could not save this submission. Reload its operation before retrying.",
     );
   const attempt = submitted.data;
+  // Their team is not the RPC's to write; the file is admitted either way.
+  if (opponentTeam.team)
+    await saveAdminOpponentTeam(
+      admin,
+      attempt.match_id,
+      programId,
+      opponentTeam.team,
+    );
   if (attempt.state === "queued") {
     // Await dispatch. Edge claims before side effects; a repeated/lost response
     // cannot cause a second processor to insert points. Queued remains retryable.

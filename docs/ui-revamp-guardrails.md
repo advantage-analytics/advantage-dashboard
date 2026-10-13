@@ -218,7 +218,12 @@ be. Doubles teams and existing users depend on it.
 > `event_entry_id`, or anything under `match_stats`, `points` or `shots`. A
 > player keeps the plain client UPDATE under the creator-only policy, on the
 > same two columns, for matches they recorded. The wizard and the Edit Match
-> dialog write the same two columns on their own match. Unlike the earlier
+> dialog write the same two columns on their own match. Since 2026-10-13 the
+> admin console's wizard asks too: its two submission routes write the pair
+> onto the match they just created, scoped by `program_id`, after the RPC
+> (`src/lib/admin/uploads/opponent-team.ts`) — never on an attachment to a
+> recorded match, and neither column is one the `preserve_admin_*` triggers
+> hold. Unlike the earlier
 > exceptions this one writes **no** `program_audit_log` row yet — a known gap,
 > to close before the action is offered beyond the drawer. Migrations:
 > `supabase/migrations/20261012003309_matches_opponent_program.sql` (the

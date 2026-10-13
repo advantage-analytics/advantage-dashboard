@@ -65,6 +65,19 @@ function harness(
   };
   const state = options.state ?? "queued";
   const admin = {
+    from: (table: string) => ({
+      update: (values: unknown) => ({
+        eq: (_: string, matchId: string) => ({
+          eq: async (__: string, programId: string) => {
+            calls.push({
+              name: `update:${table}`,
+              args: { values, matchId, programId },
+            });
+            return { error: null };
+          },
+        }),
+      }),
+    }),
     storage: { from: () => storage },
     rpc: async (name: string, args: unknown) => {
       calls.push({ name, args });
@@ -209,5 +222,33 @@ test("file admission preserves wizard court labels and permits unanswered option
       h.calls.find((c) => c.name === "admin_submit_match_file")!.args.p_request
         .courtType,
     ).toBe(court || null);
+  }
+});
+test("their team is saved on the new match alone, and refused when malformed or on an attachment", async () => {
+  const file = await workbook();
+  const picked = harness();
+  const withProgram = form(file);
+  withProgram.set("opponentProgramId", id(7));
+  expect((await submitAdminMatchFile(withProgram, picked.deps)).ok).toBe(true);
+  expect(picked.calls.find((c) => c.name === "update:matches")!.args).toEqual({
+    values: { opponent_program_id: id(7), opponent_school: null },
+    matchId: id(5),
+    programId: id(3),
+  });
+  const plain = harness();
+  await submitAdminMatchFile(form(file), plain.deps);
+  expect(plain.calls.some((c) => c.name === "update:matches")).toBe(false);
+  const both = form(file);
+  both.set("opponentProgramId", id(7));
+  both.set("opponentSchool", "Rival College");
+  const attached = form(file);
+  attached.delete("playerId");
+  attached.set("matchId", id(5));
+  attached.set("fingerprint", "a".repeat(32));
+  attached.set("opponentSchool", "Rival College");
+  for (const bad of [both, attached]) {
+    const h = harness();
+    expect((await submitAdminMatchFile(bad, h.deps)).ok).toBe(false);
+    expect(h.calls).toEqual([]);
   }
 });

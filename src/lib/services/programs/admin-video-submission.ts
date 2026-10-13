@@ -4,6 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
+import {
+  readAdminOpponentTeam,
+  saveAdminOpponentTeam,
+} from "@/lib/admin/uploads/opponent-team";
 const defaults = { checkAdmin, createAdminClient, getAdminUploadContext };
 
 /**
@@ -30,6 +34,8 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     "fingerprint",
     "playerId",
     "opponentName",
+    "opponentProgramId",
+    "opponentSchool",
     "score",
     "date",
     "courtType",
@@ -69,13 +75,26 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     );
   if (
     matchId &&
-    ["playerId", "opponentName", "score", "date", "courtType", "bestOf"].some(
-      (key) => body[key] != null,
-    )
+    [
+      "playerId",
+      "opponentName",
+      "opponentProgramId",
+      "opponentSchool",
+      "score",
+      "date",
+      "courtType",
+      "bestOf",
+    ].some((key) => body[key] != null)
   )
     return refuse(
       "An attachment uses the recorded players, score and match details. Do not supply replacements.",
     );
+  const opponentTeam = readAdminOpponentTeam(
+    body.opponentProgramId,
+    body.opponentSchool,
+  );
+  if (!opponentTeam.ok)
+    return refuse("Choose their team from the directory, or type a school.");
   const resolved = await deps.getAdminUploadContext(programId);
   if (!resolved.ok || resolved.context.actorId !== actor.id)
     return refuse("This program is unavailable.");
@@ -200,6 +219,14 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     });
     return refuse("Could not reserve this video.");
   }
+  // Their team is not the RPC's to write; the job is reserved either way.
+  if (opponentTeam.team)
+    await saveAdminOpponentTeam(
+      admin,
+      data.match_id as string,
+      programId,
+      opponentTeam.team,
+    );
   return {
     ok: true as const,
     operationId,
