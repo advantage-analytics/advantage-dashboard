@@ -53,7 +53,7 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  * the button as wide as the column and pushed "Not now" onto a line of its
  * own. A button names its action; the page names its subject.
  */
-const JOIN_LABEL = "Join team";
+export const JOIN_LABEL = "Join team";
 
 /** Signed in as the invited address. One button. */
 export function JoinReady({

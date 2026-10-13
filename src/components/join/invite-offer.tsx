@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { CLAIM_BUTTON, ClaimActions } from "@/components/claim/claim-shell";
+import { JOIN_LABEL } from "@/components/join/join-forms";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   JoinQuotaFooter,
@@ -127,10 +128,9 @@ function SingleInvite({
           className={CLAIM_BUTTON}
           onClick={run}
         >
-          {/* The action, not the program: the heading above names it, and a
-              long name made this button as wide as the row. Same label as
-              the `/join/[token]` screens. */}
-          {pending ? "Joining…" : "Join team"}
+          {/* The action, not the program: the heading above names it. See
+              JOIN_LABEL, shared with the `/join/[token]` screens. */}
+          {pending ? "Joining…" : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref} />
         <JoinQuotaFooter
