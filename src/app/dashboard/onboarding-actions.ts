@@ -36,6 +36,8 @@ export interface MarkTourDoneResult {
     | "unexpected";
 }
 
+const SAVE_FAILED = "Could not save that the tour was seen.";
+
 export async function markTourDone(tour: SeenId): Promise<MarkTourDoneResult> {
   // A server action's argument is whatever the network sent, so the type is
   // re-checked here against the columns that exist.
@@ -66,20 +68,20 @@ export async function markTourDone(tour: SeenId): Promise<MarkTourDoneResult> {
       .select("id");
     if (error) {
       return {
-        error: "Could not save that the tour was seen.",
+        error: SAVE_FAILED,
         code: "write_failed",
       };
     }
     if (!data?.length) {
       return {
-        error: "Could not save that the tour was seen.",
+        error: SAVE_FAILED,
         code: "no_row",
       };
     }
     return { error: null };
   } catch {
     return {
-      error: "Could not save that the tour was seen.",
+      error: SAVE_FAILED,
       code: "unexpected",
     };
   }
