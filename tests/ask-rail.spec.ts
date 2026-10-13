@@ -243,6 +243,40 @@ test.describe("earlier questions, by month", () => {
     }
   });
 
+  // The zone is the workspace's, handed in as a string — not the browser's
+  // and not UTC — so a Pacific evening is dated the day it was, on the server
+  // and here alike.
+  test("a question is dated in the workspace's time zone, not UTC's", async ({
+    page,
+  }) => {
+    await openFixture(page, "?earlier=edge&tz=America/Los_Angeles");
+
+    await expect(rail(page).getByRole("heading")).toHaveText([
+      "October",
+      "September",
+    ]);
+    await expect(rail(page).getByRole("listitem").locator("time")).toHaveText([
+      "Oct 12",
+      "Sep 30",
+    ]);
+    // The attribute stays the instant itself.
+    await expect(
+      rail(page).getByRole("listitem").first().locator("time"),
+    ).toHaveAttribute("datetime", "2026-10-13T03:30:00.000Z");
+  });
+
+  test("with no zone, or one that is not a zone, the dates are UTC's and nothing throws", async ({
+    page,
+  }) => {
+    for (const query of ["?earlier=edge", "?earlier=edge&tz=Not/AZone"]) {
+      await openFixture(page, query);
+      await expect(rail(page).getByRole("heading")).toHaveText(["October"]);
+      await expect(rail(page).getByRole("listitem").locator("time")).toHaveText(
+        ["Oct 13", "Oct 1"],
+      );
+    }
+  });
+
   test("the open conversation says so, and only it", async ({ page }) => {
     await openFixture(page);
 

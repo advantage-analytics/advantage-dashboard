@@ -8,7 +8,9 @@ import {
   MAX_ASK_TABLE_ROWS,
   MAX_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
-import { comparedPairs } from "@/lib/services/ask/facts";
+import { comparedPairs, isNumber, printed } from "@/lib/services/ask/facts";
+import { ASK_SCOPE_COUNT_COLUMN } from "@/lib/services/ask/prompts";
+import { capitalize } from "@/lib/utils";
 import { askMeasure } from "@/lib/services/ask/measures";
 
 /**
@@ -74,8 +76,6 @@ export interface AskPairedShape {
   unpaired: { column: string; label: string }[];
 }
 
-const SCOPE_COUNT_COLUMN = "matches_in_scope";
-
 /** Columns that count matches or are a difference: never a measure of their own here. */
 const NOT_A_MEASURE =
   /^(?:n|matches|played|match_count|matches_played|num_matches|n_matches|[a-z0-9_]+_matches|matches_[a-z0-9_]+|[a-z0-9_]+_match_count)$|_(?:diff|diff_pct|delta|change|gap)$/;
@@ -99,15 +99,6 @@ function relativeGap(a: number, b: number, percentage: boolean): number {
     percentage ? 0 : MIN_COUNT_SCALE,
   );
   return larger === 0 ? 0 : Math.abs(a - b) / larger;
-}
-
-function printed(value: number): number {
-  const rounded = Math.round(Math.abs(value) * 10) / 10;
-  return value < 0 && rounded > 0 ? -rounded : rounded;
-}
-
-function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }
 
 /** A measure's name: the dictionary's, or the column's own words for an alias it cannot place. */
@@ -188,7 +179,7 @@ export function pairedShape(rows: readonly AskRow[]): AskPairedShape | null {
   const unpaired = Object.keys(row)
     .filter(
       (column) =>
-        column !== SCOPE_COUNT_COLUMN &&
+        column !== ASK_SCOPE_COUNT_COLUMN &&
         !inPair.has(column) &&
         !NOT_A_MEASURE.test(column) &&
         !column.startsWith(PAIRED_NAME_PREFIX) &&
@@ -290,10 +281,6 @@ interface Side {
 
 function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
-function upperFirst(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function joined(parts: readonly string[]): string {
@@ -479,7 +466,7 @@ export function buildPairedAnswer(
   const lead = stated.slice(0, MAX_PAIRED_HEADLINE);
   const headline =
     lead.length > 0
-      ? `${upperFirst(clauses(lead))}.`
+      ? `${capitalize(clauses(lead))}.`
       : shape.kind === "opponent"
         ? `${subject.name} and ${other.lower} were level on every measure compared.`
         : `Every measure compared was level with ${other.lower}.`;
@@ -487,7 +474,7 @@ export function buildPairedAnswer(
   // ── Table: subject | other, widest gap first, within the table's limits ──
   const tabled = shape.pairs.slice(0, MAX_ASK_TABLE_ROWS);
   const labels = rowLabels(tabled);
-  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const table = [
     `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first, from ${count}.`,
     `COLUMNS: ${subject.heading} ${S} ${other.heading}`,
@@ -503,7 +490,7 @@ export function buildPairedAnswer(
     MAX_PAIRED_HEADLINE,
     MAX_PAIRED_HEADLINE + MAX_PAIRED_BODY,
   );
-  if (rest.length > 0) body.push(`${upperFirst(clauses(rest))}.`);
+  if (rest.length > 0) body.push(`${capitalize(clauses(rest))}.`);
   if (level.length > 0 && lead.length > 0) {
     body.push(
       `Level: ${joined(level.map((pair) => `${lowerFirst(pair.label)} (${cell(pair.subject)})`))}.`,
@@ -610,7 +597,7 @@ export function buildTwoGroupAnswer(
     gap: number;
   }[] = [];
   for (const column of Object.keys(first)) {
-    if (column === SCOPE_COUNT_COLUMN) continue;
+    if (column === ASK_SCOPE_COUNT_COLUMN) continue;
     const a = first[column];
     const b = second[column];
     if (!isNumber(a) || !isNumber(b)) continue;
@@ -653,11 +640,11 @@ export function buildTwoGroupAnswer(
   const lead = stated.slice(0, MAX_PAIRED_HEADLINE);
   const headline =
     lead.length > 0
-      ? `${upperFirst(lead.map(clause).join("; "))}.`
+      ? `${capitalize(lead.map(clause).join("; "))}.`
       : "The two groups were level on every measure compared.";
 
   const tabled = measures.slice(0, MAX_ASK_TABLE_ROWS);
-  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const table = [
     `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first.`,
     `COLUMNS: ${ref(1, label)} ${S} ${ref(2, label)}`,
@@ -672,7 +659,7 @@ export function buildTwoGroupAnswer(
     MAX_PAIRED_HEADLINE,
     MAX_PAIRED_HEADLINE + MAX_PAIRED_BODY,
   );
-  if (rest.length > 0) body.push(`${upperFirst(rest.map(clause).join("; "))}.`);
+  if (rest.length > 0) body.push(`${capitalize(rest.map(clause).join("; "))}.`);
   if (level.length > 0 && lead.length > 0) {
     body.push(
       `Level: ${joined(level.map((entry) => `${lowerFirst(entry.name)} (${ref(1, entry.column)})`))}.`,
@@ -774,7 +761,7 @@ export function buildPlayersAnswer(
     .slice(0, MAX_ASK_TABLE_ROWS);
   if (players.length < 2) return null;
 
-  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const perMatch = measures.some((measure) => PER_MATCH.test(measure.column));
   const tail = (ordered: readonly AskRow[]): string[] => [
     ...(ordered.every((row) => isNumber(row.group_matches))
@@ -991,7 +978,7 @@ export function absentMatchupLead(
   return {
     lead: [
       `${who} has no recorded match against ${other}.`,
-      `${one ? `The program's one match against ${other}` : `The program has {{r1.${SCOPE_COUNT_COLUMN}}} matches against ${other}${many ? "; the most recent" : ""}`}: ${upperFirst(retold.join(" "))}`,
+      `${one ? `The program's one match against ${other}` : `The program has {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches against ${other}${many ? "; the most recent" : ""}`}: ${capitalize(retold.join(" "))}`,
     ],
     extraRow,
   };
@@ -1028,7 +1015,8 @@ export function buildMatchListAnswer(
     if (!("i_won" in row)) return null;
     if (row.i_won !== null && typeof row.i_won !== "boolean") return null;
     for (const [column, value] of Object.entries(row)) {
-      if (column === SCOPE_COUNT_COLUMN || NOT_A_MEASURE.test(column)) continue;
+      if (column === ASK_SCOPE_COUNT_COLUMN || NOT_A_MEASURE.test(column))
+        continue;
       if (isNumber(value)) return null;
     }
   }
@@ -1114,7 +1102,7 @@ export function buildTrendAnswer(
   if (date === undefined) return null;
   const measures = keys.filter(
     (column) =>
-      column !== SCOPE_COUNT_COLUMN &&
+      column !== ASK_SCOPE_COUNT_COLUMN &&
       !NOT_A_MEASURE.test(column) &&
       rows.some((row) => isNumber(row[column])) &&
       rows.every((row) => row[column] === null || isNumber(row[column])),
@@ -1156,7 +1144,7 @@ export function buildTrendAnswer(
     points.length <= MAX_ASK_TREND_POINTS
       ? `\n${ASK_VISUAL_LINE_PREFIX} trend ${S} ${name} over time, oldest first.\nPLOT: ${date} ${S} ${measure}`
       : "";
-  const count = `{{r1.${SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const body = [
     `Lowest: ${at(low)}.`,
     `Highest: ${at(high)}.`,

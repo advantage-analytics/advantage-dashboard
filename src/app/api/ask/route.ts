@@ -311,8 +311,28 @@ export async function POST(request: Request): Promise<Response> {
   // viewer is in it is read here, before a row of the program is.
   let scope: AskScope = PERSONAL_ASK_SCOPE;
   if (body.programId !== null) {
-    const workspaces = await getWorkspaceContext().catch(() => null);
-    const program = workspaces?.available.find(
+    // A read that failed is not an answer. Only a list that was read and
+    // does not hold the program says "not a member"; a thrown read — or one
+    // that came back empty for a viewer this request has just authenticated —
+    // is the server's fault and is worth asking again, so it leaves as the
+    // retryable error rather than a sentence telling a member they are not
+    // one.
+    let workspaces: Awaited<ReturnType<typeof getWorkspaceContext>>;
+    try {
+      workspaces = await getWorkspaceContext();
+    } catch (error) {
+      console.error("[ask] could not read the viewer's workspaces", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return errorResponse(transportError("internal_error", "workspace_read"));
+    }
+    if (!workspaces) {
+      console.error("[ask] could not read the viewer's workspaces", {
+        error: "no workspace context for a signed-in viewer",
+      });
+      return errorResponse(transportError("internal_error", "workspace_read"));
+    }
+    const program = workspaces.available.find(
       (workspace) =>
         workspace.kind === "team" && workspace.id === body.programId,
     );

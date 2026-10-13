@@ -45,6 +45,12 @@ export interface AskRailProps {
    * scope's own page. The personal page when omitted.
    */
   scope?: AskScope;
+  /**
+   * The IANA zone the months and row dates are read in: the workspace's
+   * (`Workspace.timeZone`), the same string on the server and in the browser.
+   * UTC when omitted or unknown (`ask-earlier.ts`).
+   */
+  timeZone?: string;
   /** The conversation that is open, so its row can say so. */
   activeConversationId: string | null;
   /** "New question": the button here, and the page's shortcut, run this. */
@@ -90,6 +96,7 @@ export function AskRail({
   quota,
   conversations,
   scope = PERSONAL_ASK_SCOPE,
+  timeZone,
   activeConversationId,
   onNewQuestion,
   onDeleteConversation,
@@ -199,6 +206,7 @@ export function AskRail({
               {conversations.length > 0 ? (
                 <AskEarlier
                   conversations={conversations}
+                  timeZone={timeZone}
                   basePath={askBasePath(scope)}
                   activeConversationId={activeConversationId}
                   onDeleteConversation={onDeleteConversation}
@@ -343,13 +351,14 @@ function AskLimit({ quota }: { quota: AskQuotaView }) {
 
 function AskEarlier({
   conversations,
+  timeZone,
   basePath,
   activeConversationId,
   onDeleteConversation,
   deleteDisabled,
 }: Pick<
   AskRailProps,
-  "conversations" | "activeConversationId" | "onDeleteConversation"
+  "conversations" | "timeZone" | "activeConversationId" | "onDeleteConversation"
 > & { basePath: string; deleteDisabled: boolean }) {
   // The row being asked about. Kept after the dialog closes so its title does
   // not blank out while the dialog is still leaving.
@@ -375,7 +384,7 @@ function AskEarlier({
 
   return (
     <>
-      {askMonthGroups(conversations).map((group) => (
+      {askMonthGroups(conversations, timeZone).map((group) => (
         <section
           key={group.key}
           data-ask-month={group.key}
@@ -387,6 +396,7 @@ function AskEarlier({
               <AskEarlierRow
                 key={conversation.id}
                 conversation={conversation}
+                timeZone={timeZone}
                 basePath={basePath}
                 active={conversation.id === activeConversationId}
                 deleteDisabled={deleteDisabled}
@@ -440,19 +450,22 @@ function AskEarlier({
  */
 function AskEarlierRow({
   conversation,
+  timeZone,
   basePath,
   active,
   deleteDisabled,
   onDelete,
 }: {
   conversation: AskConversationSummary;
+  /** The zone the row's date is read in (`AskRailProps.timeZone`). */
+  timeZone: string | undefined;
   /** The page this conversation belongs to (`askBasePath`). */
   basePath: string;
   active: boolean;
   deleteDisabled: boolean;
   onDelete: () => void;
 }) {
-  const askedOn = askDayLabel(conversation.updatedAt);
+  const askedOn = askDayLabel(conversation.updatedAt, timeZone);
   return (
     <li
       className={cn(

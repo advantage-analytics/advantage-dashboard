@@ -9,7 +9,7 @@ import {
 } from "@/lib/data/ask-server";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { canUploadForProgram } from "@/lib/workspace/types";
+import { explainVideoRefusal } from "@/lib/workspace/types";
 
 export const metadata = { title: "Ask" };
 
@@ -79,7 +79,13 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
       // this URL starts a fresh thread rather than keep another team's.
       key={`${programId}:${conversation?.id ?? "new"}`}
       scope={scope}
-      canUpload={canUploadForProgram(active)}
+      // "Send match video" is offered only where sending would go through:
+      // `explainVideoRefusal()` is the rule the upload route itself asks —
+      // the role and policy half (`canUploadForProgram()`) AND a program that
+      // is approved to send video. The role half alone offered the button to
+      // a program still in review, which the next page then refused.
+      canUpload={explainVideoRefusal(active) === null}
+      timeZone={active.timeZone}
       tagOptions={tagOptions}
       quota={quota}
       conversations={conversations}

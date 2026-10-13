@@ -1028,12 +1028,17 @@
   }
 }
 
+/* On the trend's wrapper (`[data-ask-wipe]`), which holds the drawing and the
+ * last value's label. The negative insets are room, not motion: 12px for the
+ * dots that sit on the box's edge, and 96px on the right for the label, which
+ * starts in the plot's right gutter (9% of the width, so under 40px on a
+ * narrow column) and does not wrap. The end state must leave both whole. */
 @keyframes ask-wipe {
   from {
     clip-path: inset(-12px 100% -12px -12px);
   }
   to {
-    clip-path: inset(-12px -48px -12px -12px);
+    clip-path: inset(-12px -96px -12px -12px);
   }
 }
 

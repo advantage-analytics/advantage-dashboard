@@ -2,7 +2,7 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...]
  *
  * `--program` runs every question in TEAM scope for that program: the tag
  * options are the program's matches and roster, the plan and answer prompts
@@ -10,10 +10,22 @@
  * account must be a member of the program (the verifier is a coach on the ZZ
  * Test Program). `scripts/ask-eval-team.json` is the coach's question list.
  * The names in it are placeholders — players Sokolov and Reyes, opponents
- * Okafor and Lindqvist — because a roster is not something to commit: copy
- * the file, put the program's own names in, and run the copy. A `players`
- * or `opponents` tag that names nobody on the roster is reported as
- * `TAG REFUSED` and its question skipped.
+ * Okafor and Lindqvist — because a roster is not something to commit. A
+ * `players` or `opponents` tag that names nobody on the roster is reported as
+ * `TAG REFUSED` and its question skipped, so a straight run of that file
+ * refuses every tagged question. Put the program's own names in at run time
+ * with `--sub`, and leave the file as it is:
+ *
+ *   npx tsx scripts/ask-eval.ts --out report.md --program <uuid> \
+ *     --questions scripts/ask-eval-team.json \
+ *     --sub "Sokolov=Rudy Quan" --sub "Reyes=Emon van Loben Sels"
+ *
+ * `--sub "From=To"` is repeatable. Each replaces the whole word `From`
+ * (case-sensitive; "Sokolov's" becomes "Rudy Quan's") in the question's
+ * text, in every name it tags (`players`, `opponents`, `matches`) BEFORE the
+ * tags are resolved, and in its `want` note. It works on any question list,
+ * the built-in one included. The report then carries the real names — keep
+ * it out of the repo. `scripts/lib/ask-eval-subs.ts` is the function.
  *
  * It signs in as the eyes-on verifier account (EYES_ON_EMAIL /
  * EYES_ON_PASSWORD), builds that account's tag options, and for each question
@@ -35,6 +47,7 @@
  */
 import { writeFileSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { parseSubs, subArgs, substituteQuestion } from "./lib/ask-eval-subs";
 import { loadEnvLocal } from "./lib/env";
 
 loadEnvLocal();
@@ -236,14 +249,26 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      "Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>]",
+      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...]',
     );
     process.exit(2);
   }
+  let subs: Map<string, string>;
+  try {
+    subs = parseSubs(subArgs(process.argv));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(2);
+  }
   const questionsFile = arg("questions");
-  const questions: EvalQuestion[] = questionsFile
-    ? (JSON.parse(readFileSync(questionsFile, "utf8")) as EvalQuestion[])
-    : DEFAULT_QUESTIONS;
+  // Names are substituted here, once, before anything reads the list: the
+  // tags are resolved from the substituted names and the model is asked the
+  // substituted question.
+  const questions: EvalQuestion[] = (
+    questionsFile
+      ? (JSON.parse(readFileSync(questionsFile, "utf8")) as EvalQuestion[])
+      : DEFAULT_QUESTIONS
+  ).map((question) => substituteQuestion(question, subs));
   const only = arg("only")
     ?.split(",")
     .map((part) => Number(part.trim()) - 1);

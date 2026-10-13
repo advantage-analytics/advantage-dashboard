@@ -9,14 +9,18 @@
  * differently.
  */
 
-/** An async iterable of text chunks, as a streamed `text/plain` response. */
-export function textStreamResponse(iterable: AsyncIterable<string>): Response {
+/** Pipe an async iterable through `encode` into a streamed `Response`. */
+function streamResponse<T>(
+  iterable: AsyncIterable<T>,
+  encode: (item: T) => string,
+  contentType: string,
+): Response {
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
       try {
-        for await (const chunk of iterable) {
-          controller.enqueue(encoder.encode(chunk));
+        for await (const item of iterable) {
+          controller.enqueue(encoder.encode(encode(item)));
         }
         controller.close();
       } catch (err) {
@@ -27,9 +31,16 @@ export function textStreamResponse(iterable: AsyncIterable<string>): Response {
     },
   });
 
-  return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  return new Response(stream, { headers: { "Content-Type": contentType } });
+}
+
+/** An async iterable of text chunks, as a streamed `text/plain` response. */
+export function textStreamResponse(iterable: AsyncIterable<string>): Response {
+  return streamResponse(
+    iterable,
+    (chunk) => chunk,
+    "text/plain; charset=utf-8",
+  );
 }
 
 /**
@@ -44,25 +55,11 @@ export function textStreamResponse(iterable: AsyncIterable<string>): Response {
  * the stream, exactly as it does for the text helper.
  */
 export function ndjsonStreamResponse<T>(iterable: AsyncIterable<T>): Response {
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      try {
-        for await (const event of iterable) {
-          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-        }
-        controller.close();
-      } catch (err) {
-        // `close()` on an errored controller throws; the error is the close.
-        console.error("Stream error:", err);
-        controller.error(err);
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { "Content-Type": "application/x-ndjson" },
-  });
+  return streamResponse(
+    iterable,
+    (event) => `${JSON.stringify(event)}\n`,
+    "application/x-ndjson",
+  );
 }
 
 /** "+2.1", "-0.5", or "flat" — a KPI's movement, as the prompts state it. */

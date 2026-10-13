@@ -5,8 +5,14 @@
  * Pure on purpose — no React, no clock. "This year" is the newest year in the
  * list (or the one handed in), never `Date.now()`: the server's render and
  * the browser's must agree, and a spec must be able to hold the answer.
- * Months and days are read in UTC for the same reason — a question asked at
- * 23:30 on the 31st is in one month on every machine.
+ *
+ * Months and days are read in a zone the caller names — the workspace's
+ * (`Workspace.timeZone`) — never the machine's own, for the same reason: the
+ * server (UTC on Vercel) and the browser are handed the same string, so they
+ * file a question under the same day. Read in UTC instead, a question asked
+ * on the evening of Oct 12 in California was dated "Oct 13", and one asked on
+ * a month's last evening was filed under the next month. A zone that is
+ * missing or that `Intl` does not know reads as UTC rather than throwing.
  */
 
 const MONTHS = [
@@ -35,13 +41,64 @@ export interface AskMonthGroup<Row> {
 /** What the rail calls the group of rows with no readable date. */
 export const ASK_UNDATED_LABEL = "Undated";
 
-function parse(updatedAt: string): Date | null {
+/** The zone dates are read in when none is given, or the one given is bad. */
+export const ASK_DEFAULT_TIME_ZONE = "UTC";
+
+const PARTS: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+};
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The formatter for one zone, built once. The locale is fixed ("en-US") so
+ * the parts read the same on every machine; an unknown zone makes `Intl`
+ * throw a RangeError, which is answered with UTC's formatter.
+ */
+function formatterFor(
+  timeZone: string | null | undefined,
+): Intl.DateTimeFormat {
+  const zone = timeZone || ASK_DEFAULT_TIME_ZONE;
+  const known = formatters.get(zone);
+  if (known) return known;
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat("en-US", { ...PARTS, timeZone: zone });
+  } catch {
+    formatter =
+      zone === ASK_DEFAULT_TIME_ZONE
+        ? new Intl.DateTimeFormat("en-US", PARTS)
+        : formatterFor(ASK_DEFAULT_TIME_ZONE);
+  }
+  formatters.set(zone, formatter);
+  return formatter;
+}
+
+/** The calendar day `updatedAt` falls on in `timeZone`; `month` is 0-based. */
+function zonedDay(
+  updatedAt: string,
+  timeZone: string | null | undefined,
+): { year: number; month: number; day: number } | null {
   const date = new Date(updatedAt);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime())) return null;
+  const read: Record<string, number> = {};
+  for (const part of formatterFor(timeZone).formatToParts(date)) {
+    if (part.type === "year" || part.type === "month" || part.type === "day") {
+      read[part.type] = Number(part.value);
+    }
+  }
+  const { year, month, day } = read;
+  if (!Number.isFinite(year) || !(month >= 1 && month <= 12) || !(day >= 1)) {
+    return null;
+  }
+  return { year, month: month - 1, day };
 }
 
 /**
- * Group rows by the UTC month of `updatedAt`. Groups come out newest month
+ * Group rows by the month `updatedAt` falls in, read in `timeZone` (UTC when
+ * omitted or not a zone `Intl` knows). Groups come out newest month
  * first whatever order the rows arrive in; inside a group the rows keep the
  * order they were given (the loader's: most recently used first). A row whose
  * date cannot be read is kept — a question nobody can reach is worse than one
@@ -53,19 +110,19 @@ function parse(updatedAt: string): Date | null {
  */
 export function askMonthGroups<Row extends { updatedAt: string }>(
   rows: readonly Row[],
+  timeZone?: string | null,
   currentYear?: number | null,
 ): AskMonthGroup<Row>[] {
   const dated = new Map<string, { year: number; month: number; rows: Row[] }>();
   const undated: Row[] = [];
 
   for (const row of rows) {
-    const date = parse(row.updatedAt);
+    const date = zonedDay(row.updatedAt, timeZone);
     if (!date) {
       undated.push(row);
       continue;
     }
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
+    const { year, month } = date;
     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
     const group = dated.get(key);
     if (group) group.rows.push(row);
@@ -90,11 +147,15 @@ export function askMonthGroups<Row extends { updatedAt: string }>(
 }
 
 /**
- * `2026-10-07T…` → `Oct 7`, in UTC; null when the date cannot be read. Never
- * carries a year: the row sits under a month label that does.
+ * `2026-10-07T…` → `Oct 7`, the day it is in `timeZone` (UTC when omitted or
+ * unknown); null when the date cannot be read. Never carries a year: the row
+ * sits under a month label that does.
  */
-export function askDayLabel(updatedAt: string): string | null {
-  const date = parse(updatedAt);
+export function askDayLabel(
+  updatedAt: string,
+  timeZone?: string | null,
+): string | null {
+  const date = zonedDay(updatedAt, timeZone);
   if (!date) return null;
-  return `${MONTHS[date.getUTCMonth()].slice(0, 3)} ${date.getUTCDate()}`;
+  return `${MONTHS[date.month].slice(0, 3)} ${date.day}`;
 }

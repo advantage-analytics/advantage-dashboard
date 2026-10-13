@@ -37,6 +37,7 @@ import {
   type AskSourceMatch,
   type AskStatusStage,
   type AskVisual,
+  isRecord,
   readAskSourceMatch,
   readAskVisual,
 } from "@/lib/services/ask/events";
@@ -321,10 +322,6 @@ export function askThreadReducer(
 }
 
 // ── Reading the wire ────────────────────────────────────────────────────────
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;

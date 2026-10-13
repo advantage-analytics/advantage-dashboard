@@ -39,9 +39,12 @@ export function TrendVisual({
         ]}
       />
       <div className="flex flex-col gap-1">
-        <div aria-hidden="true" className="relative">
+        {/* The wipe is the wrapper's, not the SVG's: an HTML box is what gets
+            clipped, and the drawing inside it is never itself the animated
+            element. The last value's label is inside the same box, so the
+            wipe's end state has to clear it (`ask-wipe` in `globals.css`). */}
+        <div aria-hidden="true" data-ask-wipe="" className="relative">
           <svg
-            data-ask-wipe=""
             viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
             className="block w-full overflow-visible"
           >
@@ -86,7 +89,9 @@ export function TrendVisual({
                 {
                   left: percent(lastAt.x, TREND_BOX.width),
                   top: percent(lastAt.y, TREND_BOX.height),
-                  // After the line has reached it.
+                  // After the line has reached it: the wipe has passed
+                  // this far by the time the fade starts, so the label
+                  // fades whole and is never cut by the wipe's edge.
                   "--ask-row": 8,
                 } as CSSProperties
               }

@@ -51,6 +51,7 @@ import {
   type AskPromptTurn,
   buildAnswerPrompt,
   buildPlanPrompt,
+  oneLine,
 } from "@/lib/services/ask/prompts";
 import {
   ASK_REVIEW_SQL,
@@ -1837,15 +1838,69 @@ const STORED_BY_LOWER = new Map<string, string>(
 );
 
 /**
- * The query with each quoted literal that names a stored shot value in
- * another case turned to the stored spelling. A literal that is anything
- * else — a pattern, a name, a value of another column — is left alone.
+ * One of the four shot columns as the planner writes it — bare, or qualified
+ * (`s.zone`, `ask.shots.zone`) — and nothing that merely contains its name:
+ * `result_type` and `serve_zone` are other columns.
+ */
+const SHOT_COLUMN = String.raw`(?<![\w.])(?:\w+\.)*(?:zone|shot_type|result|spin_type)\b`;
+
+const QUOTED = String.raw`'[^'%_]{1,20}'`;
+
+/** `zone = 't'`, `s.result <> 'IN'`, `spin_type != 'slice'`. */
+const SHOT_EQUALS = new RegExp(
+  String.raw`(${SHOT_COLUMN}\s*(?:=|<>|!=)\s*)(${QUOTED})`,
+  "gi",
+);
+
+/** `shot_type in ('first serve', 'Second Serve')`, and `not in`. */
+const SHOT_IN = new RegExp(
+  String.raw`(${SHOT_COLUMN}\s+(?:not\s+)?in\s*\()(\s*${QUOTED}(?:\s*,\s*${QUOTED})*\s*)(?=\))`,
+  "gi",
+);
+
+/** `case s.zone when 't' then … end`, up to its first `end`. */
+const SHOT_CASE = new RegExp(
+  String.raw`\bcase\s+${SHOT_COLUMN}\s[\s\S]*?\bend\b`,
+  "gi",
+);
+
+function storedLiteral(literal: string): string {
+  const inner = literal.slice(1, -1);
+  const stored = STORED_BY_LOWER.get(inner.toLowerCase());
+  return stored !== undefined && stored !== inner ? `'${stored}'` : literal;
+}
+
+/**
+ * The query with each quoted literal that is COMPARED WITH A SHOT COLUMN and
+ * names a stored shot value in another case turned to the stored spelling.
+ *
+ * Only there: after `zone`, `shot_type`, `result` or `spin_type` with `=`,
+ * `<>` or `!=`, inside that column's `in (…)` list, and in the `when`s of a
+ * `case <column> when '…'`. A literal anywhere else is another column's
+ * value and is left alone — respelled, `opponent_name = 'slice'` or
+ * `court_type = 'out'` would stop matching the rows it was written for. So
+ * is one behind a function (`lower(s.zone) = 't'`), which already compares
+ * in the case it asked for, and anything that is a pattern.
  */
 export function withStoredSpelling(sql: string): string {
-  return sql.replace(/'([^'%_]{1,20})'/g, (literal, inner: string) => {
-    const stored = STORED_BY_LOWER.get(inner.toLowerCase());
-    return stored !== undefined && stored !== inner ? `'${stored}'` : literal;
-  });
+  const literals = new RegExp(QUOTED, "g");
+  return sql
+    .replace(
+      SHOT_EQUALS,
+      (_match, head: string, literal: string) => head + storedLiteral(literal),
+    )
+    .replace(
+      SHOT_IN,
+      (_match, head: string, list: string) =>
+        head + list.replace(literals, storedLiteral),
+    )
+    .replace(SHOT_CASE, (block) =>
+      block.replace(
+        new RegExp(String.raw`(\bwhen\s+)(${QUOTED})`, "gi"),
+        (_match, head: string, literal: string) =>
+          head + storedLiteral(literal),
+      ),
+    );
 }
 
 /**
@@ -2195,10 +2250,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
-}
-
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function oneSentence(text: string): string {

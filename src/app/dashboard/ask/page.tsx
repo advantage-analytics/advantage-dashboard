@@ -7,6 +7,7 @@ import {
   getAskTagOptions,
 } from "@/lib/data/ask-server";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Ask" };
 
@@ -25,10 +26,17 @@ export const metadata = { title: "Ask" };
  * shell holds the thread in client state, and without it a navigation from
  * one `?c=` to another would keep showing the first.
  *
- * The scope is personal by construction: this route reads no workspace, so
- * it answers about the viewer's own matches whichever workspace is active.
- * The program's page is `/dashboard/team/ask`, the same shell with a team
- * scope.
+ * The scope is personal by construction: nothing about the active workspace
+ * decides what is asked about, so it answers about the viewer's own matches
+ * whichever workspace is active. The program's page is `/dashboard/team/ask`,
+ * the same shell with a team scope.
+ *
+ * The workspace IS read for one thing: its time zone, which the rail dates
+ * earlier questions in (`ask-earlier.ts`). `getWorkspaceContext()` is
+ * `cache()`d — the same read the dashboard layout already made — and a
+ * string from the server is what keeps the server's render and the browser's
+ * on the same day. No workspace reads as UTC; the layout has already turned
+ * away a signed-out viewer.
  *
  * The reads happen in `AskContent`, inside a `WidgetBoundary`: when the
  * viewer's matches cannot be read `getAskTagOptions()` throws, and the page
@@ -51,17 +59,20 @@ async function AskContent({ searchParams }: AskRouteProps) {
   const { c } = await searchParams;
   const conversationId = typeof c === "string" ? c : null;
 
-  const [tagOptions, quota, conversations, conversation] = await Promise.all([
-    getAskTagOptions(),
-    getAskQuota(),
-    getAskConversations(),
-    conversationId ? getAskConversation(conversationId) : null,
-  ]);
+  const [workspace, tagOptions, quota, conversations, conversation] =
+    await Promise.all([
+      getWorkspaceContext(),
+      getAskTagOptions(),
+      getAskQuota(),
+      getAskConversations(),
+      conversationId ? getAskConversation(conversationId) : null,
+    ]);
 
   return (
     <AskPage
       key={conversation?.id ?? "new"}
       scope={PERSONAL_ASK_SCOPE}
+      timeZone={workspace?.active.timeZone}
       tagOptions={tagOptions}
       quota={quota}
       conversations={conversations}

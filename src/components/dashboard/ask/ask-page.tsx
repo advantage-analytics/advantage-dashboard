@@ -94,6 +94,12 @@ export interface AskPageProps {
    * the personal page, where the viewer can always send their own match.
    */
   canUpload?: boolean;
+  /**
+   * The active workspace's IANA zone (`Workspace.timeZone`), which the rail
+   * dates earlier questions in. A string from the server, so the server's
+   * render and the browser's agree; UTC when omitted.
+   */
+  timeZone?: string;
   /** What can be tagged. No matches here is the page's day zero. */
   tagOptions: AskTagOptions;
   /** Null when the count could not be read. */
@@ -163,6 +169,7 @@ function AskDayZero({
 
 function AskThread({
   scope,
+  timeZone,
   tagOptions,
   quota,
   conversations,
@@ -306,6 +313,7 @@ function AskThread({
           quota={quotaView}
           conversations={listed}
           scope={scope}
+          timeZone={timeZone}
           activeConversationId={state.conversationId}
           onNewQuestion={newQuestion}
           onDeleteConversation={deleteConversation}

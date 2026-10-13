@@ -140,12 +140,12 @@ const MAX_LABEL_LENGTH = 40;
 // ── Reading a row ────────────────────────────────────────────────────────────
 
 /** A value as the page prints it: one decimal at most. */
-function printed(value: number): number {
+export function printed(value: number): number {
   const rounded = Math.round(Math.abs(value) * 10) / 10;
   return value < 0 && rounded > 0 ? -rounded : rounded;
 }
 
-function isNumber(value: unknown): value is number {
+export function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 

@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from "react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
+import { sentences } from "./ask-sentences";
 import { AskSources } from "./ask-sources";
 import type { AskAnswerState } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
@@ -239,16 +240,4 @@ function AnswerBody({
 /** A part's place in the order the answer is read, for parts that land together. */
 function part(index: number): CSSProperties {
   return { "--ask-i": index } as CSSProperties;
-}
-
-/**
- * A paragraph as its sentences, each keeping the space that follows it, so
- * the text reads exactly as it was written. Split after a full stop, a
- * question mark or an exclamation mark that is followed by a space — never
- * inside "6-3, 6-4" or "51.8%".
- */
-function sentences(paragraph: string): string[] {
-  return (
-    paragraph.match(/[^.!?]+(?:[.!?]+(?=\s|$)\s*|[.!?]+|$)/g) ?? [paragraph]
-  );
 }

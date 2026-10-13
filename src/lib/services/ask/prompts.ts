@@ -336,7 +336,7 @@ export function renderAskPercentageBlock(): string {
 }
 
 /** One line of text: line breaks and runs of space collapsed, so data cannot fake a new prompt line. */
-function oneLine(text: string): string {
+export function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 

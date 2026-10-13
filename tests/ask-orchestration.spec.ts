@@ -617,6 +617,48 @@ test.describe("a plan that cannot be used is told back once", () => {
     const other =
       "select 1 from ask.matches where court_type ilike '%hard%' and opponent_hand = 'left' and opponent_name = 'Kick Buttowski'";
     expect(withStoredSpelling(other)).toBe(other);
+
+    // Every comparison a shot column is written in: qualified or bare, `<>`
+    // and `!=`, `not in`, and the `when`s of a `case` on the column.
+    expect(
+      withStoredSpelling(
+        "select 1 from ask.shots where zone <> 'WIDE' and ask.shots.spin_type != 'slice' and result not in ( 'out' , 'NET' )",
+      ),
+    ).toBe(
+      "select 1 from ask.shots where zone <> 'Wide' and ask.shots.spin_type != 'Slice' and result not in ( 'Out' , 'Net' )",
+    );
+    expect(
+      withStoredSpelling(
+        "select case s.zone when 't' then 'out' when 'body' then 'b' else 'flat' end from ask.shots s",
+      ),
+    ).toBe(
+      "select case s.zone when 'T' then 'out' when 'Body' then 'b' else 'flat' end from ask.shots s",
+    );
+
+    // A literal that happens to spell a shot value but is compared with
+    // another column is that column's value. Respelled, it matches nothing.
+    for (const untouched of [
+      "select 1 from ask.matches where opponent_name = 'slice'",
+      "select 1 from ask.matches where tournament = 'flat'",
+      "select 1 from ask.matches where court_type = 'out'",
+      "select 1 from ask.matches m where m.opponent_name in ('slice', 'kick')",
+      // A column that only contains a shot column's name.
+      "select 1 from ask.points where result_type = 'in' and serve_zone = 't'",
+      // Behind a function the comparison is already in the case it asked for.
+      "select 1 from ask.shots s where lower(s.zone) = 't'",
+      // A label the query prints is not a comparison.
+      "select 'wide' as label, count(*) from ask.shots",
+    ]) {
+      expect(withStoredSpelling(untouched)).toBe(untouched);
+    }
+    // Both kinds in one query: only the shot column's literal moves.
+    expect(
+      withStoredSpelling(
+        "select 1 from ask.shots s join ask.matches m using (match_id) where m.tournament = 'flat' and s.spin_type = 'flat'",
+      ),
+    ).toBe(
+      "select 1 from ask.shots s join ask.matches m using (match_id) where m.tournament = 'flat' and s.spin_type = 'Flat'",
+    );
   });
 
   test("three directions returned as one number are told back", () => {

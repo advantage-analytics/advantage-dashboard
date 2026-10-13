@@ -14,7 +14,14 @@ import {
  * files a question asked late on the 31st under a different month on the
  * server than in the browser, and React swaps the list after hydration; a
  * "this year" taken from the clock does the same every New Year's Eve.
+ *
+ * So the zone is an argument — the workspace's — and never the machine's.
+ * UTC is only the fallback: read in UTC, a question asked on a California
+ * evening is dated tomorrow, and on a month's last evening it is filed under
+ * next month.
  */
+
+const PACIFIC = "America/Los_Angeles";
 
 const row = (id: string, updatedAt: string) => ({ id, updatedAt });
 
@@ -73,6 +80,7 @@ test.describe("askMonthGroups", () => {
         row("a", "2025-12-30T10:00:00.000Z"),
         row("b", "2025-11-02T10:00:00.000Z"),
       ],
+      undefined,
       2026,
     );
 
@@ -98,7 +106,7 @@ test.describe("askMonthGroups", () => {
     expect(groups[0].rows.map((item) => item.id)).toEqual(["new", "new-2"]);
   });
 
-  test("the month is UTC's, on either side of a month's edge", () => {
+  test("with no zone given, the month is UTC's, on either side of a month's edge", () => {
     const groups = askMonthGroups([
       // 23:30 on Oct 31 in UTC — already November east of Greenwich.
       row("late", "2026-10-31T23:30:00.000Z"),
@@ -116,6 +124,51 @@ test.describe("askMonthGroups", () => {
       "early",
       "offset",
     ]);
+  });
+
+  test("the month is the zone's: a month's last evening stays in that month", () => {
+    const rows = [
+      // 8:30 pm on Oct 12 in California — Oct 13 in UTC.
+      row("evening", "2026-10-13T03:30:00.000Z"),
+      // 10 pm on Sep 30 in California — already October in UTC.
+      row("month-end", "2026-10-01T05:00:00.000Z"),
+      // 9 pm on Dec 31, 2025 in California — already 2026 in UTC.
+      row("year-end", "2026-01-01T05:00:00.000Z"),
+    ];
+
+    const pacific = askMonthGroups(rows, PACIFIC);
+    expect(pacific.map((group) => [group.key, group.label])).toEqual([
+      ["2026-10", "October"],
+      ["2026-09", "September"],
+      ["2025-12", "December 2025"],
+    ]);
+    expect(pacific.map((group) => group.rows.map((item) => item.id))).toEqual([
+      ["evening"],
+      ["month-end"],
+      ["year-end"],
+    ]);
+
+    // The same instants in UTC, which is what the rail used to show.
+    expect(askMonthGroups(rows, "UTC").map((group) => group.key)).toEqual([
+      "2026-10",
+      "2026-01",
+    ]);
+
+    // East of Greenwich the edge moves the other way: 23:30 UTC on Oct 31
+    // is already November 1 in Tokyo.
+    expect(
+      askMonthGroups([row("late", "2026-10-31T23:30:00.000Z")], "Asia/Tokyo")[0]
+        .key,
+    ).toBe("2026-11");
+  });
+
+  test("a zone that is missing or unknown reads as UTC and never throws", () => {
+    const rows = [row("evening", "2026-10-01T05:00:00.000Z")];
+    for (const zone of [undefined, null, "", "Not/AZone", "pacific time"]) {
+      expect(askMonthGroups(rows, zone).map((group) => group.key)).toEqual([
+        "2026-10",
+      ]);
+    }
   });
 
   test("a row with no readable date is kept, in a last group of its own", () => {
@@ -150,7 +203,23 @@ test.describe("askDayLabel", () => {
     expect(askDayLabel("2026-09-28T09:00:00.000Z")).toBe("Sep 28");
   });
 
-  test("the day is UTC's", () => {
+  test("the day is the zone's", () => {
+    // 8:30 pm on Oct 12 in California.
+    expect(askDayLabel("2026-10-13T03:30:00.000Z", PACIFIC)).toBe("Oct 12");
+    // 10 pm on Sep 30 in California.
+    expect(askDayLabel("2026-10-01T05:00:00.000Z", PACIFIC)).toBe("Sep 30");
+    // Mid-afternoon is the same day either way.
+    expect(askDayLabel("2026-10-12T21:00:00.000Z", PACIFIC)).toBe("Oct 12");
+    expect(askDayLabel("2026-10-31T23:30:00.000Z", "Asia/Tokyo")).toBe("Nov 1");
+  });
+
+  test("a zone that is missing or unknown reads as UTC and never throws", () => {
+    for (const zone of [undefined, null, "", "Not/AZone"]) {
+      expect(askDayLabel("2026-10-13T03:30:00.000Z", zone)).toBe("Oct 13");
+    }
+  });
+
+  test("with no zone given, the day is UTC's", () => {
     expect(askDayLabel("2026-10-31T23:30:00.000Z")).toBe("Oct 31");
     expect(askDayLabel("2026-11-01T01:00:00+02:00")).toBe("Oct 31");
   });

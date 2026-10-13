@@ -585,6 +585,23 @@ test.describe("the visual block", () => {
     await expect(block).not.toContainText("37.5");
   });
 
+  test("trend: the arrival wipe is the wrapper's, never the SVG's own", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=trend");
+    const block = visual(page);
+
+    const wiped = block.locator("[data-ask-wipe]");
+    await expect(wiped).toHaveCount(1);
+    expect(await wiped.evaluate((node) => node.tagName)).toBe("DIV");
+    await expect(block.locator("svg[data-ask-wipe]")).toHaveCount(0);
+    // The wrapper holds both the drawing and the last value's label, so one
+    // clip covers them and its end state has to clear the label.
+    await expect(wiped.locator("> svg")).toHaveCount(1);
+    await expect(wiped.locator("> [data-ask-trend-last]")).toHaveCount(1);
+    await expect(wiped.locator("[data-ask-after]")).toHaveCount(1);
+  });
+
   test("split: each part's count as sent, and no share of the whole", async ({
     page,
   }) => {

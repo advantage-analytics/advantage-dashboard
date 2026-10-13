@@ -112,8 +112,12 @@ interface World {
   options: AskTagOptions | Error;
   /** What `getAskTagOptions(programId)` answers for a team question. */
   teamOptions: AskTagOptions;
-  /** The viewer's workspaces, as `getWorkspaceContext()` lists them; null when it cannot say. */
-  workspaces: { id: string; kind: "personal" | "team"; name: string }[] | null;
+  /**
+   * The viewer's workspaces, as `getWorkspaceContext()` lists them; null when
+   * it answers with no context at all, an Error when the read throws.
+   */
+  workspaces:
+    { id: string; kind: "personal" | "team"; name: string }[] | null | Error;
   /** What `getAskConversation()` answers for any id. */
   conversation: unknown;
   quota: { used: number; cap: number; resetsOn: string } | null;
@@ -270,6 +274,7 @@ function loadRoute(state: World) {
     "@/lib/workspace/active-workspace-server": {
       getWorkspaceContext: async () => {
         calls.loaders.push("getWorkspaceContext");
+        if (state.workspaces instanceof Error) throw state.workspaces;
         return state.workspaces
           ? {
               active: state.workspaces[0],
@@ -871,8 +876,8 @@ test.describe("POST /api/ask · a team question (programId)", () => {
       {
         workspaces: [{ id: OTHER_PROGRAM_ID, kind: "personal", name: "Me" }],
       },
-      // The workspaces could not be read: refuse, never assume.
-      { workspaces: null },
+      // Read, and the viewer is in no program at all.
+      { workspaces: [{ id: USER_ID, kind: "personal", name: "Personal" }] },
     ];
     for (const overrides of cases) {
       const { route, calls } = loadRoute(world(overrides));
@@ -884,6 +889,35 @@ test.describe("POST /api/ask · a team question (programId)", () => {
       expect(calls.loaders).toEqual(["getWorkspaceContext"]);
       expect(calls.rpc).toEqual([]);
       expect(calls.llm).toBe(0);
+    }
+  });
+
+  test("500 internal_error — the workspaces could not be read: retryable, and never “not a member”", async () => {
+    const cases: Partial<World>[] = [
+      // The read threw.
+      { workspaces: new Error("connection reset") },
+      // The read answered with no context for a viewer who is signed in.
+      { workspaces: null },
+    ];
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      for (const overrides of cases) {
+        // The viewer IS a member of this program; a failed read must not
+        // tell them otherwise.
+        const { route, calls } = loadRoute(world(overrides));
+        const response = await route.POST(post(TEAM_QUESTION));
+        expect(response.status).toBe(500);
+        const body = await refused(response);
+        expect(body.code).toBe("internal_error");
+        expect(body.error).not.toMatch(/not a member/i);
+        // Refused before a row of the program is read or a question spent.
+        expect(calls.loaders).toEqual(["getWorkspaceContext"]);
+        expect(calls.rpc).toEqual([]);
+        expect(calls.llm).toBe(0);
+      }
+    } finally {
+      console.error = logged;
     }
   });
 

@@ -135,7 +135,13 @@ test.describe("the routes", () => {
     expect(team).toContain("getAskConversation(conversationId, programId)");
     // The limit is the asker's own: no program.
     expect(team).toContain("getAskQuota()");
-    expect(team).toContain("canUploadForProgram(active)");
+    // The button is offered by the rule the upload route itself asks —
+    // role, policy AND a program approved to send video — never by the role
+    // half alone, which offers it to a program still in review.
+    expect(team).toContain("canUpload={explainVideoRefusal(active) === null}");
+    expect(team).not.toContain("canUpload={canUploadForProgram");
+    // The rail's dates are read in the program's zone.
+    expect(team).toContain("timeZone={active.timeZone}");
     // Never from the address bar.
     expect(team).not.toMatch(/searchParams[^;]*program/i);
   });
@@ -145,7 +151,12 @@ test.describe("the routes", () => {
     expect(personal).toContain("scope={PERSONAL_ASK_SCOPE}");
     expect(personal).toContain("getAskTagOptions()");
     expect(personal).toContain("getAskConversations()");
-    expect(personal).not.toContain("getWorkspaceContext");
+    // The workspace is read for its time zone — what the rail dates earlier
+    // questions in — and for nothing that decides whose matches are asked
+    // about: no loader takes anything from it.
+    expect(personal).toContain("timeZone={workspace?.active.timeZone}");
+    expect(personal.match(/\bworkspace\b\??\./g)).toEqual(["workspace?."]);
+    expect(personal).not.toMatch(/getAsk\w+\([^)]*(workspace|program)/);
   });
 
   test("the shell and the delete action hard-code neither page", () => {
