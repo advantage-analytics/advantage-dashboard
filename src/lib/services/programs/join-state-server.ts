@@ -1,8 +1,11 @@
 import { cache } from "react";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { crestUrl } from "@/lib/data/teams-server";
 import { resolveJoinState, type JoinState } from "./invite-acceptance";
 import { hasProfileName } from "./join-name";
 import { joinTokenFromPath } from "./join-links";
+import { hashToken } from "./tokens";
 
 /**
  * `resolveJoinState`, once per request.
@@ -72,4 +75,53 @@ export async function sessionNeedsName(): Promise<boolean> {
     .maybeSingle();
   if (error || !data) return false;
   return !hasProfileName(data.first_name as string | null);
+}
+
+/**
+ * The crest of the program a join token leads to, or null.
+ *
+ * The join screens draw the team mark above their heading, and a program that
+ * uploaded a crest should see it there, not the initial that stands in for
+ * one. Neither `JoinState` nor the link preview carries the crest, so this is
+ * its own read: the token to its program — an invitation by the token's hash,
+ * else a live join link by the token — then that program's `crest_path`.
+ *
+ * Service role, keyed on a token the caller already holds, and called only for
+ * the states that already name the program on screen. A crest is a public
+ * bucket object; nothing here reveals more than the heading beside it does.
+ * Null on any miss: the initial is a complete mark on its own.
+ */
+export async function joinProgramCrestUrl(
+  token: string,
+): Promise<string | null> {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  const admin = createAdminClient();
+  const [{ data: invite }, { data: link }] = await Promise.all([
+    admin
+      .from("program_invites")
+      .select("program_id")
+      .eq("token_hash", hashToken(trimmed))
+      .maybeSingle(),
+    admin
+      .from("program_join_links")
+      .select("program_id")
+      .eq("token", trimmed)
+      .is("revoked_at", null)
+      .maybeSingle(),
+  ]);
+
+  // Invitation first, as `resolveJoinState` resolves them.
+  const programId = (invite?.program_id ?? link?.program_id) as
+    string | undefined;
+  if (!programId) return null;
+
+  const { data: program } = await admin
+    .from("programs")
+    .select("crest_path")
+    .eq("id", programId)
+    .maybeSingle();
+
+  return crestUrl((program?.crest_path as string | null) ?? null);
 }

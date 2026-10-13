@@ -16,6 +16,7 @@ import { JoinPane } from "@/components/join/join-pane";
 import { JoinTermsPanel } from "@/components/join/join-terms";
 import { NothingSent } from "@/components/join/nothing-sent";
 import {
+  joinProgramCrestUrl,
   resolveJoinStateOnce,
   sessionNeedsName,
 } from "@/lib/services/programs/join-state-server";
@@ -165,6 +166,17 @@ export default async function JoinPage({
     redirect(authHref("/onboarding", joinHref(token)));
   }
 
+  // The crest for the four screens that draw the team mark. Read only for
+  // them, and only once the redirects above have had their say.
+  const crest =
+    !declined &&
+    (state.kind === "ready" ||
+      state.kind === "sign_up" ||
+      state.kind === "link_ready" ||
+      state.kind === "link_sign_up")
+      ? await joinProgramCrestUrl(readToken(token))
+      : null;
+
   switch (state.kind) {
     // Revoked, mistyped, never real — an invitation or a join link alike. One
     // message for all of them, because distinguishing them would confirm to
@@ -253,6 +265,7 @@ export default async function JoinPage({
           eyebrow={state.programName}
           title="Join your program"
           mark={state.programName}
+          crestUrl={crest}
           aside={terms}
         >
           <JoinReady
@@ -287,6 +300,7 @@ export default async function JoinPage({
           eyebrow={state.programName}
           title="Set up your account"
           mark={state.programName}
+          crestUrl={crest}
           aside={terms}
         >
           <JoinSignUp
@@ -317,6 +331,7 @@ export default async function JoinPage({
           eyebrow={state.programName}
           title={`Join ${state.programName}`}
           mark={state.programName}
+          crestUrl={crest}
           aside={terms}
         >
           <JoinLinkReady
@@ -350,6 +365,7 @@ export default async function JoinPage({
           eyebrow={state.programName}
           title={`Join ${state.programName}`}
           mark={state.programName}
+          crestUrl={crest}
           aside={terms}
         >
           <JoinLinkSignUp

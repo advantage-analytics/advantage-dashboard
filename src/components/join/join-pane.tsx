@@ -29,6 +29,7 @@ export function JoinPane({
   title,
   body,
   mark,
+  crestUrl,
   aside,
   children,
 }: {
@@ -38,6 +39,8 @@ export function JoinPane({
   body?: React.ReactNode;
   /** The program's name. Its initial is drawn as the team mark. */
   mark?: string;
+  /** The program's crest, drawn in place of the initial when it has one. */
+  crestUrl?: string | null;
   aside?: React.ReactNode;
   children?: React.ReactNode;
 }) {
@@ -61,7 +64,7 @@ export function JoinPane({
           workspace={{
             kind: "team",
             mark: mark.trim().charAt(0).toUpperCase(),
-            iconUrl: null,
+            iconUrl: crestUrl ?? null,
           }}
           className="size-8 rounded-[var(--radius-button)] text-[12px]"
         />
