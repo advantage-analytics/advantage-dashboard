@@ -34,7 +34,9 @@ import { cn } from "@/lib/utils";
  * `StepBar` (2px, one segment per step, done and current in Signal Blue), the
  * title beside the modal-chrome close X (mandatory on a multi-step popover),
  * the body, then the footer — the mono "n of N" left, Back and the one
- * primary right. No caret, no entry animation.
+ * primary right. A single-step tour (`total === 1`) has no progress to show,
+ * so it drops the StepBar and the counter and keeps the rest. No caret, no
+ * entry animation.
  *
  * It wraps `Popover` (Root) and `PopoverAnchor` from `ui/popover.tsx` but not
  * `PopoverContent`, which carries a zoom/slide entrance the tour box does not
@@ -163,7 +165,7 @@ export function TourPopover({
             onInteractOutside={(event) => event.preventDefault()}
             className="pointer-events-auto z-50 w-[288px] rounded-[14px] border border-[var(--border-card)] bg-[var(--surface-card)] px-4 pt-4 pb-3.5 shadow-[var(--shadow-dropdown)] outline-none"
           >
-            <TourStepBar index={index} total={total} />
+            {total > 1 && <TourStepBar index={index} total={total} />}
 
             <div className="mt-3.5 flex items-start justify-between gap-3">
               <p
@@ -191,9 +193,13 @@ export function TourPopover({
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="font-mono text-[11px] text-[var(--ink-500)] tabular-nums">
-                {index + 1} of {total}
-              </p>
+              {total > 1 ? (
+                <p className="font-mono text-[11px] text-[var(--ink-500)] tabular-nums">
+                  {index + 1} of {total}
+                </p>
+              ) : (
+                <span aria-hidden />
+              )}
               <div className="flex items-center gap-2">
                 {canGoBack && (
                   <button

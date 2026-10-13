@@ -13,11 +13,17 @@ import { TourPopover } from "@/components/ui/tour";
  * Escape went through `onSkip` rather than some other close path.
  */
 
-const STEPS = [
+const ALL_STEPS = [
   { tour: "upload", title: "Add a match", body: "Upload video or an export." },
   { tour: "matches", title: "Every match", body: "Open a row for its report." },
   { tour: "settings", title: "Make it yours", body: "Profile and sources." },
 ];
+
+// `?steps=1` drives the single-step variant: one hint, no progress.
+const STEPS =
+  new URLSearchParams(location.search).get("steps") === "1"
+    ? ALL_STEPS.slice(0, 1)
+    : ALL_STEPS;
 
 document.body.insertAdjacentHTML(
   "afterbegin",

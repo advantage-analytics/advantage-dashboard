@@ -282,7 +282,7 @@ ready).
 
 ## T21 · TourPopover single-step variant: no StepBar, no counter when total is 1
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/ui/tour.tsx, tests/fixtures/tour-popover-harness.tsx, tests/tour-popover.spec.ts — guess
 - **done when:**

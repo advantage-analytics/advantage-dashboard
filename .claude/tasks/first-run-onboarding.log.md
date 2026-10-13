@@ -198,3 +198,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `getWorkspaceContext` ignores a failed `users` select, so a column added in code before its migration silently redirects every dashboard request to `/onboarding`. Log the error (as `listProgramWorkspaces` does). Any non-prod DB must apply `20261012224442` before this code runs.
+
+## T21 · TourPopover single-step variant: no StepBar, no counter when total is 1 — done
+
+**gate:** mechanical pass (typecheck clean, lint 0 errors, format clean; full suite 5704 passed, 340 failed — all "Executable doesn't exist", environmental; the new browser case passed 6/6 under a temporary 1194 shim, since removed); completion `VERDICT: pass`.
+**changed:** `TourPopover` renders the StepBar and the "n of N" counter only when `total > 1`; a single step keeps title, body, close X and Done (an empty `aria-hidden` span holds the footer's right alignment). Harness `?steps=1` and a spec case for the one-step box.
+**follow-ups:**
+
+1. Without the StepBar the title keeps its `mt-3.5`, so a one-step box has a little extra space above the title; trim it in the single-step branch.

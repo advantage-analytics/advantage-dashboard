@@ -89,8 +89,8 @@ test.afterAll(async () => {
   );
 });
 
-async function openTour(page: Page) {
-  await page.goto(origin);
+async function openTour(page: Page, query = "") {
+  await page.goto(origin + query);
   await expect
     .poll(() => page.locator("html").getAttribute("data-hydrated"))
     .toBe("true");
@@ -186,4 +186,20 @@ test("Back returns a step, and the spotlight hugs the anchor until the tour clos
   await page.keyboard.press("Escape");
   await expect(spotlight).toHaveCount(0);
   await expect(start).toBeFocused();
+});
+
+test("A single-step tour shows no StepBar and no counter, and Done closes it", async ({
+  page,
+}) => {
+  const { tour } = await openTour(page, "/?steps=1");
+  await expect(tour.locator("[data-step-segment]")).toHaveCount(0);
+  await expect(tour).not.toContainText(/\d+ of \d+/);
+  await expect(page.getByRole("button", { name: "Skip tour" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+
+  const done = page.getByRole("button", { name: "Done" });
+  await expect(done).toBeFocused();
+  await done.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-skipped", "0");
 });
