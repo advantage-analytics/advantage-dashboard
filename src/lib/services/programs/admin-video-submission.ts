@@ -5,6 +5,7 @@ import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 import {
+  OPPONENT_TEAM_NOT_SAVED_MESSAGE,
   adminOpponentProgramExists,
   readAdminOpponentTeam,
   saveAdminOpponentTeam,
@@ -13,9 +14,10 @@ const defaults = { checkAdmin, createAdminClient, getAdminUploadContext };
 
 /**
  * A refusal the route answers with its own `status`: 401 with no session, 403
- * for a signed-in non-admin, 400 for everything the request itself got wrong.
+ * for a signed-in non-admin, 400 for everything the request itself got wrong,
+ * 500 for a write of ours that did not land.
  */
-function refuse(message: string, status: 400 | 401 | 403 = 400) {
+function refuse(message: string, status: 400 | 401 | 403 | 500 = 400) {
   return { ok: false as const, status, message };
 }
 
@@ -224,14 +226,19 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
     });
     return refuse("Could not reserve this video.");
   }
-  // Their team is not the RPC's to write; the job is reserved either way.
-  if (opponentTeam.team)
-    await saveAdminOpponentTeam(
+  // Their team is not the RPC's to write. When it does not land the job stays
+  // reserved and nothing is uploaded yet: the wizard shows the sentence, and
+  // the next submit of this operation replays the RPC and tries again.
+  if (
+    opponentTeam.team &&
+    !(await saveAdminOpponentTeam(
       admin,
       data.match_id as string,
       programId,
       opponentTeam.team,
-    );
+    ))
+  )
+    return refuse(OPPONENT_TEAM_NOT_SAVED_MESSAGE, 500);
   return {
     ok: true as const,
     operationId,

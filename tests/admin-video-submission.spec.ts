@@ -33,6 +33,7 @@ function harness(
   authorized: boolean | 401 = true,
   program = id(3),
   rpcError: string | null = null,
+  teamWriteError: string | null = null,
 ) {
   const calls: { name: string; args: Record<string, unknown> }[] = [];
   const client = {
@@ -53,7 +54,9 @@ function harness(
                   name: `update:${table}`,
                   args: { values, matchId, programId, unset: [first, second] },
                 });
-                return { error: null };
+                return {
+                  error: teamWriteError ? { message: teamWriteError } : null,
+                };
               },
             }),
           }),
@@ -309,4 +312,24 @@ test("their team is saved on the new match alone, and refused when malformed or 
     ).ok,
   ).toBe(false);
   expect(attached.calls).toEqual([]);
+});
+test("a team that did not save is answered, not a success, and the same operation can be submitted again", async () => {
+  const failed = harness(true, id(3), null, "connection reset");
+  const answer = await submitAdminMatchVideo(
+    { ...input, opponentSchool: "Rival College" },
+    failed.deps,
+  );
+  expect(answer).toMatchObject({
+    ok: false,
+    status: 500,
+    message: expect.stringContaining("their team wasn't"),
+  });
+  // The job was reserved first; the wizard retries this operation as it is.
+  expect(failed.calls.map((c) => c.name)).toEqual([
+    "admin_submit_match_video",
+    "update:matches",
+  ]);
+  // Without a team there is no write to fail.
+  const none = harness(true, id(3), null, "connection reset");
+  expect((await submitAdminMatchVideo(input, none.deps)).ok).toBe(true);
 });

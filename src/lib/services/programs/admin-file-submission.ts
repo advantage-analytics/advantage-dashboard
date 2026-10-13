@@ -8,6 +8,7 @@ import { getParser } from "@/lib/services/upload/parsers";
 import { validateSwingVisionFile } from "@/lib/services/upload/validators/swingvision-validator";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 import {
+  OPPONENT_TEAM_NOT_SAVED_MESSAGE,
   adminOpponentProgramExists,
   readAdminOpponentTeam,
   saveAdminOpponentTeam,
@@ -32,9 +33,10 @@ const refusals: Record<string, string> = {
 };
 /**
  * A refusal the route answers with its own `status`: 401 with no session, 403
- * for a signed-in non-admin, 400 for everything the request itself got wrong.
+ * for a signed-in non-admin, 400 for everything the request itself got wrong,
+ * 500 for a write of ours that did not land.
  */
-function failure(error: string, status: 400 | 401 | 403 = 400) {
+function failure(error: string, status: 400 | 401 | 403 | 500 = 400) {
   return { ok: false as const, status, message: refusals[error] ?? error };
 }
 
@@ -203,14 +205,16 @@ export async function submitAdminMatchFile(
         : "Could not save this submission. Reload its operation before retrying.",
     );
   const attempt = submitted.data;
-  // Their team is not the RPC's to write; the file is admitted either way.
-  if (opponentTeam.team)
-    await saveAdminOpponentTeam(
+  // Their team is not the RPC's to write; the file is admitted either way,
+  // so processing is still dispatched below before a miss is answered.
+  const teamSaved =
+    !opponentTeam.team ||
+    (await saveAdminOpponentTeam(
       admin,
       attempt.match_id,
       programId,
       opponentTeam.team,
-    );
+    ));
   if (attempt.state === "queued") {
     // Await dispatch. Edge claims before side effects; a repeated/lost response
     // cannot cause a second processor to insert points. Queued remains retryable.
@@ -225,6 +229,9 @@ export async function submitAdminMatchFile(
       })
       .catch(() => undefined);
   }
+  // The next submit of this operation replays the RPC and tries the team
+  // again; it cannot start a second processor.
+  if (!teamSaved) return failure(OPPONENT_TEAM_NOT_SAVED_MESSAGE, 500);
   return getAdminMatchFileStatus(operationId, itemId, deps);
 }
 

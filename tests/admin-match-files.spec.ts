@@ -53,6 +53,8 @@ function harness(
     error?: string;
     /** The directory has no program with the id the request names. */
     noProgram?: boolean;
+    /** The follow-up team write answers this error. */
+    teamWriteError?: string;
   } = {},
 ) {
   const calls: { name: string; args?: any }[] = [];
@@ -86,7 +88,11 @@ function harness(
                   name: `update:${table}`,
                   args: { values, matchId, programId, unset: [first, second] },
                 });
-                return { error: null };
+                return {
+                  error: options.teamWriteError
+                    ? { message: options.teamWriteError }
+                    : null,
+                };
               },
             }),
           }),
@@ -277,4 +283,22 @@ test("their team is saved on the new match alone, and refused when malformed or 
     expect((await submitAdminMatchFile(bad, h.deps)).ok).toBe(false);
     expect(h.calls).toEqual([]);
   }
+});
+test("a team that did not save is answered, not a success, after processing is dispatched", async () => {
+  const file = await workbook();
+  const failed = harness({ teamWriteError: "connection reset" });
+  const withSchool = form(file);
+  withSchool.set("opponentSchool", "Rival College");
+  expect(await submitAdminMatchFile(withSchool, failed.deps)).toMatchObject({
+    ok: false,
+    status: 500,
+    message: expect.stringContaining("their team wasn't"),
+  });
+  // The file is admitted regardless, so its analysis is not held back.
+  expect(failed.calls.map((c) => c.name)).toEqual([
+    "upload",
+    "admin_submit_match_file",
+    "update:matches",
+    "process",
+  ]);
 });

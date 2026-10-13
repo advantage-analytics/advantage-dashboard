@@ -57,6 +57,15 @@ export function readAdminOpponentTeam(
 }
 
 /**
+ * What the administrator reads when the match was created and its team was
+ * not. Both ways out work: the RPCs answer a second submit of the same
+ * operation with the same match, and the team is not part of the request they
+ * compare, so removing it does not read as a different submission.
+ */
+export const OPPONENT_TEAM_NOT_SAVED_MESSAGE =
+  "The match was saved, but their team wasn't. Submit again to save it, or remove their team to continue without it.";
+
+/**
  * True when the program the request names exists. Asked before anything is
  * created, so a made-up or deleted id is a refusal the administrator reads —
  * not a foreign-key failure after the match is already saved.
@@ -81,8 +90,10 @@ export async function adminOpponentProgramExists(
  * still null — the RPCs answer a replay with the same match, and a replay
  * must not undo a team set through Edit Match or the opponent drawer since.
  *
- * Returns false on an error. The match and its analysis are already saved by
- * then, so the submission still succeeds and the miss is logged here.
+ * Returns false on an error, and the caller answers
+ * `OPPONENT_TEAM_NOT_SAVED_MESSAGE` instead of a success: the match is already
+ * saved by then, and submitting the same operation again replays the RPC and
+ * tries this write again.
  */
 export async function saveAdminOpponentTeam(
   admin: AdminClient,
