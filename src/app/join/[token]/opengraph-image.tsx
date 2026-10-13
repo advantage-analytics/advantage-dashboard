@@ -1,4 +1,5 @@
 import { resolveJoinStateOnce } from "@/lib/services/programs/join-state-server";
+import { joinCard } from "@/lib/services/programs/join-card";
 import { LINK_CARD_SIZE, linkCard, wordmarkCard } from "@/lib/og/link-card";
 
 /**
@@ -7,10 +8,8 @@ import { LINK_CARD_SIZE, linkCard, wordmarkCard } from "@/lib/og/link-card";
  * what the link does. Drawn by `linkCard`, the layout every shared link's
  * card uses.
  *
- * It follows the page's own metadata rule (`generateMetadata` in `page.tsx`):
- * only the JOIN-LINK states name the team. An invitation was addressed to one
- * person, and a token that is unknown, spent or expired must read exactly
- * like one that never existed, so every other state draws the bare wordmark —
+ * `joinCard` decides what it says, by the page's own metadata rule: only the
+ * JOIN-LINK states name the team. Every other state draws the bare wordmark —
  * the site's default card — and answers 200 like any other.
  */
 export const alt = "Join your team on Advantage";
@@ -36,26 +35,6 @@ export default async function Image({
   const { token } = await params;
   const state = await resolveJoinStateOnce(readToken(token));
 
-  switch (state.kind) {
-    case "link_sign_up":
-    case "link_ready":
-      return linkCard({
-        headline: state.programName,
-        line: "Join as a player",
-        facts: "Create an account or sign in to join.",
-        kicker: "Team invite",
-      });
-    // A full team's card must not invite people to a join the page will
-    // refuse; it says what the page says.
-    case "link_full":
-      return linkCard({
-        headline: state.programName,
-        line: "Every player seat is taken",
-        lineTone: "quiet",
-        facts: "Ask a coach to free one.",
-        kicker: "Team invite",
-      });
-    default:
-      return wordmarkCard();
-  }
+  const card = joinCard(state);
+  return card ? linkCard(card) : wordmarkCard();
 }

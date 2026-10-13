@@ -22,6 +22,9 @@ export const contentType = "image/png";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/** What fits on one line of the card's facts, in characters. */
+const FACTS_LINE = 68;
+
 export default async function Image({
   params,
 }: {
@@ -41,12 +44,13 @@ export default async function Image({
   });
   const squad = `${teamLabel(program.team)} Tennis`;
   // Conference names run to 76 characters ("Region 23 - Mississippi
-  // Association of Community Colleges Conference (MACCC)") and wrap to three
-  // lines. Past one line (about 56 characters with the squad) the conference is dropped and the division
-  // stays, the same trade the claim flow's eyebrow makes.
+  // Association of Community Colleges Conference (MACCC)"). Past one line of
+  // the card's facts (about 68 characters with the squad) the conference is
+  // dropped and the division stays, the same trade the claim flow's eyebrow
+  // makes.
   const full = programSubtitle(program.division, program.conference);
   const facts =
-    `${squad} · ${full}`.length > 56
+    `${squad} · ${full}`.length > FACTS_LINE
       ? (divisionLabel(program.division) ?? "")
       : full;
 
