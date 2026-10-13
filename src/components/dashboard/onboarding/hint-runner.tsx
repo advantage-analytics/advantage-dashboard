@@ -29,12 +29,17 @@ import type { HintId } from "@/lib/onboarding/tours";
  * Popover content both do, so the hint never lands on top of BetaWelcome or
  * an open menu. That wait gates opening only: once open, the hint's own
  * popover is a `role="dialog"` too, and it must not close itself over it.
- * If `when` turns false before it opens, it gives up and renders nothing.
+ * If `when` turns false before it opens, it gives up and renders nothing;
+ * if it turns false while the hint shows (the upload finished, the viewer
+ * left the team), the box goes too — quietly, unstamped, since the moment it
+ * spoke to has passed rather than been answered.
  *
  * Done and Skip (the X, Escape) both close it for good, and so does
- * `resolved` turning true while it shows — the person did the thing the hint
- * points at (opened the tray it names), so it has nothing left to say and
- * must not sit on top of what they opened. The this-session guard (`tour-done:<hint>:<viewerId>`, the same key scheme as
+ * `resolved` — the person did the thing the hint points at (opened the tray,
+ * switched back), so it has nothing left to say. That holds whether the box
+ * is showing or only due: a tray opened before the hint found its quiet
+ * moment must not have the hint pop up on it once it closes. The
+ * this-session guard (`tour-done:<hint>:<viewerId>`, the same key scheme as
  * `TourRunner`'s) is set first, so it holds even when `markTourDone` fails.
  */
 
@@ -47,9 +52,9 @@ export interface HintRunnerProps {
   /** Facts the copy interpolates — the team's name for the switcher hint. */
   copyFacts?: HintCopyFacts;
   /**
-   * The person did what the hint points at — the activity tray opened. An
-   * open hint closes for good (stamped, like Done); a hint not yet open is
-   * left alone, since it only opens when no dialog is up anyway.
+   * The person did what the hint points at — the activity tray opened, the
+   * viewer switched out of the team. A showing or due hint closes for good
+   * (stamped, like Done); one that is not due is left alone.
    */
   resolved?: boolean;
 }
@@ -104,10 +109,13 @@ export function HintRunner({
     setAnchor(null);
   }, []);
 
-  // The anchor's own surface opened while the hint showed: it is answered.
   // Adjusted during render (React's "state from a prop change" pattern), so
-  // the box is gone in the same commit the tray opens in.
-  if (resolved && !finished && anchor !== null) finish();
+  // the box is gone in the same commit the condition changes in.
+  // Answered — showing or only due: closed for good.
+  if (resolved && !finished && (anchor !== null || when)) finish();
+  // No longer due while it shows: withdrawn, not answered — unstamped, so a
+  // later moment may offer it again.
+  else if (!when && !finished && anchor !== null) setAnchor(null);
 
   // Finished — by Done, Skip or `resolved` — stamps it, once. The guard is
   // set before the action, so it holds for this session even when the action

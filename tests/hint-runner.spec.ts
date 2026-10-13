@@ -221,6 +221,39 @@ test("opening the tray answers its hint: the box closes and is stamped once", as
   ).toBe("1");
 });
 
+test("a tray opened before the hint found its moment answers it: it never opens", async ({
+  page,
+}) => {
+  await open(page, "?hint=activity-tray&dialog=1");
+  await settle(page);
+  await expect(
+    page.getByRole("dialog", { name: "Your upload keeps going." }),
+  ).toHaveCount(0);
+  await page.locator('[data-tour="activity-tray"]').click();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await settle(page);
+  await settle(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual(["activity-tray"]);
+});
+
+test("a hint no longer due while it shows is withdrawn, unstamped", async ({
+  page,
+}) => {
+  await open(page, "?hint=activity-tray");
+  await expect(
+    page.getByRole("dialog", { name: "Your upload keeps going." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "No longer due" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:activity-tray:viewer-1"),
+    ),
+  ).toBeNull();
+});
+
 test("the hint waits while another dialog is open, and opens once it closes", async ({
   page,
 }) => {

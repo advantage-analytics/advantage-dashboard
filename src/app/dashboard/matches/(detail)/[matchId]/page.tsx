@@ -67,7 +67,7 @@ import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
 import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
-import { getTourDoneAt } from "@/lib/data/tour-done-server";
+import { markTourDone } from "@/app/dashboard/onboarding-actions";
 import { firstReportTourEligible } from "@/lib/onboarding/tours";
 import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 
@@ -270,11 +270,10 @@ export default async function MatchDetailPage({
     throw new Error(`Failed to load points for match ${matchId}`);
   }
 
-  // The first-report tour's cheap facts (design §8), decided before the
-  // report's second wave of reads so its one row read can ride along: a team
-  // workspace, a lost session, a match somebody else filed, a team match or
-  // one with no published statistics (`stats_unavailable` passes the gate
-  // but has no report to tour) never spends a query. The decision itself is
+  // The first-report tour's cheap facts (design §8): a team workspace, a lost
+  // session, a match somebody else filed, a team match or one with no
+  // published statistics (`stats_unavailable` passes the gate but has no
+  // report to tour) never spends a query. The decision itself is
   // `firstReportTourEligible`'s, below, from the same facts.
   const viewerId = workspace?.viewer.id ?? null;
   const isCreator = viewerId !== null && match.createdBy === viewerId;
@@ -287,19 +286,17 @@ export default async function MatchDetailPage({
 
   // Fetched only once there's a view switcher to show it in — the
   // awaiting-analysis branch below never renders `ShotsTab`, so a match still
-  // analysing skips all three queries entirely. Run together: none depends
-  // on another's result. `firstReportTourDoneAt` is `undefined` — "unknown",
-  // which never opens the tour — whenever it was not read.
-  const [savedViews, bandSettings, firstReportTourDoneAt] =
+  // analysing skips both queries entirely. Run together: neither depends on
+  // the other's result.
+  const [savedViews, bandSettings] =
     !isAwaitingAnalysis && activeWorkspace
       ? await Promise.all([
           getSavedViews(activeWorkspace.id),
           getBandSettings(activeWorkspace.id),
-          firstReportTourCandidate && viewerId
-            ? getTourDoneAt(viewerId, "first-report")
-            : undefined,
         ])
-      : [[], DEFAULT_BANDS, undefined];
+      : [[], DEFAULT_BANDS];
+  // On the request's workspace context already — no read of its own.
+  const firstReportTourDoneAt = workspace?.viewer.firstReportTourDoneAt ?? null;
 
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
@@ -360,11 +357,12 @@ export default async function MatchDetailPage({
   // The first-report tour (design §8): offered once, on the first report a
   // personal player can read of a match they filed themselves. Decided here,
   // below the short-circuit, because a match still analysing has no report
-  // to tour and must not spend these reads. The count is the one read left,
-  // and only a viewer who has never finished the tour pays it: once the row
-  // is stamped, no report costs more than the row read above. A failed count
-  // means no tour, never a failed page: the report is the thing, the tour is
-  // a courtesy over it.
+  // to tour and must not spend this read. The count is the one read, and
+  // only a viewer whose column is still null pays it — once: a player with
+  // more than one finished match can never be offered the tour, so the
+  // column is settled for them right here and no later report counts again.
+  // A failed count means no tour, never a failed page: the report is the
+  // thing, the tour is a courtesy over it.
   let firstReportTour = false;
   if (firstReportTourCandidate && viewerId && activeWorkspace) {
     const finishedMatchCount =
@@ -374,6 +372,14 @@ export default async function MatchDetailPage({
             return null;
           })
         : null;
+    if (
+      firstReportTourDoneAt === null &&
+      finishedMatchCount !== null &&
+      finishedMatchCount > 1
+    ) {
+      // Never throws; a failed write only means the next report counts again.
+      await markTourDone("first-report");
+    }
     firstReportTour = firstReportTourEligible({
       workspaceKind: activeWorkspace.kind,
       isCreator,

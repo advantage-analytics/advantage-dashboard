@@ -6,7 +6,9 @@ import {
   assertSampleClean,
   isSampleId,
   SAMPLE_NAMES,
+  tokenHash,
   type SampleMatchData,
+  type SampleNames,
 } from "@/lib/sample-match/anonymise";
 import {
   SAMPLE_MATCH_ID,
@@ -20,11 +22,17 @@ import {
   REAL_PROGRAM_ID,
   REAL_SHOT_ID,
   REAL_UPLOADER_ID,
+  SYNTHETIC_BANNED,
   SYNTHETIC_MATCH_DETAIL,
+  SYNTHETIC_REWRITES,
 } from "./fixtures/sample-match-synthetic";
 
 const FIXTURE_PATH = "src/lib/sample-match/fixture.json";
-const BANNED = /rudy|quan|goodman|ucla|splitstep/i;
+const BANNED = new RegExp(`${SYNTHETIC_BANNED.join("|")}|splitstep`, "i");
+
+/** The anonymiser over the synthetic source, with its program rewrite. */
+const anonymise = (names?: SampleNames) =>
+  anonymiseMatchDetail(SYNTHETIC_MATCH_DETAIL, names, SYNTHETIC_REWRITES);
 const UUID_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -56,12 +64,15 @@ function scoreFromYourSide(match: SampleMatchData["match"]): number[][] {
 }
 
 test.describe("anonymiseMatchDetail", () => {
-  const sample = anonymiseMatchDetail(SYNTHETIC_MATCH_DETAIL);
+  const sample = anonymise();
 
   test("no banned string survives anywhere in the output", () => {
     const offenders = allStrings(sample).filter((text) => BANNED.test(text));
     expect(offenders).toEqual([]);
     expect(() => assertSampleClean(sample)).not.toThrow();
+    expect(() =>
+      assertSampleClean(sample, { banned: SYNTHETIC_BANNED }),
+    ).not.toThrow();
   });
 
   test("both players are renamed in every place a name appears", () => {
@@ -79,7 +90,7 @@ test.describe("anonymiseMatchDetail", () => {
   });
 
   test("custom names are honoured", () => {
-    const renamed = anonymiseMatchDetail(SYNTHETIC_MATCH_DETAIL, {
+    const renamed = anonymise({
       player1: "Alex Reed",
       player2: "Casey Lane",
     });
@@ -102,7 +113,7 @@ test.describe("anonymiseMatchDetail", () => {
     }
     // Two points keep two distinct ids; a rebuild hands out the same ones.
     expect(sample.points?.[0]?.id).not.toBe(sample.points?.[1]?.id);
-    const again = anonymiseMatchDetail(SYNTHETIC_MATCH_DETAIL);
+    const again = anonymise();
     expect(again.match.id).toBe(sample.match.id);
     expect(again.points?.map((p) => p.id)).toEqual(
       sample.points?.map((p) => p.id),
@@ -133,7 +144,7 @@ test.describe("anonymiseMatchDetail", () => {
   });
 
   test("leaves the input untouched", () => {
-    expect(SYNTHETIC_MATCH_DETAIL.match.player1.name).toBe("Rudy Quan");
+    expect(SYNTHETIC_MATCH_DETAIL.match.player1.name).toBe("Casey Brennan");
     expect(SYNTHETIC_MATCH_DETAIL.match.isUserPlayer1).toBe(false);
     expect(SYNTHETIC_MATCH_DETAIL.points?.[0]?.saved).toBe(true);
   });
@@ -143,17 +154,30 @@ test.describe("assertSampleClean", () => {
   test("throws on the unanonymised input, naming the first offender", () => {
     // The walk reaches the match's real id before its player names.
     expect(() => assertSampleClean(SYNTHETIC_MATCH_DETAIL)).toThrow(
-      /not clean: uuid bca90097-72c9-448b-b0e4-e0e83dc143d9 at \$\.match\.id/,
+      /not clean: uuid 7c1e4b2a-3f5d-4e8a-9b6c-1d2e3f4a5b6c at \$\.match\.id/,
     );
-    expect(() => assertSampleClean({ player: "Rudy Quan" })).toThrow(
-      /not clean: "Rudy" found at \$\.player/,
-    );
+    expect(() =>
+      assertSampleClean(
+        { player: "Casey Brennan" },
+        { banned: SYNTHETIC_BANNED },
+      ),
+    ).toThrow(/not clean: "Casey" found at \$\.player/);
   });
 
   test("throws on a real uuid even when every name is clean", () => {
     expect(() =>
       assertSampleClean({ id: REAL_MATCH_ID, name: SAMPLE_NAMES.player1 }),
-    ).toThrow(/uuid bca90097-72c9-448b-b0e4-e0e83dc143d9 at \$\.id/);
+    ).toThrow(/uuid 7c1e4b2a-3f5d-4e8a-9b6c-1d2e3f4a5b6c at \$\.id/);
+  });
+
+  test("refuses a hashed banned word, whole words only", () => {
+    const bannedHashes = new Set([tokenHash("zed")]);
+    expect(() =>
+      assertSampleClean({ note: "Zed served" }, { bannedHashes }),
+    ).toThrow(/banned word "Zed" found at \$\.note/);
+    expect(() =>
+      assertSampleClean({ note: "Zedd served" }, { bannedHashes }),
+    ).not.toThrow();
   });
 
   test("is case-insensitive", () => {

@@ -4,14 +4,14 @@ import type { PlayerStatistics } from "@/lib/data/types";
 
 /**
  * A hand-written `getMatchDetailData` result carrying exactly the things the
- * anonymiser must scrub: the two real names (in match fields, an insight and
+ * anonymiser must scrub: two made-up "real" names (in match fields, an insight and
  * a key moment), real-looking uuids, a program tie, an uploader and a
  * bookmark. Small on purpose — two points — so a failure reads as one line.
  */
 
-export const REAL_MATCH_ID = "bca90097-72c9-448b-b0e4-e0e83dc143d9";
+export const REAL_MATCH_ID = "7c1e4b2a-3f5d-4e8a-9b6c-1d2e3f4a5b6c";
 export const REAL_PROGRAM_ID = "5f1c2a7e-9b3d-4c21-8e6a-2d4b7f9c1a30";
-export const REAL_UPLOADER_ID = "0df75bc6-a44a-47fa-8d5b-9cccd9542fd7";
+export const REAL_UPLOADER_ID = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
 export const REAL_POINT_IDS = [
   "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
   "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
@@ -104,7 +104,7 @@ function point(
 export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
   match: {
     id: REAL_MATCH_ID,
-    tournamentName: "UCLA Spring Invitational",
+    tournamentName: "Northfield Spring Invitational",
     date: "March 5, 2026",
     matchType: "Dual match",
     courtType: "Hard",
@@ -116,9 +116,14 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
     durationSec: 5040,
     eventId: "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80",
     uploadedBy: "Coach Example",
-    player1: { name: "Rudy Quan", school: "", hand: "Right", backhand: "Two" },
+    player1: {
+      name: "Casey Brennan",
+      school: "",
+      hand: "Right",
+      backhand: "Two",
+    },
     player2: {
-      name: "Matt Goodman",
+      name: "Theo Marsh",
       school: "",
       hand: "Right",
       backhand: "One",
@@ -152,13 +157,13 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
       player1Stats: playerStats({}),
       player2Stats: playerStats({ aces: 1, totalPointsWon: 37 }),
     },
-    player1Name: "Rudy Quan",
-    player2Name: "Matt Goodman",
+    player1Name: "Casey Brennan",
+    player2Name: "Theo Marsh",
   },
   points: [
     point(REAL_POINT_IDS[0], 1, {
       saved: true,
-      savedBy: [{ userId: REAL_UPLOADER_ID, name: "Rudy Quan" }],
+      savedBy: [{ userId: REAL_UPLOADER_ID, name: "Casey Brennan" }],
       shots: [
         {
           id: REAL_SHOT_ID,
@@ -183,7 +188,7 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
       pointScoreRaw: "15-0",
       resultType: "unforced_error",
       eventType: "Backhand error",
-      description: "Goodman backhand unforced error into the net",
+      description: "Marsh backhand unforced error into the net",
       player: "player2",
     }),
   ],
@@ -191,25 +196,24 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
     {
       moment: "Early Break",
       description:
-        "Rudy broke Goodman in the opening game of the UCLA dual with a return winner.",
+        "Casey broke Marsh in the opening game of the Northfield dual with a return winner.",
     },
   ],
   insights: {
     player1: {
       summary:
-        "Rudy Quan won 72% behind the first serve and never faced a break point against Matt Goodman.",
+        "Casey Brennan won 72% behind the first serve and never faced a break point against Theo Marsh.",
       strengths: [
         {
           name: "First serve",
           value: 72,
-          description: "Quan's first serve held up all afternoon.",
+          description: "Brennan's first serve held up all afternoon.",
         },
       ],
       weaknesses: [],
     },
     player2: {
-      summary:
-        "Goodman struggled on return, winning 40% of first-return points.",
+      summary: "Marsh struggled on return, winning 40% of first-return points.",
     },
   },
   kpiHistory: {
@@ -219,3 +223,15 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
   },
   foldUnreconciled: false,
 };
+
+/** The synthetic source's program, which a spec rewrites as a real one is. */
+export const SYNTHETIC_REWRITES = [["Northfield", "Westbrook"]] as const;
+
+/** Every word of the synthetic source that must not survive anonymising. */
+export const SYNTHETIC_BANNED = [
+  "Casey",
+  "Brennan",
+  "Theo",
+  "Marsh",
+  "Northfield",
+] as const;

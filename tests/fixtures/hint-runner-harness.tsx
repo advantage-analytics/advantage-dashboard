@@ -15,7 +15,8 @@ import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
  *                   BetaWelcome, or an open menu — that "Close dialog" removes
  *
  * Clicking the "Activity" anchor stands for opening the tray: it sets the
- * runner's `resolved`, as `ActivityTray` passes its own open state.
+ * runner's `resolved`, as `ActivityTray` passes its own open state. "No
+ * longer due" turns `when` off, as a finished upload does.
  */
 
 const params = new URLSearchParams(window.location.search);
@@ -32,6 +33,7 @@ function Harness() {
   const [runnerKey, setRunnerKey] = useState(0);
   const [mounted, setMounted] = useState(true);
   const [trayOpen, setTrayOpen] = useState(false);
+  const [due, setDue] = useState(WHEN);
 
   useEffect(() => {
     document.documentElement.dataset.hydrated = "true";
@@ -64,6 +66,9 @@ function Harness() {
         >
           Remount runner
         </button>
+        <button type="button" onClick={() => setDue(false)}>
+          No longer due
+        </button>
         {dialog && (
           <div role="dialog" aria-label="Welcome">
             <button type="button" onClick={() => setDialog(false)}>
@@ -76,7 +81,7 @@ function Harness() {
             key={runnerKey}
             hint={HINT}
             viewerId={VIEWER}
-            when={WHEN}
+            when={due}
             copyFacts={{ teamName: "Stanford Women's Tennis" }}
             resolved={trayOpen}
           />

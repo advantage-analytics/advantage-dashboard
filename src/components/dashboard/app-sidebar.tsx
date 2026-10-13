@@ -89,6 +89,8 @@ export function AppSidebar() {
           doneAt: viewer.workspaceHintDoneAt,
         })}
         copyFacts={{ teamName: active.name }}
+        // Back in their own matches: the hint's "switch back here" is done.
+        resolved={active.kind === "personal"}
       />
 
       <div className="h-6 shrink-0" />

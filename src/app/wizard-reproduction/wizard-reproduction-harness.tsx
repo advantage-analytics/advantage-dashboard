@@ -66,6 +66,8 @@ const workspace: WorkspaceContextValue = {
     recordingSource: null,
     workspaceHintDoneAt: null,
     activityHintDoneAt: null,
+    sampleTourDoneAt: null,
+    firstReportTourDoneAt: null,
   },
 };
 

@@ -14,7 +14,7 @@ import { TOUR_COLUMN, type SeenId } from "@/lib/onboarding/tours";
  * (`20261007061209_users_onboarding_tours_column_grants.sql`) are what admit
  * the write; the id comes from the session, never from the caller. The tour
  * id is mapped to its column through `TOUR_COLUMN` (`lib/onboarding/tours.ts`,
- * shared with `getTourDoneAt`) — the input is never interpolated into SQL.
+ * shared with the workspace context's read) — the input is never interpolated into SQL.
  * The update selects the row back, as `finishOnboarding` does: an update
  * that matched nothing (RLS hid the row, or no `users` row exists) is an
  * error, never a silent success that offers the tour again next session.

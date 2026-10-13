@@ -227,6 +227,17 @@ test.describe("setupSteps", () => {
     ]);
   });
 
+  test("no finished match yet: the first-report step asks for a first match", () => {
+    const step = setupSteps({ ...fresh, finishedMatchCount: 0 })[1];
+    expect(step).toMatchObject({
+      key: "firstReportTour",
+      label: "Send your first match",
+      href: "/dashboard/matches/new",
+      link: "Send a match",
+      done: false,
+    });
+  });
+
   test("nothing set: nothing done", () => {
     expect(done(fresh)).toEqual({
       sampleTour: false,

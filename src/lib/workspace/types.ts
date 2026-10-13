@@ -371,6 +371,20 @@ export interface Viewer {
    * `workspaceHintDoneAt`: the tray already reads `useWorkspace()`.
    */
   activityHintDoneAt: string | null;
+  /**
+   * `users.sample_tour_done_at` — when the sample report's tour was finished
+   * or skipped. Null means never, so `/dashboard/matches/sample` opens it on
+   * its own. On the context so the sample page reads the row it already has.
+   */
+  sampleTourDoneAt: string | null;
+  /**
+   * `users.first_report_tour_done_at` — when the first-report tour was
+   * finished or skipped, or settled for a player with more than one finished
+   * match (who can never be offered it). Null means neither, so a first
+   * report may still offer it. On the context so a report costs no extra
+   * row read for it.
+   */
+  firstReportTourDoneAt: string | null;
 }
 
 /**

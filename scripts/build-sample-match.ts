@@ -1,10 +1,15 @@
 /**
  * Build the first-run sample match fixture from one real match.
  *
- *   npx tsx scripts/build-sample-match.ts            # writes src/lib/sample-match/fixture.json
- *   npx tsx scripts/build-sample-match.ts --check    # read, anonymise, verify, write nothing
+ *   SAMPLE_SOURCE_MATCH_ID=<uuid> npx tsx scripts/build-sample-match.ts          # writes the fixture
+ *   SAMPLE_SOURCE_MATCH_ID=<uuid> npx tsx scripts/build-sample-match.ts --check  # verify, write nothing
+ *   npx tsx scripts/build-sample-match.ts --match=<uuid> [--check]                 # the same, by flag
  *
- * Reads match SOURCE_MATCH_ID through the service-role client and the same
+ * The source match is named at run time, never here: this file, like the
+ * fixture, must not lead back to the people the sample was made from. It is
+ * the match the players agreed to share (brief H2); ask the author for its id.
+ *
+ * Reads that match through the service-role client and the same
  * loader the match page composes (`loadMatchDetail`, the inside of
  * `getMatchDetailData`) — never a hand-copied `select`, so the fixture cannot
  * drift from what the page actually renders. "You" is pinned to seat one
@@ -41,12 +46,20 @@ try {
   /* already exported */
 }
 
-/** Rudy Quan d. Matt Goodman 6-2 6-2 — 87 points, 532 shots, a full video match. */
-const SOURCE_MATCH_ID = "bca90097-72c9-448b-b0e4-e0e83dc143d9";
+const SOURCE_MATCH_ID =
+  process.argv.find((arg) => arg.startsWith("--match="))?.slice(8) ??
+  process.env.SAMPLE_SOURCE_MATCH_ID ??
+  "";
 const FIXTURE_PATH = "src/lib/sample-match/fixture.json";
 
 async function main() {
   const check = process.argv.includes("--check");
+  if (!/^[0-9a-f-]{36}$/i.test(SOURCE_MATCH_ID)) {
+    console.error(
+      "name the source match: SAMPLE_SOURCE_MATCH_ID=<uuid> or --match=<uuid>",
+    );
+    process.exit(1);
+  }
   const supabase = createAdminClient();
 
   const data = await loadMatchDetail(supabase, SOURCE_MATCH_ID, {
@@ -68,9 +81,13 @@ async function main() {
   }
 
   const sample = anonymiseMatchDetail(data);
-  // Checked on the serialised form, which is what gets committed.
+  // Checked on the serialised form, which is what gets committed — against
+  // the hashed list and, plainly, the source's own names as read just now.
   const json = JSON.stringify(sample, null, 2) + "\n";
-  assertSampleClean(JSON.parse(json));
+  const sourceNames = [data.match.player1.name, data.match.player2.name]
+    .flatMap((name) => name.split(/\s+/))
+    .filter((part) => part.length >= 3);
+  assertSampleClean(JSON.parse(json), { banned: sourceNames });
 
   const sets = sample.match.score.sets
     .map((set) => `${set.player1}-${set.player2}`)

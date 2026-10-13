@@ -56,8 +56,9 @@ export const TOUR_TARGET_VIEW: Record<TourTarget, TourTab | null> = {
 
 /**
  * `users` column each tour or hint stamps when it is finished or skipped.
- * Shared by the `markTourDone` action (the write) and `getTourDoneAt` (the
- * read), so the two can never name different columns. Exported from here, a
+ * Shared by the `markTourDone` action (the write) and the workspace
+ * context's `users` read (`Viewer.*DoneAt`), so the two can never name
+ * different columns. Exported from here, a
  * plain module, because the action file is `"use server"` and may export
  * only async functions. The hint columns are also read by
  * `getWorkspaceContext`, which the shell already calls once per request.
@@ -190,8 +191,8 @@ export interface FirstReportTourFacts {
    */
   finishedMatchCount: number | null;
   /**
-   * `users.first_report_tour_done_at`: `null` when never finished, `undefined`
-   * when it could not be read (`getTourDoneAt`).
+   * `users.first_report_tour_done_at` (`Viewer.firstReportTourDoneAt`): `null`
+   * when never finished; `undefined` when not known, which never opens it.
    */
   doneAt: string | null | undefined;
 }
@@ -260,10 +261,12 @@ export interface SetupStep {
 /**
  * The getting-set-up steps in order: the two tours, then playing profile and
  * preferences. An account with more than one finished match counts both tours
- * as done, so a veteran's line is unchanged by them. An unknown count
- * (`null`) counts them as done too: without it a veteran cannot be told from
- * a newcomer, and the line must not ask a veteran to take a tour — the
- * profile and preferences steps still read from their own facts.
+ * as done, so a veteran's line is unchanged by them. With none finished, the
+ * first-report step asks for a first match instead, since there is no report
+ * to send anyone to. An unknown count (`null`) counts both tours as done:
+ * without it a veteran cannot be told from a newcomer, and the line must not
+ * ask a veteran to take a tour. The profile and preferences steps read from
+ * their own facts.
  */
 export function setupSteps(facts: SetupFacts): SetupStep[] {
   const toursSettled =
@@ -276,13 +279,24 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
       link: "Open sample",
       done: facts.sampleTourDoneAt !== null || toursSettled,
     },
-    {
-      key: "firstReportTour",
-      label: "Read your first report",
-      href: "/dashboard/matches",
-      link: "Open matches",
-      done: facts.firstReportTourDoneAt !== null || toursSettled,
-    },
+    // With no finished match yet there is no report to read, and the list
+    // would offer nothing to open: the step points at the one thing that
+    // brings a first report, until one exists.
+    facts.finishedMatchCount === 0
+      ? {
+          key: "firstReportTour",
+          label: "Send your first match",
+          href: "/dashboard/matches/new",
+          link: "Send a match",
+          done: facts.firstReportTourDoneAt !== null,
+        }
+      : {
+          key: "firstReportTour",
+          label: "Read your first report",
+          href: "/dashboard/matches",
+          link: "Open matches",
+          done: facts.firstReportTourDoneAt !== null || toursSettled,
+        },
     {
       key: "playingProfile",
       label: "Hand and backhand",

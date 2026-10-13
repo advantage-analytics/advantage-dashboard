@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 
-import { getTourDoneAt } from "@/lib/data/tour-done-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
@@ -79,10 +78,9 @@ import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
  * (`?tour=1`) or the viewer has never finished it (`users.sample_tour_done_at`
  * is null) — and only in a personal workspace. A team workspace reaching the
  * URL renders the same read-only report with no tour: no entry point links a
- * team here, and the tour's "you" is a solo player's. A failed read of the
- * column (`getTourDoneAt`) is "unknown", not "never seen": only `?tour=1`
- * opens it then, so a transient error cannot push the tour at someone who
- * already dismissed it — and `?tour=1` is passed on as `requested`, so the
+ * team here, and the tour's "you" is a solo player's. The column comes off
+ * the request's workspace context (`viewer.sampleTourDoneAt`), so the page
+ * reads no row of its own; `?tour=1` is passed on as `requested`, so the
  * runner's own this-session guard yields to it too. The report is the thing;
  * the tour is a courtesy over it.
  *
@@ -145,17 +143,13 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
   const isDerived = match.sourceProvider === "splitstep";
 
   // The tour: personal workspaces only; then the URL's ask, or never seen.
-  // The column is read only when the cheaper fact already allows it.
   const activeWorkspace = workspace?.active ?? null;
   const viewerId = workspace?.viewer.id ?? null;
   const tourAsked = query.tour === "1";
-  let startTour = false;
-  if (activeWorkspace?.kind === "personal" && viewerId) {
-    const sampleTourDoneAt = tourAsked
-      ? null
-      : await getTourDoneAt(viewerId, "sample");
-    startTour = tourAsked || sampleTourDoneAt === null;
-  }
+  const startTour =
+    activeWorkspace?.kind === "personal" &&
+    viewerId !== null &&
+    (tourAsked || workspace?.viewer.sampleTourDoneAt === null);
 
   return (
     // The same bounded box `(detail)/[matchId]/layout.tsx` draws: the rail
