@@ -28,6 +28,7 @@ export function TeamSeasonTitle({
   usage,
   awaitingReport,
   action,
+  setup,
 }: {
   /** Every match filed, video in flight included. */
   matchCount: number;
@@ -47,6 +48,11 @@ export function TeamSeasonTitle({
    * to. The slot holds its place in every case.
    */
   action: React.ReactNode;
+  /**
+   * The setup pointer (`TeamSetupLine`), on the summary line's baseline like
+   * the "new results" link beside it — not a row of its own under the title.
+   */
+  setup?: React.ReactNode;
 }) {
   const hoursLeft = (
     <>
@@ -90,6 +96,7 @@ export function TeamSeasonTitle({
           )}
         </>
       )}
+      {setup}
     </TeamSeasonTitleFrame>
   );
 }
