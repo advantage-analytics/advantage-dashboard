@@ -223,3 +223,14 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. For `/pr-check` Stage 3b to see the hint, the `EYES_ON_*` verifier account needs a team membership and a null `users.workspace_hint_done_at`.
+
+## T24 · Activity tray hint on first in-flight upload after leaving the wizard — blocked
+
+**gate:** mechanical FAIL — full suite 5716 passed, 347 failed: 346 environmental ("Executable doesn't exist") and 1 real: `tests/upload-paused-surfaces.spec.ts:281` "the tray keeps a paused upload among the running rows…" throws `TypeError: (0 , navigation_1.usePathname) is not a function` at `ActivityTray`. That spec also renders the real tray in a VM (`renderTray`, its `next/navigation` stub at ~L234 is `{ unstable_rethrow }` only), and the task's stub list named the four `activity-tray-*` specs but not this one. Completion `VERDICT: pass` (not reached as the deciding stage).
+**stash:** 86e22845c7967c4c1913797540188c038699ecad
+**fix to retry:** pop the stash, add `usePathname: () => "/dashboard"` to `upload-paused-surfaces.spec.ts`'s `next/navigation` stub and a marker stub for `@/components/dashboard/onboarding/hint-runner` (as `activity-tray-rows.spec.ts` got), then re-gate. grep `tests/` for every other `activity-tray.tsx` VM render first.
+**follow-ups:**
+
+1. Opening the tray while the hint shows leaves both boxes under the same trigger; close or suppress the hint when the tray opens (`HintRunner` has no external close today).
+2. The job row is created after the wizard's 300 ms refresh is scheduled; a slow insert defers the hint to the next render (not lost).
+3. `armed` is never cleared within the tab session.

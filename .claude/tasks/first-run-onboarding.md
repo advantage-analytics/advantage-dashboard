@@ -322,7 +322,7 @@ ready).
 
 ## T24 · Activity tray hint on first in-flight upload after leaving the wizard
 
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T22
 - **files:** src/components/dashboard/activity/activity-tray.tsx, tests/activity-tray-rows.spec.ts, tests/activity-tray-failure.spec.ts, tests/activity-tray-started.spec.ts, tests/activity-tray-detail.spec.ts (stub additions only) — guess
