@@ -232,6 +232,46 @@ test.describe("ask_run_query: scope and guards (live)", () => {
     ]);
   });
 
+  // The views once asked auth.uid(), which re-reads request.jwt.claims on
+  // every call — and the SQL run through the function can overwrite that
+  // setting. One statement read another user's matches (20261013051323's
+  // header has the query). The viewer is now pinned and signed before any
+  // caller-supplied SQL runs, and nothing in schema ask reads the claims.
+  test("SQL that overwrites the request's JWT claims still reads only the caller's rows", async () => {
+    const claims = JSON.stringify({ sub: a.userId, role: "authenticated" });
+    for (const forged of [
+      `select (select set_config('request.jwt.claims', '${claims}', true) is not null) as forged, (select count(*) from ask.matches) as seen`,
+      `with f as materialized (select set_config('request.jwt.claims', '${claims}', true) as s) select m.n as seen from f, lateral (select count(*) n from ask.matches where f.s is not null) m`,
+    ]) {
+      const got = await run(b.client, SCOPE_ALL, forged);
+      expect(got.error).toBeNull();
+      // B's own one personal match — never A's two.
+      expect(got.data?.rows[0]).toMatchObject({ seen: 1 });
+    }
+  });
+
+  test("SQL that overwrites the pinned viewer reads nothing", async () => {
+    for (const forged of [
+      `with f as materialized (select set_config('ask.viewer', '${a.userId}', true) as s) select m.n as seen from f, lateral (select count(*) n from ask.matches where f.s is not null) m`,
+      `with f as materialized (select set_config('ask.viewer', '${a.userId}', true) as s, set_config('ask.viewer_sig', repeat('0', 64), true) as t) select m.n as seen from f, lateral (select count(*) n from ask.matches where f.s is not null) m`,
+    ]) {
+      const got = await run(b.client, SCOPE_ALL, forged);
+      expect(got.error).toBeNull();
+      expect(got.data?.rows[0]).toMatchObject({ seen: 0 });
+    }
+  });
+
+  test("the public door cannot be called again from inside a query", async () => {
+    const got = await run(
+      b.client,
+      SCOPE_ALL,
+      `select public.ask_run_query('select match_id from ask.matches', 'select 1 as x')::text as inner_result`,
+    );
+    // 42501 is also the door's own "not signed in": the message says which.
+    expect(got.error?.code).toBe("42501");
+    expect(got.error?.message).toContain("permission denied for function");
+  });
+
   // The door must open onto all four views. ask.match_stats once did not:
   // it read a security_invoker view, so ask_reader was refused on the base
   // table and every statistics question (and the mock plan) failed with

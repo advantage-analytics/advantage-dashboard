@@ -1,8 +1,5 @@
 -- Ask: the viewer is pinned and signed before any model-written SQL runs.
 --
--- NOT YET APPLIED when this file was written (2026-10-12). Rename it to the
--- live version and record the probes below once it is.
---
 -- THE HOLE THIS CLOSES (found by the pre-merge access review, reproduced live
 -- and rolled back on 2026-10-12). The four `ask` views decide whose rows to
 -- show by calling auth.uid() — through ask.my_match_ids(), ask.my_side(),
@@ -66,24 +63,39 @@
 -- still-streaming answer is not closed by this; it would need the save and
 -- the reservation tied together.)
 --
--- PROBES to run after apply, each rolled back, as `authenticated` with the
--- JWT claims set (see 20261011215730 for the shape):
---   V1 the forgery above, in both shapes that worked (scalar subquery; a
---      materialized CTE with a lateral read), as a user with no matches
---      naming a user with some → matches_seen 0.
---   V2 the same with ask.program_id pointed at a program the caller is not
---      in, and with the claims forged to one of its members → 0.
---   V3 overwriting ask.viewer with another id, with and without copying the
---      caller's own signature → 0.
---   V4 the working paths, unchanged: a user's own personal count; a member's
---      team probes (T1, T6 of 20261012170339); a non-member's team count 0;
---      the membership probes M1 of 20261012223023.
+-- VERIFIED live after apply (2026-10-12, version 20261013051323), each probe
+-- rolled back, as `authenticated` sessions with the JWT claims set:
+--   V1 the forgery, in both shapes that had returned the victim's 18
+--      matches, as a user with no matches → matches seen 0 (the set_config
+--      still succeeds; nothing reads what it wrote).
+--   V2 claims forged to a member of a program AND ask.program_id pointed at
+--      that program, by a non-member → 0.
+--   V3 ask.viewer overwritten with another id, keeping the caller's own
+--      signature → 0; with a made-up signature → 0; claims forged and the
+--      public door called again from inside the query to re-pin → 42501
+--      permission denied for function ask_run_query.
+--   V4 unchanged: the victim reading their own → 18 matches, 18 'me'
+--      statistics rows, 2310 points; a program owner's personal scope → 1;
+--      their team scope → 10 matches under three roster names (1, 3, 6), 10
+--      'me' and 10 'opponent' statistics rows, 1183 points, 7995 shots; a
+--      member's direct ask.my_side() on a roster id → 'player1'; a
+--      non-member's team scope → 0.
 --   V5 ask_reader cannot execute public.ask_run_query,
---      public.ask_run_team_query or ask_private.sign; authenticated cannot
---      execute ask.exec_query, ask.viewer or anything in ask_private; nobody
---      but postgres can read ask_private.pin_key.
---   V6 ask_release_question on an answered question's row → false, row
---      kept; on a fresh reservation → true.
+--      public.ask_run_team_query or ask_private.sign, holds no USAGE on
+--      ask_private and no SELECT on the key; authenticated cannot execute
+--      ask.exec_query or ask.viewer and holds no USAGE on ask_private, and
+--      can execute the two public functions; anon and service_role cannot;
+--      owners postgres / postgres / ask_reader. No JWT → 42501; a null
+--      program → 22004.
+--   V6 ask_release_question on the row of an answered question → false, row
+--      kept (12 before, 12 after); on a fresh reservation → true.
+--
+-- A note for the next change to these functions: the first attempt at this
+-- migration failed and rolled back on `grant execute on ask.exec_query to
+-- postgres` placed after the temporary membership was revoked — once the
+-- function is ask_reader's, only its owner can grant on it. And a plain
+-- `revoke … from authenticated` on a function ask_reader owns is a silent
+-- no-op when run as postgres: take ownership first.
 
 -- ---------------------------------------------------------------------------
 -- The key. One row, random at creation, readable by its owner alone.
@@ -367,10 +379,12 @@ alter function ask.exec_query(text, text) owner to ask_reader;
 alter function public.ask_run_query(text, text) owner to postgres;
 alter function public.ask_run_team_query(uuid, text, text) owner to postgres;
 
+-- While postgres still acts as ask_reader: once the function is ask_reader's,
+-- only its owner can grant on it.
+grant execute on function ask.exec_query(text, text) to postgres;
+
 revoke create on schema ask from ask_reader;
 revoke ask_reader from postgres granted by postgres;
-
-grant execute on function ask.exec_query(text, text) to postgres;
 
 -- ---------------------------------------------------------------------------
 -- The two doors: read the caller once, pin, select the scope, execute.
