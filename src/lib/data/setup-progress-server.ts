@@ -70,8 +70,11 @@ export async function getSetupSteps(
   }
 }
 
-/** Newest matches read to answer the step. Past this, the answer is settled. */
-const SENT_MATCH_WINDOW = 50;
+/**
+ * Matches read per round. An established program answers in the first one —
+ * its newest matches are analysed — so this is the whole cost there.
+ */
+const SENT_MATCH_PAGE = 50;
 
 /**
  * Has the program sent a match — one whose report is back or on its way?
@@ -81,30 +84,39 @@ const SENT_MATCH_WINDOW = 50;
  * tray's section call this step done while the page's own pointer, on the
  * same screen, still asked for it. Each match resolves the way the page
  * resolves it — its job, else an import, else a manual entry.
+ *
+ * Newest first, a page at a time, to the end of the program's matches when
+ * nothing qualifies: the page reads them all, and stopping at the first page
+ * would let fifty score-only entries hide the analysed match behind them.
  */
 async function hasSentMatch(
   supabase: SupabaseClient,
   programId: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("id, source_provider, verified")
-    .eq("program_id", programId)
-    .order("date", { ascending: false, nullsFirst: false })
-    .limit(SENT_MATCH_WINDOW);
-  if (error) throw error;
+  for (let from = 0; ; from += SENT_MATCH_PAGE) {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("id, source_provider, verified")
+      .eq("program_id", programId)
+      .order("date", { ascending: false, nullsFirst: false })
+      .order("id")
+      .range(from, from + SENT_MATCH_PAGE - 1);
+    if (error) throw error;
 
-  const rows = data ?? [];
-  const jobs = await loadMatchAnalysis(
-    supabase,
-    rows.map((row) => row.id),
-  );
-  return rows.some((row) => {
-    const analysis =
-      jobs.get(row.id) ??
-      (row.source_provider
-        ? importedAnalysis(row.source_provider, Boolean(row.verified))
-        : manualAnalysis());
-    return isAnalysisReady(analysis.status) || isInFlight(analysis.status);
-  });
+    const rows = data ?? [];
+    const jobs = await loadMatchAnalysis(
+      supabase,
+      rows.map((row) => row.id),
+    );
+    const sent = rows.some((row) => {
+      const analysis =
+        jobs.get(row.id) ??
+        (row.source_provider
+          ? importedAnalysis(row.source_provider, Boolean(row.verified))
+          : manualAnalysis());
+      return isAnalysisReady(analysis.status) || isInFlight(analysis.status);
+    });
+    if (sent) return true;
+    if (rows.length < SENT_MATCH_PAGE) return false;
+  }
 }

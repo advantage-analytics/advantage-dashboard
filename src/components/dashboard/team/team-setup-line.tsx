@@ -70,11 +70,9 @@ export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
         {STEPS.map((step) => (
           <span
             key={step.key}
-            className={
-              setup[step.key]
-                ? "h-[3px] w-3 rounded-full bg-[var(--blue)]"
-                : "h-[3px] w-3 rounded-full bg-[var(--border-medium)]"
-            }
+            className={`h-[3px] w-3 rounded-full ${
+              setup[step.key] ? "bg-[var(--blue)]" : "bg-[var(--border-medium)]"
+            }`}
           />
         ))}
       </span>

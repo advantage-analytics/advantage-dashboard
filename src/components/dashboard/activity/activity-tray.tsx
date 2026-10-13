@@ -58,6 +58,12 @@ import { cn } from "@/lib/utils";
  * lives behind one footer line that covers the whole history rather than the
  * last two rows of it, so the panel holds two row shapes and one blue.
  *
+ * One thing sits outside that job, above the feed and apart from it: the
+ * "Getting set up" section (`SetupSection`, `tray-setup.ts`). It is a standing
+ * to-do list, not activity, so it is drawn in grey, counted nowhere, and gone
+ * once setup is done — the rules below about the dot and the blue are about
+ * the feed, and setup takes neither.
+ *
  * ── The leading column carries state, not air ──────────────────────────────
  * 14px, always present, so every row's text starts on the same x. Work rows
  * lead with the match page's own stepper marks at their compact size — the
