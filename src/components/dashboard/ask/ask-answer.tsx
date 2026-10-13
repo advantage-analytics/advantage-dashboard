@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type CSSProperties } from "react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
@@ -84,8 +85,17 @@ export function AskAnswer({
   scope = PERSONAL_ASK_SCOPE,
 }: AskAnswerProps) {
   const copy = askCopy(scope);
+  // An answer that mounted mid-stream is arriving now, and its parts move as
+  // they land (`globals.css`, "Ask: an answer arriving"). One reopened from
+  // the rail mounts already `done` and is simply there. Decided once: the
+  // motion must not replay when the stream ends or the page re-renders.
+  const [live] = useState(answer.status === "streaming");
   return (
-    <div data-ask-answer="" className="flex min-w-0 flex-col gap-5">
+    <div
+      data-ask-answer=""
+      data-ask-live={live ? "" : undefined}
+      className="flex min-w-0 flex-col gap-5"
+    >
       {answer.status === "error" ? (
         <AnswerError error={answer.error} copy={copy} />
       ) : (
@@ -138,11 +148,18 @@ function AnswerBody({
   return (
     <>
       {answer.headline && (
-        <p className="text-title text-balance">{answer.headline}</p>
+        <p data-ask-part="" style={part(0)} className="text-title text-balance">
+          {answer.headline}
+        </p>
       )}
 
       {figures.length > 0 && (
-        <ul aria-label="Figures" className="flex flex-wrap gap-x-8 gap-y-2.5">
+        <ul
+          aria-label="Figures"
+          data-ask-part=""
+          style={part(1)}
+          className="flex flex-wrap gap-x-8 gap-y-2.5"
+        >
           {figures.map((figure, index) => (
             // Value over label, in the markup as on screen.
             <li
@@ -162,10 +179,12 @@ function AnswerBody({
       )}
 
       {answer.visual && (
-        <AskVisualBlock
-          visual={answer.visual}
-          trendAverageLabel={copy.trendAverage}
-        />
+        <div data-ask-part="" style={part(2)}>
+          <AskVisualBlock
+            visual={answer.visual}
+            trendAverageLabel={copy.trendAverage}
+          />
+        </div>
       )}
 
       {paragraphs.length > 0 && (
@@ -178,20 +197,31 @@ function AnswerBody({
               className="text-body max-w-[66ch] text-pretty"
               style={{ lineHeight: 1.65 }}
             >
-              {paragraph}
+              {/* A sentence at a time, as the stream sends them: one that has
+                  been read keeps its key and stays put; a new one fades in. */}
+              {sentences(paragraph).map((sentence, at) => (
+                <span key={at} data-ask-sentence="">
+                  {sentence}
+                </span>
+              ))}
             </p>
           ))}
         </div>
       )}
 
       {answer.status === "streaming" && (
-        <p role="status" className="text-body-sm">
+        <p
+          role="status"
+          key={answer.stage ?? "sending"}
+          data-ask-stage=""
+          className="text-body-sm"
+        >
           {answer.stage ? copy.stage[answer.stage] : "Sending your question"}
         </p>
       )}
 
       {(answer.sources || answer.status === "done") && (
-        <div className="flex flex-col gap-3">
+        <div data-ask-part="" style={part(3)} className="flex flex-col gap-3">
           {answer.sources && <AskSources matches={answer.sources} />}
           {answer.status === "done" && (
             <p data-ask-signature="" className="text-micro max-w-[60ch]">
@@ -203,5 +233,22 @@ function AnswerBody({
         </div>
       )}
     </>
+  );
+}
+
+/** A part's place in the order the answer is read, for parts that land together. */
+function part(index: number): CSSProperties {
+  return { "--ask-i": index } as CSSProperties;
+}
+
+/**
+ * A paragraph as its sentences, each keeping the space that follows it, so
+ * the text reads exactly as it was written. Split after a full stop, a
+ * question mark or an exclamation mark that is followed by a space — never
+ * inside "6-3, 6-4" or "51.8%".
+ */
+function sentences(paragraph: string): string[] {
+  return (
+    paragraph.match(/[^.!?]+(?:[.!?]+(?=\s|$)\s*|[.!?]+|$)/g) ?? [paragraph]
   );
 }

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AskSplitVisual } from "@/lib/services/ask/events";
 import { shareWeights } from "./visual-geometry";
 import { VisualFrame } from "./visual-frame";
@@ -27,12 +28,16 @@ export function SplitVisual({ visual }: { visual: AskSplitVisual }) {
               weight > 0 && (
                 <span
                   key={index}
+                  data-ask-grow=""
                   className="h-full min-w-0 rounded-[var(--radius-cell)]"
-                  style={{
-                    flexGrow: weight,
-                    flexBasis: 0,
-                    background: STEPS[index % STEPS.length],
-                  }}
+                  style={
+                    {
+                      flexGrow: weight,
+                      flexBasis: 0,
+                      background: STEPS[index % STEPS.length],
+                      "--ask-row": index,
+                    } as CSSProperties
+                  }
                 />
               ),
           )
@@ -43,7 +48,12 @@ export function SplitVisual({ visual }: { visual: AskSplitVisual }) {
       </span>
       <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
         {visual.parts.map((part, index) => (
-          <li key={index} className="flex flex-col gap-0.5">
+          <li
+            key={index}
+            data-ask-after=""
+            style={{ "--ask-row": index } as CSSProperties}
+            className="flex flex-col gap-0.5"
+          >
             <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
               <span
                 aria-hidden="true"

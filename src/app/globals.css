@@ -967,3 +967,143 @@
     animation-duration: var(--duration-fast);
   }
 }
+
+/* ── Ask: an answer arriving ───────────────────────────────────────────────
+ * Only an answer that streamed in this visit moves (`data-ask-live`, set by
+ * `AskAnswer` when it mounted mid-stream); one reopened from the rail is
+ * simply there. Three motions, each with one job:
+ *
+ *   settle  a part of the answer (claim, figures, block, prose, sources)
+ *           arriving: it clears from a slight blur and rises 6px. Parts that
+ *           land together are offset by `--ask-i`, capped by how few there are.
+ *   land    the data itself — the one authored moment. Table rows cascade,
+ *           bars and segments grow from their origin, the trend wipes in from
+ *           its first match to its last, on the chart curve.
+ *   read    a sentence joining the prose as it streams: a fade, no movement,
+ *           so the line being read never shifts.
+ *
+ * No figure counts up: a number that is wrong for half a second is the one
+ * thing this surface must never show. Under reduced motion every transform,
+ * blur and wipe is dropped and a plain fade is all that remains.
+ */
+@keyframes ask-settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes ask-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ask-read {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes ask-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes ask-wipe {
+  from {
+    clip-path: inset(-12px 100% -12px -12px);
+  }
+  to {
+    clip-path: inset(-12px -48px -12px -12px);
+  }
+}
+
+@keyframes ask-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@layer components {
+  [data-ask-live] [data-ask-part] {
+    animation: ask-settle var(--duration-enter) var(--ease-out-expo) both;
+    animation-delay: calc(var(--ask-i, 0) * 45ms);
+  }
+
+  [data-ask-live] [data-ask-sentence] {
+    animation: ask-read 260ms var(--ease-primary) both;
+  }
+
+  /* The step the route says it is on: it breathes while it waits, and a
+     change of step fades in. Not progress — nothing here knows how long. */
+  [data-ask-live] [data-ask-stage] {
+    animation:
+      ask-fade var(--duration-hover) var(--ease-primary) both,
+      ask-breathe 1.8s ease-in-out var(--duration-hover) infinite;
+  }
+
+  /* land — rows of a table, one after another */
+  [data-ask-live] [data-ask-visual] [data-ask-row] {
+    animation: ask-settle var(--duration-enter) var(--ease-out-expo) both;
+    animation-delay: calc(90ms + var(--ask-row, 0) * 34ms);
+  }
+
+  /* land — a bar or a segment, from its origin */
+  [data-ask-live] [data-ask-visual] [data-ask-grow] {
+    transform-origin: left center;
+    animation: ask-grow 620ms var(--ease-chart) both;
+    animation-delay: calc(120ms + var(--ask-row, 0) * 55ms);
+  }
+
+  /* land — a figure beside its bar, once the bar has somewhere to be */
+  [data-ask-live] [data-ask-visual] [data-ask-after] {
+    animation: ask-fade var(--duration-enter) var(--ease-primary) both;
+    animation-delay: calc(380ms + var(--ask-row, 0) * 55ms);
+  }
+
+  /* land — the trend, from its first match to its last */
+  [data-ask-live] [data-ask-visual] [data-ask-wipe] {
+    animation: ask-wipe 820ms var(--ease-chart) 120ms both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-ask-live] [data-ask-part],
+    [data-ask-live] [data-ask-sentence],
+    [data-ask-live] [data-ask-visual] [data-ask-row],
+    [data-ask-live] [data-ask-visual] [data-ask-after] {
+      animation: ask-fade var(--duration-hover) linear both;
+    }
+
+    [data-ask-live] [data-ask-stage] {
+      animation: ask-fade var(--duration-hover) linear both;
+    }
+
+    [data-ask-live] [data-ask-visual] [data-ask-grow],
+    [data-ask-live] [data-ask-visual] [data-ask-wipe] {
+      animation: none;
+    }
+  }
+}

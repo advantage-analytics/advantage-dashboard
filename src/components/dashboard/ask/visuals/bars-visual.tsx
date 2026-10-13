@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AskBarsVisual } from "@/lib/services/ask/events";
 import { cn } from "@/lib/utils";
 import { barWidth } from "./visual-geometry";
@@ -24,6 +25,7 @@ export function BarsVisual({ visual }: { visual: AskBarsVisual }) {
         {visual.rows.map((row, index) => (
           <li
             key={index}
+            style={{ "--ask-row": index } as CSSProperties}
             className="grid grid-cols-[minmax(0,168px)_minmax(0,1fr)] items-center gap-x-4"
           >
             <span className="text-[12px] text-[var(--ink-700)]">
@@ -71,11 +73,13 @@ function Bar({
         className="h-1.5 min-w-0 flex-1 rounded-[1px] bg-[var(--ink-100)]"
       >
         <span
+          data-ask-grow=""
           className="block h-full rounded-[1px]"
           style={{ width: `${barWidth(value)}%`, background: color }}
         />
       </span>
       <span
+        data-ask-after=""
         className={cn(
           "w-12 shrink-0 text-right text-[12px] whitespace-nowrap tabular-nums",
           strong ? "text-[var(--ink-900)]" : "text-[var(--ink-500)]",

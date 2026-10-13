@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
 import { VisualFrame, VisualKey } from "./visual-frame";
@@ -40,6 +41,7 @@ export function TrendVisual({
       <div className="flex flex-col gap-1">
         <div aria-hidden="true" className="relative">
           <svg
+            data-ask-wipe=""
             viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
             className="block w-full overflow-visible"
           >
@@ -78,11 +80,16 @@ export function TrendVisual({
           {lastAt && (
             <span
               data-ask-trend-last=""
+              data-ask-after=""
               className="absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
-              style={{
-                left: percent(lastAt.x, TREND_BOX.width),
-                top: percent(lastAt.y, TREND_BOX.height),
-              }}
+              style={
+                {
+                  left: percent(lastAt.x, TREND_BOX.width),
+                  top: percent(lastAt.y, TREND_BOX.height),
+                  // After the line has reached it.
+                  "--ask-row": 8,
+                } as CSSProperties
+              }
             >
               {points[last].value.text}
             </span>

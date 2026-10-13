@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AskServeVisual } from "@/lib/services/ask/events";
 import { shareWeights } from "./visual-geometry";
 import { VisualFrame, VisualKey } from "./visual-frame";
@@ -37,12 +38,16 @@ export function ServeVisual({ visual }: { visual: AskServeVisual }) {
                       weights[zoneIndex] > 0 && (
                         <span
                           key={zone.key}
+                          data-ask-grow=""
                           className="h-full min-w-0 rounded-[var(--radius-cell)]"
-                          style={{
-                            flexGrow: weights[zoneIndex],
-                            flexBasis: 0,
-                            background: zone.color,
-                          }}
+                          style={
+                            {
+                              flexGrow: weights[zoneIndex],
+                              flexBasis: 0,
+                              background: zone.color,
+                              "--ask-row": index + zoneIndex,
+                            } as CSSProperties
+                          }
                         />
                       ),
                   )
@@ -51,7 +56,11 @@ export function ServeVisual({ visual }: { visual: AskServeVisual }) {
                   <span className="h-full flex-1 rounded-[var(--radius-cell)] bg-[var(--ink-100)]" />
                 )}
               </span>
-              <span className="flex gap-4 text-[11px] text-[var(--ink-500)] tabular-nums">
+              <span
+                data-ask-after=""
+                style={{ "--ask-row": index + 2 } as CSSProperties}
+                className="flex gap-4 text-[11px] text-[var(--ink-500)] tabular-nums"
+              >
                 {ZONES.map((zone) => (
                   <span key={zone.key}>
                     {zone.label}{" "}

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AskTableVisual } from "@/lib/services/ask/events";
 import { cn } from "@/lib/utils";
 import { VisualFrame } from "./visual-frame";
@@ -29,7 +30,11 @@ export function TableVisual({ visual }: { visual: AskTableVisual }) {
         </thead>
         <tbody>
           {visual.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr
+              key={rowIndex}
+              data-ask-row=""
+              style={{ "--ask-row": rowIndex } as CSSProperties}
+            >
               <th
                 scope="row"
                 className="h-8 text-[12px] font-normal text-[var(--ink-700)]"
