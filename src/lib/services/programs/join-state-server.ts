@@ -98,7 +98,10 @@ export async function joinProgramCrestUrl(
   if (!trimmed) return null;
 
   const admin = createAdminClient();
-  const [{ data: invite }, { data: link }] = await Promise.all([
+  const [
+    { data: invite, error: inviteError },
+    { data: link, error: linkError },
+  ] = await Promise.all([
     admin
       .from("program_invites")
       .select("program_id")
@@ -112,16 +115,31 @@ export async function joinProgramCrestUrl(
       .maybeSingle(),
   ]);
 
+  // Message only — the token is a working credential. Logged because the
+  // fallback is silent on screen: without this, a read that started failing
+  // would show as "the crests are gone" with nothing saying why.
+  const lookupError = inviteError ?? linkError;
+  if (lookupError) {
+    console.error("[join] crest lookup failed", {
+      message: lookupError.message,
+    });
+  }
+
   // Invitation first, as `resolveJoinState` resolves them.
   const programId = (invite?.program_id ?? link?.program_id) as
     string | undefined;
   if (!programId) return null;
 
-  const { data: program } = await admin
+  const { data: program, error: programError } = await admin
     .from("programs")
     .select("crest_path")
     .eq("id", programId)
     .maybeSingle();
+  if (programError) {
+    console.error("[join] crest lookup failed", {
+      message: programError.message,
+    });
+  }
 
   return crestUrl((program?.crest_path as string | null) ?? null);
 }
