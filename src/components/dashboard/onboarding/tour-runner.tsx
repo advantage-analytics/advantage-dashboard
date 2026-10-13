@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { markTourDone } from "@/app/dashboard/onboarding-actions";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import {
+  findTarget,
+  rememberSeen,
+  seenThisSession,
+} from "@/components/dashboard/onboarding/seen-this-session";
 import { TourPopover } from "@/components/ui/tour";
 import {
   resolveSteps,
@@ -73,29 +78,6 @@ export interface TourRunnerProps {
 
 /** Frames to wait for a step's target before giving up on that step (~1s). */
 const TARGET_WAIT_FRAMES = 60;
-
-const guardKey = (tour: TourId, viewerId: string) =>
-  `tour-done:${tour}:${viewerId}`;
-
-function seenThisSession(tour: TourId, viewerId: string): boolean {
-  try {
-    return sessionStorage.getItem(guardKey(tour, viewerId)) !== null;
-  } catch {
-    return false;
-  }
-}
-
-function rememberSeen(tour: TourId, viewerId: string) {
-  try {
-    sessionStorage.setItem(guardKey(tour, viewerId), "1");
-  } catch {
-    // Private windows and blocked storage: the server stamp still lands.
-  }
-}
-
-function findTarget(target: TourTarget): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-tour="${target}"]`);
-}
 
 /** The rail's targets open to the right; the body's open below. */
 const SIDE_BY_TARGET: Record<TourTarget, "right" | "bottom"> = {

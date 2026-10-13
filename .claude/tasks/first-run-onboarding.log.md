@@ -206,3 +206,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Without the StepBar the title keeps its `mt-3.5`, so a one-step box has a little extra space above the title; trim it in the single-step branch.
+
+## T22 · Pure hint rules + HintRunner: one-step popover driver for the shell — done
+
+**gate:** mechanical pass (typecheck clean, lint 0 errors, format clean; full suite 5717 passed, 346 failed — all "Executable doesn't exist", environmental; hint-runner, tour-runner and tour-popover browser specs 17/17 under a temporary 1194 shim, since removed); completion `VERDICT: pass`.
+**changed:** `src/lib/onboarding/hints.ts` (anchors, sides, copy, `workspaceHintDue`, `activityHintDue`); `HintRunner` opens a one-step `TourPopover` on its `data-tour` anchor only when no `[role="dialog"]` is up, stamps via `markTourDone` on Done/Skip, and hides itself if its anchor leaves the DOM; `seenThisSession`/`rememberSeen`/`findTarget` extracted to `seen-this-session.ts` for both runners. Offline predicate spec and a browser harness spec.
+**follow-ups:**
+
+1. The opening poll runs every frame while another dialog stays open, with no timeout; pause it while the tab is hidden if it matters.
+2. If `when` turns false after the hint is open it stays open by design — check that suits the tray when an upload finishes mid-hint (T24).

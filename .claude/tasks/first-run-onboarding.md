@@ -294,7 +294,7 @@ ready).
 
 ## T22 · Pure hint rules + HintRunner: one-step popover driver for the shell
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T20, T21
 - **files:** src/lib/onboarding/hints.ts (new), src/components/dashboard/onboarding/hint-runner.tsx (new), src/components/dashboard/onboarding/seen-this-session.ts (new, extracted from tour-runner.tsx), src/components/dashboard/onboarding/tour-runner.tsx, tests/onboarding-hints.spec.ts (new), tests/hint-runner.spec.ts (new), tests/fixtures/hint-runner-harness.tsx (new) — guess
