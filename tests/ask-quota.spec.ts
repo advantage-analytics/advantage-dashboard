@@ -22,10 +22,17 @@ import { clearPoolLeftovers, poolLogins } from "./fixtures/live-db-pool";
  *  3. A released reservation frees its slot.
  *  4. Two reservations sent at once from 19 used yield exactly one success
  *     (the per-user advisory lock).
- *  5. User A cannot release user B's reservation.
+ *  5. User A's id cannot release user B's reservation.
  *  6. A direct insert or delete on `ask_usage` as `authenticated` is refused
  *     with `42501` (only SELECT is granted), A reads only A's rows, and an
  *     anonymous client cannot call the functions.
+ *  7. `ask_release_question(p_user_id, usage_id)` is the server's: a
+ *     signed-in user's own client cannot call it in any argument shape (or
+ *     the limit would be theirs to reset), and neither can an anonymous one.
+ *
+ * Reserving and reading go through the user's own client, as the route does
+ * them. Releasing goes through the service-role client with the user's id as
+ * `p_user_id` — the route's path (`src/lib/services/ask/database.ts`).
  *
  * Every row this spec writes names one of its two pool users, so the sweep
  * in `beforeAll`/`afterAll` goes by `user_id` and no real row is touched.
@@ -85,13 +92,21 @@ test.describe("ask_usage: the question limit (live)", () => {
       error: { code?: string; message: string } | null;
     }>;
 
+  type Released = {
+    data: boolean | null;
+    error: { code?: string; message: string } | null;
+  };
+
+  /** The server path: the service role, naming whose reservation it is. */
   const release = (s: Session, usageId: string) =>
-    s.client.rpc("ask_release_question", {
+    admin.rpc("ask_release_question", {
+      p_user_id: s.userId,
       usage_id: usageId,
-    }) as unknown as Promise<{
-      data: boolean | null;
-      error: { code?: string; message: string } | null;
-    }>;
+    }) as unknown as Promise<Released>;
+
+  /** Any client, any arguments: the raw call, for the refusal cases. */
+  const releaseAs = (client: SupabaseClient, args: Record<string, unknown>) =>
+    client.rpc("ask_release_question", args) as unknown as Promise<Released>;
 
   /** Ground truth, past RLS: the user's row count for the current month. */
   const countFor = async (userId: string): Promise<number> => {
@@ -235,7 +250,7 @@ test.describe("ask_usage: the question limit (live)", () => {
 
   // ── 5. Ownership ──────────────────────────────────────────────────────────
 
-  test("user A cannot release user B's reservation", async () => {
+  test("user A's id cannot release user B's reservation", async () => {
     const theirs = await reserve(b);
     expect(theirs.error).toBeNull();
     const usageId = theirs.data!.usage_id;
@@ -279,5 +294,49 @@ test.describe("ask_usage: the question limit (live)", () => {
       const call = await client.rpc(fn);
       expect(call.error?.code, fn).toBe(INSUFFICIENT_PRIVILEGE);
     }
+  });
+
+  // ── 7. Release is the server's ────────────────────────────────────────────
+
+  test("a user's own client cannot release a reservation, their own included", async () => {
+    await seedTo(b.userId, 0);
+    const held = await reserve(b);
+    expect(held.error).toBeNull();
+    const usageId = held.data!.usage_id;
+
+    // The one-argument form the function had while users could call it, the
+    // server's form naming themselves, and the server's form naming someone
+    // else. PostgREST answers "no such function" and "may not execute" with
+    // different errors; either is a refusal, so the code is not pinned.
+    const shapes: Record<string, unknown>[] = [
+      { usage_id: usageId },
+      { p_user_id: b.userId, usage_id: usageId },
+      { p_user_id: a.userId, usage_id: usageId },
+    ];
+    for (const client of [b.client, a.client, anon()]) {
+      for (const args of shapes) {
+        const got = await releaseAs(client, args);
+        const label = Object.keys(args).join(", ");
+        expect(got.error, label).not.toBeNull();
+        expect(got.data, label).toBeNull();
+      }
+    }
+    // Still held: nothing above gave it back.
+    expect(await countFor(b.userId)).toBe(1);
+
+    // A null user is refused, and releases nothing.
+    const nobody = await releaseAs(admin, {
+      p_user_id: null,
+      usage_id: usageId,
+    });
+    expect(nobody.error).not.toBeNull();
+    expect(nobody.data).toBeNull();
+    expect(await countFor(b.userId)).toBe(1);
+
+    // The server, naming its owner, does.
+    const released = await release(b, usageId);
+    expect(released.error).toBeNull();
+    expect(released.data).toBe(true);
+    expect(await countFor(b.userId)).toBe(0);
   });
 });

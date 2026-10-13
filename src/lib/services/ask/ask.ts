@@ -2004,6 +2004,18 @@ async function runQuery(
   plan: AskPlanQuery,
   scope: AskScope,
 ): Promise<{ ok: true; result: QueryResult } | { ok: false; error: string }> {
+  // Every string that reaches the database is checked HERE, whatever built
+  // it: the planner, a canned comparison, a scope carried over from an
+  // earlier turn. The earlier turn's scope is read back from a saved answer,
+  // and a saved answer is something its owner can write (ask_save_exchange is
+  // theirs to call) — so a call site that trusted it would let hand-written
+  // SQL through. The callers' own checks are for their error messages; this
+  // one is the rule.
+  const checked = checkAskSql({ scopeSql: plan.scope_sql, sql: plan.sql });
+  if (!checked.ok) {
+    return { ok: false, error: `refused by the SQL check: ${checked.reason}` };
+  }
+
   const team = scope.kind === "team";
   const { data, error } = team
     ? await rpc(db, "ask_run_team_query", {

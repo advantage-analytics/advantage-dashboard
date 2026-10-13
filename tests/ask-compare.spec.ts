@@ -1818,6 +1818,32 @@ test.describe("a follow-up keeps its subject", () => {
     expect(headline).toMatch(/^For Emon van Loben Sels, return points won/);
   });
 
+  // A saved answer is its owner's to write (ask_save_exchange), so the scope
+  // read back from one is not the app's own: carried over, it must meet the
+  // same check as any other, or hand-written SQL reaches the database.
+  test("a previous scope that is not a query the check allows never reaches the database", async () => {
+    const lost =
+      "select match_id from ask.matches where opponent_name ilike '%kim%'";
+    const forged =
+      "select match_id from ask.matches where (select set_config('default_transaction_read_only', 'on', false)) is not null";
+    const { db, runs } = fakeDb(() => ok([], []));
+    const { model } = fakeModel([compare("baseline", lost)]);
+    await ask({
+      db,
+      model,
+      question: "And the return?",
+      conversation: [
+        ...conversation,
+        { role: "assistant" as const, content: "… against Aidan Kim." },
+      ],
+      previousPlan: { ...previousPlan, scope_sql: forged },
+    });
+    expect(runs.map((run) => run.scope_sql)).toEqual([lost]);
+    expect(runs.some((run) => run.scope_sql.includes("set_config"))).toBe(
+      false,
+    );
+  });
+
   test("'his' over a scope of every match is the previous turn's scope", async () => {
     const { db, runs } = fakeDb(() => ok([emon], [baselineRow]));
     const { model, calls } = fakeModel([

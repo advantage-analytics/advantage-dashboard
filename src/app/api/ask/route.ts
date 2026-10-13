@@ -23,8 +23,9 @@
  *                               asked in the other workspace
  *   409 no_matches              the scope has no match
  *   429 ask_limit_reached       `ask_reserve_question()` refused
- *   500 internal_error          the matches could not be read, the
- *                               reservation failed, the stream did not open
+ *   500 internal_error          the matches could not be read, the service
+ *                               key is not configured, the reservation
+ *                               failed, the stream did not open
  *
  * Same origin before the session, as every other mutation here does it
  * (`uploads.ts`, the cancel route): a cross-site caller learns nothing about
@@ -34,8 +35,17 @@
  * is `{ kind, id }` and is re-resolved against the viewer's matches
  * (`resolveAskTags()`); the conversation is re-read through RLS; and the 429
  * is `ask_reserve_question()`'s own refusal — no count is read and compared
- * here. Every database call rides the cookie-authenticated client; the
- * service-role client is never built.
+ * here.
+ *
+ * Every database call rides the cookie-authenticated client but three:
+ * `ask_run_query`, `ask_run_team_query` and `ask_release_question` are
+ * executable by `service_role` only, so that a signed-in user cannot run
+ * SQL of their own through them from the browser. `createAskDatabase()`
+ * (`src/lib/services/ask/database.ts`) sends exactly those three to the
+ * service-role client, with this request's `auth.getUser()` id as the viewer
+ * — never anything from the body. That module is the only place Ask uses the
+ * service role, and this route reads no table through it. A deployment
+ * without the service key refuses with a 500 before a question is reserved.
  *
  * A team question (`programId`) is the same ladder over the program's rows.
  * Membership is `getWorkspaceContext()`'s answer — the id must be one of the
@@ -73,6 +83,10 @@ import {
   type AskModel,
 } from "@/lib/services/ask/ask";
 import {
+  createAskDatabase,
+  type AskRpcClient,
+} from "@/lib/services/ask/database";
+import {
   MAX_ASK_QUESTION_LENGTH,
   type AskEvent,
 } from "@/lib/services/ask/events";
@@ -94,6 +108,7 @@ import {
   type MatchVideoHttpError,
 } from "@/lib/services/match-video/http";
 import { siteUrl } from "@/lib/site-url";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
@@ -400,9 +415,29 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const db: AskDatabase = {
-    rpc: (fn, args) => supabase.rpc(fn, args),
-  };
+  // The three server-only functions need the service role (`database.ts`).
+  // `createAdminClient()` throws when the key is unset: that is this
+  // deployment's fault, answered here — before a question is reserved — and
+  // not as a crash. Mock mode runs its sample plan through the same query
+  // function, so it needs the key too.
+  let service: AskRpcClient;
+  try {
+    const admin = createAdminClient();
+    service = { rpc: (fn, args) => admin.rpc(fn, args) };
+  } catch (error) {
+    console.error("[ask] the service-role client could not be built", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return errorResponse(
+      transportError("internal_error", "service_role_unavailable"),
+    );
+  }
+  // The viewer is `user.id` from this request's own `auth.getUser()` above.
+  const db: AskDatabase = createAskDatabase({
+    user: { rpc: (fn, args) => supabase.rpc(fn, args) },
+    service,
+    viewerId: user.id,
+  });
   const model: AskModel = {
     configured: isLLMConfigured(),
     stream: (systemPrompt, messages) =>

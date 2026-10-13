@@ -34,6 +34,13 @@
  * SQL guard, `ask_run_query`, the renderer and the chart blocks are all the
  * real ones.
  *
+ * The query functions are executable by `service_role` only, so — exactly as
+ * the route does — the database it hands `askQuestion()` comes from
+ * `createAskDatabase()` (`src/lib/services/ask/database.ts`): those calls go
+ * to a service-role client with the signed-in verifier's id as the viewer,
+ * everything else to the verifier's own session. SUPABASE_SERVICE_ROLE_KEY is
+ * therefore required, and is used for nothing but those function calls.
+ *
  * Two things are NOT real, on purpose:
  *   - nothing is reserved against the month's questions (`reservation: null`);
  *   - `ask_save_exchange` is intercepted, so no conversation is written.
@@ -287,6 +294,8 @@ async function main() {
   type AskTagOptions = import("@/lib/data/ask-tags").AskTagOptions;
   const { getLLMStream, isLLMConfigured, createLLMObservabilityContext } =
     await import("@/lib/llm/adapter");
+  const { createAskDatabase } = await import("@/lib/services/ask/database");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
 
   if (!isLLMConfigured()) {
     console.error(
@@ -300,15 +309,32 @@ async function main() {
     required("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     { auth: { persistSession: false } },
   );
-  const signIn = await supabase.auth.signInWithPassword({
-    email: required("EYES_ON_EMAIL"),
-    password: required("EYES_ON_PASSWORD"),
-  });
+  // The verifier's credentials first — without them there is no run — then
+  // the service key, both before a sign-in is spent on a run that cannot
+  // finish: without the key the server-only functions cannot be called.
+  const email = required("EYES_ON_EMAIL");
+  const password = required("EYES_ON_PASSWORD");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY (set it in .env.local or the shell): ask_run_query and ask_run_team_query are executable by the service role only.",
+    );
+    process.exit(2);
+  }
+  const serviceRole = createAdminClient();
+  const signIn = await supabase.auth.signInWithPassword({ email, password });
   if (signIn.error || !signIn.data.user) {
     console.error(`Sign-in failed: ${signIn.error?.message ?? "no user"}`);
     process.exit(2);
   }
   const viewerId = signIn.data.user.id;
+
+  // The one database every question below runs through — the route's own
+  // routing, with the verifier's signed-in id as the viewer.
+  const askDatabase = createAskDatabase({
+    user: { rpc: (fn, args) => supabase.rpc(fn, args) },
+    service: { rpc: (fn, args) => serviceRole.rpc(fn, args) },
+    viewerId,
+  });
 
   const MATCH_COLUMNS =
     "id, date, player1_id, player2_id, player1_name, player2_name, created_by, score, tournament_name, round, result, match_type, court_type, verified, duration, opponent_hand, opponent_backhand";
@@ -460,7 +486,7 @@ async function main() {
         if (fn === "ask_save_exchange") {
           return { data: "00000000-0000-4000-8000-00000000e7a1", error: null };
         }
-        const result = await supabase.rpc(fn, args);
+        const result = await askDatabase.rpc(fn, args);
         if (fn === "ask_run_query" || fn === "ask_run_team_query") {
           queries.push({
             scope: args?.scope_sql,

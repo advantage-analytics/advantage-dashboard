@@ -344,3 +344,47 @@ test.describe("checkAskSql — allowlists", () => {
     }
   });
 });
+
+test.describe("checkAskSql — a CTE cannot stand in for a catalog relation", () => {
+  test("a CTE named like a pg_ relation is refused, wherever it is declared", () => {
+    for (const sql of [
+      "select a.x, p.rolname from (with pg_roles as (select 1 as x) select x from pg_roles) a, scope, pg_roles p",
+      "with pg_settings as (select 1 as x) select x from pg_settings",
+      "with PG_Proc as (select 1 as x) select x from PG_Proc",
+    ]) {
+      const got = checkAskSql({
+        scopeSql: "select match_id from ask.matches",
+        sql,
+      });
+      expect(got.ok, sql).toBe(false);
+    }
+  });
+
+  test("an ordinary CTE is still allowed", () => {
+    expect(
+      checkAskSql({
+        scopeSql: "select match_id from ask.matches",
+        sql: "with per_match as (select match_id, count(*) as n from ask.points join scope using (match_id) group by 1) select max(n) as most from per_match",
+      }).ok,
+    ).toBe(true);
+  });
+
+  test("the calls the server-only door exists to keep out are refused", () => {
+    for (const sql of [
+      "select set_config('default_transaction_read_only', 'on', false) as x",
+      "select pg_advisory_lock(1) as x",
+      "select pg_notify('pgrst', 'reload schema') as x",
+      "select pg_sleep(5) as x",
+      "select current_setting('request.headers', true) as x",
+      "select query_to_xml('select 1', true, true, '') as x",
+      "select lo_get(1) as x",
+      "select pg_catalog.set_config('a.b', 'c', false) as x",
+    ]) {
+      const got = checkAskSql({
+        scopeSql: "select match_id from ask.matches",
+        sql,
+      });
+      expect(got.ok, sql).toBe(false);
+    }
+  });
+});

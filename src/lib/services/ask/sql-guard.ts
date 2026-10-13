@@ -5,12 +5,16 @@ import { parse } from "pgsql-ast-parser";
  * `public.ask_run_query(scope_sql, sql)` (design "Route → Check step", plan
  * step 4).
  *
- * This module exists for a clear error and an early stop, not for safety.
- * The database carries the guards the security rests on — a read-only
- * transaction, a role with `SELECT` on four views and nothing else, and the
- * query wrapped as a subquery — so a query this guard wrongly refuses costs
- * one model retry and one it wrongly accepts is still stopped there. That
- * asymmetry is why every decision below falls on the side of refusing: the
+ * This module is a security boundary. It was written as an early stop with
+ * a clear error, when the query functions were callable from the browser and
+ * the database's own guards were all there was. They are server-only now
+ * (20261013055928), which makes this check the one thing that decides WHICH
+ * functions a query may call: the database still limits what can be read (a
+ * pinned viewer, a role with `SELECT` on four views, a read-only
+ * transaction), but it cannot stop a call to set_config, an advisory lock or
+ * pg_notify, and this can. `runQuery()` in `ask.ts` runs it on every string
+ * before it reaches the database. Every decision below falls on the side of
+ * refusing — a query wrongly refused costs one model retry: the
  * walk ALLOWLISTS the AST node kinds, relations, functions and keywords a
  * read-only aggregate over the `ask` views needs, and refuses anything else by
  * name.
@@ -256,6 +260,16 @@ function collectCteNames(root: unknown, names: Set<string>): void {
       ) {
         refuse(
           `A CTE may not be named "${alias}": that name is reserved for a relation the query reads.`,
+        );
+      }
+      // CTE names are accepted as relations anywhere in the statement, not
+      // only inside their own `with`, and an unqualified name the query does
+      // not define resolves through the function's search_path to pg_catalog.
+      // So a CTE called pg_roles in one subquery would let a bare `pg_roles`
+      // elsewhere read the real catalog. No CTE needs such a name.
+      if (/^(?:pg_|information_schema$)/.test(lower)) {
+        refuse(
+          `A CTE may not be named "${alias}": names beginning pg_ belong to the system catalog.`,
         );
       }
       names.add(lower);

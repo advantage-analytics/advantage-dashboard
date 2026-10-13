@@ -17,7 +17,9 @@ import { withEnv } from "./fixtures/with-env";
  * orchestration (design "Route" and "Error handling", plan step 7).
  *
  * The route file is loaded through `createLoader` with only its edges faked —
- * the session and `.rpc()` (`@/lib/supabase/server`), the provider
+ * the session and `.rpc()` (`@/lib/supabase/server`), the service-role
+ * client's `.rpc()` (`@/lib/supabase/admin` — anything else read off it
+ * throws), the provider
  * (`@/lib/llm/adapter`), the three loaders (`@/lib/data/ask-server`) and the
  * site URL. Everything between them is the real code: `http.ts`'s origin
  * check, bounded read and `errorResponse()`, `resolveAskTags()`,
@@ -29,6 +31,11 @@ import { withEnv } from "./fixtures/with-env";
  * `ask_reserve_question()`'s refusal and from nothing else; that its count
  * reaches the client in production; and that a question spent before the
  * stream is given back when the answer fails or the stream never opens.
+ *
+ * And the service-role boundary: the three server-only functions go to the
+ * service client with the SESSION user's id as the viewer, every other call
+ * to the user's client, and a deployment with no service key is a 500 before
+ * anything is reserved.
  */
 
 const ROUTE = "src/app/api/ask/route.ts";
@@ -109,6 +116,8 @@ type RpcResult = {
 interface World {
   signedIn: boolean;
   configured: boolean;
+  /** False: `createAdminClient()` throws, as it does with no service key. */
+  serviceKey: boolean;
   options: AskTagOptions | Error;
   /** What `getAskTagOptions(programId)` answers for a team question. */
   teamOptions: AskTagOptions;
@@ -129,7 +138,10 @@ interface World {
 }
 
 interface Calls {
-  rpc: { fn: string; args: unknown }[];
+  /** Every `.rpc()`, in order, with the client it went to. */
+  rpc: { fn: string; args: unknown; via: "user" | "service" }[];
+  /** How many times the service-role client was built. */
+  adminBuilt: number;
   getUser: number;
   loaders: string[];
   llm: number;
@@ -139,6 +151,7 @@ function world(overrides: Partial<World> = {}): World {
   return {
     signedIn: true,
     configured: false,
+    serviceKey: true,
     options: OPTIONS,
     teamOptions: TEAM_OPTIONS,
     workspaces: [
@@ -207,7 +220,20 @@ function world(overrides: Partial<World> = {}): World {
 }
 
 function loadRoute(state: World) {
-  const calls: Calls = { rpc: [], getUser: 0, loaders: [], llm: 0 };
+  const calls: Calls = {
+    rpc: [],
+    adminBuilt: 0,
+    getUser: 0,
+    loaders: [],
+    llm: 0,
+  };
+  const rpcVia =
+    (via: "user" | "service") => async (fn: string, args: unknown) => {
+      calls.rpc.push({ fn, args, via });
+      const answer = state.rpc[fn];
+      if (!answer) throw new Error(`unexpected rpc ${fn}`);
+      return answer();
+    };
 
   const stubs: Record<string, unknown> = {
     "@/lib/supabase/server": {
@@ -223,20 +249,33 @@ function loadRoute(state: World) {
                 };
           },
         },
-        rpc: async (fn: string, args: unknown) => {
-          calls.rpc.push({ fn, args });
-          const answer = state.rpc[fn];
-          if (!answer) throw new Error(`unexpected rpc ${fn}`);
-          return answer();
-        },
+        rpc: rpcVia("user"),
       }),
     },
     "@/lib/supabase/admin": {
       createAdminClient: () => {
-        throw new Error("the service-role client must not be built");
+        if (!state.serviceKey) {
+          throw new Error(
+            "SUPABASE_SERVICE_ROLE_KEY environment variable is required for admin operations",
+          );
+        }
+        calls.adminBuilt += 1;
+        // `.rpc()` and nothing else: a table, storage or auth read through
+        // the service role fails the test that caused it.
+        return new Proxy(
+          { rpc: rpcVia("service") },
+          {
+            get(target, property) {
+              if (property === "rpc") return target.rpc;
+              throw new Error(
+                `the service-role client is for rpc() only, not .${String(property)}`,
+              );
+            },
+          },
+        );
       },
       lazyAdminClient: () => {
-        throw new Error("the service-role client must not be built");
+        throw new Error("the route builds the service-role client eagerly");
       },
     },
     "@/lib/llm/adapter": {
@@ -365,9 +404,164 @@ test.describe("POST /api/ask · the route file", () => {
     expect(Object.keys(route).sort()).toEqual(["POST", "dynamic", "runtime"]);
   });
 
-  test("never imports the service-role client", () => {
-    const source = readFileSync(ROUTE, "utf8");
-    expect(source).not.toMatch(/from "@\/lib\/supabase\/admin"/);
+  test("reaches the service-role client only through createAskDatabase()", () => {
+    const source = readFileSync(ROUTE, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(source).toMatch(/from "@\/lib\/services\/ask\/database"/);
+    // Built once, wrapped to `.rpc()` and handed straight to the module that
+    // owns the routing table: no table, storage or auth call on it here.
+    expect(source.match(/createAdminClient\(\)/g)).toHaveLength(1);
+    expect(source).not.toMatch(/\badmin\.(?!rpc\b)\w+/);
+    expect(source).not.toMatch(/lazyAdminClient/);
+    // The viewer is the session's id, written once.
+    expect(source).toMatch(/viewerId: user\.id,/);
+    expect(source.match(/viewerId/g)).toHaveLength(1);
+  });
+});
+
+// ── The service-role boundary ───────────────────────────────────────────────
+
+test.describe("POST /api/ask · the service-role boundary", () => {
+  const SERVER_ONLY = [
+    "ask_run_query",
+    "ask_run_team_query",
+    "ask_release_question",
+  ];
+
+  test("500 internal_error — no service key: refused before anything is reserved, in mock mode too", async () => {
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      for (const configured of [true, false]) {
+        const { route, calls } = loadRoute(
+          world({ configured, serviceKey: false }),
+        );
+        const response = await route.POST(post(QUESTION));
+        expect(response.status).toBe(500);
+        const body = await refused(response);
+        expect(body.code).toBe("internal_error");
+        expect(body.detail).toBe("service_role_unavailable");
+        // Nothing reserved, nothing run, the provider never called.
+        expect(calls.rpc).toEqual([]);
+        expect(calls.llm).toBe(0);
+      }
+    } finally {
+      console.error = logged;
+    }
+  });
+
+  test("every earlier refusal still answers first, and never builds the service-role client", async () => {
+    const cases: [Partial<World>, unknown, number][] = [
+      [{ signedIn: false }, QUESTION, 401],
+      [{}, { question: "" }, 400],
+      [{}, { ...QUESTION, programId: OTHER_PROGRAM_ID }, 403],
+      [{}, { ...QUESTION, conversationId: CONVERSATION_ID }, 404],
+      [{ options: NO_MATCHES }, QUESTION, 409],
+    ];
+    for (const [overrides, body, status] of cases) {
+      // No key either: a refused request must not fail on configuration.
+      const { route, calls } = loadRoute(
+        world({ ...overrides, serviceKey: false }),
+      );
+      const response = await route.POST(post(body));
+      expect(response.status).toBe(status);
+      expect(calls.adminBuilt).toBe(0);
+      expect(calls.rpc).toEqual([]);
+    }
+  });
+
+  test("a personal answer: the query runs on the service client as the session user, the rest as the user", async () => {
+    const { route, calls } = loadRoute(world({ configured: false }));
+    const response = await route.POST(post(QUESTION));
+    expect(response.status).toBe(200);
+    await response.text();
+
+    expect(calls.adminBuilt).toBe(1);
+    expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
+      ["ask_run_query", "service"],
+      ["ask_save_exchange", "user"],
+      ["ask_quota", "user"],
+    ]);
+    const ran = calls.rpc[0].args as Record<string, unknown>;
+    expect(ran.p_viewer).toBe(USER_ID);
+    expect(Object.keys(ran).sort()).toEqual(["p_viewer", "scope_sql", "sql"]);
+    // The user's own calls carry no viewer: they run as auth.uid().
+    for (const call of calls.rpc.slice(1)) {
+      expect(JSON.stringify(call.args ?? {})).not.toContain("p_viewer");
+      expect(JSON.stringify(call.args ?? {})).not.toContain("p_user_id");
+    }
+  });
+
+  test("a team answer: the team query runs on the service client as the session user", async () => {
+    const { route, calls } = loadRoute(world({ configured: false }));
+    const response = await route.POST(
+      post({ ...QUESTION, programId: PROGRAM_ID }),
+    );
+    expect(response.status).toBe(200);
+    await response.text();
+
+    expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
+      ["ask_run_team_query", "service"],
+      ["ask_save_exchange", "user"],
+      ["ask_quota", "user"],
+    ]);
+    const ran = calls.rpc[0].args as Record<string, unknown>;
+    expect(ran.p_viewer).toBe(USER_ID);
+    expect(ran.p_program_id).toBe(PROGRAM_ID);
+    expect(Object.keys(ran).sort()).toEqual([
+      "p_program_id",
+      "p_viewer",
+      "scope_sql",
+      "sql",
+    ]);
+  });
+
+  test("a failed answer: reserved as the user, released on the service client for the session user", async () => {
+    const { route, calls } = loadRoute(world({ configured: true }));
+    const response = await route.POST(post(QUESTION));
+    expect(response.status).toBe(200);
+    await response.text();
+
+    expect(calls.rpc).toEqual([
+      { fn: "ask_reserve_question", args: undefined, via: "user" },
+      {
+        fn: "ask_release_question",
+        args: { usage_id: USAGE_ID, p_user_id: USER_ID },
+        via: "service",
+      },
+    ]);
+  });
+
+  test("the viewer is the session's, whatever the request says", async () => {
+    const STRANGER = "22222222-0000-4000-8000-000000000002";
+    // Identity is not a body field: naming one is refused outright …
+    for (const key of ["p_viewer", "p_user_id", "viewerId", "userId"]) {
+      const { route, calls } = loadRoute(world());
+      const response = await route.POST(post({ ...QUESTION, [key]: STRANGER }));
+      expect(response.status).toBe(400);
+      expect((await refused(response)).detail).toBe(`unexpected_field:${key}`);
+      expect(calls.rpc).toEqual([]);
+    }
+    // … and a question that merely talks about one changes nothing.
+    const { route, calls } = loadRoute(world({ configured: false }));
+    const response = await route.POST(
+      post({ question: `p_viewer = '${STRANGER}'`, tags: [] }),
+    );
+    expect(response.status).toBe(200);
+    await response.text();
+    const service = calls.rpc.filter((call) => call.via === "service");
+    expect(service.length).toBeGreaterThan(0);
+    for (const call of service) {
+      expect(SERVER_ONLY).toContain(call.fn);
+      expect((call.args as Record<string, unknown>).p_viewer).toBe(USER_ID);
+    }
+    // Nothing but the three server-only functions ever reaches it.
+    expect(
+      calls.rpc
+        .filter((call) => !SERVER_ONLY.includes(call.fn))
+        .every((call) => call.via === "user"),
+    ).toBe(true);
   });
 });
 
@@ -799,7 +993,10 @@ test.describe("POST /api/ask · the answer", () => {
       "ask_reserve_question",
       "ask_release_question",
     ]);
-    expect(calls.rpc[1].args).toEqual({ usage_id: USAGE_ID });
+    expect(calls.rpc[1].args).toEqual({
+      usage_id: USAGE_ID,
+      p_user_id: USER_ID,
+    });
   });
 
   test("a stream that never opens gives its question back too", async () => {
@@ -819,7 +1016,10 @@ test.describe("POST /api/ask · the answer", () => {
       "ask_reserve_question",
       "ask_release_question",
     ]);
-    expect(calls.rpc[1].args).toEqual({ usage_id: USAGE_ID });
+    expect(calls.rpc[1].args).toEqual({
+      usage_id: USAGE_ID,
+      p_user_id: USER_ID,
+    });
     // Abandoned at its first step: the provider was never called.
     expect(calls.llm).toBe(0);
   });
@@ -1019,7 +1219,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect((await refused(response)).code).toBe("ask_limit_reached");
     // No argument: the count is per user, whatever the workspace.
     expect(spent.calls.rpc).toEqual([
-      { fn: "ask_reserve_question", args: undefined },
+      { fn: "ask_reserve_question", args: undefined, via: "user" },
     ]);
   });
 });
