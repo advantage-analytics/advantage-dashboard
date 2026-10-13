@@ -512,8 +512,8 @@ export interface DualHistoryRow {
 }
 
 /**
- * What the quiet "Getting set up" line reads (Platform Audit Ta3, in the
- * personal Home's `SetupLine` register). Three facts this loader already
+ * What the quiet "Getting set up" line reads (Platform Audit Ta3). Three
+ * facts this loader already
  * holds; nothing is read to answer them.
  */
 export interface TeamSetupProgress {

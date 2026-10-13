@@ -21,11 +21,12 @@ import {
  * dismissal, no "seen it" bit — which is what lets the section be right on a
  * second device and after a sign-out.
  *
- * Personal reads the same two rows the Home line does. Team takes roster and
- * schedule from `getTeamHomePresence`, one id from each source, rather than
- * the season aggregation Team Home is drawn from: the tray renders on every
- * dashboard page and cannot afford that read. The match step is answered by
- * `hasSentMatch`, which keeps Team Home's own rule — see there.
+ * Personal reads the viewer's playing profile and preferences rows. Team
+ * takes roster and schedule from `getTeamHomePresence`, one id from each
+ * source, rather than the season aggregation Team Home is drawn from: the
+ * tray renders on every dashboard page and cannot afford that read. The
+ * match step is answered by `hasSentMatch`, which keeps Team Home's own rule
+ * — see there.
  *
  * Team steps are staff-only, since each is a write the database refuses a
  * player. Chrome, so never fatal: a failed read is an absent section.

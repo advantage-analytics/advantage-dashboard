@@ -8,7 +8,8 @@ import type { WorkspaceKind } from "@/lib/workspace/types";
  * spec (`tests/onboarding-tours.spec.ts`) without rendering a report.
  *
  * Design: `work/first-run-onboarding/02_design/output/design.md` §5 (steps),
- * §7 (entry points), §8 (first-report eligibility) and §9 (`SetupLine`).
+ * §7 (entry points) and §8 (first-report eligibility). The getting-set-up
+ * steps (§9) live in the activity tray (`tray-setup.ts`), not here.
  */
 
 export type TourId = "sample" | "first-report";
@@ -222,94 +223,4 @@ export function firstReportTourEligible({
     finishedMatchCount === 1 &&
     doneAt === null
   );
-}
-
-/**
- * The facts the getting-set-up line (`SetupLine`,
- * `src/components/dashboard/home/setup-line.tsx`) is built from, every one
- * read back out of the database by Home's `Footer` region in
- * `src/app/dashboard/(home)/page.tsx`.
- */
-export interface SetupFacts {
-  /** `users.sample_tour_done_at`. */
-  sampleTourDoneAt: string | null;
-  /** `users.first_report_tour_done_at`. */
-  firstReportTourDoneAt: string | null;
-  /**
-   * Finished (analysed) matches the user has created, or `null` when the
-   * count could not be read.
-   */
-  finishedMatchCount: number | null;
-  /** `users.hand` and `users.backhand` are both set. */
-  playingProfile: boolean;
-  /** A `user_preferences` row exists. */
-  notifications: boolean;
-}
-
-export type SetupStepKey =
-  "sampleTour" | "firstReportTour" | "playingProfile" | "notifications";
-
-export interface SetupStep {
-  key: SetupStepKey;
-  /** How the step reads on the getting-set-up line, as its own sentence. */
-  label: string;
-  href: string;
-  link: string;
-  done: boolean;
-}
-
-/**
- * The getting-set-up steps in order: the two tours, then playing profile and
- * preferences. An account with more than one finished match counts both tours
- * as done, so a veteran's line is unchanged by them. With none finished, the
- * first-report step asks for a first match instead, since there is no report
- * to send anyone to. An unknown count (`null`) counts both tours as done:
- * without it a veteran cannot be told from a newcomer, and the line must not
- * ask a veteran to take a tour. The profile and preferences steps read from
- * their own facts.
- */
-export function setupSteps(facts: SetupFacts): SetupStep[] {
-  const toursSettled =
-    facts.finishedMatchCount === null || facts.finishedMatchCount > 1;
-  return [
-    {
-      key: "sampleTour",
-      label: "See the sample report",
-      href: "/dashboard/matches/sample?tour=1",
-      link: "Open sample",
-      done: facts.sampleTourDoneAt !== null || toursSettled,
-    },
-    // With no finished match yet there is no report to read, and the list
-    // would offer nothing to open: the step points at the one thing that
-    // brings a first report, until one exists.
-    facts.finishedMatchCount === 0
-      ? {
-          key: "firstReportTour",
-          label: "Send your first match",
-          href: "/dashboard/matches/new",
-          link: "Send a match",
-          done: facts.firstReportTourDoneAt !== null,
-        }
-      : {
-          key: "firstReportTour",
-          label: "Read your first report",
-          href: "/dashboard/matches",
-          link: "Open matches",
-          done: facts.firstReportTourDoneAt !== null || toursSettled,
-        },
-    {
-      key: "playingProfile",
-      label: "Hand and backhand",
-      href: "/dashboard/settings/profile",
-      link: "Open profile",
-      done: facts.playingProfile,
-    },
-    {
-      key: "notifications",
-      label: "How you hear that a report is ready",
-      href: "/dashboard/settings/preferences",
-      link: "Open preferences",
-      done: facts.notifications,
-    },
-  ];
 }
