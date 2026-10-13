@@ -77,30 +77,37 @@ test.describe("nav data: icons and comingSoon flags", () => {
     };
     walk(appDir);
 
-    for (const link of [...PERSONAL_NAV, ...TEAM_NAV]) {
-      const file = routeToFile.get(link.href);
-      // Fail loudly rather than skipping: an href we cannot resolve to a page
-      // is exactly the silent hole this test exists to close.
-      expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
+    const lists = [
+      { kind: "personal", links: PERSONAL_NAV },
+      { kind: "team", links: TEAM_NAV },
+    ] as const;
 
-      const rendersComingSoon = fs
-        .readFileSync(file as string, "utf8")
-        .includes("ComingSoonPage");
+    for (const { links } of lists) {
+      for (const link of links) {
+        const file = routeToFile.get(link.href);
+        // Fail loudly rather than skipping: an href we cannot resolve to a page
+        // is exactly the silent hole this test exists to close.
+        expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
 
-      if (BUILT_AHEAD_OF_NAV.includes(link.href)) {
+        const rendersComingSoon = fs
+          .readFileSync(file as string, "utf8")
+          .includes("ComingSoonPage");
+
+        if (BUILT_AHEAD_OF_NAV.includes(link.href)) {
+          expect(
+            Boolean(link.comingSoon) && !rendersComingSoon,
+            `${link.href} is listed in BUILT_AHEAD_OF_NAV but is no longer a built page behind a comingSoon flag — take it off the list`,
+          ).toBe(true);
+          continue;
+        }
+
         expect(
-          Boolean(link.comingSoon) && !rendersComingSoon,
-          `${link.href} is listed in BUILT_AHEAD_OF_NAV but is no longer a built page behind a comingSoon flag — take it off the list`,
-        ).toBe(true);
-        continue;
+          Boolean(link.comingSoon),
+          rendersComingSoon
+            ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
+            : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
+        ).toBe(rendersComingSoon);
       }
-
-      expect(
-        Boolean(link.comingSoon),
-        rendersComingSoon
-          ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
-          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`,
-      ).toBe(rendersComingSoon);
     }
   });
 });

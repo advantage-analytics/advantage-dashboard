@@ -252,12 +252,32 @@ paths:
                   summary: No editable field in the body
                   value:
                     error: Nothing to save.
+                bothTeamKeys:
+                  summary: A program and a typed school in one body
+                  value:
+                    error: An opponent's team is a program or a school as typed, not both. Send one and null the other.
+                    code: opponent_team_exclusive
+                    field: opponent_school
         "401":
           $ref: "#/components/responses/PlainUnauthorized"
         "404":
           $ref: "#/components/responses/PlainNotFound"
+        "422":
+          description: >-
+            `opponent_program_id` is well formed but names no program the
+            caller can read in the directory. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldErrorResponse"
+              examples:
+                opponentProgramNotFound:
+                  value:
+                    error: That team isn't in the directory. Choose another, or keep the school as typed.
+                    code: opponent_program_not_found
+                    field: opponent_program_id
         "500":
-          description: The match, its analysis status or the roster could not be read, or the save failed.
+          description: The match, its analysis status, the roster or the opponent's program could not be read, or the save failed.
           content:
             application/json:
               schema:
@@ -3546,6 +3566,36 @@ components:
         source_provider:
           type: [string, "null"]
           description: "`swing-vision`, `splitstep`, or null for a hand-scored match."
+        opponent_program_id:
+          type: [string, "null"]
+          format: uuid
+          description: The opponent's team, when it is a directory program. Never set together with `opponent_school`.
+        opponent_school:
+          type: [string, "null"]
+          description: The opponent's school as typed, for a team the directory does not hold.
+        opponent_program:
+          description: The program row behind `opponent_program_id`, or null when there is none or the caller cannot read it.
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, school_name]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                school_name:
+                  type: string
+                school_abbrev:
+                  type: [string, "null"]
+                crest_path:
+                  type: [string, "null"]
+                  description: Object key in the public `program-crests` bucket.
+                conference:
+                  type: [string, "null"]
+                division:
+                  type: [string, "null"]
+                team:
+                  type: [string, "null"]
     AnalysisStatus:
       type: string
       enum:
@@ -3697,6 +3747,17 @@ components:
             - $ref: "#/components/schemas/MatchFormat"
         score:
           $ref: "#/components/schemas/MatchScore"
+        opponent_program_id:
+          type: [string, "null"]
+          format: uuid
+          description: >-
+            The opponent's team as a directory program. Send it together with
+            `opponent_school`, one of them null: both non-null is a 400, and an
+            id the directory does not hold is a 422.
+        opponent_school:
+          type: [string, "null"]
+          maxLength: 120
+          description: The opponent's school as typed; trimmed, and an empty string is stored as null.
 
     BallPathSample:
       type: array

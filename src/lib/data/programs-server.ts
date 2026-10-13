@@ -26,8 +26,21 @@ import {
  * whoever is looking. School, squad and where it plays are on the ITA website.
  */
 export interface ProgramDirectoryRow {
+  /**
+   * `programs.id`, so a row that is PICKED can be written as a foreign key
+   * with no second read. This and the two fields marked the same way are
+   * filled by `searchPrograms` only, hence optional: rows built elsewhere
+   * (the dual edit page, the opponents directory, fixtures) never carry
+   * them. Null when the enrichment read behind them failed — the row still
+   * lists, it just cannot be pointed at.
+   */
+  id?: string | null;
   programKey: string;
   schoolName: string;
+  /** `programs.school_abbrev` — "UCLA". Search only; null where there is none. */
+  schoolAbbrev?: string | null;
+  /** Public URL of the crest. Search only; null for the initials mark. */
+  crestUrl?: string | null;
   team: GenderedSquad;
   division: string | null;
   conference: string | null;
@@ -67,8 +80,13 @@ export type ProgramStatus =
  */
 export function redactForPlayer(row: ProgramSearchResult): PlayerProgramRow {
   return {
+    // Published facts, like the rest: the id is in every claim URL's program
+    // and the crest sits in a public bucket.
+    id: row.id ?? null,
     programKey: row.programKey,
     schoolName: row.schoolName,
+    schoolAbbrev: row.schoolAbbrev ?? null,
+    crestUrl: row.crestUrl ?? null,
     team: row.team,
     division: row.division,
     conference: row.conference,
@@ -190,6 +208,11 @@ const SEARCH_LIMIT = 8;
 /** Shape both the search RPC and the status RPC return. */
 function toResult(row: Record<string, unknown>): ProgramSearchResult {
   return {
+    // Neither RPC projects these three; `searchPrograms` fills them in from
+    // `programs` itself (see `withDirectoryFacts`).
+    id: null,
+    schoolAbbrev: null,
+    crestUrl: null,
     programKey: row.program_key as string,
     schoolName: row.school_name as string,
     team: row.team as GenderedSquad,
@@ -230,7 +253,78 @@ export async function searchPrograms(
     return [];
   }
 
-  return ((data ?? []) as Record<string, unknown>[]).map(toResult);
+  return withDirectoryFacts(
+    supabase,
+    ((data ?? []) as Record<string, unknown>[]).map(toResult),
+  );
+}
+
+/**
+ * The bucket a crest key lives in — `PROGRAM_CRESTS_BUCKET` in
+ * `teams-server.ts`, repeated because this module is imported by client
+ * components for its labels and that one opens the cookie client.
+ */
+export const CRESTS_BUCKET = "program-crests";
+
+/**
+ * Add `id`, `schoolAbbrev` and `crestUrl` to a page of search results.
+ *
+ * A second read rather than a wider `search_programs()`: changing a shipped
+ * SECURITY DEFINER function's return shape means a drop and re-create, which
+ * resets its `anon` grant — and every row it returns is a college program,
+ * which `programs`' own SELECT policy already shows to `anon`. One query for
+ * the page, keyed on the unique `program_key`. `crestUrl()`'s rule on the
+ * client already open: the bucket is public, so the URL is a pure function of
+ * the key.
+ *
+ * Best-effort: a failed read returns the rows as they were, with the three
+ * fields null, so the claim flow's search never fails for an enrichment.
+ */
+async function withDirectoryFacts(
+  supabase: SupabaseClient,
+  rows: ProgramSearchResult[],
+): Promise<ProgramSearchResult[]> {
+  if (rows.length === 0) return rows;
+
+  const { data, error } = await supabase
+    .from("programs")
+    .select("id, program_key, school_abbrev, crest_path")
+    .in(
+      "program_key",
+      rows.map((row) => row.programKey),
+    );
+
+  if (error) {
+    console.error("[programs] search enrichment failed", {
+      error: error.message,
+    });
+    return rows;
+  }
+
+  const facts = new Map(
+    (
+      (data ?? []) as {
+        id: string;
+        program_key: string;
+        school_abbrev: string | null;
+        crest_path: string | null;
+      }[]
+    ).map((row) => [row.program_key, row]),
+  );
+  const crests = supabase.storage.from(CRESTS_BUCKET);
+
+  return rows.map((row) => {
+    const fact = facts.get(row.programKey);
+    if (!fact) return row;
+    return {
+      ...row,
+      id: fact.id,
+      schoolAbbrev: fact.school_abbrev,
+      crestUrl: fact.crest_path
+        ? crests.getPublicUrl(fact.crest_path).data.publicUrl
+        : null,
+    };
+  });
 }
 
 /**

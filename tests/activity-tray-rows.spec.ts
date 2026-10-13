@@ -51,7 +51,21 @@ const loader = createLoader({
       WorkspaceScopeChip: marker("WorkspaceScopeChip"),
     },
     "@/components/dashboard/matches/analysis-progress-track": {
-      AnalysisProgressTrack: marker("AnalysisProgressTrack"),
+      // Props out as attributes, so a row's bar can be read back: where it
+      // sits, whether it is moving, and what colour it was asked for.
+      AnalysisProgressTrack: (props: {
+        percent: number;
+        live?: boolean;
+        tone?: string;
+        label?: string;
+      }) =>
+        React.createElement("span", {
+          "data-component": "AnalysisProgressTrack",
+          "data-percent": props.percent,
+          "data-live": props.live ? "true" : "false",
+          "data-tone": props.tone ?? "default",
+          "aria-label": props.label,
+        }),
     },
     "@/components/dashboard/workspace-provider": {
       useWorkspace: () => ({ viewer: { id: "viewer-1" } }),
@@ -90,7 +104,7 @@ function item(
   return { matchId, title, analysis, at: "2026-09-28T12:00:00Z" };
 }
 
-function render(items: ActivityItem[]) {
+function render(items: ActivityItem[], setup: unknown[] = []) {
   return renderToStaticMarkup(
     React.createElement(ActivityTray, {
       feed: { items },
@@ -98,6 +112,7 @@ function render(items: ActivityItem[]) {
       approvedInviteIds: [],
       elsewhere: [],
       joins: [],
+      setup,
     }),
   );
 }
@@ -133,6 +148,74 @@ test("an upload_again row links to Add video for this match", () => {
   expect(row!.inner).not.toContain("<a ");
   expect(row!.inner).toContain("Failed:");
   expect(row!.text).not.toContain("Analysis failed —");
+});
+
+test("an upload_again row with a stopped percent keeps the upload row's shape", () => {
+  const html = render([
+    item(UPLOAD_ID, "M. Reid vs J. Park", {
+      status: "failed",
+      recovery: "upload_again",
+      stoppedUploadPercent: 27,
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("M. Reid vs J. Park"));
+  expect(row).toBeDefined();
+  // Still one link, to the same place the ordinary failed row goes.
+  expect(row!.href).toBe(`/dashboard/matches/new?match=${UPLOAD_ID}`);
+  expect(row!.inner).not.toContain("<a ");
+  expect(row!.inner).toContain("Failed:");
+
+  // Title, then the bar, then where it stopped beside the action.
+  const title = row!.text.indexOf("M. Reid vs J. Park");
+  const reason = row!.text.indexOf("Upload stopped at 27%");
+  const action = row!.text.indexOf("Add video");
+  expect(title).toBeGreaterThan(-1);
+  expect(reason).toBeGreaterThan(title);
+  expect(action).toBeGreaterThan(reason);
+  const bar = row!.inner.indexOf('data-component="AnalysisProgressTrack"');
+  expect(bar).toBeGreaterThan(row!.inner.indexOf("M. Reid vs J. Park"));
+  expect(bar).toBeLessThan(row!.inner.indexOf("Upload stopped at 27%"));
+  // The title is the row's medium line, as on every failed row.
+  expect(row!.inner).toMatch(
+    /<span class="[^"]*font-medium[^"]*">M\. Reid vs J\. Park<\/span>/,
+  );
+
+  // Frozen where it stopped: grey, and not moving.
+  expect(row!.inner).toContain('data-percent="27"');
+  expect(row!.inner).toContain('data-live="false"');
+  expect(row!.inner).toContain('data-tone="var(--ink-300)"');
+
+  // The short reason is replaced, not repeated.
+  expect(row!.text).not.toContain("Upload didn't finish");
+});
+
+test("an upload_again row with no stopped percent keeps the ordinary failed row", () => {
+  const html = render([
+    item(UPLOAD_ID, "M. Reid vs J. Park", {
+      status: "failed",
+      recovery: "upload_again",
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("M. Reid vs J. Park"));
+  expect(row!.text).toContain("Upload didn't finish");
+  expect(row!.text).not.toContain("Upload stopped at");
+  expect(row!.inner).not.toContain("AnalysisProgressTrack");
+});
+
+test("any other failure ignores a stopped percent and keeps the ordinary failed row", () => {
+  // The server never sets a reading on such a row; the tray ignores one anyway.
+  const html = render([
+    item(RETRY_ID, "A. Lee vs B. Cruz", {
+      status: "failed",
+      recovery: "retry",
+      stoppedUploadPercent: 100,
+    }),
+  ]);
+  const row = links(html).find((l) => l.text.includes("A. Lee vs B. Cruz"));
+  expect(row!.href).toBe(`/dashboard/matches/${RETRY_ID}`);
+  expect(row!.text).toContain("Open");
+  expect(row!.text).not.toContain("Upload stopped at");
+  expect(row!.inner).not.toContain("AnalysisProgressTrack");
 });
 
 test("a retry row links to the match page and reads Open", () => {
@@ -193,4 +276,48 @@ test("failed rows carry no blue and no bordered button", () => {
     expect(row.inner).not.toContain("border-[var(--border-medium)]");
   }
   expect(html).toContain('aria-label="Activity, 2 failed"');
+});
+
+const ROSTER_DONE = {
+  key: "roster",
+  label: "Add players to the roster",
+  done: true,
+  href: "/dashboard/team/roster",
+  action: "Roster",
+};
+const MATCH_OPEN = {
+  key: "match",
+  label: "Send a first match",
+  done: false,
+  href: "/dashboard/matches/new",
+  action: "New match",
+};
+
+test("an open setup step is a link; a done one is a ticked line", () => {
+  const html = render([], [ROSTER_DONE, MATCH_OPEN]);
+  expect(html).toContain("Getting set up");
+  expect(html).toContain("1 of 2");
+
+  const open = links(html).find((l) => l.text.includes("Send a first match"));
+  expect(open).toBeDefined();
+  expect(open!.href).toBe("/dashboard/matches/new");
+  expect(open!.text).toContain("New match");
+
+  expect(html).toContain("Add players to the roster");
+  expect(
+    links(html).some((l) => l.text.includes("Add players to the roster")),
+  ).toBe(false);
+});
+
+test("setup never lights the dot or enters the tooltip's count", () => {
+  const html = render([], [ROSTER_DONE, MATCH_OPEN]);
+  expect(html).toContain('aria-label="Activity, Nothing in flight"');
+  expect(html).not.toContain("top-[3px] right-[3px]");
+  // The feed's own empty state still prints under the section.
+  expect(html).toContain("Nothing running here.");
+});
+
+test("a finished setup renders no section at all", () => {
+  const html = render([], [ROSTER_DONE, { ...MATCH_OPEN, done: true }]);
+  expect(html).not.toContain("Getting set up");
 });

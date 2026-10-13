@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
-import { Activity, ChevronRight, Users } from "lucide-react";
+import { Activity, Check, ChevronRight, Circle, Users } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -22,18 +22,24 @@ import {
   ANALYSIS_LABEL,
   isInFlight,
   isLiveUpdating,
+  isUploadPaused,
   inFlightMark,
+  UPLOAD_PAUSED_LABEL,
 } from "@/lib/data/match-analysis";
 import { invitationHref } from "@/lib/services/programs/join-links";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { trayDetail } from "./tray-detail";
+import { setupOutstanding, type SetupStep } from "./tray-setup";
 import { trayStartedDay, trayStartedTitle } from "./tray-started";
 import {
   isTrayFailure,
   trayFailureAction,
   trayFailureReason,
+  trayStoppedUploadPercent,
+  trayStoppedUploadReason,
+  type TrayFailureAction,
 } from "./tray-failure";
 import type {
   ActivityFeed,
@@ -56,6 +62,12 @@ import { cn } from "@/lib/utils";
  * settled row, and an ETA restating a bar restating a title. The receipt now
  * lives behind one footer line that covers the whole history rather than the
  * last two rows of it, so the panel holds two row shapes and one blue.
+ *
+ * One thing sits outside that job, above the feed and apart from it: the
+ * "Getting set up" section (`SetupSection`, `tray-setup.ts`). It is a standing
+ * to-do list, not activity, so it is drawn in grey, counted nowhere, and gone
+ * once setup is done — the rules below about the dot and the blue are about
+ * the feed, and setup takes neither.
  *
  * ── The leading column carries state, not air ──────────────────────────────
  * 14px, always present, so every row's text starts on the same x. Work rows
@@ -117,8 +129,13 @@ const RING = (
 
 function InFlightRow({ item }: { item: ActivityItem }) {
   const { analysis, title } = item;
-  const word = ANALYSIS_LABEL[analysis.status];
   const now = new Date();
+  // Quiet for twenty minutes. The job is still `uploading`, so the row stays
+  // here rather than under the failures — but it must not look like progress:
+  // the still ring, the words, and a grey bar with no sheen. The match page
+  // it opens is where the upload can be started again.
+  const paused = isUploadPaused(analysis, now.getTime());
+  const word = paused ? UPLOAD_PAUSED_LABEL : ANALYSIS_LABEL[analysis.status];
 
   return (
     <Link
@@ -130,7 +147,10 @@ function InFlightRow({ item }: { item: ActivityItem }) {
         <span className="mt-0.5 flex">
           {/* Spinner only while work runs; a queued or stored job wears the
               still `wait` ring, as it does in the Matches and Roster rows. */}
-          <StepMark state={inFlightMark(analysis.status)} size="compact" />
+          <StepMark
+            state={paused ? "wait" : inFlightMark(analysis.status)}
+            size="compact"
+          />
         </span>
       </Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
@@ -156,7 +176,8 @@ function InFlightRow({ item }: { item: ActivityItem }) {
           analysis.progressPercent !== undefined && (
             <AnalysisProgressTrack
               percent={analysis.progressPercent}
-              live
+              live={!paused}
+              tone={paused ? "var(--ink-300)" : undefined}
               label={`${word} ${title}`}
             />
           )}
@@ -184,6 +205,11 @@ function InFlightRow({ item }: { item: ActivityItem }) {
  */
 function FailedRow({ item }: { item: ActivityItem }) {
   const action = trayFailureAction(item.analysis, item.matchId);
+  const stoppedAt = trayStoppedUploadPercent(item.analysis);
+
+  if (stoppedAt !== undefined) {
+    return <StoppedUploadRow item={item} action={action} percent={stoppedAt} />;
+  }
 
   return (
     <Link
@@ -201,15 +227,90 @@ function FailedRow({ item }: { item: ActivityItem }) {
           {trayFailureReason(item.analysis)}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-1">
-        <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
-          {action.label}
+      <RowAction label={action.label} />
+    </Link>
+  );
+}
+
+/** A failed row's trailing word and chevron: where the click goes. */
+function RowAction({ label }: { label: string }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
+        {label}
+      </span>
+      <ChevronRight
+        className="size-[13px] text-[var(--ink-400)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+    </span>
+  );
+}
+
+/**
+ * An upload that died part-way, in the shape of the upload row it replaces.
+ *
+ * The row that was moving a minute ago — title, started day, a bar — becomes
+ * this one, so the reader recognises it as the same item rather than a new
+ * failure that appeared from nowhere: the same three lines, with the fail
+ * mark, the bar frozen where the transfer stopped, and that position in
+ * words beside the one thing to do about it.
+ *
+ * The bar is grey and still. Blue and the travelling sheen both mean "this
+ * is being measured right now", and nothing is. Still one link, like every
+ * failed row.
+ */
+function StoppedUploadRow({
+  item,
+  action,
+  percent,
+}: {
+  item: ActivityItem;
+  action: TrayFailureAction;
+  percent: number;
+}) {
+  const now = new Date();
+  const reason = trayStoppedUploadReason(percent);
+
+  return (
+    <Link
+      href={action.href}
+      className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS, "group")}
+    >
+      <Lead>
+        {/* Down 2px so the 14px mark centres on the title's line, as on the
+            upload row. */}
+        <span className="mt-0.5 flex">
+          <StepMark state="fail" size="compact" />
         </span>
-        <ChevronRight
-          className="size-[13px] text-[var(--ink-400)]"
-          strokeWidth={1.5}
-          aria-hidden="true"
+      </Lead>
+      <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--ink-900)]">
+            {item.title}
+          </span>
+          <ChromeTooltip
+            label={trayStartedTitle(item.at, now)}
+            side="top"
+            align="end"
+          >
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)] tabular-nums">
+              {trayStartedDay(item.at, now)}
+            </span>
+          </ChromeTooltip>
+        </span>
+        <AnalysisProgressTrack
+          percent={percent}
+          tone="var(--ink-300)"
+          label={`${reason}: ${item.title}`}
         />
+        <span className="flex items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-[11px] text-[var(--ink-500)] tabular-nums">
+            {reason}
+          </span>
+          <RowAction label={action.label} />
+        </span>
       </span>
     </Link>
   );
@@ -430,12 +531,113 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
   );
 }
 
+/**
+ * "Getting set up", above the feed, while a step is still open.
+ *
+ * Grey on purpose. Blue in the tray means waiting on you, and it clears itself
+ * when the job settles; setup stays open for days, so it borrows neither the
+ * row's dot nor the trigger's (`tray-setup.ts`). The one blue here is the step
+ * bar's filled segments — the wizard's `StepBar`, counting what is done.
+ *
+ * A done step keeps its row, ticked and muted, so the section reads as a list
+ * being worked through; an open one is a link whose trailing word names where
+ * it goes, the stopped row's grammar at the section's tighter measure.
+ */
+function SetupSection({
+  steps,
+  onOpen,
+}: {
+  steps: SetupStep[];
+  onOpen: () => void;
+}) {
+  const done = steps.filter((step) => step.done).length;
+
+  return (
+    <section aria-label="Getting set up">
+      <div className="px-2.5 pt-2.5 pb-1.5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[12px] font-medium text-[var(--ink-900)]">
+            Getting set up
+          </p>
+          <p className="text-[11px] text-[var(--ink-600)] tabular-nums">
+            {done} of {steps.length}
+          </p>
+        </div>
+        <div aria-hidden="true" className="mt-2 flex gap-1">
+          {steps.map((step) => (
+            <span
+              key={step.key}
+              className={cn(
+                "h-[3px] flex-1 rounded-full",
+                step.done ? "bg-[var(--blue)]" : "bg-[var(--border-medium)]",
+              )}
+            />
+          ))}
+        </div>
+      </div>
+      <ul>
+        {steps.map((step) => (
+          <li key={step.key}>
+            {step.done ? (
+              <div className="flex items-center gap-3 rounded-[9px] px-2.5 py-2">
+                <Lead>
+                  <Check
+                    className="size-[14px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </Lead>
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {step.label}
+                  <span className="sr-only">, done</span>
+                </span>
+              </div>
+            ) : (
+              <Link
+                href={step.href}
+                onClick={onOpen}
+                className={cn(
+                  "group flex items-center gap-3 rounded-[9px] px-2.5 py-2",
+                  ROW_INTERACTIVE_CLASS,
+                )}
+              >
+                <Lead>
+                  <Circle
+                    className="size-[14px] text-[var(--ink-700)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </Lead>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
+                  {step.label}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
+                    {step.action}
+                  </span>
+                  <ChevronRight
+                    className="size-[13px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </span>
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mx-2.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+    </section>
+  );
+}
+
 export function ActivityTray({
   feed,
   invites,
   approvedInviteIds,
   elsewhere,
   joins,
+  setup = [],
 }: {
   feed: ActivityFeed;
   invites: PendingInvite[];
@@ -444,6 +646,11 @@ export function ActivityTray({
   elsewhere: ElsewhereWork[];
   /** Recent joins to the active program — empty unless the viewer is staff. */
   joins: MemberJoin[];
+  /**
+   * The workspace's setup steps, done and open — drawn only while one is
+   * open, and never counted toward the dot or the tooltip.
+   */
+  setup?: SetupStep[];
 }) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
@@ -586,6 +793,9 @@ export function ActivityTray({
         </div>
 
         <div className="flex max-h-[420px] flex-col overflow-y-auto p-2">
+          {setupOutstanding(setup) && (
+            <SetupSection steps={setup} onOpen={() => setIsOpen(false)} />
+          )}
           {unread > 0 || joins.length > 0 ? (
             <>
               {invites.map((invite) => (

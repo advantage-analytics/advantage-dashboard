@@ -17,9 +17,11 @@ that is not merged.
 
 ## 1. Where onboarding happens today
 
-**A normal sign-up answers no questions at all.** `sign-up-form.tsx:66` sends
-`emailRedirectTo: …/confirm?next=/dashboard`, so a new account lands on the
-dashboard directly.
+**A normal sign-up answers no questions at all.** `sign-up-form.tsx` sends
+`emailRedirectTo: …/confirm?next=<destination>`, and the destination defaults
+to `/dashboard`, so a new account lands on the dashboard directly. The one
+exception is a sign-up that began on a team join link: `/sign-up?next=/join/<token>`
+carries the link through, and the confirmation returns there instead.
 
 The one question set that exists — F2, _"How do you use Advantage?"_ at
 `/claim` — is reachable from exactly two places:

@@ -15,7 +15,8 @@ import { DELETE_REASON_LABEL, type SideNames } from "./label-format";
  * The console's one confirm, drawn by the product's `ConfirmDialog`: delete a
  * stroke (with the reason `label_shots` requires), delete a point, move a point
  * into a game someone else serves, reset an edited stroke or point to its
- * seed, or mark the session complete (listing what is still open). The dialog closes on its action without waiting on the server
+ * seed, give a serve to the other player (with "Only this shot" as its second
+ * answer), or mark the session complete (listing what is still open). The dialog closes on its action without waiting on the server
  * (`runOperation`'s contract); nothing is written on Cancel.
  */
 export function LabelConfirmDialog({
@@ -23,6 +24,7 @@ export function LabelConfirmDialog({
   names,
   onCancel,
   onConfirm,
+  onAlternative,
   initialReason = null,
 }: {
   confirm: LabelConfirm | null;
@@ -30,6 +32,8 @@ export function LabelConfirmDialog({
   onCancel: () => void;
   /** The dialog's action. A stroke delete passes the chosen reason. */
   onConfirm: (confirm: LabelConfirm, reason: LabelDeleteReason | null) => void;
+  /** The second answer, on the one confirm that has it (`alternativeLabel`). */
+  onAlternative?: (confirm: LabelConfirm) => void;
   /** A reason already chosen on first render — for specs. None by default. */
   initialReason?: LabelDeleteReason | null;
 }) {
@@ -51,6 +55,7 @@ export function LabelConfirmDialog({
       names={names}
       onCancel={onCancel}
       onConfirm={onConfirm}
+      onAlternative={onAlternative}
       initialReason={initialReason}
     />
   );
@@ -61,12 +66,14 @@ function LabelConfirmBody({
   names,
   onCancel,
   onConfirm,
+  onAlternative,
   initialReason,
 }: {
   confirm: LabelConfirm | null;
   names: SideNames;
   onCancel: () => void;
   onConfirm: (confirm: LabelConfirm, reason: LabelDeleteReason | null) => void;
+  onAlternative?: (confirm: LabelConfirm) => void;
   initialReason: LabelDeleteReason | null;
 }) {
   const [reason, setReason] = useState<LabelDeleteReason | null>(initialReason);
@@ -87,6 +94,18 @@ function LabelConfirmBody({
       pendingLabel={copy.pendingLabel}
       tone={copy.tone}
       error={problem}
+      footerLeft={
+        copy.alternativeLabel && onAlternative ? (
+          <button
+            type="button"
+            data-confirm-alternative=""
+            onClick={() => onAlternative(confirm)}
+            className="cursor-pointer rounded-[var(--radius-cell)] text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            {copy.alternativeLabel}
+          </button>
+        ) : undefined
+      }
       onConfirm={() => {
         if (needsReason && reason === null) {
           setProblem("Pick a reason to delete this shot.");

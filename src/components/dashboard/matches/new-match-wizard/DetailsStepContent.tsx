@@ -98,7 +98,23 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { rankLineOffers } from "./offer-match";
-import type { EventPreset, FormData, LineOffer, ValueSource } from "./types";
+import type {
+  EventPreset,
+  FormData,
+  LineOffer,
+  OpponentTeamProgram,
+  ValueSource,
+  VideoProbeSummary,
+} from "./types";
+import { opponentTeamFromHistory, opponentTeamIsEmpty } from "./opponent-team";
+import { OpponentTeamField } from "@/components/dashboard/matches/opponent-team-field";
+import {
+  CheckedFileRow,
+  VideoFileLead,
+  videoUploadFacts,
+} from "./CheckedFileRow";
+import { UploadNoteStrip } from "../upload-keep-open-note";
+import { UPLOADING_COPY } from "../upload-progress-copy";
 import {
   floatMenuCls,
   floatMenuDividerCls,
@@ -139,7 +155,7 @@ export interface DetailsStepContentProps {
   formData: FormData;
   onInputChange: (
     field: keyof FormData,
-    value: string | number | boolean | null | undefined,
+    value: string | number | boolean | OpponentTeamProgram | null | undefined,
   ) => void;
   /** Called only after a format reduction's score-loss choice is resolved. */
   onFormatChange: (bestOf: string) => void;
@@ -200,6 +216,26 @@ export interface DetailsStepContentProps {
   onOneSet: () => void;
   /** Back to the remembered format, with the question open again. */
   onUndoOneSet: () => void;
+  /**
+   * The video Save match is about to upload, for a processing provider that
+   * still holds the picked File. Null or absent draws no Video section — an
+   * import has no video, and a restored draft has lost its File.
+   */
+  video?: DetailsVideo | null;
+}
+
+/** What the Video section draws: the picked file and what the probe read. */
+export interface DetailsVideo {
+  file: File;
+  name: string;
+  /** Already formatted, as the file step shows it ("3.80 GB"). */
+  size: string;
+  probe: VideoProbeSummary | null;
+  /**
+   * The trim window's length in seconds, or null when none is chosen. What
+   * uploads is this cut, not the whole file.
+   */
+  keptSeconds: number | null;
 }
 
 type Hand = "right" | "left";
@@ -972,6 +1008,7 @@ function DetailsStepContentImpl({
   oneSetSettled,
   onOneSet,
   onUndoOneSet,
+  video = null,
 }: DetailsStepContentProps) {
   const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
@@ -1236,11 +1273,58 @@ function DetailsStepContentImpl({
   const playerHand = formData.playerHand as Hand | undefined;
   const playerBackhand = formData.playerBackhand as Backhand | undefined;
 
+  // Their team, as the last match against this opponent recorded it — the
+  // field's three keys with source "history", or cleared when the team on the
+  // form was the PREVIOUS opponent's remembered one (`opponentTeamFromHistory`).
+  // Never the line's `opponentProgramKey` / `opponentSchool`.
+  const currentTeam = useMemo(
+    () => ({
+      opponentTeamProgram: formData.opponentTeamProgram,
+      opponentTeamSchool: formData.opponentTeamSchool,
+      opponentTeamSource: formData.opponentTeamSource,
+    }),
+    [
+      formData.opponentTeamProgram,
+      formData.opponentTeamSchool,
+      formData.opponentTeamSource,
+    ],
+  );
+  // Only where the "their team" field is on screen — a team workspace, not the
+  // admin console. Anywhere else a remembered team would be written to the
+  // match with no field to see it in or clear it from.
+  const teamFieldShown = workspaceKind === "team" && !admin;
+  const rememberTeam = useCallback(
+    (seen: OpponentPlayed | undefined) => {
+      if (!teamFieldShown) return;
+      const team = opponentTeamFromHistory(currentTeam, seen);
+      if (!team) return;
+      onInputChange("opponentTeamProgram", team.opponentTeamProgram);
+      onInputChange("opponentTeamSchool", team.opponentTeamSchool);
+      onInputChange("opponentTeamSource", team.opponentTeamSource);
+    },
+    [currentTeam, onInputChange, teamFieldShown],
+  );
+
+  // What the "their team" line under the opponent's name reads back. The
+  // field's own answer first. With the field empty, a match filed under a dual
+  // line takes that line's program when it is saved — `line.opponentProgramKey`
+  // on `preset ?? attachedLine`, the same line and the same test the save in
+  // `useUploadMatchWizard` uses — so the line's school is shown as the answer,
+  // read-only: nothing puts source "line" into the form, the line decides it.
+  const savingLine = preset ?? attachedLine;
+  const lineTeamSchool =
+    savingLine?.eventKind === "dual" && savingLine.opponentProgramKey
+      ? savingLine.opponentSchool?.trim() || null
+      : null;
+  const teamFromLine =
+    opponentTeamIsEmpty(currentTeam) && lineTeamSchool !== null;
+
   const pickPlayed = useCallback(
     (row: OpponentPlayed) => {
       onInputChange("opponentName", row.name);
       onInputChange("opponentSource", "history");
       onInputChange("opponentPlayerId", row.playerId);
+      rememberTeam(row);
       const hand =
         row.hand === "right" || row.hand === "left" ? row.hand : undefined;
       const backhand =
@@ -1256,7 +1340,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange],
+    [onInputChange, rememberTeam],
   );
 
   const pickRoster = useCallback(
@@ -1268,6 +1352,7 @@ function DetailsStepContentImpl({
       const seen = played.find(
         (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
       );
+      rememberTeam(seen);
       const hand =
         seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
       const backhand =
@@ -1283,7 +1368,7 @@ function DetailsStepContentImpl({
       setNamingOpponent(false);
       setNameOpen(false);
     },
-    [onInputChange, played],
+    [onInputChange, played, rememberTeam],
   );
 
   const createOpponent = useCallback(
@@ -1291,6 +1376,14 @@ function DetailsStepContentImpl({
       onInputChange("opponentName", name);
       onInputChange("opponentSource", "new");
       onInputChange("opponentPlayerId", null);
+      // A typed name that IS someone already played — the list had not loaded
+      // or the row was not the one clicked — still gets their remembered team.
+      const typedKey = normalizedPersonName(name);
+      rememberTeam(
+        typedKey
+          ? played.find((p) => normalizedPersonName(p.name) === typedKey)
+          : undefined,
+      );
       onInputChange("opponentHand", undefined);
       onInputChange("opponentBackhand", undefined);
       onInputChange("opponentStyleSource", undefined);
@@ -1309,7 +1402,15 @@ function DetailsStepContentImpl({
         if (result.saved) setSavedSchool(lineSchool);
       }
     },
-    [inDual, lineProgramKey, lineSchool, onInputChange, admin],
+    [
+      inDual,
+      lineProgramKey,
+      lineSchool,
+      onInputChange,
+      admin,
+      played,
+      rememberTeam,
+    ],
   );
 
   const saveProfile = async () => {
@@ -1875,6 +1976,33 @@ function DetailsStepContentImpl({
                     {opponentProvenance}
                   </span>
                 )}
+                {/* Their team — optional, a team workspace's question only,
+                    and under the name like everything else this row says
+                    beyond its three answers. */}
+                {teamFieldShown && (
+                  <OpponentTeamField
+                    className="mt-1"
+                    program={teamFromLine ? null : formData.opponentTeamProgram}
+                    school={
+                      teamFromLine
+                        ? lineTeamSchool
+                        : formData.opponentTeamSchool
+                    }
+                    source={teamFromLine ? "line" : formData.opponentTeamSource}
+                    opponentFirstName={firstNameOf(formData.opponentName)}
+                    onChange={(team) => {
+                      onInputChange(
+                        "opponentTeamProgram",
+                        team.program ?? undefined,
+                      );
+                      onInputChange(
+                        "opponentTeamSchool",
+                        team.school ?? undefined,
+                      );
+                      onInputChange("opponentTeamSource", team.source);
+                    }}
+                  />
+                )}
               </span>
             )}
             <div className="flex flex-col gap-3 sm:contents">
@@ -2098,6 +2226,31 @@ function DetailsStepContentImpl({
           />
         </div>
       </div>
+      {/* Video — what Save match is about to start. Only while the wizard
+          holds the file: a restored draft keeps the form but not the File, and
+          a section naming a video that is not there would be a false promise. */}
+      {isProcessingProvider && video && (
+        <div
+          className="flex flex-col gap-[18px] border-t border-[var(--border-hairline)] pt-6"
+          data-testid="details-video-section"
+        >
+          <SectionHead label="Video" micro="what uploads when you save" />
+          <CheckedFileRow
+            lead={
+              <VideoFileLead
+                file={video.file}
+                durationSeconds={video.probe?.durationSeconds ?? 0}
+              />
+            }
+            name={video.name}
+            facts={
+              videoUploadFacts(video.probe, video.size, video.keptSeconds) ??
+              video.size
+            }
+          />
+          <UploadNoteStrip>{UPLOADING_COPY.beforeSave}</UploadNoteStrip>
+        </div>
+      )}
       {/* Red: the scores entered for the dropped sets are gone once this runs,
           and the stock dialog's blue button said otherwise. */}
       <ConfirmDialog

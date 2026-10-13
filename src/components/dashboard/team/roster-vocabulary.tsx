@@ -82,6 +82,30 @@ export function resendRole(role: MemberRole): Exclude<MemberRole, "owner"> {
 }
 
 /**
+ * What a resend sends: the open invitation, again.
+ *
+ * `playerId` is the part that gets dropped. `create_program_invite` reads an
+ * invitation with no player as a stranger's, and refuses a stranger whose
+ * address is already on an unclaimed roster row — so a resend that forgets the
+ * row it was sent to is refused as a duplicate of that very row ("… is already
+ * on this roster without an account"). Where the row has no address the call
+ * succeeds instead and unbinds the invitation, and accepting it mints a second
+ * profile for the same athlete. Every surface that resends builds its
+ * arguments here, so none of them can leave it out.
+ */
+export function resendInput(invite: {
+  email: string;
+  role: MemberRole;
+  playerId: string | null;
+}) {
+  return {
+    email: invite.email,
+    role: resendRole(invite.role),
+    playerId: invite.playerId,
+  };
+}
+
+/**
  * Resend, as a word and as a look.
  *
  * The action itself is not shared: the Roster table runs it through the

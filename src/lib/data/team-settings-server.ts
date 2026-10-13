@@ -42,6 +42,13 @@ export interface TeamInvite {
   createdAt: string;
   /** `program_invites.invited_by` — a `users.id`, or null once that account is gone. */
   invitedBy: string | null;
+  /**
+   * `program_invites.player_id` — the roster row this invitation claims, or
+   * null for someone new. A resend must carry it back: without it the RPC
+   * reads the address as a stranger's and refuses it as a duplicate of the
+   * very row it was sent to.
+   */
+  playerId: string | null;
 }
 
 export interface TeamIdentity {
@@ -65,6 +72,11 @@ export interface TeamIdentity {
   uploadPolicy: UploadPolicy;
   /** Who may change the schedule — the second policy row. */
   eventsPolicy: EventsPolicy;
+  /**
+   * Players may put a match's video on its public share link. Staff always
+   * may; off by default. Saved on change, not through the settings draft.
+   */
+  playersCanShareVideo: boolean;
   /**
    * Object key in the `program-crests` bucket, or null for the initials mark.
    * A key, never a URL — see `crestUrl()` in `teams-server.ts`.
@@ -214,14 +226,14 @@ export async function getTeamSettings(
       supabase
         .from("programs")
         .select(
-          "id, school_name, team, org_type, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, time_zone, crest_path",
+          "id, school_name, team, org_type, conference, division, home_venue, default_surface, players_can_upload, upload_policy, events_policy, players_can_share_video, time_zone, crest_path",
         )
         .eq("id", programId)
         .maybeSingle(),
       rosterRead,
       supabase
         .from("program_invites")
-        .select("id, email, role, created_at, invited_by")
+        .select("id, email, role, created_at, invited_by, player_id")
         .eq("program_id", programId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false }),
@@ -283,6 +295,7 @@ export async function getTeamSettings(
       role: string;
       created_at: string;
       invited_by: string | null;
+      player_id: string | null;
     }[]
   ).map((invite) => ({
     id: invite.id,
@@ -290,6 +303,7 @@ export async function getTeamSettings(
     role: invite.role as MemberRole,
     createdAt: invite.created_at,
     invitedBy: invite.invited_by,
+    playerId: invite.player_id,
   }));
 
   return {
@@ -305,6 +319,7 @@ export async function getTeamSettings(
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
       eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
+      playersCanShareVideo: row.players_can_share_video === true,
       crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
     },

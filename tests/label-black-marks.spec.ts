@@ -781,7 +781,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     const ended = hints.find((h) => h.code === "shot_after_point_end")!;
     expect(ended.label).toBe("Did the point end here? 1 shot follows");
     expect(ended.actions.map((a) => a.label)).toEqual([
-      "Remove 1",
+      "Yes, remove 1",
       "Split here",
     ]);
     ended.actions[0].run();
@@ -816,7 +816,7 @@ test.describe("the hints read off the rows, with their answers", () => {
       removeOnly
         .find((h) => h.code === "shot_after_point_end")!
         .actions.map((a) => a.label),
-    ).toEqual(["Remove 1"]);
+    ).toEqual(["Yes, remove 1"]);
     const splitOnly = pointHints(point, marksOf(point, []), NAMES, {
       operations: edit.operations,
     });
@@ -848,7 +848,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     ].map((m) => [m[1], m[2]]);
     expect(buttons).toEqual([
       ["shot_after_point_end", "Split here"],
-      ["shot_after_point_end", "Remove 1"],
+      ["shot_after_point_end", "Yes, remove 1"],
     ]);
   });
 

@@ -382,7 +382,8 @@ interface AdminTeamData {
 const PROGRAM_SELECT = `
   id, program_key, school_name, team, conference, conference_id, division,
   city, state, staff_page_url, home_venue, default_surface, roster_public,
-  players_can_upload, upload_policy, events_policy, time_zone, crest_path,
+  players_can_upload, upload_policy, events_policy, players_can_share_video,
+  time_zone, crest_path,
   status, org_type, pilot_eligible, primary_domain, seats, created_at,
   claimed_at, pilot_ends_on, pilot_approved_by, pilot_approved_at,
   pilot_ended_at
@@ -413,6 +414,7 @@ interface RawProgram {
   players_can_upload: boolean;
   upload_policy: string | null;
   events_policy: string | null;
+  players_can_share_video: boolean | null;
   time_zone: string;
   crest_path: string | null;
   status: string;
@@ -1258,7 +1260,7 @@ export const getAdminTeam = cache(
         // reads; `invited_by` is a `users.id` and the person may be an admin
         // who holds no membership row, so it cannot be resolved from `members`.
         .select(
-          "id, email, role, created_at, invited_by, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
+          "id, email, role, created_at, invited_by, player_id, expires_at, inviter:users!program_invites_invited_by_fkey(first_name, last_name, email)",
         )
         .eq("program_id", programId)
         .is("accepted_at", null)
@@ -1328,6 +1330,7 @@ export const getAdminTeam = cache(
       playersCanUpload: row.players_can_upload,
       uploadPolicy: (row.upload_policy as UploadPolicy | null) ?? "everyone",
       eventsPolicy: (row.events_policy as EventsPolicy | null) ?? "staff",
+      playersCanShareVideo: row.players_can_share_video === true,
       crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
       status: row.status,
@@ -1408,6 +1411,7 @@ export const getAdminTeam = cache(
           role: string;
           created_at: string;
           invited_by: string | null;
+          player_id: string | null;
           expires_at: string;
           inviter: RawInviter | RawInviter[] | null;
         }[]
@@ -1419,6 +1423,7 @@ export const getAdminTeam = cache(
           role: invite.role as MemberRole,
           createdAt: invite.created_at,
           invitedBy: invite.invited_by,
+          playerId: invite.player_id,
           expiresAt: invite.expires_at,
           expired: Date.parse(invite.expires_at) <= Date.now(),
           // The same fallback ladder every other name on this page uses: a

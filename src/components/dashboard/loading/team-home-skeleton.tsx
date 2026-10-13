@@ -17,7 +17,6 @@ export { PendingBar, PendingRegion } from "./pending";
 
 export function TeamHomeFrame({
   title,
-  setupLine,
   kpis,
   dual,
   movers,
@@ -35,15 +34,11 @@ export function TeamHomeFrame({
   | "history"
   | "footer",
   ReactNode
-> & {
-  /** Staff-only, and only while setup remains — see `TeamSetupLine`. */
-  setupLine?: ReactNode;
-}) {
+>) {
   return (
     <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
         {title}
-        {setupLine}
         <TeamHomeRegions
           kpis={kpis}
           dual={dual}

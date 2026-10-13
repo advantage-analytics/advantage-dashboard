@@ -23,6 +23,17 @@ test.describe("REPORT_VIEWS", () => {
 });
 
 test.describe("parseReportView", () => {
+  test("a view the report does not offer reads as the fallback", () => {
+    // The public share page: a link without the video, or without the
+    // visualizations, must not open an empty pane on a pasted `?tab=`.
+    const shared = ["statistics", "shots"] as const;
+    expect(parseReportView("shots", "statistics", shared)).toBe("shots");
+    expect(parseReportView("film", "statistics", shared)).toBe("statistics");
+    expect(parseReportView("shots", "statistics", ["statistics"])).toBe(
+      "statistics",
+    );
+  });
+
   test("shots and film pass through", () => {
     expect(parseReportView("shots")).toBe("shots");
     expect(parseReportView("film")).toBe("film");

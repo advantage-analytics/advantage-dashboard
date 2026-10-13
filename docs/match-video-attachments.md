@@ -49,6 +49,16 @@ Playback is looser on purpose: anyone who can already see the match (the
 read-side `authorizeMatchVisibility` gate) can watch its attached video, since
 watching changes nothing.
 
+A public share link (`/m/<token>`) is the one way to watch without an account,
+and only when the link carries the video. `match_share_links.include_video` is
+written by `set_match_share_video` alone, which asks `can_share_match_video`:
+on a team match that is the program's staff, and its players only where
+`programs.players_can_share_video` is on. The share page re-asks the rule for
+the link's maker on every read (`sharedVideoAllowed`), signs through the same
+ladder below the gate (`getSharedMatchVideo`), and renews through
+`GET /api/share/[token]/video`. It records no view and offers no way to add,
+replace or adjust the file.
+
 ### Playable format validation
 
 Accepted containers: **MP4, MOV, M4V, MKV, WebM** (`MATCH_VIDEO_EXTENSIONS` /

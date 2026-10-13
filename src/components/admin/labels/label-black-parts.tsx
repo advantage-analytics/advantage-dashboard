@@ -156,7 +156,12 @@ export function gameSlot({
   details,
 }: {
   icon: LucideIcon;
-  row: "game-overflow" | "game-underflow" | "tiebreak-fold" | "set-score";
+  row:
+    | "game-overflow"
+    | "game-underflow"
+    | "tiebreak-fold"
+    | "tiebreak-serve"
+    | "set-score";
   anchor: string;
   rootData?: Record<string, string>;
   title: string;

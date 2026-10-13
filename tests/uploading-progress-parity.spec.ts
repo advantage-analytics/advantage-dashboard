@@ -109,10 +109,17 @@ test("uploading: the wizard's title, its three steps in order, the percentage an
   expect(html).toContain(`aria-label="${UPLOADING_COPY.trackLabel}"`);
   expect(html).toContain('aria-current="step"');
 
+  // One strip: the instruction leads (medium weight), then what ignoring it
+  // costs, then the reassurance.
   const keep = out.indexOf(UPLOADING_COPY.notes.keepTabOpen);
+  const cost = out.indexOf(UPLOADING_COPY.notes.ifItStops);
   const reassure = out.indexOf(UPLOADING_COPY.notes.keepUsing);
   expect(keep).toBeGreaterThan(out.indexOf(UPLOADING_COPY.steps.video));
-  expect(reassure).toBeGreaterThan(keep);
+  expect(cost).toBeGreaterThan(keep);
+  expect(reassure).toBeGreaterThan(cost);
+  expect(html).toContain(
+    `<b class="font-medium">${UPLOADING_COPY.notes.keepTabOpen}</b>`,
+  );
   expect(reassure).toBeLessThan(out.lastIndexOf(UPLOADING_COPY.steps.analysis));
 });
 
@@ -135,6 +142,7 @@ test("both surfaces import the one copy module and hard-code none of it", () => 
     UPLOADING_COPY.title,
     UPLOADING_COPY.steps.video,
     UPLOADING_COPY.notes.keepTabOpen,
+    UPLOADING_COPY.notes.ifItStops,
     UPLOADING_COPY.notes.keepUsing,
   ];
   for (const file of [PANEL, WIZARD]) {

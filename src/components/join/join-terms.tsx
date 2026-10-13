@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { TermMark } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
 
 /**
@@ -11,22 +10,22 @@ import { advButton } from "@/lib/ui/adv-button";
  * only screen where saying so costs nothing. After the Join button it is a
  * settings page nobody opens.
  *
- * Two columns, not one list. A single column of six rows would be six things a
- * person has to hold in their head and sort themselves; two headed columns do
- * the sorting for them, and the answer they arrived with — "what happens to
- * what I already have" — is a whole column rather than a line buried in the
- * middle of one.
+ * Two headed halves, not one list. A single run of terms would be six things
+ * a person has to hold in their head and sort themselves; two headings do the
+ * sorting for them, and the answer they arrived with — "what happens to what I
+ * already have" — is a whole half rather than a line buried in the middle of
+ * one. Each half is a short paragraph: see `JoinTerms` for why not rows.
  *
  * ── Not the same rows as 4.2 ────────────────────────────────────────────────
  * `components/claim/sharing-rows.tsx` carries the trio a player reads on 4.2,
  * when they ask a coach to add them, and the design's caption on that screen
  * claims they are "the same ones the invited player reads in 8.2, in the same
- * order". They are not — 8.2's own frame draws six rows in two columns and
- * shares no sentence with 4.2's three. The caption describes an intent the
+ * order". They are not — 8.2 covers six facts under two headings and shares no
+ * sentence with 4.2's three. The caption describes an intent the
  * frames never carried out.
  *
  * Which is why these are here and not there. Importing three sentences that
- * would then need six, or bending the 8.2 columns back into a trio, would each
+ * would then need six, or bending the 8.2 halves back into a trio, would each
  * make one screen wrong to make a caption right. The two sets say the same
  * thing at different moments — asking, and accepting — and the moments differ:
  * 4.2 leads with "this changes nothing yet, your coach still has to approve",
@@ -52,88 +51,109 @@ export function Problem({ message }: { message: string | null }) {
   );
 }
 
-export interface JoinTermRow {
+/**
+ * One side of the terms: a heading and the sentences under it.
+ *
+ * Prose rather than a checked list. The six rows this replaced were six full
+ * sentences, and the design system's own rule for a confirmation is that what
+ * it costs is written as prose, not a bulleted tub — a list of sentences reads
+ * as fine print, and this is the one screen where the text has to be read.
+ */
+export interface JoinTerms {
+  title: string;
   text: string;
   /**
-   * The one clause the design sets in ink-900 medium. A substring of `text`,
-   * so the sentence stays one readable string rather than three fragments a
-   * later editor has to reassemble in their head before they can change it.
+   * The one clause set in ink-900 medium. A substring of `text`, so the
+   * paragraph stays one readable string rather than fragments a later editor
+   * has to reassemble before they can change it.
    */
   emphasis?: string;
 }
 
-/** Left column. Blue checks: what the program gains. */
-export const JOIN_TERMS_SEEN: readonly JoinTermRow[] = [
-  {
-    text: "Matches uploaded to the team — video, stats and the full report",
-    emphasis: "to the team",
-  },
-  { text: "Your trends across those matches" },
-  { text: "Any personal match you choose to share, one at a time" },
-];
+/** What the program gains. */
+const JOIN_TERMS_SEEN: JoinTerms = {
+  title: "Your coaches will see",
+  text: "Matches uploaded to the team, with their video, stats and full report. Your trends across those matches. Any personal match you choose to share, one at a time.",
+  emphasis: "to the team",
+};
 
-/** Right column. Ink checks: what does not move. */
-export const JOIN_TERMS_KEPT: readonly JoinTermRow[] = [
-  { text: "Everything you've uploaded up to now" },
-  { text: "Personal matches you upload later, unless you share them" },
-  {
-    text: "Your account, if you leave the program — the team's matches stay with the team",
-  },
-];
+/** What does not move. */
+const JOIN_TERMS_KEPT: JoinTerms = {
+  title: "Stays yours",
+  text: "Everything you've uploaded up to now, personal matches you upload later unless you share them, and your account if you leave. The team's matches stay with the team.",
+};
 
-function TermsColumn({
-  title,
-  rows,
-  tone,
-}: {
-  title: string;
-  rows: readonly JoinTermRow[];
-  tone: "blue" | "ink";
-}) {
+function TermsBlock({ terms }: { terms: JoinTerms }) {
+  // Split once, on the clause itself. When `emphasis` is absent — or is edited
+  // to something the paragraph no longer contains — this renders the plain
+  // paragraph rather than dropping half of it.
+  const [before, after] = terms.emphasis
+    ? terms.text.split(terms.emphasis)
+    : [terms.text, undefined];
+
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <span className="eyebrow">{title}</span>
-      <ul className="flex flex-col gap-2.5">
-        {rows.map((row) => {
-          // Split once, on the clause itself. When `emphasis` is absent — or is
-          // edited to something the sentence no longer contains — this renders
-          // the plain sentence rather than dropping half of it.
-          const [before, after] = row.emphasis
-            ? row.text.split(row.emphasis)
-            : [row.text, undefined];
-
-          return (
-            <li key={row.text} className="flex gap-2.5">
-              <TermMark tone={tone} />
-              <span className="text-body-sm">
-                {before}
-                {row.emphasis !== undefined && after !== undefined && (
-                  <>
-                    <span className="font-medium text-[var(--ink-900)]">
-                      {row.emphasis}
-                    </span>
-                    {after}
-                  </>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="eyebrow">{terms.title}</span>
+      <p className="text-body-sm">
+        {before}
+        {terms.emphasis !== undefined && after !== undefined && (
+          <>
+            <span className="font-medium text-[var(--ink-900)]">
+              {terms.emphasis}
+            </span>
+            {after}
+          </>
+        )}
+      </p>
     </div>
   );
 }
 
-/** The two columns, in the order the design draws them. */
+/**
+ * The terms as two columns, for a screen with no side panel.
+ *
+ * `InviteOffer` uses this: it can list several invitations, so the terms sit
+ * once above every button instead of beside one of them.
+ */
 export function JoinSharingTerms() {
   return (
     <div className="grid gap-6 border-t border-[var(--border-hairline)] pt-5 sm:grid-cols-2 sm:gap-10">
-      <TermsColumn
-        title="Your coaches will see"
-        rows={JOIN_TERMS_SEEN}
-        tone="blue"
-      />
-      <TermsColumn title="Stays yours" rows={JOIN_TERMS_KEPT} tone="ink" />
+      <TermsBlock terms={JOIN_TERMS_SEEN} />
+      <TermsBlock terms={JOIN_TERMS_KEPT} />
+    </div>
+  );
+}
+
+/**
+ * The terms as the side panel of a `/join/[token]` screen.
+ *
+ * The same grey panel the claim screens put beside a decision (`AsidePanel`),
+ * so the action sits on the left and what it means sits beside it rather than
+ * above it, pushing the button down the page. The quota line closes the panel:
+ * it is the last thing joining changes, and it used to float at the far end of
+ * the button row with nothing tying it to the terms it belongs to.
+ */
+export function JoinTermsPanel({
+  programHours,
+  personalHours,
+}: {
+  programHours: number;
+  personalHours: number;
+}) {
+  return (
+    <div className="flex flex-col gap-3.5 rounded-[var(--radius-card)] bg-[var(--surface-subtle)] p-5">
+      <TermsBlock terms={JOIN_TERMS_SEEN} />
+      <div className="border-t border-[var(--border-medium)] pt-3">
+        <TermsBlock terms={JOIN_TERMS_KEPT} />
+      </div>
+      {/* Balanced, so the narrow panel never leaves "2h." alone on a line.
+          `text-micro` on the block too: its line box, not the page's. */}
+      <div className="text-micro text-balance">
+        <JoinQuotaNote
+          programHours={programHours}
+          personalHours={personalHours}
+        />
+      </div>
     </div>
   );
 }

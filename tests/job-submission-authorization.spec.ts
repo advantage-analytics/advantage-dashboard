@@ -943,6 +943,31 @@ for (const member of [false, true]) {
   });
 }
 
+// The console submits for teams that are not approved yet; a suspension is
+// the one status that still refuses, before any quota is reserved.
+for (const [programStatus, status] of [
+  ["unclaimed", 200],
+  ["claim_pending", 200],
+  ["suspended", 403],
+] as const) {
+  test(`console submission for a ${programStatus} program answers ${status}`, async () => {
+    const h = adminHarness([personal()]);
+    h.deps.authorizeAdminVideo = async () => ({
+      jobId: "11111111-1111-4111-8111-111111111111",
+      matchId: "22222222-2222-4222-8222-222222222222",
+      programId: PROGRAM,
+      workspace: team({
+        role: "owner",
+        programStatus,
+        canSubmitVideo: programStatus !== "suspended",
+      }),
+      roster: ROSTER,
+    });
+    expect((await call(h)).status).toBe(status);
+    expect(h.reserved.length).toBe(status === 200 ? 1 : 0);
+  });
+}
+
 test("console discovery denies unauthorized actors and wrong program before quota", async () => {
   const denied = adminHarness();
   denied.deps.authorizeAdminVideo = async () => {

@@ -135,6 +135,21 @@ ring = only elsewhere; nothing = quiet. No "mark all read" — the mark clears
 itself.
 Empty state: "Nothing running here."
 
+**Getting set up** — while a setup step is open in the active workspace, a
+section sits above the feed: "Getting set up" (12px medium) with "1 of 2"
+right, a 3px step bar (done `--blue`, open `--border-medium`), then one row
+per step at the tighter `py-2` measure. A done step is a 14px ink-400 `Check`
+and a muted label; an open one is a link with a 14px ink-700 `Circle`, the
+label, and the stopped row's trailing grey word + chevron naming where it
+goes. Setup is a standing state, so it is **never counted**: not in the
+trigger's dot, not in the tooltip sentence, and no blue dot on its rows — the
+step bar's filled segments are its only blue. All steps done, no section.
+Personal: hand and backhand, report notifications. Team (staff only): roster,
+a dual while the Schedule is open, a first match. Team Home keeps a one-line
+pointer on its title's summary line — the same ticks and one 11px blue link, "Finish
+setup: send a first match →" (`team/team-setup-line.tsx`). _Shipped:_
+`activity/tray-setup.ts`, `lib/data/setup-progress-server.ts`.
+
 ### Header (v3)
 
 ```
@@ -347,15 +362,15 @@ group of people. _Shipped:_ `matches/match-detail/share-match-button.tsx`
 From `nav.ts` + chrome. StrokeWidth 1.5 everywhere except the row-menu
 trigger's `MoreHorizontal` (1.75, the one exception).
 
-| Glyph                                                                                                                                                                 | Use                                                                                                                                                                             | Size                                    |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `Home`, `Video`, `Calendar`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle`                                                                | Nav — Home / Matches (both workspaces) / Schedule / Statistics / Ask / Roster / Compare / Settings / Help                                                                       | 16px (`size-4`)                         |
-| `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`/`ChevronLeft`, `ArrowUpRight`, `Check`, `Plus`, `X`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus, drawer stepping and close; `ArrowUpRight` = "open as page" in a drawer header                                    | 15px header, 14px inline, 12px chevrons |
-| `Check`                                                                                                                                                               | Also `TermMark` — the row mark in the join sharing terms and the guardian acknowledgments. Blue where something is gained, ink where nothing moves, never blue above a checkbox | 14px, stroke 1.5                        |
-| `MoreHorizontal`, `Pencil`, `Trash2`, `Upload`                                                                                                                        | Row and drawer actions                                                                                                                                                          | 14px / 1.75 stroke on `MoreHorizontal`  |
-| `SlidersHorizontal`, `Timer`, `CircleHelp`, `LogOut`                                                                                                                  | Profile menu — Preferences / Usage / Help / Sign out                                                                                                                            | 13px                                    |
-| `CircleCheck`, `CircleX`                                                                                                                                              | `ResultMark` — match outcome ONLY, never repurposed for analysis lifecycle (that's `StatusChip`'s dot + text)                                                                   | 14px                                    |
-| `Calendar`, `MapPin`, `Swords`, `Film`, `Target`                                                                                                                      | Fixture/event metadata (`Target` = practice; the crosshair icon it replaced is retired)                                                                                         | 13px, `--ink-400`                       |
+| Glyph                                                                                                                                                                 | Use                                                                                                                                                                                         | Size                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `Home`, `Video`, `Calendar`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle`                                                                | Nav — Home / Matches (both workspaces) / Schedule / Statistics / Ask / Roster / Compare / Settings / Help                                                                                   | 16px (`size-4`)                         |
+| `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`/`ChevronLeft`, `ArrowUpRight`, `Check`, `Plus`, `X`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus, drawer stepping and close; `ArrowUpRight` = "open as page" in a drawer header                                                | 15px header, 14px inline, 12px chevrons |
+| `Check`                                                                                                                                                               | Also `TermMark` — the row mark in the guardian acknowledgments (the join sharing terms are prose now). Blue where something is gained, ink where nothing moves, never blue above a checkbox | 14px, stroke 1.5                        |
+| `MoreHorizontal`, `Pencil`, `Trash2`, `Upload`                                                                                                                        | Row and drawer actions                                                                                                                                                                      | 14px / 1.75 stroke on `MoreHorizontal`  |
+| `SlidersHorizontal`, `Timer`, `CircleHelp`, `LogOut`                                                                                                                  | Profile menu — Preferences / Usage / Help / Sign out                                                                                                                                        | 13px                                    |
+| `CircleCheck`, `CircleX`                                                                                                                                              | `ResultMark` — match outcome ONLY, never repurposed for analysis lifecycle (that's `StatusChip`'s dot + text)                                                                               | 14px                                    |
+| `Calendar`, `MapPin`, `Swords`, `Film`, `Target`                                                                                                                      | Fixture/event metadata (`Target` = practice; the crosshair icon it replaced is retired)                                                                                                     | 13px, `--ink-400`                       |
 
 `Video` covers Matches in **both** workspaces; `Calendar` belongs only to the
 fixtures list (Schedule/Events) — the two must not swap.

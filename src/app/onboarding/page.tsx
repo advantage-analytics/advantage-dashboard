@@ -2,7 +2,17 @@ import { redirect } from "next/navigation";
 import { ClaimHeading } from "@/components/claim/claim-shell";
 import { InviteOffer } from "@/components/join/invite-offer";
 import { getPendingInvites } from "@/lib/data/pending-invites-server";
-import { isNotNow, notNowHref } from "@/lib/services/programs/join-links";
+import { safeNext } from "@/lib/auth/safe-next";
+import {
+  isNotNow,
+  joinTokenFromPath,
+  notNowHref,
+} from "@/lib/services/programs/join-links";
+import {
+  hasProfileName,
+  splitRosterName,
+} from "@/lib/services/programs/join-name";
+import { resolveJoinStateOnce } from "@/lib/services/programs/join-state-server";
 import { quotaHours } from "@/lib/services/programs/join-quota";
 import { inviteSentence } from "@/lib/services/programs/join-role";
 import { createClient } from "@/lib/supabase/server";
@@ -60,9 +70,39 @@ export default async function OnboardingPage({
 
   const { data: row } = await supabase
     .from("users")
-    .select("onboarded_at")
+    .select("onboarded_at, first_name")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Sent here by a join link, for the name and nothing else: joining marks the
+  // account onboarded, so this is the only time the name step can run for
+  // them (`sessionNeedsName`). Checked before the onboarded redirect below —
+  // an account that finished onboarding some other way can still be nameless
+  // — and only while the link still offers a Join button, so a stale or spent
+  // `next` falls through to the ordinary flow instead of a dead end.
+  const next = safeNext(typeof query.next === "string" ? query.next : null);
+  const joinToken = joinTokenFromPath(next);
+  if (joinToken) {
+    const join = await resolveJoinStateOnce(joinToken);
+    if (join.kind === "link_ready" || join.kind === "ready") {
+      if (hasProfileName(row?.first_name as string | null | undefined)) {
+        redirect(next);
+      }
+      return (
+        <OnboardingFlow
+          join={{
+            next,
+            programName: join.programName,
+            // The coach's own spelling of this person, when their address is
+            // already on the roster. An invitation carries no such name.
+            ...splitRosterName(
+              join.kind === "link_ready" ? join.rosterMatchName : null,
+            ),
+          }}
+        />
+      );
+    }
+  }
 
   if (row?.onboarded_at) redirect("/dashboard");
 

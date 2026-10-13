@@ -204,6 +204,28 @@ be. Doubles teams and existing users depend on it.
 > match (the Details form) passes as before. Migration:
 > `supabase/migrations/20260929215610_set_match_round_on_line.sql`.
 
+> **A sixth reviewed exception, added 2026-10-12: `set_opponent_team`.**
+>
+> The team Opponents drawer's "Add their team" names the program an opponent
+> plays for on matches that were saved before the wizard asked. Allowed
+> because it is metadata about the OTHER side and touches no fact a statistic
+> is computed from: a single explicit action by the program's owner, a coach
+> or staff (the raw role, not the schedule policy — this is not a schedule
+> setting); scoped to matches of that one program, every id re-verified
+> against `program_id` under a row lock, at most 200 per call, all or nothing;
+> touching **only** `opponent_program_id` and `opponent_school` — **never**
+> `player1_id`, `player2_id`, `player2_name`, `score`, `format`, `program_id`,
+> `event_entry_id`, or anything under `match_stats`, `points` or `shots`. A
+> player keeps the plain client UPDATE under the creator-only policy, on the
+> same two columns, for matches they recorded. The wizard and the Edit Match
+> dialog write the same two columns on their own match. Unlike the earlier
+> exceptions this one writes **no** `program_audit_log` row yet — a known gap,
+> to close before the action is offered beyond the drawer. Migrations:
+> `supabase/migrations/20261012003309_matches_opponent_program.sql` (the
+> columns), `20261012071550_set_opponent_team.sql` and
+> `20261012080828_set_opponent_team_lock_fix.sql` (the function; the first
+> version's lock-on-aggregate statement failed every call and was replaced).
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in
@@ -333,6 +355,27 @@ to put a testable seam.
 > `exceljs.default ?? exceljs`, the ESM/CommonJS interop the admin file route
 > needs to run them in Node — with parsing, validation, attribution and the
 > blank-Guest fallback untouched. The webhook route is not touched.
+
+> **A reviewed exception, added 2026-10-11: the admin console uploads for
+> teams that are not approved, from `claude/admin-upload-approval-e3051c`.**
+> This supersedes two phrases in the entry above: `admin_video_access` no
+> longer requires "program active", and the console workspace's
+> `canSubmitVideo` no longer comes from the `program.status === "active"`
+> rule. Approval gates what a program's own members may spend; an
+> administrator uploading on a team's behalf is the reviewer, so the console
+> accepts an `unclaimed` or `claim_pending` program and refuses only
+> `suspended`. The rule is `adminCanUploadFor()` / `adminUploadApproval()` in
+> `src/lib/admin/uploads/approval.ts` — a deliberate, console-only fork of the
+> claim-state rule, mirrored in SQL as `status <> 'suspended'` by migration
+> `20261012020333` across the eight admin upload functions. On the frozen
+> list, `jobs/handler.ts` and `upload-url/handler.ts` each gain one argument:
+> `uploadEligibility()` is still called unchanged but is handed
+> `approval: adminUploadApproval(…)` when `adminVideo` is set, and `undefined`
+> otherwise, so the dashboard path reads the workspace's own status exactly as
+> before. Nothing the pipeline sends, bills or computes changes, and the spend
+> still lands on the target program's own ledger. Not covered: an automatic
+> retry (`resubmit-job.ts`) of a console job for an unapproved team still
+> prices through the `status === "active"` rule and is refused.
 
 > **A reviewed exception, added 2026-09-27: input-rejected retries and the
 > frame-rate warning, from `claude/match-analysis-failure-retry-8769f3`**

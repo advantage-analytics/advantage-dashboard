@@ -166,7 +166,7 @@ export async function discardPreparedVideo(storageName: string): Promise<void> {
  * Only files untouched for `STALE_AFTER_MS`: another open tab may be uploading
  * one right now, and a sync handle's writes keep `lastModified` fresh while the
  * cut is being written. An upload that sits idle longer than this is long past
- * the reaper's 15-minute stall rule anyway.
+ * the twenty-minute "upload paused" rule anyway.
  */
 const STALE_AFTER_MS = 12 * 60 * 60 * 1000;
 

@@ -329,6 +329,34 @@ test.describe("buildAppliedRows", () => {
     expect(points[7].shots[1].zone).toBe("Crosscourt");
   });
 
+  test("an in serve whose landing is outside the box is written in, with no landing and no zone", () => {
+    // Hit from behind the baseline on +x; the far service box ends 6.4 m
+    // past the net, so y 23 is long. The seed keeps such a serve in when a
+    // rally followed it: the landing is the vendor's wrong bounce.
+    const placed = (landingY: number) =>
+      build([
+        pt(0, "p1", "ace", (p) => [
+          shot(p, "p1", "first_serve", "in", {
+            contactX: 1,
+            contactY: 0,
+            landingX: -1,
+            landingY,
+          }),
+        ]),
+      ]).points[0].shots[0];
+    expect(placed(23)).toMatchObject({
+      result: "In",
+      landing_x: null,
+      landing_y: null,
+      zone: null,
+      contact_x: 1,
+    });
+    // The same serve with its bounce in the box keeps both.
+    const inBox = placed(16);
+    expect(inBox.landing_y).toBe(16);
+    expect(inBox.zone).not.toBeNull();
+  });
+
   test("a point with no winner is a problem, not a row", () => {
     const points = session().map((p) =>
       p.pointIndex === 6 ? { ...p, winner: null } : p,

@@ -5,7 +5,7 @@ import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import {
   RESEND_CLASS,
   RESEND_LABEL,
-  resendRole,
+  resendInput,
 } from "@/components/dashboard/team/roster-vocabulary";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
@@ -33,9 +33,12 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
 export function ResendInvite({
   email,
   role,
+  playerId,
 }: {
   email: string;
   role: MemberRole;
+  /** `program_invites.player_id` — the roster row the invitation claims. */
+  playerId: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(
@@ -51,10 +54,9 @@ export function ResendInvite({
         onClick={() => {
           setNote(null);
           startTransition(async () => {
-            const result = await inviteMember({
-              email,
-              role: resendRole(role),
-            });
+            const result = await inviteMember(
+              resendInput({ email, role, playerId }),
+            );
             if (!result.ok) {
               setNote({ tone: "bad", text: result.error });
               return;

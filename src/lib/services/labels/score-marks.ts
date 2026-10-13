@@ -25,13 +25,14 @@
  *   (`replayedServeGap`). Measured over the 9 label sessions on 2026-10-09:
  *   7 fired, 5 combined by the labeller, 0 wrong on reviewed points.
  *
- * `withLiveScoreMarks` also runs `liveRowMarks`, the one other `count` mark
- * read off the rows: "Ending can't be read" (`lastShotUnresolved`,
- * marks-state.ts) on a point whose strokes it is handed.
+ * `withLiveScoreMarks` also runs `liveRowMarks`, the other `count` marks
+ * read off the rows: "Ending can't be read" (`lastShotUnresolved`) and
+ * "Fault, no second serve" (`firstServeFaultAlone`, both marks-state.ts) on
+ * a point whose strokes it is handed.
  */
 
 import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
-import { lastShotUnresolved } from "./marks-state";
+import { firstServeFaultAlone, lastShotUnresolved } from "./marks-state";
 import { gameDecided, gameKey, isCountedPoint, labelScores } from "./score";
 import {
   isServeStroke,
@@ -238,11 +239,12 @@ export function liveScoreMarks(
 
 /** A point `liveRowMarks` can read: its strokes, when the caller has them. */
 export type RowMarkPoint = Pick<LabelPoint, "id" | "status"> &
-  Partial<Pick<LabelPoint, "shots">>;
+  Partial<Pick<LabelPoint, "shots" | "ending">>;
 
 /**
  * "Ending can't be read" on every live point whose last stroke has neither a
- * landing nor a result, by point id. A point handed without its strokes (the
+ * landing nor a result, and "Fault, no second serve" on one that stops on a
+ * missed first serve, by point id. A point handed without its strokes (the
  * scorecard's seeded rows) raises nothing. Ghosts are not strokes here, as in
  * the console.
  */
@@ -252,8 +254,11 @@ export function liveRowMarks(
   const out: Record<string, LabelMark[]> = {};
   for (const point of points) {
     if (point.status === "deleted" || !point.shots) continue;
-    const mark = lastShotUnresolved({ shots: point.shots }, true);
-    if (mark) out[point.id] = [mark];
+    const own = [
+      lastShotUnresolved({ shots: point.shots }, true),
+      firstServeFaultAlone({ shots: point.shots, ending: point.ending }, true),
+    ].filter((mark): mark is NonNullable<typeof mark> => mark !== null);
+    if (own.length > 0) out[point.id] = own;
   }
   return out;
 }

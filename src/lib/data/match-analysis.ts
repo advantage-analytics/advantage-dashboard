@@ -122,6 +122,14 @@ export interface MatchAnalysis {
    */
   uploadPercent?: number;
   /**
+   * Where the transfer stood when a failed job stopped, floored 0-100 — see
+   * `stoppedUploadPercent()`. Its own field rather than `uploadPercent`,
+   * which means bytes are moving right now and drives a live bar: this one is
+   * a reading taken off a job nothing is running for. Set only when the
+   * transfer never finished, so it only ever accompanies `upload_again`.
+   */
+  stoppedUploadPercent?: number;
+  /**
    * When the job row was created, ISO. Stands in for "when the transfer
    * started" — the row is inserted immediately before the upload begins, so the
    * gap is a couple of seconds against a transfer measured in minutes.
@@ -509,8 +517,40 @@ export interface RecoveryRow {
   error_message?: string | null;
   external_job_id?: string | null;
   updated_at?: string | null;
+  /**
+   * The transfer's heartbeat. Optional: a projection that does not select it
+   * keeps the old reading, where a recorded key alone counts as a video.
+   */
+  upload_progress_percent?: number | null;
   hasVideo: boolean;
   hasResults: boolean;
+}
+
+/**
+ * Is this a failed job whose video never finished uploading?
+ *
+ * `video_object_key` cannot answer that: `/api/splitstep/upload-url` writes it
+ * when the upload URL is issued, before a byte moves, so a transfer that died
+ * at 27% carries a key to a blob that was never committed. Classified on the
+ * key alone that job read as `retry`, and offered to resend a video that does
+ * not exist — until some later cleanup happened to clear the key.
+ *
+ * The heartbeat can. `markJobUploaded()` writes 100 with the terminal
+ * `uploaded` status, so a failed job that was never handed to the vendor and
+ * whose last recorded progress is below 100 stopped mid-transfer. Positive
+ * evidence only: no recorded progress says nothing, and reads as finished.
+ */
+export function transferNeverFinished(row: {
+  status: string;
+  upload_progress_percent?: number | null;
+  external_job_id?: string | null;
+}): boolean {
+  return (
+    row.status === "failed" &&
+    row.external_job_id == null &&
+    row.upload_progress_percent != null &&
+    row.upload_progress_percent < 100
+  );
 }
 
 /** `RecoveryInput` less the chain count, which only the caller can supply. */
@@ -531,7 +571,8 @@ export function jobRecoveryFacts(
     errorCode: row.error_code ?? null,
     errorCategory: row.error_category ?? null,
     errorStep: row.error_step ?? null,
-    hasVideo: row.hasVideo,
+    // A key is not a video until the transfer behind it finished.
+    hasVideo: row.hasVideo && !transferNeverFinished(row),
     hasResults: row.hasResults,
     stalledSubmit:
       status !== undefined &&
@@ -682,6 +723,27 @@ export function stageFillPercent(
   if (stage.end === stage.start) return overallPercent >= 100 ? 100 : 0;
   const ratio = (overallPercent - stage.start) / (stage.end - stage.start);
   return Math.max(0, Math.min(1, ratio)) * 100;
+}
+
+/**
+ * Where a failed job's upload stopped, as a whole percent — or undefined when
+ * it did not stop part-way.
+ *
+ * `processing_jobs.upload_progress_percent` is a liveness heartbeat, and
+ * neither `reap_stalled_uploads()` nor the transfer-failure write clears it,
+ * so a dead upload's row still says how far it got. Only for a job
+ * `transferNeverFinished()` recognises, so it only ever accompanies
+ * `upload_again`; and not for 0, a job that died in the cut or before its
+ * first block, which has no position worth drawing a bar for.
+ */
+export function stoppedUploadPercent(row: {
+  status: string;
+  upload_progress_percent?: number | null;
+  external_job_id?: string | null;
+}): number | undefined {
+  if (!transferNeverFinished(row)) return undefined;
+  const percent = row.upload_progress_percent ?? 0;
+  return percent > 0 ? Math.floor(percent) : undefined;
 }
 
 /**
@@ -1051,6 +1113,51 @@ export function isSubmitStalled(
 
   return nowMs - movedAt > SUBMIT_STALL_MS;
 }
+
+/**
+ * How long an upload may go without a progress write before it reads as
+ * paused. The transfer writes at least once a minute, the cut before it too,
+ * so twenty minutes of silence is a tab that is closed, a computer that is
+ * asleep or a connection that is gone — never a slow upload.
+ */
+export const UPLOAD_PAUSED_AFTER_MS = 20 * 60 * 1000;
+
+/**
+ * How long a quiet upload is left before `reap_stalled_uploads()` fails it —
+ * the function's `p_stale_after`, passed by both the page-load reaper and the
+ * scheduled sweep.
+ *
+ * Six hours because that is how long the upload credential lives
+ * (`azure-sas.ts`): until then a tab that wakes up can still finish, and one
+ * that slept through an afternoon has done exactly that. Past it nothing can.
+ * It was fifteen minutes, which was survivable only because the uploading tab
+ * ignored the verdict; now that a failed job stops its tab
+ * (`splitstep/job-liveness.ts`), fifteen minutes would throw away every upload
+ * whose laptop lid was closed over lunch.
+ */
+export const UPLOAD_ABANDONED_AFTER = "6 hours";
+
+/**
+ * Has this upload gone quiet?
+ *
+ * Still `uploading` in the database — nothing has failed, and the tab may yet
+ * carry on — but not moving, which is a different thing to tell someone than
+ * "Uploading 27%". Derived from the row's last move rather than stored, like
+ * `isSubmitStalled()`: there is no event to store it on. Silence is the event.
+ */
+export function isUploadPaused(
+  analysis: Pick<MatchAnalysis, "status" | "updatedAt">,
+  nowMs: number = Date.now(),
+): boolean {
+  if (analysis.status !== "uploading") return false;
+  if (!analysis.updatedAt) return false;
+  const movedAt = Date.parse(analysis.updatedAt);
+  if (!Number.isFinite(movedAt)) return false;
+  return nowMs - movedAt > UPLOAD_PAUSED_AFTER_MS;
+}
+
+/** The status word for a paused upload, wherever one is drawn. */
+export const UPLOAD_PAUSED_LABEL = "Upload paused";
 
 export interface AnalysisAction {
   label: string;

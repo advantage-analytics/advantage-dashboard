@@ -33,7 +33,7 @@ import {
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
-  resendRole,
+  resendInput,
 } from "@/components/dashboard/team/roster-vocabulary";
 import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
 
@@ -933,14 +933,7 @@ export function RosterTable({
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() =>
-                      run(() =>
-                        inviteMember({
-                          email: invite.email,
-                          role: resendRole(invite.role),
-                        }),
-                      )
-                    }
+                    onClick={() => run(() => inviteMember(resendInput(invite)))}
                     className={RESEND_CLASS}
                   >
                     {RESEND_LABEL}

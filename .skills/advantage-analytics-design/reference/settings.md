@@ -126,6 +126,14 @@ only · Owner and coaches · All staff · Everyone on the team_
 (`programs.upload_policy`; `players_can_upload` is derived from it and keeps
 the roster's own switch working).
 
+**Players can share match video publicly** is the Policies card's one switch
+(`AdvSwitch`, `programs.players_can_share_video`, 2026-10-11). It is a plain
+yes/no with no ladder to it, so it **saves on change** instead of riding the
+page's draft and Save bar, and — unlike the two ladders above it — **any staff
+may move it**, by decision. The card is drawn for staff only, so the switch is
+never shown to someone who cannot use it; a refused save steps it back and
+prints the reason in the row's description, in `--danger`.
+
 ### A field the viewer may not change
 
 Never a `disabled` input: it still looks like an input, so it reads as broken

@@ -164,6 +164,9 @@ export function MatchesFilterPanel<K extends string>({
         // bottom whenever the toolbar sat lower than the guess assumed.
         collisionPadding={12}
         aria-label={label}
+        // The panel keeps its own ↑/↓/Esc: `useRowSelection`'s window key
+        // listener stands down for anything under this attribute.
+        data-row-keys="ignore"
         className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(272px,var(--radix-popover-content-available-width))] flex-col overflow-y-auto rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
       >
         {sections.map((section, i) => (

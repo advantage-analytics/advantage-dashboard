@@ -603,6 +603,138 @@ test.describe("no duplicate match (T20)", () => {
     });
     // The draft is spent once its match carries the work.
     expect(h.draftDeletes).toContain("draft-m");
+    // The field is empty and the line names no program, so this update has
+    // no team to write — and writes neither key, leaving whatever the row
+    // already holds.
+    expect(h.queryCalls[update].args[0]).not.toHaveProperty(
+      "opponent_program_id",
+    );
+    expect(h.queryCalls[update].args[0]).not.toHaveProperty("opponent_school");
+  });
+
+  /** The row a line's refill writes, with the "their team" field as given. */
+  async function refilled(
+    preset: EventPreset,
+    team: (h: ReturnType<typeof uploadWizardHarness>) => void,
+    opponentProgramId?: string,
+  ) {
+    const h = uploadWizardHarness({
+      team: true,
+      props: { draft: draftOf({ id: "draft-m", preset }), preset },
+      opponentProgramId,
+    });
+    await h.flush();
+    const file = await h.pick("match.csv");
+    file.resolve(parsedNames("Player athlete"));
+    await h.flush();
+    h.current.handleInputChange("playerHand", "right");
+    h.current.handleInputChange("playerBackhand", "two-handed");
+    h.current.handleInputChange("opponentHand", "left");
+    h.current.handleInputChange("opponentBackhand", "one-handed");
+    h.current.handleInputChange("fixedCamera", true);
+    h.current.handleInputChange("initialTopPlayerIsPlayer1", true);
+    team(h);
+    h.render();
+    h.current.handleFileContinue();
+    h.render();
+    await h.current.handleCreateMatch();
+    h.render();
+    const update = h.queryCalls.find((c) => c.method === "update");
+    return {
+      row: update?.args[0] as Record<string, unknown>,
+      formData: h.current.formData,
+    };
+  }
+
+  const TEAM = {
+    id: "11111111-1111-4111-8111-111111111111",
+    schoolName: "Meridian State",
+    shortCode: "MSU",
+    crestUrl: null,
+    conference: "Big Sky",
+    division: "D1",
+  };
+  const LINE_PROGRAM_ID = "22222222-2222-4222-8222-222222222222";
+  const dualLine = (): EventPreset => ({
+    ...linePreset(),
+    eventKind: "dual",
+    opponentProgramKey: "rival-state-mens",
+    opponentSchool: "Rival State",
+  });
+
+  test("an empty field with no line program leaves both keys out of the update", async () => {
+    const { row } = await refilled(linePreset(), () => {});
+    expect(row).toBeTruthy();
+    expect(row).not.toHaveProperty("opponent_program_id");
+    expect(row).not.toHaveProperty("opponent_school");
+    // A dual line whose key resolves to no program is the same case.
+    const unresolved = await refilled(dualLine(), () => {});
+    expect(unresolved.row).not.toHaveProperty("opponent_program_id");
+    expect(unresolved.row).not.toHaveProperty("opponent_school");
+  });
+
+  test("the update branch writes a picked team, and a typed one, as an insert would", async () => {
+    const picked = await refilled(linePreset(), (h) => {
+      h.current.handleInputChange("opponentTeamProgram", TEAM);
+      h.current.handleInputChange("opponentTeamSource", "picked");
+    });
+    expect(picked.row).toMatchObject({
+      opponent_program_id: TEAM.id,
+      opponent_school: null,
+    });
+
+    const typed = await refilled(linePreset(), (h) => {
+      h.current.handleInputChange("opponentTeamSchool", "Valley Club");
+      h.current.handleInputChange("opponentTeamSource", "typed");
+    });
+    expect(typed.row).toMatchObject({
+      opponent_program_id: null,
+      opponent_school: "Valley Club",
+    });
+  });
+
+  test("an empty field on a dual line saves the line's program, resolved from its key", async () => {
+    const { row, formData } = await refilled(
+      dualLine(),
+      () => {},
+      LINE_PROGRAM_ID,
+    );
+    expect(row).toMatchObject({
+      opponent_program_id: LINE_PROGRAM_ID,
+      opponent_school: null,
+    });
+    // The fallback is the save's: the field's keys stay empty and the line's
+    // own pair is as the preset seeded it.
+    expect(formData.opponentTeamProgram).toBeUndefined();
+    expect(formData.opponentTeamSchool).toBeUndefined();
+    expect(formData.opponentTeamSource).toBeUndefined();
+    expect(formData.opponentProgramKey).toBe("rival-state-mens");
+    expect(formData.opponentSchool).toBe("Rival State");
+  });
+
+  test("an answered field outranks the dual line's program", async () => {
+    const { row } = await refilled(
+      dualLine(),
+      (h) => {
+        h.current.handleInputChange("opponentTeamSchool", "Valley Club");
+        h.current.handleInputChange("opponentTeamSource", "typed");
+      },
+      LINE_PROGRAM_ID,
+    );
+    expect(row).toMatchObject({
+      opponent_program_id: null,
+      opponent_school: "Valley Club",
+    });
+  });
+
+  test("a tournament line's key is never resolved into a team", async () => {
+    const { row } = await refilled(
+      { ...dualLine(), eventKind: "tournament" },
+      () => {},
+      LINE_PROGRAM_ID,
+    );
+    expect(row).not.toHaveProperty("opponent_program_id");
+    expect(row).not.toHaveProperty("opponent_school");
   });
 });
 

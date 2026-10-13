@@ -64,6 +64,7 @@ import { parseWebhookPayload } from "@/lib/services/splitstep/webhook-payload";
 import type { VendorVideoUrl } from "@/lib/services/splitstep/video-url/types";
 import { uploadEligibility } from "@/lib/workspace/upload-eligibility";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
+import { adminUploadApproval } from "@/lib/admin/uploads/approval";
 import {
   billingWorkspaceFor,
   NO_BILLING_WORKSPACE_REFUSAL,
@@ -533,6 +534,12 @@ export async function handleSubmitJob(
     athlete: athleteOnRow(match, userId),
     roster,
     attachesToLine: match.event_entry_id !== null,
+    // The console uploads for teams that are not approved yet; only a
+    // suspension stops it (`adminCanUploadFor()`). Undefined for everyone
+    // else, so the dashboard path reads the workspace's own status as before.
+    approval: adminVideo
+      ? adminUploadApproval(adminVideo.workspace.programStatus)
+      : undefined,
   });
 
   if (!eligibility.ok) {

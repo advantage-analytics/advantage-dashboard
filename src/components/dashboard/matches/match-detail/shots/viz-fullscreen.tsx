@@ -752,7 +752,9 @@ export function VizFullscreen() {
             >
               <CutMenu
                 savedViews={meta.savedViews}
-                onSaveRequest={() => setSaveDialogOpen(true)}
+                onSaveRequest={
+                  meta.readOnly ? undefined : () => setSaveDialogOpen(true)
+                }
                 triggerRef={cutMenuTriggerRef}
                 width={312}
                 tone="dark"
@@ -798,7 +800,10 @@ export function VizFullscreen() {
                 menu's own "Edit bands…" row renders disabled for a viewer
                 who cannot change this workspace's bands, and `enterEdit`
                 refuses them as well. */}
-              {bandKindFor(cut) !== null && (
+              {/* Not on the public share page: the menu's rows change or
+                  explain a workspace's bands, and a reader there has no
+                  workspace. The bands themselves still draw. */}
+              {bandKindFor(cut) !== null && !meta.readOnly && (
                 <>
                   <SlabDivider />
                   <span ref={bandsTriggerRef} className="contents">
@@ -848,20 +853,24 @@ export function VizFullscreen() {
           </div>
         </div>
 
-        <SaveViewDialog
-          open={saveDialogOpen}
-          onOpenChange={setSaveDialogOpen}
-          anchorRef={cutMenuTriggerRef}
-          cut={cut}
-          chart={state.chart}
-          filters={state.filters}
-          savedViews={meta.savedViews}
-          workspaceKind={meta.workspaceKind}
-          workspaceName={meta.workspaceName}
-          tone="dark"
-          side="top"
-          onSaved={(view) => setState((prev) => ({ ...prev, viewId: view.id }))}
-        />
+        {!meta.readOnly && (
+          <SaveViewDialog
+            open={saveDialogOpen}
+            onOpenChange={setSaveDialogOpen}
+            anchorRef={cutMenuTriggerRef}
+            cut={cut}
+            chart={state.chart}
+            filters={state.filters}
+            savedViews={meta.savedViews}
+            workspaceKind={meta.workspaceKind}
+            workspaceName={meta.workspaceName}
+            tone="dark"
+            side="top"
+            onSaved={(view) =>
+              setState((prev) => ({ ...prev, viewId: view.id }))
+            }
+          />
+        )}
       </div>
     </TooltipProvider>,
     document.body,

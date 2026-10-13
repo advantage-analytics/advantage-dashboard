@@ -1,7 +1,13 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Merge, Check, CornerDownRight, Plus } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Merge,
+  Check,
+  CornerDownRight,
+  Plus,
+} from "lucide-react";
 import {
   FloatMenu,
   FloatMenuItem,
@@ -32,7 +38,11 @@ import {
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { pointResetScope } from "@/lib/services/labels/reset";
 import type { TiebreakFold } from "@/lib/services/labels/tiebreak-fold";
-import { gameInSetOf } from "@/lib/services/labels/operations";
+import {
+  tiebreakServeReason,
+  type TiebreakServeOrder,
+} from "@/lib/services/labels/tiebreak-serve";
+import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
@@ -703,6 +713,54 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
     title: "Tiebreak at 6–6?",
     reason,
     action: operations?.onFoldTiebreak ? button : null,
+    actionLabel: label,
+    details,
+  });
+});
+
+/**
+ * A tiebreak off its serve order (tiebreak-serve.ts): a slot above the first
+ * point that is off it — a `server` the one-then-two-each order does not
+ * give, or a serve hit by the other player. "Fix serve order" rewrites every
+ * point's `server` from the order's first server, and a point whose strokes
+ * contradict its own switches players.
+ */
+export const BlackTiebreakServe = memo(function BlackTiebreakServe({
+  order,
+  names,
+  onFix,
+}: {
+  order: TiebreakServeOrder;
+  names: SideNames;
+  /** The console's fix; absent, the slot only reads. */
+  onFix?: (game: LabelGame) => void;
+}) {
+  const name = order.type === "tiebreak" ? "Tiebreak" : "Match tiebreak";
+  const reason = tiebreakServeReason(order, names);
+  const details = [
+    `${names[order.first]} serves first, then two points each in turn`,
+  ];
+  if (order.switched > 0) details.push(playersSwitchDetail(order.switched));
+  const label = "Fix serve order";
+  return gameSlot({
+    icon: ArrowLeftRight,
+    row: "tiebreak-serve",
+    anchor: order.off[0].pointId,
+    title: `${name} serve order is off`,
+    reason,
+    action: onFix ? (
+      <BlackTextAction
+        ink="amber"
+        data-tiebreak-serve-fix=""
+        aria-label={`${label}: ${reason}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onFix(order.game);
+        }}
+      >
+        {label}
+      </BlackTextAction>
+    ) : null,
     actionLabel: label,
     details,
   });

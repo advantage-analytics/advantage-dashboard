@@ -885,6 +885,7 @@ test.describe("the three tiers", () => {
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
     expect(counted.sort()).toEqual([
+      "first_serve_fault_alone",
       "last_call_overruled",
       "last_shot_unresolved",
       "pick_winner",

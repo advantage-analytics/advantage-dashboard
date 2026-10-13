@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseTypedName } from "@/lib/data/person-name-case";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/auth/safe-next";
+import { joinTokenFromPath } from "@/lib/services/programs/join-links";
 import {
   ACQUISITION_DETAIL_MAX,
   isAcquisitionSource,
@@ -61,7 +63,9 @@ const RESOLUTION: Record<
  * whichever action finishes the flow, never on its own: a person who types a
  * name and closes the tab has changed nothing, and is asked again next visit
  * with empty fields — the design's rule that the fields never prefill, from
- * the OAuth profile or from anywhere else. `parseTypedName` re-applies the
+ * the OAuth profile or from anywhere else. (One exception, decided 2026-10-11:
+ * the join-link name step opens on the name a coach already put on this
+ * person's roster row — see `OnboardingFlow`'s `join` prop.) `parseTypedName` re-applies the
  * blur casing and rejects a blank, so what is stored is what was seen and a
  * `""` never lands in a nullable column. Overwrites whatever
  * `handle_new_user` split out of the Google profile at signup, which is the
@@ -78,6 +82,7 @@ function parseNamePair(input: {
 }
 
 const NAME_ERROR = "Enter your first and last name.";
+const SAVE_ERROR = "We couldn't save that. Try again.";
 
 /**
  * The player's intake answers from screens 1.5 and 1.7, re-typed for the write.
@@ -207,7 +212,7 @@ export async function finishOnboarding(input: {
     if (error) {
       console.error("[onboarding] could not save", { message: error.message });
     }
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   // The dashboard layout read the null stamp when it bounced them here.
@@ -300,9 +305,61 @@ export async function finishGuardianOnboarding(input: {
         message: error.message,
       });
     }
-    return { ok: false, error: "We couldn't save that. Try again." };
+    return { ok: false, error: SAVE_ERROR };
   }
 
   revalidatePath("/dashboard", "layout");
   redirect("/dashboard");
+}
+
+/**
+ * The name step on its own, for someone about to join a program by link.
+ *
+ * `/join/<token>` sends a signed-in account with no name here before it shows
+ * a Join button, because joining marks the account onboarded and this flow
+ * would never run for them again. So this writes the two name columns and
+ * NOTHING else — no persona, no intake answers, and above all no
+ * `onboarded_at`: if they come back and decline the join, the ordinary
+ * onboarding is still theirs to answer.
+ *
+ * `next` comes from the query string, so it is clamped and then required to be
+ * a join link. This action is not a general "save a name and go anywhere".
+ */
+export async function saveNameThenJoin(input: {
+  firstName: string;
+  lastName: string;
+  next: string;
+}): Promise<{ ok: false; error: string }> {
+  const name = parseNamePair(input);
+  if (name === null) {
+    return { ok: false, error: NAME_ERROR };
+  }
+
+  const next = safeNext(typeof input?.next === "string" ? input.next : null);
+  if (joinTokenFromPath(next) === null) {
+    return { ok: false, error: SAVE_ERROR };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data, error } = await supabase
+    .from("users")
+    .update(name)
+    .eq("id", user.id)
+    .select("id");
+
+  if (error || !data?.length) {
+    if (error) {
+      console.error("[onboarding] could not save the name", {
+        message: error.message,
+      });
+    }
+    return { ok: false, error: SAVE_ERROR };
+  }
+
+  redirect(next);
 }

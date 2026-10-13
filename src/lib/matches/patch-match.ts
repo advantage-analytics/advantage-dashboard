@@ -128,7 +128,13 @@ export interface StoredMatchForPatch {
 
 export type PatchResult =
   | { ok: true; update: Record<string, unknown> }
-  | { ok: false; error: string; field?: string };
+  | { ok: false; error: string; field?: string; code?: string };
+
+/** The longest school name `opponent_school` keeps as typed. */
+export const OPPONENT_SCHOOL_MAX = 120;
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Fields a scheduled line decides. */
 const EVENT_OWNED_FIELDS = [
@@ -369,6 +375,60 @@ export function normalizeMatchPatch(
     }
     update.date = `${day}T12:00:00`;
   }
+
+  // The opponent's team: a directory program OR a school as typed, never both
+  // (`matches_opponent_program_or_school_check`). Each key is read only when
+  // the body carries it, so a save that did not touch the team cannot clear
+  // one. The route checks that the program exists before it is written.
+  if ("opponent_program_id" in body) {
+    const v = body.opponent_program_id;
+    if (v === null || v === "") {
+      update.opponent_program_id = null;
+    } else if (typeof v === "string" && UUID_PATTERN.test(v.trim())) {
+      update.opponent_program_id = v.trim().toLowerCase();
+    } else {
+      return {
+        ok: false,
+        error: "Choose their team from the list.",
+        field: "opponent_program_id",
+        code: "opponent_program_invalid",
+      };
+    }
+  }
+  if ("opponent_school" in body) {
+    const v = body.opponent_school;
+    const school = trimOrNull(v);
+    if (school === undefined) {
+      return {
+        ok: false,
+        error: "Enter their school as text.",
+        field: "opponent_school",
+        code: "opponent_school_invalid",
+      };
+    }
+    if (school !== null && school.length > OPPONENT_SCHOOL_MAX) {
+      return {
+        ok: false,
+        error: `Keep their school to ${OPPONENT_SCHOOL_MAX} characters.`,
+        field: "opponent_school",
+        code: "opponent_school_too_long",
+      };
+    }
+    update.opponent_school = school;
+  }
+  if (update.opponent_program_id != null && update.opponent_school != null) {
+    return {
+      ok: false,
+      error:
+        "An opponent's team is a program or a school as typed, not both. Send one and null the other.",
+      field: "opponent_school",
+      code: "opponent_team_exclusive",
+    };
+  }
+  // Setting one clears the other, so a body carrying a single key can never
+  // meet a leftover on the row and trip the either/or CHECK.
+  if (update.opponent_program_id != null) update.opponent_school = null;
+  else if (update.opponent_school != null) update.opponent_program_id = null;
 
   for (const [key, allowed] of Object.entries(HAND_FIELDS)) {
     if (!(key in body)) continue;
