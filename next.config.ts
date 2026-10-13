@@ -51,22 +51,21 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Turbopack will handle the dynamic imports correctly
   },
-  // The shared match report's Open Graph image reads its font and the
-  // wordmark PNG from disk at module scope (`src/app/m/[token]/
-  // opengraph-image.tsx`). A `readFile` on a computed path is invisible to
-  // the build's file tracing, so both are named here or the deployed
-  // function 500s looking for them.
-  outputFileTracingIncludes: {
-    "/m/[token]/opengraph-image": [
-      "./src/app/m/[token]/*.woff",
-      "./public/logos/logo-email.png",
-    ],
-    // The claim link's card borrows the same font and wordmark.
-    "/claim/[programKey]/opengraph-image": [
-      "./src/app/m/[token]/*.woff",
-      "./public/logos/logo-email.png",
-    ],
-  },
+  // Every shared link's Open Graph image is drawn by `src/lib/og/link-card.tsx`,
+  // which reads its fonts and the wordmark PNG from disk at module scope. A
+  // `readFile` on a computed path is invisible to the build's file tracing, so
+  // each card route names them here or the deployed function 500s looking for
+  // them.
+  outputFileTracingIncludes: Object.fromEntries(
+    [
+      "/m/[token]/opengraph-image",
+      "/claim/[programKey]/opengraph-image",
+      "/join/[token]/opengraph-image",
+    ].map((route) => [
+      route,
+      ["./src/app/m/[token]/*.woff", "./public/logos/logo-email.png"],
+    ]),
+  ),
   async headers() {
     return [
       {
