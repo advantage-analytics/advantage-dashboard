@@ -45,6 +45,16 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  * person could change it, and the only thing changing it can do is fail.
  */
 
+/**
+ * The Join button's label on the two-sided screens.
+ *
+ * Not the program's name. The heading beside it already says which program,
+ * and a name like "University of California, Los Angeles Men's Tennis" made
+ * the button as wide as the column and pushed "Not now" onto a line of its
+ * own. A button names its action; the page names its subject.
+ */
+const JOIN_LABEL = "Join team";
+
 /** Signed in as the invited address. One button. */
 export function JoinReady({
   token,
@@ -79,7 +89,7 @@ export function JoinReady({
             })
           }
         >
-          {pending ? "Joining…" : `Join ${programName}`}
+          {pending ? "Joining…" : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
       </ClaimActions>
@@ -186,7 +196,7 @@ export function JoinSignUp({
 
       <ClaimActions>
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
-          {pending ? "Joining…" : `Join ${programName}`}
+          {pending ? "Joining…" : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
         {/* Some of the people reading this have never chosen a password for
@@ -383,7 +393,7 @@ export function JoinLinkReady({
               : "Request to join"
             : pending
               ? "Joining…"
-              : `Join ${programName}`}
+              : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref(joinHref(token))} />
       </ClaimActions>
