@@ -8,6 +8,7 @@ import { getParser } from "@/lib/services/upload/parsers";
 import { validateSwingVisionFile } from "@/lib/services/upload/validators/swingvision-validator";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 import {
+  adminOpponentProgramExists,
   readAdminOpponentTeam,
   saveAdminOpponentTeam,
 } from "@/lib/admin/uploads/opponent-team";
@@ -135,6 +136,10 @@ export async function submitAdminMatchFile(
   const storagePath = `_admin-console/${operationId}/${itemId}/${sha256}.xlsx`;
   // This prefix cannot be written by a browser. Never overwrite a retry's bytes.
   const admin = deps.createAdminClient();
+  if (!(await adminOpponentProgramExists(admin, opponentTeam.team)))
+    return failure(
+      "That team isn't in the directory. Choose another, or type the school.",
+    );
   const stored = await admin.storage
     .from("match-data")
     .upload(storagePath, file, { upsert: false });

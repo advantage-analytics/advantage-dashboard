@@ -218,18 +218,31 @@ be. Doubles teams and existing users depend on it.
 > `event_entry_id`, or anything under `match_stats`, `points` or `shots`. A
 > player keeps the plain client UPDATE under the creator-only policy, on the
 > same two columns, for matches they recorded. The wizard and the Edit Match
-> dialog write the same two columns on their own match. Since 2026-10-13 the
-> admin console's wizard asks too: its two submission routes write the pair
-> onto the match they just created, scoped by `program_id`, after the RPC
-> (`src/lib/admin/uploads/opponent-team.ts`) — never on an attachment to a
-> recorded match, and neither column is one the `preserve_admin_*` triggers
-> hold. Unlike the earlier
+> dialog write the same two columns on their own match. Unlike the earlier
 > exceptions this one writes **no** `program_audit_log` row yet — a known gap,
 > to close before the action is offered beyond the drawer. Migrations:
 > `supabase/migrations/20261012003309_matches_opponent_program.sql` (the
 > columns), `20261012071550_set_opponent_team.sql` and
 > `20261012080828_set_opponent_team_lock_fix.sql` (the function; the first
 > version's lock-on-aggregate statement failed every call and was replaced).
+>
+> **A second writer of the same two columns, added 2026-10-13: the admin
+> console's upload wizard.** It is _not_ the action above and meets none of
+> its preconditions: a platform administrator, not the program's staff; the
+> service-role client, not `set_opponent_team`; one plain UPDATE with no row
+> lock. What keeps it narrow is where it runs — in the two console submission
+> services, after `checkAdmin` and after `admin_submit_match_video` /
+> `admin_submit_match_file` have admitted the operation — and what it can
+> reach: the match id the RPC itself returned, also matched on `program_id`,
+> only while both columns are still null (so a replay of the operation never
+> undoes a later edit), and never on an attachment to a recorded match, which
+> both routes refuse. A named program is checked against `programs` before
+> anything is created. Neither column is on the list the `preserve_admin_*`
+> triggers hold. It writes **no** `program_audit_log` row, and the team is not
+> part of the operation's stored request — the same open gap as above, now
+> with a second door. The other admin-console entries in this file describe
+> the RPCs and do not mention this follow-up write.
+> `src/lib/admin/uploads/opponent-team.ts`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

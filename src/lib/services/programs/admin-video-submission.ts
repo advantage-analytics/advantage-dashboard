@@ -5,6 +5,7 @@ import { getAdminUploadContext } from "@/lib/data/admin-upload-server";
 import { buildSplitStepJobRequest } from "@/lib/services/splitstep/job-request";
 import { UUID_RE as uuid, FINGERPRINT_RE } from "@/lib/admin/validation";
 import {
+  adminOpponentProgramExists,
   readAdminOpponentTeam,
   saveAdminOpponentTeam,
 } from "@/lib/admin/uploads/opponent-team";
@@ -106,6 +107,10 @@ export async function submitAdminMatchVideo(input: unknown, deps = defaults) {
       "This program is suspended, so video can't be submitted for it.",
     );
   const admin = deps.createAdminClient();
+  if (!(await adminOpponentProgramExists(admin, opponentTeam.team)))
+    return refuse(
+      "That team isn't in the directory. Choose another, or type the school.",
+    );
   const player = context.roster.find((p) => p.playerId === id("playerId"));
   let player1Name = player?.name ?? "",
     player2Name =

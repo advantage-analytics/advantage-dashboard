@@ -45,13 +45,18 @@ function harness(
     from: (table: string) => ({
       update: (values: Record<string, unknown>) => ({
         eq: (_: string, matchId: string) => ({
-          eq: async (__: string, programId: string) => {
-            calls.push({
-              name: `update:${table}`,
-              args: { values, matchId, programId },
-            });
-            return { error: null };
-          },
+          eq: (__: string, programId: string) => ({
+            // Only onto a match with no team yet: both columns `is null`.
+            is: (first: string) => ({
+              is: async (second: string) => {
+                calls.push({
+                  name: `update:${table}`,
+                  args: { values, matchId, programId, unset: [first, second] },
+                });
+                return { error: null };
+              },
+            }),
+          }),
         }),
       }),
       select: () => ({
@@ -258,6 +263,7 @@ test("their team is saved on the new match alone, and refused when malformed or 
     values: { opponent_program_id: id(7), opponent_school: null },
     matchId: id(5),
     programId: id(3),
+    unset: ["opponent_program_id", "opponent_school"],
   });
   const typed = harness();
   await submitAdminMatchVideo(

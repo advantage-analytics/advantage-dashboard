@@ -7,7 +7,8 @@
  * and on `opponent_program_id` / `opponent_school` alone — the two columns the
  * wizard, the Edit Match dialog and `set_opponent_team` already write, and
  * neither is on the list the `preserve_admin_*` triggers hold while a file or
- * video is in flight. A retry of the same operation writes the same answer.
+ * video is in flight. It lands only while the match has no team at all, so a
+ * replay of the operation never rewrites one that was set or corrected since.
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -56,13 +57,32 @@ export function readAdminOpponentTeam(
 }
 
 /**
+ * True when the program the request names exists. Asked before anything is
+ * created, so a made-up or deleted id is a refusal the administrator reads —
+ * not a foreign-key failure after the match is already saved.
+ */
+export async function adminOpponentProgramExists(
+  admin: AdminClient,
+  team: AdminOpponentTeam | null,
+): Promise<boolean> {
+  if (!team?.opponent_program_id) return true;
+  const { data, error } = await admin
+    .from("programs")
+    .select("id")
+    .eq("id", team.opponent_program_id)
+    .maybeSingle();
+  return !error && Boolean(data);
+}
+
+/**
  * Writes the team onto the match the submission just created. Scoped by
  * `program_id` as well as the id, so it can only land on a match of the
- * program the operation was admitted for.
+ * program the operation was admitted for, and only while both columns are
+ * still null — the RPCs answer a replay with the same match, and a replay
+ * must not undo a team set through Edit Match or the opponent drawer since.
  *
- * Returns false when it did not land (a program id that is not in the
- * directory fails the foreign key). The match and its analysis are already
- * saved by then, so callers report it rather than failing the submission.
+ * Returns false on an error. The match and its analysis are already saved by
+ * then, so the submission still succeeds and the miss is logged here.
  */
 export async function saveAdminOpponentTeam(
   admin: AdminClient,
@@ -74,7 +94,9 @@ export async function saveAdminOpponentTeam(
     .from("matches")
     .update(team)
     .eq("id", matchId)
-    .eq("program_id", programId);
+    .eq("program_id", programId)
+    .is("opponent_program_id", null)
+    .is("opponent_school", null);
   if (error) {
     console.error("[admin-uploads] opponent team not saved", {
       matchId,
