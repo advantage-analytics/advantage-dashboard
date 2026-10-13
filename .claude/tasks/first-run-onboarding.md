@@ -308,7 +308,7 @@ ready).
 
 ## T23 · Workspace switcher hint on first second workspace
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** src/components/dashboard/sidebar/workspace-row.tsx, src/components/dashboard/app-sidebar.tsx — guess (run `trace-route` for "the sidebar workspace switcher")

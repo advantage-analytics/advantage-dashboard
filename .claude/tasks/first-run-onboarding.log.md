@@ -215,3 +215,11 @@ is the runner's. Newest entries at the bottom.
 
 1. The opening poll runs every frame while another dialog stays open, with no timeout; pause it while the tab is hidden if it matters.
 2. If `when` turns false after the hint is open it stays open by design — check that suits the tray when an upload finishes mid-hint (T24).
+
+## T23 · Workspace switcher hint on first second workspace — done
+
+**gate:** mechanical pass (typecheck clean, lint 0 errors, format clean; full suite 5717 passed, 346 failed — all "Executable doesn't exist", environmental); completion `VERDICT: pass`.
+**changed:** `WorkspaceRow`'s trigger carries `data-tour="workspace-switcher"` (one button serves both widths); `AppSidebar` reads `available` and `viewer` from `useWorkspace()` and mounts `HintRunner hint="workspace-switcher"` once after the row, gated by `workspaceHintDue`. No new query, no `DashboardShell` prop, header untouched.
+**follow-ups:**
+
+1. For `/pr-check` Stage 3b to see the hint, the `EYES_ON_*` verifier account needs a team membership and a null `users.workspace_hint_done_at`.
