@@ -234,3 +234,13 @@ is the runner's. Newest entries at the bottom.
 1. Opening the tray while the hint shows leaves both boxes under the same trigger; close or suppress the hint when the tray opens (`HintRunner` has no external close today).
 2. The job row is created after the wizard's 300 ms refresh is scheduled; a slow insert defers the hint to the next render (not lost).
 3. `armed` is never cleared within the tab session.
+
+## T24 · Activity tray hint on first in-flight upload after leaving the wizard — done
+
+**gate:** retry after the block above. Mechanical pass (typecheck clean, lint 0 errors, format clean; full suite 5717 passed, 347 failed — all "Executable doesn't exist", environmental; hint-runner, tour-runner, tour-popover, activity-tray*, upload-paused-surfaces and onboarding-hints 94/94 under a temporary 1194 shim, since removed); completion `VERDICT: pass`.
+**changed:** Stash `86e22845` popped. Tray trigger carries `data-tour="activity-tray"`; `ActivityTray` mounts `HintRunner hint="activity-tray"` gated by `activityHintDue` (pathname from `usePathname()`, `armed` from a `match-created` listener mirrored to sessionStorage). Fix for the block: `upload-paused-surfaces.spec.ts`'s tray loader gains `usePathname` and a HintRunner marker. By the author's request in session ("close the hint when the tray opens"): `HintRunner` takes `resolved` — an open hint closes for good and is stamped once when it turns true (render-time close; the guard and `markTourDone` moved into an effect keyed on `finished`) — and the tray passes `resolved={isOpen}`; harness and spec case added.
+**follow-ups:**
+
+1. The job row is created after the wizard's 300 ms refresh is scheduled; a slow insert defers the hint to the next render (not lost).
+2. `armed` is never cleared within the tab session.
+3. `useActivityHintArmed` uses a set-state-in-effect lint exception for the post-mount sessionStorage read; `useSyncExternalStore` would avoid it.

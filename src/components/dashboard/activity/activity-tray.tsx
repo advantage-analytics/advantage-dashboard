@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
+import { unstable_rethrow, usePathname } from "next/navigation";
 import { Activity, ChevronRight, Users } from "lucide-react";
 import {
   Popover,
@@ -14,6 +14,8 @@ import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scop
 import { AnalysisProgressTrack } from "@/components/dashboard/matches/analysis-progress-track";
 import { StepMark } from "@/components/dashboard/shared/vertical-steps";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
+import { activityHintDue } from "@/lib/onboarding/hints";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -541,6 +543,8 @@ export function ActivityTray({
 }) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+  const armed = useActivityHintArmed(viewer.id);
 
   /**
    * Subscribe only when an update is actually coming.
@@ -623,6 +627,7 @@ export function ActivityTray({
         <PopoverTrigger asChild>
           <button
             type="button"
+            data-tour="activity-tray"
             aria-label={`Activity, ${detail}`}
             className={cn(
               "group relative flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none",
@@ -741,6 +746,60 @@ export function ActivityTray({
           />
         </Link>
       </PopoverContent>
+      {/* The first upload the viewer leaves running: the wizard is gone, and
+          this trigger is where the job is now. Popover Root renders no DOM, so
+          this sits beside the tray, not in it. Reads `inFlight` as computed
+          above — no query or subscription of its own. */}
+      <HintRunner
+        hint="activity-tray"
+        viewerId={viewer.id}
+        when={activityHintDue({
+          inFlightCount: inFlight.length,
+          onWizard: pathname.startsWith("/dashboard/matches/new"),
+          armed,
+          doneAt: viewer.activityHintDoneAt,
+        })}
+        // Opening the tray answers the hint: close it rather than stack two
+        // boxes under one trigger.
+        resolved={isOpen}
+      />
     </Popover>
   );
+}
+
+/**
+ * Whether the viewer started an upload from the wizard this session — the
+ * tray hint's `armed`. Set by the wizard's `match-created` event, which fires
+ * just before it navigates away and `router.refresh()`es 300 ms later; that
+ * refresh is what brings the new job into `feed.items`. Mirrored to
+ * `sessionStorage` so a remount between the two (the tray sits in a Suspense
+ * boundary the refresh re-runs) does not drop it. Storage can throw (private
+ * windows, blocked site data); the hint simply stays unarmed then.
+ */
+function useActivityHintArmed(viewerId: string): boolean {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    const key = `activity-hint-armed:${viewerId}`;
+    try {
+      // Read after mount, not in the initializer: the server render has no
+      // storage, and a different first client render would not hydrate.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (window.sessionStorage.getItem(key) === "1") setArmed(true);
+    } catch {
+      // Unreadable storage: unarmed until this mount sees the event.
+    }
+    const arm = () => {
+      setArmed(true);
+      try {
+        window.sessionStorage.setItem(key, "1");
+      } catch {
+        // The in-memory flag still holds for this mount.
+      }
+    };
+    window.addEventListener("match-created", arm);
+    return () => window.removeEventListener("match-created", arm);
+  }, [viewerId]);
+
+  return armed;
 }

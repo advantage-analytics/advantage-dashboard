@@ -203,6 +203,24 @@ test("Skip closes the hint and sets the guard", async ({ page }) => {
   ).toBe("1");
 });
 
+test("opening the tray answers its hint: the box closes and is stamped once", async ({
+  page,
+}) => {
+  await open(page, "?hint=activity-tray");
+  await expect(
+    page.getByRole("dialog", { name: "Your upload keeps going." }),
+  ).toBeVisible();
+  // The scrim takes no clicks, so the tray's own trigger is reachable.
+  await page.locator('[data-tour="activity-tray"]').click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual(["activity-tray"]);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("tour-done:activity-tray:viewer-1"),
+    ),
+  ).toBe("1");
+});
+
 test("the hint waits while another dialog is open, and opens once it closes", async ({
   page,
 }) => {

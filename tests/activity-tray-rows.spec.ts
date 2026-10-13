@@ -38,7 +38,10 @@ function LinkStub({
 const loader = createLoader({
   stubs: {
     "next/link": { __esModule: true, default: LinkStub },
-    "next/navigation": { unstable_rethrow: () => {} },
+    "next/navigation": {
+      unstable_rethrow: () => {},
+      usePathname: () => "/dashboard",
+    },
     "@/components/ui/popover": {
       Popover: passThrough,
       PopoverTrigger: passThrough,
@@ -66,6 +69,9 @@ const loader = createLoader({
           "data-tone": props.tone ?? "default",
           "aria-label": props.label,
         }),
+    },
+    "@/components/dashboard/onboarding/hint-runner": {
+      HintRunner: marker("HintRunner"),
     },
     "@/components/dashboard/workspace-provider": {
       useWorkspace: () => ({ viewer: { id: "viewer-1" } }),

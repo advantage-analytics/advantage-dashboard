@@ -31,8 +31,10 @@ import type { HintId } from "@/lib/onboarding/tours";
  * popover is a `role="dialog"` too, and it must not close itself over it.
  * If `when` turns false before it opens, it gives up and renders nothing.
  *
- * Done and Skip (the X, Escape) both close it for good: the this-session
- * guard (`tour-done:<hint>:<viewerId>`, the same key scheme as
+ * Done and Skip (the X, Escape) both close it for good, and so does
+ * `resolved` turning true while it shows — the person did the thing the hint
+ * points at (opened the tray it names), so it has nothing left to say and
+ * must not sit on top of what they opened. The this-session guard (`tour-done:<hint>:<viewerId>`, the same key scheme as
  * `TourRunner`'s) is set first, so it holds even when `markTourDone` fails.
  */
 
@@ -44,6 +46,12 @@ export interface HintRunnerProps {
   when: boolean;
   /** Facts the copy interpolates — the team's name for the switcher hint. */
   copyFacts?: HintCopyFacts;
+  /**
+   * The person did what the hint points at — the activity tray opened. An
+   * open hint closes for good (stamped, like Done); a hint not yet open is
+   * left alone, since it only opens when no dialog is up anyway.
+   */
+  resolved?: boolean;
 }
 
 const OPEN_DIALOG = '[role="dialog"]';
@@ -53,6 +61,7 @@ export function HintRunner({
   viewerId,
   when,
   copyFacts,
+  resolved = false,
 }: HintRunnerProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [finished, setFinished] = useState(false);
@@ -93,11 +102,21 @@ export function HintRunner({
   const finish = useCallback(() => {
     setFinished(true);
     setAnchor(null);
+  }, []);
+
+  // The anchor's own surface opened while the hint showed: it is answered.
+  // Adjusted during render (React's "state from a prop change" pattern), so
+  // the box is gone in the same commit the tray opens in.
+  if (resolved && !finished && anchor !== null) finish();
+
+  // Finished — by Done, Skip or `resolved` — stamps it, once. The guard is
+  // set before the action, so it holds for this session even when the action
+  // fails; the action never throws by contract.
+  useEffect(() => {
+    if (!finished) return;
     rememberSeen(hint, viewerId);
-    // The action never throws by contract; a transport failure still leaves
-    // the hint closed — the guard above already holds for this session.
     void markTourDone(hint).catch(() => undefined);
-  }, [hint, viewerId]);
+  }, [finished, hint, viewerId]);
 
   if (finished || !anchor) return null;
 

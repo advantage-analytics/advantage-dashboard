@@ -13,6 +13,9 @@ import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
  *   ?when=0         the hint is not due
  *   ?dialog=1       start with a `role="dialog"` element in the document —
  *                   BetaWelcome, or an open menu — that "Close dialog" removes
+ *
+ * Clicking the "Activity" anchor stands for opening the tray: it sets the
+ * runner's `resolved`, as `ActivityTray` passes its own open state.
  */
 
 const params = new URLSearchParams(window.location.search);
@@ -28,6 +31,7 @@ function Harness() {
   const [dialog, setDialog] = useState(params.get("dialog") === "1");
   const [runnerKey, setRunnerKey] = useState(0);
   const [mounted, setMounted] = useState(true);
+  const [trayOpen, setTrayOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.hydrated = "true";
@@ -42,7 +46,11 @@ function Harness() {
       </aside>
       <main style={{ flex: 1 }}>
         <header style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button type="button" data-tour="activity-tray">
+          <button
+            type="button"
+            data-tour="activity-tray"
+            onClick={() => setTrayOpen(true)}
+          >
             Activity
           </button>
         </header>
@@ -70,6 +78,7 @@ function Harness() {
             viewerId={VIEWER}
             when={WHEN}
             copyFacts={{ teamName: "Stanford Women's Tennis" }}
+            resolved={trayOpen}
           />
         )}
       </main>
