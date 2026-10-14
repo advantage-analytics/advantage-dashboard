@@ -313,14 +313,14 @@ export interface AskSourcesEvent {
   matches: AskSourceMatch[];
 }
 
-/** The answer is saved; `used` of `cap` questions are spent this month. */
+/** The answer is saved; `used` of `cap` questions are spent this month (`cap` null: no limit). */
 export interface AskDoneEvent {
   type: "done";
   conversationId: string;
   /** The saved answer's `ask_messages` id, for feedback on it. Absent if it could not be read. */
   answerId?: string;
   used: number;
-  cap: number;
+  cap: number | null;
 }
 
 /** The answer failed. `error` is the sentence to show, `code` the slug to branch on. */

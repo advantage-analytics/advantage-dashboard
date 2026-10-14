@@ -507,6 +507,17 @@ test.describe("sending", () => {
     expect(await sent(page)).toEqual([]);
   });
 
+  test("a platform admin past any count can still send, and sees no count", async ({
+    page,
+  }) => {
+    await openFixture(
+      page,
+      "?quota=unlimited&used=250&text=How+is+my+second+serve%3F",
+    );
+    await expect(send(page)).toBeEnabled();
+    await expect(count(page)).toHaveCount(0);
+  });
+
   test("one question short of the limit can still be sent", async ({
     page,
   }) => {

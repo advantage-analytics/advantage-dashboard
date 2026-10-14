@@ -19,6 +19,7 @@ import type { AskScope } from "@/lib/services/ask/scope";
  * Query string:
  * - `?used=<n>`   questions spent of 20 (default 12)
  * - `?quota=none` the count could not be read
+ * - `?quota=unlimited` a platform admin: no cap
  * - `?pending=1`  an answer is in flight
  * - `?text=<s>`   the draft the composer opens with
  * - `?scope=team` the team page: a program's players can be tagged, and each
@@ -100,7 +101,7 @@ const QUOTA: AskQuotaView | null =
     ? null
     : {
         used: Number(params.get("used") ?? 12),
-        cap: 20,
+        cap: params.get("quota") === "unlimited" ? null : 20,
         resetsOn: "2026-11-01",
       };
 

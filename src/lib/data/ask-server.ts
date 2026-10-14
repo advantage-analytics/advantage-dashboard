@@ -129,7 +129,8 @@ export const getAskTagOptions = cache(async function getAskTagOptions(
 export interface AskQuota {
   /** Questions spent this UTC month. */
   used: number;
-  cap: number;
+  /** Null for a platform admin: no monthly limit, though every question is still counted. */
+  cap: number | null;
   /** `YYYY-MM-DD`, the first day of next month. */
   resetsOn: string;
 }
@@ -161,7 +162,7 @@ export const getAskQuota = cache(
     } | null;
     if (
       typeof row?.used !== "number" ||
-      typeof row.cap !== "number" ||
+      (typeof row.cap !== "number" && row.cap !== null) ||
       typeof row.resets_on !== "string"
     ) {
       console.error("[ask] ask_quota() answered an unexpected shape");

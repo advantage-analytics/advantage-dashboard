@@ -116,7 +116,11 @@ const TAGS: AskTag[] = [
   { kind: "match", id: "m-0914", label: "Sep 14 · Marcus Hale" },
 ];
 
-const QUOTA: AskQuotaView = { used: 8, cap: 20, resetsOn: "2026-11-01" };
+const QUOTA = {
+  used: 8,
+  cap: 20,
+  resetsOn: "2026-11-01",
+} satisfies AskQuotaView;
 
 interface Chat {
   id: string;

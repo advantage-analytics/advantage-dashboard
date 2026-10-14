@@ -304,8 +304,10 @@ function RailIconButton({
  * calendar month.
  */
 function AskLimit({ quota }: { quota: AskQuotaView }) {
-  const used = Math.min(Math.max(quota.used, 0), quota.cap);
-  const left = quota.cap - used;
+  if (quota.cap === null) return <AskUnlimited used={quota.used} />;
+  const cap = quota.cap;
+  const used = Math.min(Math.max(quota.used, 0), cap);
+  const left = cap - used;
 
   return (
     <div
@@ -324,15 +326,15 @@ function AskLimit({ quota }: { quota: AskQuotaView }) {
           aria-hidden="true"
           className="font-mono text-[10px] text-[var(--ink-500)] tabular-nums"
         >
-          {used} / {quota.cap}
+          {used} / {cap}
         </p>
       </div>
       <span
         role="img"
-        aria-label={`${used} of ${quota.cap} questions used`}
+        aria-label={`${used} of ${cap} questions used`}
         className="flex gap-[3px]"
       >
-        {Array.from({ length: quota.cap }, (_, index) => (
+        {Array.from({ length: cap }, (_, index) => (
           <span
             key={index}
             data-ask-unit={index < used ? "used" : "left"}
@@ -344,6 +346,27 @@ function AskLimit({ quota }: { quota: AskQuotaView }) {
         ))}
       </span>
       <p className="text-[11px] text-[var(--ink-500)]">Resets on the 1st</p>
+    </div>
+  );
+}
+
+/**
+ * A platform admin's allowance: no limit, so no meter and nothing left to
+ * count down — only how many have been asked this month, which is still
+ * counted (each one is a model call someone pays for).
+ */
+function AskUnlimited({ used }: { used: number }) {
+  return (
+    <div
+      data-ask-rail="limit"
+      className="flex flex-col gap-1 border-t border-[var(--border-hairline)] px-5 pt-3.5 pb-4"
+    >
+      <p data-ask-left="" className="text-[12px] text-[var(--ink-900)]">
+        Unlimited questions
+      </p>
+      <p className="text-[11px] text-[var(--ink-500)] tabular-nums">
+        {Math.max(used, 0)} asked this month
+      </p>
     </div>
   );
 }

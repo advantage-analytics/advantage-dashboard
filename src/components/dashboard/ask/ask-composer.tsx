@@ -29,7 +29,8 @@ import type { AskQuestion, AskTag } from "./use-ask-stream";
  */
 export interface AskQuotaView {
   used: number;
-  cap: number;
+  /** Null for a platform admin: no limit, so no count against one. */
+  cap: number | null;
   resetsOn: string | null;
 }
 
@@ -133,7 +134,8 @@ export function AskComposer({
     token !== null && !(flat.length === 0 && /\s/.test(token.query));
   const open = tagging && showable;
 
-  const atLimit = quota !== null && quota.used >= quota.cap;
+  const atLimit =
+    quota !== null && quota.cap !== null && quota.used >= quota.cap;
   // A question needs a word in it. A lone `@` — what the tag button types —
   // is the start of a tag, not something to send.
   const canSend = /[^\s@]/.test(value.text) && !pending && !atLimit;
@@ -415,7 +417,7 @@ export function AskComposer({
 
           <div className="flex-1" />
 
-          {quota && (
+          {quota && quota.cap !== null && (
             <p
               data-ask-count=""
               className="font-mono text-[11px] text-[var(--ink-600)] tabular-nums"
