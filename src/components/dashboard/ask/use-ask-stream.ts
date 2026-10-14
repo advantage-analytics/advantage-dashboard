@@ -140,8 +140,10 @@ export interface AskThreadState {
   draft: AskQuestion;
   /** The last question's refusal, until the next one is sent. */
   refusal: AskRefusal | null;
-  /** The count from the last `done` (or a 429's detail); null until one arrives. */
-  /** `cap` null: a platform admin, with no limit. */
+  /**
+   * The count from the last `done` (or a 429's detail); null until one arrives.
+   * `cap` null: a platform admin, with no limit.
+   */
   usage: { used: number; cap: number | null } | null;
 }
 
