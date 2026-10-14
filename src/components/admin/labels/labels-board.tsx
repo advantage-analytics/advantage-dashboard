@@ -233,12 +233,7 @@ function ProgramDropdown({
             <span className="eyebrow-sm">Match</span>
             <span className="eyebrow-sm">Analysed</span>
             <span className="eyebrow-sm">Points</span>
-            <span
-              className="eyebrow-sm"
-              title="The analysis's own marks on the points, before anyone labelled them. Open a match for what is still left to check."
-            >
-              Flagged at upload
-            </span>
+            <span className="eyebrow-sm">Flagged at upload</span>
             <span className="eyebrow-sm">Status</span>
             <span aria-hidden="true" />
           </div>
