@@ -87,7 +87,11 @@ import {
   type IdentityMatchStatus,
   type OpponentTeamProgram,
 } from "./types";
-import { opponentTeamIsEmpty, opponentTeamUpdate } from "./opponent-team";
+import {
+  opponentTeamColumns,
+  opponentTeamIsEmpty,
+  opponentTeamUpdate,
+} from "./opponent-team";
 import {
   deleteMatchDraft,
   deleteMatchDraftsForMatch,
@@ -3207,6 +3211,17 @@ export function useUploadMatchWizard({
                 date: formData.date,
                 courtType: formData.courtType,
               };
+          // Their team, new matches only — an attachment keeps the recorded
+          // match as it is. Only the key that has a value is sent: the file
+          // route reads a form, where a null would arrive as the word.
+          const team = opponentTeamColumns(formData);
+          const opponentTeam = attachment
+            ? {}
+            : team.opponent_program_id
+              ? { opponentProgramId: team.opponent_program_id }
+              : team.opponent_school
+                ? { opponentSchool: team.opponent_school }
+                : {};
           let response: Response;
           if (isProcessingProvider) {
             response = await fetch("/api/admin/uploads/video", {
@@ -3219,6 +3234,7 @@ export function useUploadMatchWizard({
                   ? {}
                   : {
                       opponentName: formData.opponentName,
+                      ...opponentTeam,
                       bestOf: Number(formData.bestOf),
                       score: adminVideoScore(formData),
                     }),
@@ -3241,6 +3257,7 @@ export function useUploadMatchWizard({
                     matchType:
                       formData.matchType === "Doubles" ? "Doubles" : "Singles",
                   }),
+              ...opponentTeam,
             }))
               body.set(key, String(value));
             const fallbackMessage =
