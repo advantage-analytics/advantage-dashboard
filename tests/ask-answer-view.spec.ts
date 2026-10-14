@@ -800,3 +800,47 @@ test.describe("on the team page", () => {
     await expect(visual(page)).toContainText("Your average");
   });
 });
+
+test.describe("a clarifying question", () => {
+  test("asks in the claim's place, offers its choices, and is not an alert", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=clarify");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(
+      page.getByText("Whose forehand should this count?"),
+    ).toHaveCount(1);
+    const choices = page.getByRole("button");
+    await expect(choices).toHaveText(["Ana Sokolov", "Theo Lindqvist"]);
+    await expect(
+      page.getByText("Asking doesn't use a question", { exact: false }),
+    ).toHaveCount(1);
+    // Nothing of an answer: no figures, no sources.
+    await expect(figures(page)).toHaveCount(0);
+    await expect(page.getByText(/Computed from/)).toHaveCount(0);
+
+    await choices.nth(1).click();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __askChosen?: string }).__askChosen,
+      ),
+    ).toBe("Theo Lindqvist");
+  });
+});
+
+test("a pattern answer's source row opens the Video view on its points", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=watch");
+  const watch = page.getByRole("link", { name: /Watch 4 points/ });
+  await expect(watch).toHaveCount(1);
+  await expect(watch).toHaveAttribute(
+    "href",
+    "/dashboard/matches/match-sep-28?tab=film&f=cp.y_cd.dl",
+  );
+  // A row with no link opens its match report as before.
+  await expect(page.getByRole("link", { name: /Marcus Hale/ })).toHaveAttribute(
+    "href",
+    "/dashboard/matches/match-sep-14",
+  );
+});

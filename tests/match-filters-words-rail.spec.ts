@@ -117,6 +117,31 @@ test.describe("applied-words", () => {
     ]);
   });
 
+  test("Custom › Stroke and the Then shot read in rally order, Then after Custom", () => {
+    expect(
+      appliedPhrases(
+        filtersWith({
+          thenDirection: ["Down the Line"],
+          thenStroke: ["Overhead"],
+          thenPlayer: "opponent",
+          thenSide: ["ad"],
+          thenRallyShot: [5],
+          customStroke: ["Forehand"],
+          customPlayer: "you",
+        }),
+        NAMES,
+      ),
+    ).toEqual([
+      "a shot by Rudy",
+      "a forehand",
+      "then a shot by Sam",
+      "then from the ad side",
+      "then an overhead",
+      "then down the line shot",
+      "then rally shot 5",
+    ]);
+  });
+
   test("no filters, no words", () => {
     expect(appliedPhrases(EMPTY_MATCH_FILTERS, NAMES)).toEqual([]);
   });

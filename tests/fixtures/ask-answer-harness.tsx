@@ -24,6 +24,10 @@ import type { AskScope } from "@/lib/services/ask/scope";
  *                      interrupted stream
  * - `?case=old`        saved before the notice existed: the no-advice
  *                      sentence is the end of its body
+ * - `?case=clarify`    Ask asking which was meant, with two choices; a pick
+ *                      is written to `window.__askChosen`
+ * - `?case=watch`      a pattern answer: the first source carries a
+ *                      "Watch N points" link into its Video view
  *
  * On any case:
  * - `&visual=bars|table|trend|split|serve|form`  the answer carries that
@@ -244,6 +248,31 @@ function answerFor(name: string): AskAnswerState {
         noAdvice: false,
         body: `${FULL.body}\n\n${ASK_NO_ADVICE_SENTENCE}`,
       };
+    case "clarify":
+      return {
+        ...PARTIAL,
+        status: "error",
+        stage: null,
+        error: {
+          message: "Whose forehand should this count?",
+          code: "needs_clarification",
+          options: ["Ana Sokolov", "Theo Lindqvist"],
+        },
+      };
+    case "watch":
+      return {
+        ...FULL,
+        sources: [
+          {
+            ...SOURCES[0],
+            watch: {
+              href: "/dashboard/matches/match-sep-28?tab=film&f=cp.y_cd.dl",
+              points: 4,
+            },
+          },
+          ...SOURCES.slice(1),
+        ],
+      };
     case "error":
       return {
         ...PARTIAL,
@@ -260,6 +289,12 @@ function answerFor(name: string): AskAnswerState {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <AskAnswer answer={answerFor(params.get("case") ?? "full")} scope={TEAM} />,
+  <AskAnswer
+    answer={answerFor(params.get("case") ?? "full")}
+    scope={TEAM}
+    onChoose={(option) => {
+      (window as unknown as { __askChosen?: string }).__askChosen = option;
+    }}
+  />,
 );
 document.documentElement.dataset.hydrated = "true";

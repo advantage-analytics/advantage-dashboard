@@ -56,6 +56,12 @@ const SHARED_ERRORS = {
     title: "The answer couldn't be completed",
     detail: "Ask the question again.",
   },
+  // The title is the question Ask is asking, which comes with the event;
+  // this one stands in only when it did not.
+  needs_clarification: {
+    title: "Which did you mean?",
+    detail: "Pick one, or type your own answer. Asking doesn't use a question.",
+  },
 } as const;
 
 /** The personal page's copy: one player, their own matches. */

@@ -45,6 +45,7 @@ const PLAYER_KEYS: ReadonlySet<MatchFilterKey> = new Set([
   "server",
   "resultPlayer",
   "customPlayer",
+  "thenPlayer",
 ]);
 
 function otherPlayer(side: PlayerSide): PlayerSide {

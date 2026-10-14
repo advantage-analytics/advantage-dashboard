@@ -71,6 +71,7 @@ import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
 import { isUuid } from "@/lib/admin/validation";
 import {
   getAskConversation,
+  getAskPageSeats,
   getAskQuota,
   getAskTagOptions,
   type AskTagOptions,
@@ -492,6 +493,7 @@ export async function POST(request: Request): Promise<Response> {
     conversationId: conversation?.id ?? null,
     reservation: reserved.reservation,
     scope,
+    pageSeats: getAskPageSeats,
   });
 
   try {

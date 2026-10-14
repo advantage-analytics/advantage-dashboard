@@ -4966,7 +4966,7 @@ components:
         rows:
           type: array
           minItems: 1
-          maxItems: 8
+          maxItems: 12
           items:
             type: object
             required: [label, cells]

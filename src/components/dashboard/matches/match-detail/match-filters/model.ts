@@ -30,11 +30,15 @@ export { POINT_SCORE_OPTIONS, type PointScoreOption } from "./score";
 /**
  * The shared match filters — ONE model behind the Film (Video) tab's filters
  * and the statistic cuts that open it (Score / Serve / Return / Result /
- * Custom). The Statistics tab itself is never filtered. Pure logic: no React, no
- * `next/navigation`, so Playwright specs import it directly.
+ * Custom / Then). The Statistics tab itself is never filtered. Pure logic: no
+ * React, no `next/navigation`, so Playwright specs import it directly.
  *
  * Combination rule, everywhere: OR within a group, AND across groups and
- * sections. An empty group is no constraint.
+ * sections. An empty group is no constraint. Custom and Then are the one
+ * exception, a SEQUENCE: each names one shot (every chosen group of it holding
+ * on that shot), and with both set the Then shot must come later in the same
+ * point than the Custom shot (`matchesShotSequence`). Either one alone is a
+ * single-shot rule.
  *
  * ── Player attribution (docs/ui-revamp-guardrails.md) ───────────────────────
  *
@@ -58,6 +62,8 @@ export type ReturnZone = "Down the Line" | "Middle" | "Crosscourt";
 export type ReturnContact = "inside" | "middle" | "neutral";
 export type ResultShot =
   "Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead";
+/** Custom › Stroke and Then › Stroke — a rally stroke; serves and feeds are none. */
+export type ShotStroke = "Forehand" | "Backhand" | "Volley" | "Overhead";
 /** Result › Outcome — always from YOUR side (`youIsPlayer1`). */
 export type ResultOutcome = "won" | "lost";
 /** Result › Ending — the point ended on a winner or an error. */
@@ -114,9 +120,20 @@ export interface MatchFilters {
   /* Custom — every chosen group must hold on ONE shot */
   readonly customPlayer: PlayerSide | null;
   readonly customSide: readonly CourtHalf[];
+  readonly customStroke: readonly ShotStroke[];
   readonly customDirection: readonly ShotDirection[];
   /** `shot.shotNumber`, 1 = the deciding serve. */
   readonly customRallyShot: readonly number[];
+  /*
+   * Then — a second shot, by Custom's own per-shot test. With Custom also
+   * set it must come LATER in the same point than the Custom shot; alone it
+   * is a single-shot rule like Custom.
+   */
+  readonly thenPlayer: PlayerSide | null;
+  readonly thenSide: readonly CourtHalf[];
+  readonly thenStroke: readonly ShotStroke[];
+  readonly thenDirection: readonly ShotDirection[];
+  readonly thenRallyShot: readonly number[];
 }
 
 export type MatchFilterKey = keyof MatchFilters;
@@ -133,6 +150,7 @@ const SINGLE_KEYS = [
   "court",
   "resultPlayer",
   "customPlayer",
+  "thenPlayer",
 ] as const satisfies readonly MatchFilterKey[];
 type SingleKey = (typeof SINGLE_KEYS)[number];
 
@@ -164,8 +182,14 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "resultRallyLength",
   "customPlayer",
   "customSide",
+  "customStroke",
   "customDirection",
   "customRallyShot",
+  "thenPlayer",
+  "thenSide",
+  "thenStroke",
+  "thenDirection",
+  "thenRallyShot",
 ];
 
 export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
@@ -191,8 +215,14 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   resultRallyLength: [],
   customPlayer: null,
   customSide: [],
+  customStroke: [],
   customDirection: [],
   customRallyShot: [],
+  thenPlayer: null,
+  thenSide: [],
+  thenStroke: [],
+  thenDirection: [],
+  thenRallyShot: [],
 });
 
 /* ── Option catalog ─────────────────────────────────────────────────────── */
@@ -213,6 +243,20 @@ const SIDE_OPTIONS: readonly FilterOption<CourtHalf>[] = [
 export const RALLY_SHOT_NUMBERS: readonly number[] = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 ];
+const STROKE_OPTIONS: readonly FilterOption<ShotStroke>[] = [
+  { value: "Forehand", label: "Forehand" },
+  { value: "Backhand", label: "Backhand" },
+  { value: "Volley", label: "Volley" },
+  { value: "Overhead", label: "Overhead" },
+];
+const DIRECTION_OPTIONS: readonly FilterOption<ShotDirection>[] = [
+  { value: "Crosscourt", label: "Crosscourt" },
+  { value: "Down the Line", label: "Down the line" },
+  { value: "Inside Out", label: "Inside out" },
+  { value: "Inside In", label: "Inside in" },
+];
+const RALLY_SHOT_OPTIONS: readonly FilterOption<number>[] =
+  RALLY_SHOT_NUMBERS.map((n) => ({ value: n, label: String(n) }));
 
 /**
  * The fixed options of each group, in panel order. `sets` is empty here: its
@@ -304,20 +348,18 @@ export const MATCH_FILTER_OPTIONS: {
   ],
   customPlayer: PLAYER_OPTIONS,
   customSide: SIDE_OPTIONS,
-  customDirection: [
-    { value: "Crosscourt", label: "Crosscourt" },
-    { value: "Down the Line", label: "Down the line" },
-    { value: "Inside Out", label: "Inside out" },
-    { value: "Inside In", label: "Inside in" },
-  ],
-  customRallyShot: RALLY_SHOT_NUMBERS.map((n) => ({
-    value: n,
-    label: String(n),
-  })),
+  customStroke: STROKE_OPTIONS,
+  customDirection: DIRECTION_OPTIONS,
+  customRallyShot: RALLY_SHOT_OPTIONS,
+  thenPlayer: PLAYER_OPTIONS,
+  thenSide: SIDE_OPTIONS,
+  thenStroke: STROKE_OPTIONS,
+  thenDirection: DIRECTION_OPTIONS,
+  thenRallyShot: RALLY_SHOT_OPTIONS,
 };
 
 export type MatchFilterSectionId =
-  "score" | "serve" | "return" | "result" | "custom";
+  "score" | "serve" | "return" | "result" | "custom" | "then";
 
 export interface MatchFilterGroup {
   key: MatchFilterKey;
@@ -399,8 +441,20 @@ export const MATCH_FILTER_SECTIONS: readonly {
     groups: [
       { key: "customPlayer", label: "Hit by" },
       { key: "customSide", label: "Side" },
+      { key: "customStroke", label: "Stroke" },
       { key: "customDirection", label: "Direction" },
       { key: "customRallyShot", label: "Hit", note: "1 = the serve" },
+    ],
+  },
+  {
+    id: "then",
+    label: "Then",
+    groups: [
+      { key: "thenPlayer", label: "Hit by" },
+      { key: "thenSide", label: "Side" },
+      { key: "thenStroke", label: "Stroke" },
+      { key: "thenDirection", label: "Direction" },
+      { key: "thenRallyShot", label: "Hit", note: "1 = the serve" },
     ],
   },
 ];
@@ -655,7 +709,7 @@ export function rallyLengthBandOf(rallyLength: number): RallyLengthBand | null {
   return "short";
 }
 
-function strokeOf(shotType: string | null | undefined): ResultShot | null {
+function strokeOf(shotType: string | null | undefined): ShotStroke | null {
   const t = lower(shotType);
   if (t.includes("overhead") || t.includes("smash")) return "Overhead";
   if (t.includes("volley")) return "Volley";
@@ -801,53 +855,156 @@ function matchesEnding(
   return by !== null && (pov === null || by === pov);
 }
 
-export function hasCustom(f: MatchFilters): boolean {
+/**
+ * One shot of the Custom → Then sequence: the groups Custom and Then share,
+ * read off either step's keys (`customStepOf`, `thenStepOf`), so both steps run
+ * through the one per-shot test (`shotMatchesStep`).
+ */
+export interface ShotStep {
+  readonly player: PlayerSide | null;
+  readonly side: readonly CourtHalf[];
+  readonly stroke: readonly ShotStroke[];
+  readonly direction: readonly ShotDirection[];
+  readonly rallyShot: readonly number[];
+}
+
+export function customStepOf(f: MatchFilters): ShotStep {
+  return {
+    player: f.customPlayer,
+    side: f.customSide,
+    stroke: f.customStroke,
+    direction: f.customDirection,
+    rallyShot: f.customRallyShot,
+  };
+}
+
+export function thenStepOf(f: MatchFilters): ShotStep {
+  return {
+    player: f.thenPlayer,
+    side: f.thenSide,
+    stroke: f.thenStroke,
+    direction: f.thenDirection,
+    rallyShot: f.thenRallyShot,
+  };
+}
+
+function stepIsSet(step: ShotStep): boolean {
   return (
-    f.customPlayer !== null ||
-    f.customSide.length > 0 ||
-    f.customDirection.length > 0 ||
-    f.customRallyShot.length > 0
+    step.player !== null ||
+    step.side.length > 0 ||
+    step.stroke.length > 0 ||
+    step.direction.length > 0 ||
+    step.rallyShot.length > 0
   );
 }
 
-/**
- * The same-shot rule: ONE shot must satisfy every chosen Custom group at
- * once. Shot numbers below 1 (feeds, faulted serves) never match.
- */
-function matchesCustom(
-  point: MatchPoint,
-  f: MatchFilters,
-  ctx: MatchFilterContext,
-): boolean {
-  return (point.shots ?? []).some((shot) => shotMatchesCustom(shot, f, ctx));
+export function hasCustom(f: MatchFilters): boolean {
+  return stepIsSet(customStepOf(f));
+}
+
+export function hasThen(f: MatchFilters): boolean {
+  return stepIsSet(thenStepOf(f));
 }
 
 /**
- * Whether ONE shot satisfies every chosen Custom group — `matchesCustom`'s
- * per-shot test, for a host that draws shots rather than points (the
- * Visualizations rally and errors cuts plot the shot itself, so it is the
- * shot, not merely its point, that must match).
+ * A rally shot's stroke for Custom/Then › Stroke — `finalShotOf`'s
+ * classifier, with serves and feeds never one (a serve row's type names no
+ * stroke, but a feed or serve is never a rally stroke whatever it says).
+ */
+export function shotStrokeOf(
+  shot: Pick<MatchShot, "shotType">,
+): ShotStroke | null {
+  if (isServeShotType(shot.shotType) || isFeedShotType(shot.shotType)) {
+    return null;
+  }
+  return strokeOf(shot.shotType);
+}
+
+/**
+ * Whether ONE shot satisfies every chosen group of `step` at once — the one
+ * per-shot test behind Custom and Then. Shot numbers below 1 (feeds, faulted
+ * serves) never match. Player resolves to a seat through `ctx.youIsPlayer1`.
+ */
+export function shotMatchesStep(
+  shot: MatchShot,
+  step: ShotStep,
+  ctx: MatchFilterContext,
+): boolean {
+  if (!(shot.shotNumber >= 1)) return false;
+  const player = step.player === null ? null : seatOf(step.player, ctx);
+  if (player !== null && shot.isPlayer1 !== player) return false;
+  if (step.rallyShot.length > 0) {
+    if (!step.rallyShot.includes(shot.shotNumber)) return false;
+  }
+  if (step.side.length > 0) {
+    const half = hitterHalf(shot);
+    if (half === null || !step.side.includes(half)) return false;
+  }
+  if (step.stroke.length > 0) {
+    const stroke = shotStrokeOf(shot);
+    if (stroke === null || !step.stroke.includes(stroke)) return false;
+  }
+  if (step.direction.length > 0) {
+    const dir = shotDirection(shot, handOf(shot.isPlayer1, ctx));
+    if (dir === null || !step.direction.includes(dir)) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether ONE shot satisfies every chosen Custom group — the per-shot test,
+ * for a host that draws shots rather than points (the Visualizations rally
+ * and errors cuts plot the shot itself, so it is the shot, not merely its
+ * point, that must match).
  */
 export function shotMatchesCustom(
   shot: MatchShot,
   f: MatchFilters,
   ctx: MatchFilterContext,
 ): boolean {
-  if (!(shot.shotNumber >= 1)) return false;
-  const player = f.customPlayer === null ? null : seatOf(f.customPlayer, ctx);
-  if (player !== null && shot.isPlayer1 !== player) return false;
-  if (f.customRallyShot.length > 0) {
-    if (!f.customRallyShot.includes(shot.shotNumber)) return false;
+  return shotMatchesStep(shot, customStepOf(f), ctx);
+}
+
+/** `shotMatchesCustom` for the Then step. */
+export function shotMatchesThen(
+  shot: MatchShot,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean {
+  return shotMatchesStep(shot, thenStepOf(f), ctx);
+}
+
+/**
+ * The Custom → Then rule for one point. Custom alone: some shot satisfies
+ * Custom. Then alone: some shot satisfies Then. Both: some shot A satisfies
+ * Custom and some shot B of the same point satisfies Then with
+ * `B.shotNumber > A.shotNumber` — strictly later, so one shot is never both
+ * steps. Neither set: true.
+ */
+export function matchesShotSequence(
+  point: Pick<MatchPoint, "shots">,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean {
+  const shots = point.shots ?? [];
+  const custom = customStepOf(f);
+  const then = thenStepOf(f);
+  const customSet = stepIsSet(custom);
+  const thenSet = stepIsSet(then);
+  if (!customSet && !thenSet) return true;
+  if (!thenSet) return shots.some((s) => shotMatchesStep(s, custom, ctx));
+  if (!customSet) return shots.some((s) => shotMatchesStep(s, then, ctx));
+  // The earliest Custom shot leaves the most room for a later Then shot.
+  let first = Infinity;
+  for (const s of shots) {
+    if (s.shotNumber < first && shotMatchesStep(s, custom, ctx)) {
+      first = s.shotNumber;
+    }
   }
-  if (f.customSide.length > 0) {
-    const half = hitterHalf(shot);
-    if (half === null || !f.customSide.includes(half)) return false;
-  }
-  if (f.customDirection.length > 0) {
-    const dir = shotDirection(shot, handOf(shot.isPlayer1, ctx));
-    if (dir === null || !f.customDirection.includes(dir)) return false;
-  }
-  return true;
+  if (first === Infinity) return false;
+  return shots.some(
+    (s) => s.shotNumber > first && shotMatchesStep(s, then, ctx),
+  );
 }
 
 function anyOf<T>(
@@ -979,8 +1136,8 @@ export function matchesPoint(
     return false;
   }
 
-  /* Custom */
-  if (hasCustom(f) && !matchesCustom(point, f, ctx)) return false;
+  /* Custom → Then */
+  if (!matchesShotSequence(point, f, ctx)) return false;
 
   return true;
 }
@@ -1135,6 +1292,22 @@ const SIDE_CODES: CodeTable<"court"> = [
   ["deuce", "d"],
   ["ad", "a"],
 ];
+/** Custom › Stroke and Then › Stroke — the same tokens as Result › Shot's. */
+const STROKE_CODES: CodeTable<"customStroke"> = [
+  ["Forehand", "fh"],
+  ["Backhand", "bh"],
+  ["Volley", "vo"],
+  ["Overhead", "oh"],
+];
+const DIRECTION_CODES: CodeTable<"customDirection"> = [
+  ["Crosscourt", "cc"],
+  ["Down the Line", "dl"],
+  ["Inside Out", "io"],
+  ["Inside In", "ii"],
+];
+const RALLY_SHOT_CODES: CodeTable<"customRallyShot"> = RALLY_SHOT_NUMBERS.map(
+  (n) => [n, String(n)],
+);
 
 const URL_CODEC: {
   readonly [K in MatchFilterKey]: {
@@ -1273,19 +1446,14 @@ const URL_CODEC: {
   },
   customPlayer: { key: "cp", codes: PLAYER_CODES },
   customSide: { key: "cs", codes: SIDE_CODES },
-  customDirection: {
-    key: "cd",
-    codes: [
-      ["Crosscourt", "cc"],
-      ["Down the Line", "dl"],
-      ["Inside Out", "io"],
-      ["Inside In", "ii"],
-    ],
-  },
-  customRallyShot: {
-    key: "cr",
-    codes: RALLY_SHOT_NUMBERS.map((n) => [n, String(n)]),
-  },
+  customDirection: { key: "cd", codes: DIRECTION_CODES },
+  customStroke: { key: "ck", codes: STROKE_CODES },
+  customRallyShot: { key: "cr", codes: RALLY_SHOT_CODES },
+  thenPlayer: { key: "tp", codes: PLAYER_CODES },
+  thenSide: { key: "ts", codes: SIDE_CODES },
+  thenStroke: { key: "tk", codes: STROKE_CODES },
+  thenDirection: { key: "td", codes: DIRECTION_CODES },
+  thenRallyShot: { key: "tr", codes: RALLY_SHOT_CODES },
 };
 
 const MAX_INT_CODE = 99;

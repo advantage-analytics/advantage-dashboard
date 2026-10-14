@@ -120,7 +120,7 @@ function pillLabels(html: string): string[] {
 }
 
 test.describe("FiltersPanel markup", () => {
-  test("title, Clear all, and sections in order Score, Serve, Return, Result, Custom", () => {
+  test("title, Clear all, and sections in order Score, Serve, Return, Result, Custom, Then", () => {
     const html = render(fullAvailability());
     // The dropdown trigger's look: the SlidersHorizontal glyph, then the word.
     expect(html).toMatch(
@@ -129,13 +129,21 @@ test.describe("FiltersPanel markup", () => {
     const order = [...html.matchAll(/data-section="([a-z]+)"/g)].map(
       (m) => m[1],
     );
-    expect(order).toEqual(["score", "serve", "return", "result", "custom"]);
+    expect(order).toEqual([
+      "score",
+      "serve",
+      "return",
+      "result",
+      "custom",
+      "then",
+    ]);
     expect(sectionHeaders(html).map((h) => h.title)).toEqual([
       "Score",
       "Serve",
       "Return",
       "Result",
       "Custom",
+      "Then",
     ]);
   });
 
@@ -179,9 +187,15 @@ test.describe("FiltersPanel markup", () => {
     expect(groupLabels("custom")).toEqual([
       "Hit by",
       "Side",
+      "Stroke",
       "Direction",
       "Hit",
     ]);
+    // Then is the same shot layout as Custom.
+    expect(groupLabels("then")).toEqual(groupLabels("custom"));
+    expect(pillLabels(sectionHtml(html, "then"))).toEqual(
+      pillLabels(sectionHtml(html, "custom")),
+    );
     expect(text(sectionHtml(html, "return"))).toContain("from the baseline");
     expect(text(sectionHtml(html, "result"))).toContain("from your side");
     expect(text(sectionHtml(html, "result"))).toContain("the last shot");
@@ -231,6 +245,9 @@ test.describe("FiltersPanel markup", () => {
     expect(text(html)).not.toContain("Winnner");
 
     const custom = pillLabels(sectionHtml(html, "custom"));
+    expect(custom).toEqual(
+      expect.arrayContaining(["Forehand", "Backhand", "Volley", "Overhead"]),
+    );
     expect(custom.slice(-12)).toEqual([
       "1",
       "2",
@@ -336,6 +353,7 @@ test.describe("FiltersPanel markup", () => {
       Return: "false",
       Result: "true",
       Custom: "false",
+      Then: "false",
     });
   });
 });
@@ -517,6 +535,7 @@ test.describe("FiltersPanel header, summaries and footer", () => {
       Return: "Federico Gomez returning",
       Result: "Any",
       Custom: "Any",
+      Then: "Any",
     });
     expect(
       sectionSummary(
@@ -525,6 +544,19 @@ test.describe("FiltersPanel header, summaries and footer", () => {
         { you: "a", opponent: "b" },
       ),
     ).toBe("Set 1 · set 2 · 40-Ad");
+    // Then's player pill prints the name, like Custom's.
+    expect(
+      sectionSummary(
+        {
+          ...EMPTY_MATCH_FILTERS,
+          thenPlayer: "opponent",
+          thenStroke: ["Backhand"],
+          thenDirection: ["Down the Line"],
+        },
+        "then",
+        { you: "a", opponent: "b" },
+      ),
+    ).toBe("b · backhand · down the line");
   });
 
   test("no Any pill; Points is a 5-column grid with Ad-40 right of 40-40 and 40-Ad beneath", () => {
@@ -538,6 +570,9 @@ test.describe("FiltersPanel header, summaries and footer", () => {
     expect(sectionHtml(html, "return")).toContain("follows the server");
     expect(text(sectionHtml(html, "custom"))).toContain(
       "One shot in the rally has to match every choice here.",
+    );
+    expect(text(sectionHtml(html, "then"))).toContain(
+      "A later shot in the same point, matching every choice here.",
     );
   });
 

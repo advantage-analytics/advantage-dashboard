@@ -28,8 +28,8 @@ import {
 } from "./panel-draft";
 
 /**
- * The shared match filters panel — Score / Serve / Return / Result / Custom —
- * driven entirely by `model.ts`'s catalog (`MATCH_FILTER_SECTIONS`,
+ * The shared match filters panel — Score / Serve / Return / Result / Custom /
+ * Then — driven entirely by `model.ts`'s catalog (`MATCH_FILTER_SECTIONS`,
  * `MATCH_FILTER_OPTIONS`); no option label is declared here. The Video tab
  * hosts it twice: the report's 340px filters drawer (`filter-rail.tsx`) and
  * the fullscreen film room's points drawer (`film/film-advanced-panel.tsx`).
@@ -274,6 +274,11 @@ function FilterSection({
         {section.id === "custom" && (
           <p className="text-micro">
             One shot in the rally has to match every choice here.
+          </p>
+        )}
+        {section.id === "then" && (
+          <p className="text-micro">
+            A later shot in the same point, matching every choice here.
           </p>
         )}
         {section.groups.map((g) => (

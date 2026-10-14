@@ -1,4 +1,4 @@
-import { UUID_RE } from "@/lib/admin/validation";
+import { isUuid, UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
 import {
   ASK_ANSWER_FAILED_MESSAGE,
@@ -54,6 +54,39 @@ import {
   buildPlanPrompt,
   oneLine,
 } from "@/lib/services/ask/prompts";
+import {
+  type AskPattern,
+  type AskPatternNames,
+  type AskPatternReading,
+  asksForPattern,
+  buildPatternAnswer,
+  buildPatternPrompt,
+  namesSequence,
+  patternAnswerRows,
+  patternNeedsPlayer,
+  patternSql,
+  readPatternReply,
+} from "@/lib/services/ask/pattern";
+import { patternVideoHref } from "@/lib/services/ask/pattern-video";
+import type { AskPageSeat } from "@/lib/data/ask-server";
+import {
+  ASK_NO_SHOTS_MESSAGE,
+  type AskPlaysSubject,
+  asksForLosingPlays,
+  buildLosingPlaysAnswer,
+  losingPlaysSql,
+  losingPlaysSubject,
+  losingPlaysVoice,
+} from "@/lib/services/ask/plays";
+import {
+  asksForServePlusOne,
+  buildServePlusOneAnswer,
+  continuesServePlusOne,
+  servePlusOneRequest,
+  servePlusOneRequestOfSql,
+  servePlusOneSql,
+  type AskServePlusOne,
+} from "@/lib/services/ask/serve-plus-one";
 import {
   ASK_REVIEW_SQL,
   type AskReviewMode,
@@ -219,6 +252,12 @@ export interface AskQuestionInput {
   reservation: AskReservation | null;
   /** Whose matches the question is about; the route has already checked membership. */
   scope: AskScope;
+  /**
+   * The match page's seat per match (`getAskPageSeats`), for pattern
+   * answers' "Watch" links: a link is attached only where the page seats the
+   * viewer where Ask does. Without it, no answer carries a link.
+   */
+  pageSeats?: (matchIds: string[]) => Promise<Map<string, AskPageSeat>>;
 }
 
 // ── Sentences the error events carry ─────────────────────────────────────────
@@ -722,6 +761,12 @@ type PlanStep =
       reply: string;
       /** True when the server chose the plan itself: nothing to send back to the planner. */
       forced?: boolean;
+      /** Set when the sql is `plays.ts`'s losing-plays query, for this side. */
+      plays?: AskPlaysSubject;
+      /** Set when the sql is `pattern.ts`'s query for this pattern. */
+      pattern?: AskPattern;
+      /** Set when the sql is `serve-plus-one.ts`'s breakdown, for this request. */
+      plusOne?: AskServePlusOne;
     }
   | { ok: false; refusal: string; advice: boolean }
   | { ok: false; problem: PlanProblem; reply: string }
@@ -788,6 +833,94 @@ export async function* askQuestion(
     let reviewText: string | null = null;
     let queried = false;
     let followUpRefusalRetried = false;
+    // A shot pattern, read once by the reading step (`pattern.ts`). Never in
+    // mock mode: its plan is fixed and there is no model to read with.
+    const patternAsked =
+      model.configured &&
+      asksForPattern(input.question) &&
+      // "All his serve +1 patterns" is the breakdown, not one pattern.
+      !asksForServePlusOne(input.question) &&
+      (!asksForLosingPlays(input.question) || namesSequence(input.question));
+    let patternRead = false;
+    /**
+     * The matches a "Watch" link may be attached to: those the page seats the
+     * viewer in exactly where Ask does, read off the same point — Ask's
+     * `i_served` against the page's server seat.
+     */
+    const linkableMatches = async (
+      rows: readonly AskRow[],
+      scopeSql: string,
+    ): Promise<Set<string>> => {
+      const ids = rows.flatMap((row) =>
+        typeof row.match_id === "string" &&
+        typeof row.points === "number" &&
+        row.points > 0 &&
+        isUuid(row.match_id)
+          ? [row.match_id]
+          : [],
+      );
+      if (ids.length === 0 || !input.pageSeats) return new Set();
+      const seats = await input.pageSeats(ids).catch(() => null);
+      if (!seats || seats.size === 0) return new Set();
+      const checks = [...seats].map(
+        ([id, seat]) =>
+          `(p.match_id = '${id}' and p.point_number = ${Math.trunc(seat.pointNumber)})`,
+      );
+      const read = await runQuery(
+        db,
+        {
+          scope_sql: scopeSql,
+          sql: `select p.match_id, p.i_served from ask.points p where p.match_id in (select match_id from scope) and (${checks.join(" or ")})`,
+          asks_for_advice: false,
+        },
+        scope,
+      );
+      if (!read.ok) return new Set();
+      const linkable = new Set<string>();
+      for (const row of read.result.rows) {
+        const seat =
+          typeof row.match_id === "string" ? seats.get(row.match_id) : null;
+        if (!seat || typeof row.i_served !== "boolean") continue;
+        const mineIsPlayer1 = row.i_served
+          ? seat.serverIsPlayer1
+          : !seat.serverIsPlayer1;
+        if (mineIsPlayer1 === seat.youIsPlayer1) {
+          linkable.add(row.match_id as string);
+        }
+      }
+      return linkable;
+    };
+    const readPattern = async (): Promise<AskPatternReading> => {
+      const opponentTag = input.tags.prompt.find(
+        (tag) => tag.kind === "opponent",
+      );
+      const playerTag = input.tags.prompt.find((tag) => tag.kind === "player");
+      try {
+        const reply = await collect(
+          await model.stream(
+            buildPatternPrompt({
+              names: {
+                mine: team
+                  ? playerTag?.kind === "player"
+                    ? playerTag.playerName
+                    : "the program's player"
+                  : "you",
+                opponent:
+                  opponentTag?.kind === "opponent"
+                    ? opponentTag.opponentName
+                    : "the opponent",
+              },
+              roster: [],
+              team,
+            }),
+            [{ role: "user", content: input.question }],
+          ),
+        );
+        return readPatternReply(reply);
+      } catch {
+        return { kind: "none" };
+      }
+    };
     // A first result that ran but whose baselines all equalled the scoped
     // figures, with those columns already left out. If the planner's second
     // try fails in any way, this is the answer: a result without a baseline
@@ -822,6 +955,18 @@ export async function* askQuestion(
       ? `${[...input.conversation].reverse().find((turn) => turn.role === "user")?.content ?? ""} ${input.question}`
       : input.question;
 
+    // The serve +1 breakdown, asked now or carried on from the last answer.
+    const previousPlusOne = servePlusOneRequestOfSql(previous?.sql ?? null);
+    const plusOneContinued =
+      previousPlusOne !== null &&
+      !asksForServePlusOne(input.question) &&
+      continuesServePlusOne(input.question);
+    const plusOne: AskServePlusOne | null = asksForServePlusOne(input.question)
+      ? servePlusOneRequest(input.question, input.tags.prompt, team)
+      : plusOneContinued
+        ? previousPlusOne
+        : null;
+
     // Three refusals the server does not accept, and one choice it makes
     // itself (`compare.ts`). Never in mock mode, whose plan is fixed.
     const reroute = (step: PlanStep): PlanStep => {
@@ -831,18 +976,72 @@ export async function* askQuestion(
         plan: AskPlanQuery,
         review: boolean,
         compare: CompareRequest | null,
+        plays?: AskPlaysSubject,
+        plusOne?: AskServePlusOne,
       ): PlanStep => ({
         ok: true,
         plan,
         review,
         compare,
         forced: true,
+        ...(plays ? { plays } : {}),
+        ...(plusOne ? { plusOne } : {}),
         reply: JSON.stringify(
           review
             ? { review: true, scope_sql: plan.scope_sql }
             : { compare: compare?.kind, scope_sql: plan.scope_sql },
         ),
       });
+      // "What are Rudy's serve +1 patterns?": every serve and the next shot,
+      // by zone, stroke and direction, from the shots — or a follow-up to
+      // that answer asking for more of it ("a table of all the plays
+      // compared?"), which keeps its player when it names no other.
+      if (plusOne !== null && (step.ok || refused)) {
+        const planned = step.ok ? step.plan.scope_sql : null;
+        const scopeSql =
+          plusOneContinued && previous !== null
+            ? planned === null || planned === ASK_ALL_MATCHES_SCOPE
+              ? previous.scope_sql
+              : planned
+            : (planned ?? tagScope ?? ASK_ALL_MATCHES_SCOPE);
+        return forced(
+          {
+            scope_sql: scopeSql,
+            sql: servePlusOneSql(plusOne),
+            asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+          },
+          false,
+          null,
+          undefined,
+          plusOne,
+        );
+      }
+      // "What are Eli's losing plays?": strokes and directions, from the
+      // shots. Only the planner's scope is kept — the fixed comparisons read
+      // match totals and cannot say which shot a point was lost on.
+      if (
+        !patternAsked &&
+        asksForLosingPlays(input.question) &&
+        (step.ok || refused)
+      ) {
+        const subject = losingPlaysSubject(
+          input.question,
+          input.tags.prompt,
+          team,
+        );
+        return forced(
+          {
+            scope_sql: step.ok
+              ? step.plan.scope_sql
+              : (tagScope ?? ASK_ALL_MATCHES_SCOPE),
+            sql: losingPlaysSql(subject),
+            asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+          },
+          false,
+          null,
+          subject,
+        );
+      }
       // "What should Rudy practice?" is the review of that scope, never
       // "practice sessions are not recorded".
       if (refused && asksWhatToWorkOn(input.question)) {
@@ -1071,9 +1270,43 @@ export async function* askQuestion(
       attempt < MAX_PLAN_ATTEMPTS && result === null;
       attempt += 1
     ) {
-      const step = reroute(
+      let step = reroute(
         await planOnce(model, systemPrompt, messages, cannotAnswer, team),
       );
+      // A shot pattern is read into a fixed form by the model and queried by
+      // the server (`pattern.ts`); only the planner's scope is kept. Read
+      // once: a reading that fails leaves the planner's own step.
+      if (patternAsked && !patternRead && (step.ok || "refusal" in step)) {
+        patternRead = true;
+        const reading = await readPattern();
+        if (reading.kind === "clarify") {
+          await release();
+          yield {
+            type: "error",
+            code: "needs_clarification",
+            error: reading.question,
+            options: reading.options,
+          };
+          return;
+        }
+        if (reading.kind === "pattern") {
+          step = {
+            ok: true,
+            plan: {
+              scope_sql: step.ok
+                ? step.plan.scope_sql
+                : (tagScope ?? ASK_ALL_MATCHES_SCOPE),
+              sql: patternSql(reading.pattern),
+              asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+            },
+            review: false,
+            compare: null,
+            forced: true,
+            pattern: reading.pattern,
+            reply: JSON.stringify({ pattern: reading.pattern }),
+          };
+        }
+      }
       if (!step.ok && fallback) {
         ({ plan, result } = fallback);
         break;
@@ -1133,7 +1366,11 @@ export async function* askQuestion(
           step.compare = { kind, measures: null };
         }
       }
-      const free = !step.review && step.compare === null;
+      const free =
+        !step.review &&
+        step.compare === null &&
+        step.plays === undefined &&
+        step.pattern === undefined;
       if (free) {
         step.plan.sql = withStoredSpelling(step.plan.sql);
         step.plan.scope_sql = withStoredSpelling(step.plan.scope_sql);
@@ -1288,6 +1525,107 @@ export async function* askQuestion(
         }
         ({ plan, result } = compared);
         reviewText = compared.text;
+        break;
+      }
+      if (step.pattern !== undefined && ran.matches.length > 0) {
+        plan = step.plan;
+        const rows = patternAnswerRows(ran.rows, ran.matches.length);
+        if (rows === null) {
+          result = { matches: ran.matches, rows: [] };
+          emptyReason = ASK_NO_SHOTS_MESSAGE;
+          break;
+        }
+        // A team pattern in "my" words over several players' matches is
+        // nobody's in particular: asked, whatever the model read.
+        const playerAsk = playerAskFor(
+          team,
+          input.question,
+          input.tags.prompt,
+          ran.matches,
+        );
+        if (playerAsk !== null) {
+          await release();
+          yield {
+            type: "error",
+            code: "needs_clarification",
+            error: playerAsk.question,
+            options: playerAsk.options,
+          };
+          return;
+        }
+        const names = patternNames(ran.matches);
+        const labels = new Map(
+          ran.matches.map((match) => [
+            match.matchId,
+            `${team && match.playerName ? `${match.playerName} vs ` : "vs "}${match.opponentName ?? "opponent"}`,
+          ]),
+        );
+        reviewText = buildPatternAnswer(rows, step.pattern, names, labels);
+        result = {
+          matches: withPatternLinks(
+            ran.matches,
+            rows,
+            step.pattern,
+            await linkableMatches(rows, step.plan.scope_sql),
+          ),
+          rows,
+        };
+        break;
+      }
+      if (step.plusOne !== undefined && ran.matches.length > 0) {
+        // The server's own query and answer, like the losing plays.
+        plan = step.plan;
+        // A team breakdown in "my" words over several players' serves is
+        // nobody's in particular: asked, as for a pattern.
+        const playerAsk = playerAskFor(
+          team,
+          input.question,
+          input.tags.prompt,
+          ran.matches,
+        );
+        if (playerAsk !== null) {
+          await release();
+          yield {
+            type: "error",
+            code: "needs_clarification",
+            error: playerAsk.question,
+            options: playerAsk.options,
+          };
+          return;
+        }
+        const plusOne = step.plusOne;
+        const written = buildServePlusOneAnswer(
+          ran.rows,
+          subjectVoice(plusOne.subject, ran.matches, team),
+          plusOne,
+        );
+        result = {
+          matches: ran.matches,
+          rows: written === null ? [] : ran.rows,
+        };
+        if (written === null) {
+          emptyReason = ASK_NO_SHOTS_MESSAGE;
+        } else {
+          reviewText = written;
+        }
+        break;
+      }
+      if (step.plays !== undefined && ran.matches.length > 0) {
+        // The server's own query and answer. No shot recorded in any match
+        // in scope is "no data", said as such — never the match totals.
+        plan = step.plan;
+        const rows = withScopeCount(ran.rows, ran.matches.length);
+        const written = buildLosingPlaysAnswer(
+          rows,
+          subjectVoice(step.plays, ran.matches, team),
+          ran.matches.length,
+        );
+        result = { matches: ran.matches, rows: written === null ? [] : rows };
+        if (written === null) {
+          emptyReason = ASK_NO_SHOTS_MESSAGE;
+        } else {
+          reviewText = written;
+        }
         break;
       }
       let resultRows = ran.rows;
@@ -2072,6 +2410,90 @@ function sourceMatch(value: unknown, team: boolean): AskSourceMatch | null {
 }
 
 // ── Answer step ──────────────────────────────────────────────────────────────
+
+/** A model reply, whole: the reading step wants JSON, not a stream. */
+async function collect(chunks: AsyncIterable<string>): Promise<string> {
+  let text = "";
+  for await (const chunk of chunks) text += chunk;
+  return text;
+}
+
+/** Who a losing-plays or serve +1 answer speaks about: the one name the matches agree on, or a plain word. */
+function subjectVoice(
+  subject: AskPlaysSubject,
+  matches: readonly AskSourceMatch[],
+  team: boolean,
+) {
+  return losingPlaysVoice(
+    subject,
+    onlyName(
+      matches.map((match) =>
+        subject === "opponent"
+          ? match.opponentName
+          : team
+            ? match.playerName
+            : null,
+      ),
+    ),
+  );
+}
+
+/** Asks which player when a team question in "my" words spans several players' matches. */
+function playerAskFor(
+  team: boolean,
+  question: string,
+  tags: readonly { kind: string }[],
+  matches: readonly AskSourceMatch[],
+) {
+  return patternNeedsPlayer({
+    team,
+    question,
+    rosterInScope: [
+      ...new Set(
+        matches.flatMap((match) =>
+          match.playerName ? [match.playerName] : [],
+        ),
+      ),
+    ],
+    playerTagged: tags.some((tag) => tag.kind === "player"),
+  });
+}
+
+/** The two sides as a pattern answer names them: one name the matches agree on, or a plain word. */
+function patternNames(matches: readonly AskSourceMatch[]): AskPatternNames {
+  return {
+    mine: onlyName(matches.map((match) => match.playerName)) ?? "you",
+    opponent:
+      onlyName(matches.map((match) => match.opponentName)) ?? "the opponent",
+  };
+}
+
+/**
+ * Each match the pattern came up in, with a link that opens those points in
+ * the match's Video view (`pattern-video.ts`) and the count it opens.
+ */
+function withPatternLinks(
+  matches: readonly AskSourceMatch[],
+  rows: readonly AskRow[],
+  pattern: AskPattern,
+  linkable: ReadonlySet<string>,
+): AskSourceMatch[] {
+  const points = new Map(
+    rows.flatMap((row) =>
+      typeof row.match_id === "string" && typeof row.points === "number"
+        ? [[row.match_id, row.points] as const]
+        : [],
+    ),
+  );
+  return matches.map((match) => {
+    const count = points.get(match.matchId) ?? 0;
+    // A match whose seats the page and Ask read differently gets no link: its
+    // "you" would be the other player.
+    if (count === 0 || !linkable.has(match.matchId)) return match;
+    const href = patternVideoHref(match.matchId, pattern);
+    return href ? { ...match, watch: { href, points: count } } : match;
+  });
+}
 
 /** Server-written answer text as the one-chunk stream the renderer takes. */
 async function* oneChunk(text: string): AsyncIterable<string> {

@@ -213,10 +213,10 @@ function AskThread({
     seen.current = state.exchanges.length;
   }, [state.exchanges.length]);
 
-  async function send() {
+  async function send(question?: AskExchange["question"]) {
     const first = state.conversationId === null;
-    const title = state.draft.text.trim();
-    const outcome = await ask();
+    const title = (question ?? state.draft).text.trim();
+    const outcome = await ask(question);
     if (outcome?.status !== "done" || !first) return;
 
     window.history.replaceState(
@@ -297,7 +297,7 @@ function AskThread({
       <AskComposer
         value={state.draft}
         onChange={setDraft}
-        onSubmit={send}
+        onSubmit={() => send()}
         tagOptions={tagOptions}
         scope={scope}
         quota={quotaView}
@@ -326,11 +326,21 @@ function AskThread({
           <h1 className="sr-only">Ask</h1>
           <div className={cn(ASK_SCROLL, ASK_GUTTER, "pt-7 pb-4")}>
             <div className={cn(ASK_COLUMN, "flex flex-col gap-8")}>
-              {state.exchanges.map((exchange) => (
+              {state.exchanges.map((exchange, index) => (
                 <AskExchangeView
                   key={exchange.id}
                   exchange={exchange}
                   scope={scope}
+                  // Only the latest question's choices can still be picked.
+                  onChoose={
+                    index === state.exchanges.length - 1
+                      ? (option) =>
+                          send({
+                            ...exchange.question,
+                            text: `${exchange.question.text} (${option})`,
+                          })
+                      : undefined
+                  }
                 />
               ))}
               <div ref={end} aria-hidden="true" />
@@ -359,15 +369,17 @@ function AskThread({
 function AskExchangeView({
   exchange,
   scope,
+  onChoose,
 }: {
   exchange: AskExchange;
   scope: AskScope;
+  onChoose?: (option: string) => void;
 }) {
   const { question, answer } = exchange;
   return (
     <article className="flex flex-col gap-8">
       <AskPrompt text={question.text} tags={question.tags} />
-      <AskAnswer answer={answer} scope={scope} />
+      <AskAnswer answer={answer} scope={scope} onChoose={onChoose} />
     </article>
   );
 }
