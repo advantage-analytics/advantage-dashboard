@@ -169,6 +169,8 @@ export function HintRunner({
       onNext={finish}
       onSkip={finish}
       side={HINT_SIDE[hint]}
+      // A hint may stay up while the person keeps working: no dimmed page.
+      dim={false}
     />
   );
 }

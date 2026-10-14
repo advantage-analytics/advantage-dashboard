@@ -4,8 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * How many of a player's own matches have a report to read — the number the
  * first-report tour (`firstReportTourEligible`, `src/lib/onboarding/tours.ts`)
- * and the getting-set-up line (`setupSteps`) key off: exactly one such match
- * opens the tour, more than one marks a veteran.
+ * keys off: exactly one such match opens the tour, more than one marks a
+ * veteran (and `20261014144110_users_onboarding_backfill.sql` settles
+ * existing veterans by the same definition).
  *
  * "Finished" means **a `match_stats` row exists for the match**. That is the
  * fact the codebase already uses to say a match has statistics:
@@ -29,8 +30,8 @@ import { createClient } from "@/lib/supabase/server";
  * One `head: true, count: "exact"` query: the `match_stats!inner` embed
  * (through `match_stats_match_id_fkey`) keeps only matches with at least one
  * stats row, and PostgREST counts the parent `matches` rows, so a match's two
- * seat rows (`unique (match_id, is_player1)`) count once. Request-cached: the
- * match page and the Home line may both ask in one render.
+ * seat rows (`unique (match_id, is_player1)`) count once. Request-cached, so
+ * a render that asks twice reads once.
  */
 export const countFinishedMatchesFor = cache(
   async (userId: string): Promise<number> => {

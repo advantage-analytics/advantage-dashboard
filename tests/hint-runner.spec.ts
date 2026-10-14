@@ -130,6 +130,8 @@ test("the hint opens anchored to its data-tour element, with no step bar, and st
   await expect(hint).not.toContainText("1 of 1");
   await expect(hint.getByRole("button", { name: "Done" })).toBeVisible();
   await expect(hint.getByRole("button", { name: "Back" })).toHaveCount(0);
+  // A hint may stay up while the person works: it never dims the page.
+  await expect(page.locator("[data-tour-spotlight]")).toHaveCount(0);
 
   // Anchored: opens to the right of the switcher, beside it vertically.
   const anchor = await page

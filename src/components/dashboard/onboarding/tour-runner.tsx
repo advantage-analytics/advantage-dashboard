@@ -74,7 +74,16 @@ export interface TourRunnerProps {
    * seen this session.
    */
   requested?: boolean;
+  /**
+   * Targets the page knows have nothing behind them, whose steps are dropped
+   * before the tour opens: the rail's Film and Visualizations rows always
+   * render, so the DOM alone cannot tell a match with no video, or no shots,
+   * from one that has them.
+   */
+  withhold?: readonly TourTarget[];
 }
+
+const NONE: readonly TourTarget[] = [];
 
 /** Frames to wait for a step's target before giving up on that step (~1s). */
 const TARGET_WAIT_FRAMES = 60;
@@ -93,7 +102,10 @@ export function TourRunner({
   viewerId,
   start,
   requested = false,
+  withhold = NONE,
 }: TourRunnerProps) {
+  // A stable key, so a fresh array each render does not re-run the opener.
+  const withheldKey = withhold.join(",");
   const { state, actions } = useMatchReport();
   // `actions` is rebuilt on every view change; the effects want the latest
   // `selectView` and view without re-running for them.
@@ -137,7 +149,9 @@ export function TourRunner({
       // Known absent: missing from the view it lives in. Anything else may
       // still appear once its step switches views.
       const view = viewRef.current;
+      const withheld = new Set(withheldKey.split(","));
       const missing = TOUR_TARGETS.filter((target) => {
+        if (withheld.has(target)) return true;
         const home = TOUR_TARGET_VIEW[target];
         return (home === null || home === view) && !findTarget(target);
       });
@@ -146,7 +160,7 @@ export function TourRunner({
       setRun((running) => running ?? { absent: new Set(missing), index: 0 });
     });
     return () => cancelAnimationFrame(frame);
-  }, [start, requested, tour, viewerId]);
+  }, [start, requested, tour, viewerId, withheldKey]);
 
   const finish = useCallback(() => {
     setRun(null);

@@ -469,7 +469,19 @@ export default async function MatchDetailPage({
               targets the report above has rendered. Mounted only when
               eligible, so every other render carries nothing of it. */}
           {firstReportTour && viewerId && (
-            <TourRunner tour="first-report" viewerId={viewerId} start />
+            <TourRunner
+              tour="first-report"
+              viewerId={viewerId}
+              start
+              // The rail always draws Film and Visualizations; a report with
+              // no playable video, or no shots, has nothing there to tour.
+              withhold={[
+                ...(video ? [] : (["film"] as const)),
+                ...((data.points ?? []).some((p) => (p.shots?.length ?? 0) > 0)
+                  ? []
+                  : (["shots"] as const)),
+              ]}
+            />
           )}
         </MatchReportProvider>
       </MatchFiltersProvider>

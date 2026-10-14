@@ -411,9 +411,7 @@ export function VizFocused({
       <VizToolbar
         className="viz-vt-toolbar"
         savedViews={savedViews}
-        onSaveRequest={
-          canSaveViews && !readOnly ? () => setSaveDialogOpen(true) : undefined
-        }
+        onSaveRequest={canSaveViews ? () => setSaveDialogOpen(true) : undefined}
         cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
@@ -688,7 +686,7 @@ export function VizFocused({
 
       {savedViewsBand}
 
-      {canSaveViews && !readOnly && (
+      {canSaveViews && (
         <SaveViewDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}

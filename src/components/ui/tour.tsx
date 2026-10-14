@@ -77,6 +77,12 @@ export interface TourPopoverProps {
   onSkip: () => void;
   /** Preferred side of the anchor; Radix flips it when there is no room. */
   side?: "top" | "right" | "bottom" | "left";
+  /**
+   * Dim the page around the anchor. On for a tour, which the person is in
+   * for a few steps; off for a one-card hint, which may stay up while they
+   * keep working and must not leave the app looking disabled.
+   */
+  dim?: boolean;
 }
 
 /** Breathing room between the anchor's edge and the spotlight's. */
@@ -98,6 +104,7 @@ export function TourPopover({
   onBack,
   onSkip,
   side = "bottom",
+  dim = true,
 }: TourPopoverProps) {
   const titleId = React.useId();
   const bodyId = React.useId();
@@ -127,7 +134,7 @@ export function TourPopover({
 
   return (
     <>
-      {open && <TourSpotlight anchor={anchor} />}
+      {open && dim && <TourSpotlight anchor={anchor} />}
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -263,9 +270,9 @@ type Box = { top: number; left: number; width: number; height: number };
 /**
  * The page dimmed around `anchor`. One fixed box over the anchor's rect whose
  * spread shadow paints the scrim across the rest of the viewport. The rect is
- * re-read every frame while it shows — scrolling, a view switching underneath
- * and layout shifts all move the anchor, and a per-frame read is the one
- * thing that tracks all three — but state only changes when it moved.
+ * re-read whenever something could have moved the anchor — a scroll, a
+ * resize, a change to the page — at most once a frame, and state only
+ * changes when it moved.
  */
 function TourSpotlight({ anchor }: { anchor: HTMLElement }) {
   const [box, setBox] = React.useState<Box | null>(null);
@@ -287,6 +294,7 @@ function TourSpotlight({ anchor }: { anchor: HTMLElement }) {
     let frame = 0;
     let last = "";
     const read = () => {
+      frame = 0;
       const r = anchor.getBoundingClientRect();
       const next = {
         top: Math.round(r.top) - SPOTLIGHT_PAD,
@@ -299,11 +307,35 @@ function TourSpotlight({ anchor }: { anchor: HTMLElement }) {
         last = key;
         setBox(next);
       }
-      frame = requestAnimationFrame(read);
     };
-    frame = requestAnimationFrame(read);
+    // Re-measured only when something could have moved it — a scroll
+    // anywhere (captured, so inner scroll panes count), a resize of the
+    // window or the anchor, or a change to the page around it — and at most
+    // once a frame. A page that sits still costs nothing.
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(read);
+    };
+    const resized = new ResizeObserver(schedule);
+    resized.observe(anchor);
+    const changed = new MutationObserver(schedule);
+    changed.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden"],
+    });
+    window.addEventListener("scroll", schedule, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("resize", schedule, { passive: true });
+    schedule();
     return () => {
-      cancelAnimationFrame(frame);
+      if (frame) cancelAnimationFrame(frame);
+      resized.disconnect();
+      changed.disconnect();
+      window.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
       window.clearTimeout(settle);
     };
   }, [anchor]);

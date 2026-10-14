@@ -164,6 +164,7 @@ export function FilmTab({
             entry={entry}
             unit={unit}
             playbackEndpoint={playbackEndpoint}
+            sharedLink={readOnlyProp}
           />
         </FilterRailProvider>
       </FilmReadOnlyContext>
@@ -207,10 +208,18 @@ function FilmRoom({
   entry,
   unit,
   playbackEndpoint,
+  sharedLink,
 }: {
   video: MatchVideo;
   entry: MatchFilmEntry;
   unit: DistanceUnit;
+  /**
+   * The public share page (`FilmTab`'s own `readOnly` prop), as opposed to
+   * a report that is read-only for another reason — the sample. Only a
+   * shared link's refused renewal means "the link stopped carrying the
+   * video"; the sample's means what it means anywhere else.
+   */
+  sharedLink: boolean;
   /**
    * Where the player renews its playback URL, resolved by `FilmTab`: the
    * share page's `/api/share/<token>/video`, the sample's
@@ -393,7 +402,7 @@ function FilmRoom({
   // file is still attached — and "Sign in again" (`denied`) is no help to a
   // reader who never signed in. Both say what actually happened instead.
   const problem =
-    readOnly &&
+    sharedLink &&
     (playback.problem?.reason === "removed" ||
       playback.problem?.reason === "denied")
       ? {
@@ -1099,9 +1108,6 @@ function FilmRoom({
             visiblePoints={filteredPoints}
             filmFilters={filmFilters}
             onToggleSaved={toggleSaved}
-            // A read-only room asks for no ball-paths file either: the
-            // sample's id names nothing to fetch.
-            readOnly={readOnly}
             // The room derives its own displayed point from its own playhead
             // — `displayedPointId` here is the shell's, and the shell's clock
             // does not move while the room is open.

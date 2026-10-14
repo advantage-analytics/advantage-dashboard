@@ -157,11 +157,6 @@ function ShotsTabBody() {
       readOnly={meta.readOnly}
     />
   );
-  // The wall's Saved collection would be an empty grid on a read-only report
-  // with nothing saved (its one item, "Create view", is a writer) — so the
-  // wall gets no band and drops the Default/Saved switch instead.
-  const wallSavedViewsBand =
-    canSaveViews || meta.savedViews.length > 0 ? savedViewsBand : undefined;
 
   return (
     <>
@@ -179,7 +174,9 @@ function ShotsTabBody() {
       <div inert={viewerOpen || undefined}>
         {state.cut === null ? (
           <VizWall
-            savedViewsBand={meta.readOnly ? undefined : wallSavedViewsBand}
+            // A read-only report has no Saved collection to switch to: its only
+            // item would be "Create view", a writer.
+            savedViewsBand={meta.readOnly ? undefined : savedViewsBand}
             collection={wallCollection}
             onCollectionChange={setWallCollection}
           />

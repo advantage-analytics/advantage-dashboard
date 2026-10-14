@@ -6,6 +6,7 @@ import {
   useMatchReport,
 } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
+import type { TourTarget } from "@/lib/onboarding/tours";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 
 /**
@@ -45,6 +46,10 @@ const TARGETS = (params.get("targets") ?? "scoreboard,insight,head-to-head")
 const TABS = params.get("tabs") === "1";
 const VIEWER = params.get("viewer") ?? "viewer-1";
 const REQUESTED = params.get("requested") === "1";
+/** `?withhold=a,b` — targets the page says have nothing behind them. */
+const WITHHOLD = (params.get("withhold") ?? "")
+  .split(",")
+  .filter(Boolean) as TourTarget[];
 window.__markTourDoneRejects = params.get("reject") === "1";
 window.__markTourDoneCalls = [];
 
@@ -150,6 +155,7 @@ function Harness() {
           viewerId={VIEWER}
           start
           requested={REQUESTED}
+          withhold={WITHHOLD}
         />
       )}
     </MatchReportProvider>

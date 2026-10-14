@@ -204,12 +204,6 @@ export interface FilmFullscreenProps {
    */
   onToggleSaved?: (pointId: string) => void;
   /**
-   * `MatchReportMeta.readOnly`, from `FilmRoom`. The room's one request of
-   * its own — the ball-paths file — is not made: the sample's placeholder id
-   * names no `/api/matches` row to ask. Defaults to `false`.
-   */
-  readOnly?: boolean;
-  /**
    * Follow-or-hold (T17 design), owned by `FilmRoom` so it outlives this
    * room. The state and the two callbacks are forwarded to the drawer's list
    * untouched; the DISPLAYED point is derived here from the room's own

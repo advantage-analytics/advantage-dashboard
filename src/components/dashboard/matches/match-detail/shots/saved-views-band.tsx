@@ -1051,7 +1051,7 @@ export function SavedViewsBand({
             );
           })}
 
-          {canSaveViews && !readOnly && (
+          {canSaveViews && (
             <div role="listitem">
               <NewViewTile hrefFor={hrefFor} />
             </div>

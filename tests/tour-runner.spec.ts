@@ -188,6 +188,18 @@ test("an absent middle target drops its step, and Skip closes through a failing 
   ).toBe("1");
 });
 
+test("a withheld target drops its step even though its element renders", async ({
+  page,
+}) => {
+  await open(page, "?withhold=insight");
+  const first = page.getByRole("dialog", { name: "Scoreboard" });
+  await expect(first).toContainText("1 of 2");
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Head-to-head" }),
+  ).toContainText("2 of 2");
+});
+
 test("a step with a tab switches the view before anchoring", async ({
   page,
 }) => {
