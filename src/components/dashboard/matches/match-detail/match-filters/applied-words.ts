@@ -127,8 +127,16 @@ const PHRASE: {
     RALLY_LENGTH_PHRASE[value as RallyLengthBand] ?? lower(option),
   customPlayer: (_, value, names) => `a shot by ${playerName(value, names)}`,
   customSide: (option) => `from the ${lower(option)} side`,
+  customStroke: (option) => article(lower(option)),
   customDirection: (option) => `${lower(option)} shot`,
   customRallyShot: (_, value) => `rally shot ${String(value)}`,
+  // Then reads as Custom's phrase after "then", each value on its own — the
+  // Visualizations strip draws one token per value, so each must say so.
+  thenPlayer: (_, value, names) => `then a shot by ${playerName(value, names)}`,
+  thenSide: (option) => `then from the ${lower(option)} side`,
+  thenStroke: (option) => `then ${article(lower(option))}`,
+  thenDirection: (option) => `then ${lower(option)} shot`,
+  thenRallyShot: (_, value) => `then rally shot ${String(value)}`,
 };
 
 /** One applied value's phrase — `appliedPhrases`' wording for a single
@@ -165,8 +173,8 @@ export function appliedValues(filters: MatchFilters, key: MatchFilterKey) {
 
 /**
  * The order the sentence reads in: the rally's own order — who served and
- * how, the return, then the score it was played at, how it ended and the
- * custom shot — so it reads "G. Revelli serving · second serve · break
+ * how, the return, then the score it was played at, how it ended, the
+ * custom shot and the Then shot after it — so it reads "G. Revelli serving · second serve · break
  * point" (the approved mock), not the panel's Score-first order. Every key of
  * `MATCH_FILTER_KEYS`, exactly once.
  */
@@ -193,8 +201,14 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "resultRallyLength",
   "customPlayer",
   "customSide",
+  "customStroke",
   "customDirection",
   "customRallyShot",
+  "thenPlayer",
+  "thenSide",
+  "thenStroke",
+  "thenDirection",
+  "thenRallyShot",
 ];
 
 /**
