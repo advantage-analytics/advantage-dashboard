@@ -51,6 +51,10 @@ function harness(
     existing?: Blob;
     state?: string;
     error?: string;
+    /** The directory has no program with the id the request names. */
+    noProgram?: boolean;
+    /** The follow-up team write answers this error. */
+    teamWriteError?: string;
   } = {},
 ) {
   const calls: { name: string; args?: any }[] = [];
@@ -65,6 +69,36 @@ function harness(
   };
   const state = options.state ?? "queued";
   const admin = {
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: options.noProgram ? null : { id: id(7) },
+            error: null,
+          }),
+        }),
+      }),
+      update: (values: unknown) => ({
+        eq: (_: string, matchId: string) => ({
+          eq: (__: string, programId: string) => ({
+            // Only onto a match with no team yet: both columns `is null`.
+            is: (first: string) => ({
+              is: async (second: string) => {
+                calls.push({
+                  name: `update:${table}`,
+                  args: { values, matchId, programId, unset: [first, second] },
+                });
+                return {
+                  error: options.teamWriteError
+                    ? { message: options.teamWriteError }
+                    : null,
+                };
+              },
+            }),
+          }),
+        }),
+      }),
+    }),
     storage: { from: () => storage },
     rpc: async (name: string, args: unknown) => {
       calls.push({ name, args });
@@ -210,4 +244,61 @@ test("file admission preserves wizard court labels and permits unanswered option
         .courtType,
     ).toBe(court || null);
   }
+});
+test("their team is saved on the new match alone, and refused when malformed or on an attachment", async () => {
+  const file = await workbook();
+  const picked = harness();
+  const withProgram = form(file);
+  withProgram.set("opponentProgramId", id(7));
+  expect((await submitAdminMatchFile(withProgram, picked.deps)).ok).toBe(true);
+  expect(picked.calls.find((c) => c.name === "update:matches")!.args).toEqual({
+    values: { opponent_program_id: id(7), opponent_school: null },
+    matchId: id(5),
+    programId: id(3),
+    unset: ["opponent_program_id", "opponent_school"],
+  });
+  // A program the directory does not hold is refused before anything is
+  // stored or created.
+  const missing = harness({ noProgram: true });
+  const unknown = form(file);
+  unknown.set("opponentProgramId", id(7));
+  expect(await submitAdminMatchFile(unknown, missing.deps)).toMatchObject({
+    ok: false,
+    message: expect.stringContaining("isn't in the directory"),
+  });
+  expect(missing.calls).toEqual([]);
+  const plain = harness();
+  await submitAdminMatchFile(form(file), plain.deps);
+  expect(plain.calls.some((c) => c.name === "update:matches")).toBe(false);
+  const both = form(file);
+  both.set("opponentProgramId", id(7));
+  both.set("opponentSchool", "Rival College");
+  const attached = form(file);
+  attached.delete("playerId");
+  attached.set("matchId", id(5));
+  attached.set("fingerprint", "a".repeat(32));
+  attached.set("opponentSchool", "Rival College");
+  for (const bad of [both, attached]) {
+    const h = harness();
+    expect((await submitAdminMatchFile(bad, h.deps)).ok).toBe(false);
+    expect(h.calls).toEqual([]);
+  }
+});
+test("a team that did not save is answered, not a success, after processing is dispatched", async () => {
+  const file = await workbook();
+  const failed = harness({ teamWriteError: "connection reset" });
+  const withSchool = form(file);
+  withSchool.set("opponentSchool", "Rival College");
+  expect(await submitAdminMatchFile(withSchool, failed.deps)).toMatchObject({
+    ok: false,
+    status: 500,
+    message: expect.stringContaining("their team wasn't"),
+  });
+  // The file is admitted regardless, so its analysis is not held back.
+  expect(failed.calls.map((c) => c.name)).toEqual([
+    "upload",
+    "admin_submit_match_file",
+    "update:matches",
+    "process",
+  ]);
 });
