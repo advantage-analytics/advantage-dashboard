@@ -1,10 +1,14 @@
 import posthog from "posthog-js";
+import { isPostHogOffInDev } from "@/lib/posthog-client";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
 
-// Optional: without both values the app runs with PostHog off.
-if (!projectToken || !apiHost) {
+// Optional: without both values the app runs with PostHog off. `next dev`
+// also runs with it off unless NEXT_PUBLIC_POSTHOG_IN_DEV=true.
+if (isPostHogOffInDev) {
+  // Silent: the default for every local session, not a misconfiguration.
+} else if (!projectToken || !apiHost) {
   if (process.env.NODE_ENV === "development") {
     console.warn(
       "[posthog] PostHog is off: set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN and NEXT_PUBLIC_POSTHOG_HOST to enable it (see .env.example).",

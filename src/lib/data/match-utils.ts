@@ -343,11 +343,21 @@ export function zonedDayString(now: Date, timeZone: string): string {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-/** "2026-08-08T…" → "Aug 8". */
+/**
+ * "2026-08-08T…" → "Aug 8", read in UTC.
+ *
+ * Pinned to UTC because client components call this during render: the
+ * server renders in UTC and the browser in its own zone, so an evening-Pacific
+ * instant was "Oct 9" on the server and "Oct 8" in the browser — React error
+ * #418 on /admin/requests. Server loaders already ran in UTC on Vercel, so
+ * their output does not change. Same rule as `formatCompletedAt` in
+ * labels-table.tsx.
+ */
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 

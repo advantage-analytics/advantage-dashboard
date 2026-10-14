@@ -1,4 +1,5 @@
 import { SeverityNumber } from "@opentelemetry/api-logs";
+import { isPostHogOffInDev } from "@/lib/posthog-client";
 
 // The provider is created by register() in the root instrumentation.ts and
 // published on globalThis — importing it from that file would get a separate,
@@ -25,11 +26,15 @@ export type LogLevel = "info" | "warn" | "error";
  * src/lib/posthog-client.ts instead — different module on purpose, since
  * NEXT_PUBLIC_ vars are the only thing safe to import into a browser bundle,
  * and this one is imported by server-only files.
+ *
+ * Null under `next dev` unless NEXT_PUBLIC_POSTHOG_IN_DEV=true — see
+ * isPostHogOffInDev.
  */
 export function getPostHogServerConfig(): {
   token: string;
   host: string;
 } | null {
+  if (isPostHogOffInDev) return null;
   const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
   return token && host ? { token, host } : null;
