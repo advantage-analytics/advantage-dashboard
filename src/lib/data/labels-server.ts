@@ -10,6 +10,7 @@ import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
 import { readAllPages } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
+import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import {
   choosePlaybackFile,
@@ -70,7 +71,7 @@ export interface LabelJobRow {
      * What the console last counted open (`open_counts`), amber and grey;
      * null until the session is opened with marks.
      */
-    openCounts: { amber: number; grey: number } | null;
+    openCounts: FlagCounts | null;
   } | null;
 }
 
@@ -111,9 +112,7 @@ interface DbSession {
 }
 
 /** `open_counts` as the list reads it; anything malformed reads as none. */
-function readOpenCounts(
-  value: unknown,
-): { amber: number; grey: number } | null {
+function readOpenCounts(value: unknown): FlagCounts | null {
   if (!value || typeof value !== "object") return null;
   const { amber, grey } = value as Record<string, unknown>;
   return typeof amber === "number" && typeof grey === "number"

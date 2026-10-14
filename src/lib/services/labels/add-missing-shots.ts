@@ -5,7 +5,8 @@
  * ending sync a single add writes is written for each. Then the session's rows
  * read back whole, as Undo does.
  *
- * An add that is refused is counted and skipped, never retried: the rest still
+ * An add that is refused, or names a point or stroke outside the session, is
+ * counted and skipped, never retried: the rest still
  * land, and the labeller sees how many did not.
  */
 
@@ -60,11 +61,22 @@ export async function addMissingShots(
   if (!Array.isArray(adds) || adds.length > MAX_MISSING_SHOT_ADDS) {
     return { error: "Too many shots to add at once." };
   }
+  const db = deps.createAdminClient();
+  const before = await deps.readPoints(db, sessionId);
+  if (!before) return { error: "No such session." };
+  // Only this session's own points and strokes.
+  const shotsOf = new Map(
+    before.map((point) => [point.id, new Set(point.shots.map((s) => s.id))]),
+  );
   let added = 0;
   let failed = 0;
   // One at a time: two adds in one point read each other's rows.
   for (const add of adds) {
-    if (!isUuid(add?.pointId) || !isUuid(add?.afterShotId)) {
+    if (
+      !isUuid(add?.pointId) ||
+      !isUuid(add?.afterShotId) ||
+      !shotsOf.get(add.pointId)?.has(add.afterShotId)
+    ) {
       failed += 1;
       continue;
     }
@@ -72,7 +84,7 @@ export async function addMissingShots(
     if ("error" in result) failed += 1;
     else added += 1;
   }
-  const points = await deps.readPoints(deps.createAdminClient(), sessionId);
+  const points = await deps.readPoints(db, sessionId);
   if (!points) return { error: "No such session." };
   return { ok: true, added, failed, points };
 }

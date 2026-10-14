@@ -169,6 +169,7 @@ export function endingPatchForShotChange(
 
 /**
  * Whether the edit moved a shot before the last and left the last as it was.
+ * Every field counts: a placement or a time is as much an edit as a stroke.
  * A re-save that changed nothing, or one of the last shot, is the labeller
  * standing behind the rally's end; an edit further back is not.
  */
@@ -180,9 +181,7 @@ function editedEarlierShot(
   const keys = (point: EndingPoint) =>
     liveShotsInOrder(point, ghosts)
       .filter((shot) => !isLetServe(shot))
-      .map((shot) =>
-        [shot.id, shot.hitter, shot.stroke, shot.result].join("|"),
-      );
+      .map((shot) => JSON.stringify(shot));
   const was = keys(before);
   const now = keys(after);
   return was.join("\n") !== now.join("\n") && was.at(-1) === now.at(-1);

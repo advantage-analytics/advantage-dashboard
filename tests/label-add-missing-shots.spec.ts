@@ -18,7 +18,8 @@ function deps(refuse: ReadonlySet<string> = new Set()) {
     deps: {
       requireAdmin: async () => ({ id: "admin" }),
       createAdminClient: () => ({}) as AdminClient,
-      readPoints: async () => [],
+      readPoints: async () =>
+        [{ id: P1, shots: [{ id: S1 }, { id: S2 }] }] as never,
       addShot: async (_pointId: string, afterShotId: string) => {
         if (refuse.has(afterShotId)) return { error: "refused" };
         added.push(afterShotId);
@@ -53,6 +54,21 @@ test("adds each slot in order, counts a refusal and carries on", async () => {
     ],
     d,
   );
-  expect(result).toEqual({ ok: true, added: 1, failed: 2, points: [] });
+  expect(result).toMatchObject({ ok: true, added: 1, failed: 2 });
   expect(added).toEqual([S2]);
+});
+
+test("a point or stroke outside the session is skipped, never written", async () => {
+  const { deps: d, added } = deps();
+  const OTHER = "44444444-4444-4444-8444-444444444444";
+  const result = await addMissingShots(
+    SESSION,
+    [
+      { pointId: OTHER, afterShotId: S1 },
+      { pointId: P1, afterShotId: OTHER },
+    ],
+    d,
+  );
+  expect(result).toMatchObject({ ok: true, added: 0, failed: 2 });
+  expect(added).toEqual([]);
 });

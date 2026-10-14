@@ -1034,6 +1034,7 @@ export function LabelConsole({
     }
     setPlacement(NO_PLACEMENT);
     setPoints(result.points);
+    if (result.added > 0) setUndoEmpty(false);
     if (result.failed > 0) {
       dispatchSave({
         type: "failure",
@@ -1042,7 +1043,6 @@ export function LabelConsole({
       return;
     }
     dispatchSave({ type: "success", at: Date.now() });
-    setUndoEmpty(false);
   }
 
   /** A plan the console refused before any write: the status bar says why. */

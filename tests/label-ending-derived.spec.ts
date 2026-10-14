@@ -516,6 +516,14 @@ test.describe("a winner the strokes contradict", () => {
       "p1",
     );
     expect(endingPatchForShotChange(stored, edited, GHOSTS)).toBeNull();
+    // A placement alone is an edit too.
+    const moved = point(
+      shots.map((shot, i) => (i === 1 ? { ...shot, landingX: 1.25 } : shot)),
+      "p1",
+      "error",
+      "p1",
+    );
+    expect(endingPatchForShotChange(stored, moved, GHOSTS)).toBeNull();
   });
 
   test("it is a contradiction only when the rows settle who won", () => {

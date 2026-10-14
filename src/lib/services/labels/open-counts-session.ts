@@ -8,11 +8,9 @@
 import { isUuid } from "@/lib/admin/validation";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
+import type { FlagCounts } from "./job-groups";
 
-export interface LabelOpenCounts {
-  amber: number;
-  grey: number;
-}
+export type LabelOpenCounts = FlagCounts;
 
 export type LabelOpenCountsResult = { ok: true } | { error: string };
 
