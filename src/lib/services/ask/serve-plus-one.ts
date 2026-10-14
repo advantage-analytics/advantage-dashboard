@@ -4,9 +4,13 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
-import { ASK_SHOT_ROLE_CTES } from "@/lib/services/ask/pattern";
+import {
+  ASK_SHOT_ROLE_CTES,
+  type AskPatternCourt,
+} from "@/lib/services/ask/pattern";
 import {
   count,
+  losingPlaysSubject,
   sentenceCase,
   type AskPlaysSubject,
   type AskPlaysVoice,
@@ -49,7 +53,7 @@ export interface AskServePlusOne {
   /** Only points on a first or a second serve; null for both. */
   serveType: AskServeType | null;
   /** Only points from one side; absent for both. */
-  court?: "Deuce" | "Ad";
+  court?: AskPatternCourt;
   /** One table row per side as well (deuce and ad apart). */
   bySide?: boolean;
 }
@@ -73,6 +77,12 @@ export function plusOneWithSides(
     return { ...rest, court: sides.court };
   }
   return previous;
+}
+
+/** Whether the question names a side at all — split or one of them. */
+export function namesASide(question: string): boolean {
+  const sides = plusOneSides(question);
+  return sides.bySide === true || sides.court !== undefined;
 }
 
 /** The sides a question asks for: split, one of them, or neither. */
@@ -128,10 +138,6 @@ export function continuesServePlusOne(question: string): boolean {
   return CONTINUES.test(question) && !SPECIFIC_SHOT.test(question);
 }
 
-const OPPONENT_SIDE =
-  /\b(?:opponents?'?s?|their|the other player'?s?)\s+(?:first |second )?(?:serv(?:e|es|ing)|returns?|returning)\b/i;
-const THIRD_PERSON = /\b(?:his|her)\s+(?:first |second )?(?:serv|return)/i;
-
 /**
  * Which +1 and whose. The viewer's unless the question names the
  * opponent's. In a team, "his serve" is the program's player's — the one the
@@ -140,13 +146,13 @@ const THIRD_PERSON = /\b(?:his|her)\s+(?:first |second )?(?:serv|return)/i;
  */
 export function servePlusOneRequest(
   question: string,
-  _tags: readonly AskPromptTag[],
+  tags: readonly AskPromptTag[],
   team: boolean,
 ): AskServePlusOne {
-  // On the personal page "his serve" is the opponent's, as in the losing
-  // plays (`losingPlaysSubject`); in a team it is the program's player's.
-  const opponent =
-    OPPONENT_SIDE.test(question) || (!team && THIRD_PERSON.test(question));
+  // Whose +1 is the losing plays' rule (`losingPlaysSubject`): the side named
+  // first, so "my return +1 against their serve" is mine; in a team "his" is
+  // the program's player and only "the opponent's" is the other side.
+  const opponent = losingPlaysSubject(question, tags, team) === "opponent";
   const serveType = /\bfirst serves?\b/i.test(question)
     ? "first"
     : /\bsecond serves?\b/i.test(question)

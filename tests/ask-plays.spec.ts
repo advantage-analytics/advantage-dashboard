@@ -452,3 +452,10 @@ test("with both sides named, the side named first is whose plays", () => {
   ).toBe("mine");
   expect(losingPlaysSubject("Where does he beat me?", [])).toBe("opponent");
 });
+
+test("a count of points won on a shot is not the winning-plays table", () => {
+  expect(
+    asksForWinningPlays("How many points did I win on my forehand shots?"),
+  ).toBe(false);
+  expect(asksForWinningPlays("which shots won him the most points")).toBe(true);
+});

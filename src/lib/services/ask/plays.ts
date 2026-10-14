@@ -53,7 +53,10 @@ const OWN_POSSESSIVE = /\b(?:my|our)\b/i;
 const ABOUT_THE_OPPONENT =
   /\b(?:opponents?|(?:this|that) players?|he|she|him|they|them)\b/i;
 const ABOUT_ME = /\b(?:i|me|mine|we|us)\b/i;
-const OPPONENT_WORD = /\bopponents?'?s?\b/i;
+// The opponent's, as a possessive: "the opponent's serve", "his opponents'
+// misses". A bare "opponents" ("Rudy versus all his opponents") names who the
+// program's player played, not whose shots the question is about.
+const OPPONENT_WORD = /\bopponent(?:'s|s')/i;
 
 /**
  * Whose losing plays the question is about. Whose plays they are is read
@@ -357,7 +360,7 @@ export const ASK_NO_SHOTS_MESSAGE =
 // ── Winning plays ────────────────────────────────────────────────────────────
 
 const WINNING_PLAYS =
-  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won|winning)\b/i;
+  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b/i;
 
 /**
  * Whether the question asks for winning plays: which strokes, in which
@@ -379,11 +382,9 @@ export function winningPlaysSubject(
   tags: readonly AskPromptTag[],
   team: boolean,
 ): AskPlaysSubject {
-  if (!team) return losingPlaysSubject(question, tags);
-  if (OPPONENT_WORD.test(question)) return "opponent";
-  const opponentTag = tags.some((tag) => tag.kind === "opponent");
-  const playerTag = tags.some((tag) => tag.kind === "player");
-  return opponentTag && !playerTag ? "opponent" : "mine";
+  // The losing plays' rule, team words and all: whose plays is the same
+  // question whichever way they went.
+  return losingPlaysSubject(question, tags, team);
 }
 
 /**
@@ -396,7 +397,6 @@ export function winningPlaysSubject(
  */
 export function winningPlaysSql(subject: AskPlaysSubject): string {
   const theirs = subject === "mine" ? "true" : "false";
-  const won = subject === "mine" ? "true" : "false";
   return `with sh as (
   select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction, s.result, p.i_won,
     s.shot_number = max(s.shot_number) over (partition by s.match_id, s.point_number) as last_shot,
@@ -410,11 +410,11 @@ export function winningPlaysSql(subject: AskPlaysSubject): string {
 ended as (
   select shot_type as stroke, direction, 'winner' as kind
   from sh
-  where last_shot and i_won = ${won} and mine = ${theirs} and result = 'In'
+  where last_shot and i_won = ${theirs} and mine = ${theirs} and result = 'In'
   union all
   select prev_type, prev_direction, 'drew'
   from sh
-  where last_shot and i_won = ${won} and mine <> ${theirs} and result in ('Out', 'Net')
+  where last_shot and i_won = ${theirs} and mine <> ${theirs} and result in ('Out', 'Net')
     and prev_mine = ${theirs}
 ),
 plays as (
@@ -432,7 +432,7 @@ ranked as (
   from plays
 )
 select 'total' as section, null as stroke, null as direction,
-  (select count(*) from sh where last_shot and i_won = ${won}) as points,
+  (select count(*) from sh where last_shot and i_won = ${theirs}) as points,
   (select coalesce(sum(points), 0) from plays) as winners,
   (select count(distinct match_id) from sh) as errors_drawn
 union all

@@ -89,6 +89,7 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   continuesServePlusOne,
+  namesASide,
   plusOneSides,
   plusOneWithSides,
   servePlusOneRequest,
@@ -1041,6 +1042,9 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForLosingPlays(input.question) &&
+        // A side named ("on the ad side") is the planner's to answer: the
+        // fixed plays answers count the whole match and would drop it.
+        !namesASide(input.question) &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(
@@ -1066,6 +1070,9 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForWinningPlays(input.question) &&
+        // A side named ("on the ad side") is the planner's to answer: the
+        // fixed plays answers count the whole match and would drop it.
+        !namesASide(input.question) &&
         (step.ok || refused)
       ) {
         const subject = winningPlaysSubject(

@@ -14,6 +14,7 @@ import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
+  namesASide,
   plusOneBreakdownAsked,
   plusOneSides,
   plusOneWithSides,
@@ -657,4 +658,30 @@ test("on the personal page 'his serve +1' is the opponent's, tagged or not", () 
   expect(servePlusOneRequest("his serve +1 patterns", [], false).subject).toBe(
     "opponent",
   );
+});
+
+test.describe("whose +1, with the other side named too", () => {
+  test("'my +1 against their serve' is mine", () => {
+    expect(
+      servePlusOneRequest(
+        "What is my return plus one against their first serve?",
+        [],
+        false,
+      ),
+    ).toMatchObject({ phase: "return", subject: "mine", serveType: "first" });
+    expect(
+      servePlusOneRequest(
+        "How does my serve +1 do against their return?",
+        [],
+        true,
+      ).subject,
+    ).toBe("mine");
+  });
+  test("a bare 'opponents' is who was played, not whose +1", () => {
+    expect(servePlusOneRequest(ASKED[1], [], true).subject).toBe("mine");
+  });
+  test("a named side sends a plays question to the planner", () => {
+    expect(namesASide("what are my best shots on the ad side")).toBe(true);
+    expect(namesASide("what are my best shots")).toBe(false);
+  });
 });
