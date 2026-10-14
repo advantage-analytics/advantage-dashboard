@@ -120,6 +120,30 @@ export interface SampleVideoDeps {
   };
 }
 
+/**
+ * The sample clip's first credential, minted on the server while the sample
+ * page renders — the way a real report's page hands its player a signed URL
+ * — so the Film view starts on a playable link and keeps its one recovery
+ * attempt for a real failure. `null` when signing fails (Azure unconfigured):
+ * the page then hands over no URL and the view asks
+ * `GET /api/sample-match/video`, which answers that case as its 503.
+ */
+export function mintSampleVideoCredential(
+  mintSas: SampleVideoDeps["mintSas"],
+): { playbackUrl: string; expiresAt: Date } | null {
+  try {
+    return mintSas({
+      blobName: SAMPLE_VIDEO_BLOB,
+      ttlSeconds: SAMPLE_VIDEO_TTL_SECONDS,
+    });
+  } catch (cause) {
+    console.error(`${LOG} could not mint the sample credential on render`, {
+      cause,
+    });
+    return null;
+  }
+}
+
 /* -------------------------------------------------------------------------
  * Handler
  * ---------------------------------------------------------------------- */

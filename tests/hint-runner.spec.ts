@@ -254,6 +254,33 @@ test("a hint no longer due while it shows is withdrawn, unstamped", async ({
   ).toBeNull();
 });
 
+test("waiting behind an open dialog costs no frame loop", async ({ page }) => {
+  // Count every animation frame the page asks for once it has hydrated.
+  await page.addInitScript(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    (window as unknown as { __frames: number }).__frames = 0;
+    window.requestAnimationFrame = (callback) => {
+      (window as unknown as { __frames: number }).__frames += 1;
+      return raf(callback);
+    };
+  });
+  await open(page, "?hint=activity-tray&dialog=1");
+  await settle(page);
+  const before = await page.evaluate(
+    () => (window as unknown as { __frames: number }).__frames,
+  );
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(
+    () => (window as unknown as { __frames: number }).__frames,
+  );
+  // `settle` itself spends three; a polling loop would spend ~30 here.
+  expect(after - before).toBeLessThan(5);
+  await expect(page.getByRole("dialog", { name: "Welcome" })).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Your upload keeps going." }),
+  ).toHaveCount(0);
+});
+
 test("the hint waits while another dialog is open, and opens once it closes", async ({
   page,
 }) => {

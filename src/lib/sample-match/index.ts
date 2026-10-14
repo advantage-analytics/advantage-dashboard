@@ -120,23 +120,24 @@ export function sampleMatchData(): SampleMatchDetail {
  * `getMatchVideo()` — which reads `matches` and `match_video_attachments`,
  * neither of which has a row for a placeholder id.
  *
- * It carries no playable URL. The credential is minted per viewer by
- * `GET /api/sample-match/video` (`MatchReportMeta.playbackEndpoint`), which
- * the Film view's playback hook already polls for an attachment: an expiry
- * in the past makes its first scheduled renewal fire within a second of
- * mounting, and the empty `src` — which the element refuses at once — spends
- * the hook's recovery attempt on that same renewal, so the first load asks
- * the sample route rather than waiting on a timer. The attachment id and
- * version are {@link SAMPLE_VIDEO_ATTACHMENT}'s, the pair the route answers
- * with, so that first renewal reads as "same video, fresh URL" and never as a
- * replacement. A route that refuses — Azure unconfigured, the clip not yet
- * uploaded — lands on the view's unavailable state, exactly as a real match's
- * would.
+ * Its playable URL is the `credential` the sample page mints while it
+ * renders (`mintSampleVideoCredential`), the way a real report's page hands
+ * its player a signed URL, so the Film view starts on a working link. Later
+ * renewals go to `GET /api/sample-match/video`
+ * (`MatchReportMeta.playbackEndpoint`), since the placeholder id names no
+ * `/api/matches` row. Without a credential — signing failed on render — it
+ * carries no URL and an expiry in the past, so the view's first renewal asks
+ * that route at once; a route that refuses lands on the unavailable state,
+ * exactly as a real match's would. The attachment id and version are
+ * {@link SAMPLE_VIDEO_ATTACHMENT}'s, the pair the route answers with, so a
+ * renewal reads as "same video, fresh URL" and never as a replacement.
  */
-export function sampleMatchVideo(): MatchVideo {
+export function sampleMatchVideo(
+  credential: { playbackUrl: string; expiresAt: Date } | null = null,
+): MatchVideo {
   return {
-    url: "",
-    expiresAt: new Date(0).toISOString(),
+    url: credential?.playbackUrl ?? "",
+    expiresAt: (credential?.expiresAt ?? new Date(0)).toISOString(),
     startTimeSeconds: SAMPLE_VIDEO_ATTACHMENT.offsetSeconds,
     source: "attachment",
     attachment: {

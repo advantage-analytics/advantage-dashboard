@@ -10,6 +10,8 @@ import {
   sampleMatchData,
   sampleMatchVideo,
 } from "@/lib/sample-match";
+import { mintSampleVideoCredential } from "@/lib/services/sample-match/video";
+import { mintPlaybackSas } from "@/lib/services/splitstep/video-url/azure-sas";
 import { NO_FILM_ENTRY } from "@/lib/match-video/film-entry";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
@@ -57,7 +59,8 @@ import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
  * - **Data.** `sampleMatchData()` (`src/lib/sample-match`), a committed
  *   fixture whose placeholder ids name no row. Nothing here reads `matches`,
  *   `processing_jobs`, saved views or bands, and the page never calls
- *   `getMatchDetailData()`; the video is `sampleMatchVideo()`, renewed through
+ *   `getMatchDetailData()`; the video is `sampleMatchVideo()` over a credential
+ *   minted on render, renewed through
  *   `GET /api/sample-match/video` (`playbackEndpoint`) rather than the match's
  *   own route. The analysis short-circuit, the reconcile-before-read and the
  *   failed-points throw have no equivalent: a static fixture is always a
@@ -128,7 +131,8 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
 
   const data = sampleMatchData();
   const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
-  const video = sampleMatchVideo();
+  // A playable first link, minted here as a real report's page mints one.
+  const video = sampleMatchVideo(mintSampleVideoCredential(mintPlaybackSas));
 
   // The single attribution point (guardrails §4): every you/opp decision
   // routes through `getMatchSides`, keyed on `match.isUserPlayer1` — which

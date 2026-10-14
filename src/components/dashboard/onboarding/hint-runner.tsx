@@ -24,8 +24,9 @@ import type { HintId } from "@/lib/onboarding/tours";
  * and its view switching and so cannot mount in the shell.
  *
  * Opening waits for a quiet moment: while `when` holds and the hint was not
- * seen this session, it polls `requestAnimationFrame` until the anchor is in
- * the document AND nothing carries `role="dialog"` — Radix Dialog and Radix
+ * seen this session, it re-checks on every change to the document
+ * (`watchDocument`) until the anchor is in the document AND nothing carries
+ * `role="dialog"` — Radix Dialog and Radix
  * Popover content both do, so the hint never lands on top of BetaWelcome or
  * an open menu. That wait gates opening only: once open, the hint's own
  * popover is a `role="dialog"` too, and it must not close itself over it.
@@ -61,6 +62,43 @@ export interface HintRunnerProps {
 
 const OPEN_DIALOG = '[role="dialog"]';
 
+/**
+ * Run `check` on the next frame and again after any change to the document,
+ * at most once a frame, until it answers `true`. Everything the hint waits on
+ * is a DOM change — the anchor mounting, a dialog or menu opening or closing,
+ * the anchor leaving — so a `MutationObserver` wakes it exactly then, and a
+ * page that sits still costs nothing: no per-frame loop for however long a
+ * dialog stays open or an anchor stays away. Returns the cleanup.
+ */
+function watchDocument(check: () => boolean): () => void {
+  let frame = 0;
+  let done = false;
+  const observer = new MutationObserver(() => schedule());
+  function run() {
+    frame = 0;
+    if (done) return;
+    if (check()) {
+      done = true;
+      observer.disconnect();
+    }
+  }
+  function schedule() {
+    if (!done && frame === 0) frame = requestAnimationFrame(run);
+  }
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["role", "data-tour"],
+  });
+  schedule();
+  return () => {
+    done = true;
+    observer.disconnect();
+    if (frame) cancelAnimationFrame(frame);
+  };
+}
+
 export function HintRunner({
   hint,
   viewerId,
@@ -71,20 +109,15 @@ export function HintRunner({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [finished, setFinished] = useState(false);
 
-  // Open: poll for the anchor and a moment with no dialog in the document.
+  // Open: wait for the anchor and a moment with no dialog in the document.
   useEffect(() => {
     if (!when || anchor || finished || seenThisSession(hint, viewerId)) return;
-    let frame = 0;
-    const look = () => {
+    return watchDocument(() => {
       const element = findTarget(HINT_ANCHOR[hint]);
-      if (element && !document.querySelector(OPEN_DIALOG)) {
-        setAnchor(element);
-        return;
-      }
-      frame = requestAnimationFrame(look);
-    };
-    frame = requestAnimationFrame(look);
-    return () => cancelAnimationFrame(frame);
+      if (!element || document.querySelector(OPEN_DIALOG)) return false;
+      setAnchor(element);
+      return true;
+    });
   }, [when, anchor, finished, hint, viewerId]);
 
   // Open: if the anchor leaves the document (the tray unmounts, the sidebar
@@ -92,16 +125,11 @@ export function HintRunner({
   // a dismissal — the guard is untouched, so it may open again.
   useEffect(() => {
     if (!anchor) return;
-    let frame = 0;
-    const watch = () => {
-      if (!anchor.isConnected) {
-        setAnchor(null);
-        return;
-      }
-      frame = requestAnimationFrame(watch);
-    };
-    frame = requestAnimationFrame(watch);
-    return () => cancelAnimationFrame(frame);
+    return watchDocument(() => {
+      if (anchor.isConnected) return false;
+      setAnchor(null);
+      return true;
+    });
   }, [anchor]);
 
   const finish = useCallback(() => {

@@ -277,4 +277,17 @@ test.describe("sampleMatchData", () => {
     expect(Date.parse(video.expiresAt)).toBeLessThan(Date.now());
     expect(video.attachment?.expiryWarning).toBe(false);
   });
+
+  test("a credential minted on render makes the first link playable", () => {
+    const expiresAt = new Date(Date.now() + 30 * 60_000);
+    const video = sampleMatchVideo({
+      playbackUrl: "https://example.blob.core.windows.net/sample.mp4?sig=x",
+      expiresAt,
+    });
+    expect(video.url).toBe(
+      "https://example.blob.core.windows.net/sample.mp4?sig=x",
+    );
+    expect(video.expiresAt).toBe(expiresAt.toISOString());
+    expect(video.attachment?.id).toBe(SAMPLE_VIDEO_ATTACHMENT.id);
+  });
 });

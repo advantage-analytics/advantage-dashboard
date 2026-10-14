@@ -8,6 +8,7 @@ import {
   SAMPLE_VIDEO_BLOB,
   SAMPLE_VIDEO_TTL_SECONDS,
   handleGetSampleVideo,
+  mintSampleVideoCredential,
   type SampleVideoDeps,
 } from "@/lib/services/sample-match/video";
 
@@ -291,4 +292,26 @@ test("the session-refresh proxy covers the route and is unchanged", () => {
   // browser route. Nothing here needed a matcher change.
   expect(proxy).toContain("api/webhooks|api/cron");
   expect(proxy).not.toContain("sample-match");
+});
+
+test("the render-time mint signs the one fixed blob, and answers null when signing fails", () => {
+  const calls: Array<{ blobName: string; ttlSeconds: number }> = [];
+  const expiresAt = new Date(Date.now() + SAMPLE_VIDEO_TTL_SECONDS * 1000);
+  const credential = mintSampleVideoCredential((params) => {
+    calls.push(params);
+    return { playbackUrl: "https://blob/sample?sig=x", expiresAt };
+  });
+  expect(calls).toEqual([
+    { blobName: SAMPLE_VIDEO_BLOB, ttlSeconds: SAMPLE_VIDEO_TTL_SECONDS },
+  ]);
+  expect(credential).toEqual({
+    playbackUrl: "https://blob/sample?sig=x",
+    expiresAt,
+  });
+
+  expect(
+    mintSampleVideoCredential(() => {
+      throw new Error("AZURE_STORAGE_ACCOUNT is not set");
+    }),
+  ).toBeNull();
 });
