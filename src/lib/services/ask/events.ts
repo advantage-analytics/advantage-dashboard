@@ -34,7 +34,12 @@ export type AskStatusStage = (typeof ASK_STATUS_STAGES)[number];
  *   does not claim the data was at fault or that the provider was down.
  */
 export type AskErrorCode =
-  "cannot_answer" | "no_data" | "llm_unavailable" | "answer_failed";
+  | "cannot_answer"
+  | "no_data"
+  | "llm_unavailable"
+  | "answer_failed"
+  /** Not a failure: Ask asks which was meant (`error` is the question, `options` the choices). */
+  | "needs_clarification";
 
 /**
  * One match an answer was computed from, as the `ask.matches` view states it.
@@ -55,6 +60,11 @@ export interface AskSourceMatch {
    * unknown.
    */
   playerName: string | null;
+  /**
+   * A pattern answer only: the match's Video view filtered to the points the
+   * answer counted in it, and how many. Absent everywhere else.
+   */
+  watch?: { href: string; points: number };
 }
 
 /**
@@ -74,6 +84,13 @@ export function readAskSourceMatch(value: unknown): AskSourceMatch | null {
     iWon: typeof value.iWon === "boolean" ? value.iWon : null,
     scoreText: text(value.scoreText),
     playerName: text(value.playerName),
+    // Only a link into a match's own page, with a count, is kept.
+    ...(isRecord(value.watch) &&
+    typeof value.watch.href === "string" &&
+    value.watch.href.startsWith("/dashboard/matches/") &&
+    typeof value.watch.points === "number"
+      ? { watch: { href: value.watch.href, points: value.watch.points } }
+      : {}),
   };
 }
 
@@ -302,6 +319,12 @@ export interface AskErrorEvent {
   type: "error";
   code: AskErrorCode;
   error: string;
+  /**
+   * `needs_clarification` only: two to four answers the asker can pick, each
+   * sent back as a follow-up. The server writes them from what the scope
+   * holds, never from free model text beyond a short label.
+   */
+  options?: string[];
 }
 
 export type AskEvent =

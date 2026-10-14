@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
+import { advButton } from "@/lib/ui/adv-button";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
@@ -23,6 +24,12 @@ export interface AskAnswerProps {
    * program's" on the team one. The personal page when omitted.
    */
   scope?: AskScope;
+  /**
+   * When the answer is a clarifying question (`needs_clarification`), what
+   * picking one of its choices does — the page re-asks with it attached.
+   * Omitted for an exchange whose choices can no longer be picked.
+   */
+  onChoose?: (option: string) => void;
 }
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
@@ -84,6 +91,7 @@ export const ASK_ERROR_COPY = PERSONAL_ASK_COPY.errors;
 export function AskAnswer({
   answer,
   scope = PERSONAL_ASK_SCOPE,
+  onChoose,
 }: AskAnswerProps) {
   const copy = askCopy(scope);
   // An answer that mounted mid-stream is arriving now, and its parts move as
@@ -97,11 +105,52 @@ export function AskAnswer({
       data-ask-live={live ? "" : undefined}
       className="flex min-w-0 flex-col gap-5"
     >
-      {answer.status === "error" ? (
+      {answer.status === "error" &&
+      answer.error?.code === "needs_clarification" ? (
+        <AnswerQuestion error={answer.error} copy={copy} onChoose={onChoose} />
+      ) : answer.status === "error" ? (
         <AnswerError error={answer.error} copy={copy} />
       ) : (
         <AnswerBody answer={answer} copy={copy} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Ask asking which was meant: the question in the claim's place, the choices
+ * as quiet buttons under it, and a line saying a reply is free. Not an alert —
+ * nothing failed. Picking a choice re-asks the question with it attached;
+ * typing an answer in the composer works too, since the question is kept.
+ */
+function AnswerQuestion({
+  error,
+  copy: { errors },
+  onChoose,
+}: {
+  error: NonNullable<AskAnswerState["error"]>;
+  copy: AskCopy;
+  onChoose?: (option: string) => void;
+}) {
+  const fallback = errors.needs_clarification;
+  return (
+    <div data-ask-clarify="" className="flex flex-col gap-3">
+      <p className="text-title">{error.message || fallback.title}</p>
+      {onChoose && error.options && error.options.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {error.options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onChoose(option)}
+              className={`${advButton("outline", "sm")} cursor-pointer`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-body-sm text-[var(--ink-500)]">{fallback.detail}</p>
     </div>
   );
 }

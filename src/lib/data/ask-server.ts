@@ -31,7 +31,9 @@ import {
   type DbAskTeamMatch,
 } from "@/lib/data/ask-tags";
 import { getPersonalMatches } from "@/lib/data/personal-matches-server";
+import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
+import { youSeat } from "@/lib/data/viewer-side";
 import { createClient } from "@/lib/supabase/server";
 
 export type {
@@ -308,3 +310,64 @@ export const getAskConversation = cache(async function getAskConversation(
     })),
   };
 });
+
+/** How the match page seats the viewer in one match, with a point to check Ask's seat against. */
+export interface AskPageSeat {
+  /** `youSeat()`'s answer — the seat the match page, and its Video filter, call "you". */
+  youIsPlayer1: boolean;
+  /** The match's first point and who served it, so Ask's own seat can be read off the same point. */
+  pointNumber: number;
+  serverIsPlayer1: boolean;
+}
+
+/**
+ * The match page's seat for each match, for pattern answers' "Watch" links.
+ *
+ * Ask decides whose side is "mine" with `ask.my_side()`, and the page with
+ * `youSeat()` (`viewer-side.ts`). They agree whenever a seat is held by an id
+ * that names the viewer or a roster player, and part in fallbacks — a legacy
+ * match with no seat ids, a doubles line, a seat held only by a coach's login.
+ * A link that set "you" in the page's filters on one of those would open the
+ * other player's shots. So the caller compares the two on one real point and
+ * links only where they match; this returns the page's half.
+ *
+ * Read through the signed-in client, so RLS decides which rows come back; a
+ * match it cannot read is simply absent, and gets no link.
+ */
+export async function getAskPageSeats(
+  matchIds: readonly string[],
+): Promise<Map<string, AskPageSeat>> {
+  const seats = new Map<string, AskPageSeat>();
+  const ids = matchIds.filter(isUuid);
+  if (ids.length === 0) return seats;
+  const supabase = await createClient();
+  const [{ data: rows, error }, myPlayerIds] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, program_id, player1_id, player2_id")
+      .in("id", ids),
+    getMyPlayerIds(),
+  ]);
+  if (error || !rows) return seats;
+  await Promise.all(
+    rows.map(async (row) => {
+      const [rosterIds, first] = await Promise.all([
+        resolveRosterSeatIds(supabase, row),
+        supabase
+          .from("points")
+          .select("point_number, server_is_player1")
+          .eq("match_id", row.id)
+          .order("point_number", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (first.error || !first.data) return;
+      seats.set(row.id, {
+        youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
+        pointNumber: first.data.point_number,
+        serverIsPlayer1: first.data.server_is_player1,
+      });
+    }),
+  );
+  return seats;
+}

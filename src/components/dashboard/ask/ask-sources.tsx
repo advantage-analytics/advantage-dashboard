@@ -99,12 +99,24 @@ function SourceRow({
   return (
     <li className="col-span-full grid grid-cols-subgrid">
       <Link
-        href={`/dashboard/matches/${encodeURIComponent(match.matchId)}`}
+        // A pattern answer's row opens the match's Video view on exactly the
+        // points the answer counted there.
+        href={
+          match.watch?.href ??
+          `/dashboard/matches/${encodeURIComponent(match.matchId)}`
+        }
         className="group col-span-full -mx-2 grid h-9 grid-cols-subgrid items-center rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] outline-none hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]"
       >
         <SourceResult iWon={match.iWon} />
         <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
           {askMatchPlayers(match)}
+          {match.watch && (
+            <span className="text-[var(--blue)]">
+              {" "}
+              · Watch {match.watch.points}{" "}
+              {match.watch.points === 1 ? "point" : "points"}
+            </span>
+          )}
         </span>
         {sets ? (
           <ScoreLine

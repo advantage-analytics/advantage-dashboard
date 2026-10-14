@@ -85,6 +85,8 @@ export interface AskFigure {
 export interface AskAnswerError {
   message: string;
   code: string | null;
+  /** `needs_clarification`: the answers the asker can pick. */
+  options?: string[];
 }
 
 export interface AskAnswerState {
@@ -217,7 +219,11 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
         ...answer,
         status: "error",
         stage: null,
-        error: { message: event.error, code: event.code },
+        error: {
+          message: event.error,
+          code: event.code,
+          ...(event.options ? { options: event.options } : {}),
+        },
       };
   }
 }
@@ -400,6 +406,11 @@ export function parseAskEvent(line: string): AskEvent | null {
             // a slug outside it still renders its sentence.
             code: value.code as Extract<AskEvent, { type: "error" }>["code"],
             error: value.error,
+            ...(Array.isArray(value.options) &&
+            value.options.length > 0 &&
+            value.options.every((o) => typeof o === "string")
+              ? { options: value.options as string[] }
+              : {}),
           }
         : null;
     default:
@@ -711,7 +722,7 @@ export interface AskStream {
    * Send the draft. Resolves with how it ended, or null when there was
    * nothing to send (an empty question, or one already in flight).
    */
-  ask: () => Promise<AskOutcome | null>;
+  ask: (question?: AskQuestion) => Promise<AskOutcome | null>;
   /** Abandon the thread and whatever is in flight. */
   reset: () => void;
 }
@@ -741,18 +752,23 @@ export function useAskStream(initial: {
   );
 
   const { conversationId, draft, inFlight } = state;
-  const ask = useCallback(async () => {
-    if (inFlight || draft.text.trim() === "") return null;
+  // `question` sends that instead of the draft: a clarifying choice is the
+  // earlier question with its answer attached, not what the composer holds.
+  const ask = useCallback(
+    async (question: AskQuestion = draft) => {
+      if (inFlight || question.text.trim() === "") return null;
 
-    const controller = new AbortController();
-    flight.current = controller;
-    nextExchange += 1;
-    dispatch({ type: "asked", id: `asked-${nextExchange}`, question: draft });
+      const controller = new AbortController();
+      flight.current = controller;
+      nextExchange += 1;
+      dispatch({ type: "asked", id: `asked-${nextExchange}`, question });
 
-    return streamAsk({ conversationId, question: draft, programId }, dispatch, {
-      signal: controller.signal,
-    });
-  }, [conversationId, draft, inFlight, programId]);
+      return streamAsk({ conversationId, question, programId }, dispatch, {
+        signal: controller.signal,
+      });
+    },
+    [conversationId, draft, inFlight, programId],
+  );
 
   const reset = useCallback(() => {
     flight.current?.abort();
