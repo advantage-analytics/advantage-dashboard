@@ -32,6 +32,7 @@ import {
 } from "@/lib/data/ask-tags";
 import { getPersonalMatches } from "@/lib/data/personal-matches-server";
 import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
+import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { createClient } from "@/lib/supabase/server";
@@ -332,7 +333,10 @@ export interface AskPageSeat {
  * links only where they match; this returns the page's half.
  *
  * Read through the signed-in client, so RLS decides which rows come back; a
- * match it cannot read is simply absent, and gets no link.
+ * match it cannot read is simply absent, and gets no link. So is a match with
+ * no playable video (`getMatchVideo()`, the match page's own test): its link
+ * would open Statistics, not the points — every SwingVision match without an
+ * added video, and every video whose file has expired.
  */
 export async function getAskPageSeats(
   matchIds: readonly string[],
@@ -351,7 +355,7 @@ export async function getAskPageSeats(
   if (error || !rows) return seats;
   await Promise.all(
     rows.map(async (row) => {
-      const [rosterIds, first] = await Promise.all([
+      const [rosterIds, first, video] = await Promise.all([
         resolveRosterSeatIds(supabase, row),
         supabase
           .from("points")
@@ -360,8 +364,9 @@ export async function getAskPageSeats(
           .order("point_number", { ascending: true })
           .limit(1)
           .maybeSingle(),
+        getMatchVideo(row.id).catch(() => null),
       ]);
-      if (first.error || !first.data) return;
+      if (!video || first.error || !first.data) return;
       seats.set(row.id, {
         youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
         pointNumber: first.data.point_number,
