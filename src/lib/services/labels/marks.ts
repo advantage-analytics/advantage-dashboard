@@ -50,6 +50,14 @@ import {
   type LabelSide,
 } from "./session";
 
+/**
+ * "Game cut differs" on more than this share of the match's points, and on at
+ * least `SEGMENT_SYSTEMIC_MIN` of them, is the entered score being wrong
+ * rather than those points: its chips are not drawn (`buildLabelMarks`).
+ */
+export const SEGMENT_SYSTEMIC_SHARE = 1 / 3;
+export const SEGMENT_SYSTEMIC_MIN = 10;
+
 /** How loudly a mark is drawn (see the file comment). */
 export type LabelMarkTier = "count" | "hint" | "hidden";
 export type LabelMarkScope = "point" | "shot";
@@ -111,6 +119,14 @@ export const LABEL_ONLY_FLAGS = {
  * called out 31 in 51, and a last serve it called out 5 in 5; the other
  * way round, a last stroke seeded Out that the vendor called in was labelled
  * in 8 times in 11.
+ *
+ * Retiered 2026-10-12 on Michela Moore v Emily Baek (137 points):
+ * `second_serve_called_out` is counted — 5 of its 6 points changed, and two
+ * of the three points changed with no chip at all were double faults that
+ * carried only this hint. `segment_proposal_differs` stays counted, but not
+ * when it is on most of the match (`SEGMENT_SYSTEMIC_SHARE`): there it fired
+ * on 122 points because the entered score was wrong (6–4 for a 6–0), which is
+ * one thing to fix, not 122 points to check — see `buildLabelMarks`.
  */
 export const LABEL_MARK_META = {
   [POINT_FLAGS.WINNER_DISPUTED]: { tier: "count", scope: "point" },
@@ -136,7 +152,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
-  [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "hint", scope: "point" },
+  [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "hint", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.PHANTOM_STROKES_DROPPED]: { tier: "hidden", scope: "point" },
@@ -150,6 +166,27 @@ export const LABEL_MARK_META = {
 >;
 
 export type LabelMarkCode = keyof typeof LABEL_MARK_META;
+
+/**
+ * The `count` marks that are about the data, not the score: answering one
+ * changes what is recorded of the point, rarely who won it. Their chip and
+ * their number in the header are grey; amber is kept for a mark that can move
+ * the score. Every `hint` is data too (`pointRowMarks` draws those as the
+ * same grey chip on a closed row).
+ *
+ * Sorted 2026-10-12 on the four fully checked sessions: the labeller changed
+ * the winner on 28% of "Missing shot?" points — the rate of any point, about
+ * one in five — while changing something on all 40. Every other counted mark
+ * moved the winner on a third to more than half of its points.
+ */
+export const DATA_MARK_CODES: ReadonlySet<LabelMarkCode> = new Set([
+  POINT_FLAGS.SAME_PLAYER_CONSECUTIVE,
+]);
+
+/** Whether a mark is about the data, not the score (`DATA_MARK_CODES`). */
+export function isDataMark(mark: Pick<LabelMark, "code" | "tier">): boolean {
+  return mark.tier !== "count" || DATA_MARK_CODES.has(mark.code);
+}
 
 export function isLabelMarkCode(value: string): value is LabelMarkCode {
   return Object.prototype.hasOwnProperty.call(LABEL_MARK_META, value);
@@ -693,6 +730,32 @@ export function buildLabelMarks(
           videoTime: midpoint(a.video_time, b.video_time),
         });
       }
+    }
+  }
+
+  // "Game cut differs" on most of the match is not a question about each
+  // point: the entered score the re-cut was fitted to is wrong, and the
+  // session's own stops say so (the set that does not add up, flag-nav.ts;
+  // the set break the clock shows, set-break.ts). The chips go, so the points
+  // that do need a look are not lost among them; the scorecard still reads
+  // them, as hidden marks.
+  const recut = Object.values(marks.points).filter((list) =>
+    list.some((m) => m.code === POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS),
+  ).length;
+  if (
+    recut >= SEGMENT_SYSTEMIC_MIN &&
+    recut > transcript.points.length * SEGMENT_SYSTEMIC_SHARE
+  ) {
+    for (const [pointId, list] of Object.entries(marks.points)) {
+      const kept = list.flatMap((m): LabelMark[] =>
+        m.code !== POINT_FLAGS.SEGMENT_PROPOSAL_DIFFERS
+          ? [m]
+          : hidden
+            ? [{ ...m, tier: "hidden" } as LabelMark]
+            : [],
+      );
+      if (kept.length === 0) delete marks.points[pointId];
+      else marks.points[pointId] = kept;
     }
   }
 

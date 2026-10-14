@@ -7,10 +7,17 @@
 
 import type { LabelMarkCode, LabelMarks } from "./marks";
 import { MARK_LABEL } from "./marks-copy";
-import { markStates, pointRowMarkList } from "./marks-state";
+import {
+  markStates,
+  markTone,
+  openHintMarks,
+  pointRowMarkList,
+  pointWinnerContradicted,
+} from "./marks-state";
 import type { LabelPoint } from "./session";
 import type { LabelScoreMismatch } from "./set-scores";
 import { gameOverflow, gameUnderflow } from "./game-shift";
+import { setBreakLabel, setBreakSuspects } from "./set-break";
 import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 
@@ -20,6 +27,8 @@ export interface OpenFlag {
   /** As the rail numbers the point: `pointIndex + 1`. */
   pointNumber: number;
   code: LabelMarkCode;
+  /** About the data, not the score (`markTone`): grey, and counted apart. */
+  data: boolean;
 }
 
 /**
@@ -80,7 +89,8 @@ export function tiebreakServeStops(
  * Every amber slot the rail draws between rows, as stops: a game already won
  * with rows after it (on its first leftover), a game that ends short (on its
  * last row, which the slot follows), the tiebreak at 6–6 (on the first point
- * it would fold) and a tiebreak off its serve order. Read off the rows alone,
+ * it would fold), a tiebreak off its serve order and a sit-down long enough
+ * to be a set break the rows do not have. Read off the rows alone,
  * so there on a session labelled without marks too. `]` and `[` land on
  * each; the header's total stays the marks and the score, and its jump's
  * tooltip says how many slots there are beside them.
@@ -108,6 +118,11 @@ export function slotStops(
       stop(fold.pointIds[0], "Tiebreak at 6–6?"),
     ),
     ...tiebreakServeStops(tiebreakServeOrders(points)),
+    // No slot of its own in the rail: the clock says a set ended where the
+    // rows carry on (set-break.ts), and the stop is the game after the gap.
+    ...setBreakSuspects(points).flatMap((suspect) =>
+      stop(suspect.pointId, setBreakLabel(suspect)),
+    ),
   ];
 }
 
@@ -116,7 +131,11 @@ export function flagStopLabel(stop: FlagStop): string {
   return "code" in stop ? MARK_LABEL[stop.code] : stop.label;
 }
 
-/** Every open `count` mark, in the rail's order. Deleted points have none. */
+/**
+ * Every open flag, in the rail's order: each point's open `count` marks, then
+ * — until the point is checked — its hints, which are grey (`data`) like the
+ * chip its row draws for them. Deleted points have none.
+ */
 export function openFlags(
   points: readonly LabelPoint[],
   marks: LabelMarks,
@@ -132,8 +151,23 @@ export function openFlags(
         pointId: point.id,
         pointNumber: point.pointIndex + 1,
         code: mark.code,
+        data: markTone(mark, point, marks.suggestions) === "data",
       });
     });
+    // A winner the strokes contradict is the score: amber, and still open
+    // on a checked point. Every other hint is data, and goes when checked.
+    const contradicted = pointWinnerContradicted(point, marks);
+    if (point.checkedAt !== null && !contradicted) continue;
+    for (const hint of openHintMarks(point, marks)) {
+      const score = contradicted && hint.code === "ending_stale";
+      if (point.checkedAt !== null && !score) continue;
+      flags.push({
+        pointId: point.id,
+        pointNumber: point.pointIndex + 1,
+        code: hint.code,
+        data: !score,
+      });
+    }
   }
   return flags;
 }
@@ -148,6 +182,12 @@ const KINDS: readonly { name: string; codes: readonly LabelMarkCode[] }[] = [
       "last_shot_unresolved",
       "winner_guessed",
       "last_call_overruled",
+      // The grey list's: how the point ended, not who won it.
+      "shot_after_point_end",
+      "ending_stale",
+      "ending_suspect_line",
+      "winner_to_error_by_bounce",
+      "result_type_unknown",
     ],
   },
   { name: "Missing shot", codes: ["same_player_consecutive"] },
@@ -157,7 +197,15 @@ const KINDS: readonly { name: string; codes: readonly LabelMarkCode[] }[] = [
       "reserve_after_in",
       "service_court_repeat",
       "first_serve_fault_alone",
+      "second_serve_called_out",
+      "second_serve_as_first",
+      "serve_after_serve_in",
+      "serve_in_landing_out",
     ],
+  },
+  {
+    name: "Landing",
+    codes: ["last_landing_missing", "net_hit_contradicts_height"],
   },
   {
     name: "Score",

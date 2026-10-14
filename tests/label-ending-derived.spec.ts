@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 import {
   deriveEnding,
   endingPatchForShotChange,
+  winnerContradicted,
 } from "@/lib/services/labels/ending-derived";
+import { endingStale } from "@/lib/services/labels/marks-state";
 import type {
   LabelEnding,
   LabelPoint,
@@ -473,5 +475,56 @@ test.describe("deriveEnding · a let serve is replayed, never played", () => {
         GHOSTS,
       ),
     ).toEqual({ ending: "double_fault", endedBy: "p1", winner: "p2" });
+  });
+});
+
+test.describe("a winner the strokes contradict", () => {
+  // Quan v Harazaki, point 16: a rally ending on p1's ball out, stored as
+  // "error by p1" with p1 still the winner — left by a write from before the
+  // winner was kept in step with the ending.
+  const rally = () => [
+    serve({ hitter: "p2" }),
+    p1(),
+    p2(),
+    p1({ result: "out" }),
+  ];
+
+  test("re-saving the stroke puts the winner right, and leaves the ending alone", () => {
+    const shots = rally();
+    const stored = point(shots, "p1", "error", "p1");
+    // The rows say the same thing before and after: only the winner is off.
+    expect(endingPatchForShotChange(stored, stored, GHOSTS)).toEqual({
+      winner: "p2",
+    });
+    // Already right: nothing to write.
+    const right = point(shots, "p2", "error", "p1");
+    expect(endingPatchForShotChange(right, right, GHOSTS)).toBeNull();
+    // No winner labelled yet is not a contradiction.
+    const unset = point(shots, null, "error", "p1");
+    expect(endingPatchForShotChange(unset, unset, GHOSTS)).toBeNull();
+  });
+
+  test("it is a contradiction only when the rows settle who won", () => {
+    const missed = deriveEnding(point(rally(), "p1"), GHOSTS);
+    expect(winnerContradicted({ winner: "p1" }, missed)).toBe(true);
+    expect(winnerContradicted({ winner: "p2" }, missed)).toBe(false);
+    expect(winnerContradicted({ winner: null }, missed)).toBe(false);
+    // A last stroke with no result yet settles nothing.
+    const open = deriveEnding(
+      point([serve({ hitter: "p2" }), p1({ result: null })], "p2"),
+      GHOSTS,
+    );
+    expect(winnerContradicted({ winner: "p2" }, open)).toBe(false);
+    expect(winnerContradicted({ winner: "p1" }, null)).toBe(false);
+  });
+
+  test("“Different ending?” is raised for it, with the winner the rows settle", () => {
+    const stored = point(rally(), "p1", "error", "p1");
+    expect(endingStale(stored, GHOSTS)).toMatchObject({
+      code: "ending_stale",
+      params: { ending: "error", endedBy: "p1", winner: "p2" },
+    });
+    // The same point with its winner right raises nothing.
+    expect(endingStale(point(rally(), "p2", "error", "p1"), GHOSTS)).toBeNull();
   });
 });

@@ -81,6 +81,11 @@ import {
   reopenLabelSession,
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
+import {
+  undoLabelOp,
+  type LabelUndoResult,
+} from "@/lib/services/labels/undo-session";
+import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
@@ -106,7 +111,7 @@ export async function updateLabelShot(
   shotId: string,
   patch: Record<string, unknown>,
 ): Promise<LabelShotEditResult> {
-  return editLabelShot(shotId, patch);
+  return withLabelOp("Edit shot", () => editLabelShot(shotId, patch));
 }
 
 /**
@@ -117,7 +122,7 @@ export async function updateLabelPoint(
   pointId: string,
   patch: Record<string, unknown>,
 ): Promise<LabelPointEditResult> {
-  return editLabelPoint(pointId, patch);
+  return withLabelOp("Edit point", () => editLabelPoint(pointId, patch));
 }
 
 /**
@@ -128,14 +133,14 @@ export async function deleteLabelShotAction(
   shotId: string,
   reason: string,
 ): Promise<LabelShotStatusResult> {
-  return deleteLabelShot(shotId, reason);
+  return withLabelOp("Delete shot", () => deleteLabelShot(shotId, reason));
 }
 
 /** Undo a shot's delete: the status it had before comes back. */
 export async function restoreLabelShotAction(
   shotId: string,
 ): Promise<LabelShotStatusResult> {
-  return restoreLabelShot(shotId);
+  return withLabelOp("Restore shot", () => restoreLabelShot(shotId));
 }
 
 /**
@@ -147,14 +152,14 @@ export async function restoreLabelShotAction(
 export async function removeLabelShotsAfterAction(
   shotId: string,
 ): Promise<LabelShotsRemoveResult> {
-  return removeLabelShotsAfter(shotId);
+  return withLabelOp("Remove shots", () => removeLabelShotsAfter(shotId));
 }
 
 /** Undo a batched removal: each tombstone's status before it comes back. */
 export async function restoreLabelShotsAction(
   shotIds: string[],
 ): Promise<LabelShotsRestoreResult> {
-  return restoreLabelShots(shotIds);
+  return withLabelOp("Restore shots", () => restoreLabelShots(shotIds));
 }
 
 /**
@@ -165,21 +170,21 @@ export async function addLabelShotAction(
   pointId: string,
   afterShotId: string | null,
 ): Promise<LabelAddShotResult> {
-  return addLabelShot(pointId, afterShotId);
+  return withLabelOp("Add shot", () => addLabelShot(pointId, afterShotId));
 }
 
 /** Delete a label point: a tombstone, never a removed row. */
 export async function deleteLabelPointAction(
   pointId: string,
 ): Promise<LabelPointStatusResult> {
-  return deleteLabelPoint(pointId);
+  return withLabelOp("Delete point", () => deleteLabelPoint(pointId));
 }
 
 /** Undo a point's delete. */
 export async function restoreLabelPointAction(
   pointId: string,
 ): Promise<LabelPointStatusResult> {
-  return restoreLabelPoint(pointId);
+  return withLabelOp("Restore point", () => restoreLabelPoint(pointId));
 }
 
 /**
@@ -191,7 +196,9 @@ export async function moveLabelPointAction(
   to: LabelGame,
   switchServer: boolean,
 ): Promise<LabelMovePointResult> {
-  return moveLabelPoint(pointId, to, switchServer);
+  return withLabelOp("Move point", () =>
+    moveLabelPoint(pointId, to, switchServer),
+  );
 }
 
 /**
@@ -204,7 +211,9 @@ export async function setLabelGameServerAction(
   game: LabelGame,
   server: LabelSide,
 ): Promise<LabelGameWriteResult> {
-  return setLabelGameServer(sessionId, game, server);
+  return withLabelOp("Set server", () =>
+    setLabelGameServer(sessionId, game, server),
+  );
 }
 
 /**
@@ -217,7 +226,9 @@ export async function setLabelGameTypeAction(
   game: LabelGame,
   type: LabelGameType,
 ): Promise<LabelGameWriteResult> {
-  return setLabelGameType(sessionId, game, type);
+  return withLabelOp("Set game type", () =>
+    setLabelGameType(sessionId, game, type),
+  );
 }
 
 /** Mark a point checked (`checked_at` = now) or, with `checked` false, clear it. */
@@ -226,8 +237,8 @@ export async function setLabelPointCheckedAction(
   checked: boolean,
 ): Promise<LabelCheckedResult> {
   return checked
-    ? markLabelPointChecked(pointId)
-    : unmarkLabelPointChecked(pointId);
+    ? withLabelOp("Check point", () => markLabelPointChecked(pointId))
+    : withLabelOp("Uncheck point", () => unmarkLabelPointChecked(pointId));
 }
 
 /**
@@ -238,7 +249,7 @@ export async function setLabelPointCheckedAction(
 export async function resetLabelShotAction(
   shotId: string,
 ): Promise<LabelShotStatusResult> {
-  return resetLabelShot(shotId);
+  return withLabelOp("Reset shot", () => resetLabelShot(shotId));
 }
 
 /**
@@ -249,7 +260,7 @@ export async function resetLabelShotAction(
 export async function resetLabelPointAction(
   pointId: string,
 ): Promise<LabelPointResetResult> {
-  return resetLabelPoint(pointId);
+  return withLabelOp("Reset point", () => resetLabelPoint(pointId));
 }
 
 /**
@@ -261,7 +272,9 @@ export async function resetLabelPointAction(
 export async function restoreLabelSiteRemovalAction(
   shotId: string,
 ): Promise<LabelSiteRemovalRestoreResult> {
-  return restoreLabelSiteRemoval(shotId);
+  return withLabelOp("Restore removed shot", () =>
+    restoreLabelSiteRemoval(shotId),
+  );
 }
 
 /**
@@ -275,7 +288,9 @@ export async function dismissLabelSuggestionAction(
   pointId: string,
   key: string,
 ): Promise<LabelDismissSuggestionResult> {
-  return dismissLabelSuggestion(pointId, key);
+  return withLabelOp("Dismiss suggestion", () =>
+    dismissLabelSuggestion(pointId, key),
+  );
 }
 
 /**
@@ -293,7 +308,9 @@ export async function insertLabelPointAction(
   anchorPointId: string,
   position: InsertPosition = "before",
 ): Promise<LabelInsertPointResult> {
-  return insertLabelPoint(sessionId, anchorPointId, position);
+  return withLabelOp("Add point", () =>
+    insertLabelPoint(sessionId, anchorPointId, position),
+  );
 }
 
 /**
@@ -311,7 +328,9 @@ export async function shiftLabelGameOverflowAction(
   sessionId: string,
   fromPointId: string,
 ): Promise<LabelGameShiftResult> {
-  return shiftLabelGameOverflow(sessionId, fromPointId);
+  return withLabelOp("Move points to next game", () =>
+    shiftLabelGameOverflow(sessionId, fromPointId),
+  );
 }
 
 /**
@@ -323,7 +342,9 @@ export async function pullLabelGamePointsAction(
   sessionId: string,
   gameKey: string,
 ): Promise<LabelGameShiftResult> {
-  return pullLabelGamePoints(sessionId, gameKey);
+  return withLabelOp("Pull points into game", () =>
+    pullLabelGamePoints(sessionId, gameKey),
+  );
 }
 
 /**
@@ -334,7 +355,9 @@ export async function foldLabelTiebreakAction(
   sessionId: string,
   setNumber: number,
 ): Promise<LabelGameShiftResult> {
-  return foldLabelTiebreak(sessionId, setNumber);
+  return withLabelOp("Fold tiebreak", () =>
+    foldLabelTiebreak(sessionId, setNumber),
+  );
 }
 
 /**
@@ -351,7 +374,7 @@ export async function splitLabelPointAction(
   pointId: string,
   shotId: string,
 ): Promise<LabelSplitPointResult> {
-  return splitLabelPoint(pointId, shotId);
+  return withLabelOp("Split point", () => splitLabelPoint(pointId, shotId));
 }
 
 /**
@@ -367,7 +390,9 @@ export async function combineLabelPointsAction(
   pointId: string,
   direction: CombineDirection,
 ): Promise<LabelCombinePointsResult> {
-  return combineLabelPoints(pointId, direction);
+  return withLabelOp("Combine points", () =>
+    combineLabelPoints(pointId, direction),
+  );
 }
 
 /**
@@ -380,7 +405,7 @@ export async function combineLabelPointsAction(
 export async function switchLabelPointPlayersAction(
   pointId: string,
 ): Promise<LabelPlayerSwitchResult> {
-  return switchLabelPointPlayers(pointId);
+  return withLabelOp("Switch players", () => switchLabelPointPlayers(pointId));
 }
 
 /**
@@ -417,4 +442,17 @@ export async function reopenLabelSessionAction(
   sessionId: string,
 ): Promise<LabelSessionStatusResult> {
   return reopenLabelSession(sessionId);
+}
+
+/**
+ * The console's Undo: rewind the session's newest journaled action, whatever
+ * it was — an edit, a delete, a split, a combine, a reset — and answer the
+ * session's rows as they now stand. Every action above runs inside
+ * `withLabelOp`, which is what files its writes as one step; this one does
+ * not, so an undo is never itself a step to undo.
+ */
+export async function undoLabelOpAction(
+  sessionId: string,
+): Promise<LabelUndoResult> {
+  return undoLabelOp(sessionId);
 }
