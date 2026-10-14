@@ -1,22 +1,18 @@
 import { expect, test } from "@playwright/test";
-import * as React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   clampRailWidth,
   layoutAfterFullscreenRequest,
   parseRailWidth,
-  type LabelLayoutMode,
 } from "@/components/admin/labels/label-layout";
-import { createLoader } from "./fixtures/vm-modules";
 
-/** The console's two layouts, the rail's width, and the header's Layout menu. */
+/** The session's two views (overview, full screen) and the rail's width. */
 
 test("a request for the browser's full screen settles the layout", () => {
   // It went along: black, in the browser's full screen.
   expect(layoutAfterFullscreenRequest("entered")).toBe("black");
   // Refused: never black under the browser's bars.
-  expect(layoutAfterFullscreenRequest("refused")).toBe("docked-side");
+  expect(layoutAfterFullscreenRequest("refused")).toBe("overview");
   // No Fullscreen API at all: the black layer is the only full screen.
   expect(layoutAfterFullscreenRequest("unsupported")).toBe("black");
 });
@@ -45,103 +41,5 @@ test.describe("the rail's width", () => {
     for (const raw of [null, undefined, "", "  ", "wide", "{}", "640px"]) {
       expect(parseRailWidth(raw), String(raw)).toBe(640);
     }
-  });
-});
-
-test.describe("the header's Layout menu", () => {
-  type ControlProps = {
-    mode: LabelLayoutMode;
-    onChange: (mode: LabelLayoutMode) => void;
-  };
-  type ItemProps = {
-    label: string;
-    description?: string;
-    chosen?: boolean;
-    onSelect: () => void;
-  };
-
-  /**
-   * The control with `FloatMenu` opened flat: the trigger, then every row as
-   * a plain element carrying what it was given — and the rows' `onSelect`s,
-   * in order, for the spec to press.
-   */
-  function draw(mode: LabelLayoutMode) {
-    const rows: ItemProps[] = [];
-    const chosen: LabelLayoutMode[] = [];
-    const { LabelLayoutControl } = createLoader({
-      stubs: {
-        "@/components/ui/float-menu": {
-          FloatMenu: ({
-            trigger,
-            label,
-            children,
-          }: {
-            trigger: React.ReactNode;
-            label: string;
-            children: React.ReactNode;
-          }) =>
-            React.createElement(
-              "div",
-              { "data-stub-menu": label },
-              trigger,
-              children,
-            ),
-          FloatMenuItem: (props: ItemProps) => {
-            rows.push(props);
-            return React.createElement(
-              "div",
-              {
-                "data-stub-row": props.label,
-                "data-chosen": props.chosen ? "true" : "false",
-              },
-              props.description,
-            );
-          },
-        },
-      },
-    }).load("src/components/admin/labels/label-layout-control.tsx") as {
-      LabelLayoutControl: React.ComponentType<ControlProps>;
-    };
-    const html = renderToStaticMarkup(
-      React.createElement(LabelLayoutControl, {
-        mode,
-        onChange: (next) => chosen.push(next),
-      }),
-    );
-    return { html, rows, chosen };
-  }
-
-  test("exactly two rows — Docked side, Full screen — each saying what it does", () => {
-    const { html, rows } = draw("docked-side");
-    expect(html).toContain('data-stub-menu="Layout"');
-    expect(rows.map((row) => row.label)).toEqual([
-      "Docked side",
-      "Full screen",
-    ]);
-    expect(rows.map((row) => row.description)).toEqual([
-      "Video over the court, the points list on the right",
-      "The same layout on black, filling the whole screen",
-    ]);
-  });
-
-  test("the current mode is the checked row, and the trigger names it", () => {
-    const docked = draw("docked-side");
-    expect(docked.rows.map((row) => row.chosen)).toEqual([true, false]);
-    expect(docked.html).toMatch(
-      /<button[^>]*data-label-layout=""[^>]*data-layout-mode="docked-side"[^>]*aria-label="Layout: Docked side"/,
-    );
-    const black = draw("black");
-    expect(black.rows.map((row) => row.chosen)).toEqual([false, true]);
-    expect(black.html).toMatch(
-      /<button[^>]*data-label-layout=""[^>]*data-layout-mode="black"[^>]*aria-label="Layout: Full screen"/,
-    );
-  });
-
-  test("choosing the other row reports it; choosing the current one reports nothing", () => {
-    const { rows, chosen } = draw("docked-side");
-    rows[0].onSelect();
-    expect(chosen).toEqual([]);
-    rows[1].onSelect();
-    expect(chosen).toEqual(["black"]);
   });
 });

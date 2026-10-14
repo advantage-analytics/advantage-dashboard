@@ -15,6 +15,7 @@ import {
 } from "react";
 import {
   labelProgress,
+  liveShotsInOrder,
   orderLabelShots,
   type LabelGameType,
   type LabelPoint,
@@ -180,7 +181,6 @@ import {
 } from "./court-placement";
 import { LabelBlackRail } from "./label-black-rail";
 import { LabelBlackView } from "./label-black-view";
-import { LabelSideView } from "./label-side-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
@@ -191,7 +191,6 @@ import {
   layoutAfterFullscreenRequest,
   type LabelLayoutMode,
 } from "./label-layout";
-import { LabelLayoutControl } from "./label-layout-control";
 import { sideNames } from "./label-format";
 import { nowPlayingOf, nowPlayingReadout } from "./label-now-playing";
 import {
@@ -208,6 +207,12 @@ import {
 } from "@/lib/services/labels/tiebreak-fold";
 import type { LabelRowOperations } from "./label-row-parts";
 import { LabelSaveStatus } from "./label-save-status";
+import { LabelDashboard } from "./label-dashboard";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
+import { getInitials } from "@/lib/data/match-utils";
+import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
+import type { LabelUndoResult } from "@/lib/services/labels/undo-session";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
@@ -219,6 +224,8 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
+/** How long the overview's jump waits for full screen to settle. */
+const OPEN_JUMP_DELAY_MS = 450;
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
 
@@ -312,7 +319,11 @@ function removeFrom(set: Dispatch<SetStateAction<ReadonlySet<string>>>) {
  *   same call (ending-session.ts); the server's `point` is the last word over
  *   the optimistic rows here.
  * - Outside a control: Enter checks the open point, Space plays or pauses, ← /
- *   → step points.
+ *   → step points, ] / [ step the amber marks and ' / ; the grey ones. ↑ / ↓ walk the open point's
+ *   strokes and ⌘ Enter checks the point, both from inside a stroke's row
+ *   too. Escape lets go of the selected stroke, then folds the open point.
+ *   ⌘Z is the header's Undo: the newest action rewound on the server. Space
+ *   plays or pauses from anywhere but a text field, an open menu or a dialog.
  * - Two layouts (`label-layout.ts`) mount the same player, court panel and rail
  *   with the same callbacks. A switch remounts the `<video>`, so the console
  *   re-seeks it to the clock's time.
@@ -333,6 +344,7 @@ export function LabelConsole({
   initialLayoutMode,
   initialRailWidth,
   headerAction,
+  upload = null,
 }: {
   session: LabelSession;
   video: LabelVideo | null;
@@ -352,6 +364,8 @@ export function LabelConsole({
   ) => Promise<LabelPointEditResult>;
   /** The row operations' server actions. Absent: the rows offer none. */
   operations?: LabelConsoleOperations;
+  /** What the uploader entered, for the overview (label-overview-server.ts). */
+  upload?: LabelUploadInfo | null;
   /** A confirm open on first render — for specs. */
   initialConfirm?: LabelConfirm | null;
   /** Site-removed strokes shown as their struck-through row on first render. */
@@ -436,7 +450,6 @@ export function LabelConsole({
   const player = useRef<LabelVideoHandle>(null);
   // One scroller ref per layout: each mode mounts its own rail, and the follow
   // scroll hangs its hold listeners on the element behind the ref it is given.
-  const sideScrollerRef = useRef<HTMLDivElement | null>(null);
   const blackScrollerRef = useRef<HTMLDivElement | null>(null);
   // The root: the video writes the film's clock onto it (`--film-t`), so the
   // playing row's progress rule and the transport read one clock.
@@ -465,8 +478,10 @@ export function LabelConsole({
   // Leaving the browser's full screen by any road puts the layout back to
   // docked side: one state (use-browser-fullscreen.ts). Only while the layout
   // is the full screen. The hook calls the latest of these.
+  // Where leaving full screen lands.
+  const homeMode: LabelLayoutMode = "overview";
   const leftWholeScreen = () => {
-    if (layoutMode === "black") switchLayout("docked-side");
+    if (layoutMode === "black") switchLayout(homeMode);
   };
   const { enter: enterWholeScreen, leave: leaveWholeScreen } =
     useBrowserFullscreen(leftWholeScreen);
@@ -479,7 +494,7 @@ export function LabelConsole({
         // Fullscreen API keeps the black layer.
         void enterWholeScreen().then((outcome) => {
           const settled = layoutAfterFullscreenRequest(outcome);
-          if (settled !== "black") switchLayout(settled);
+          if (settled !== "black") switchLayout(homeMode);
         });
       } else {
         // The exit button and the Layout menu leave the browser's too.
@@ -506,10 +521,33 @@ export function LabelConsole({
       const giveUp = window.setTimeout(stop, 1500);
       document.addEventListener("focusin", release);
     },
-    [switchLayout, enterWholeScreen, leaveWholeScreen],
+    [switchLayout, enterWholeScreen, leaveWholeScreen, homeMode],
   );
   const fullScreen = layoutMode === "black";
-  const scrollerRef = fullScreen ? blackScrollerRef : sideScrollerRef;
+  // The overview has no film, court or rail: nothing is labelled on it, and
+  // the console's keys are not bound there.
+  const overview = layoutMode === "overview";
+  const overviewRef = useRef(overview);
+  useEffect(() => {
+    overviewRef.current = overview;
+  });
+  // A point the overview opened full screen on. The rail it scrolls is not
+  // mounted until the layout has switched, so the jump waits for that.
+  const openOnPointId = useRef<string | null>(null);
+  const jumpAfterOpen = useRef<(pointId: string) => void>(() => {});
+  useEffect(() => {
+    const pointId = openOnPointId.current;
+    if (!fullScreen || pointId === null) return;
+    openOnPointId.current = null;
+    // After the browser's own full-screen transition: the rail is measured
+    // for the jump's scroll, and mid-transition it is still the wrong height.
+    const timer = window.setTimeout(
+      () => jumpAfterOpen.current(pointId),
+      OPEN_JUMP_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [fullScreen]);
+  const scrollerRef = blackScrollerRef;
 
   // A mode change remounts the `<video>` at zero. Put the new element where the
   // clock says the film was: `seekTo` before its metadata is in sets the
@@ -907,6 +945,39 @@ export function LabelConsole({
     setPoints((rows) => settleRows(rows, result));
     dispatchSave({ type: "success", at: Date.now() });
     return result;
+  }
+
+  // Undo: the server rewinds the newest action on its journal and answers
+  // every row, which replace the console's own — an undone split or combine
+  // moves strokes between points and renumbers the ones after. Not while a
+  // write is in flight: its answer would land on rows that are gone. False
+  // once the server has said nothing is left, until the next write.
+  const [undoing, setUndoing] = useState(false);
+  const [undoEmpty, setUndoEmpty] = useState(false);
+  if (undoEmpty && saveStatus.pending > 0) setUndoEmpty(false);
+  const canUndo =
+    editable &&
+    Boolean(operations?.undo) &&
+    !undoing &&
+    !undoEmpty &&
+    !statusSaving &&
+    !confirm &&
+    saveStatus.pending === 0;
+  async function undoLast() {
+    if (!canUndo || !operations?.undo) return;
+    setUndoing(true);
+    dispatchSave({ type: "start" });
+    const result = await settle(operations.undo(session.id));
+    setUndoing(false);
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    setPlacement(NO_PLACEMENT);
+    setPoints(result.points);
+    dispatchSave({ type: "success", at: Date.now() });
+    // After the success above, which counts as a write settling.
+    setUndoEmpty(result.undone === null || result.remaining === 0);
   }
 
   /** A plan the console refused before any write: the status bar says why. */
@@ -1531,6 +1602,7 @@ export function LabelConsole({
         pointId,
         pointNumber: point.pointIndex + 1,
         to,
+        gameInSet: gameInSetOf(points, to),
         server,
         swaps: moveSwapsPlayers(point, server)
           ? point.winner === null
@@ -2011,20 +2083,30 @@ export function LabelConsole({
   // and [ go to the next and previous open flag. Never from inside a control,
   // where those keys already mean something.
   const checkOpenPoint = useRef<() => void>(() => {});
-  // `]` and `[`: the next and previous open flag, as the header's flag does.
-  const stepToFlag = useRef<(direction: 1 | -1) => void>(() => {});
+  // `]` and `[`: the next and previous amber flag, as the header's amber list
+  // does; `'` and `;`, the two keys under them, the same for the grey list.
+  const stepToFlag = useRef<
+    (direction: 1 | -1, kind: "score" | "data") => void
+  >(() => {});
+  // ↑ and ↓: the previous and next stroke of the open point.
+  const stepShot = useRef<(direction: 1 | -1) => void>(() => {});
+  // Escape with no stroke selected: fold the open point's rows away.
+  const foldOpenPoint = useRef<() => boolean>(() => false);
+  // ⌘Z: the header's Undo.
+  const undoLastRef = useRef<() => void>(() => {});
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
     () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
     [operable, points, session.adScoring],
   );
-  // The marks, the set that doesn't add up and every amber slot between the
-  // rows, as the rail's header steps them.
-  const openMarks = useMemo(() => {
+  // The two lists the rail's header steps: what can move the score — the
+  // amber marks, the set that doesn't add up and every amber slot between
+  // the rows — and the grey marks, which are wrong data.
+  const flagStops = useMemo(() => {
     const slots: readonly FlagStop[] = slotJumpStops;
-    if (!liveMarks) return slots;
-    const marked: FlagStop[] = openFlags(points, liveMarks);
+    if (!liveMarks) return { score: slots, data: [] as FlagStop[] };
+    const marked = openFlags(points, liveMarks);
     const stop = scoreStop(
       sessionScoreMismatch({
         points,
@@ -2035,7 +2117,14 @@ export function LabelConsole({
       }),
       points,
     );
-    return [...marked, ...(stop ? [stop] : []), ...slots];
+    return {
+      score: [
+        ...marked.filter((flag) => !flag.data),
+        ...(stop ? [stop] : []),
+        ...slots,
+      ] as readonly FlagStop[],
+      data: marked.filter((flag) => flag.data) as readonly FlagStop[],
+    };
   }, [
     points,
     liveMarks,
@@ -2049,20 +2138,48 @@ export function LabelConsole({
       if (!operable || confirm || !expanded || expanded.checkedAt) return;
       setChecked(expanded.id, true);
     };
-    stepToFlag.current = (direction) => {
+    stepToFlag.current = (direction, kind) => {
       if (confirm) return;
-      const flag = stepFlag(openMarks, points, currentPointId, direction);
+      const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
       if (flag) findGap(flag.pointId);
+    };
+    stepShot.current = (direction) => {
+      if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
+      const shots = liveShotsInOrder(expanded, drawsGhosts(marks)).filter(
+        (shot) => !shot.id.startsWith(PENDING_SHOT_PREFIX),
+      );
+      if (shots.length === 0) return;
+      const at = shots.findIndex((shot) => shot.id === placement.shotId);
+      // From no stroke, ↓ takes the first and ↑ the last; the ends do not wrap.
+      const next =
+        at === -1
+          ? direction === 1
+            ? 0
+            : shots.length - 1
+          : Math.min(shots.length - 1, Math.max(0, at + direction));
+      if (next === at) return;
+      // A cell left focused in the old row would keep the keys for itself.
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      selectShot(shots[next].id);
+    };
+    undoLastRef.current = () => void undoLast();
+    jumpAfterOpen.current = (pointId) => findGap(pointId);
+    foldOpenPoint.current = () => {
+      if (confirm || !expanded || unfoldedPointId !== expanded.id) return false;
+      setFoldedPointId(expanded.id);
+      return true;
     };
   });
   // Escape lets go of the selected stroke, from anywhere in its row: a text
   // field has already put its draft back by the time the key reaches the
   // window. An open menu or dialog keeps the key for itself.
+  // With no stroke selected the same key folds the open point, unless it was
+  // spent closing an editor (`defaultPrevented`) or typed into a field.
   const selectedShotId = placement.shotId;
   useEffect(() => {
-    if (selectedShotId === null) return;
     function onEscape(event: KeyboardEvent) {
       if (
+        overviewRef.current ||
         event.key !== "Escape" ||
         event.metaKey ||
         event.ctrlKey ||
@@ -2074,6 +2191,19 @@ export function LabelConsole({
       ) {
         return;
       }
+      if (selectedShotId === null) {
+        const target = event.target as Element | null;
+        if (
+          event.defaultPrevented ||
+          target?.closest?.("input, select, textarea, [contenteditable='true']")
+        ) {
+          return;
+        }
+        if (foldOpenPoint.current()) {
+          (document.activeElement as HTMLElement | null)?.blur?.();
+        }
+        return;
+      }
       (document.activeElement as HTMLElement | null)?.blur?.();
       setPlacement(NO_PLACEMENT);
     }
@@ -2082,14 +2212,66 @@ export function LabelConsole({
   }, [selectedShotId]);
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (overviewRef.current) return;
       const key = event.key;
+      // ⌘ Enter and ↑ / ↓ work from inside a stroke's row as well: a focused
+      // cell is a button, which the keys below leave alone. A text field, an
+      // open menu and a dialog still keep them.
+      // ⌘Z is the header's Undo, except in a text field, which undoes its
+      // own typing.
+      if (
+        (key === "z" || key === "Z") &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.defaultPrevented
+      ) {
+        const target = event.target as Element | null;
+        if (
+          target?.closest?.(
+            "input, select, textarea, [contenteditable='true'], [role='dialog'], [role='alertdialog']",
+          )
+        ) {
+          return;
+        }
+        event.preventDefault();
+        undoLastRef.current();
+        return;
+      }
+      const chord = key === "Enter" && (event.metaKey || event.ctrlKey);
+      const vertical =
+        (key === "ArrowUp" || key === "ArrowDown") &&
+        !event.metaKey &&
+        !event.ctrlKey;
+      if (chord || vertical) {
+        if (event.defaultPrevented || event.altKey || event.shiftKey) return;
+        const target = event.target as Element | null;
+        if (
+          target?.closest?.(
+            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
+          ) ||
+          document.querySelector(
+            "[role='menu'], [role='dialog'], [role='alertdialog']",
+          )
+        ) {
+          return;
+        }
+        event.preventDefault();
+        if (chord) {
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          checkOpenPoint.current();
+        } else stepShot.current(key === "ArrowDown" ? 1 : -1);
+        return;
+      }
       if (
         (key !== "Enter" &&
           key !== " " &&
           key !== "ArrowLeft" &&
           key !== "ArrowRight" &&
           key !== "[" &&
-          key !== "]") ||
+          key !== "]" &&
+          key !== ";" &&
+          key !== "'") ||
         event.defaultPrevented ||
         event.metaKey ||
         event.ctrlKey ||
@@ -2103,12 +2285,52 @@ export function LabelConsole({
       event.preventDefault();
       if (key === "Enter") checkOpenPoint.current();
       else if (key === "]" || key === "[") {
-        stepToFlag.current(key === "]" ? 1 : -1);
+        stepToFlag.current(key === "]" ? 1 : -1, "score");
+      } else if (key === "'" || key === ";") {
+        stepToFlag.current(key === "'" ? 1 : -1, "data");
       } else if (key === " ") player.current?.togglePlay();
       else player.current?.step(key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+  // Space always plays or pauses, with a cell, a row or a button focused too.
+  // It is taken in the capture phase, before the control it was aimed at can
+  // read it as a click or open its editor, and that control is let go so the
+  // key's release does not press it either. Typing keeps its space, and an
+  // open menu or dialog keeps the key: there it chooses.
+  useEffect(() => {
+    function onSpace(event: KeyboardEvent) {
+      if (
+        overviewRef.current ||
+        event.key !== " " ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest?.(
+          "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
+        ) ||
+        document.querySelector(
+          "[role='menu'], [role='dialog'], [role='alertdialog']",
+        )
+      ) {
+        return;
+      }
+      // Outside a control the handler above has it.
+      if (!target?.closest?.(KEY_OWNER_SELECTOR)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      if (!event.repeat) player.current?.togglePlay();
+    }
+    window.addEventListener("keydown", onSpace, true);
+    return () => window.removeEventListener("keydown", onSpace, true);
   }, []);
 
   // The follow scroll, on the rail's scroller: the page itself does not scroll.
@@ -2190,7 +2412,9 @@ export function LabelConsole({
       checked={checked}
       total={total}
       saveStatus={saveStatus}
-      onExit={fullScreen ? () => chooseLayout("docked-side") : undefined}
+      onUndo={editable && operations?.undo ? () => void undoLast() : undefined}
+      canUndo={canUndo}
+      onExit={fullScreen ? () => chooseLayout(homeMode) : undefined}
       onFullScreen={fullScreen ? undefined : () => chooseLayout("black")}
       scrollerRef={scrollerRef}
       onFocusCapture={railHandlers.holdOnEditorFocus}
@@ -2234,7 +2458,6 @@ export function LabelConsole({
       onGoToPoint={railHandlers.findGap}
     />
   );
-  const View = fullScreen ? LabelBlackView : LabelSideView;
 
   return (
     <div
@@ -2250,25 +2473,63 @@ export function LabelConsole({
           data-console-header=""
           className="flex shrink-0 items-end justify-between gap-8"
         >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <h1 className="text-display truncate">
-              Label match · {session.player1Name} vs {session.player2Name}
-            </h1>
-            <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-              <span className="tabular">
-                {checked} of {total} points checked
-              </span>
-              {status === "complete" ? (
-                <span data-session-complete="">· Complete</span>
-              ) : null}
-              <span aria-hidden="true">·</span>
-              <span className="mono text-[11px] text-[var(--ink-500)]">
-                derivation {session.derivationVersion}
-              </span>
-            </p>
+          <div className="flex min-w-0 items-center gap-4">
+            {/* Both players, player 1 in front: the pair is the match. */}
+            <span className="flex shrink-0">
+              <PersonAvatar
+                initials={getInitials(session.player1Name)}
+                className="relative size-10 text-[12px]"
+              />
+              <PersonAvatar
+                initials={getInitials(session.player2Name)}
+                className="-ml-2.5 size-10 text-[12px] shadow-[0_0_0_2px_var(--surface-card)]"
+              />
+            </span>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <h1 className="text-display truncate">
+                {session.player1Name} vs {session.player2Name}
+              </h1>
+              <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
+                {upload?.program ? (
+                  <>
+                    <ProgramCrest
+                      name={upload.program}
+                      crestUrl={upload.programCrestUrl}
+                      size={26}
+                      className="size-[18px] rounded-[5px] text-[7px]"
+                    />
+                    <span>{upload.program}</span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                ) : null}
+                <span className="tabular">
+                  {checked} of {total} points checked
+                </span>
+                {status === "complete" ? (
+                  <span data-session-complete="">· Complete</span>
+                ) : null}
+                <span aria-hidden="true">·</span>
+                <span className="mono text-[11px] text-[var(--ink-500)]">
+                  derivation {session.derivationVersion}
+                </span>
+              </p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-5">
             <LabelSaveStatus status={saveStatus} />
+            {operable && operations?.undo && !overview ? (
+              <button
+                type="button"
+                data-undo-last=""
+                className={advButton("outline", "sm")}
+                aria-label="Undo the last change"
+                aria-keyshortcuts="Meta+Z"
+                disabled={!canUndo}
+                onClick={() => void undoLast()}
+              >
+                Undo
+              </button>
+            ) : null}
             {operable && operations?.completeSession ? (
               <button
                 type="button"
@@ -2294,7 +2555,14 @@ export function LabelConsole({
                 Reopen
               </button>
             ) : null}
-            <LabelLayoutControl mode={layoutMode} onChange={chooseLayout} />
+            <button
+              type="button"
+              data-open-labelling=""
+              className={advButton("primary", "sm")}
+              onClick={() => chooseLayout("black")}
+            >
+              {status === "complete" ? "Open full screen" : "Open labelling"}
+            </button>
             {headerAction}
           </div>
         </div>
@@ -2302,15 +2570,44 @@ export function LabelConsole({
 
       {/* The full-screen layer is a child of this root so `--film-t`
           reaches the rail's rows. */}
-      <View
-        initialRailWidth={initialRailWidth}
-        video={videoPlayer}
-        court={courtPanel}
-        placing={placing}
-        arrive={layoutSwitched}
-      >
-        {rail}
-      </View>
+      {overview ? (
+        <LabelDashboard
+          points={points}
+          marks={liveMarks}
+          games={scores.games}
+          adScoring={session.adScoring}
+          names={names}
+          finalScore={sessionFields.finalScore}
+          matchScore={session.matchScore}
+          warnings={completeWarnings({
+            points,
+            adScoring: session.adScoring,
+            marks: liveMarks,
+            finalScore: sessionFields.finalScore,
+            videoEndsEarly: sessionFields.videoEndsEarly,
+            matchScore: session.matchScore,
+            games: scores.games,
+            names,
+          })}
+          complete={status === "complete"}
+          upload={upload}
+          onOpen={(pointId) => {
+            // The gesture the browser's full screen asks for is this click.
+            openOnPointId.current = pointId ?? null;
+            chooseLayout("black");
+          }}
+        />
+      ) : (
+        <LabelBlackView
+          initialRailWidth={initialRailWidth}
+          video={videoPlayer}
+          court={courtPanel}
+          placing={placing}
+          arrive={layoutSwitched}
+        >
+          {rail}
+        </LabelBlackView>
+      )}
 
       {operable ? (
         <LabelConfirmDialog
@@ -2456,6 +2753,11 @@ export interface LabelConsoleOperations {
   completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /** A complete session back to `labelling`. Absent: no "Reopen". */
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
+  /**
+   * Rewind the session's newest action, whatever it was, and answer the rows
+   * as they now stand (undo-session.ts). Absent: no "Undo".
+   */
+  undo?: (sessionId: string) => Promise<LabelUndoResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

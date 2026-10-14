@@ -24,6 +24,7 @@ import {
   markSummary,
   pointChanged,
   pointRowMarkList,
+  markTone,
   rollupMarks,
   stateHoverParts,
   type MarkListPoint,
@@ -449,6 +450,7 @@ test.describe("a flag's life", () => {
       text: "Missing shot?",
       count: 1,
       state: "open",
+      tone: "data",
     });
   });
 
@@ -515,13 +517,14 @@ test.describe("the row roll-up", () => {
       text: "Check the ending",
       count: 1,
       state: "open",
+      tone: "score",
     });
   });
 
   test("two marks read as a count", () => {
     expect(
       rollup([sample("winner_disputed"), sample("pick_winner")], point()),
-    ).toEqual({ text: "2 to check", count: 2, state: "open" });
+    ).toEqual({ text: "2 to check", count: 2, state: "open", tone: "score" });
   });
 
   test("a settled mark loses its words and the pencil appears", () => {
@@ -530,14 +533,16 @@ test.describe("the row roll-up", () => {
       text: null,
       count: 1,
       state: "settled",
+      tone: "score",
     });
     expect(
       rollup(marks, point({ status: "edited", checkedAt: CHECKED_AT })),
-    ).toEqual({ text: null, count: 1, state: "checked" });
+    ).toEqual({ text: null, count: 1, state: "checked", tone: "score" });
     expect(rollup(marks, point({ checkedAt: CHECKED_AT }))).toEqual({
       text: null,
       count: 1,
       state: "checked-as-is",
+      tone: "score",
     });
   });
 
@@ -548,14 +553,60 @@ test.describe("the row roll-up", () => {
         [sample("service_court_repeat"), sample("winner_disputed")],
         point({ dismissed: ["missing_point"] }),
       ),
-    ).toEqual({ text: "Check the ending", count: 2, state: "open" });
+    ).toEqual({
+      text: "Check the ending",
+      count: 2,
+      state: "open",
+      tone: "score",
+    });
     // Dismissed outranks checked as is.
     expect(
       rollup(
         [sample("service_court_repeat"), sample("winner_disputed")],
         point({ dismissed: ["missing_point"], checkedAt: CHECKED_AT }),
       ),
-    ).toEqual({ text: null, count: 2, state: "dismissed" });
+    ).toEqual({
+      text: null,
+      count: 2,
+      state: "dismissed",
+      tone: "score",
+    });
+  });
+
+  test("grey for the data, amber for the score: a missing shot is the score's only at the rally's end", () => {
+    const missing = sample("same_player_consecutive");
+    const shots = ["s1", "s2", "s3", "s4", "s5", "s6"].map((id) => ({
+      id,
+      status: "kept",
+    }));
+    const slot = (afterShotId: string) => [
+      {
+        kind: "missing_shot" as const,
+        key: "missing_shot:1" as const,
+        pointId: "p",
+        afterShotId,
+        hitter: "p1" as const,
+        videoTime: null,
+      },
+    ];
+    const p = { id: "p", shots };
+    // Mid-rally: three strokes or more after the gap.
+    expect(markTone(missing, p, slot("s2"))).toBe("data");
+    // Among the last three: who hit the last ball is in question.
+    expect(markTone(missing, p, slot("s4"))).toBe("score");
+    expect(markTone(missing, p, slot("s5"))).toBe("score");
+    // Its place unknown: data. Every other counted mark: the score.
+    expect(markTone(missing, p)).toBe("data");
+    expect(markTone(sample("winner_disputed"), p)).toBe("score");
+    // One open data mark is a grey chip; beside an open score mark, amber.
+    expect(rollupMarks([missing], ["open"], ["data"])?.tone).toBe("data");
+    expect(
+      rollupMarks(
+        [missing, sample("winner_disputed")],
+        ["open", "open"],
+        ["data", "score"],
+      )?.tone,
+    ).toBe("score");
   });
 });
 
@@ -679,15 +730,15 @@ test.describe("the tiers on a point", () => {
       listPoint([listShot("s1")]),
       marksOf(
         [
-          sample("second_serve_called_out"),
+          sample("result_type_unknown"),
           sample("ending_suspect_line"),
-          sample("second_serve_called_out"),
+          sample("result_type_unknown"),
         ],
         { s1: [sample("net_hit_contradicts_height")] },
       ),
     );
     expect(codes(list.hints)).toEqual([
-      "second_serve_called_out",
+      "result_type_unknown",
       "ending_suspect_line",
       "net_hit_contradicts_height",
     ]);

@@ -563,13 +563,17 @@ export const BlackSuggestedPoint = memo(function BlackSuggestedPoint({
             <BlackTextAction
               ink="quiet"
               data-point-suggestion-let=""
-              aria-label={`Point ${b} was a let, replayed`}
+              aria-label={`Point ${a} was a let, replayed`}
               onClick={(event) => {
                 event.stopPropagation();
-                edit.onPatchPoint?.(point.id, { ending: "let_replayed" });
+                // The let is the first of the pair: the serve that was played
+                // again is the point that counted.
+                edit.onPatchPoint?.(before?.id ?? point.id, {
+                  ending: "let_replayed",
+                });
               }}
             >
-              {b} was a let
+              {a} was a let
             </BlackTextAction>
           )}
           <BlackTextAction

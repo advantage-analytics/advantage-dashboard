@@ -20,6 +20,7 @@ import { labelScores, type LabelGameBand } from "./score";
 import { enteredScore, labelSetScores, scoreMismatch } from "./set-scores";
 import type { MatchScore } from "@/lib/services/splitstep/derivation";
 import { isNonPointEnding, labelProgress, type LabelPoint } from "./session";
+import { setBreakSuspects, setBreakWarning } from "./set-break";
 import { tiebreakServeOrders } from "./tiebreak-serve";
 
 export interface CompleteWarningInput {
@@ -103,6 +104,10 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
         `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? ", so publishing will refuse" : ""}`,
       );
     }
+  }
+
+  for (const suspect of setBreakSuspects(points)) {
+    warnings.push(setBreakWarning(suspect));
   }
 
   const names = input.names ?? { p1: "player 1", p2: "player 2" };
