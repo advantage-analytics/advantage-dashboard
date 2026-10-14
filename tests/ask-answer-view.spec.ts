@@ -865,7 +865,7 @@ test.describe("feedback", () => {
     await up(page).click();
     await expect(up(page)).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("status").last()).toHaveText(
-      "Thanks — this helps improve Ask.",
+      "Thanks — kept to help improve Ask.",
     );
     // A thumbs up asks for nothing more.
     await expect(page.locator("[data-ask-feedback-detail]")).toHaveCount(0);
@@ -884,6 +884,8 @@ test.describe("feedback", () => {
     await down(page).click();
     const detail = page.locator("[data-ask-feedback-detail]");
     await expect(detail).toHaveCount(1);
+    // What happens to it is said before it is sent.
+    await expect(detail).toContainText("even if you delete the conversation");
     const send = detail.getByRole("button", { name: "Send" });
     await expect(send).toBeDisabled();
 

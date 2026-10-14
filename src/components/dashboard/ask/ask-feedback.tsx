@@ -19,9 +19,17 @@ export const ASK_FEEDBACK_COPY = {
   ask: "What went wrong?",
   notePlaceholder: "Anything else? (optional)",
   send: "Send",
-  thanks: "Thanks — this helps improve Ask.",
+  thanks: "Thanks — kept to help improve Ask.",
   failed: "Could not save that. Try again.",
 } as const;
+
+/**
+ * What happens to a thumb, said where it is given and where a conversation
+ * is deleted: the row keeps a copy of the exchange and outlives the thread
+ * (`20261014205215_ask_feedback_keep.sql`).
+ */
+export const ASK_FEEDBACK_KEPT =
+  "Feedback you send is kept with its question and answer to improve Ask, even if you delete the conversation.";
 
 /**
  * Thumbs up or down on one saved answer, beside its signature.
@@ -154,6 +162,9 @@ export function AskFeedbackControl({
             onChange={(event) => setNote(event.target.value)}
             className="w-full resize-none rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 py-2 text-[13px] text-[var(--ink-900)] placeholder:text-[var(--ink-400)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           />
+          <p className="text-micro" style={{ color: "var(--ink-500)" }}>
+            {ASK_FEEDBACK_KEPT}
+          </p>
           <div>
             <button
               type="button"

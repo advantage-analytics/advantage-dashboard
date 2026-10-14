@@ -26,6 +26,7 @@ import {
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import type { AskQuotaView } from "./ask-composer";
+import { ASK_FEEDBACK_KEPT } from "./ask-feedback";
 import { askDayLabel, askMonthGroups } from "./ask-earlier";
 import {
   ASK_RAIL,
@@ -432,6 +433,7 @@ function AskEarlier({
               <Em>{target.title}</Em> leaves Earlier questions. What it used of{" "}
               <Em>this month’s questions</Em> stays used.
             </p>
+            <p>{ASK_FEEDBACK_KEPT}</p>
           </ConfirmProse>
         )}
       </ConfirmDialog>
