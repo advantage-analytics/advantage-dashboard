@@ -61,6 +61,8 @@ export interface LabelDashboardProps {
   names: Record<LabelSide, string>;
   finalScore: readonly (readonly number[])[] | null;
   matchScore: MatchScore | null;
+  /** The video stops before the match does: the sets are not held to the record. */
+  videoEndsEarly: boolean | null;
   /** `completeWarnings(...)`: what "Mark complete" would list. */
   warnings: readonly string[];
   /** The session is published; nothing is left to do but read. */
@@ -85,7 +87,9 @@ interface Reading {
 type WidgetProps = LabelDashboardProps & { reading: Reading };
 
 export function LabelDashboard(props: LabelDashboardProps) {
-  const { points, marks, games, adScoring, finalScore, matchScore } = props;
+  const { points, marks, games, adScoring, finalScore, matchScore, upload } =
+    props;
+  const bestOf = upload?.bestOf ?? 3;
   const flagged = useMemo(
     () => (marks ? openFlags(points, marks) : []),
     [points, marks],
@@ -106,12 +110,12 @@ export function LabelDashboard(props: LabelDashboardProps) {
     stats: useMemo(() => {
       try {
         return expectedStats(
-          buildAppliedRows({ points, adScoring, bestOf: 3 }).points,
+          buildAppliedRows({ points, adScoring, bestOf }).points,
         );
       } catch {
         return null;
       }
-    }, [points, adScoring]),
+    }, [points, adScoring, bestOf]),
   };
   const widget = { ...props, reading };
 
@@ -586,6 +590,7 @@ function publishChecks({
   points,
   marks,
   warnings,
+  videoEndsEarly,
   reading,
 }: WidgetProps): CheckItem[] {
   const { sets, entered, flagged } = reading;
@@ -613,30 +618,37 @@ function publishChecks({
     `${n} ${n === 1 ? one : many}`;
 
   return [
-    entered === null
+    videoEndsEarly === true
       ? {
-          state: "open",
+          state: "done",
           title: "Score adds up",
-          detail: "No score was entered to check the sets against.",
+          detail:
+            "The video ends before the match does, so the sets are not held to the record.",
         }
-      : differing.length > 0
+      : entered === null
         ? {
-            // With marks on, a publish refuses a set that disagrees.
-            state: marks ? "blocking" : "open",
+            state: "open",
             title: "Score adds up",
-            detail: differing
-              .map(
-                (d) =>
-                  `Set ${d.set.setNumber} is labelled ${d.labelled} against a record of ${d.record}`,
-              )
-              .join(". "),
-            pointId: differing[0].set.lastPointId,
+            detail: "No score was entered to check the sets against.",
           }
-        : {
-            state: "done",
-            title: "Score adds up",
-            detail: "Every labelled set matches the match record.",
-          },
+        : differing.length > 0
+          ? {
+              // With marks on, a publish refuses a set that disagrees.
+              state: marks ? "blocking" : "open",
+              title: "Score adds up",
+              detail: differing
+                .map(
+                  (d) =>
+                    `Set ${d.set.setNumber} is labelled ${d.labelled} against a record of ${d.record}`,
+                )
+                .join(". "),
+              pointId: differing[0].set.lastPointId,
+            }
+          : {
+              state: "done",
+              title: "Score adds up",
+              detail: "Every labelled set matches the match record.",
+            },
     refused.length > 0
       ? {
           state: "blocking",

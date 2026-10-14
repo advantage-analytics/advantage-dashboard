@@ -504,6 +504,20 @@ test.describe("a winner the strokes contradict", () => {
     expect(endingPatchForShotChange(unset, unset, GHOSTS)).toBeNull();
   });
 
+  test("an edit further back in the rally leaves a winner set by hand alone", () => {
+    const shots = rally();
+    const stored = point(shots, "p1", "error", "p1");
+    const edited = point(
+      shots.map((shot, i) =>
+        i === 1 ? { ...shot, stroke: "backhand" } : shot,
+      ),
+      "p1",
+      "error",
+      "p1",
+    );
+    expect(endingPatchForShotChange(stored, edited, GHOSTS)).toBeNull();
+  });
+
   test("it is a contradiction only when the rows settle who won", () => {
     const missed = deriveEnding(point(rally(), "p1"), GHOSTS);
     expect(winnerContradicted({ winner: "p1" }, missed)).toBe(true);

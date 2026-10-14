@@ -2577,6 +2577,7 @@ export function LabelConsole({
           names={names}
           finalScore={sessionFields.finalScore}
           matchScore={session.matchScore}
+          videoEndsEarly={sessionFields.videoEndsEarly}
           warnings={completeWarnings({
             points,
             adScoring: session.adScoring,

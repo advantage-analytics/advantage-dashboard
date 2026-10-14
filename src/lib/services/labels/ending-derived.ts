@@ -141,7 +141,8 @@ export const SHOT_FIELDS_MOVING_ENDING = [
  * ending surviving, it is a contradiction — "error by Quan", won by Quan —
  * left by a write from before the winner was kept in step, and a labeller who
  * re-saves the stroke is asking for it to be put right. The winner alone
- * moves; the stored ending stays.
+ * moves and the stored ending stays. Not for an edit further back in the
+ * rally that left the last shot as it was: a winner set by hand stands.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,
@@ -158,9 +159,33 @@ export function endingPatchForShotChange(
     was.endedBy === now.endedBy &&
     was.winner === now.winner
   ) {
-    return winnerContradicted(after, now) ? { winner: now.winner } : null;
+    return winnerContradicted(after, now) &&
+      !editedEarlierShot(before, after, ghosts)
+      ? { winner: now.winner }
+      : null;
   }
   return endingPatchTo(after, now);
+}
+
+/**
+ * Whether the edit moved a shot before the last and left the last as it was.
+ * A re-save that changed nothing, or one of the last shot, is the labeller
+ * standing behind the rally's end; an edit further back is not.
+ */
+function editedEarlierShot(
+  before: EndingPoint,
+  after: EndingPoint,
+  ghosts: boolean,
+): boolean {
+  const keys = (point: EndingPoint) =>
+    liveShotsInOrder(point, ghosts)
+      .filter((shot) => !isLetServe(shot))
+      .map((shot) =>
+        [shot.id, shot.hitter, shot.stroke, shot.result].join("|"),
+      );
+  const was = keys(before);
+  const now = keys(after);
+  return was.join("\n") !== now.join("\n") && was.at(-1) === now.at(-1);
 }
 
 /**

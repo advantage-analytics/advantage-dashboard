@@ -163,6 +163,18 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   expect(out).toContain("2 of 3 still to check.");
 });
 
+test("a video that ends early holds no set to the record", () => {
+  const html = render({
+    session: { ...labelSessionFixture(), videoEndsEarly: true },
+    video: null,
+    initialLayoutMode: "overview",
+    ...SAVES,
+  } as ConsoleProps);
+  const out = text(html);
+  expect(out).toContain("The video ends before the match does");
+  expect(out).not.toContain("against a record of");
+});
+
 test("one row per live point, and a marker for the deleted one", () => {
   const html = render({
     session: labelSessionFixture(),
