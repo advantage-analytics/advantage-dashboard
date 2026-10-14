@@ -218,6 +218,8 @@ test.describe("a streamed answer", () => {
       noAdvice: false,
       sources: [SOURCE],
       error: null,
+      answerId: null,
+      feedback: null,
     });
 
     // A first question names no conversation, and a tag goes as kind and id.
@@ -368,6 +370,8 @@ test.describe("a streamed answer", () => {
       noAdvice: true,
       sources: [SOURCE],
       error: null,
+      answerId: null,
+      feedback: null,
     });
     // The sentence is the footer's to print: it is never put into the body.
     expect(state.exchanges[0].answer.body).not.toContain(
@@ -740,6 +744,8 @@ test.describe("a saved conversation", () => {
           noAdvice: false,
           sources: [SOURCE],
           error: null,
+          answerId: "m2",
+          feedback: null,
         },
       },
       {
@@ -755,6 +761,8 @@ test.describe("a saved conversation", () => {
           noAdvice: false,
           sources: null,
           error: null,
+          answerId: null,
+          feedback: null,
         },
       },
     ]);
@@ -824,6 +832,8 @@ test.describe("a saved conversation", () => {
       noAdvice: false,
       sources: [SOURCE],
       error: null,
+      answerId: "m2",
+      feedback: null,
     });
   });
 

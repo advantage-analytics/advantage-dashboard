@@ -585,6 +585,10 @@ test.describe("deleting an earlier question", () => {
     await deleteButtons(page).first().click();
 
     await expect(dialog(page)).toContainText("stays used");
+    // Feedback outlives the thread, and the dialog says so before it goes.
+    await expect(dialog(page)).toContainText(
+      "Feedback you send is kept with its question and answer",
+    );
     await expect(dialog(page)).not.toContainText(
       /free|refund|get .* back|restore/i,
     );

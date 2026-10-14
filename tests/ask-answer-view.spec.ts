@@ -844,3 +844,72 @@ test("a pattern answer's source row opens the Video view on its points", async (
     "/dashboard/matches/match-sep-14",
   );
 });
+
+test.describe("feedback", () => {
+  const rated = (page: Page) =>
+    page.evaluate(
+      () => (window as unknown as { __askRated?: unknown[] }).__askRated ?? [],
+    );
+  const up = (page: Page) => page.getByRole("button", { name: "Good answer" });
+  const down = (page: Page) => page.getByRole("button", { name: "Bad answer" });
+
+  test("an answer with no saved id draws no thumbs", async ({ page }) => {
+    await openFixture(page);
+    await expect(page.locator("[data-ask-feedback]")).toHaveCount(0);
+  });
+
+  test("a thumbs up is saved at once, and pressing it again takes it back", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=rated");
+    await up(page).click();
+    await expect(up(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("status").last()).toHaveText(
+      "Thanks — kept to help improve Ask.",
+    );
+    // A thumbs up asks for nothing more.
+    await expect(page.locator("[data-ask-feedback-detail]")).toHaveCount(0);
+    await up(page).click();
+    await expect(up(page)).toHaveAttribute("aria-pressed", "false");
+    expect(await rated(page)).toEqual([
+      { rating: "up", reasons: [], note: null },
+      null,
+    ]);
+  });
+
+  test("a thumbs down is saved, then reasons and a note update it", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=rated");
+    await down(page).click();
+    const detail = page.locator("[data-ask-feedback-detail]");
+    await expect(detail).toHaveCount(1);
+    // What happens to it is said before it is sent.
+    await expect(detail).toContainText("even if you delete the conversation");
+    const send = detail.getByRole("button", { name: "Send" });
+    await expect(send).toBeDisabled();
+
+    await detail.getByRole("button", { name: "Wrong numbers" }).click();
+    await detail.getByRole("textbox").fill("  The serve count is off  ");
+    await send.click();
+    await expect(detail).toHaveCount(0);
+    await expect(down(page)).toHaveAttribute("aria-pressed", "true");
+    expect(await rated(page)).toEqual([
+      { rating: "down", reasons: [], note: null },
+      {
+        rating: "down",
+        reasons: ["wrong_numbers"],
+        note: "The serve count is off",
+      },
+    ]);
+  });
+
+  test("a save that fails says so", async ({ page }) => {
+    await openFixture(page, "?case=rated&rate=fail");
+    await down(page).click();
+    await expect(page.getByRole("status").last()).toHaveText(
+      "Could not save that. Try again.",
+    );
+    await expect(page.locator("[data-ask-feedback-detail]")).toHaveCount(0);
+  });
+});

@@ -183,6 +183,8 @@ const BUILT: AskAnswerState = {
   noAdvice: true,
   sources: SOURCES,
   error: null,
+  answerId: null,
+  feedback: null,
 };
 
 // ── The page ────────────────────────────────────────────────────────────────

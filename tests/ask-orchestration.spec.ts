@@ -74,6 +74,7 @@ import { resolveAskTags, type AskResolvedTags } from "@/lib/services/ask/tags";
 
 const USAGE_ID = "aaaaaaaa-0000-4000-8000-000000000001";
 const CONVERSATION_ID = "bbbbbbbb-0000-4000-8000-000000000002";
+const ANSWER_ID = "00000000-0000-4000-8000-0000000000a1";
 const MATCH_A = "3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f";
 const MATCH_B = "8a7b6c5d-4e3f-4a2b-8c1d-9e8f7a6b5c4d";
 
@@ -180,6 +181,8 @@ function fakeDb(script: DbScript = {}) {
           return script.release ?? { data: true, error: null };
         case "ask_save_exchange":
           return script.save ?? { data: CONVERSATION_ID, error: null };
+        case "ask_last_answer_id":
+          return { data: ANSWER_ID, error: null };
         case "ask_quota":
           return (
             script.quota ?? {
@@ -324,6 +327,7 @@ test.describe("a completed answer", () => {
     expect(last(events)).toEqual({
       type: "done",
       conversationId: CONVERSATION_ID,
+      answerId: ANSWER_ID,
       used: 4,
       cap: 20,
     });
@@ -333,6 +337,7 @@ test.describe("a completed answer", () => {
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
       "ask_save_exchange",
+      "ask_last_answer_id",
     ]);
     expect(calls[0].args).toEqual({
       scope_sql: PLAN.scope_sql,
@@ -1296,6 +1301,7 @@ test.describe("mock mode (no provider configured)", () => {
     expect(last(events)).toEqual({
       type: "done",
       conversationId: CONVERSATION_ID,
+      answerId: ANSWER_ID,
       used: 3,
       cap: 20,
     });
@@ -1308,6 +1314,7 @@ test.describe("mock mode (no provider configured)", () => {
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
       "ask_save_exchange",
+      "ask_last_answer_id",
       "ask_quota",
     ]);
   });
@@ -1822,6 +1829,7 @@ The team's players won {{r1.second_serve_won_pct}} of second-serve points.`;
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_team_query",
       "ask_save_exchange",
+      "ask_last_answer_id",
       "ask_quota",
     ]);
     const body = text(events);

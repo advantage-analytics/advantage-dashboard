@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AskAnswer } from "@/components/dashboard/ask/ask-answer";
 import type { AskAnswerState } from "@/components/dashboard/ask/use-ask-stream";
@@ -9,6 +10,7 @@ import {
   type AskVisual,
   type AskVisualKind,
 } from "@/lib/services/ask/events";
+import type { AskFeedback } from "@/lib/services/ask/feedback";
 import type { AskScope } from "@/lib/services/ask/scope";
 
 /**
@@ -215,6 +217,8 @@ const FULL: AskAnswerState = {
   noAdvice: params.get("advice") === "1",
   sources: SOURCES,
   error: null,
+  answerId: null,
+  feedback: null,
 };
 
 // What had arrived when a failure landed. An error state must show none of it.
@@ -225,6 +229,8 @@ const PARTIAL = {
   body: FULL.body,
   noAdvice: FULL.noAdvice,
   sources: SOURCES,
+  answerId: null,
+  feedback: null,
 };
 
 function answerFor(name: string): AskAnswerState {
@@ -273,6 +279,16 @@ function answerFor(name: string): AskAnswerState {
           ...SOURCES.slice(1),
         ],
       };
+    case "rated":
+      // A saved answer the asker can rate; `feedback=down` starts it rated.
+      return {
+        ...FULL,
+        answerId: "00000000-0000-4000-8000-000000000001",
+        feedback:
+          params.get("feedback") === "down"
+            ? { rating: "down", reasons: [], note: null }
+            : null,
+      };
     case "error":
       return {
         ...PARTIAL,
@@ -288,13 +304,38 @@ function answerFor(name: string): AskAnswerState {
   }
 }
 
+/** The harness's thumbs: each save is recorded, and `rate=fail` refuses them. */
+function Rated() {
+  const [answer, setAnswer] = useState(() =>
+    answerFor(params.get("case") ?? "full"),
+  );
+  const onRate = async (feedback: AskFeedback | null) => {
+    const w = window as unknown as { __askRated?: (AskFeedback | null)[] };
+    (w.__askRated ??= []).push(feedback);
+    if (params.get("rate") === "fail") return false;
+    setAnswer((current) => ({ ...current, feedback }));
+    return true;
+  };
+  return (
+    <AskAnswer
+      answer={answer}
+      scope={TEAM}
+      onRate={answer.answerId ? onRate : undefined}
+    />
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
-  <AskAnswer
-    answer={answerFor(params.get("case") ?? "full")}
-    scope={TEAM}
-    onChoose={(option) => {
-      (window as unknown as { __askChosen?: string }).__askChosen = option;
-    }}
-  />,
+  params.get("case") === "rated" ? (
+    <Rated />
+  ) : (
+    <AskAnswer
+      answer={answerFor(params.get("case") ?? "full")}
+      scope={TEAM}
+      onChoose={(option) => {
+        (window as unknown as { __askChosen?: string }).__askChosen = option;
+      }}
+    />
+  ),
 );
 document.documentElement.dataset.hydrated = "true";
