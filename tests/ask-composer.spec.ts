@@ -475,6 +475,10 @@ test.describe("sending", () => {
     await question(page).press("Enter");
     expect(await sent(page)).toEqual([]);
 
+    // The tag button's lone `@` is not a question either.
+    await question(page).fill("@");
+    await expect(send(page)).toBeDisabled();
+
     await question(page).fill("How is my second serve?");
     await expect(send(page)).toBeEnabled();
   });

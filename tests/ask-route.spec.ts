@@ -303,6 +303,7 @@ function loadRoute(state: World) {
             ? `getAskConversation:${id}:${programId}`
             : `getAskConversation:${id}`,
         );
+        if (state.conversation instanceof Error) throw state.conversation;
         return state.conversation;
       },
       getAskQuota: async () => {
@@ -771,6 +772,19 @@ test.describe("POST /api/ask · refusals before the stream", () => {
       ]);
       expect(calls.rpc).toEqual([]);
     }
+  });
+
+  test("500 internal_error — a conversation read that failed is not 'not found'", async () => {
+    const { route, calls } = loadRoute(
+      world({ conversation: new Error("connection reset") }),
+    );
+    const response = await route.POST(
+      post({ ...QUESTION, conversationId: CONVERSATION_ID }),
+    );
+    expect(response.status).toBe(500);
+    expect((await refused(response)).code).toBe("internal_error");
+    expect(calls.rpc).toEqual([]);
+    expect(calls.llm).toBe(0);
   });
 
   test("409 no_matches — an account with no personal match", async () => {

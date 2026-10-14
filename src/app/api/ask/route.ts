@@ -23,7 +23,8 @@
  *                               asked in the other workspace
  *   409 no_matches              the scope has no match
  *   429 ask_limit_reached       `ask_reserve_question()` refused
- *   500 internal_error          the matches could not be read, the service
+ *   500 internal_error          the matches or the conversation could not be
+ *                               read, the service
  *                               key is not configured, the reservation
  *                               failed, the stream did not open
  *
@@ -387,10 +388,24 @@ export async function POST(request: Request): Promise<Response> {
 
   // Null for an id that is malformed, unknown, someone else's or from the
   // other workspace — all the same answer, so the field cannot be used to
-  // probe.
-  const conversation = body.conversationId
-    ? await getAskConversation(body.conversationId, body.programId)
-    : null;
+  // probe. A read that failed throws, and is the server's fault: retryable,
+  // never "not found".
+  let conversation: Awaited<ReturnType<typeof getAskConversation>> = null;
+  if (body.conversationId) {
+    try {
+      conversation = await getAskConversation(
+        body.conversationId,
+        body.programId,
+      );
+    } catch (error) {
+      console.error("[ask] could not read the conversation", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return errorResponse(
+        transportError("internal_error", "conversation_read"),
+      );
+    }
+  }
   if (body.conversationId && !conversation) {
     return errorResponse(
       refusal(
