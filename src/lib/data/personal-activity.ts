@@ -71,10 +71,6 @@ function utcMidnight(now: Date): Date {
   );
 }
 
-function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 function levelFor(count: number): 0 | 1 | 2 | 3 {
   if (count <= 0) return 0;
   if (count === 1) return 1;
@@ -127,7 +123,7 @@ export function personalActivityFrom(
       );
       // Future days in the current week have no matches yet — level 0, blank.
       const isFuture = cellDate.getTime() > today.getTime();
-      const key = dayKey(cellDate);
+      const key = matchDay(cellDate) ?? "";
       const count = isFuture ? 0 : (counts.get(key) ?? 0);
       if (count > 0) sessionCount++;
       days.push({ date: key, count, level: levelFor(count) });

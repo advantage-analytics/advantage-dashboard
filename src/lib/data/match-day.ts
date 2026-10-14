@@ -60,7 +60,7 @@
  */
 
 /** Anything a match's date arrives as. */
-export type MatchDateInput = string | Date | null | undefined;
+type MatchDateInput = string | Date | null | undefined;
 
 /** A `YYYY-MM-DD`, or a `Date` whose UTC day is meant. */
 export type TodayInput = string | Date;
