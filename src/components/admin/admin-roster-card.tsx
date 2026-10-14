@@ -23,7 +23,8 @@ import {
   adminAddProgramPlayer,
   adminInviteMember,
 } from "@/lib/services/programs/admin-team-actions";
-import { getInitials, shortDate } from "@/lib/data/match-utils";
+import { formatMatchDayShort } from "@/lib/data/match-day";
+import { getInitials } from "@/lib/data/match-utils";
 import type { AdminTeamRosterPlayer } from "@/lib/data/admin-team-roster";
 import type { SeatUsage } from "@/lib/data/teams-server";
 import { cn } from "@/lib/utils";
@@ -112,7 +113,7 @@ function LastMatchCell({ player }: { player: AdminTeamRosterPlayer }) {
     );
   }
 
-  const date = lastMatch.date ? shortDate(lastMatch.date) : null;
+  const date = lastMatch.date ? formatMatchDayShort(lastMatch.date) : null;
 
   return (
     <span className="flex items-center gap-2">

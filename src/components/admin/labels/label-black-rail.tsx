@@ -7,7 +7,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from "react";
-import { Flag, Maximize2, Minimize2, Scale } from "lucide-react";
+import { Flag, Maximize2, Minimize2, Scale, Undo2 } from "lucide-react";
 import { reducedMotionNow } from "@/components/dashboard/matches/match-detail/film/film-motion";
 import type { FollowAffordance } from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -43,11 +43,12 @@ import {
   gameKey,
   type LabelScores,
 } from "@/lib/services/labels/score";
-import type {
-  LabelGameType,
-  LabelPoint,
-  LabelSide,
-  MatchScore,
+import {
+  isWithdrawnPointAdd,
+  type LabelGameType,
+  type LabelPoint,
+  type LabelSide,
+  type MatchScore,
 } from "@/lib/services/labels/session";
 import {
   mismatchGameKey,
@@ -126,6 +127,10 @@ export function LabelBlackRail({
   checked,
   total,
   saveStatus,
+  onUndo,
+  missingShots = 0,
+  onAddMissingShots,
+  canUndo = false,
   tone = "dark",
   showSession = true,
   onExit,
@@ -176,6 +181,15 @@ export function LabelBlackRail({
   checked: number;
   total: number;
   saveStatus: SaveStatus;
+  /**
+   * The console's Undo, for the view with no page header over the rail (full
+   * screen). Absent, there is no button; `canUndo` false draws it disabled.
+   */
+  onUndo?: () => void;
+  /** Open "Missing shot?" slots "Add shot" can fill; with the handler, "Add all". */
+  missingShots?: number;
+  onAddMissingShots?: () => void;
+  canUndo?: boolean;
   tone?: RailTone;
   /** Title, checked count and save line. False where the page shows them. */
   showSession?: boolean;
@@ -294,6 +308,16 @@ export function LabelBlackRail({
   const openMarks = useMemo(
     () => (marks ? openFlags(points, marks) : []),
     [points, marks],
+  );
+  // Two lists in the header: amber for what can move the score, grey for
+  // wrong data.
+  const scoreMarks = useMemo(
+    () => openMarks.filter((flag) => !flag.data),
+    [openMarks],
+  );
+  const dataMarks = useMemo(
+    () => openMarks.filter((flag) => flag.data),
+    [openMarks],
   );
   // One object for every row, the same one until an input moves: the rows
   // are memoised, and a fresh context per render would re-render them all.
@@ -434,34 +458,38 @@ export function LabelBlackRail({
           data-label-rail-header=""
           className="@container flex h-[46px] shrink-0 items-center gap-[10px] pr-[10px] pl-[14px] shadow-[inset_0_-1px_0_color-mix(in_oklab,var(--color-white)_8%,transparent)]"
         >
-          <span
-            data-label-rail-title=""
-            className="truncate text-[12px] font-medium text-white"
-          >
-            {showSession ? `${player1Name} vs ${player2Name}` : "Points"}
-          </span>
+          {/* Full screen is for fixing the data and nothing else: what is
+              left to do (the count, the two flag lists) leads, and the
+              match's name and format stay on the page it was opened from. */}
           {showSession ? (
-            <span
-              data-label-rail-progress=""
-              className="mono tabular shrink-0 text-[10px] whitespace-nowrap text-white/45"
+            <ChromeTooltip
+              label={`${player1Name} vs ${player2Name}`}
+              detail={`${adScoring ? "Ad scoring" : "No-ad scoring"} · ${playOnLets ? "lets: play on" : "lets replayed"}`}
+              side="bottom"
+              align="start"
             >
-              {checked} <span className="text-white/25">/</span> {total} checked
-            </span>
-          ) : null}
-          {showSession ? (
+              <span
+                role="img"
+                data-label-rail-progress=""
+                data-match-format={`${adScoring ? "Ad scoring" : "No-ad scoring"} · ${playOnLets ? "Lets: play on" : "Lets replayed"}`}
+                aria-label={`${checked} of ${total} points checked. ${player1Name} vs ${player2Name}`}
+                className="mono tabular shrink-0 text-[11px] whitespace-nowrap text-white"
+              >
+                {checked}
+                <span className="text-white/35"> / {total}</span>
+              </span>
+            </ChromeTooltip>
+          ) : (
             <span
-              data-match-format=""
-              className="shrink-0 text-[11px] whitespace-nowrap text-white/45"
+              data-label-rail-title=""
+              className="truncate text-[12px] font-medium text-white"
             >
-              <span className="text-white/25">·</span>{" "}
-              {adScoring ? "Ad scoring" : "No-ad scoring"}{" "}
-              <span className="text-white/25">·</span>{" "}
-              {playOnLets ? "Lets: play on" : "Lets replayed"}
+              Points
             </span>
-          ) : null}
+          )}
           {marks !== null || mismatch ? (
             <LabelFlagSummary
-              openMarks={openMarks}
+              openMarks={scoreMarks}
               points={points}
               fromPointId={expandedPointId ?? playingPointId}
               onGoToPoint={onGoToPoint}
@@ -492,9 +520,60 @@ export function LabelBlackRail({
               }
             />
           ) : null}
+          {marks !== null ? (
+            <LabelFlagSummary
+              kind="data"
+              openMarks={dataMarks}
+              points={points}
+              fromPointId={expandedPointId ?? playingPointId}
+              onGoToPoint={onGoToPoint}
+              tone={tone}
+              score={null}
+              bulk={
+                onAddMissingShots && missingShots > 0
+                  ? {
+                      label:
+                        missingShots === 1
+                          ? "Add the missing shot"
+                          : `Add all ${missingShots} missing shots`,
+                      description: "Each where its slot suggests, as one Undo",
+                      onSelect: onAddMissingShots,
+                    }
+                  : null
+              }
+            />
+          ) : null}
           <span className="flex-1" />
           {showSession ? (
             <LabelSaveStatus status={saveStatus} tone={tone} />
+          ) : null}
+          {showSession && onUndo ? (
+            <ChromeTooltip
+              label="Undo"
+              detail="Takes back the last change"
+              shortcut="⌘Z"
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                data-label-rail-undo=""
+                aria-label="Undo the last change"
+                aria-keyshortcuts="Meta+Z"
+                disabled={!canUndo}
+                onClick={onUndo}
+                className={cn(
+                  HEADER_BUTTON,
+                  "disabled:cursor-default disabled:text-white/25 disabled:hover:bg-transparent disabled:active:scale-100",
+                )}
+              >
+                <Undo2
+                  className="size-3.5"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              </button>
+            </ChromeTooltip>
           ) : null}
           {onFullScreen ? (
             <ChromeTooltip
@@ -574,6 +653,7 @@ export function LabelBlackRail({
             >
               {points.map((point) => {
                 if (point.status === "deleted") {
+                  if (isWithdrawnPointAdd(point)) return null;
                   return (
                     <BlackDeletedPoint
                       key={point.id}

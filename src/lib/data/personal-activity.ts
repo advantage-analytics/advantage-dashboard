@@ -1,3 +1,5 @@
+import { matchDay } from "@/lib/data/match-day";
+
 /**
  * One day-cell of the personal-Home activity heatmap (the "Activity" widget on
  * the Personal Home & Matches canvas, artboard 1b `activityUnderMatches`).
@@ -50,14 +52,23 @@ const MONTH_SHORT = [
   "Dec",
 ];
 
-function dayKey(d: Date): string {
-  // Build the key from local Y/M/D rather than toISOString(): the stored match
-  // `date` is bucketed the same string way in calculateHeatmap(), so a cell and
-  // a match agree on the day regardless of the server's timezone offset.
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/**
+ * The grid is a calendar of DAYS, and every cell is a UTC midnight: built with
+ * `Date.UTC`, stepped in whole 24-hour days, and read back with the UTC
+ * getters. A match's day is the UTC date part of `matches.date`
+ * (`match-day.ts`), so a cell and the matches counted into it are named on the
+ * same ruler, and "today" is the UTC day that module's labels use.
+ *
+ * It used to be built on the runtime's local midnight and local getters. That
+ * is the same grid on Vercel (UTC) and a different one everywhere else: the
+ * day-zero page draws this in the browser, so its "today" column could differ
+ * from the server's, and stepping 24 hours from a local midnight names one
+ * day twice and skips another across a DST change.
+ */
+function utcMidnight(now: Date): Date {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 function levelFor(count: number): 0 | 1 | 2 | 3 {
@@ -68,18 +79,19 @@ function levelFor(count: number): 0 | 1 | 2 | 3 {
 }
 
 /**
- * The grid's first cell: the Sunday 51 weeks before this week's, at 00:00. The
- * grid ends on the current week (its rightmost column), so "today" sits in the
- * last column the way a GitHub contribution graph does.
+ * The grid's first cell: the Sunday 51 weeks before this week's, at 00:00 UTC.
+ * The grid ends on the current week (its rightmost column), so "today" sits in
+ * the last column the way a GitHub contribution graph does.
+ *
+ * Its ISO string is also the query's lower bound, and a UTC midnight is the
+ * one bound that keeps every match of that first day — a match's day is the
+ * UTC date part of its stored value, whatever time rides along with it.
  */
 export function activityWindowStart(now: Date = new Date()): Date {
-  // Zero the time so day arithmetic can't drift across a DST boundary
-  // mid-window.
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const today = utcMidnight(now);
   const startSunday = new Date(today);
-  startSunday.setDate(
-    today.getDate() - today.getDay() - (WEEKS - 1) * DAYS_PER_WEEK,
+  startSunday.setUTCDate(
+    today.getUTCDate() - today.getUTCDay() - (WEEKS - 1) * DAYS_PER_WEEK,
   );
   return startSunday;
 }
@@ -92,14 +104,13 @@ export function personalActivityFrom(
   matches: { date: string | null }[],
   now: Date = new Date(),
 ): PersonalActivity {
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const today = utcMidnight(now);
   const startSunday = activityWindowStart(now);
 
   const counts = new Map<string, number>();
   for (const row of matches) {
-    if (!row.date) continue;
-    const key = (row.date as string).slice(0, 10);
+    const key = matchDay(row.date);
+    if (!key) continue;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
@@ -112,7 +123,7 @@ export function personalActivityFrom(
       );
       // Future days in the current week have no matches yet — level 0, blank.
       const isFuture = cellDate.getTime() > today.getTime();
-      const key = dayKey(cellDate);
+      const key = matchDay(cellDate) ?? "";
       const count = isFuture ? 0 : (counts.get(key) ?? 0);
       if (count > 0) sessionCount++;
       days.push({ date: key, count, level: levelFor(count) });
@@ -130,7 +141,7 @@ export function personalActivityFrom(
     const sample = new Date(
       startSunday.getTime() + w * DAYS_PER_WEEK * MS_PER_DAY,
     );
-    const label = MONTH_SHORT[sample.getMonth()];
+    const label = MONTH_SHORT[sample.getUTCMonth()];
     if (months[months.length - 1] !== label) months.push(label);
   }
   const monthLabels = months.slice(-12);

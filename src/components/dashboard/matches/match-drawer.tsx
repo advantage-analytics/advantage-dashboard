@@ -34,7 +34,7 @@ import {
   useMatchSnapshot,
 } from "./drawer-sections";
 import { drawerAnalysisStepsView } from "./match-detail/analysis-steps";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
@@ -239,7 +239,9 @@ export function MatchDrawer({
         <div className="flex min-w-0 flex-col gap-2">
           <dl className="flex min-w-0 flex-col gap-0.5 text-left">
             <DrawerFact label="Date" icon={<Calendar />}>
-              <span className="tabular">{formatShortDate(match.date)}</span>
+              <span className="tabular">
+                {formatMatchDayShortYear(match.date)}
+              </span>
             </DrawerFact>
             <DrawerFact
               label="Court"

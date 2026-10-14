@@ -10,6 +10,7 @@ import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
 import { readAllPages } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
+import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import {
   choosePlaybackFile,
@@ -66,6 +67,11 @@ export interface LabelJobRow {
     checked: number;
     /** `label_points` excluding tombstones — the denominator "N of M". */
     total: number;
+    /**
+     * What the console last counted open (`open_counts`), amber and grey;
+     * null until the session is opened with marks.
+     */
+    openCounts: FlagCounts | null;
   } | null;
 }
 
@@ -102,6 +108,16 @@ interface DbSession {
   job_id: string;
   status: "labelling" | "complete";
   started_at: string;
+  open_counts: unknown;
+}
+
+/** `open_counts` as the list reads it; anything malformed reads as none. */
+function readOpenCounts(value: unknown): FlagCounts | null {
+  if (!value || typeof value !== "object") return null;
+  const { amber, grey } = value as Record<string, unknown>;
+  return typeof amber === "number" && typeof grey === "number"
+    ? { amber, grey }
+    : null;
 }
 interface DbLabelPoint {
   session_id: string;
@@ -149,7 +165,7 @@ export async function listLabelJobs(
       .returns<DbMatch[]>(),
     db
       .from("label_sessions")
-      .select("id, job_id, status, started_at")
+      .select("id, job_id, status, started_at, open_counts")
       .in("job_id", jobIds)
       .order("started_at", { ascending: false })
       .returns<DbSession[]>(),
@@ -206,6 +222,7 @@ export async function listLabelJobs(
             status: session.status,
             checked: progress?.checked ?? 0,
             total: progress?.total ?? 0,
+            openCounts: readOpenCounts(session.open_counts),
           }
         : null,
     };
@@ -606,9 +623,11 @@ const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
 /**
  * The labelled job's own file, signed for playback. Not `getMatchVideo`: that
  * loader goes through the viewer's own RLS and plays the NEWEST job. A label
- * session is pinned to one job, so this asks `choosePlaybackFile` (the same
- * upload-first, vendor-copy-second rule and the same offset) about exactly that
- * job, and signs with `mintPlaybackSas`.
+ * session is pinned to one job, so this asks `choosePlaybackFile` about exactly
+ * that job, and signs with `mintPlaybackSas`. Vendor copy FIRST, our upload as
+ * the fallback (the offset rule is unchanged): measured 2026-10-14, uploads ran
+ * 8–12 Mbps against a 10–15 Mbps link to the container, so the console stalled
+ * on every seek; the vendor's re-encode is the same 1080p at about 2 Mbps.
  */
 async function loadJobVideo(
   db: AdminClient,
@@ -625,11 +644,14 @@ async function loadJobVideo(
   if (!job) return null;
 
   const container = videoContainerClient();
-  const choice = await choosePlaybackFile([job], (blobName) =>
-    container
-      .getBlockBlobClient(blobName)
-      .exists()
-      .catch(() => false),
+  const choice = await choosePlaybackFile(
+    [job],
+    (blobName) =>
+      container
+        .getBlockBlobClient(blobName)
+        .exists()
+        .catch(() => false),
+    "vendor-copy",
   );
   if (!choice) return null;
 

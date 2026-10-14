@@ -200,7 +200,6 @@ const HIDDEN_ON_SHOT: LabelMark[] = [
 const EVERY_HINT: LabelMark[] = [
   mark("ending_suspect_line", {}),
   mark("winner_to_error_by_bounce", { loser: "p1" }),
-  mark("second_serve_called_out", {}),
   mark("result_type_unknown", {}),
 ];
 const NET_HIT = mark("net_hit_contradicts_height", {});
@@ -264,17 +263,30 @@ test.describe("the chip on the point row", () => {
 });
 
 test.describe("a closed row draws only what can change the score", () => {
-  test("a hint is no chip on the row, and takes nothing from the count beside it", () => {
+  test("hints are one grey chip on the row, and take nothing from the count beside it", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    // Hints alone: the row is the row with no marks at all.
+    // Hints alone: a grey chip, "N data" — wrong data, not the score.
     const hintsOnly = renderRow(
       point,
       marksOf(point, EVERY_HINT, { [shot.id]: [NET_HIT] }),
     );
-    expect(chips(hintsOnly)).toHaveLength(0);
+    const [grey, ...others] = chips(hintsOnly);
+    expect(others).toHaveLength(0);
+    expect(grey.text).toBe("4 data");
+    expect(grey.tag).toContain('data-mark-tone="data"');
+    expect(grey.tag).not.toContain("rail-amber");
     expect(hintsOnly).not.toContain("data-point-hint");
-    expect(hintsOnly).toBe(renderRow(point, marksOf(point, [])));
+    // Checked, the point is done with them: no chip at all.
+    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
+    expect(
+      chips(
+        renderRow(
+          checked,
+          marksOf(checked, EVERY_HINT, { [shot.id]: [NET_HIT] }),
+        ),
+      ),
+    ).toHaveLength(0);
 
     // Beside a counted mark, the chip is that mark's alone — not "N to check".
     const withCount = renderRow(
@@ -341,10 +353,11 @@ test.describe("the open point's quiet line", () => {
     ]);
     // One line, with a middle dot between the two hints and none at either end.
     expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
-    const line = html.slice(
-      html.indexOf("data-point-hints"),
-      html.indexOf('data-row="shot"'),
+    // Last in the well, under the rally it is about.
+    expect(html.indexOf("data-point-hints")).toBeGreaterThan(
+      html.lastIndexOf('data-row="shot"'),
     );
+    const line = html.slice(html.indexOf("data-point-hints"));
     expect(line.match(/aria-hidden="true"[^>]*>·</g)).toHaveLength(1);
     expect(chips(html)).toHaveLength(0);
   });
@@ -448,18 +461,21 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("drawn on the line with the words and the sentence, and a button after each", () => {
+  test("a hint with an answer is a dashed suggestion row with its button: under the rally, or under its own stroke", () => {
     const html = renderWell(stale(), marksOf(stale(), []));
-    expect(hintLine(html)).toEqual([
-      {
-        code: "ending_stale",
-        text: "Ace by Lee?",
-        label:
-          "Ace by Lee? The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
-      },
-    ]);
+    // Not a word on the quiet line: a row of its own, after the last stroke.
+    expect(hintLine(html)).toEqual([]);
+    const row = tag(html, 'data-point-hint="ending_stale"');
+    expect(row).toContain('data-row="suggested-end"');
+    expect(row).toContain("outline-dashed");
+    expect(html.indexOf('data-point-hint="ending_stale"')).toBeGreaterThan(
+      html.lastIndexOf('data-row="shot"'),
+    );
+    expect(tag(html, "data-suggestion-text")).toContain(
+      'aria-label="Ace by Lee? The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what&#x27;s wrong."',
+    );
     const button =
-      /<button[^>]*data-point-hint-action="ending_stale"[^>]*>([^<]*)</.exec(
+      /<button[^>]*data-point-hint-action="ending_stale"[^>]*>.*?<span[^>]*>([^<]*)</.exec(
         html,
       );
     expect(button?.[1]).toBe("Make it an ace");
@@ -467,16 +483,17 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(button?.[0]).toContain("active:scale-[0.96]");
     expect(chips(html)).toHaveLength(0);
 
+    // "Second serve?" names its stroke: the row sits right under that serve.
     const serves = renderWell(retyped(), marksOf(retyped(), []));
-    expect(hintLine(serves).map((h) => [h.code, h.text, h.label])).toEqual([
-      [
-        "second_serve_as_first",
-        "Second serve?",
-        "Second serve? Follows a faulted serve, so it is the second serve.",
-      ],
-    ]);
+    expect(hintLine(serves)).toEqual([]);
+    expect(tag(serves, 'data-point-hint="second_serve_as_first"')).toContain(
+      'data-row="suggested-end"',
+    );
+    expect(
+      serves.indexOf('data-point-hint="second_serve_as_first"'),
+    ).toBeGreaterThan(serves.indexOf('data-shot-id="s-second"'));
     expect(serves).toMatch(
-      /<button[^>]*data-point-hint-action="second_serve_as_first"[^>]*>Make it a second serve</,
+      /<button[^>]*data-point-hint-action="second_serve_as_first"[^>]*>.*?<span[^>]*>Make it a second serve</,
     );
   });
 
@@ -540,9 +557,19 @@ test.describe("the hints read off the rows, with their answers", () => {
     const [hint] = pointHints(point, marksOf(point, [call]), NAMES, edit);
     expect([hint.code, hint.label]).toEqual([
       "last_call_overruled",
-      "Was the last ball in?",
+      "Was the last ball out?",
     ]);
-    expect(hint.actions.map((a) => a.label)).toEqual(["Make it out"]);
+    expect(hint.actions.map((a) => a.label)).toEqual(["Yes, make it out"]);
+    // A question the labeller can answer "no" to, like the rest.
+    expect(hint.dismissKey).toBe("hint:last_call_overruled");
+    expect(
+      pointHints(
+        { ...point, dismissed: ["hint:last_call_overruled"] },
+        marksOf(point, [call]),
+        NAMES,
+        edit,
+      ).map((h) => h.code),
+    ).not.toContain("last_call_overruled");
     hint.actions[0].run();
     expect(patched).toEqual([["shot", ace.id, { result: "out" }]]);
 
@@ -552,7 +579,8 @@ test.describe("the hints read off the rows, with their answers", () => {
       eventId: ace.eventId!,
     });
     const [netHint] = pointHints(point, marksOf(point, [net]), NAMES, edit);
-    expect(netHint.actions.map((a) => a.label)).toEqual(["Make it a net"]);
+    expect(netHint.actions.map((a) => a.label)).toEqual(["Yes, make it a net"]);
+    expect(netHint.label).toBe("Was the last ball in the net?");
 
     // Once the labeller changed the result, the chip is settled: no answer.
     const answered = {
@@ -666,7 +694,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("“Point ended here” is a suggestion row under the stroke that ended the point; the other hints lead the well", () => {
+  test("“Point ended here” is a suggestion row under the stroke that ended the point; the quiet hints close the well", () => {
     const point = endedEarly();
     const html = renderWell(point, marksOf(point, []));
     const at = (needle: string) => {
@@ -677,11 +705,11 @@ test.describe("the hints read off the rows, with their answers", () => {
     const ended = at('data-point-hint="shot_after_point_end"');
     expect(ended).toBeGreaterThan(at('data-shot-id="s-long"'));
     expect(ended).toBeLessThan(at('data-shot-id="s-dead-1"'));
-    // "No landing on the last shot" is about the point: still the first row.
-    expect(at('data-point-hint="last_landing_missing"')).toBeLessThan(
-      at('data-row="shot"'),
+    // "No landing on the last shot" is about the point: the well's last row.
+    expect(at('data-point-hint="last_landing_missing"')).toBeGreaterThan(
+      html.lastIndexOf('data-row="shot"'),
     );
-    // One hint line on top; the ending is its own dashed suggestion row.
+    // One hint line at the foot; the ending is its own dashed suggestion row.
     expect(html.match(/data-point-hints=""/g)).toHaveLength(1);
     expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
   });

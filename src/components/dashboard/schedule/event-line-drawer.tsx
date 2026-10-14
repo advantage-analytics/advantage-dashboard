@@ -53,7 +53,7 @@ import {
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { advButton } from "@/lib/ui/adv-button";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { cn } from "@/lib/utils";
 import type {
   EntryMatch,
@@ -351,7 +351,7 @@ export function EventLineDrawer({
                 formatter — else the event's dates (a tournament's span). */}
             <span className="tabular">
               {played?.date
-                ? formatShortDate(played.date)
+                ? formatMatchDayShortYear(played.date)
                 : formatEventDatesLong(event.startsOn, event.endsOn)}
             </span>
           </DrawerFact>

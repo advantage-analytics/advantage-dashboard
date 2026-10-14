@@ -20,7 +20,11 @@ import {
   type OpenFlag,
   type ScoreStop,
 } from "@/lib/services/labels/flag-nav";
-import { onPointsDetail, toCheckLabel } from "@/lib/services/labels/marks-copy";
+import {
+  dataFlagsLabel,
+  onPointsDetail,
+  toCheckLabel,
+} from "@/lib/services/labels/marks-copy";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { RailTone } from "./label-rail-tone";
@@ -61,6 +65,14 @@ const ROW_INK: Record<
 const NO_STOPS: readonly ScoreStop[] = [];
 
 /**
+ * The jump keys, as the console binds them. Amber takes `]` and `[`; grey
+ * takes the two keys directly under those on the keyboard, so the row a hand
+ * is on says which list it is walking.
+ */
+export const SCORE_KEYS = { next: "]", prev: "[" } as const;
+export const DATA_KEYS = { next: "'", prev: ";" } as const;
+
+/**
  * The header's open marks: today's flag and count, now the jump to the next open
  * flag after `fromPointId` (`]`, and `[` back, are the console's keys for the
  * same), and a quiet chevron that opens every flag in one `FloatMenu`. The
@@ -78,7 +90,9 @@ export function LabelFlagSummary({
   score,
   scoreStop = null,
   extraStops = NO_STOPS,
+  kind = "score",
   tone = "dark",
+  bulk = null,
 }: {
   /** `openFlags(points, marks)`. */
   openMarks: readonly OpenFlag[];
@@ -96,8 +110,20 @@ export function LabelFlagSummary({
    * marks and the score.
    */
   extraStops?: readonly ScoreStop[];
+  /**
+   * Which list this control is for. `score` (the default) is the amber one:
+   * the marks that can move the score, the score that does not add up and
+   * the questions between rows, stepped with `]` and `[`. `data` is the grey
+   * one beside it: wrong data that rarely moves the score, stepped with the
+   * two keys under those, `'` and `;`. The caller passes each its own list.
+   */
+  kind?: "score" | "data";
   tone?: RailTone;
+  /** One action over the whole list ("Add all 12 missing shots"); null: none. */
+  bulk?: { label: string; description: string; onSelect: () => void } | null;
 }) {
+  const data = kind === "data";
+  const keys = data ? DATA_KEYS : SCORE_KEYS;
   const [open, setOpen] = useState(false);
   const stops: readonly FlagStop[] = [
     ...openMarks,
@@ -122,6 +148,8 @@ export function LabelFlagSummary({
     onGoToPoint?.(pointId);
   };
 
+  // No grey flag open: the grey control is not drawn at all.
+  if (data && count === 0) return null;
   // Nothing open and the score adds up: today's quiet total, not a control.
   if (count === 0 && score === null) {
     return (
@@ -136,12 +164,22 @@ export function LabelFlagSummary({
     );
   }
 
+  const totalLabel = data ? dataFlagsLabel(count) : toCheckLabel(count);
+  // One glyph for both, as on the rows: the chip there is the same flag,
+  // amber or grey.
   const total = (
     <>
       <Flag className="size-2.5" strokeWidth={1.8} aria-hidden="true" />
       {count}
     </>
   );
+  // The attribute a spec, and the console's own probes, find each control by.
+  const totalAttr = data
+    ? { "data-label-rail-data-count": "" }
+    : { "data-label-rail-to-check": "" };
+  const lit = data
+    ? "text-white/70 hover:bg-white/[0.08] hover:text-white"
+    : "text-[var(--rail-amber)] hover:bg-[var(--rail-amber-wash)]";
 
   return (
     <span
@@ -177,10 +215,10 @@ export function LabelFlagSummary({
       ) : null}
       {next && onGoToPoint ? (
         <ChromeTooltip
-          label={`Next flag · point ${next.pointNumber}`}
+          label={`${data ? "Next data flag" : "Next flag"} · point ${next.pointNumber}`}
           detail={[
             flagStopLabel(next),
-            [toCheckLabel(count), onPointsDetail(openPoints)?.toLowerCase()]
+            [totalLabel, onPointsDetail(openPoints)?.toLowerCase()]
               .filter(Boolean)
               .join(" "),
             ...(slots > 0
@@ -191,16 +229,21 @@ export function LabelFlagSummary({
                 ]
               : []),
           ]}
-          shortcut="]"
+          shortcut={keys.next}
           side="bottom"
           hidden={open}
         >
           <button
             type="button"
-            data-label-rail-to-check=""
-            aria-label={toCheckLabel(count)}
+            {...totalAttr}
+            aria-label={totalLabel}
             onClick={() => go(next.pointId)}
-            className="mono tabular inline-flex h-6 cursor-pointer items-center gap-1 rounded-l-[6px] px-[5px] text-[10px] whitespace-nowrap text-[var(--rail-amber)] transition-colors duration-150 hover:bg-[var(--rail-amber-wash)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            className={cn(
+              "mono tabular inline-flex h-6 cursor-pointer items-center gap-1 rounded-l-[6px] px-[5px] text-[10px] whitespace-nowrap transition-colors duration-150 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
+              count > 0
+                ? lit
+                : "text-white/45 hover:bg-white/[0.08] hover:text-white",
+            )}
           >
             {total}
           </button>
@@ -208,11 +251,15 @@ export function LabelFlagSummary({
       ) : (
         <span
           role="img"
-          data-label-rail-to-check=""
-          aria-label={toCheckLabel(count)}
+          {...totalAttr}
+          aria-label={totalLabel}
           className={cn(
             "mono tabular inline-flex h-6 items-center gap-1 px-[5px] text-[10px] whitespace-nowrap",
-            count > 0 ? "text-[var(--rail-amber)]" : "text-white/45",
+            count > 0
+              ? data
+                ? "text-white/70"
+                : "text-[var(--rail-amber)]"
+              : "text-white/45",
           )}
         >
           {total}
@@ -224,17 +271,20 @@ export function LabelFlagSummary({
         align="start"
         width={300}
         tone={tone}
-        label="Flag list"
+        label={data ? "Data flag list" : "Flag list"}
         className="max-h-[480px] overflow-y-auto"
         trigger={
           <button
             type="button"
             data-label-flag-list=""
+            data-label-flag-kind={kind}
             data-score-mismatch={score ? "" : undefined}
             aria-label={
-              score
-                ? "Every open flag, and the score that doesn’t add up"
-                : "Every open flag"
+              data
+                ? "Every open data flag"
+                : score
+                  ? "Every open flag, and the score that doesn’t add up"
+                  : "Every open flag"
             }
             aria-haspopup="menu"
             aria-expanded={open}
@@ -252,19 +302,32 @@ export function LabelFlagSummary({
       >
         {next && onGoToPoint ? (
           <FloatMenuItem
-            label="Next flag"
+            label={data ? "Next data flag" : "Next flag"}
             description={`Point ${next.pointNumber} · ${flagStopLabel(next)}`}
-            trailing={<MenuKey tone={tone}>]</MenuKey>}
+            trailing={<MenuKey tone={tone}>{keys.next}</MenuKey>}
             onSelect={() => go(next.pointId)}
           />
         ) : null}
         {prev && onGoToPoint && prev.pointId !== next?.pointId ? (
           <FloatMenuItem
-            label="Previous flag"
+            label={data ? "Previous data flag" : "Previous flag"}
             description={`Point ${prev.pointNumber} · ${flagStopLabel(prev)}`}
-            trailing={<MenuKey tone={tone}>[</MenuKey>}
+            trailing={<MenuKey tone={tone}>{keys.prev}</MenuKey>}
             onSelect={() => go(prev.pointId)}
           />
+        ) : null}
+        {bulk ? (
+          <>
+            {next && onGoToPoint ? <FloatMenuDivider /> : null}
+            <FloatMenuItem
+              label={bulk.label}
+              description={bulk.description}
+              onSelect={() => {
+                setOpen(false);
+                bulk.onSelect();
+              }}
+            />
+          </>
         ) : null}
         {score ? (
           <>
@@ -304,7 +367,9 @@ export function LabelFlagSummary({
         ))}
         {groups.length > 0 ? (
           <FloatMenuNote>
-            Hints aren’t counted here. They show inside each open point.
+            {data
+              ? "Wrong data that rarely moves the score. Each goes when its point is checked."
+              : "Only what can move the score. Wrong data is the grey list beside this one."}
           </FloatMenuNote>
         ) : null}
       </FloatMenu>

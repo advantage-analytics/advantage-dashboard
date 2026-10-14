@@ -28,6 +28,7 @@ import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
 } from "@/hooks/use-live-match-analysis";
+import { compareMatchDays } from "@/lib/data/match-day";
 import { matchesFilterGroups } from "@/lib/data/match-filters";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
@@ -621,7 +622,9 @@ export function MatchesPageContent({
       let cmp = 0;
       switch (sortField) {
         case "date":
-          cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
+          // `date` is the printed day ("September 28, 2026"); `match-day.ts`
+          // reads it back, so the order is by day and never by a parser.
+          cmp = compareMatchDays(a.date, b.date);
           break;
         case "opponent":
           cmp = a.player2.name.localeCompare(b.player2.name);

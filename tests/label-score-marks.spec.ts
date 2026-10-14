@@ -514,7 +514,8 @@ test.describe("the console reads them live", () => {
       ...EMPTY,
       serveSides: { [P1]: "deuce", [P2]: "ad" },
     });
-    expect(agreed).not.toContain("data-mark-chip");
+    // No amber chip; a grey one, for the rows' own hints, is not a flag.
+    expect(agreed).not.toContain('data-mark-tone="score"');
     expect(agreed).not.toContain('data-row="suggested-point"');
     expect(agreed).toContain('aria-label="Nothing left to check"');
   });
