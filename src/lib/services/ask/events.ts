@@ -143,8 +143,15 @@ export const MAX_ASK_VISUALS = 1;
 
 /** `bars`: rows beyond this many drop the block. */
 export const MAX_ASK_BARS_ROWS = 6;
-/** `table`: rows beyond this many drop the block. */
-export const MAX_ASK_TABLE_ROWS = 8;
+/**
+ * `table`: rows beyond this many drop the block. Twelve so the serve +1
+ * breakdown (`serve-plus-one.ts`) can list its patterns; every other table —
+ * the model's own, the comparisons, the review, a pattern's matches — still
+ * holds `ASK_TABLE_ROWS`.
+ */
+export const MAX_ASK_TABLE_ROWS = 12;
+/** How many rows every table but the serve +1 breakdown holds. */
+export const ASK_TABLE_ROWS = 8;
 /** `table`: column headings, inclusive. */
 export const MIN_ASK_TABLE_COLUMNS = 1;
 export const MAX_ASK_TABLE_COLUMNS = 3;

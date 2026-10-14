@@ -5,7 +5,7 @@ import {
 } from "@/lib/services/ask/answer-render";
 import {
   MAX_ASK_TABLE_COLUMNS,
-  MAX_ASK_TABLE_ROWS,
+  ASK_TABLE_ROWS,
   MAX_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
 import { comparedPairs, isNumber, printed } from "@/lib/services/ask/facts";
@@ -472,7 +472,7 @@ export function buildPairedAnswer(
         : `Every measure compared was level with ${other.lower}.`;
 
   // ── Table: subject | other, widest gap first, within the table's limits ──
-  const tabled = shape.pairs.slice(0, MAX_ASK_TABLE_ROWS);
+  const tabled = shape.pairs.slice(0, ASK_TABLE_ROWS);
   const labels = rowLabels(tabled);
   const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const table = [
@@ -643,7 +643,7 @@ export function buildTwoGroupAnswer(
       ? `${capitalize(lead.map(clause).join("; "))}.`
       : "The two groups were level on every measure compared.";
 
-  const tabled = measures.slice(0, MAX_ASK_TABLE_ROWS);
+  const tabled = measures.slice(0, ASK_TABLE_ROWS);
   const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const table = [
     `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first.`,
@@ -758,7 +758,7 @@ export function buildPlayersAnswer(
         typeof row.player_name === "string" &&
         measures.some((measure) => isNumber(row[measure.column])),
     )
-    .slice(0, MAX_ASK_TABLE_ROWS);
+    .slice(0, ASK_TABLE_ROWS);
   if (players.length < 2) return null;
 
   const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
@@ -825,7 +825,7 @@ export function buildPlayersAnswer(
       `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared${context.explicit ? "" : ", widest gap first"}.`,
       `COLUMNS: ${ref(1, "player_name")} ${S} ${ref(2, "player_name")}`,
       ...entries
-        .slice(0, MAX_ASK_TABLE_ROWS)
+        .slice(0, ASK_TABLE_ROWS)
         .map(
           (entry) =>
             `ROW: ${entry.name} ${S} ${ref(1, entry.measure.column)} ${S} ${ref(2, entry.measure.column)}`,
@@ -884,7 +884,7 @@ export function buildPlayersAnswer(
 
   const byPlayer = ordered.length <= MAX_ASK_TABLE_COLUMNS;
   const tabled = byPlayer
-    ? measures.slice(0, MAX_ASK_TABLE_ROWS)
+    ? measures.slice(0, ASK_TABLE_ROWS)
     : measures.slice(0, MAX_ASK_TABLE_COLUMNS);
   const table = byPlayer
     ? [

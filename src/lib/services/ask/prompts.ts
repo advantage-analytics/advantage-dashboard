@@ -18,7 +18,7 @@ import {
   MAX_ASK_SERVE_COURTS,
   MAX_ASK_SPLIT_PARTS,
   MAX_ASK_TABLE_COLUMNS,
-  MAX_ASK_TABLE_ROWS,
+  ASK_TABLE_ROWS,
   MAX_ASK_TREND_POINTS,
   MAX_ASK_VISUALS,
   MIN_ASK_SPLIT_PARTS,
@@ -655,7 +655,7 @@ ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.all_first_serve_pct}}
 ROW: Second-serve points won ${S} {{r1.second_serve_won_pct}} ${S} {{r1.all_second_serve_won_pct}}`,
   },
   table: {
-    when: `you against the opponent, or several unlike numbers side by side — counts next to percentages, a baseline or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${MAX_ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Measure, Metric, Stat, Set or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of your own numbers is not a table (use figure lines, or add the opponent's or all-matches column).`,
+    when: `you against the opponent, or several unlike numbers side by side — counts next to percentages, a baseline or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Measure, Metric, Stat, Set or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of your own numbers is not a table (use figure lines, or add the opponent's or all-matches column).`,
     rows: [
       {
         [ASK_SCOPE_COUNT_COLUMN]: 1,
@@ -1161,7 +1161,7 @@ ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.team_first_serve_pct}
 ROW: Second-serve points won ${S} {{r1.second_serve_won_pct}} ${S} {{r1.team_second_serve_won_pct}}`,
     },
     table: {
-      when: `players side by side (one ROW per player, labelled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${MAX_ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
+      when: `players side by side (one ROW per player, labelled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
       rows: [
         {
           [ASK_SCOPE_COUNT_COLUMN]: 1,
@@ -1284,7 +1284,7 @@ The app draws a block from cells of the result; you choose its kind and write it
 ${ASK_VISUAL_LINE_SYNTAX}
 A cell is exactly one ${ASK_CELL_REFERENCE_SYNTAX} and nothing else. A label or caption is a few plain words with no digits; it may hold a reference ("From {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches"). After a ROW label comes ${S}, never an equals sign. A ${ASK_VISUAL_PLOT_PREFIX} line names columns of the result, not cells: the app reads them from every row, so you never write a reference per match.
 
-A result with one row per player is drawn as a table with one ROW per player, labelled with the player's name copied from that row's player_name, the rows in the order the result gives them, and at most ${MAX_ASK_TABLE_ROWS} of them. A result with me_ and opp_ columns is drawn as a table whose first column is headed with the player's name when the result is about one player, or "Team" when it covers several, and whose second is the opponent's name or "Opponents" — never "You". It holds the four to six measures that differ most between the two, the largest difference first. Leave out a measure whose cells are null. In each row the first cell is the me_ column and the second is the opp_ column of the SAME measure: never two me_ columns in one row, and never a percentage beside a count.
+A result with one row per player is drawn as a table with one ROW per player, labelled with the player's name copied from that row's player_name, the rows in the order the result gives them, and at most ${ASK_TABLE_ROWS} of them. A result with me_ and opp_ columns is drawn as a table whose first column is headed with the player's name when the result is about one player, or "Team" when it covers several, and whose second is the opponent's name or "Opponents" — never "You". It holds the four to six measures that differ most between the two, the largest difference first. Leave out a measure whose cells are null. In each row the first cell is the me_ column and the second is the opp_ column of the SAME measure: never two me_ columns in one row, and never a percentage beside a count.
 
 ${renderVisualCatalogue(ASK_TEAM_VISUAL_EXAMPLES)}
 

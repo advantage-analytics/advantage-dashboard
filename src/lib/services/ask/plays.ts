@@ -3,7 +3,7 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
 
 /**
@@ -253,7 +253,7 @@ export function buildLosingPlaysAnswer(
           `${ASK_VISUAL_LINE_PREFIX} table ${S} ${sentenceCase(voice.possessive)} rally shots by direction, most often missed first.`,
           `COLUMNS: Shots ${S} Missed ${S} Miss rate`,
           ...rally
-            .slice(0, MAX_ASK_TABLE_ROWS)
+            .slice(0, ASK_TABLE_ROWS)
             .map(
               (entry) =>
                 `ROW: ${label(entry.row)} ${S} ${cell(entry.ref, "shots")} ${S} ${cell(entry.ref, "missed")} ${S} ${cell(entry.ref, "miss_pct")}`,

@@ -3,7 +3,7 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 
 /**
  * Shot patterns: "serve wide plus one down the line", "forehand crosscourt
@@ -323,6 +323,46 @@ select match_id, point_number from hit order by match_id, point_number`;
 }
 
 /** The query's shared head: the shots read once, the points, and the points the pattern holds on (`hit`). */
+/**
+ * `raw`, `numbered` and `sh`: every shot in scope, with which serve was the
+ * one played (`is_played_serve`: the second serve when there was one, else
+ * the first), whether it is a stroke (`is_stroke`: not a serve or a feed),
+ * and which stroke was the return (`is_return`). Shared by the pattern query
+ * and the serve +1 breakdown (`serve-plus-one.ts`), so the two can never
+ * disagree on what a return is.
+ *
+ * ask.shots is read once: the serve played and the return are picked with
+ * window functions over each point, not with subqueries that would read the
+ * view again per row.
+ */
+export const ASK_SHOT_ROLE_CTES = `raw as (
+  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.zone, s.direction,
+    coalesce(s.shot_type, '') not in ('First Serve', 'Second Serve', 'Feed') as is_stroke,
+    bool_or(s.shot_type = 'Second Serve') over (partition by s.match_id, s.point_number) as had_second
+  from ask.shots s
+  where s.match_id in (select match_id from scope)
+),
+numbered as (
+  select raw.*,
+    min(case when raw.is_stroke then raw.shot_number end)
+      over (partition by raw.match_id, raw.point_number) as first_stroke,
+    count(*) filter (where raw.is_stroke)
+      over (partition by raw.match_id, raw.point_number, raw.shot_number) as strokes_here
+  from raw
+),
+sh as (
+  -- The return is the first stroke, and only when one stroke alone holds
+  -- that shot number: a point with several strokes stored at the same
+  -- number (rally rows before the serve at 0) has no return that can be
+  -- told apart, and is never read as having one.
+  select numbered.*,
+    numbered.shot_type = 'Second Serve'
+      or (numbered.shot_type = 'First Serve' and not numbered.had_second) as is_played_serve,
+    numbered.is_stroke and numbered.shot_number = numbered.first_stroke
+      and numbered.strokes_here = 1 as is_return
+  from numbered
+)`;
+
 function patternCtes(pattern: AskPattern): string {
   const where: string[] = [];
   const { serve, returnShot } = pattern;
@@ -379,36 +419,7 @@ function patternCtes(pattern: AskPattern): string {
     );
   }
 
-  // ask.shots is read once: the serve played and the return are picked with
-  // window functions over each point, not with subqueries that would read the
-  // view again per row.
-  return `with raw as (
-  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.zone, s.direction,
-    coalesce(s.shot_type, '') not in ('First Serve', 'Second Serve', 'Feed') as is_stroke,
-    bool_or(s.shot_type = 'Second Serve') over (partition by s.match_id, s.point_number) as had_second
-  from ask.shots s
-  where s.match_id in (select match_id from scope)
-),
-numbered as (
-  select raw.*,
-    min(case when raw.is_stroke then raw.shot_number end)
-      over (partition by raw.match_id, raw.point_number) as first_stroke,
-    count(*) filter (where raw.is_stroke)
-      over (partition by raw.match_id, raw.point_number, raw.shot_number) as strokes_here
-  from raw
-),
-sh as (
-  -- The return is the first stroke, and only when one stroke alone holds
-  -- that shot number: a point with several strokes stored at the same
-  -- number (rally rows before the serve at 0) has no return that can be
-  -- told apart, and is never read as having one.
-  select numbered.*,
-    numbered.shot_type = 'Second Serve'
-      or (numbered.shot_type = 'First Serve' and not numbered.had_second) as is_played_serve,
-    numbered.is_stroke and numbered.shot_number = numbered.first_stroke
-      and numbered.strokes_here = 1 as is_return
-  from numbered
-),
+  return `with ${ASK_SHOT_ROLE_CTES},
 pt as (
   select p.match_id, p.point_number, p.i_served, p.i_won
   from ask.points p
@@ -614,7 +625,7 @@ export function buildPatternAnswer(
     lines.push(
       `${ASK_VISUAL_LINE_PREFIX} table ${S} The points the pattern came up on, by match.`,
       `COLUMNS: Points ${S} Won ${S} Won rate`,
-      ...matchRows.slice(0, MAX_ASK_TABLE_ROWS).map((row, index) => {
+      ...matchRows.slice(0, ASK_TABLE_ROWS).map((row, index) => {
         const ref = `r${index + 2}`;
         const label = labels.get(String(row.match_id)) ?? "Match";
         return `ROW: ${label.replace(/\d/g, "").trim() || "Match"} ${S} {{${ref}.points}} ${S} {{${ref}.won}} ${S} {{${ref}.won_pct}}`;

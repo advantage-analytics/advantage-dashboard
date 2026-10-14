@@ -3,7 +3,7 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import { askMeasureLabel } from "@/lib/services/ask/measures";
 
 /**
@@ -687,7 +687,7 @@ export function buildReviewAnswer(
       )
       .join(` ${S} `)}`,
     ...items
-      .slice(0, MAX_ASK_TABLE_ROWS)
+      .slice(0, ASK_TABLE_ROWS)
       .map(
         (item) =>
           `ROW: ${item.measure.label} ${S} ${columns.map((window) => cell(window, item.measure)).join(` ${S} `)}`,

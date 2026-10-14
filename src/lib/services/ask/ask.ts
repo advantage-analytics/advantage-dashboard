@@ -79,6 +79,15 @@ import {
   losingPlaysVoice,
 } from "@/lib/services/ask/plays";
 import {
+  asksForServePlusOne,
+  buildServePlusOneAnswer,
+  continuesServePlusOne,
+  servePlusOneRequest,
+  servePlusOneRequestOfSql,
+  servePlusOneSql,
+  type AskServePlusOne,
+} from "@/lib/services/ask/serve-plus-one";
+import {
   ASK_REVIEW_SQL,
   type AskReviewMode,
   buildReviewAnswer,
@@ -756,6 +765,8 @@ type PlanStep =
       plays?: AskPlaysSubject;
       /** Set when the sql is `pattern.ts`'s query for this pattern. */
       pattern?: AskPattern;
+      /** Set when the sql is `serve-plus-one.ts`'s breakdown, for this request. */
+      plusOne?: AskServePlusOne;
     }
   | { ok: false; refusal: string; advice: boolean }
   | { ok: false; problem: PlanProblem; reply: string }
@@ -827,6 +838,8 @@ export async function* askQuestion(
     const patternAsked =
       model.configured &&
       asksForPattern(input.question) &&
+      // "All his serve +1 patterns" is the breakdown, not one pattern.
+      !asksForServePlusOne(input.question) &&
       (!asksForLosingPlays(input.question) || namesSequence(input.question));
     let patternRead = false;
     /**
@@ -942,6 +955,18 @@ export async function* askQuestion(
       ? `${[...input.conversation].reverse().find((turn) => turn.role === "user")?.content ?? ""} ${input.question}`
       : input.question;
 
+    // The serve +1 breakdown, asked now or carried on from the last answer.
+    const previousPlusOne = servePlusOneRequestOfSql(previous?.sql ?? null);
+    const plusOneContinued =
+      previousPlusOne !== null &&
+      !asksForServePlusOne(input.question) &&
+      continuesServePlusOne(input.question);
+    const plusOne: AskServePlusOne | null = asksForServePlusOne(input.question)
+      ? servePlusOneRequest(input.question, input.tags.prompt, team)
+      : plusOneContinued
+        ? previousPlusOne
+        : null;
+
     // Three refusals the server does not accept, and one choice it makes
     // itself (`compare.ts`). Never in mock mode, whose plan is fixed.
     const reroute = (step: PlanStep): PlanStep => {
@@ -952,6 +977,7 @@ export async function* askQuestion(
         review: boolean,
         compare: CompareRequest | null,
         plays?: AskPlaysSubject,
+        plusOne?: AskServePlusOne,
       ): PlanStep => ({
         ok: true,
         plan,
@@ -959,12 +985,37 @@ export async function* askQuestion(
         compare,
         forced: true,
         ...(plays ? { plays } : {}),
+        ...(plusOne ? { plusOne } : {}),
         reply: JSON.stringify(
           review
             ? { review: true, scope_sql: plan.scope_sql }
             : { compare: compare?.kind, scope_sql: plan.scope_sql },
         ),
       });
+      // "What are Rudy's serve +1 patterns?": every serve and the next shot,
+      // by zone, stroke and direction, from the shots — or a follow-up to
+      // that answer asking for more of it ("a table of all the plays
+      // compared?"), which keeps its player when it names no other.
+      if (plusOne !== null && (step.ok || refused)) {
+        const planned = step.ok ? step.plan.scope_sql : null;
+        const scopeSql =
+          plusOneContinued && previous !== null
+            ? planned === null || planned === ASK_ALL_MATCHES_SCOPE
+              ? previous.scope_sql
+              : planned
+            : (planned ?? tagScope ?? ASK_ALL_MATCHES_SCOPE);
+        return forced(
+          {
+            scope_sql: scopeSql,
+            sql: servePlusOneSql(plusOne),
+            asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+          },
+          false,
+          null,
+          undefined,
+          plusOne,
+        );
+      }
       // "What are Eli's losing plays?": strokes and directions, from the
       // shots. Only the planner's scope is kept — the fixed comparisons read
       // match totals and cannot say which shot a point was lost on.
@@ -1521,6 +1572,61 @@ export async function* askQuestion(
           ),
           rows,
         };
+        break;
+      }
+      if (step.plusOne !== undefined && ran.matches.length > 0) {
+        // The server's own query and answer, like the losing plays.
+        plan = step.plan;
+        // A team breakdown in "my" words over several players' serves is
+        // nobody's in particular: asked, as for a pattern.
+        const playerAsk = patternNeedsPlayer({
+          team,
+          question: input.question,
+          rosterInScope: [
+            ...new Set(
+              ran.matches.flatMap((match) =>
+                match.playerName ? [match.playerName] : [],
+              ),
+            ),
+          ],
+          playerTagged: input.tags.prompt.some((tag) => tag.kind === "player"),
+        });
+        if (playerAsk !== null) {
+          await release();
+          yield {
+            type: "error",
+            code: "needs_clarification",
+            error: playerAsk.question,
+            options: playerAsk.options,
+          };
+          return;
+        }
+        const plusOne = step.plusOne;
+        const written = buildServePlusOneAnswer(
+          ran.rows,
+          losingPlaysVoice(
+            plusOne.subject,
+            onlyName(
+              ran.matches.map((match) =>
+                plusOne.subject === "opponent"
+                  ? match.opponentName
+                  : team
+                    ? match.playerName
+                    : null,
+              ),
+            ),
+          ),
+          plusOne,
+        );
+        result = {
+          matches: ran.matches,
+          rows: written === null ? [] : ran.rows,
+        };
+        if (written === null) {
+          emptyReason = ASK_NO_SHOTS_MESSAGE;
+        } else {
+          reviewText = written;
+        }
         break;
       }
       if (step.plays !== undefined && ran.matches.length > 0) {
