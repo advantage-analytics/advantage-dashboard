@@ -141,7 +141,8 @@ export interface AskThreadState {
   /** The last question's refusal, until the next one is sent. */
   refusal: AskRefusal | null;
   /** The count from the last `done` (or a 429's detail); null until one arrives. */
-  usage: { used: number; cap: number } | null;
+  /** `cap` null: a platform admin, with no limit. */
+  usage: { used: number; cap: number | null } | null;
 }
 
 export type AskThreadAction =
@@ -416,7 +417,7 @@ export function parseAskEvent(line: string): AskEvent | null {
     case "done":
       return typeof value.conversationId === "string" &&
         typeof value.used === "number" &&
-        typeof value.cap === "number"
+        (typeof value.cap === "number" || value.cap === null)
         ? {
             type: "done",
             conversationId: value.conversationId,

@@ -5293,8 +5293,9 @@ components:
           type: integer
           minimum: 0
         cap:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
+          description: Null for a platform admin, who has no monthly limit.
       examples:
         - type: done
           conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d

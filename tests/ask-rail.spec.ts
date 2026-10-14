@@ -348,6 +348,18 @@ test.describe("earlier questions, by month", () => {
 });
 
 test.describe("the limit", () => {
+  test("a platform admin has no meter and nothing counting down", async ({
+    page,
+  }) => {
+    await openFixture(page, "?quota=unlimited&used=37");
+    await expect(limit(page).locator("[data-ask-left]")).toHaveText(
+      "Unlimited questions",
+    );
+    await expect(limit(page)).toContainText("37 asked this month");
+    await expect(meter(page)).toHaveCount(0);
+    await expect(limit(page)).not.toContainText("Resets");
+  });
+
   test("what is left, the count, a 20-segment meter and the rule", async ({
     page,
   }) => {

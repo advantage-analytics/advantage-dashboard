@@ -212,7 +212,8 @@ export interface AskModel {
 export interface AskReservation {
   usageId: string;
   used: number;
-  cap: number;
+  /** Null for a platform admin: no limit. */
+  cap: number | null;
   /** `YYYY-MM-DD`. */
   resetsOn: string;
 }
@@ -336,7 +337,7 @@ export async function reserveAskQuestion(
   if (
     typeof row?.usage_id !== "string" ||
     typeof row.used !== "number" ||
-    typeof row.cap !== "number" ||
+    (typeof row.cap !== "number" && row.cap !== null) ||
     typeof row.resets_on !== "string"
   ) {
     return {
@@ -2592,11 +2593,12 @@ function savedAnswer(
 async function spentCount(
   db: AskDatabase,
   reservation: AskReservation | null,
-): Promise<{ used: number; cap: number }> {
+): Promise<{ used: number; cap: number | null }> {
   if (reservation) return { used: reservation.used, cap: reservation.cap };
   const { data } = await rpc(db, "ask_quota");
   const row = asRecord(data);
-  return typeof row?.used === "number" && typeof row.cap === "number"
+  return typeof row?.used === "number" &&
+    (typeof row.cap === "number" || row.cap === null)
     ? { used: row.used, cap: row.cap }
     : { used: 0, cap: 0 };
 }

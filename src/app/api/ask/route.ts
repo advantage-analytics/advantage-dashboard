@@ -255,9 +255,11 @@ async function limitReached(
   let figures = detail;
   if (!figures) {
     const quota = await getAskQuota().catch(() => null);
-    figures = quota
-      ? { used: quota.used, cap: quota.cap, resets_on: quota.resetsOn }
-      : null;
+    // A 429 is only ever a capped account's; one with no cap has no figures.
+    figures =
+      quota && quota.cap !== null
+        ? { used: quota.used, cap: quota.cap, resets_on: quota.resetsOn }
+        : null;
   }
   return errorResponse(
     refusal(

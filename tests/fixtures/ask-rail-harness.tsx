@@ -19,6 +19,7 @@ import type { AskScope } from "@/lib/services/ask/scope";
  * Query string:
  * - `?used=<n>`     questions spent of 20 (default 8)
  * - `?quota=none`   the count could not be read
+ * - `?quota=unlimited` a platform admin: no cap
  * - `?earlier=none` no saved conversation
  * - `?busy=1`       an answer is in flight
  * - `?fail=1`       the delete is refused
@@ -40,7 +41,7 @@ const QUOTA: AskQuotaView | null =
     ? null
     : {
         used: Number(params.get("used") ?? 8),
-        cap: 20,
+        cap: params.get("quota") === "unlimited" ? null : 20,
         resetsOn: "2026-11-01",
       };
 
