@@ -55,6 +55,15 @@ import {
   oneLine,
 } from "@/lib/services/ask/prompts";
 import {
+  ASK_NO_SHOTS_MESSAGE,
+  type AskPlaysSubject,
+  asksForLosingPlays,
+  buildLosingPlaysAnswer,
+  losingPlaysSql,
+  losingPlaysSubject,
+  losingPlaysVoice,
+} from "@/lib/services/ask/plays";
+import {
   ASK_REVIEW_SQL,
   type AskReviewMode,
   buildReviewAnswer,
@@ -722,6 +731,8 @@ type PlanStep =
       reply: string;
       /** True when the server chose the plan itself: nothing to send back to the planner. */
       forced?: boolean;
+      /** Set when the sql is `plays.ts`'s losing-plays query, for this side. */
+      plays?: AskPlaysSubject;
     }
   | { ok: false; refusal: string; advice: boolean }
   | { ok: false; problem: PlanProblem; reply: string }
@@ -831,18 +842,38 @@ export async function* askQuestion(
         plan: AskPlanQuery,
         review: boolean,
         compare: CompareRequest | null,
+        plays?: AskPlaysSubject,
       ): PlanStep => ({
         ok: true,
         plan,
         review,
         compare,
         forced: true,
+        ...(plays ? { plays } : {}),
         reply: JSON.stringify(
           review
             ? { review: true, scope_sql: plan.scope_sql }
             : { compare: compare?.kind, scope_sql: plan.scope_sql },
         ),
       });
+      // "What are Eli's losing plays?": strokes and directions, from the
+      // shots. Only the planner's scope is kept — the fixed comparisons read
+      // match totals and cannot say which shot a point was lost on.
+      if (asksForLosingPlays(input.question) && (step.ok || refused)) {
+        const subject = losingPlaysSubject(input.question, input.tags.prompt);
+        return forced(
+          {
+            scope_sql: step.ok
+              ? step.plan.scope_sql
+              : (tagScope ?? ASK_ALL_MATCHES_SCOPE),
+            sql: losingPlaysSql(subject),
+            asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+          },
+          false,
+          null,
+          subject,
+        );
+      }
       // "What should Rudy practice?" is the review of that scope, never
       // "practice sessions are not recorded".
       if (refused && asksWhatToWorkOn(input.question)) {
@@ -1133,7 +1164,8 @@ export async function* askQuestion(
           step.compare = { kind, measures: null };
         }
       }
-      const free = !step.review && step.compare === null;
+      const free =
+        !step.review && step.compare === null && step.plays === undefined;
       if (free) {
         step.plan.sql = withStoredSpelling(step.plan.sql);
         step.plan.scope_sql = withStoredSpelling(step.plan.scope_sql);
@@ -1288,6 +1320,35 @@ export async function* askQuestion(
         }
         ({ plan, result } = compared);
         reviewText = compared.text;
+        break;
+      }
+      if (step.plays !== undefined && ran.matches.length > 0) {
+        // The server's own query and answer. No shot recorded in any match
+        // in scope is "no data", said as such — never the match totals.
+        plan = step.plan;
+        const rows = withScopeCount(ran.rows, ran.matches.length);
+        const written = buildLosingPlaysAnswer(
+          rows,
+          losingPlaysVoice(
+            step.plays,
+            onlyName(
+              ran.matches.map((match) =>
+                step.plays === "opponent"
+                  ? match.opponentName
+                  : team
+                    ? match.playerName
+                    : null,
+              ),
+            ),
+          ),
+          ran.matches.length,
+        );
+        result = { matches: ran.matches, rows: written === null ? [] : rows };
+        if (written === null) {
+          emptyReason = ASK_NO_SHOTS_MESSAGE;
+        } else {
+          reviewText = written;
+        }
         break;
       }
       let resultRows = ran.rows;
