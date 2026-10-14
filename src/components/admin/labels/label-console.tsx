@@ -2496,7 +2496,6 @@ export function LabelConsole({
                       name={upload.program}
                       crestUrl={upload.programCrestUrl}
                       size={26}
-                      className="size-[18px] rounded-[5px] text-[7px]"
                     />
                     <span>{upload.program}</span>
                     <span aria-hidden="true">·</span>

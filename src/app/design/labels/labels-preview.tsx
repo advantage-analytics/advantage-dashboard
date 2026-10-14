@@ -52,10 +52,7 @@ export function LabelsDesignPreview() {
 
       <section aria-labelledby="overview" className="flex flex-col gap-12">
         <div className="flex flex-col gap-1">
-          <h2
-            id="overview"
-            className="text-[20px] font-light text-[var(--ink-900)]"
-          >
+          <h2 id="overview" className="text-title-lg">
             A match’s overview
           </h2>
           <p className="text-[13px] text-[var(--ink-600)]">
@@ -84,10 +81,7 @@ export function LabelsDesignPreview() {
 
       <section aria-labelledby="list" className="flex flex-col gap-6">
         <div className="flex flex-col gap-1 border-t border-[var(--border-card)] pt-5">
-          <h2
-            id="list"
-            className="text-[20px] font-light text-[var(--ink-900)]"
-          >
+          <h2 id="list" className="text-title-lg">
             The Labels list, by program and player
           </h2>
           <p className="max-w-[72ch] text-[13px] leading-[1.6] text-[var(--ink-600)]">
