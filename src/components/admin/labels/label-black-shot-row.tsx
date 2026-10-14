@@ -28,6 +28,7 @@ import {
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
+import { hoverLine } from "@/lib/services/labels/marks-state";
 import {
   isLabelDeleteReason,
   planAddedShot,
@@ -251,32 +252,26 @@ export function BlackShotsWell({
   // The next row's place in the well, for the stagger; none when the well
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
-  // The point's hints, as the well's first row: it arrives with the rally.
-  // Their answers write through the console only where it can write at all.
+  // The point's hints. One about a stroke, or with an answer to click, is a
+  // dashed amber row: under its stroke, or under the rally when it is about
+  // the whole point. The rest are one quiet line, last in the well. Nothing
+  // leads the well: a line above the first stroke read as part of the point's
+  // header, and its answers as words rather than buttons. Their answers write
+  // through the console only where it can write at all.
   const hints = pointHints(
     point,
     marks,
     edit.names,
     edit.editable ? edit : undefined,
   );
-  // A hint about one live stroke goes under it; the rest lead the well.
   const live = new Set(
     point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
   );
   const under = (hint: (typeof hints)[number]) =>
     hint.afterShotId !== undefined && live.has(hint.afterShotId);
-  const top = hints.filter((hint) => !under(hint));
-  if (top.length > 0) {
-    const arrival = rowArrival(arrive());
-    rows.push(
-      <PointHintLine
-        key="hints"
-        hints={top}
-        className={arrival.className}
-        style={arrival.style}
-      />,
-    );
-  }
+  const rest = hints.filter((hint) => !under(hint));
+  const offered = rest.filter((hint) => hint.actions.length > 0);
+  const quiet = rest.filter((hint) => hint.actions.length === 0);
   const hintLineAfter = (shotId: string) => {
     for (const hint of hints) {
       if (hint.afterShotId !== shotId) continue;
@@ -350,6 +345,28 @@ export function BlackShotsWell({
         />,
       );
     }
+  }
+  for (const hint of offered) {
+    rows.push(
+      <BlackEndedSuggestion
+        key={`hint-${hint.code}`}
+        hint={hint}
+        point={point}
+        edit={edit}
+        arrive={arrive()}
+      />,
+    );
+  }
+  if (quiet.length > 0) {
+    const arrival = rowArrival(arrive());
+    rows.push(
+      <PointHintLine
+        key="hints"
+        hints={quiet}
+        className={arrival.className}
+        style={arrival.style}
+      />,
+    );
   }
   const addArrival = rowArrival(arrive());
   return (
@@ -1021,7 +1038,9 @@ function BlackSuggestedShot({
 }
 
 /**
- * "Point ended here", under the stroke that ended the point: a suggestion, so
+ * A hint with a stroke of its own or an answer to click — "Point ended here"
+ * under the stroke that ended the point, "Was the last ball in?" under the
+ * last ball, "Different ending?" under the rally: a suggestion, so
  * it wears the suggested shot's dashed amber frame, and its answers are laid
  * out as the selected row's tray lays out its own — the same inset, gap, 10px
  * type and icons (Split here takes Split's, Remove N takes Delete's), with
@@ -1058,7 +1077,7 @@ function BlackEndedSuggestion({
       <ChromeTooltip label={hint.label} detail={hint.detail} side="top" wrap>
         <span
           data-suggestion-text=""
-          aria-label={`${hint.label}. ${hint.detail}`}
+          aria-label={hoverLine({ name: hint.label, detail: hint.detail })}
           className="inline-flex min-w-0 shrink items-center gap-[5px] px-1"
           style={{ color: AMBER_SUGGESTION_INK }}
         >
@@ -1074,7 +1093,9 @@ function BlackEndedSuggestion({
         <BlackTextAction
           key={action.label}
           ink="plain"
-          icon={isSplit(action.label) ? Split : isYes(action.label) ? Check : X}
+          icon={
+            isSplit(action.label) ? Split : isRemoval(action.label) ? X : Check
+          }
           shrinks
           small
           data-point-hint-action={hint.code}
@@ -1112,8 +1133,8 @@ function BlackEndedSuggestion({
 /** Whether a hint's answer is its split ("Split here"). */
 const isSplit = (label: string) => label.startsWith("Split");
 
-/** Whether a hint's answer is its yes ("Yes, remove 1"). */
-const isYes = (label: string) => label.startsWith("Yes");
+/** Whether a hint's answer only takes strokes away ("Remove 3"). */
+const isRemoval = (label: string) => label.startsWith("Remove");
 
 /** A ghost row's value: struck through, or an unstruck em dash for none. */
 function Struck({

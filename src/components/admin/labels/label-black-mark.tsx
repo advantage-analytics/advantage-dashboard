@@ -22,7 +22,9 @@ import {
   lastCallAnswer,
   lastLandingMissing,
   markStates,
+  markTone,
   missingPointAdded,
+  pointWinnerContradicted,
   pointEndedEarly,
   pointRowMarkList,
   secondServeAsFirst,
@@ -32,9 +34,11 @@ import {
   stateHoverParts,
   type MarkHoverParts,
   type MarkState,
+  type MarkTone,
 } from "@/lib/services/labels/marks-state";
 import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
 import {
+  hintDismissKey,
   isSuggestionKey,
   pointEndedKey,
 } from "@/lib/services/labels/suggestions";
@@ -59,6 +63,8 @@ export interface MarkChipProps {
   text: string | null;
   count: number;
   state: MarkState;
+  /** Amber for a mark that can move the score, grey for one about the data. */
+  tone?: MarkTone;
   /** The accessible name: a Radix tooltip renders nothing until it opens. */
   hover: string;
   /** The tooltip's first line: the mark's name and state, or "3 to check". */
@@ -68,8 +74,9 @@ export interface MarkChipProps {
 }
 
 /**
- * One chip. Amber while a mark it stands for is open; a quiet outline, and no
- * words, once none is. Under a 600px row (the nearest `@container`) the words
+ * One chip. Amber while a mark it stands for is open and can move the score;
+ * grey, filled, while the open ones are only about the data (`tone`); a quiet
+ * outline, and no words, once none is open. Under a 600px row (the nearest `@container`) the words
  * are not drawn and the chip is its icon, so the point's two lines keep their
  * room. Not a tab stop: a click on it is a click on its row.
  */
@@ -77,6 +84,7 @@ export function MarkChip({
   text,
   count,
   state,
+  tone = "score",
   hover,
   name,
   detail,
@@ -94,13 +102,16 @@ export function MarkChip({
         role="img"
         data-mark-chip=""
         data-mark-state={state}
+        data-mark-tone={tone}
         data-mark-count={count}
         aria-label={hover}
         className={cn(
           "inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full px-1.5 text-[10px] font-medium whitespace-nowrap",
           quiet
             ? "bg-transparent text-white/[0.38] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-white)_14%,transparent)]"
-            : "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]",
+            : tone === "data"
+              ? "bg-white/[0.10] text-white/70"
+              : "bg-[var(--rail-amber-wash)] text-[var(--rail-amber)]",
           words && "@min-[600px]:px-[7px]",
         )}
       >
@@ -132,7 +143,8 @@ export interface PointHint {
   actions: readonly PointHintAction[];
   /**
    * The stroke the hint is about, when it is one: "Point ended here" sits
-   * under the stroke that ended the point, not at the top of the well.
+   * under the stroke that ended the point and "Was the last ball in?" under
+   * the last ball, not on a line away from it.
    */
   afterShotId?: string;
   /** The key Dismiss stores, for a hint the labeller can wave away. */
@@ -148,8 +160,10 @@ const HINT_DOT_INK = railInk(0.25);
  * The open point's quiet line: its hints by their labels, each with its
  * sentence on hover, and a hint's answers as text actions after its word
  * (`RAIL_PRESS`, through `BlackTextAction`). Counted nowhere. Drawn as the
- * first row of the shots well, it takes the well's own arrival (`className` /
- * `style`).
+ * last row of the shots well, under the rally it is about, it takes the
+ * well's own arrival (`className` / `style`). Only the hints with nothing to
+ * click and no stroke of their own are left to it: the rest are suggestion
+ * rows (`BlackShotsWell`).
  */
 export function PointHintLine({
   hints,
@@ -315,7 +329,24 @@ export function pointRowMarks(
   const { count } = pointRowMarkList(point, marks);
   const states = markStates(count, point, marks.suggestions, points);
   const pointAdded = missingPointAdded(point, marks.suggestions, points);
-  const chip = rollupMarks(count, states);
+  const chip = rollupMarks(
+    count,
+    states,
+    count.map((mark) => markTone(mark, point, marks.suggestions)),
+  );
+  // Nothing counted is open: the row speaks for its hints instead, as a grey
+  // chip, until the point is checked. They were words on the open point's
+  // line alone, so a closed row with only data to fix looked finished.
+  if (!chip || chip.state !== "open") {
+    // A winner the strokes contradict is the score, not data: its chip is
+    // amber and outlasts the point being checked.
+    const contradicted = pointWinnerContradicted(point, marks);
+    const data =
+      point.checkedAt === null || contradicted
+        ? dataChip(point, marks, names, contradicted)
+        : null;
+    if (data) return { flag: data };
+  }
   if (!chip) return { flag: null };
 
   const members = count.map((mark, i) => ({ mark, state: states[i] }));
@@ -331,6 +362,37 @@ export function pointRowMarks(
         chip.text ?? "Nothing left to check",
       ),
     },
+  };
+}
+
+/**
+ * The grey chip of a closed row: the point's hints (`pointHints`, the marks'
+ * own and the ones read off the rows), one by its own words, several as
+ * "N data". Null with none.
+ */
+function dataChip(
+  point: LabelPoint,
+  marks: LabelMarks,
+  names: SideNames,
+  contradicted = false,
+): MarkChipProps | null {
+  const every = pointHints(point, marks, names);
+  // Checked, only the contradicted winner is still a question.
+  const hints =
+    point.checkedAt === null
+      ? every
+      : every.filter((hint) => hint.code === "ending_stale");
+  if (hints.length === 0) return null;
+  const text = hints.length === 1 ? hints[0].label : `${hints.length} data`;
+  return {
+    text,
+    count: hints.length,
+    state: "open",
+    tone: contradicted ? "score" : "data",
+    ...chipHover(
+      hints.map((hint) => ({ name: hint.label, detail: hint.detail })),
+      text,
+    ),
   };
 }
 
@@ -386,19 +448,43 @@ export function pointHints(
       mark.code === "shot_after_point_end" ? mark.params.shotId : undefined;
     const key = ended ? pointEndedKey(ended) : undefined;
     // A draft stroke has no id to store yet: no Dismiss until it lands.
-    const dismissKey = key && isSuggestionKey(key) ? key : undefined;
+    const actions = hintActions(mark, point, edit, lastCall?.shotId);
+    const afterShotId = ended ?? hintShotId(mark, lastCall?.shotId);
+    // Every hint drawn as a question (a row of its own: one with an answer,
+    // or about one stroke) can be answered "no": Dismiss stores its code.
+    const asked = actions.length > 0 || afterShotId !== undefined;
+    const candidate = key ?? (asked ? hintDismissKey(mark.code) : undefined);
+    const dismissKey =
+      candidate && isSuggestionKey(candidate) ? candidate : undefined;
     if (dismissKey && point.dismissed.includes(dismissKey)) return [];
     return [
       {
         code: mark.code,
         label: hintLabel(mark, names),
         detail: markHover(mark, names),
-        actions: hintActions(mark, point, edit, lastCall?.shotId),
-        afterShotId: ended,
+        actions,
+        afterShotId,
         dismissKey,
       },
     ];
   });
+}
+
+/** The stroke a hint asks about, for the hints that name one. */
+function hintShotId(
+  mark: LabelMark,
+  lastCallShotId?: string,
+): string | undefined {
+  switch (mark.code) {
+    case "last_call_overruled":
+      return lastCallShotId;
+    case "second_serve_as_first":
+    case "serve_after_serve_in":
+    case "serve_in_landing_out":
+      return mark.params.shotId;
+    default:
+      return undefined;
+  }
 }
 
 /**

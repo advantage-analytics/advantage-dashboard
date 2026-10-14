@@ -82,6 +82,25 @@ export function isWithdrawnAdd(
   return shot.status === "deleted" && shot.statusBeforeDelete === "added";
 }
 
+/**
+ * A point the labeller added and then deleted before it held a stroke: the
+ * same case as `isWithdrawnAdd`, for a point. It never stood for anything on
+ * the video, so the console draws no marker for it — neither "Deleted point"
+ * nor the "Combined into the point above" its empty row would otherwise read
+ * as (`isCombinedTombstone`).
+ */
+export function isWithdrawnPointAdd(
+  point: Pick<LabelPoint, "status" | "statusBeforeDelete"> & {
+    shots: readonly unknown[];
+  },
+): boolean {
+  return (
+    point.status === "deleted" &&
+    point.statusBeforeDelete === "added" &&
+    point.shots.length === 0
+  );
+}
+
 /** Whether a stroke is a serve — a first or a second. */
 export function isServeStroke(stroke: LabelStroke | null | undefined): boolean {
   return stroke === "first_serve" || stroke === "second_serve";
