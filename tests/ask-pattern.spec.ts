@@ -33,6 +33,7 @@ const NAMES = { mine: "Emon van Loben Sels", opponent: "Eli Stephenson" };
 const SERVE_PLUS_ONE: AskPattern = {
   serve: { server: "mine", zones: ["Wide"], type: null },
   returnShot: null,
+  plusOne: null,
   shots: [
     { player: "mine", strokes: [], directions: ["Down the Line"], within: 3 },
   ],
@@ -41,6 +42,7 @@ const SERVE_PLUS_ONE: AskPattern = {
 const FOREHAND_THEN_DTL: AskPattern = {
   serve: null,
   returnShot: null,
+  plusOne: null,
   shots: [
     {
       player: "mine",
@@ -145,11 +147,13 @@ test.describe("the query", () => {
     "return only": {
       serve: { server: "opponent", zones: [], type: "second" },
       returnShot: { strokes: ["Backhand"], zones: ["Down the Line"] },
+      plusOne: null,
       shots: [],
     },
     "every stroke kind": {
       serve: null,
       returnShot: null,
+      plusOne: null,
       shots: [
         {
           player: null,
@@ -314,6 +318,7 @@ test.describe("the Video link", () => {
     const middle: AskPattern = {
       serve: null,
       returnShot: null,
+      plusOne: null,
       shots: [
         { player: "mine", strokes: [], directions: ["Middle"], within: null },
       ],
@@ -340,5 +345,109 @@ test.describe("the reading's own rules", () => {
       directions: ["Down the Line"],
       within: 7,
     });
+  });
+});
+
+test.describe("the +1, exactly", () => {
+  const RETURN_PLUS_ONE: AskPattern = {
+    serve: { server: "opponent", zones: [], type: null },
+    returnShot: { strokes: [], zones: ["Middle"] },
+    plusOne: { after: "return", strokes: [], directions: ["Crosscourt"] },
+    shots: [],
+  };
+
+  test("is read from plus_one, and every stroke listed is no stroke", () => {
+    expect(
+      readAskPattern({
+        serve: { server: "opponent" },
+        return: { zones: ["Middle"] },
+        plus_one: {
+          after: "return",
+          strokes: ["Forehand", "Backhand", "Volley", "Overhead"],
+          directions: ["Crosscourt"],
+        },
+      }),
+    ).toEqual(RETURN_PLUS_ONE);
+    expect(readAskPattern({ plus_one: { after: "rally" } })).toBeNull();
+  });
+
+  test("is the returner's shot four, hit by the returner", () => {
+    const sql = patternSql(RETURN_PLUS_ONE);
+    expect(sql).toContain("q.is_return_plus_one");
+    expect(sql).toContain("q.mine = true");
+    expect(sql).toContain("q.direction in ('Crosscourt')");
+    expect(sql).toContain("numbered.shot_number = 4 as is_return_plus_one");
+    expect(
+      checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
+    ).toEqual({ ok: true });
+  });
+
+  test("is said as the returner's next ball", () => {
+    expect(describePattern(RETURN_PLUS_ONE, NAMES)).toBe(
+      "Eli Stephenson hit a serve, then Emon van Loben Sels hit a return through the middle, then Emon van Loben Sels's next ball (the returner's plus one) was a shot crosscourt",
+    );
+  });
+
+  test("opens the Video view on Hit 4 by the returner", () => {
+    expect(patternMatchFilters(RETURN_PLUS_ONE)).toMatchObject({
+      server: "opponent",
+      returnZone: ["Middle"],
+      customPlayer: "you",
+      customDirection: ["Crosscourt"],
+      customRallyShot: [4],
+    });
+    expect(
+      patternMatchFilters({
+        ...RETURN_PLUS_ONE,
+        serve: { server: "mine", zones: ["T"], type: null },
+        returnShot: null,
+        plusOne: { after: "serve", strokes: ["Forehand"], directions: [] },
+      }),
+    ).toMatchObject({
+      customPlayer: "you",
+      customStroke: ["Forehand"],
+      customRallyShot: [3],
+    });
+  });
+});
+
+test.describe("the side", () => {
+  const AD_RETURN: AskPattern = {
+    court: "Ad",
+    serve: { server: "opponent", zones: [], type: null },
+    returnShot: { strokes: [], zones: ["Crosscourt"] },
+    plusOne: null,
+    shots: [],
+  };
+
+  test("is read only from the two sides, and left out when not named", () => {
+    expect(
+      readAskPattern({
+        court: "Ad",
+        serve: { server: "opponent" },
+        return: { zones: ["Crosscourt"] },
+      }),
+    ).toEqual(AD_RETURN);
+    expect(
+      readAskPattern({ court: "ad", serve: { server: "mine" } }),
+    ).toBeNull();
+    expect(readAskPattern({ serve: { server: "mine" } })).not.toHaveProperty(
+      "court",
+    );
+  });
+
+  test("filters the point's court, says so, and opens the Video view on that side", () => {
+    expect(patternSql(AD_RETURN)).toContain("pt.court = 'Ad'");
+    expect(
+      buildPatternAnswer(
+        [{ match_id: null, points: 3, won: 1, won_pct: 33.3 }],
+        AD_RETURN,
+        NAMES,
+        new Map(),
+      ),
+    ).toContain(
+      "Read as: points on the ad side where Eli Stephenson hit a serve",
+    );
+    expect(patternMatchFilters(AD_RETURN)).toMatchObject({ court: "ad" });
   });
 });

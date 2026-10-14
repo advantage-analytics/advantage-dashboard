@@ -14,6 +14,10 @@ import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
+  namesASide,
+  plusOneBreakdownAsked,
+  plusOneSides,
+  plusOneWithSides,
   continuesServePlusOne,
   servePlusOneRequest,
   servePlusOneRequestOfSql,
@@ -73,6 +77,29 @@ test.describe("which questions are the breakdown", () => {
   });
 });
 
+test.describe("the return +1", () => {
+  test("is its own breakdown, the returner's", () => {
+    expect(plusOneBreakdownAsked("What are Rudy's return +1 patterns?")).toBe(
+      "return",
+    );
+    expect(plusOneBreakdownAsked("show me his return plus one")).toBe("return");
+    expect(
+      servePlusOneRequest("What are Rudy's return +1 patterns?", [], true),
+    ).toEqual({ phase: "return", subject: "mine", serveType: null });
+    expect(
+      servePlusOneRequest("their opponents' return +1 patterns", [], true)
+        .subject,
+    ).toBe("opponent");
+  });
+  test("one named return +1 is the pattern form's, not the breakdown", () => {
+    expect(
+      plusOneBreakdownAsked(
+        "When Rudy returns down the middle and his plus 1 is crosscourt, how often does he win?",
+      ),
+    ).toBeNull();
+  });
+});
+
 test.describe("whose serve", () => {
   test("in a team, 'his serve' is the program's player's", () => {
     for (const question of ASKED) {
@@ -82,7 +109,7 @@ test.describe("whose serve", () => {
   test("the opponent's serve, said so, is the opponent's", () => {
     expect(
       servePlusOneRequest("their opponents' serve +1 patterns", [], true),
-    ).toEqual({ subject: "opponent", serveType: null });
+    ).toEqual({ phase: "serve", subject: "opponent", serveType: null });
   });
   test("on the personal page 'his serve' with an opponent tagged is that opponent's", () => {
     expect(
@@ -91,33 +118,51 @@ test.describe("whose serve", () => {
     ).toBe("opponent");
     expect(
       servePlusOneRequest("my first serve plus one", [OPPONENT_TAG], false),
-    ).toEqual({ subject: "mine", serveType: "first" });
+    ).toEqual({ phase: "serve", subject: "mine", serveType: "first" });
   });
 });
 
 test.describe("the query", () => {
-  for (const subject of ["mine", "opponent"] as const) {
-    for (const serveType of [null, "first", "second"] as const) {
-      test(`${subject} ${serveType ?? "both"}: passes the guard and reads back`, () => {
-        const sql = servePlusOneSql({ subject, serveType });
-        expect(
-          checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
-        ).toEqual({ ok: true });
-        expect(servePlusOneRequestOfSql(sql)).toEqual({ subject, serveType });
-      });
+  for (const phase of ["serve", "return"] as const) {
+    for (const subject of ["mine", "opponent"] as const) {
+      for (const serveType of [null, "first", "second"] as const) {
+        test(`${phase} ${subject} ${serveType ?? "both"}: passes the guard and reads back`, () => {
+          const sql = servePlusOneSql({ phase, subject, serveType });
+          expect(
+            checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
+          ).toEqual({ ok: true });
+          expect(servePlusOneRequestOfSql(sql)).toEqual({
+            phase,
+            subject,
+            serveType,
+          });
+        });
+      }
     }
   }
 
-  test("the +1 is the server's own first stroke after the return", () => {
-    const sql = servePlusOneSql({ subject: "mine", serveType: null });
-    expect(sql).toContain("v.is_played_serve and v.mine = true");
-    expect(sql).toContain("r.is_return");
-    expect(sql).toContain(
-      "s.is_stroke and s.mine = true and s.shot_number > r.shot_number",
-    );
-    expect(sql).toContain("p.nth = 1");
-    // The opponent's serve: their shots, and their points won.
-    const theirs = servePlusOneSql({ subject: "opponent", serveType: null });
+  test("the +1 is the Video filter's: the server's shot 3, the returner's shot 4", () => {
+    const serve = servePlusOneSql({
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+    });
+    expect(serve).toContain("v.is_played_serve and v.mine = true");
+    expect(serve).toContain("q.is_serve_plus_one and q.mine = true");
+    const ret = servePlusOneSql({
+      phase: "return",
+      subject: "mine",
+      serveType: "second",
+    });
+    expect(ret).toContain("r.is_return and r.mine = true");
+    expect(ret).toContain("q.is_return_plus_one and q.mine = true");
+    expect(ret).toContain("v.shot_type = 'Second Serve'");
+    // The opponent's: their shots, and their points won.
+    const theirs = servePlusOneSql({
+      phase: "serve",
+      subject: "opponent",
+      serveType: null,
+    });
     expect(theirs).toContain("v.mine = false");
     expect(theirs).toContain("(not pt.i_won) as won");
   });
@@ -128,7 +173,7 @@ test.describe("the query", () => {
 const RUDY: AskRow[] = [
   {
     section: "total",
-    serve_zone: null,
+    zone: null,
     stroke: null,
     direction: null,
     points: 244,
@@ -136,8 +181,8 @@ const RUDY: AskRow[] = [
     won_pct: 55.3,
   },
   {
-    section: "served",
-    serve_zone: null,
+    section: "opening",
+    zone: null,
     stroke: null,
     direction: null,
     points: 326,
@@ -146,7 +191,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "T",
+    zone: "T",
     stroke: "Backhand",
     direction: "Crosscourt",
     points: 29,
@@ -155,7 +200,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "T",
+    zone: "T",
     stroke: "Forehand",
     direction: "Inside Out",
     points: 20,
@@ -164,7 +209,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "T",
+    zone: "T",
     stroke: "Backhand",
     direction: "Down the Line",
     points: 15,
@@ -173,7 +218,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "T",
+    zone: "T",
     stroke: "Forehand",
     direction: "Down the Line",
     points: 15,
@@ -182,7 +227,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "Wide",
+    zone: "Wide",
     stroke: "Forehand",
     direction: "Down the Line",
     points: 14,
@@ -191,7 +236,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "Body",
+    zone: "Body",
     stroke: "Backhand",
     direction: "Crosscourt",
     points: 13,
@@ -200,7 +245,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "Wide",
+    zone: "Wide",
     stroke: "Forehand",
     direction: "Inside In",
     points: 12,
@@ -209,7 +254,7 @@ const RUDY: AskRow[] = [
   },
   {
     section: "pattern",
-    serve_zone: "Body",
+    zone: "Body",
     stroke: "Forehand",
     direction: "Crosscourt",
     points: 12,
@@ -232,7 +277,7 @@ async function rendered(text: string, rows: readonly AskRow[]) {
 
 test.describe("the answer", () => {
   const voice = losingPlaysVoice("mine", "Rudy Quan");
-  const request = { subject: "mine", serveType: null } as const;
+  const request = { phase: "serve", subject: "mine", serveType: null } as const;
 
   test("every pattern in a table, winning and losing named, every figure a cell", async () => {
     const text = buildServePlusOneAnswer(RUDY, voice, request) ?? "";
@@ -387,7 +432,11 @@ test.describe("routing", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({
       scope_sql: RUDY_SCOPE,
-      sql: servePlusOneSql({ subject: "mine", serveType: null }),
+      sql: servePlusOneSql({
+        phase: "serve",
+        subject: "mine",
+        serveType: null,
+      }),
     });
     // The server writes the answer: the model was asked for the plan only.
     expect(calls()).toBe(1);
@@ -423,14 +472,22 @@ test.describe("routing", () => {
           ],
           previousPlan: {
             scope_sql: RUDY_SCOPE,
-            sql: servePlusOneSql({ subject: "mine", serveType: null }),
+            sql: servePlusOneSql({
+              phase: "serve",
+              subject: "mine",
+              serveType: null,
+            }),
           },
         }),
       ),
     );
     expect(runs[0]).toMatchObject({
       scope_sql: RUDY_SCOPE,
-      sql: servePlusOneSql({ subject: "mine", serveType: null }),
+      sql: servePlusOneSql({
+        phase: "serve",
+        subject: "mine",
+        serveType: null,
+      }),
     });
   });
 
@@ -454,8 +511,138 @@ test.describe("routing", () => {
       ),
     );
     expect(runs[0]).toMatchObject({
-      sql: servePlusOneSql({ subject: "mine", serveType: null }),
+      sql: servePlusOneSql({
+        phase: "serve",
+        subject: "mine",
+        serveType: null,
+      }),
     });
+  });
+});
+
+test.describe("by side", () => {
+  test("a question names a split, one side, or neither", () => {
+    expect(plusOneSides("his serve +1 patterns divided up by sides")).toEqual({
+      bySide: true,
+    });
+    expect(plusOneSides("serve +1 on deuce and ad")).toEqual({ bySide: true });
+    expect(plusOneSides("return +1 on the ad side")).toEqual({ court: "Ad" });
+    expect(plusOneSides("serve +1 from the deuce court")).toEqual({
+      court: "Deuce",
+    });
+    expect(plusOneSides("serve +1 patterns")).toEqual({});
+  });
+
+  test("a split groups by court too; one side filters to it", () => {
+    const split = servePlusOneSql({
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      bySide: true,
+    });
+    expect(split).toContain("group by court, zone, stroke, direction");
+    expect(split).toContain("select o.court, o.zone");
+    const ad = servePlusOneSql({
+      phase: "return",
+      subject: "mine",
+      serveType: null,
+      court: "Ad",
+    });
+    expect(ad).toContain("and pc.court = 'Ad'");
+    for (const sql of [split, ad]) {
+      expect(
+        checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
+      ).toEqual({ ok: true });
+    }
+    expect(servePlusOneRequestOfSql(ad)).toEqual({
+      phase: "return",
+      subject: "mine",
+      serveType: null,
+      court: "Ad",
+    });
+  });
+
+  test("a follow-up's split replaces one side, and one side replaces a split", () => {
+    const deuce = {
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      court: "Deuce",
+    } as const;
+    expect(plusOneWithSides(deuce, { bySide: true })).toEqual({
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      bySide: true,
+    });
+    expect(
+      plusOneWithSides(
+        { ...deuce, court: undefined, bySide: true },
+        { court: "Ad" },
+      ),
+    ).toMatchObject({ court: "Ad" });
+    expect(plusOneWithSides(deuce, {})).toBe(deuce);
+  });
+
+  test("each row says its side", async () => {
+    const rows: AskRow[] = [
+      {
+        section: "total",
+        court: null,
+        zone: null,
+        stroke: null,
+        direction: null,
+        points: 30,
+        won: 16,
+        won_pct: 53.3,
+      },
+      {
+        section: "opening",
+        court: null,
+        zone: null,
+        stroke: null,
+        direction: null,
+        points: 40,
+        won: 2,
+        won_pct: null,
+      },
+      {
+        section: "pattern",
+        court: "Ad",
+        zone: "Wide",
+        stroke: "Forehand",
+        direction: "Inside Out",
+        points: 9,
+        won: 6,
+        won_pct: 66.7,
+      },
+      {
+        section: "pattern",
+        court: "Deuce",
+        zone: "T",
+        stroke: "Backhand",
+        direction: "Crosscourt",
+        points: 8,
+        won: 3,
+        won_pct: 37.5,
+      },
+    ];
+    const text =
+      buildServePlusOneAnswer(rows, losingPlaysVoice("mine", "Rudy Quan"), {
+        phase: "serve",
+        subject: "mine",
+        serveType: null,
+        bySide: true,
+      }) ?? "";
+    const { result } = await rendered(text, rows);
+    expect(result.droppedDigits).toEqual([]);
+    if (result.visual?.kind !== "table") throw new Error("no table");
+    expect(result.visual.caption).toContain("deuce and ad sides apart");
+    expect(result.visual.rows.map((row) => row.label)).toEqual([
+      "Ad · Wide serve → forehand inside out",
+      "Deuce · T serve → backhand crosscourt",
+    ]);
+    expect(result.headline).toContain("on the ad side, a serve out wide");
   });
 });
 
@@ -471,4 +658,30 @@ test("on the personal page 'his serve +1' is the opponent's, tagged or not", () 
   expect(servePlusOneRequest("his serve +1 patterns", [], false).subject).toBe(
     "opponent",
   );
+});
+
+test.describe("whose +1, with the other side named too", () => {
+  test("'my +1 against their serve' is mine", () => {
+    expect(
+      servePlusOneRequest(
+        "What is my return plus one against their first serve?",
+        [],
+        false,
+      ),
+    ).toMatchObject({ phase: "return", subject: "mine", serveType: "first" });
+    expect(
+      servePlusOneRequest(
+        "How does my serve +1 do against their return?",
+        [],
+        true,
+      ).subject,
+    ).toBe("mine");
+  });
+  test("a bare 'opponents' is who was played, not whose +1", () => {
+    expect(servePlusOneRequest(ASKED[1], [], true).subject).toBe("mine");
+  });
+  test("a named side sends a plays question to the planner", () => {
+    expect(namesASide("what are my best shots on the ad side")).toBe(true);
+    expect(namesASide("what are my best shots")).toBe(false);
+  });
 });

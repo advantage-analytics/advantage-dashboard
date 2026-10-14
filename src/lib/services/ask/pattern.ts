@@ -89,9 +89,27 @@ export interface AskPatternShot {
   within: number | null;
 }
 
+/**
+ * The +1, exactly: the next stroke by the player who served (`after:
+ * "serve"`) or who returned (`after: "return"`), after the return — never
+ * "a shot within N", which could be the return itself.
+ */
+export interface AskPatternPlusOne {
+  after: "serve" | "return";
+  strokes: AskPatternStroke[];
+  directions: AskPatternDirection[];
+}
+
+export const ASK_PATTERN_COURTS = ["Deuce", "Ad"] as const;
+export type AskPatternCourt = (typeof ASK_PATTERN_COURTS)[number];
+
 export interface AskPattern {
+  /** The side the point was played from (`ask.points.court`); absent for either. */
+  court?: AskPatternCourt;
   serve: AskPatternServe | null;
   returnShot: AskPatternReturn | null;
+  /** The serve's or the return's +1; null when the pattern names none. */
+  plusOne: AskPatternPlusOne | null;
   /** Up to two shots, in order: the second comes later in the same point. */
   shots: AskPatternShot[];
 }
@@ -215,6 +233,33 @@ export function readAskPattern(value: unknown): AskPattern | null {
     }
   }
 
+  let court: AskPatternCourt | undefined;
+  if (value.court !== null && value.court !== undefined) {
+    if (
+      typeof value.court !== "string" ||
+      !(ASK_PATTERN_COURTS as readonly string[]).includes(value.court)
+    ) {
+      return null;
+    }
+    court = value.court as AskPatternCourt;
+  }
+
+  let plusOne: AskPatternPlusOne | null = null;
+  const rawPlus = value.plus_one ?? value.plusOne;
+  if (rawPlus !== null && rawPlus !== undefined) {
+    if (!isRecord(rawPlus)) return null;
+    if (rawPlus.after !== "serve" && rawPlus.after !== "return") return null;
+    const strokes = listOf(rawPlus.strokes, ASK_PATTERN_STROKES);
+    const directions = listOf(rawPlus.directions, ASK_PATTERN_DIRECTIONS);
+    if (strokes === undefined || directions === undefined) return null;
+    plusOne = {
+      after: rawPlus.after,
+      // Every stroke listed is no stroke constraint.
+      strokes: strokes.length === ASK_PATTERN_STROKES.length ? [] : strokes,
+      directions,
+    };
+  }
+
   const rawShots = value.shots ?? [];
   if (!Array.isArray(rawShots) || rawShots.length > 2) return null;
   const shots: AskPatternShot[] = [];
@@ -224,7 +269,14 @@ export function readAskPattern(value: unknown): AskPattern | null {
     if (!shotIsEmpty(shot)) shots.push(shot);
   }
 
-  if (serve === null && returnShot === null && shots.length === 0) return null;
+  if (
+    serve === null &&
+    returnShot === null &&
+    plusOne === null &&
+    shots.length === 0
+  ) {
+    return null;
+  }
   // Two rules the reading prompt states, held here whatever the model wrote:
   // "then X" with no player named is the same player's next shot, and every
   // stroke listed is no stroke constraint at all.
@@ -237,7 +289,7 @@ export function readAskPattern(value: unknown): AskPattern | null {
       shots[index] = { ...shot, strokes: [] };
     }
   }
-  return { serve, returnShot, shots };
+  return { ...(court ? { court } : {}), serve, returnShot, plusOne, shots };
 }
 
 // ── The query ────────────────────────────────────────────────────────────────
@@ -321,10 +373,12 @@ select match_id, point_number from hit order by match_id, point_number`;
 
 /** The query's shared head: the shots read once, the points, and the points the pattern holds on (`hit`). */
 /**
- * `raw`, `numbered` and `sh`: every shot in scope, with which serve was the
- * one played (`is_played_serve`: the second serve when there was one, else
- * the first), whether it is a stroke (`is_stroke`: not a serve or a feed),
- * and which stroke was the return (`is_return`). Shared by the pattern query
+ * `raw` … `sh`: every shot in scope, with which serve was the one played
+ * (`is_played_serve`: the second serve when there was one, else the first),
+ * whether it is a stroke (`is_stroke`: not a serve or a feed), which stroke
+ * was the return (`is_return`), and the two +1s as the Video filter numbers
+ * them — the server's shot 3 (`is_serve_plus_one`) and the returner's shot 4
+ * (`is_return_plus_one`). Shared by the pattern query
  * and the serve +1 breakdown (`serve-plus-one.ts`), so the two can never
  * disagree on what a return is.
  *
@@ -352,11 +406,19 @@ sh as (
   -- that shot number: a point with several strokes stored at the same
   -- number (rally rows before the serve at 0) has no return that can be
   -- told apart, and is never read as having one.
+  --
+  -- The +1s are the Video filter's: the server's is shot 3, the returner's
+  -- shot 4 (its "Hit 3" / "Hit 4"). Not "that player's next ball after the
+  -- return": on a point the vendor numbered wrong (the same player twice in
+  -- a row, strokes before the serve) the two part, and a Watch link must
+  -- open exactly the points the answer counted.
   select numbered.*,
     numbered.shot_type = 'Second Serve'
       or (numbered.shot_type = 'First Serve' and not numbered.had_second) as is_played_serve,
     numbered.is_stroke and numbered.shot_number = numbered.first_stroke
-      and numbered.strokes_here = 1 as is_return
+      and numbered.strokes_here = 1 as is_return,
+    numbered.is_stroke and numbered.shot_number = 3 as is_serve_plus_one,
+    numbered.is_stroke and numbered.shot_number = 4 as is_return_plus_one
   from numbered
 )`;
 
@@ -364,6 +426,7 @@ function patternCtes(pattern: AskPattern): string {
   const where: string[] = [];
   const { serve, returnShot } = pattern;
 
+  if (pattern.court) where.push(`pt.court = '${pattern.court}'`);
   if (serve?.server) {
     where.push(`pt.i_served = ${serve.server === "mine" ? "true" : "false"}`);
   }
@@ -395,6 +458,25 @@ function patternCtes(pattern: AskPattern): string {
     }
     where.push(`exists (select 1 from sh r where ${tests.join(" and ")})`);
   }
+  if (pattern.plusOne) {
+    const { after, strokes, directions } = pattern.plusOne;
+    const tests = [
+      SAME_POINT("q"),
+      after === "serve" ? "q.is_serve_plus_one" : "q.is_return_plus_one",
+    ];
+    // Hit by: the server's +1 is the server's ball, the return's the other
+    // side's — the Video filter's Custom › Hit by, set the same way.
+    const server = pattern.serve?.server ?? null;
+    if (server !== null) {
+      const mine = after === "serve" ? server === "mine" : server !== "mine";
+      tests.push(`q.mine = ${mine ? "true" : "false"}`);
+    }
+    if (strokes.length > 0) tests.push(strokeTest("q", strokes));
+    if (directions.length > 0) {
+      tests.push(`q.direction in (${quoted(directions)})`);
+    }
+    where.push(`exists (select 1 from sh q where ${tests.join(" and ")})`);
+  }
   const [first, second] = pattern.shots;
   if (first && second) {
     const inner = [
@@ -418,7 +500,7 @@ function patternCtes(pattern: AskPattern): string {
 
   return `with ${ASK_SHOT_ROLE_CTES},
 pt as (
-  select p.match_id, p.point_number, p.i_served, p.i_won
+  select p.match_id, p.point_number, p.i_served, p.i_won, p.court
   from ask.points p
   where p.match_id in (select match_id from sh)
 ),
@@ -544,6 +626,28 @@ export function describePattern(
         : `the ${stroke} went${zone || " in"}`,
     );
   }
+  if (pattern.plusOne) {
+    const { after, strokes, directions } = pattern.plusOne;
+    const server = serve?.server ?? null;
+    const hitter =
+      server === null
+        ? null
+        : after === "serve"
+          ? who(server, names)
+          : who(server === "mine" ? "opponent" : "mine", names);
+    const stroke =
+      strokes.length > 0 ? orList(strokes.map((s) => s.toLowerCase())) : "shot";
+    const direction =
+      directions.length > 0
+        ? ` ${orList(directions.map((d) => DIRECTION_WORDS[d] ?? d.toLowerCase()))}`
+        : "";
+    const role = after === "serve" ? "the server's" : "the returner's";
+    parts.push(
+      hitter
+        ? `${hitter}'s next ball (${role} plus one) was a ${stroke}${direction}`
+        : `${role} next ball (the plus one) was a ${stroke}${direction}`,
+    );
+  }
   shots.forEach((shot, index) => {
     const text = shotWords(shot, names);
     parts.push(index === 1 ? `later in the point ${text}` : text);
@@ -627,7 +731,7 @@ export function buildPatternAnswer(
   }
 
   const paragraphs = [
-    `Read as: points where ${description}.`,
+    `Read as: points${pattern.court ? ` on the ${pattern.court.toLowerCase()} side` : ""} where ${description}.`,
     points > 0 && points < ASK_PATTERN_SMALL_SAMPLE
       ? "That is a small sample, so one or two points either way would move the rate a long way."
       : null,
@@ -674,11 +778,14 @@ export function buildPatternPrompt(input: {
     "The pattern object, every field optional:",
     '  "serve":  {"server": "mine"|"opponent"|null, "zones": ["Wide"|"Body"|"T"], "type": "first"|"second"|null}',
     '  "return": {"strokes": ["Forehand"|"Backhand"], "zones": ["Crosscourt"|"Down the Line"|"Middle"]}',
+    '  "court":  "Deuce"|"Ad"  — only when the question names a side: the court the point was played from ("on the ad side", "deuce court").',
+    '  "plus_one": {"after": "serve"|"return", "strokes": [same as shots], "directions": [same as shots]}  — the +1 EXACTLY: the server\'s ball after the return ("serve", shot 3), or the returner\'s ball after that ("return", shot 4).',
     '  "shots":  up to two, in order — the second is LATER in the same point:',
     '            {"player": "mine"|"opponent"|null, "strokes": ["Forehand"|"Backhand"|"Volley"|"Overhead"], "directions": ["Crosscourt"|"Down the Line"|"Inside Out"|"Inside In"|"Middle"], "within": 1-12|null}',
     "",
     `"mine" is ${names.mine === "you" ? "the person asking" : names.mine}${team ? " (the program's player)" : ""}; "opponent" is ${names.opponent}.`,
-    'Shots count from the serve: 1 is the serve, 2 the return, 3 the server\'s next shot. "Serve +1" is the server\'s shot 3: {"player": <server>, "within": 3} with the server in "serve".',
+    'Any "+1" or "plus one" is "plus_one", never "shots": "serve +1 crosscourt" is {"serve": {"server": <who>}, "plus_one": {"after": "serve", "directions": ["Crosscourt"]}}; "return down the middle, then the +1 crosscourt" is {"serve": {"server": <the other player>}, "return": {"zones": ["Middle"]}, "plus_one": {"after": "return", "directions": ["Crosscourt"]}}. A return +1 is the returner\'s, so the server in "serve" is the OTHER player.',
+    '"shots" are for anything else: a shot within the first N (shots count from the serve: 1 is the serve, 2 the return), or a later shot in the point.',
     '"Within seven shots" is "within": 7. Inside out and inside in are their own directions — a forehand from the backhand side — never crosscourt or down the line.',
     'A direction with no stroke is any stroke. "Then X" with no player named is the same player as the shot before it.',
     "Use only the values listed. Leave a field out rather than guess.",

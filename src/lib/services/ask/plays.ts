@@ -3,7 +3,7 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS, MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
 
 /**
@@ -53,7 +53,10 @@ const OWN_POSSESSIVE = /\b(?:my|our)\b/i;
 const ABOUT_THE_OPPONENT =
   /\b(?:opponents?|(?:this|that) players?|he|she|him|they|them)\b/i;
 const ABOUT_ME = /\b(?:i|me|mine|we|us)\b/i;
-const OPPONENT_WORD = /\bopponents?'?s?\b/i;
+// The opponent's, as a possessive: "the opponent's serve", "his opponents'
+// misses". A bare "opponents" ("Rudy versus all his opponents") names who the
+// program's player played, not whose shots the question is about.
+const OPPONENT_WORD = /\bopponent(?:'s|s')/i;
 
 /**
  * Whose losing plays the question is about. Whose plays they are is read
@@ -353,3 +356,164 @@ export function buildLosingPlaysAnswer(
 /** What "no data" says when no match in scope has a shot recorded. */
 export const ASK_NO_SHOTS_MESSAGE =
   "None of these matches has shot-by-shot data, so strokes and directions can't be counted. Shots come from Advantage Intelligence video or a SwingVision file; a match entered by hand has only its score and totals.";
+
+// ── Winning plays ────────────────────────────────────────────────────────────
+
+const WINNING_PLAYS =
+  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b/i;
+
+/**
+ * Whether the question asks for winning plays: which strokes, in which
+ * direction, won the subject points. Losing plays are asked for first, so
+ * "winning and losing" is the losing plays' answer, which shows both ends.
+ */
+export function asksForWinningPlays(question: string): boolean {
+  return WINNING_PLAYS.test(question);
+}
+
+/**
+ * Whose winning plays. In a team, "this player" and "his" are the program's
+ * player — the one the conversation is about — and only a word for the
+ * opponent, or an opponent tagged with no player, is the other side. On the
+ * personal page it is `losingPlaysSubject()`'s rule.
+ */
+export function winningPlaysSubject(
+  question: string,
+  tags: readonly AskPromptTag[],
+  team: boolean,
+): AskPlaysSubject {
+  // The losing plays' rule, team words and all: whose plays is the same
+  // question whichever way they went.
+  return losingPlaysSubject(question, tags, team);
+}
+
+/**
+ * The query, over `scope`. A `total` row first — `points` the subject won,
+ * `winners` how many of those a play below accounts for, `errors_drawn`
+ * how many matches have shots — then one `play` row per stroke and
+ * direction: the points it won (`points`), as the subject's own winner
+ * (`winners`) or as the shot before the other side's miss (`errors_drawn`).
+ * Most points first.
+ */
+export function winningPlaysSql(subject: AskPlaysSubject): string {
+  const theirs = subject === "mine" ? "true" : "false";
+  return `with sh as (
+  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction, s.result, p.i_won,
+    s.shot_number = max(s.shot_number) over (partition by s.match_id, s.point_number) as last_shot,
+    lag(s.shot_type) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_type,
+    lag(s.direction) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_direction,
+    lag(s.mine) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_mine
+  from ask.shots s
+  join ask.points p on p.match_id = s.match_id and p.point_number = s.point_number
+  where s.match_id in (select match_id from scope)
+),
+ended as (
+  select shot_type as stroke, direction, 'winner' as kind
+  from sh
+  where last_shot and i_won = ${theirs} and mine = ${theirs} and result = 'In'
+  union all
+  select prev_type, prev_direction, 'drew'
+  from sh
+  where last_shot and i_won = ${theirs} and mine <> ${theirs} and result in ('Out', 'Net')
+    and prev_mine = ${theirs}
+),
+plays as (
+  select stroke, direction, count(*) as points,
+    count(*) filter (where kind = 'winner') as winners,
+    count(*) filter (where kind = 'drew') as errors_drawn
+  from ended
+  where stroke is not null and direction is not null
+    and stroke in ('Forehand', 'Backhand', 'Volley', 'Overhead', 'First Serve', 'Second Serve')
+  group by stroke, direction
+),
+ranked as (
+  select 'play' as section, stroke, direction, points, winners, errors_drawn,
+    row_number() over (order by points desc, winners desc) as place
+  from plays
+)
+select 'total' as section, null as stroke, null as direction,
+  (select count(*) from sh where last_shot and i_won = ${theirs}) as points,
+  (select coalesce(sum(points), 0) from plays) as winners,
+  (select count(distinct match_id) from sh) as errors_drawn
+union all
+select section, stroke, direction, points, winners, errors_drawn
+from ranked
+where place <= ${MAX_ASK_TABLE_ROWS}`;
+}
+
+/** Whether `sql` is one of the two winning-plays queries. */
+export function isWinningPlaysSql(sql: string): boolean {
+  return sql === winningPlaysSql("mine") || sql === winningPlaysSql("opponent");
+}
+
+/**
+ * The answer from `winningPlaysSql()`'s rows, or null when no point won in
+ * scope ended on a recorded shot — "no data", said by the caller. Every
+ * figure is a cell reference.
+ */
+export function buildWinningPlaysAnswer(
+  rows: readonly AskRow[],
+  voice: AskPlaysVoice,
+  matchCount: number,
+): string | null {
+  const indexed = rows.map((row, index) => ({ row, ref: `r${index + 1}` }));
+  const total = indexed.find((entry) => entry.row.section === "total");
+  const plays = indexed.filter((entry) => entry.row.section === "play");
+  if (!total || count(total.row.points) === 0 || plays.length === 0) {
+    return null;
+  }
+  const cell = (ref: string, column: string) => `{{${ref}.${column}}}`;
+  const top = plays[0];
+  const headline = `${sentenceCase(voice.possessive)} best play was the ${phrase(top.row)}: it won ${cell(top.ref, "points")} points — ${cell(top.ref, "winners")} as ${voice.second ? "your" : "their"} own winner and ${cell(top.ref, "errors_drawn")} by drawing an error.`;
+
+  const table = [
+    `${ASK_VISUAL_LINE_PREFIX} table ${S} The shots that won ${voice.second ? "you" : voice.name} points, by stroke and direction. Most points first.`,
+    `COLUMNS: Points won ${S} Winners ${S} Errors drawn`,
+    ...plays.map(
+      (entry) =>
+        `ROW: ${label(entry.row)} ${S} ${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "winners")} ${S} ${cell(entry.ref, "errors_drawn")}`,
+    ),
+  ];
+
+  const paragraphs: string[] = [];
+  paragraphs.push(
+    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. The table lists the plays that won the most.`,
+  );
+  const withShots = count(total.row.errors_drawn);
+  paragraphs.push(
+    withShots < matchCount
+      ? `Counted from the shots of ${cell(total.ref, "errors_drawn")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have no shot-by-shot data.`
+      : withShots === 1
+        ? "Counted from the shots of this one match."
+        : `Counted from the shots of ${cell(total.ref, "errors_drawn")} matches.`,
+  );
+  return [headline, ...table, "", ...paragraphs.flatMap((p) => [p, ""])]
+    .join("\n")
+    .trimEnd();
+}
+
+// ── When the question could be any of them ──────────────────────────────────
+
+const ABOUT_PLAYS =
+  /\b(?:plays?|patterns?|shots?|strokes?|weapons?|strengths?|weakness(?:es)?|tendenc(?:y|ies)|game ?plan)\b/i;
+
+/** Whether a question the planner could not place is about shots or plays. */
+export function asksAboutPlays(question: string): boolean {
+  return ABOUT_PLAYS.test(question);
+}
+
+/** What Ask asks back for such a question. */
+export const ASK_PLAYS_CLARIFY_QUESTION = "Which of these should I look at?";
+
+/**
+ * The answers Ask has for a question about plays. Each choice is re-asked
+ * as the question with the choice attached, and each one's words route to
+ * its own fixed answer (`asksForWinningPlays`, `asksForLosingPlays`,
+ * `plusOneBreakdownAsked`).
+ */
+export const ASK_PLAYS_CLARIFY_OPTIONS = [
+  "Winning plays: the shots that won points",
+  "Losing plays: the shots that lost points",
+  "Serve +1 patterns",
+  "Return +1 patterns",
+] as const;

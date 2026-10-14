@@ -848,6 +848,12 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         meaning:
           "How the point ended, as text: Ace, Double Fault, Service Winner, Forehand Winner, Backhand Winner, Volley Winner, Overhead Winner, Forehand Unforced Error, Backhand Unforced Error, Forehand Forced Error, Backhand Forced Error, and the like; the stroke named is the one that ended the point, by whoever hit it; null when unknown.",
       },
+      {
+        name: "court",
+        type: "text",
+        meaning:
+          "The service court the point was played from: Deuce or Ad. From the point score (0-0, 15-15, 30-0 are Deuce; 15-0, 30-15 are Ad), or the point's place in its game when there is no score — the Video filter's Side.",
+      },
     ],
   },
   {

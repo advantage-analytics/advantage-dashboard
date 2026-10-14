@@ -71,9 +71,16 @@ import { patternVideoHref } from "@/lib/services/ask/pattern-video";
 import type { AskPageSeat } from "@/lib/data/ask-server";
 import {
   ASK_NO_SHOTS_MESSAGE,
+  ASK_PLAYS_CLARIFY_OPTIONS,
+  ASK_PLAYS_CLARIFY_QUESTION,
   type AskPlaysSubject,
+  asksAboutPlays,
   asksForLosingPlays,
+  asksForWinningPlays,
   buildLosingPlaysAnswer,
+  buildWinningPlaysAnswer,
+  winningPlaysSql,
+  winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
   losingPlaysVoice,
@@ -82,6 +89,9 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   continuesServePlusOne,
+  namesASide,
+  plusOneSides,
+  plusOneWithSides,
   servePlusOneRequest,
   servePlusOneRequestOfSql,
   servePlusOneSql,
@@ -764,6 +774,8 @@ type PlanStep =
       forced?: boolean;
       /** Set when the sql is `plays.ts`'s losing-plays query, for this side. */
       plays?: AskPlaysSubject;
+      /** With `plays`: the winning plays' query rather than the losing plays'. */
+      winning?: boolean;
       /** Set when the sql is `pattern.ts`'s query for this pattern. */
       pattern?: AskPattern;
       /** Set when the sql is `serve-plus-one.ts`'s breakdown, for this request. */
@@ -964,8 +976,10 @@ export async function* askQuestion(
       continuesServePlusOne(input.question);
     const plusOne: AskServePlusOne | null = asksForServePlusOne(input.question)
       ? servePlusOneRequest(input.question, input.tags.prompt, team)
-      : plusOneContinued
-        ? previousPlusOne
+      : plusOneContinued && previousPlusOne
+        ? // "Can you divide that by sides?": the same breakdown, with the
+          // side this question names (or none, which keeps the last one's).
+          plusOneWithSides(previousPlusOne, plusOneSides(input.question))
         : null;
 
     // Three refusals the server does not accept, and one choice it makes
@@ -979,6 +993,7 @@ export async function* askQuestion(
         compare: CompareRequest | null,
         plays?: AskPlaysSubject,
         plusOne?: AskServePlusOne,
+        winning?: boolean,
       ): PlanStep => ({
         ok: true,
         plan,
@@ -986,6 +1001,7 @@ export async function* askQuestion(
         compare,
         forced: true,
         ...(plays ? { plays } : {}),
+        ...(winning ? { winning } : {}),
         ...(plusOne ? { plusOne } : {}),
         reply: JSON.stringify(
           review
@@ -1004,7 +1020,10 @@ export async function* askQuestion(
             ? planned === null || planned === ASK_ALL_MATCHES_SCOPE
               ? previous.scope_sql
               : planned
-            : (planned ?? tagScope ?? ASK_ALL_MATCHES_SCOPE);
+            : (planned ??
+              tagScope ??
+              previous?.scope_sql ??
+              ASK_ALL_MATCHES_SCOPE);
         return forced(
           {
             scope_sql: scopeSql,
@@ -1023,6 +1042,9 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForLosingPlays(input.question) &&
+        // A side named ("on the ad side") is the planner's to answer: the
+        // fixed plays answers count the whole match and would drop it.
+        !namesASide(input.question) &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(
@@ -1034,13 +1056,43 @@ export async function* askQuestion(
           {
             scope_sql: step.ok
               ? step.plan.scope_sql
-              : (tagScope ?? ASK_ALL_MATCHES_SCOPE),
+              : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
             sql: losingPlaysSql(subject),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
           null,
           subject,
+        );
+      }
+      // "What are this player's best plays?": the strokes and directions that
+      // won points — winners, and the shot before the other side's miss.
+      if (
+        !patternAsked &&
+        asksForWinningPlays(input.question) &&
+        // A side named ("on the ad side") is the planner's to answer: the
+        // fixed plays answers count the whole match and would drop it.
+        !namesASide(input.question) &&
+        (step.ok || refused)
+      ) {
+        const subject = winningPlaysSubject(
+          input.question,
+          input.tags.prompt,
+          team,
+        );
+        return forced(
+          {
+            scope_sql: step.ok
+              ? step.plan.scope_sql
+              : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
+            sql: winningPlaysSql(subject),
+            asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
+          },
+          false,
+          null,
+          subject,
+          undefined,
+          true,
         );
       }
       // "What should Rudy practice?" is the review of that scope, never
@@ -1333,6 +1385,18 @@ export async function* askQuestion(
             );
             continue;
           }
+          // A question about shots or plays the planner could not place is
+          // asked back with the answers Ask has for one — never a dead end.
+          if (model.configured && asksAboutPlays(input.question)) {
+            await release();
+            yield {
+              type: "error",
+              code: "needs_clarification",
+              error: ASK_PLAYS_CLARIFY_QUESTION,
+              options: [...ASK_PLAYS_CLARIFY_OPTIONS],
+            };
+            return;
+          }
           yield await fail("cannot_answer", step.refusal);
           return;
         }
@@ -1342,6 +1406,16 @@ export async function* askQuestion(
             { role: "user", content: feedback(step.problem) },
           );
           continue;
+        }
+        if (model.configured && asksAboutPlays(input.question)) {
+          await release();
+          yield {
+            type: "error",
+            code: "needs_clarification",
+            error: ASK_PLAYS_CLARIFY_QUESTION,
+            options: [...ASK_PLAYS_CLARIFY_OPTIONS],
+          };
+          return;
         }
         yield await fail("cannot_answer", cannotAnswer);
         return;
@@ -1616,7 +1690,9 @@ export async function* askQuestion(
         // in scope is "no data", said as such — never the match totals.
         plan = step.plan;
         const rows = withScopeCount(ran.rows, ran.matches.length);
-        const written = buildLosingPlaysAnswer(
+        const written = (
+          step.winning ? buildWinningPlaysAnswer : buildLosingPlaysAnswer
+        )(
           rows,
           subjectVoice(step.plays, ran.matches, team),
           ran.matches.length,
