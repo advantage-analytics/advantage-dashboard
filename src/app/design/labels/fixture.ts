@@ -326,6 +326,7 @@ const owner = (
   programCrestUrl: null,
   playerKey,
   playerName,
+  playerPhotoUrl: null,
   opponentName,
   event,
   playedAt,

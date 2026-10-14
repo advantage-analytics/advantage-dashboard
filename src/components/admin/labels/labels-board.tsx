@@ -285,6 +285,11 @@ function PersonDropdown({
       <summary className="-mx-2 mt-1 flex cursor-pointer list-none items-center gap-3 rounded-[var(--radius-element)] px-2 py-2 transition-colors duration-100 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <PersonAvatar
           initials={getInitials(player.name)}
+          photoUrl={
+            player.jobs
+              .map((job) => owners[job.matchId]?.playerPhotoUrl)
+              .find(Boolean) ?? null
+          }
           className="size-[26px] text-[9px]"
         />
         <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--ink-900)]">
