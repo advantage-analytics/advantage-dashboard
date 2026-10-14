@@ -17,6 +17,8 @@ import type { AskPattern, AskPatternShot } from "@/lib/services/ask/pattern";
  *   returnShot.strokes/zones  → Return › Type / Zone
  *   shots[0]                  → Custom › Hit by / Stroke / Direction / Hit
  *   shots[1]                  → Then   › the same
+ *   plusOne (with no shots)   → Custom › the +1's hitter, Hit 3 (the
+ *                               server's) or Hit 4 (the returner's)
  *
  * "mine" is the filter's "you": both are the viewer's side of the match (the
  * page's `useMatchSides()`, Ask's `ask.my_side()`). "Within N shots" is Hit
@@ -49,7 +51,30 @@ function shotFields(shot: AskPatternShot) {
 
 /** The pattern as the Video view's filters, or null when the filter cannot say it. */
 export function patternMatchFilters(pattern: AskPattern): MatchFilters | null {
-  const [first, second] = pattern.shots;
+  // A +1 is the Custom shot when it is the only shot the pattern names. Beside
+  // other shots it would need a third step the filter does not have.
+  const plus = pattern.plusOne;
+  if (plus && pattern.shots.length > 0) return null;
+  const server = pattern.serve?.server ?? null;
+  const shots: AskPatternShot[] = plus
+    ? [
+        {
+          player:
+            server === null
+              ? null
+              : plus.after === "serve"
+                ? server
+                : server === "mine"
+                  ? "opponent"
+                  : "mine",
+          strokes: plus.strokes,
+          directions: plus.directions,
+          within: null,
+        },
+      ]
+    : pattern.shots;
+  const [first, second] = shots;
+  const plusHit = plus ? [plus.after === "serve" ? 3 : 4] : null;
   const one = first ? shotFields(first) : undefined;
   const two = second ? shotFields(second) : undefined;
   if (one === null || two === null) return null;
@@ -68,7 +93,7 @@ export function patternMatchFilters(pattern: AskPattern): MatchFilters | null {
     customPlayer: one?.player ?? null,
     customStroke: one?.strokes ?? [],
     customDirection: one?.directions ?? [],
-    customRallyShot: one?.hits ?? [],
+    customRallyShot: plusHit ?? one?.hits ?? [],
     thenPlayer: two?.player ?? null,
     thenStroke: two?.strokes ?? [],
     thenDirection: two?.directions ?? [],

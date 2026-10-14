@@ -60,9 +60,28 @@ const db = createClient(url, key, { auth: { persistSession: false } });
 
 /** Patterns that between them use every field the form has. */
 const PATTERNS: Record<string, AskPattern> = {
+  "my serve to the T, my +1 a forehand": {
+    serve: { server: "mine", zones: ["T"], type: null },
+    returnShot: null,
+    plusOne: { after: "serve", strokes: ["Forehand"], directions: [] },
+    shots: [],
+  },
+  "their serve, my return down the middle, my +1 crosscourt": {
+    serve: { server: "opponent", zones: [], type: null },
+    returnShot: { strokes: [], zones: ["Middle"] },
+    plusOne: { after: "return", strokes: [], directions: ["Crosscourt"] },
+    shots: [],
+  },
+  "any serve +1 down the line": {
+    serve: null,
+    returnShot: null,
+    plusOne: { after: "serve", strokes: [], directions: ["Down the Line"] },
+    shots: [],
+  },
   "serve wide, then my next shot down the line": {
     serve: { server: "mine", zones: ["Wide"], type: null },
     returnShot: null,
+    plusOne: null,
     shots: [
       { player: "mine", strokes: [], directions: ["Down the Line"], within: 3 },
     ],
@@ -70,6 +89,7 @@ const PATTERNS: Record<string, AskPattern> = {
   "forehand crosscourt then down the line within seven": {
     serve: null,
     returnShot: null,
+    plusOne: null,
     shots: [
       {
         player: "mine",
@@ -88,11 +108,13 @@ const PATTERNS: Record<string, AskPattern> = {
   "their second serve, my backhand return down the line": {
     serve: { server: "opponent", zones: [], type: "second" },
     returnShot: { strokes: ["Backhand"], zones: ["Down the Line"] },
+    plusOne: null,
     shots: [],
   },
   "my inside-out forehand, then their volley": {
     serve: null,
     returnShot: null,
+    plusOne: null,
     shots: [
       {
         player: "mine",
@@ -106,6 +128,7 @@ const PATTERNS: Record<string, AskPattern> = {
   "first serve to the T, return crosscourt, overhead or inside in": {
     serve: { server: null, zones: ["T"], type: "first" },
     returnShot: { strokes: [], zones: ["Crosscourt"] },
+    plusOne: null,
     shots: [
       {
         player: null,
