@@ -12,13 +12,13 @@ import {
 import {
   ClaimShell,
   ClaimHeading,
-  ProgramMark,
   AsidePanel,
   ClaimActions,
   CLAIM_BUTTON,
   CLAIM_LINK,
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 import { claimPreview } from "@/lib/data/program-claim-preview";
 
@@ -76,7 +76,9 @@ export default async function ProgramStatusPage({
 }) {
   const { programKey } = await params;
   const supabase = await createClient();
-  const program = await getProgramPublicStatus(supabase, programKey);
+  const program = await getProgramPublicStatus(supabase, programKey, {
+    withCrest: true,
+  });
 
   if (!program) notFound();
 

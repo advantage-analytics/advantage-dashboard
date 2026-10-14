@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
-import { crestUrl } from "@/lib/data/teams-server";
 import {
-  ClaimShell,
-  ClaimHeading,
-  ProgramMark,
-} from "@/components/claim/claim-shell";
+  teamLabel,
+  programSubtitle,
+  CRESTS_BUCKET,
+} from "@/lib/data/programs-server";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 import { SetupAside, SetupForm } from "@/components/claim/setup-form";
 
 export const metadata = { title: "Set up your program" };
@@ -46,7 +46,11 @@ export default async function SetupProgramPage({
   if (!program) notFound();
 
   const squad = teamLabel(program.team as string);
-  const crest = await crestUrl(program.crest_path as string | null);
+  const crest = program.crest_path
+    ? supabase.storage
+        .from(CRESTS_BUCKET)
+        .getPublicUrl(program.crest_path as string).data.publicUrl
+    : null;
   const qualifiers = [
     squad,
     programSubtitle(

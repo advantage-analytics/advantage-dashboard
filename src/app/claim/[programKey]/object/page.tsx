@@ -6,11 +6,8 @@ import {
   teamLabel,
   programSubtitle,
 } from "@/lib/data/programs-server";
-import {
-  ClaimShell,
-  ClaimHeading,
-  ProgramMark,
-} from "@/components/claim/claim-shell";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 
 export const metadata = { title: "Report a problem" };
@@ -37,7 +34,9 @@ export default async function ObjectPage({
 }) {
   const { programKey } = await params;
   const supabase = await createClient();
-  const program = await getProgramPublicStatus(supabase, programKey);
+  const program = await getProgramPublicStatus(supabase, programKey, {
+    withCrest: true,
+  });
 
   if (!program) notFound();
 

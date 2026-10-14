@@ -3,7 +3,6 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { AdvSelect } from "@/components/ui/adv-select";
-import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
 /**
  * The chrome every claim screen shares, transcribed from Stage E.
@@ -142,39 +141,6 @@ export function ClaimShell({
         )}
       </div>
     </div>
-  );
-}
-
-/**
- * The program's mark: its crest when it has uploaded one, its initial on ink
- * otherwise — the square the sidebar draws for a team workspace, so a program
- * looks the same before it is joined as after.
- *
- * `page` sits above a claim or join heading, one column gap clear of it;
- * `row` leads a row of the program search.
- */
-export function ProgramMark({
-  name,
-  crestUrl,
-  size = "page",
-}: {
-  name: string;
-  crestUrl?: string | null;
-  size?: "page" | "row";
-}) {
-  return (
-    <WorkspaceMark
-      workspace={{
-        kind: "team",
-        mark: name.trim().charAt(0).toUpperCase(),
-        iconUrl: crestUrl ?? null,
-      }}
-      className={
-        size === "page"
-          ? "size-8 rounded-[var(--radius-button)] text-[12px]"
-          : "size-5 rounded-[var(--radius-button)] text-[9px]"
-      }
-    />
   );
 }
 

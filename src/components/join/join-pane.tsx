@@ -1,8 +1,5 @@
-import {
-  ClaimShell,
-  ClaimHeading,
-  ProgramMark,
-} from "@/components/claim/claim-shell";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 
 /**
  * The chrome every join screen shares.

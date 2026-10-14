@@ -14,9 +14,9 @@ export const metadata = { title: "Check your email" };
  *
  * One gate, one link, and the narrowest screen in the flow: 440px, because
  * there is nothing to do here and a wide page would imply there was. The
- * address is spelled out, in the body face at medium weight, so a typo is caught here rather than in a support
- * thread, and there is no progress bar and no estimate — the link either
- * arrives or it is resent.
+ * address is spelled out (body face, medium weight) so a typo is caught here
+ * rather than in a support thread, and there is no progress bar and no
+ * estimate — the link either arrives or it is resent.
  */
 export default async function CheckEmailPage({
   searchParams,

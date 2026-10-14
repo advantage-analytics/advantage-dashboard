@@ -10,7 +10,7 @@ import type {
 } from "@/lib/data/programs-server";
 import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
 import { advField } from "@/lib/ui/adv-field";
-import { ProgramMark } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 
 /**
  * One row, in whichever of its two shapes the endpoint sent.
