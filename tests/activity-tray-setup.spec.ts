@@ -11,12 +11,14 @@ import {
  * one goes, and when the section stops rendering.
  */
 test.describe("tray setup steps", () => {
-  test("personal has two steps, each pointed at its settings page", () => {
+  test("personal has three steps: the sample tour first, then its settings pages", () => {
     const steps = personalSetupSteps({
+      sampleReport: false,
       playingProfile: false,
       notifications: true,
     });
     expect(steps.map((step) => [step.key, step.done, step.href])).toEqual([
+      ["sampleReport", false, "/dashboard/matches/sample?tour=1"],
       ["playingProfile", false, "/dashboard/settings/profile"],
       ["notifications", true, "/dashboard/settings/preferences"],
     ]);
@@ -46,14 +48,32 @@ test.describe("tray setup steps", () => {
   test("one open step keeps the section; none, or no steps, drops it", () => {
     expect(
       setupOutstanding(
-        personalSetupSteps({ playingProfile: true, notifications: false }),
+        personalSetupSteps({
+          sampleReport: true,
+          playingProfile: true,
+          notifications: false,
+        }),
       ),
     ).toBe(true);
     expect(
       setupOutstanding(
-        personalSetupSteps({ playingProfile: true, notifications: true }),
+        personalSetupSteps({
+          sampleReport: true,
+          playingProfile: true,
+          notifications: true,
+        }),
       ),
     ).toBe(false);
     expect(setupOutstanding([])).toBe(false);
+    // The sample tour alone holds the section open for a new player.
+    expect(
+      setupOutstanding(
+        personalSetupSteps({
+          sampleReport: false,
+          playingProfile: true,
+          notifications: true,
+        }),
+      ),
+    ).toBe(true);
   });
 });

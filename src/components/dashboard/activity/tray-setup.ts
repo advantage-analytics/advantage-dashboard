@@ -25,8 +25,12 @@ export interface SetupStep {
   action: string;
 }
 
-/** `users.hand` + `users.backhand`, and a `user_preferences` row. */
+/**
+ * `users.hand` + `users.backhand`, a `user_preferences` row, and whether the
+ * player has toured a report — the sample's, or their own first one.
+ */
 export interface PersonalSetupFacts {
+  sampleReport: boolean;
   playingProfile: boolean;
   notifications: boolean;
 }
@@ -40,6 +44,13 @@ export interface TeamSetupFacts {
 
 export function personalSetupSteps(facts: PersonalSetupFacts): SetupStep[] {
   return [
+    {
+      key: "sampleReport",
+      label: "Tour a sample report",
+      done: facts.sampleReport,
+      href: "/dashboard/matches/sample?tour=1",
+      action: "Sample",
+    },
     {
       key: "playingProfile",
       label: "Set your hand and backhand",

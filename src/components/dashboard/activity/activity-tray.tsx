@@ -545,7 +545,7 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
  * being worked through; an open one is a link whose trailing word names where
  * it goes, the stopped row's grammar at the section's tighter measure.
  */
-function SetupSection({
+export function SetupSection({
   steps,
   onOpen,
 }: {

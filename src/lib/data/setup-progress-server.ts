@@ -7,7 +7,11 @@ import {
 } from "@/lib/data/match-analysis";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getTeamHomePresence } from "@/lib/data/team-home-server";
-import { isProgramStaff, type Workspace } from "@/lib/workspace/types";
+import {
+  isProgramStaff,
+  type Viewer,
+  type Workspace,
+} from "@/lib/workspace/types";
 import {
   personalSetupSteps,
   teamSetupSteps,
@@ -21,7 +25,8 @@ import {
  * dismissal, no "seen it" bit — which is what lets the section be right on a
  * second device and after a sign-out.
  *
- * Personal reads the viewer's playing profile and preferences rows. Team
+ * Personal reads the viewer's playing profile and preferences rows, and
+ * takes the two tour dates off the workspace context. Team
  * takes roster and schedule from `getTeamHomePresence`, one id from each
  * source, rather than the season aggregation Team Home is drawn from: the
  * tray renders on every dashboard page and cannot afford that read. The
@@ -34,8 +39,9 @@ import {
 export async function getSetupSteps(
   supabase: SupabaseClient,
   workspace: Workspace,
-  userId: string,
+  viewer: Pick<Viewer, "id" | "sampleTourDoneAt" | "firstReportTourDoneAt">,
 ): Promise<SetupStep[]> {
+  const userId = viewer.id;
   try {
     if (workspace.kind === "team") {
       if (!isProgramStaff(workspace)) return [];
@@ -60,6 +66,13 @@ export async function getSetupSteps(
       throw user.error ?? preferences.error;
     }
     return personalSetupSteps({
+      // Either tour counts: a player who has read their own first report
+      // has nothing to learn from the sample, and a veteran's
+      // first-report tour is settled the first time they open a report.
+      // Off the workspace context, so the step costs no read.
+      sampleReport:
+        viewer.sampleTourDoneAt !== null ||
+        viewer.firstReportTourDoneAt !== null,
       playingProfile: Boolean(user.data?.hand && user.data?.backhand),
       notifications: Boolean(preferences.data),
     });
