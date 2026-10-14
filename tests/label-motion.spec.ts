@@ -54,7 +54,7 @@ test.describe("the shots well opens as the Video tab's does", () => {
   });
 
   test("the console's first render animates nothing: the open point's well is simply there", () => {
-    for (const initialLayoutMode of ["docked-side", "black"] as const) {
+    for (const initialLayoutMode of ["black"] as const) {
       const html = renderConsole({ initialLayoutMode });
       expect(html).toContain(`data-shots-for="${FIXTURE_POINT_IDS.P1}"`);
       for (const cls of [
@@ -63,7 +63,6 @@ test.describe("the shots well opens as the Video tab's does", () => {
         "label-row-arrive",
         "label-court-view-in",
         "label-layer-in-full",
-        "label-layer-in-docked",
         "data-just-checked",
         "data-well-settled",
         "film-follow-pill-in",

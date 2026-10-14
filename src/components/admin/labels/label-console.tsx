@@ -457,9 +457,9 @@ export function LabelConsole({
   const pendingIds = useRef(0);
   const [clock] = useState(() => createVideoClock(initialVideoTime));
 
-  // Docked side or full screen (label-layout.ts). Never stored: the full
+  // The overview or full screen (label-layout.ts). Never stored: the full
   // screen is the browser's own, which a reload cannot re-enter without a
-  // gesture, so the console always starts docked.
+  // gesture, so the page always opens on the overview.
   const [layoutMode, setLayoutMode] = useState<LabelLayoutMode>(
     initialLayoutMode ?? DEFAULT_LAYOUT_MODE,
   );
@@ -468,17 +468,16 @@ export function LabelConsole({
   const resumeAfterLayout = useRef(false);
   /** The one way the layout changes, whoever asked. */
   // A view fades in only once the labeller has switched layouts — never the
-  // one the page loaded with (`arrive`, label-black-view / label-side-view).
+  // one the page loaded with (`arrive`, label-black-view).
   const [layoutSwitched, setLayoutSwitched] = useState(false);
   const switchLayout = useCallback((mode: LabelLayoutMode) => {
     resumeAfterLayout.current = player.current?.isPlaying() ?? false;
     setLayoutMode(mode);
     setLayoutSwitched(true);
   }, []);
-  // Leaving the browser's full screen by any road puts the layout back to
-  // docked side: one state (use-browser-fullscreen.ts). Only while the layout
-  // is the full screen. The hook calls the latest of these.
-  // Where leaving full screen lands.
+  // Leaving the browser's full screen by any road goes back to the overview:
+  // one state (use-browser-fullscreen.ts). Only while the layout is the full
+  // screen. The hook calls the latest of these.
   const homeMode: LabelLayoutMode = "overview";
   const leftWholeScreen = () => {
     if (layoutMode === "black") switchLayout(homeMode);
@@ -490,7 +489,7 @@ export function LabelConsole({
       switchLayout(mode);
       if (mode === "black") {
         // Inside the click that chose it: the gesture the browser asks for. A
-        // refused request goes back to docked side; a browser with no
+        // refused request goes back to the overview; a browser with no
         // Fullscreen API keeps the black layer.
         void enterWholeScreen().then((outcome) => {
           const settled = layoutAfterFullscreenRequest(outcome);

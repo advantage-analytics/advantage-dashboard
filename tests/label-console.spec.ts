@@ -421,10 +421,13 @@ test.describe("the Now playing pill", () => {
 });
 
 test("no labels component reads a flags field", () => {
+  // A read or a key, not the word: prose and copy may say "flags".
   const dir = path.resolve("src/components/admin/labels");
   for (const file of readdirSync(dir)) {
     const source = readFileSync(path.join(dir, file), "utf8");
-    expect(source, file).not.toMatch(/\bflags\b/i);
+    expect(source, file).not.toMatch(
+      /\.flags\b|\bflags\s*[:=?]|\[\s*["'`]flags["'`]\s*\]|\{[^}]*\bflags\b[^}]*\}\s*=/,
+    );
   }
 });
 
