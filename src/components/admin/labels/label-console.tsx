@@ -155,7 +155,10 @@ import type { LabelSessionStatusResult } from "@/lib/services/labels/session-sta
 import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
-import { applyDismiss } from "@/lib/services/labels/suggestions";
+import {
+  applyDismiss,
+  suggestionState,
+} from "@/lib/services/labels/suggestions";
 import type { LabelDismissSuggestionResult } from "@/lib/services/labels/suggestions-session";
 import {
   followAffordance,
@@ -213,6 +216,14 @@ import { ProgramCrest } from "@/components/dashboard/settings/teams/program-cres
 import { getInitials } from "@/lib/data/match-utils";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import type { LabelUndoResult } from "@/lib/services/labels/undo-session";
+import type {
+  LabelAddMissingShotsResult,
+  MissingShotAdd,
+} from "@/lib/services/labels/add-missing-shots";
+import type {
+  LabelOpenCounts,
+  LabelOpenCountsResult,
+} from "@/lib/services/labels/open-counts-session";
 import { LabelVideoPlayer, type LabelVideoHandle } from "./label-video";
 import { INITIAL_SAVE_STATUS, saveStatusReducer } from "./save-status";
 import {
@@ -414,6 +425,38 @@ export function LabelConsole({
         : withLiveScoreMarks(marks, points, session.adScoring, scores),
     [marks, points, session.adScoring, scores],
   );
+  // Every "Missing shot?" slot still open whose "Add shot" would write: what
+  // "Add all missing shots" fills, in rail order.
+  const missingShotAdds = useMemo<MissingShotAdd[]>(() => {
+    if (!marks) return [];
+    const byId = new Map(points.map((point) => [point.id, point]));
+    return marks.suggestions.flatMap((s) => {
+      if (s.kind !== "missing_shot") return [];
+      const point = byId.get(s.pointId);
+      if (!point || point.status === "deleted") return [];
+      if (suggestionState(s, point) !== "open") return [];
+      if ("error" in planAddedShot(point, s.afterShotId)) return [];
+      return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
+    });
+  }, [marks, points]);
+  // The open counts the overview shows, saved on the session whenever they
+  // change, so the Labels list reads the work left without building marks.
+  const openCounts = useMemo(() => {
+    if (!liveMarks) return null;
+    const open = openFlags(points, liveMarks);
+    const grey = open.filter((flag) => flag.data).length;
+    return { amber: open.length - grey, grey };
+  }, [points, liveMarks]);
+  const recordOpenCounts = operations?.recordOpenCounts;
+  const recordedCounts = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openCounts || !recordOpenCounts) return;
+    const key = `${openCounts.amber}/${openCounts.grey}`;
+    if (recordedCounts.current === key) return;
+    recordedCounts.current = key;
+    // A cache: a failed save leaves the list a step behind, nothing more.
+    void recordOpenCounts(session.id, openCounts).catch(() => {});
+  }, [openCounts, recordOpenCounts, session.id]);
   // The two session fields the score chip writes, held beside the rows so an
   // answer re-evaluates the chip at once.
   const [sessionFields, setSessionFields] = useState<LabelSessionFields>({
@@ -977,6 +1020,29 @@ export function LabelConsole({
     dispatchSave({ type: "success", at: Date.now() });
     // After the success above, which counts as a write settling.
     setUndoEmpty(result.undone === null || result.remaining === 0);
+  }
+
+  async function addAllMissingShots() {
+    if (!operations?.addMissingShots || missingShotAdds.length === 0) return;
+    dispatchSave({ type: "start" });
+    const result = await settle(
+      operations.addMissingShots(session.id, missingShotAdds),
+    );
+    if ("error" in result) {
+      dispatchSave({ type: "failure", message: result.error });
+      return;
+    }
+    setPlacement(NO_PLACEMENT);
+    setPoints(result.points);
+    if (result.failed > 0) {
+      dispatchSave({
+        type: "failure",
+        message: `Added ${result.added}; ${result.failed} could not be added.`,
+      });
+      return;
+    }
+    dispatchSave({ type: "success", at: Date.now() });
+    setUndoEmpty(false);
   }
 
   /** A plan the console refused before any write: the status bar says why. */
@@ -2412,6 +2478,12 @@ export function LabelConsole({
       total={total}
       saveStatus={saveStatus}
       onUndo={editable && operations?.undo ? () => void undoLast() : undefined}
+      missingShots={missingShotAdds.length}
+      onAddMissingShots={
+        editable && operations?.addMissingShots
+          ? () => void addAllMissingShots()
+          : undefined
+      }
       canUndo={canUndo}
       onExit={fullScreen ? () => chooseLayout(homeMode) : undefined}
       onFullScreen={fullScreen ? undefined : () => chooseLayout("black")}
@@ -2757,6 +2829,22 @@ export interface LabelConsoleOperations {
    * as they now stand (undo-session.ts). Absent: no "Undo".
    */
   undo?: (sessionId: string) => Promise<LabelUndoResult>;
+  /**
+   * Answer every open "Missing shot?" slot with "Add shot", as one Undo step
+   * (add-missing-shots.ts). Absent: no "Add all".
+   */
+  addMissingShots?: (
+    sessionId: string,
+    adds: MissingShotAdd[],
+  ) => Promise<LabelAddMissingShotsResult>;
+  /**
+   * Save the open amber and grey counts on the session, for the Labels list
+   * (open-counts-session.ts). Absent: the list keeps what it had.
+   */
+  recordOpenCounts?: (
+    sessionId: string,
+    counts: LabelOpenCounts,
+  ) => Promise<LabelOpenCountsResult>;
 }
 
 function defaultPoint(points: readonly LabelPoint[]): LabelPoint | null {

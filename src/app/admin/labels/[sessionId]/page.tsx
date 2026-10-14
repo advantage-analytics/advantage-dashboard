@@ -30,6 +30,8 @@ import {
   splitLabelPointAction,
   switchLabelPointPlayersAction,
   undoLabelOpAction,
+  addMissingShotsAction,
+  recordLabelOpenCountsAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -132,6 +134,8 @@ export default async function AdminLabelSessionPage({
           completeSession: completeLabelSessionAction,
           reopenSession: reopenLabelSessionAction,
           undo: undoLabelOpAction,
+          addMissingShots: addMissingShotsAction,
+          recordOpenCounts: recordLabelOpenCountsAction,
         }}
         headerAction={
           <Link

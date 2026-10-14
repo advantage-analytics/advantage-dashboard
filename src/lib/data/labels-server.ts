@@ -66,6 +66,11 @@ export interface LabelJobRow {
     checked: number;
     /** `label_points` excluding tombstones — the denominator "N of M". */
     total: number;
+    /**
+     * What the console last counted open (`open_counts`), amber and grey;
+     * null until the session is opened with marks.
+     */
+    openCounts: { amber: number; grey: number } | null;
   } | null;
 }
 
@@ -102,6 +107,18 @@ interface DbSession {
   job_id: string;
   status: "labelling" | "complete";
   started_at: string;
+  open_counts: unknown;
+}
+
+/** `open_counts` as the list reads it; anything malformed reads as none. */
+function readOpenCounts(
+  value: unknown,
+): { amber: number; grey: number } | null {
+  if (!value || typeof value !== "object") return null;
+  const { amber, grey } = value as Record<string, unknown>;
+  return typeof amber === "number" && typeof grey === "number"
+    ? { amber, grey }
+    : null;
 }
 interface DbLabelPoint {
   session_id: string;
@@ -149,7 +166,7 @@ export async function listLabelJobs(
       .returns<DbMatch[]>(),
     db
       .from("label_sessions")
-      .select("id, job_id, status, started_at")
+      .select("id, job_id, status, started_at, open_counts")
       .in("job_id", jobIds)
       .order("started_at", { ascending: false })
       .returns<DbSession[]>(),
@@ -206,6 +223,7 @@ export async function listLabelJobs(
             status: session.status,
             checked: progress?.checked ?? 0,
             total: progress?.total ?? 0,
+            openCounts: readOpenCounts(session.open_counts),
           }
         : null,
     };

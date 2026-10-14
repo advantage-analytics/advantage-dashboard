@@ -128,6 +128,8 @@ export function LabelBlackRail({
   total,
   saveStatus,
   onUndo,
+  missingShots = 0,
+  onAddMissingShots,
   canUndo = false,
   tone = "dark",
   showSession = true,
@@ -184,6 +186,9 @@ export function LabelBlackRail({
    * screen). Absent, there is no button; `canUndo` false draws it disabled.
    */
   onUndo?: () => void;
+  /** Open "Missing shot?" slots "Add shot" can fill; with the handler, "Add all". */
+  missingShots?: number;
+  onAddMissingShots?: () => void;
   canUndo?: boolean;
   tone?: RailTone;
   /** Title, checked count and save line. False where the page shows them. */
@@ -524,6 +529,18 @@ export function LabelBlackRail({
               onGoToPoint={onGoToPoint}
               tone={tone}
               score={null}
+              bulk={
+                onAddMissingShots && missingShots > 0
+                  ? {
+                      label:
+                        missingShots === 1
+                          ? "Add the missing shot"
+                          : `Add all ${missingShots} missing shots`,
+                      description: "Each where its slot suggests, as one Undo",
+                      onSelect: onAddMissingShots,
+                    }
+                  : null
+              }
             />
           ) : null}
           <span className="flex-1" />

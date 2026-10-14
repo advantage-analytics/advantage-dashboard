@@ -290,12 +290,14 @@ const open = (id: string, checked: number, total: number) => ({
   status: "labelling" as const,
   checked,
   total,
+  openCounts: { amber: Math.max(0, 12 - checked), grey: 3 },
 });
 const done = (id: string, total: number) => ({
   id,
   status: "complete" as const,
   checked: total,
   total,
+  openCounts: { amber: 0, grey: 0 },
 });
 
 export const JOBS: LabelJobRow[] = [

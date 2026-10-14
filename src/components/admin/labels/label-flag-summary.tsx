@@ -92,6 +92,7 @@ export function LabelFlagSummary({
   extraStops = NO_STOPS,
   kind = "score",
   tone = "dark",
+  bulk = null,
 }: {
   /** `openFlags(points, marks)`. */
   openMarks: readonly OpenFlag[];
@@ -118,6 +119,8 @@ export function LabelFlagSummary({
    */
   kind?: "score" | "data";
   tone?: RailTone;
+  /** One action over the whole list ("Add all 12 missing shots"); null: none. */
+  bulk?: { label: string; description: string; onSelect: () => void } | null;
 }) {
   const data = kind === "data";
   const keys = data ? DATA_KEYS : SCORE_KEYS;
@@ -312,6 +315,19 @@ export function LabelFlagSummary({
             trailing={<MenuKey tone={tone}>{keys.prev}</MenuKey>}
             onSelect={() => go(prev.pointId)}
           />
+        ) : null}
+        {bulk ? (
+          <>
+            {next && onGoToPoint ? <FloatMenuDivider /> : null}
+            <FloatMenuItem
+              label={bulk.label}
+              description={bulk.description}
+              onSelect={() => {
+                setOpen(false);
+                bulk.onSelect();
+              }}
+            />
+          </>
         ) : null}
         {score ? (
           <>
