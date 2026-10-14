@@ -134,7 +134,9 @@ export function AskComposer({
   const open = tagging && showable;
 
   const atLimit = quota !== null && quota.used >= quota.cap;
-  const canSend = value.text.trim() !== "" && !pending && !atLimit;
+  // A question needs a word in it. A lone `@` — what the tag button types —
+  // is the start of a tag, not something to send.
+  const canSend = /[^\s@]/.test(value.text) && !pending && !atLimit;
   const resets = atLimit ? resetDateLabel(quota.resetsOn) : null;
 
   const chosen = new Set(value.tags.map(askTagKey));

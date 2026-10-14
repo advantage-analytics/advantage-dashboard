@@ -1,3 +1,4 @@
+import { UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
 import {
   ASK_ANSWER_FAILED_MESSAGE,
@@ -665,11 +666,9 @@ export function playerOpponentScope(
 
 export const ASK_ALL_MATCHES_SCOPE = "select match_id from ask.matches";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** The scope a question's tags name — exactly their match ids — or null without tags. */
 export function scopeFromTags(tags: AskResolvedTags): string | null {
-  const ids = tags.matchIds.filter((id) => UUID.test(id));
+  const ids = tags.matchIds.filter((id) => UUID_RE.test(id));
   return ids.length === 0
     ? null
     : `${ASK_ALL_MATCHES_SCOPE} where match_id in (${ids.map((id) => `'${id}'`).join(", ")})`;
@@ -1845,6 +1844,8 @@ const STORED_BY_LOWER = new Map<string, string>(
 const SHOT_COLUMN = String.raw`(?<![\w.])(?:\w+\.)*(?:zone|shot_type|result|spin_type)\b`;
 
 const QUOTED = String.raw`'[^'%_]{1,20}'`;
+const QUOTED_LITERALS = new RegExp(QUOTED, "g");
+const WHEN_LITERAL = new RegExp(String.raw`(\bwhen\s+)(${QUOTED})`, "gi");
 
 /** `zone = 't'`, `s.result <> 'IN'`, `spin_type != 'slice'`. */
 const SHOT_EQUALS = new RegExp(
@@ -1883,7 +1884,6 @@ function storedLiteral(literal: string): string {
  * in the case it asked for, and anything that is a pattern.
  */
 export function withStoredSpelling(sql: string): string {
-  const literals = new RegExp(QUOTED, "g");
   return sql
     .replace(
       SHOT_EQUALS,
@@ -1892,11 +1892,11 @@ export function withStoredSpelling(sql: string): string {
     .replace(
       SHOT_IN,
       (_match, head: string, list: string) =>
-        head + list.replace(literals, storedLiteral),
+        head + list.replace(QUOTED_LITERALS, storedLiteral),
     )
     .replace(SHOT_CASE, (block) =>
       block.replace(
-        new RegExp(String.raw`(\bwhen\s+)(${QUOTED})`, "gi"),
+        WHEN_LITERAL,
         (_match, head: string, literal: string) =>
           head + storedLiteral(literal),
       ),

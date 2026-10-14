@@ -13,7 +13,7 @@ const flag = (
   pointId: string,
   code: OpenFlag["code"],
   pointNumber = points.findIndex((p) => p.id === pointId) + 1,
-): OpenFlag => ({ pointId, pointNumber, code });
+): OpenFlag => ({ pointId, pointNumber, code, data: false });
 
 const flags = [
   flag("b", "winner_disputed"),
@@ -69,9 +69,13 @@ test("groups are the four kinds in order, each point once per row", () => {
 });
 
 test("a counted mark no kind names is listed under Other", () => {
-  const groups = flagGroups([flag("a", "winner_to_error_by_bounce")]);
+  const groups = flagGroups([flag("a", "phantom_strokes_dropped")]);
   expect(groups.map((g) => g.name)).toEqual(["Other"]);
-  expect(groups[0].rows[0].label).toBe("Winner or error?");
+  expect(groups[0].rows).toHaveLength(1);
+  // A grey one has its kind: how the point ended.
+  expect(
+    flagGroups([flag("a", "winner_to_error_by_bounce")]).map((g) => g.name),
+  ).toEqual(["Ending"]);
 });
 
 test.describe("the score stop", () => {

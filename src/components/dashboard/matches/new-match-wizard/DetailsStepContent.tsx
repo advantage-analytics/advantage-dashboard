@@ -1289,10 +1289,11 @@ function DetailsStepContentImpl({
       formData.opponentTeamSource,
     ],
   );
-  // Only where the "their team" field is on screen — a team workspace, not the
-  // admin console. Anywhere else a remembered team would be written to the
-  // match with no field to see it in or clear it from.
-  const teamFieldShown = workspaceKind === "team" && !admin;
+  // Only where the "their team" field is on screen — a team workspace, the
+  // admin console's included, but not its attachment to a recorded match,
+  // which keeps that match as it is. Anywhere else a remembered team would be
+  // written to the match with no field to see it in or clear it from.
+  const teamFieldShown = workspaceKind === "team" && !admin?.attachment;
   const rememberTeam = useCallback(
     (seen: OpponentPlayed | undefined) => {
       if (!teamFieldShown) return;

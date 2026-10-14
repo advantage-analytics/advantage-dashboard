@@ -236,6 +236,11 @@ export interface AskConversation extends AskConversationSummary {
  * So does one asked in the other workspace: a personal conversation is not
  * found from a team page, nor a team one from the personal page or from
  * another program's.
+ *
+ * Throws when the read itself fails. That is not "no such conversation":
+ * answered as null it would tell a player their conversation is gone, and a
+ * follow-up asked through `/api/ask` would be refused as not found when
+ * asking again would have worked.
  */
 export const getAskConversation = cache(async function getAskConversation(
   id: string,
@@ -272,10 +277,9 @@ export const getAskConversation = cache(async function getAskConversation(
   ]);
 
   if (conversationRead.error || messagesRead.error) {
-    console.error("[ask] could not load the conversation", {
-      error: (conversationRead.error ?? messagesRead.error)?.message,
+    throw new Error("Could not load the conversation", {
+      cause: conversationRead.error ?? messagesRead.error,
     });
-    return null;
   }
 
   const conversation = conversationRead.data as {

@@ -398,6 +398,8 @@ export async function searchCustomPrograms(
 export async function getProgramPublicStatus(
   supabase: SupabaseClient,
   programKey: string,
+  /** Also read the crest, for screens that draw the program's mark. */
+  { withCrest = false }: { withCrest?: boolean } = {},
 ): Promise<ProgramPublicStatus | null> {
   const { data, error } = await supabase
     .rpc("program_public_status", { p_program_key: programKey })
@@ -410,8 +412,14 @@ export async function getProgramPublicStatus(
   if (!data) return null;
 
   const row = data as Record<string, unknown>;
+  // The crest, for the mark above a claim screen's heading — the same
+  // best-effort read the search runs, so a failed lookup draws the initial.
+  // Opt-in, because metadata and the unfurl card never draw it.
+  const [program] = withCrest
+    ? await withDirectoryFacts(supabase, [toResult(row)])
+    : [toResult(row)];
   return {
-    ...toResult(row),
+    ...program,
     claimedAt: (row.claimed_at as string | null) || null,
   };
 }

@@ -29,6 +29,8 @@ export type LabelConfirm =
       pointId: string;
       pointNumber: number;
       to: LabelGame;
+      /** The destination's number within its set (`gameInSetOf`). */
+      gameInSet: number;
       /** The destination game's server — who the point's server becomes. */
       server: LabelSide;
       /**
@@ -205,7 +207,7 @@ export function labelConfirmCopy(
       };
     case "move-point": {
       const player = names[confirm.server];
-      const move = `Point ${confirm.pointNumber} moves to set ${confirm.to.setNumber}, game ${confirm.to.gameNumber}, and ${player} becomes its server.`;
+      const move = `Point ${confirm.pointNumber} moves to set ${confirm.to.setNumber}, game ${confirm.gameInSet}, and ${player} becomes its server.`;
       const swap =
         confirm.swaps === "shots-and-winner"
           ? " Every shot in this point changes hands, and so does who won it."
