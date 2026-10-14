@@ -321,3 +321,33 @@ test.describe("the answer", () => {
     expect(buildLosingPlaysAnswer([], voice, 1)).toBeNull();
   });
 });
+
+test.describe("whose plays, in a team", () => {
+  test("'his' and 'this player' are the program's player", () => {
+    expect(losingPlaysSubject("Show his losing plays", [], true)).toBe("mine");
+    expect(
+      losingPlaysSubject("What are this player's weak shots?", [], true),
+    ).toBe("mine");
+  });
+  test("the opponent, said or tagged alone, is the other side", () => {
+    expect(losingPlaysSubject("his opponents' losing plays", [], true)).toBe(
+      "opponent",
+    );
+    expect(
+      losingPlaysSubject(
+        "What is this players losing plays?",
+        [OPPONENT_TAG],
+        true,
+      ),
+    ).toBe("opponent");
+  });
+});
+
+test("with both sides named, the side named first is whose plays", () => {
+  expect(
+    losingPlaysSubject("Which shots do I miss most against him?", [
+      OPPONENT_TAG,
+    ]),
+  ).toBe("mine");
+  expect(losingPlaysSubject("Where does he beat me?", [])).toBe("opponent");
+});
