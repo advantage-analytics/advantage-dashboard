@@ -344,9 +344,16 @@ const PUBLIC_DETAILS: ReadonlySet<string> = new Set(["finalizing"]);
  * (`rpc-errors.ts`), so a production response omits it unless the slug is
  * one of the `PUBLIC_DETAILS` above. `NODE_ENV` is read per call, not at
  * module load, so a spec can flip it.
+ *
+ * `clientDetail` is the other exception: figures a client renders from the
+ * refusal itself — `/api/ask`'s 429 carries the question count the meter
+ * shows. When given it IS the body's `detail`, in every environment, in place
+ * of the cause slug. Pass only what the page would show anyway; a cause never
+ * belongs in it.
  */
 export function errorResponse(
   error: MatchVideoHttpError | MatchVideoError,
+  clientDetail?: Readonly<Record<string, unknown>>,
 ): NextResponse {
   const showDetail =
     process.env.NODE_ENV !== "production" || PUBLIC_DETAILS.has(error.detail);
@@ -354,7 +361,11 @@ export function errorResponse(
     {
       error: error.message,
       code: error.code,
-      ...(showDetail ? { detail: error.detail } : {}),
+      ...(clientDetail
+        ? { detail: clientDetail }
+        : showDetail
+          ? { detail: error.detail }
+          : {}),
     },
     { status: error.status, headers: NO_STORE },
   );

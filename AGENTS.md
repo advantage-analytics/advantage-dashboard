@@ -75,10 +75,10 @@ Full table in [`MAP.md`](MAP.md). Three things it does not tell you:
   area (`dashboard/`, `dashboard/team/`, `admin/`), next to the workspace and role
   lookup it depends on. Webhook and cron routes are excluded from the matcher on
   purpose.
-- `/dashboard/statistics`, `/dashboard/team/statistics`, `/dashboard/ask` and
-  `/dashboard/team/ask` render `ComingSoonPage`. Their shape is not settled, so
-  there is no implementation behind them to revive — the loaders in
-  `opponents-server.ts` are the exception and are live elsewhere.
+- `/dashboard/statistics` and `/dashboard/team/statistics` render
+  `ComingSoonPage`. Their shape is not settled, so there is no implementation
+  behind them to revive — the loaders in `opponents-server.ts` are the exception
+  and are live elsewhere.
 - `/dashboard/opponents` is built in both workspaces: personal lists the player's own
   opponents (`personal-opponents-server.ts`), team the opponent players the program
   has faced (`team-opponents-server.ts`).
@@ -147,7 +147,7 @@ internal naming only.
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
 `/api/team-insight`; `LLM_PROVIDER=anthropic|openai`, SDKs dynamically imported, mock
 mode with no key (`docs/llm-setup.md`). `openai` is a misnomer: it drives the OpenAI SDK
-against Gemini (`gemini-3.5-flash-lite`), and production runs it.
+against Gemini (`gemini-3.5-flash-lite`), and production runs it. `/api/ask` also streams through `getLLMStream()`, runs model-written SQL only through `ask_run_query` / `ask_run_team_query` as role `ask_reader`, and the model never types a number: every figure is a cell reference the server substitutes. Those two functions and `ask_release_question` are server-only — `EXECUTE` is granted to `service_role` alone, because a signed-in user could otherwise call them from the browser with any SELECT and skip the SQL guard (`sql-guard.ts`) the route runs first. So the route calls exactly those three with the service key, passing its own `auth.getUser()` id as `p_viewer` / `p_user_id`; `src/lib/services/ask/database.ts` is the one place Ask uses the service role (three function calls, no table access — do not add to it), and every other Ask call still runs as the signed-in user.
 
 Match-report insights come from the `generate-insights` edge function (Gemini,
 `GEMINI_KEY`, model in its `GEMINI_MODEL` constant — `gemini-3.5-flash`, since
