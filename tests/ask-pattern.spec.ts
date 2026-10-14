@@ -410,3 +410,44 @@ test.describe("the +1, exactly", () => {
     });
   });
 });
+
+test.describe("the side", () => {
+  const AD_RETURN: AskPattern = {
+    court: "Ad",
+    serve: { server: "opponent", zones: [], type: null },
+    returnShot: { strokes: [], zones: ["Crosscourt"] },
+    plusOne: null,
+    shots: [],
+  };
+
+  test("is read only from the two sides, and left out when not named", () => {
+    expect(
+      readAskPattern({
+        court: "Ad",
+        serve: { server: "opponent" },
+        return: { zones: ["Crosscourt"] },
+      }),
+    ).toEqual(AD_RETURN);
+    expect(
+      readAskPattern({ court: "ad", serve: { server: "mine" } }),
+    ).toBeNull();
+    expect(readAskPattern({ serve: { server: "mine" } })).not.toHaveProperty(
+      "court",
+    );
+  });
+
+  test("filters the point's court, says so, and opens the Video view on that side", () => {
+    expect(patternSql(AD_RETURN)).toContain("pt.court = 'Ad'");
+    expect(
+      buildPatternAnswer(
+        [{ match_id: null, points: 3, won: 1, won_pct: 33.3 }],
+        AD_RETURN,
+        NAMES,
+        new Map(),
+      ),
+    ).toContain(
+      "Read as: points on the ad side where Eli Stephenson hit a serve",
+    );
+    expect(patternMatchFilters(AD_RETURN)).toMatchObject({ court: "ad" });
+  });
+});

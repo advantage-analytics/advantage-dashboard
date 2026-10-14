@@ -43,6 +43,43 @@ export interface AskServePlusOne {
   subject: AskPlaysSubject;
   /** Only points on a first or a second serve; null for both. */
   serveType: AskServeType | null;
+  /** Only points from one side; absent for both. */
+  court?: "Deuce" | "Ad";
+  /** One table row per side as well (deuce and ad apart). */
+  bySide?: boolean;
+}
+
+const BY_SIDE =
+  /\b(?:by|per|each|both|split(?:\s+up)?(?:\s+by)?|divided(?:\s+up)?(?:\s+by)?|broken\s+down\s+by)\s+(?:the\s+)?(?:sides?|courts?)\b|\bdeuce\b[^?.!]*\bad(?:vantage)?\b|\bad(?:vantage)?\b[^?.!]*\bdeuce\b/i;
+const DEUCE_SIDE = /\bdeuce(?:\s+(?:side|court))?\b/i;
+const AD_SIDE = /\b(?:ad|advantage)\s+(?:side|court)\b/i;
+
+/** A previous request with a follow-up's sides: a split replaces one side, one side replaces a split. */
+export function plusOneWithSides(
+  previous: AskServePlusOne,
+  sides: Pick<AskServePlusOne, "court" | "bySide">,
+): AskServePlusOne {
+  if (sides.bySide) {
+    const { court: _court, ...rest } = previous;
+    return { ...rest, bySide: true };
+  }
+  if (sides.court) {
+    const { bySide: _bySide, ...rest } = previous;
+    return { ...rest, court: sides.court };
+  }
+  return previous;
+}
+
+/** The sides a question asks for: split, one of them, or neither. */
+export function plusOneSides(
+  question: string,
+): Pick<AskServePlusOne, "court" | "bySide"> {
+  if (BY_SIDE.test(question)) return { bySide: true };
+  const deuce = DEUCE_SIDE.test(question);
+  const ad = AD_SIDE.test(question);
+  if (deuce && !ad) return { court: "Deuce" };
+  if (ad && !deuce) return { court: "Ad" };
+  return {};
 }
 
 const SERVE_PLUS_ONE =
@@ -72,7 +109,7 @@ export function asksForServePlusOne(question: string): boolean {
 }
 
 const CONTINUES =
-  /\b(?:table|compar\w*|all|detail\w*|break ?down|winning|losing|won|lost|which|each|every|patterns?|plays?)\b/i;
+  /\b(?:table|compar\w*|all|detail\w*|break ?down|winning|losing|won|lost|which|each|every|patterns?|plays?|sides?|courts?|deuce|divid\w*|split)\b/i;
 
 /**
  * Whether a follow-up to a +1 answer asks for more of the same — "Can I see
@@ -112,6 +149,7 @@ export function servePlusOneRequest(
     phase: plusOneBreakdownAsked(question) ?? "serve",
     subject: opponent ? "opponent" : "mine",
     serveType,
+    ...plusOneSides(question),
   };
 }
 
@@ -144,14 +182,19 @@ export function servePlusOneSql(request: AskServePlusOne): string {
     request.serveType === null
       ? ""
       : `\n      and v.shot_type = '${request.serveType === "first" ? "First Serve" : "Second Serve"}'`;
+  const onCourt = request.court
+    ? `\n    and pc.court = '${request.court}'`
+    : "";
   const opening =
     request.phase === "serve"
-      ? `select v.match_id, v.point_number, v.zone
+      ? `select v.match_id, v.point_number, v.zone, pc.court
   from sh v
-  where v.is_played_serve and v.mine = ${side}${serveType}`
-      : `select r.match_id, r.point_number, r.zone
+  join ask.points pc on pc.match_id = v.match_id and pc.point_number = v.point_number
+  where v.is_played_serve and v.mine = ${side}${serveType}${onCourt}`
+      : `select r.match_id, r.point_number, r.zone, pc.court
   from sh r
-  where r.is_return and r.mine = ${side}${
+  join ask.points pc on pc.match_id = r.match_id and pc.point_number = r.point_number
+  where r.is_return and r.mine = ${side}${onCourt}${
     serveType === ""
       ? ""
       : `
@@ -165,7 +208,7 @@ opening as (
   ${opening}
 ),
 played as (
-  select o.zone,
+  select ${request.bySide ? "o.court" : "null::text as court"}, o.zone,
     ${STROKE_CASE("lower(coalesce(q.shot_type, ''))")} as stroke,
     q.direction,
     (${won}) as won
@@ -176,19 +219,19 @@ played as (
   where o.zone is not null and q.direction is not null
 ),
 grouped as (
-  select 'pattern' as section, zone, stroke, direction, count(*) as points,
+  select 'pattern' as section, court, zone, stroke, direction, count(*) as points,
     count(*) filter (where won) as won,
     round(100.0 * count(*) filter (where won) / count(*), 1) as won_pct
   from played
   where stroke is not null
-  group by zone, stroke, direction
+  group by court, zone, stroke, direction
   union all
-  select 'total', null, null, null, count(*), count(*) filter (where won),
+  select 'total', null, null, null, null, count(*), count(*) filter (where won),
     round(100.0 * count(*) filter (where won) / nullif(count(*), 0), 1)
   from played
   where stroke is not null
   union all
-  select 'opening', null, null, null, count(*), count(distinct match_id), null
+  select 'opening', null, null, null, null, count(*), count(distinct match_id), null
   from opening
 ),
 ranked as (
@@ -196,7 +239,7 @@ ranked as (
     row_number() over (partition by section order by points desc, won_pct desc nulls last) as place
   from grouped
 )
-select section, zone, stroke, direction, points, won, won_pct
+select section, court, zone, stroke, direction, points, won, won_pct
 from ranked
 where section <> 'pattern' or place <= ${MAX_ASK_PLUS_ONE_ROWS}
 order by case section when 'total' then 0 when 'opening' then 1 else 2 end, place`;
@@ -207,11 +250,18 @@ export function servePlusOneRequestOfSql(
   sql: string | null,
 ): AskServePlusOne | null {
   if (!sql) return null;
+  const sides: Pick<AskServePlusOne, "court" | "bySide">[] = [
+    {},
+    { bySide: true },
+    { court: "Deuce" },
+    { court: "Ad" },
+  ];
   for (const phase of ["serve", "return"] as const) {
     for (const subject of ["mine", "opponent"] as const) {
       for (const serveType of [null, "first", "second"] as const) {
-        if (sql === servePlusOneSql({ phase, subject, serveType })) {
-          return { phase, subject, serveType };
+        for (const sideRule of sides) {
+          const request = { phase, subject, serveType, ...sideRule };
+          if (sql === servePlusOneSql(request)) return request;
         }
       }
     }
@@ -261,6 +311,14 @@ function shotPhrase(row: AskRow): string {
 }
 
 function patternPhrase(row: AskRow, phase: AskServePlusOne["phase"]): string {
+  const court =
+    typeof row.court === "string"
+      ? `on the ${row.court.toLowerCase()} side, `
+      : "";
+  return court + openingPhrase(row, phase);
+}
+
+function openingPhrase(row: AskRow, phase: AskServePlusOne["phase"]): string {
   const zone = String(row.zone ?? "");
   const opening =
     phase === "serve"
@@ -275,7 +333,8 @@ function patternLabel(row: AskRow, phase: AskServePlusOne["phase"]): string {
     phase === "serve"
       ? (SERVE_LABEL[zone] ?? zone)
       : (RETURN_LABEL[zone] ?? zone);
-  return `${opening} → ${shotPhrase(row)}`;
+  const court = typeof row.court === "string" ? `${row.court} · ` : "";
+  return `${court}${opening} → ${shotPhrase(row)}`;
 }
 
 function sentenceCase(text: string): string {
@@ -307,8 +366,9 @@ export function buildServePlusOneAnswer(
   const cell = (ref: string, column: string) => `{{${ref}.${column}}}`;
   const record = (entry: { ref: string }) =>
     `won ${cell(entry.ref, "won")} of ${cell(entry.ref, "points")}, ${cell(entry.ref, "won_pct")}`;
-  const firstOrSecond =
-    request.serveType === null ? "" : ` on ${request.serveType} serves`;
+  const firstOrSecond = `${
+    request.serveType === null ? "" : ` on ${request.serveType} serves`
+  }${request.court ? ` on the ${request.court.toLowerCase()} side` : ""}`;
   const kind = phase === "serve" ? "serve" : "return";
   const their = voice.second ? "your" : "their";
 
@@ -318,7 +378,7 @@ export function buildServePlusOneAnswer(
 
   // ── Table: every pattern, most played first ──
   const table = [
-    `${ASK_VISUAL_LINE_PREFIX} table ${S} ${sentenceCase(voice.possessive)} ${kind}-plus-one patterns${firstOrSecond}: where the ${kind} went, then ${their} next shot. Most played first.`,
+    `${ASK_VISUAL_LINE_PREFIX} table ${S} ${sentenceCase(voice.possessive)} ${kind}-plus-one patterns${firstOrSecond}${request.bySide ? ", deuce and ad sides apart" : ""}: where the ${kind} went, then ${their} next shot. Most played first.`,
     `COLUMNS: Points ${S} Won ${S} Won %`,
     ...patterns.map(
       (entry) =>

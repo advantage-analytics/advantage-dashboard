@@ -89,6 +89,8 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   continuesServePlusOne,
+  plusOneSides,
+  plusOneWithSides,
   servePlusOneRequest,
   servePlusOneRequestOfSql,
   servePlusOneSql,
@@ -973,8 +975,10 @@ export async function* askQuestion(
       continuesServePlusOne(input.question);
     const plusOne: AskServePlusOne | null = asksForServePlusOne(input.question)
       ? servePlusOneRequest(input.question, input.tags.prompt, team)
-      : plusOneContinued
-        ? previousPlusOne
+      : plusOneContinued && previousPlusOne
+        ? // "Can you divide that by sides?": the same breakdown, with the
+          // side this question names (or none, which keeps the last one's).
+          plusOneWithSides(previousPlusOne, plusOneSides(input.question))
         : null;
 
     // Three refusals the server does not accept, and one choice it makes

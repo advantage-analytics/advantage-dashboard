@@ -99,7 +99,12 @@ export interface AskPatternPlusOne {
   directions: AskPatternDirection[];
 }
 
+export const ASK_PATTERN_COURTS = ["Deuce", "Ad"] as const;
+export type AskPatternCourt = (typeof ASK_PATTERN_COURTS)[number];
+
 export interface AskPattern {
+  /** The side the point was played from (`ask.points.court`); absent for either. */
+  court?: AskPatternCourt;
   serve: AskPatternServe | null;
   returnShot: AskPatternReturn | null;
   /** The serve's or the return's +1; null when the pattern names none. */
@@ -231,6 +236,17 @@ export function readAskPattern(value: unknown): AskPattern | null {
     }
   }
 
+  let court: AskPatternCourt | undefined;
+  if (value.court !== null && value.court !== undefined) {
+    if (
+      typeof value.court !== "string" ||
+      !(ASK_PATTERN_COURTS as readonly string[]).includes(value.court)
+    ) {
+      return null;
+    }
+    court = value.court as AskPatternCourt;
+  }
+
   let plusOne: AskPatternPlusOne | null = null;
   const rawPlus = value.plus_one ?? value.plusOne;
   if (rawPlus !== null && rawPlus !== undefined) {
@@ -276,7 +292,7 @@ export function readAskPattern(value: unknown): AskPattern | null {
       shots[index] = { ...shot, strokes: [] };
     }
   }
-  return { serve, returnShot, plusOne, shots };
+  return { ...(court ? { court } : {}), serve, returnShot, plusOne, shots };
 }
 
 // ── The query ────────────────────────────────────────────────────────────────
@@ -413,6 +429,7 @@ function patternCtes(pattern: AskPattern): string {
   const where: string[] = [];
   const { serve, returnShot } = pattern;
 
+  if (pattern.court) where.push(`pt.court = '${pattern.court}'`);
   if (serve?.server) {
     where.push(`pt.i_served = ${serve.server === "mine" ? "true" : "false"}`);
   }
@@ -486,7 +503,7 @@ function patternCtes(pattern: AskPattern): string {
 
   return `with ${ASK_SHOT_ROLE_CTES},
 pt as (
-  select p.match_id, p.point_number, p.i_served, p.i_won
+  select p.match_id, p.point_number, p.i_served, p.i_won, p.court
   from ask.points p
   where p.match_id in (select match_id from sh)
 ),
@@ -721,7 +738,7 @@ export function buildPatternAnswer(
   }
 
   const paragraphs = [
-    `Read as: points where ${description}.`,
+    `Read as: points${pattern.court ? ` on the ${pattern.court.toLowerCase()} side` : ""} where ${description}.`,
     points > 0 && points < ASK_PATTERN_SMALL_SAMPLE
       ? "That is a small sample, so one or two points either way would move the rate a long way."
       : null,
@@ -768,6 +785,7 @@ export function buildPatternPrompt(input: {
     "The pattern object, every field optional:",
     '  "serve":  {"server": "mine"|"opponent"|null, "zones": ["Wide"|"Body"|"T"], "type": "first"|"second"|null}',
     '  "return": {"strokes": ["Forehand"|"Backhand"], "zones": ["Crosscourt"|"Down the Line"|"Middle"]}',
+    '  "court":  "Deuce"|"Ad"  — only when the question names a side: the court the point was played from ("on the ad side", "deuce court").',
     '  "plus_one": {"after": "serve"|"return", "strokes": [same as shots], "directions": [same as shots]}  — the +1 EXACTLY: the server\'s ball after the return ("serve", shot 3), or the returner\'s ball after that ("return", shot 4).',
     '  "shots":  up to two, in order — the second is LATER in the same point:',
     '            {"player": "mine"|"opponent"|null, "strokes": ["Forehand"|"Backhand"|"Volley"|"Overhead"], "directions": ["Crosscourt"|"Down the Line"|"Inside Out"|"Inside In"|"Middle"], "within": 1-12|null}',

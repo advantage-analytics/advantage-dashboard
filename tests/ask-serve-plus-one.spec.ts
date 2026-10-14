@@ -15,6 +15,8 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   plusOneBreakdownAsked,
+  plusOneSides,
+  plusOneWithSides,
   continuesServePlusOne,
   servePlusOneRequest,
   servePlusOneRequestOfSql,
@@ -514,5 +516,131 @@ test.describe("routing", () => {
         serveType: null,
       }),
     });
+  });
+});
+
+test.describe("by side", () => {
+  test("a question names a split, one side, or neither", () => {
+    expect(plusOneSides("his serve +1 patterns divided up by sides")).toEqual({
+      bySide: true,
+    });
+    expect(plusOneSides("serve +1 on deuce and ad")).toEqual({ bySide: true });
+    expect(plusOneSides("return +1 on the ad side")).toEqual({ court: "Ad" });
+    expect(plusOneSides("serve +1 from the deuce court")).toEqual({
+      court: "Deuce",
+    });
+    expect(plusOneSides("serve +1 patterns")).toEqual({});
+  });
+
+  test("a split groups by court too; one side filters to it", () => {
+    const split = servePlusOneSql({
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      bySide: true,
+    });
+    expect(split).toContain("group by court, zone, stroke, direction");
+    expect(split).toContain("select o.court, o.zone");
+    const ad = servePlusOneSql({
+      phase: "return",
+      subject: "mine",
+      serveType: null,
+      court: "Ad",
+    });
+    expect(ad).toContain("and pc.court = 'Ad'");
+    for (const sql of [split, ad]) {
+      expect(
+        checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
+      ).toEqual({ ok: true });
+    }
+    expect(servePlusOneRequestOfSql(ad)).toEqual({
+      phase: "return",
+      subject: "mine",
+      serveType: null,
+      court: "Ad",
+    });
+  });
+
+  test("a follow-up's split replaces one side, and one side replaces a split", () => {
+    const deuce = {
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      court: "Deuce",
+    } as const;
+    expect(plusOneWithSides(deuce, { bySide: true })).toEqual({
+      phase: "serve",
+      subject: "mine",
+      serveType: null,
+      bySide: true,
+    });
+    expect(
+      plusOneWithSides(
+        { ...deuce, court: undefined, bySide: true },
+        { court: "Ad" },
+      ),
+    ).toMatchObject({ court: "Ad" });
+    expect(plusOneWithSides(deuce, {})).toBe(deuce);
+  });
+
+  test("each row says its side", async () => {
+    const rows: AskRow[] = [
+      {
+        section: "total",
+        court: null,
+        zone: null,
+        stroke: null,
+        direction: null,
+        points: 30,
+        won: 16,
+        won_pct: 53.3,
+      },
+      {
+        section: "opening",
+        court: null,
+        zone: null,
+        stroke: null,
+        direction: null,
+        points: 40,
+        won: 2,
+        won_pct: null,
+      },
+      {
+        section: "pattern",
+        court: "Ad",
+        zone: "Wide",
+        stroke: "Forehand",
+        direction: "Inside Out",
+        points: 9,
+        won: 6,
+        won_pct: 66.7,
+      },
+      {
+        section: "pattern",
+        court: "Deuce",
+        zone: "T",
+        stroke: "Backhand",
+        direction: "Crosscourt",
+        points: 8,
+        won: 3,
+        won_pct: 37.5,
+      },
+    ];
+    const text =
+      buildServePlusOneAnswer(rows, losingPlaysVoice("mine", "Rudy Quan"), {
+        phase: "serve",
+        subject: "mine",
+        serveType: null,
+        bySide: true,
+      }) ?? "";
+    const { result } = await rendered(text, rows);
+    expect(result.droppedDigits).toEqual([]);
+    if (result.visual?.kind !== "table") throw new Error("no table");
+    expect(result.visual.caption).toContain("deuce and ad sides apart");
+    expect(result.visual.rows.map((row) => row.label)).toEqual([
+      "Ad · Wide serve → forehand inside out",
+      "Deuce · T serve → backhand crosscourt",
+    ]);
+    expect(result.headline).toContain("on the ad side, a serve out wide");
   });
 });

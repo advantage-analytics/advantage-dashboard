@@ -13,6 +13,7 @@ import type { AskPattern, AskPatternShot } from "@/lib/services/ask/pattern";
  * The pattern's fields ARE the filter's sections (`pattern.ts`'s header), so
  * this is a field-for-field copy:
  *
+ *   court                     → Serve › Side (the point's court)
  *   serve.server/zones/type   → Serve › Player / Zone / Type
  *   returnShot.strokes/zones  → Return › Type / Zone
  *   shots[0]                  → Custom › Hit by / Stroke / Direction / Hit
@@ -80,6 +81,12 @@ export function patternMatchFilters(pattern: AskPattern): MatchFilters | null {
   if (one === null || two === null) return null;
   return {
     ...EMPTY_MATCH_FILTERS,
+    court:
+      pattern.court === "Deuce"
+        ? "deuce"
+        : pattern.court === "Ad"
+          ? "ad"
+          : null,
     server:
       pattern.serve?.server === "mine"
         ? "you"

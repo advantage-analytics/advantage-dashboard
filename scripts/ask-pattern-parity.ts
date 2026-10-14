@@ -72,6 +72,20 @@ const PATTERNS: Record<string, AskPattern> = {
     plusOne: { after: "return", strokes: [], directions: ["Crosscourt"] },
     shots: [],
   },
+  "on the ad side, their serve, my return crosscourt": {
+    court: "Ad",
+    serve: { server: "opponent", zones: [], type: null },
+    returnShot: { strokes: [], zones: ["Crosscourt"] },
+    plusOne: null,
+    shots: [],
+  },
+  "on the deuce side, my serve +1 a forehand": {
+    court: "Deuce",
+    serve: { server: "mine", zones: [], type: null },
+    returnShot: null,
+    plusOne: { after: "serve", strokes: ["Forehand"], directions: [] },
+    shots: [],
+  },
   "any serve +1 down the line": {
     serve: null,
     returnShot: null,
