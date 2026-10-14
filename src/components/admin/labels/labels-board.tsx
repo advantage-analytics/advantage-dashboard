@@ -54,6 +54,19 @@ const GRID =
 
 const NO_FLAGS: FlagCounts = { amber: 0, grey: 0 };
 
+/**
+ * A job's open amber and grey: none once labelled; what the console last
+ * counted on its session when it has been opened; before that, what the
+ * analysis flagged at upload.
+ */
+function openOf(
+  job: LabelJobRow,
+  flagCounts: Readonly<Record<string, FlagCounts | undefined>>,
+): FlagCounts {
+  if (jobState(job) === "done") return NO_FLAGS;
+  return job.session?.openCounts ?? flagCounts[job.matchId] ?? NO_FLAGS;
+}
+
 const shortDay = (iso: string | null) => {
   if (!iso) return null;
   const date = new Date(iso);
@@ -105,7 +118,7 @@ export function LabelsBoard({
   const flagsOf = (jobs: readonly LabelJobRow[]): FlagCounts =>
     jobs.reduce(
       (sum, job) => {
-        const counts = flagCounts[job.matchId] ?? NO_FLAGS;
+        const counts = openOf(job, flagCounts);
         return {
           amber: sum.amber + counts.amber,
           grey: sum.grey + counts.grey,
@@ -233,7 +246,7 @@ function ProgramDropdown({
             <span className="eyebrow-sm">Match</span>
             <span className="eyebrow-sm">Analysed</span>
             <span className="eyebrow-sm">Points</span>
-            <span className="eyebrow-sm">Flagged at upload</span>
+            <span className="eyebrow-sm">Open flags</span>
             <span className="eyebrow-sm">Status</span>
             <span aria-hidden="true" />
           </div>
@@ -272,6 +285,11 @@ function PersonDropdown({
       <summary className="-mx-2 mt-1 flex cursor-pointer list-none items-center gap-3 rounded-[var(--radius-element)] px-2 py-2 transition-colors duration-100 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <PersonAvatar
           initials={getInitials(player.name)}
+          photoUrl={
+            player.jobs
+              .map((job) => owners[job.matchId]?.playerPhotoUrl)
+              .find(Boolean) ?? null
+          }
           className="size-[26px] text-[9px]"
         />
         <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--ink-900)]">
@@ -293,7 +311,7 @@ function PersonDropdown({
             key={job.jobId}
             job={job}
             owner={owners[job.matchId]}
-            flagCounts={flagCounts[job.matchId] ?? NO_FLAGS}
+            flagCounts={openOf(job, flagCounts)}
           />
         ))}
       </div>
@@ -308,8 +326,8 @@ function FlagPair({ counts }: { counts: FlagCounts }) {
       role="img"
       aria-label={
         tone === "amber"
-          ? `${n} flagged at upload that can move the score`
-          : `${n} flagged at upload about the data`
+          ? `${n} open that can move the score`
+          : `${n} open about the data`
       }
       className="tabular inline-flex items-center gap-1 text-[12px]"
       style={{
@@ -374,7 +392,7 @@ function JobRow({
       <span className="tabular text-[13px] text-[var(--ink-900)]">
         {job.pointCount}
       </span>
-      <FlagPair counts={state === "done" ? NO_FLAGS : flagCounts} />
+      <FlagPair counts={flagCounts} />
       <span className="flex min-w-0 items-center gap-2">
         {state === "todo" ? (
           <StatePill>Needs labelling</StatePill>

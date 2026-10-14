@@ -163,6 +163,18 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   expect(out).toContain("2 of 3 still to check.");
 });
 
+test("a video that ends early holds no set to the record", () => {
+  const html = render({
+    session: { ...labelSessionFixture(), videoEndsEarly: true },
+    video: null,
+    initialLayoutMode: "overview",
+    ...SAVES,
+  } as ConsoleProps);
+  const out = text(html);
+  expect(out).toContain("The video ends before the match does");
+  expect(out).not.toContain("against a record of");
+});
+
 test("one row per live point, and a marker for the deleted one", () => {
   const html = render({
     session: labelSessionFixture(),
@@ -421,10 +433,13 @@ test.describe("the Now playing pill", () => {
 });
 
 test("no labels component reads a flags field", () => {
+  // A read or a key, not the word: prose and copy may say "flags".
   const dir = path.resolve("src/components/admin/labels");
   for (const file of readdirSync(dir)) {
     const source = readFileSync(path.join(dir, file), "utf8");
-    expect(source, file).not.toMatch(/\bflags\b/i);
+    expect(source, file).not.toMatch(
+      /\.flags\b|\bflags\s*[:=?]|\[\s*["'`]flags["'`]\s*\]|\{[^}]*\bflags\b[^}]*\}\s*=/,
+    );
   }
 });
 

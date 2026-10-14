@@ -24,6 +24,7 @@ import {
   type FlagCounts,
 } from "@/lib/services/labels/job-groups";
 import { PROGRAM_CRESTS_BUCKET } from "./teams-server";
+import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 
 interface Dependencies {
   requireAdmin: () => Promise<{ id: string } | null>;
@@ -272,6 +273,8 @@ export interface LabelJobOwner {
    */
   playerKey: string;
   playerName: string;
+  /** Their profile photo as a public URL (`playerPhotoUrls`); null with none. */
+  playerPhotoUrl: string | null;
   opponentName: string;
   playedAt: string | null;
   event: string | null;
@@ -337,6 +340,11 @@ export async function getLabelJobOwners(
     ]),
   );
 
+  const photos = await playerPhotoUrls(
+    db,
+    rows.map((m) => m.player1_id).filter((id) => id !== null),
+  );
+
   for (const match of rows) {
     const playerName = match.player1_name ?? "Player 1";
     owners.set(match.id, {
@@ -349,12 +357,61 @@ export async function getLabelJobOwners(
         : null,
       playerKey: match.player1_id ?? `name:${playerName.toLowerCase()}`,
       playerName,
+      playerPhotoUrl: match.player1_id
+        ? (photos.get(match.player1_id) ?? null)
+        : null,
       opponentName: match.player2_name ?? "Player 2",
       playedAt: match.date,
       event: match.tournament_name,
     });
   }
   return owners;
+}
+
+/**
+ * Profile photos for player ids in either of `matches.player1_id`'s id
+ * spaces: a login (`users.avatar_path`), or a roster profile whose claimed
+ * account has one. Ids with no photo are left out.
+ */
+async function playerPhotoUrls(
+  db: AdminClient,
+  playerIds: readonly string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(playerIds)].filter(isUuid);
+  const photos = new Map<string, string>();
+  if (ids.length === 0) return photos;
+  const { data: roster } = await db
+    .from("program_players")
+    .select("id, claimed_by_user_id")
+    .in("id", ids)
+    .returns<{ id: string; claimed_by_user_id: string | null }[]>();
+  const accountOf = new Map<string, string>(ids.map((id) => [id, id]));
+  for (const row of roster ?? []) {
+    if (row.claimed_by_user_id) accountOf.set(row.id, row.claimed_by_user_id);
+    else accountOf.delete(row.id);
+  }
+  const accounts = [...new Set(accountOf.values())];
+  if (accounts.length === 0) return photos;
+  const { data: users } = await db
+    .from("users")
+    .select("id, avatar_path")
+    .in("id", accounts)
+    .returns<{ id: string; avatar_path: string | null }[]>();
+  const pathOf = new Map(
+    (users ?? []).flatMap((u) =>
+      u.avatar_path ? [[u.id, u.avatar_path]] : [],
+    ),
+  );
+  for (const [playerId, account] of accountOf) {
+    const path = pathOf.get(account);
+    if (path) {
+      photos.set(
+        playerId,
+        db.storage.from(USER_AVATARS_BUCKET).getPublicUrl(path).data.publicUrl,
+      );
+    }
+  }
+  return photos;
 }
 
 /* -------------------------------------------------------------------------

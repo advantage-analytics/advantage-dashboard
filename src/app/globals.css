@@ -958,9 +958,6 @@
 .label-layer-in-full {
   animation: film-mark-in var(--duration-hover) var(--ease-primary) both;
 }
-.label-layer-in-docked {
-  animation: film-mark-in var(--duration-fast) var(--ease-primary) both;
-}
 @media (prefers-reduced-motion: reduce) {
   .label-court-view-in,
   .label-layer-in-full {

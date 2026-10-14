@@ -71,6 +71,7 @@ export function LabelsDesignPreview() {
             names={NAMES}
             finalScore={null}
             matchScore={MATCH_SCORE}
+            videoEndsEarly={null}
             warnings={warnings}
             complete={false}
             upload={UPLOAD}

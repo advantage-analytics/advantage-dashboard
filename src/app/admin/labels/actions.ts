@@ -85,6 +85,16 @@ import {
   undoLabelOp,
   type LabelUndoResult,
 } from "@/lib/services/labels/undo-session";
+import {
+  addMissingShots,
+  type LabelAddMissingShotsResult,
+  type MissingShotAdd,
+} from "@/lib/services/labels/add-missing-shots";
+import {
+  recordLabelOpenCounts,
+  type LabelOpenCounts,
+  type LabelOpenCountsResult,
+} from "@/lib/services/labels/open-counts-session";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
@@ -455,4 +465,28 @@ export async function undoLabelOpAction(
   sessionId: string,
 ): Promise<LabelUndoResult> {
   return undoLabelOp(sessionId);
+}
+
+/**
+ * "Add all missing shots": every open "Missing shot?" slot answered with "Add
+ * shot", as one Undo step, and the session's rows answered whole.
+ */
+export async function addMissingShotsAction(
+  sessionId: string,
+  adds: MissingShotAdd[],
+): Promise<LabelAddMissingShotsResult> {
+  return withLabelOp("Add missing shots", () =>
+    addMissingShots(sessionId, adds),
+  );
+}
+
+/**
+ * The console's open amber and grey counts, saved on the session for the
+ * Labels list. Not a step to undo: outside `withLabelOp`.
+ */
+export async function recordLabelOpenCountsAction(
+  sessionId: string,
+  counts: LabelOpenCounts,
+): Promise<LabelOpenCountsResult> {
+  return recordLabelOpenCounts(sessionId, counts);
 }
