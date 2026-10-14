@@ -18,6 +18,7 @@ import {
   CLAIM_LINK,
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 import { claimPreview } from "@/lib/data/program-claim-preview";
 
@@ -75,7 +76,9 @@ export default async function ProgramStatusPage({
 }) {
   const { programKey } = await params;
   const supabase = await createClient();
-  const program = await getProgramPublicStatus(supabase, programKey);
+  const program = await getProgramPublicStatus(supabase, programKey, {
+    withCrest: true,
+  });
 
   if (!program) notFound();
 
@@ -95,6 +98,7 @@ export default async function ProgramStatusPage({
     const owner = program.ownerDisplay ?? "Someone";
     return (
       <ClaimShell width={720} gap={20} back="/claim/program">
+        <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
         <ClaimHeading
           gap={2}
           eyebrow={eyebrow}
@@ -132,6 +136,7 @@ export default async function ProgramStatusPage({
     const age = claimAge(program.claimedAt);
     return (
       <ClaimShell width={720} gap={20} back="/claim/program">
+        <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
         <ClaimHeading
           gap={2}
           eyebrow={eyebrow}
@@ -207,6 +212,7 @@ export default async function ProgramStatusPage({
         />
       }
     >
+      <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
       <ClaimHeading
         gap={2}
         eyebrow={qualifiers}

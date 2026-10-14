@@ -225,7 +225,7 @@ export function PointMenu({
   const iconClass = cn("size-3", iconInk);
   const now =
     point.setNumber !== null && point.gameNumber !== null
-      ? `Now in set ${point.setNumber} · game ${point.gameNumber}`
+      ? `Now in set ${point.setNumber} · game ${gameInSetOf(edit.points, { setNumber: point.setNumber, gameNumber: point.gameNumber })}`
       : undefined;
   // "Switch players": first of all when the rows contradict the server,
   // after the Combine items otherwise.

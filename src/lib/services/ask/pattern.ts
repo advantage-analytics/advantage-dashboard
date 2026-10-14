@@ -3,7 +3,8 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS, isRecord } from "@/lib/services/ask/events";
+import { count } from "@/lib/services/ask/plays";
 
 /**
  * Shot patterns: "serve wide plus one down the line", "forehand crosscourt
@@ -120,10 +121,6 @@ export function asksForPattern(question: string): boolean {
 }
 
 // ── Reading the model's reply ────────────────────────────────────────────────
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function player(value: unknown): AskPatternPlayer | null | undefined {
   if (value === null || value === undefined) return null;
@@ -560,10 +557,6 @@ export function describePattern(
 export const ASK_PATTERN_SMALL_SAMPLE = 10;
 
 const S = ASK_VISUAL_FIELD_SEPARATOR;
-
-function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
 
 /**
  * The rows the answer is written over: a total first (server-summed from the

@@ -642,10 +642,16 @@ test.describe("the header's total", () => {
       EMPTY_MARKS,
     );
     const head = header(html);
-    // Nothing on any row and no score to hold them to: it reads zero.
+    // No mark that can move the score and no score to hold the rows to: the
+    // amber count reads zero. The rows' own hints are grey flags, so the
+    // control is named for them and is not amber.
     const toCheck = tag(head, 'data-label-rail-to-check=""');
-    expect(toCheck).toContain('role="img"');
+    expect(toCheck).not.toContain("rail-amber");
     expect(toCheck).toContain('aria-label="Nothing left to check"');
+    // The grey list beside it is a control of its own.
+    expect(tag(head, 'data-label-rail-data-count=""')).toMatch(
+      /aria-label="\d+ data flags?: /,
+    );
   });
 
   test("a set that doesn't add up is a flag: counted, a chip that names it, and a slot after the set's last point", () => {
@@ -707,15 +713,23 @@ test.describe("the header's total", () => {
     const toCheck = tag(head, 'data-label-rail-to-check=""');
     expect(toCheck).toContain('aria-label="2 flags to check"');
 
-    // Hints and hidden marks alone: nothing to check.
+    // Hints and hidden marks alone: nothing amber. The hints are the grey
+    // count, and the control is named for them.
     const quiet: LabelMarks = {
       ...marks,
       points: {
         [p4.id]: marks.points[p4.id].filter((m) => m.tier !== "count"),
       },
     };
+    const quietCheck = tag(
+      header(black(session, quiet)),
+      'data-label-rail-to-check=""',
+    );
+    expect(quietCheck).not.toContain("flags to check");
+    expect(quietCheck).not.toContain("rail-amber");
+    expect(quietCheck).toContain('aria-label="Nothing left to check"');
     expect(
-      tag(header(black(session, quiet)), 'data-label-rail-to-check=""'),
-    ).toContain('aria-label="Nothing left to check"');
+      tag(header(black(session, quiet)), 'data-label-rail-data-count=""'),
+    ).toMatch(/aria-label="\d+ data flags?: /);
   });
 });

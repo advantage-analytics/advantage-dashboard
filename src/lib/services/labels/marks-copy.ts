@@ -139,6 +139,11 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
       mark.params.winner,
     );
   }
+  // Asked as the vendor called it, so its answer is a plain yes: "Was the
+  // last ball out?" → "Yes, make it out".
+  if (mark.code === "last_call_overruled") {
+    return lastCallQuestion(mark.params.vendorCall);
+  }
   const label = MARK_LABEL[mark.code];
   if (mark.code !== "shot_after_point_end") return label;
   const n = mark.params.after.length;
@@ -154,7 +159,12 @@ export const HINT_ACTION_LABEL = {
 
 /** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
 export function lastCallAction(call: "in" | "out" | "net"): string {
-  return call === "net" ? "Make it a net" : `Make it ${call}`;
+  return call === "net" ? "Yes, make it a net" : `Yes, make it ${call}`;
+}
+
+/** The same question, put as the vendor's call: "Was the last ball out?" */
+export function lastCallQuestion(call: "in" | "out" | "net"): string {
+  return `Was the last ball ${call === "net" ? "in the net" : call}?`;
 }
 
 /**
@@ -171,6 +181,11 @@ export function removeAfterLabel(count: number): string {
 export function toCheckLabel(count: number): string {
   if (count === 0) return "Nothing left to check";
   return `${count} ${count === 1 ? "flag" : "flags"} to check`;
+}
+
+/** "12 data flags" — the header's grey count, beside the amber one. */
+export function dataFlagsLabel(count: number): string {
+  return `${count} data ${count === 1 ? "flag" : "flags"}: wrong data that rarely moves the score`;
 }
 
 /** "On 30 points" — how many points the header's count is spread over. */

@@ -23,10 +23,17 @@ export type SuggestionState = "open" | "dismissed" | "done";
  * The keys `label_points.dismissed` may hold: a missing shot (by the pair's
  * first event), a missing point, and "Point ended here" (by the stroke the
  * point ended on, `pointEndedKey`) — never a draft stroke's temporary id,
- * which the stroke loses once its insert lands.
+ * which the stroke loses once its insert lands — and any other hint the well
+ * draws as a question, by its code (`hintDismissKey`): "Was the last ball
+ * in?", "Second serve?", "Different ending?".
  */
 export const SUGGESTION_KEY_RE =
-  /^(missing_shot:\d+|missing_point|point_ended:(?!pending-)[0-9A-Za-z-]+)$/;
+  /^(missing_shot:\d+|missing_point|point_ended:(?!pending-)[0-9A-Za-z-]+|hint:[a-z_]+)$/;
+
+/** A hint the labeller answered "no" to, as `dismissed` stores it. */
+export function hintDismissKey(code: string): string {
+  return `hint:${code}`;
+}
 
 /** "Point ended here" on the stroke `shotId`, as `dismissed` stores it. */
 export function pointEndedKey(shotId: string): string {

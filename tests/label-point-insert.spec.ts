@@ -662,7 +662,7 @@ test.describe("a suggested point on the black rail", () => {
       "Points 1 and 2 were both served from the ad side",
     );
     expect(inner(row, "data-point-suggestion-add")).toBe("Add point");
-    expect(inner(row, "data-point-suggestion-let")).toBe("2 was a let");
+    expect(inner(row, "data-point-suggestion-let")).toBe("1 was a let");
     expect(inner(row, "data-point-suggestion-dismiss")).toBe("Dismiss");
 
     // Between the two rows, and nowhere else.
@@ -720,8 +720,9 @@ test.describe("a suggested point on the black rail", () => {
     // Before the flagged point: the new point takes its index.
     expect(calls).toEqual([["onInsertPoint", P2]]);
     click("data-point-suggestion-let");
-    // The EXISTING point autosave, one patch.
-    expect(calls[1]).toEqual(["onPatchPoint", P2, { ending: "let_replayed" }]);
+    // The EXISTING point autosave, one patch — on the FIRST of the pair: the
+    // serve played again is the point that counted.
+    expect(calls[1]).toEqual(["onPatchPoint", P1, { ending: "let_replayed" }]);
     click("data-point-suggestion-dismiss");
     expect(calls[2]).toEqual(["onDismissSuggestion", P2, "missing_point"]);
     expect(calls).toHaveLength(3);
@@ -839,7 +840,7 @@ test.describe("a suggested point on the black rail", () => {
   });
 });
 
-test("an added empty point reads on the default layout's rail, with its menu, and can be deleted", () => {
+test("an added empty point reads on the rail, with its menu, and can be deleted", () => {
   // "Add point below" on point 2: the new point sits third, in game 1.
   const session = unchecked();
   const plan = planInsertedPoint(session.points, P2, "after");
@@ -864,7 +865,7 @@ test("an added empty point reads on the default layout's rail, with its menu, an
   // "New point" row — a "?" for the winner not yet labelled, no score yet,
   // the ⋯ menu — and, open, no strokes and the well's Add shot.
   const row = pointRow(html, NEW_ID);
-  expect(html).toContain('data-label-layout-mode="docked-side"');
+  expect(html).toContain('data-label-layout-mode="black"');
   expect(tag(row, "data-point-id")).toContain("data-point-new");
   expect(numberOf(html, NEW_ID)).toBe("3");
   expect(row).toContain('aria-label="Point 3 actions"');
