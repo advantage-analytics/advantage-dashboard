@@ -999,15 +999,6 @@
   }
 }
 
-@keyframes ask-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes ask-read {
   from {
     opacity: 0;
@@ -1066,7 +1057,7 @@
      change of step fades in. Not progress — nothing here knows how long. */
   [data-ask-live] [data-ask-stage] {
     animation:
-      ask-fade var(--duration-hover) var(--ease-primary) both,
+      fadeIn var(--duration-hover) var(--ease-primary) both,
       ask-breathe 1.8s ease-in-out var(--duration-hover) infinite;
   }
 
@@ -1085,7 +1076,7 @@
 
   /* land — a figure beside its bar, once the bar has somewhere to be */
   [data-ask-live] [data-ask-visual] [data-ask-after] {
-    animation: ask-fade var(--duration-enter) var(--ease-primary) both;
+    animation: fadeIn var(--duration-enter) var(--ease-primary) both;
     animation-delay: calc(380ms + var(--ask-row, 0) * 55ms);
   }
 
@@ -1099,11 +1090,11 @@
     [data-ask-live] [data-ask-sentence],
     [data-ask-live] [data-ask-visual] [data-ask-row],
     [data-ask-live] [data-ask-visual] [data-ask-after] {
-      animation: ask-fade var(--duration-hover) linear both;
+      animation: fadeIn var(--duration-hover) linear both;
     }
 
     [data-ask-live] [data-ask-stage] {
-      animation: ask-fade var(--duration-hover) linear both;
+      animation: fadeIn var(--duration-hover) linear both;
     }
 
     [data-ask-live] [data-ask-visual] [data-ask-grow],
