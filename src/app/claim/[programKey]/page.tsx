@@ -12,6 +12,7 @@ import {
 import {
   ClaimShell,
   ClaimHeading,
+  ProgramMark,
   AsidePanel,
   ClaimActions,
   CLAIM_BUTTON,
@@ -95,6 +96,7 @@ export default async function ProgramStatusPage({
     const owner = program.ownerDisplay ?? "Someone";
     return (
       <ClaimShell width={720} gap={20} back="/claim/program">
+        <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
         <ClaimHeading
           gap={2}
           eyebrow={eyebrow}
@@ -132,6 +134,7 @@ export default async function ProgramStatusPage({
     const age = claimAge(program.claimedAt);
     return (
       <ClaimShell width={720} gap={20} back="/claim/program">
+        <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
         <ClaimHeading
           gap={2}
           eyebrow={eyebrow}
@@ -207,6 +210,7 @@ export default async function ProgramStatusPage({
         />
       }
     >
+      <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
       <ClaimHeading
         gap={2}
         eyebrow={qualifiers}

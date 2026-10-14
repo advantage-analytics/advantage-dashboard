@@ -6,7 +6,11 @@ import {
   teamLabel,
   programSubtitle,
 } from "@/lib/data/programs-server";
-import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import {
+  ClaimShell,
+  ClaimHeading,
+  ProgramMark,
+} from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 
 export const metadata = { title: "Report a problem" };
@@ -51,6 +55,7 @@ export default async function ObjectPage({
 
   return (
     <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
+      <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
       <ClaimHeading
         gap={2}
         eyebrow={eyebrow}

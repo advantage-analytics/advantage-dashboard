@@ -3,6 +3,7 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { AdvSelect } from "@/components/ui/adv-select";
+import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 
 /**
  * The chrome every claim screen shares, transcribed from Stage E.
@@ -144,6 +145,39 @@ export function ClaimShell({
   );
 }
 
+/**
+ * The program's mark: its crest when it has uploaded one, its initial on ink
+ * otherwise — the square the sidebar draws for a team workspace, so a program
+ * looks the same before it is joined as after.
+ *
+ * `page` sits above a claim or join heading, one column gap clear of it;
+ * `row` leads a row of the program search.
+ */
+export function ProgramMark({
+  name,
+  crestUrl,
+  size = "page",
+}: {
+  name: string;
+  crestUrl?: string | null;
+  size?: "page" | "row";
+}) {
+  return (
+    <WorkspaceMark
+      workspace={{
+        kind: "team",
+        mark: name.trim().charAt(0).toUpperCase(),
+        iconUrl: crestUrl ?? null,
+      }}
+      className={
+        size === "page"
+          ? "size-8 rounded-[var(--radius-button)] text-[12px]"
+          : "size-5 rounded-[var(--radius-button)] text-[9px]"
+      }
+    />
+  );
+}
+
 /** The centre column: one stack, one gap, exactly as each frame sets it. */
 export function ClaimColumn({
   gap,
@@ -180,7 +214,7 @@ export function ClaimHeading({
   body,
   bodyMax,
 }: {
-  gap: 2 | 6 | 8;
+  gap: 2 | 6 | 8 | 12;
   /** "Step 1 of 2" — on the two numbered steps only. */
   step?: string;
   /** "Meridian State · Men's · D-I · Big Twelve" — the program being acted on. */

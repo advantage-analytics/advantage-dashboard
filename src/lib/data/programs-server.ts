@@ -410,8 +410,11 @@ export async function getProgramPublicStatus(
   if (!data) return null;
 
   const row = data as Record<string, unknown>;
+  // The crest, for the mark above every claim screen's heading — the same
+  // best-effort read the search runs, so a failed lookup draws the initial.
+  const [program] = await withDirectoryFacts(supabase, [toResult(row)]);
   return {
-    ...toResult(row),
+    ...program,
     claimedAt: (row.claimed_at as string | null) || null,
   };
 }

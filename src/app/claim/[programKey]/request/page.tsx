@@ -6,7 +6,11 @@ import {
   teamLabel,
   programSubtitle,
 } from "@/lib/data/programs-server";
-import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import {
+  ClaimShell,
+  ClaimHeading,
+  ProgramMark,
+} from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 import { ReferralRequestForm } from "@/components/claim/referral-request-form";
 import { JoinSharingRows } from "@/components/claim/sharing-rows";
@@ -105,6 +109,7 @@ export default async function RequestInvitePage({
 
     return (
       <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
+        <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
         {/* The title owns the school name, so the eyebrow carries only the
             qualifiers and stops wrapping on long institutions. */}
         <ClaimHeading
@@ -136,6 +141,7 @@ export default async function RequestInvitePage({
 
   return (
     <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
+      <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
       <ClaimHeading
         gap={2}
         eyebrow={eyebrow}

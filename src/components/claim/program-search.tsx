@@ -10,6 +10,7 @@ import type {
 } from "@/lib/data/programs-server";
 import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
 import { advField } from "@/lib/ui/adv-field";
+import { ProgramMark } from "@/components/claim/claim-shell";
 
 /**
  * One row, in whichever of its two shapes the endpoint sent.
@@ -26,13 +27,14 @@ type ProgramRow = ProgramSearchResult | PlayerProgramRow;
 const DEBOUNCE_MS = 180;
 
 /**
- * The four columns, once.
+ * The program's mark, then four columns, once.
  *
  * At page scale the result list is a table, not a stack of two-line cards:
  * school, squad, division and who has it already, each in its own column so a
  * coach scanning for their own program reads down one column instead of across
- * every row. Below `sm` it falls back to a stack, because four columns in
- * 375px is four columns of nothing.
+ * every row. Below `sm` it falls back to a stack beside the mark — `STACKED`
+ * keeps the lines under the school name rather than under the mark — because
+ * four columns in 375px is four columns of nothing.
  *
  * The division column is wider than the frame's `1fr`. Real conference names
  * are "Mississippi Association of Community Colleges Conference", not the "Big
@@ -40,7 +42,9 @@ const DEBOUNCE_MS = 180;
  * chance to be read.
  */
 const ROW_GRID =
-  "grid gap-2 sm:grid-cols-[minmax(0,1.5fr)_90px_minmax(0,1.3fr)_110px] sm:items-center sm:gap-4";
+  "grid grid-cols-[20px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 sm:grid-cols-[20px_minmax(0,1.5fr)_90px_minmax(0,1.3fr)_110px] sm:gap-4";
+
+const STACKED = "col-start-2 sm:col-start-auto";
 
 /**
  * What picking a row means.
@@ -170,20 +174,30 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
                   }
                   className={`${ROW_GRID} w-full cursor-pointer px-4 py-3 text-left transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-page)] focus-visible:bg-[var(--surface-page)] focus-visible:outline-none`}
                 >
+                  {/* On every row, not only the 2% with an uploaded crest: a
+                      mark on some rows and a gap on the rest reads as missing
+                      data rather than as a list. */}
+                  <ProgramMark
+                    name={program.schoolName}
+                    crestUrl={program.crestUrl}
+                    size="row"
+                  />
                   <span className="truncate text-[13px] text-[var(--ink-900)]">
                     {program.schoolName}
                   </span>
-                  <span className="text-body-sm">
+                  <span className={`text-body-sm ${STACKED}`}>
                     {teamLabel(program.team)}
                   </span>
-                  <span className="text-body-sm truncate">
+                  <span className={`text-body-sm truncate ${STACKED}`}>
                     {programSubtitle(program.division, program.conference)}
                   </span>
 
                   {/* For a coach, the whole point of the list: it says which
                       programs are already claimed, and by whom, before anyone
                       commits to a row. For a player, design 4.1's one word. */}
-                  <span className="text-micro truncate sm:text-right">
+                  <span
+                    className={`text-micro truncate sm:text-right ${STACKED}`}
+                  >
                     {redacted
                       ? taken
                         ? "On Advantage"
