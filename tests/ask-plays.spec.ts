@@ -3,14 +3,21 @@ import { expect, test } from "@playwright/test";
 import { type AskRow, renderAskAnswer } from "@/lib/services/ask/answer-render";
 import type { AskAnswerEvent } from "@/lib/services/ask/events";
 import {
+  ASK_PLAYS_CLARIFY_OPTIONS,
+  asksAboutPlays,
   asksForLosingPlays,
+  asksForWinningPlays,
   buildLosingPlaysAnswer,
+  buildWinningPlaysAnswer,
   isLosingPlaysSql,
+  winningPlaysSql,
+  winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
   losingPlaysVoice,
 } from "@/lib/services/ask/plays";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
+import { plusOneBreakdownAsked } from "@/lib/services/ask/serve-plus-one";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 
 /**
@@ -319,5 +326,99 @@ test.describe("the answer", () => {
     ];
     expect(buildLosingPlaysAnswer(rows, voice, 1)).toBeNull();
     expect(buildLosingPlaysAnswer([], voice, 1)).toBeNull();
+  });
+});
+
+test.describe("winning plays", () => {
+  for (const question of [
+    "What are this player's best plays from all his matches so far",
+    "what are my winning shots?",
+    "What are Emon's strengths?",
+    "which shots won him the most points",
+  ]) {
+    test(`yes: ${question}`, () => {
+      expect(asksForWinningPlays(question)).toBe(true);
+    });
+  }
+
+  test("in a team, 'this player' is the program's player", () => {
+    expect(
+      winningPlaysSubject("What are this player's best plays?", [], true),
+    ).toBe("mine");
+    expect(
+      winningPlaysSubject("What are his opponent's best plays?", [], true),
+    ).toBe("opponent");
+  });
+
+  test("passes the guard, and credits the shot before the other side's miss", () => {
+    for (const subject of ["mine", "opponent"] as const) {
+      expect(
+        checkAskSql({
+          scopeSql: "select match_id from ask.matches",
+          sql: winningPlaysSql(subject),
+        }),
+      ).toEqual({ ok: true });
+    }
+    expect(winningPlaysSql("mine")).toContain("prev_mine = true");
+  });
+
+  test("renders with every figure from a cell", async () => {
+    const rows: AskRow[] = [
+      {
+        section: "total",
+        stroke: null,
+        direction: null,
+        points: 199,
+        winners: 186,
+        errors_drawn: 3,
+      },
+      {
+        section: "play",
+        stroke: "Backhand",
+        direction: "Crosscourt",
+        points: 25,
+        winners: 7,
+        errors_drawn: 18,
+      },
+      {
+        section: "play",
+        stroke: "Forehand",
+        direction: "Down the Line",
+        points: 24,
+        winners: 12,
+        errors_drawn: 12,
+      },
+    ];
+    const text =
+      buildWinningPlaysAnswer(
+        rows,
+        losingPlaysVoice("mine", "Emon van Loben Sels"),
+        3,
+      ) ?? "";
+    const { events } = renderAskAnswer(
+      (async function* chunks() {
+        yield text;
+      })(),
+      rows,
+    );
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+    expect(seen.find((event) => event.type === "headline")).toEqual({
+      type: "headline",
+      text: "Emon van Loben Sels's best play was the backhand crosscourt: it won 25 points — 7 as their own winner and 18 by drawing an error.",
+    });
+    expect(seen.some((event) => event.type === "error")).toBe(false);
+  });
+});
+
+test.describe("a question about plays Ask cannot place", () => {
+  test("is asked back, and every choice routes to its own answer", () => {
+    expect(asksAboutPlays("What is this player's game plan?")).toBe(true);
+    const [winning, losing, serve, ret] = ASK_PLAYS_CLARIFY_OPTIONS;
+    const q = "What does he do well?";
+    expect(asksForWinningPlays(`${q} (${winning})`)).toBe(true);
+    expect(asksForLosingPlays(`${q} (${losing})`)).toBe(true);
+    expect(plusOneBreakdownAsked(`${q} (${serve})`)).toBe("serve");
+    expect(plusOneBreakdownAsked(`${q} (${ret})`)).toBe("return");
   });
 });
