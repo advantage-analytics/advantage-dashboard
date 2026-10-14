@@ -228,6 +228,18 @@ export function readAskPattern(value: unknown): AskPattern | null {
   }
 
   if (serve === null && returnShot === null && shots.length === 0) return null;
+  // Two rules the reading prompt states, held here whatever the model wrote:
+  // "then X" with no player named is the same player's next shot, and every
+  // stroke listed is no stroke constraint at all.
+  const [first, second] = shots;
+  if (first && second && second.player === null) {
+    shots[1] = { ...second, player: first.player };
+  }
+  for (const [index, shot] of shots.entries()) {
+    if (shot.strokes.length === ASK_PATTERN_STROKES.length) {
+      shots[index] = { ...shot, strokes: [] };
+    }
+  }
   return { serve, returnShot, shots };
 }
 

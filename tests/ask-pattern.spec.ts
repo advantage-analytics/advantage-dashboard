@@ -321,3 +321,24 @@ test.describe("the Video link", () => {
     expect(patternVideoHref("m1", middle)).toBeNull();
   });
 });
+
+test.describe("the reading's own rules", () => {
+  test("a later shot with no player is the same player's", () => {
+    const read = readAskPattern({
+      shots: [
+        { player: "mine", strokes: ["Forehand"], directions: ["Crosscourt"] },
+        {
+          strokes: ["Forehand", "Backhand", "Volley", "Overhead"],
+          directions: ["Down the Line"],
+          within: 7,
+        },
+      ],
+    });
+    expect(read?.shots[1]).toEqual({
+      player: "mine",
+      strokes: [],
+      directions: ["Down the Line"],
+      within: 7,
+    });
+  });
+});
