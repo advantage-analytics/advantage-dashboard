@@ -129,6 +129,12 @@ export interface TrimStepContentProps {
    * leaving the player to find an emptied question on their own.
    */
   topPlayerAnswerStale?: boolean;
+  /**
+   * The viewer has never created a match. Adds one caption under the
+   * top-player question saying what "top of frame" means — and nothing else:
+   * the question, its answers and its state are the same either way.
+   */
+  firstUpload?: boolean;
   onTrimChange: (startSeconds: number, endSeconds: number) => void;
   onAnswer: (field: CameraAnswer, value: boolean) => void;
 }
@@ -404,6 +410,7 @@ function TrimStepContentImpl({
   fixedCamera,
   initialTopPlayerIsPlayer1,
   topPlayerAnswerStale = false,
+  firstUpload = false,
   onTrimChange,
   onAnswer,
 }: TrimStepContentProps) {
@@ -1464,7 +1471,7 @@ function TrimStepContentImpl({
       {/* The two camera questions, under the strip. Both required — the
           analysis refuses a job without them, and the wrong answer to the
           second attributes every statistic to the wrong player. */}
-      <div className="mt-2 grid grid-cols-2 gap-8 border-t border-[var(--border-hairline)] pt-6">
+      <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-2.5 border-t border-[var(--border-hairline)] pt-6">
         <Question
           label="Camera"
           hint="For the whole recording"
@@ -1497,6 +1504,16 @@ function TrimStepContentImpl({
           ]}
           onChange={(v) => onAnswer("initialTopPlayerIsPlayer1", v)}
         />
+        {/* First upload only: what "top of frame" means, in the guardrails'
+            own terms (§4 — camera-relative, the window's first frame). Its
+            own grid row, pinned to the question's column so it sits directly
+            under it; the row gap matches the question's own 10px rhythm. */}
+        {firstUpload ? (
+          <p className="col-start-2 text-[11px] leading-[1.4] text-[var(--ink-600)]">
+            Top of frame means the far end, away from the camera, in the first
+            frame of your selected window.
+          </p>
+        ) : null}
       </div>
     </div>
   );

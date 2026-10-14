@@ -66,6 +66,10 @@ import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import { playedSets } from "@/lib/ui/score-format";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMatchFilmEntry } from "@/lib/data/match-film-entry-server";
+import { countFinishedMatchesFor } from "@/lib/data/finished-match-count-server";
+import { markTourDone } from "@/app/dashboard/onboarding-actions";
+import { firstReportTourEligible } from "@/lib/onboarding/tours";
+import { TourRunner } from "@/components/dashboard/onboarding/tour-runner";
 
 // Statistics is the default view and loads eagerly with the page; Shots and
 // Film are each a substantial subtree (filters, an SVG court, a video
@@ -266,6 +270,20 @@ export default async function MatchDetailPage({
     throw new Error(`Failed to load points for match ${matchId}`);
   }
 
+  // The first-report tour's cheap facts (design §8): a team workspace, a lost
+  // session, a match somebody else filed, a team match or one with no
+  // published statistics (`stats_unavailable` passes the gate but has no
+  // report to tour) never spends a query. The decision itself is
+  // `firstReportTourEligible`'s, below, from the same facts.
+  const viewerId = workspace?.viewer.id ?? null;
+  const isCreator = viewerId !== null && match.createdBy === viewerId;
+  const firstReportTourCandidate =
+    activeWorkspace?.kind === "personal" &&
+    viewerId !== null &&
+    isCreator &&
+    match.programId == null &&
+    statsPublished;
+
   // Fetched only once there's a view switcher to show it in — the
   // awaiting-analysis branch below never renders `ShotsTab`, so a match still
   // analysing skips both queries entirely. Run together: neither depends on
@@ -277,6 +295,8 @@ export default async function MatchDetailPage({
           getBandSettings(activeWorkspace.id),
         ])
       : [[], DEFAULT_BANDS];
+  // On the request's workspace context already — no read of its own.
+  const firstReportTourDoneAt = workspace?.viewer.firstReportTourDoneAt ?? null;
 
   // The rail's foot on both variants: the share popover opening upward from
   // its full-width trigger (F1).
@@ -322,6 +342,7 @@ export default async function MatchDetailPage({
       <AnalysisSteps
         analysis={analysis}
         canAct={canAct}
+        showSampleLink={workspaceKind === "personal"}
         matchId={matchId}
         match={{
           player: sides.you.name,
@@ -331,6 +352,42 @@ export default async function MatchDetailPage({
         }}
       />
     );
+  }
+
+  // The first-report tour (design §8): offered once, on the first report a
+  // personal player can read of a match they filed themselves. Decided here,
+  // below the short-circuit, because a match still analysing has no report
+  // to tour and must not spend this read. The count is the one read, and
+  // only a viewer whose column is still null pays it — once: a player with
+  // more than one finished match can never be offered the tour, so the
+  // column is settled for them right here and no later report counts again.
+  // A failed count means no tour, never a failed page: the report is the
+  // thing, the tour is a courtesy over it.
+  let firstReportTour = false;
+  if (firstReportTourCandidate && viewerId && activeWorkspace) {
+    const finishedMatchCount =
+      firstReportTourDoneAt === null
+        ? await countFinishedMatchesFor(viewerId).catch((cause: unknown) => {
+            console.error("[first-report tour] count read failed", cause);
+            return null;
+          })
+        : null;
+    if (
+      firstReportTourDoneAt === null &&
+      finishedMatchCount !== null &&
+      finishedMatchCount > 1
+    ) {
+      // Never throws; a failed write only means the next report counts again.
+      await markTourDone("first-report");
+    }
+    firstReportTour = firstReportTourEligible({
+      workspaceKind: activeWorkspace.kind,
+      isCreator,
+      matchProgramId: match.programId ?? null,
+      statsPublished,
+      finishedMatchCount,
+      doneAt: firstReportTourDoneAt,
+    });
   }
 
   return (
@@ -407,6 +464,25 @@ export default async function MatchDetailPage({
               </MatchReportWhen>
             </MatchReportPane>
           </MatchReportFrame>
+          {/* After the frame, inside the provider: the runner reads
+              `useMatchReport()` to switch views and finds the `[data-tour]`
+              targets the report above has rendered. Mounted only when
+              eligible, so every other render carries nothing of it. */}
+          {firstReportTour && viewerId && (
+            <TourRunner
+              tour="first-report"
+              viewerId={viewerId}
+              start
+              // The rail always draws Film and Visualizations; a report with
+              // no playable video, or no shots, has nothing there to tour.
+              withhold={[
+                ...(video ? [] : (["film"] as const)),
+                ...((data.points ?? []).some((p) => (p.shots?.length ?? 0) > 0)
+                  ? []
+                  : (["shots"] as const)),
+              ]}
+            />
+          )}
         </MatchReportProvider>
       </MatchFiltersProvider>
     </>

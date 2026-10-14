@@ -117,6 +117,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const trigger = (
     <button
       type="button"
+      data-tour="workspace-switcher"
       aria-label={`Workspace: ${active.name}. Switch workspace`}
       aria-expanded={open}
       onMouseEnter={() => setHovered(true)}

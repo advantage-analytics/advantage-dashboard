@@ -266,6 +266,10 @@ function toViewer(
     created_at: string | null;
     onboarded_at: string | null;
     recording_source: string | null;
+    workspace_hint_done_at: string | null;
+    activity_hint_done_at: string | null;
+    sample_tour_done_at: string | null;
+    first_report_tour_done_at: string | null;
   } | null,
   avatarUrl: string | null,
 ): Viewer {
@@ -309,6 +313,13 @@ function toViewer(
     recordingSource: isRecordingSource(recordingSource)
       ? recordingSource
       : null,
+    // Null for a missing row as for an unseen hint: either way the hint is
+    // offered, and a dismissal writes through `markTourDone` to the same
+    // columns — see `TOUR_COLUMN`.
+    workspaceHintDoneAt: row?.workspace_hint_done_at ?? null,
+    activityHintDoneAt: row?.activity_hint_done_at ?? null,
+    sampleTourDoneAt: row?.sample_tour_done_at ?? null,
+    firstReportTourDoneAt: row?.first_report_tour_done_at ?? null,
   };
 }
 
@@ -329,7 +340,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
         )
         .eq("id", user.id)
         .single(),

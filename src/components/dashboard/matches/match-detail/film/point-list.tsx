@@ -250,7 +250,11 @@ interface PointListProps {
   activeEnd: number;
   /** Stable identity, please — `PointRow` is memoized on it. */
   onSelect: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
+  /**
+   * Absent on a read-only report (the share page, the sample): the rows then
+   * draw no bookmark button at all, rather than one that would write nothing.
+   */
+  onToggleSaved?: (pointId: string) => void;
   /**
    * The second door into the fullscreen room (spec § Doors): given only by the
    * shell's column, a ⇧-click on a seekable row opens that point in the room
@@ -1033,7 +1037,8 @@ export const PointRow = memo(function PointRow({
   activeStart: number;
   activeEnd: number;
   onSelect: (point: MatchPoint) => void;
-  onToggleSaved: (pointId: string) => void;
+  /** Absent on a read-only report: no bookmark button on the row. */
+  onToggleSaved?: (pointId: string) => void;
   /** ⇧-click's door into the room; absent in the room's own drawer. */
   onOpenInRoom?: (point: MatchPoint) => void;
   /** Paint only. "dark" is the fullscreen room's drawer (frame R3). */
@@ -1128,7 +1133,7 @@ export const PointRow = memo(function PointRow({
         </span>
       )}
 
-      {!readOnly && (
+      {!readOnly && onToggleSaved && (
         <button
           type="button"
           onClick={(e) => {

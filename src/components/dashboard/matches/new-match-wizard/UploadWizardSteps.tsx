@@ -254,7 +254,7 @@ export function TrimStep() {
       topPlayerAnswerStale,
       handleInputChange,
     },
-    view: { subjectFirstName },
+    view: { subjectFirstName, firstUpload },
   } = useUploadWizard();
 
   // The two camera answers. Booleans only — the fields start undefined and
@@ -278,6 +278,7 @@ export function TrimStep() {
       fixedCamera={formData.fixedCamera}
       initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}
       topPlayerAnswerStale={topPlayerAnswerStale}
+      firstUpload={firstUpload}
       onTrimChange={handleTrimChange}
       onAnswer={onCameraAnswer}
     />

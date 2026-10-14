@@ -15,6 +15,7 @@ import {
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { SavedViewsBand } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/shots/shots-write-access";
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
@@ -46,10 +47,12 @@ import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/
  * grid, `"focused"` the Views grid — a wrapping grid reached by scrolling
  * the page, not a scrolling row (defaults, saved, Create view).
  *
- * Saving is always on — everyone, including players, may save a view — so
- * `VizFocused` no longer takes an `onSaveRequest` opt-in; it owns its own
- * Save dialog and only needs the workspace facts that dialog's "Share with
- * team" row depends on.
+ * Saving is on for everyone, including players — except on a read-only
+ * report (the share page, the sample match), where `shotsWriteAccess(meta)`
+ * turns every saved-view and band writer off: no "Create view" tile, no
+ * "Save this view…", no Manage mode, no band editor. `VizFocused` owns its
+ * own Save dialog and takes only that one flag plus the workspace facts the
+ * dialog's "Share with team" row depends on. Reading is untouched.
  *
  * The public share page (`meta.readOnly`) draws the same courts with nothing
  * that writes or belongs to a workspace: no Saved collection, no "Create
@@ -116,6 +119,7 @@ function ShotsTabBody() {
   const { meta, actions } = useMatchReport();
   const points = useVizPoints(useMatchData());
   const mounted = useMounted();
+  const { canSaveViews } = shotsWriteAccess(meta);
 
   // Keep the gallery selection across the wall/focused mount switch. A saved
   // view must return to a visible saved tile for the court morph and keyboard
@@ -148,6 +152,7 @@ function ShotsTabBody() {
       views={meta.savedViews}
       workspaceRole={meta.workspaceRole}
       workspaceKind={meta.workspaceKind}
+      canSaveViews={canSaveViews}
       variant={state.cut === null ? "wall" : "focused"}
       readOnly={meta.readOnly}
     />
@@ -169,6 +174,8 @@ function ShotsTabBody() {
       <div inert={viewerOpen || undefined}>
         {state.cut === null ? (
           <VizWall
+            // A read-only report has no Saved collection to switch to: its only
+            // item would be "Create view", a writer.
             savedViewsBand={meta.readOnly ? undefined : savedViewsBand}
             collection={wallCollection}
             onCollectionChange={setWallCollection}
@@ -177,6 +184,7 @@ function ShotsTabBody() {
           <VizFocused
             savedViews={meta.savedViews}
             savedViewsBand={savedViewsBand}
+            canSaveViews={canSaveViews}
             workspaceKind={meta.workspaceKind}
             workspaceName={meta.workspaceName}
             hasPlayableVideo={meta.hasPlayableVideo}

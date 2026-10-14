@@ -48,6 +48,7 @@ import { CutMenu } from "./cut-menu";
 import { FiltersPopover } from "./filters-popover";
 import { KEY_PAN_PX, zoomPercentLabel } from "./pan-zoom";
 import { SaveViewDialog } from "./save-view-dialog";
+import { shotsWriteAccess } from "./shots-write-access";
 import { usePanZoom } from "./use-pan-zoom";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import { useVizState } from "./use-viz-state";
@@ -121,6 +122,9 @@ export function VizFullscreen() {
     unit,
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
+  // A read-only report (share page, sample match) offers no "Save this
+  // view…" row and mounts no Save dialog — see `shotsWriteAccess`.
+  const { canSaveViews } = shotsWriteAccess(meta);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const closeWithReveal = useFullscreenReveal(rootRef);
@@ -753,7 +757,7 @@ export function VizFullscreen() {
               <CutMenu
                 savedViews={meta.savedViews}
                 onSaveRequest={
-                  meta.readOnly ? undefined : () => setSaveDialogOpen(true)
+                  canSaveViews ? () => setSaveDialogOpen(true) : undefined
                 }
                 triggerRef={cutMenuTriggerRef}
                 width={312}
@@ -853,7 +857,7 @@ export function VizFullscreen() {
           </div>
         </div>
 
-        {!meta.readOnly && (
+        {canSaveViews && (
           <SaveViewDialog
             open={saveDialogOpen}
             onOpenChange={setSaveDialogOpen}

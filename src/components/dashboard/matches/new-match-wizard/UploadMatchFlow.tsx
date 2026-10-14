@@ -63,6 +63,7 @@ export function UploadMatchFlow({
   initialProvider,
   preferredProvider,
   initialSubject,
+  firstUpload = false,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
@@ -80,6 +81,11 @@ export function UploadMatchFlow({
   preferredProvider?: ProviderId | null;
   /** A roster player named by the link that opened the wizard — see the hook. */
   initialSubject?: RosterSubject | null;
+  /**
+   * The viewer has never created a match — the page's own count. Only the
+   * trim step reads it, to explain "{who} at the start" once.
+   */
+  firstUpload?: boolean;
 } = {}) {
   const admin = useAdminWizardMode();
   // The line this flow is filling. State rather than the prop because the
@@ -247,6 +253,7 @@ export function UploadMatchFlow({
       initialProvider={initialProvider ?? null}
       preferredProvider={preferredProvider ?? null}
       initialSubject={initialSubject ?? null}
+      firstUpload={firstUpload}
     />
   );
 }

@@ -36,13 +36,13 @@ import {
   finishGuardianOnboarding,
   finishOnboarding,
   saveNameThenJoin,
-  type OnboardingChoice,
 } from "./actions";
 import {
   ACQUISITION_DETAIL_MAX,
   ACQUISITION_SOURCES,
   RECORDING_SOURCES,
   type AcquisitionSource,
+  type OnboardingChoice,
   type RecordingSource,
 } from "./answers";
 import { guardianClassYears } from "./guardian-options";

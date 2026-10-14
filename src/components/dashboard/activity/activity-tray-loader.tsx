@@ -67,7 +67,7 @@ export async function ActivityTrayLoader() {
       getElsewhereWork(supabase, workspace.active, workspace.available),
       getRecentJoins(supabase, workspace.active),
       approvedInviteIdsPromise,
-      getSetupSteps(supabase, workspace.active, workspace.viewer.id),
+      getSetupSteps(supabase, workspace.active, workspace.viewer),
     ]);
 
   return (

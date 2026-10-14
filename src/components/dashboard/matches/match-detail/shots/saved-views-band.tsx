@@ -92,6 +92,7 @@ export function SavedViewsBand({
   views,
   workspaceRole,
   workspaceKind,
+  canSaveViews,
   variant = "wall",
   readOnly = false,
 }: {
@@ -104,6 +105,13 @@ export function SavedViewsBand({
   views: SavedViewRow[];
   workspaceRole: ProgramRole;
   workspaceKind: WorkspaceKind;
+  /**
+   * `shotsWriteAccess(meta).canSaveViews`. `false` (a read-only report — the
+   * share page, the sample match) draws no "Create view" tile and no Manage
+   * mode: every view reads as unmanageable, so its tile is the plain
+   * navigating `CourtTile` and "Manage views" never appears.
+   */
+  canSaveViews: boolean;
   /**
    * F4: `"wall"` (default) is the pre-existing grid — saved views only,
    * absent with zero of them. `"focused"` is the focused view's "Views"
@@ -193,12 +201,18 @@ export function SavedViewsBand({
     optimisticViewCountRef.current = optimisticViews.length;
   }, [optimisticViews]);
 
+  // Every manage gate in this file asks this, never `canManageSavedView`
+  // directly, so a read-only report cannot reach a writer through any one of
+  // them (the header button, the ⋯ menu tile, drag, ⌥←/⌥→).
+  const canManage = (view: SavedViewRow) =>
+    canSaveViews && canManageSavedView(view, workspaceRole);
+
   const manageableIds = useMemo(
     () =>
       optimisticViews
-        .filter((v) => canManageSavedView(v, workspaceRole))
+        .filter((v) => canSaveViews && canManageSavedView(v, workspaceRole))
         .map((v) => v.id),
-    [optimisticViews, workspaceRole],
+    [optimisticViews, workspaceRole, canSaveViews],
   );
   const canManageAny = !readOnly && manageableIds.length > 0;
 
@@ -693,7 +707,7 @@ export function SavedViewsBand({
     e: ReactKeyboardEvent<HTMLDivElement>,
     view: SavedViewRow,
   ) {
-    if (!manageMode || !canManageSavedView(view, workspaceRole)) return;
+    if (!manageMode || !canManage(view)) return;
     if (!e.altKey) return;
     let dir = 0;
     if (e.key === "ArrowLeft" || e.key === "ArrowUp") dir = -1;
@@ -719,7 +733,7 @@ export function SavedViewsBand({
     e: ReactPointerEvent<HTMLDivElement>,
     view: SavedViewRow,
   ) {
-    if (!manageMode || !canManageSavedView(view, workspaceRole)) return;
+    if (!manageMode || !canManage(view)) return;
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -808,7 +822,7 @@ export function SavedViewsBand({
 
   /** One saved-view tile shared by the wall and focused grids. */
   function renderSavedTile(view: SavedViewRow) {
-    const manageable = canManageSavedView(view, workspaceRole);
+    const manageable = canManage(view);
     const data = tileDataById.get(view.id) ?? tileDataFor(view);
 
     if (manageMode && manageable) {
@@ -1037,7 +1051,7 @@ export function SavedViewsBand({
             );
           })}
 
-          {!readOnly && (
+          {canSaveViews && (
             <div role="listitem">
               <NewViewTile hrefFor={hrefFor} />
             </div>
@@ -1060,9 +1074,11 @@ export function SavedViewsBand({
                 {renderSavedTile(view)}
               </div>
             ))}
-            <div role="listitem">
-              <NewViewTile hrefFor={hrefFor} />
-            </div>
+            {canSaveViews && (
+              <div role="listitem">
+                <NewViewTile hrefFor={hrefFor} />
+              </div>
+            )}
           </div>
         )
       )}

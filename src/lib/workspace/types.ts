@@ -354,6 +354,37 @@ export interface Viewer {
    * through, so a stale row can never select a provider that does not exist.
    */
   recordingSource: RecordingSource | null;
+  /**
+   * `users.workspace_hint_done_at` — when the sidebar's workspace-switcher
+   * hint was dismissed (Done or Skip). Null means never shown through to
+   * either, so the shell offers it; a dismissal writes through
+   * `markTourDone("workspace-switcher")`. Read here, on the once-per-request
+   * workspace context, because the sidebar already has `useWorkspace()` and
+   * needs no second query for it.
+   */
+  workspaceHintDoneAt: string | null;
+  /**
+   * `users.activity_hint_done_at` — when the header's activity-tray hint was
+   * dismissed (Done or Skip). Null means never shown through to either, so
+   * the shell offers it; a dismissal writes through
+   * `markTourDone("activity-tray")`. On the context for the same reason as
+   * `workspaceHintDoneAt`: the tray already reads `useWorkspace()`.
+   */
+  activityHintDoneAt: string | null;
+  /**
+   * `users.sample_tour_done_at` — when the sample report's tour was finished
+   * or skipped. Null means never, so `/dashboard/matches/sample` opens it on
+   * its own. On the context so the sample page reads the row it already has.
+   */
+  sampleTourDoneAt: string | null;
+  /**
+   * `users.first_report_tour_done_at` — when the first-report tour was
+   * finished or skipped, or settled for a player with more than one finished
+   * match (who can never be offered it). Null means neither, so a first
+   * report may still offer it. On the context so a report costs no extra
+   * row read for it.
+   */
+  firstReportTourDoneAt: string | null;
 }
 
 /**

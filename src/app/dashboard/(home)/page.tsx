@@ -24,7 +24,6 @@ import { buildInsightEvidenceWithCaption } from "@/lib/ui/insight-evidence";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import { SeasonTitle } from "@/components/dashboard/home/season-title";
 import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
-import { SetupLine } from "@/components/dashboard/home/setup-line";
 import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
 import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
@@ -178,14 +177,6 @@ function startHomeResources(
     countViewerWins(matches as DbRecentMatch[], ids, userId),
   );
   const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
-  const setup = Promise.all([
-    supabase.from("users").select("hand, backhand").eq("id", userId).single(),
-    supabase
-      .from("user_preferences")
-      .select("user_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-  ]);
   return {
     matches,
     userId,
@@ -197,7 +188,6 @@ function startHomeResources(
     players,
     activity,
     serves,
-    setup,
   };
 }
 type HomeResources = ReturnType<typeof startHomeResources>;
@@ -281,24 +271,14 @@ async function Insight({ resources }: { resources: HomeResources }) {
   );
 }
 async function Footer({ resources }: { resources: HomeResources }) {
-  const { setup, usage } = resources;
-  const [profile, u] = await Promise.all([setup, usage]);
-  if (!profile || !u) return null;
-  const [{ data: user }, { data: preferences }] = profile;
+  const u = await resources.usage;
+  if (!u) return null;
   return (
-    <>
-      <SetupLine
-        setup={{
-          playingProfile: Boolean(user?.hand && user?.backhand),
-          notifications: Boolean(preferences),
-        }}
-      />
-      <UsageFooter
-        usedSeconds={u.usedSeconds}
-        capSeconds={u.capSeconds}
-        billingMonth={u.billingMonth}
-      />
-    </>
+    <UsageFooter
+      usedSeconds={u.usedSeconds}
+      capSeconds={u.capSeconds}
+      billingMonth={u.billingMonth}
+    />
   );
 }
 
