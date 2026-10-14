@@ -14,8 +14,13 @@
  * `lastLandingMissing`, `serveAfterServeIn`).
  */
 
-import { deriveEnding } from "./ending-derived";
-import type { LabelMark, LabelMarks, LabelSuggestion } from "./marks";
+import { deriveEnding, winnerContradicted } from "./ending-derived";
+import {
+  isDataMark,
+  type LabelMark,
+  type LabelMarks,
+  type LabelSuggestion,
+} from "./marks";
 import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   endsPointWhenMissed,
@@ -37,6 +42,7 @@ import {
 } from "./shot-derived";
 import {
   addedPointBetween,
+  hintDismissKey,
   pointEndedKey,
   suggestionState,
   type SuggestionNeighbour,
@@ -159,6 +165,10 @@ export function markState(
       return "dismissed";
     }
   }
+
+  // A counted mark whose question the well asks ("Was the last ball in?")
+  // and the labeller waved away there.
+  if (point.dismissed.includes(hintDismissKey(mark.code))) return "dismissed";
 
   // Read off the rows as they stand, so while it is there it is still true:
   // an edit that leaves the point stopping on a missed first serve has not
@@ -489,8 +499,10 @@ export function serveAfterServeIn(
 
 /**
  * "Different ending?": the point's stored ending is not what its strokes
- * derive (`deriveEnding`) — the ending or the ended-by differ, or none is
- * stored at all. How a point whose ending was left behind (a stroke edited
+ * derive (`deriveEnding`) — the ending or the ended-by differ, none is
+ * stored at all, or the two agree but the point's winner is the player the
+ * strokes say lost (`winnerContradicted`; until 2026-10-13 that last case
+ * raised nothing, and "error by Quan" sat under Quan as the winner). How a point whose ending was left behind (a stroke edited
  * before the server kept the two in step, a point added by hand) gets fixed:
  * on a click of "Make it …", never on load. Nothing for a let or a non-point,
  * whose ending says the rows do not decide it, and nothing while the rows
@@ -506,7 +518,8 @@ export function endingStale(
   if (
     point.ending !== null &&
     point.ending === derived.ending &&
-    point.endedBy === derived.endedBy
+    point.endedBy === derived.endedBy &&
+    !winnerContradicted(point, derived)
   ) {
     return null;
   }
@@ -624,6 +637,88 @@ export function markStates(
 }
 
 /**
+ * The hints still open on a point, as the well lists them (`pointHints`,
+ * label-black-mark.tsx): the marks' own, then the ones read off the rows,
+ * less any the labeller dismissed. "Was the last ball in?" is not among them:
+ * it is a counted mark. What the header's grey count and the `]` / `[` jumps
+ * read, so a grey chip on a row is a flag in the list too.
+ */
+export function openHintMarks(
+  point: LabelPoint,
+  marks: LabelMarks,
+): LabelMark[] {
+  const ghosts = drawsGhosts(marks);
+  const { hints: own, count } = pointRowMarkList(point, marks);
+  const lastCall = lastCallAnswer(point, count, ghosts);
+  const live: (LabelMark | null)[] = [
+    pointEndedEarly(point, ghosts),
+    endingStale(point, ghosts),
+    secondServeAsFirst(point, ghosts),
+    lastLandingMissing(point, ghosts),
+    serveAfterServeIn(point, ghosts),
+    serveInLandingOut(point, ghosts),
+  ];
+  return [
+    ...(lastCall
+      ? own.filter((mark) => mark.code !== "net_hit_contradicts_height")
+      : own),
+    ...live.filter((mark): mark is LabelMark => mark !== null),
+  ].filter((mark) => {
+    const key =
+      mark.code === "shot_after_point_end"
+        ? pointEndedKey(mark.params.shotId)
+        : hintDismissKey(mark.code);
+    return !point.dismissed.includes(key);
+  });
+}
+
+/**
+ * Whether the point's winner is the player its strokes say lost. The one
+ * hint that is not about the data: it is the score, so its chip is amber and
+ * stays on a checked point until it is put right.
+ */
+export function pointWinnerContradicted(
+  point: Pick<LabelPoint, "ending" | "winner" | "shots">,
+  marks: LabelMarks,
+): boolean {
+  if (isNonPointEnding(point.ending)) return false;
+  return winnerContradicted(point, deriveEnding(point, drawsGhosts(marks)));
+}
+
+/**
+ * A missing stroke this close to the end of the rally decides who hit the
+ * last ball: at most this many live strokes after the gap.
+ */
+export const MISSING_SHOT_NEAR_END = 2;
+
+/**
+ * Whether a mark can move the score (`score`, amber) or is about the data
+ * (`data`, grey). `isDataMark` by code, and one mark by where it sits:
+ * "Missing shot?" is data in the middle of a rally — a stroke the vendor
+ * never saw, with the same players hitting before and after — but a stroke
+ * missing among the rally's last three changes who hit the last ball, and so
+ * who won. Without the session's `suggestions` its place is not known, and it
+ * reads as data.
+ */
+export function markTone(
+  mark: LabelMark,
+  point: Pick<MarkStatePoint, "id"> & {
+    shots: readonly { id: string; status: string }[];
+  },
+  suggestions?: readonly LabelSuggestion[],
+): MarkTone {
+  if (!isDataMark(mark)) return "score";
+  if (mark.code !== "same_player_consecutive") return "data";
+  const live = point.shots.filter((shot) => shot.status !== "deleted");
+  const nearEnd = (suggestions ?? []).some((s) => {
+    if (s.kind !== "missing_shot" || s.pointId !== point.id) return false;
+    const at = live.findIndex((shot) => shot.id === s.afterShotId);
+    return at !== -1 && live.length - 1 - at <= MISSING_SHOT_NEAR_END;
+  });
+  return nearEnd ? "score" : "data";
+}
+
+/**
  * The chip on the point row.
  *
  * `text` is the words, or null for the icon-only form. `count` is how many
@@ -633,7 +728,15 @@ export interface MarkRollupChip {
   text: string | null;
   count: number;
   state: MarkState;
+  /**
+   * Amber or grey: `score` when a mark the chip speaks for can move the
+   * score, `data` when every one of them is about the data (`isDataMark`).
+   * It speaks for its open marks, or for all of them once none is open.
+   */
+  tone: MarkTone;
 }
+
+export type MarkTone = "score" | "data";
 
 /** Most open first: a chip is as open as its most open member. */
 const OPENNESS: readonly MarkState[] = [
@@ -658,10 +761,17 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
 export function rollupMarks(
   countMarks: readonly LabelMark[],
   states: readonly MarkState[],
+  /** One per mark (`markTone`); by code alone when not given. */
+  tones: readonly MarkTone[] = countMarks.map((mark) =>
+    isDataMark(mark) ? "data" : "score",
+  ),
 ): MarkRollupChip | null {
   if (countMarks.length === 0) return null;
   const open = countMarks.filter((_, i) => states[i] === "open");
+  const anyOpen = open.length > 0;
+  const spoken = tones.filter((_, i) => !anyOpen || states[i] === "open");
   return {
+    tone: spoken.every((tone) => tone === "data") ? "data" : "score",
     text:
       open.length === 0
         ? null

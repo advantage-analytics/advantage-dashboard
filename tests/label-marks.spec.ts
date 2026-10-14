@@ -880,7 +880,7 @@ test.describe("the labels-only flags", () => {
 });
 
 test.describe("the three tiers", () => {
-  test("eleven codes can change the score, and only they are counted", () => {
+  test("thirteen codes can change the score, and only they are counted", () => {
     const counted = Object.entries(LABEL_MARK_META)
       .filter(([, meta]) => meta.tier === "count")
       .map(([code]) => code);
@@ -892,6 +892,7 @@ test.describe("the three tiers", () => {
       "reserve_after_in",
       "same_player_consecutive",
       "score_side_mismatch",
+      "second_serve_called_out",
       "segment_proposal_differs",
       "service_court_repeat",
       "tiebreak_score_off_six_all",

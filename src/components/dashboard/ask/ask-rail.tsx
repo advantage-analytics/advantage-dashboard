@@ -442,7 +442,7 @@ function AskEarlier({
           if (!next) setError(null);
         }}
         title="Delete this question?"
-        description="Removes the question and every answer under it. There is no undo."
+        description="Removes the question and every answer from your history. There is no undo."
         tone="danger"
         confirmLabel="Delete question"
         pendingLabel="Deleting…"

@@ -13,7 +13,7 @@ import {
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
-export const ASK_FEEDBACK_COPY = {
+const ASK_FEEDBACK_COPY = {
   up: "Good answer",
   down: "Bad answer",
   ask: "What went wrong?",
@@ -66,7 +66,7 @@ export function AskFeedbackControl({
     setReasons([]);
     setNote("");
     const saved = await onRate(next);
-    setSaid(saved ? (next?.rating === "up" ? "thanks" : null) : "failed");
+    setSaid(!saved ? "failed" : next?.rating === "up" ? "thanks" : null);
     if (!saved) setDetailOpen(false);
   }
 

@@ -644,3 +644,17 @@ test.describe("by side", () => {
     expect(result.headline).toContain("on the ad side, a serve out wide");
   });
 });
+
+test("a follow-up with a question of its own is not the breakdown again", () => {
+  expect(continuesServePlusOne("Which matches did he lose?")).toBe(false);
+  expect(continuesServePlusOne("What was his record in all of them?")).toBe(
+    false,
+  );
+  expect(continuesServePlusOne(FOLLOW_UP)).toBe(true);
+});
+
+test("on the personal page 'his serve +1' is the opponent's, tagged or not", () => {
+  expect(servePlusOneRequest("his serve +1 patterns", [], false).subject).toBe(
+    "opponent",
+  );
+});

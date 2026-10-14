@@ -1,53 +1,37 @@
 /**
- * How the labelling console lays out its video and court against the points
- * rail. Pure: the console holds the mode; this file is the vocabulary, the full
- * screen's rule and the rail's arithmetic.
+ * The label session's two views. Pure: the console holds the mode; this file
+ * is the vocabulary, the full screen's rule and the rail's arithmetic.
  *
- * - `docked-side` (`label-side-view.tsx`): inside the admin page, under the
- *   console's header. The default.
- * - `black` (`label-black-view.tsx`): the same arrangement on black, in the
- *   browser's own full screen (use-browser-fullscreen.ts). The menu calls it
- *   "Full screen".
+ * - `overview` (`label-dashboard.tsx`): the page a session opens on. The
+ *   match's data, read: what was entered at upload, the score, the open
+ *   marks, the publish check, the statistics. Nothing is labelled here.
+ * - `black` (`label-black-view.tsx`): the film, the court and the points rail
+ *   on black, in the browser's own full screen (use-browser-fullscreen.ts).
+ *   The one place a match is labelled.
  *
- * The rail's width alone sizes both ({@link clampRailWidth}, kept under {@link
- * RAIL_WIDTH_STORAGE_KEY}): the film and the court take what is left.
+ * There was a third, the film and rail docked inside the admin page. Nobody
+ * labelled from it once full screen existed, and it was removed 2026-10-13.
+ *
+ * In full screen the rail's width alone sizes the layout ({@link
+ * clampRailWidth}, kept under {@link RAIL_WIDTH_STORAGE_KEY}): the film and the
+ * court take what is left.
  */
 
-export type LabelLayoutMode = "docked-side" | "black";
+export type LabelLayoutMode = "overview" | "black";
 
-/** In the order the Layout menu lists them. */
-export const LAYOUT_MODES: readonly LabelLayoutMode[] = [
-  "docked-side",
-  "black",
-];
-
-export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "docked-side";
-
-/** The menu's words for each mode, and what choosing it does. */
-export const LAYOUT_MODE_LABEL: Record<
-  LabelLayoutMode,
-  { label: string; description: string }
-> = {
-  "docked-side": {
-    label: "Docked side",
-    description: "Video over the court, the points list on the right",
-  },
-  black: {
-    label: "Full screen",
-    description: "The same layout on black, filling the whole screen",
-  },
-};
+/** The page opens on the overview; a spec that reads the rail asks for black. */
+export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "black";
 
 /**
  * The layout once the browser has answered a request for its full screen: black
  * when it went along, and when the browser has no Fullscreen API at all. A
- * refused request is docked side: black is never shown under the browser's
+ * refused request is the overview: black is never shown under the browser's
  * bars.
  */
 export function layoutAfterFullscreenRequest(
   outcome: "entered" | "refused" | "unsupported",
 ): LabelLayoutMode {
-  return outcome === "refused" ? "docked-side" : "black";
+  return outcome === "refused" ? "overview" : "black";
 }
 
 // ── The rail ────────────────────────────────────────────────────────────────

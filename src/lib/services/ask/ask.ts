@@ -1043,7 +1043,11 @@ export async function* askQuestion(
         asksForLosingPlays(input.question) &&
         (step.ok || refused)
       ) {
-        const subject = losingPlaysSubject(input.question, input.tags.prompt);
+        const subject = losingPlaysSubject(
+          input.question,
+          input.tags.prompt,
+          team,
+        );
         return forced(
           {
             scope_sql: step.ok
@@ -1601,18 +1605,12 @@ export async function* askQuestion(
         }
         // A team pattern in "my" words over several players' matches is
         // nobody's in particular: asked, whatever the model read.
-        const playerAsk = patternNeedsPlayer({
+        const playerAsk = playerAskFor(
           team,
-          question: input.question,
-          rosterInScope: [
-            ...new Set(
-              ran.matches.flatMap((match) =>
-                match.playerName ? [match.playerName] : [],
-              ),
-            ),
-          ],
-          playerTagged: input.tags.prompt.some((tag) => tag.kind === "player"),
-        });
+          input.question,
+          input.tags.prompt,
+          ran.matches,
+        );
         if (playerAsk !== null) {
           await release();
           yield {
@@ -1647,18 +1645,12 @@ export async function* askQuestion(
         plan = step.plan;
         // A team breakdown in "my" words over several players' serves is
         // nobody's in particular: asked, as for a pattern.
-        const playerAsk = patternNeedsPlayer({
+        const playerAsk = playerAskFor(
           team,
-          question: input.question,
-          rosterInScope: [
-            ...new Set(
-              ran.matches.flatMap((match) =>
-                match.playerName ? [match.playerName] : [],
-              ),
-            ),
-          ],
-          playerTagged: input.tags.prompt.some((tag) => tag.kind === "player"),
-        });
+          input.question,
+          input.tags.prompt,
+          ran.matches,
+        );
         if (playerAsk !== null) {
           await release();
           yield {
@@ -1672,18 +1664,7 @@ export async function* askQuestion(
         const plusOne = step.plusOne;
         const written = buildServePlusOneAnswer(
           ran.rows,
-          losingPlaysVoice(
-            plusOne.subject,
-            onlyName(
-              ran.matches.map((match) =>
-                plusOne.subject === "opponent"
-                  ? match.opponentName
-                  : team
-                    ? match.playerName
-                    : null,
-              ),
-            ),
-          ),
+          subjectVoice(plusOne.subject, ran.matches, team),
           plusOne,
         );
         result = {
@@ -1706,18 +1687,7 @@ export async function* askQuestion(
           step.winning ? buildWinningPlaysAnswer : buildLosingPlaysAnswer
         )(
           rows,
-          losingPlaysVoice(
-            step.plays,
-            onlyName(
-              ran.matches.map((match) =>
-                step.plays === "opponent"
-                  ? match.opponentName
-                  : team
-                    ? match.playerName
-                    : null,
-              ),
-            ),
-          ),
+          subjectVoice(step.plays, ran.matches, team),
           ran.matches.length,
         );
         result = { matches: ran.matches, rows: written === null ? [] : rows };
@@ -2528,6 +2498,47 @@ async function collect(chunks: AsyncIterable<string>): Promise<string> {
   let text = "";
   for await (const chunk of chunks) text += chunk;
   return text;
+}
+
+/** Who a losing-plays or serve +1 answer speaks about: the one name the matches agree on, or a plain word. */
+function subjectVoice(
+  subject: AskPlaysSubject,
+  matches: readonly AskSourceMatch[],
+  team: boolean,
+) {
+  return losingPlaysVoice(
+    subject,
+    onlyName(
+      matches.map((match) =>
+        subject === "opponent"
+          ? match.opponentName
+          : team
+            ? match.playerName
+            : null,
+      ),
+    ),
+  );
+}
+
+/** Asks which player when a team question in "my" words spans several players' matches. */
+function playerAskFor(
+  team: boolean,
+  question: string,
+  tags: readonly { kind: string }[],
+  matches: readonly AskSourceMatch[],
+) {
+  return patternNeedsPlayer({
+    team,
+    question,
+    rosterInScope: [
+      ...new Set(
+        matches.flatMap((match) =>
+          match.playerName ? [match.playerName] : [],
+        ),
+      ),
+    ],
+    playerTagged: tags.some((tag) => tag.kind === "player"),
+  });
 }
 
 /** The two sides as a pattern answer names them: one name the matches agree on, or a plain word. */

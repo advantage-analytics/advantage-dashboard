@@ -379,7 +379,16 @@ export async function getAskPageSeats(
           .maybeSingle(),
         getMatchVideo(row.id).catch(() => null),
       ]);
-      if (!video || first.error || !first.data) return;
+      // No served-by on the first point: nothing to check Ask's seat against,
+      // so no link (fail closed).
+      if (
+        !video ||
+        first.error ||
+        !first.data ||
+        typeof first.data.server_is_player1 !== "boolean"
+      ) {
+        return;
+      }
       seats.set(row.id, {
         youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
         pointNumber: first.data.point_number,

@@ -53,6 +53,7 @@ const OWN_POSSESSIVE = /\b(?:my|our)\b/i;
 const ABOUT_THE_OPPONENT =
   /\b(?:opponents?|(?:this|that) players?|he|she|him|they|them)\b/i;
 const ABOUT_ME = /\b(?:i|me|mine|we|us)\b/i;
+const OPPONENT_WORD = /\bopponents?'?s?\b/i;
 
 /**
  * Whose losing plays the question is about. Whose plays they are is read
@@ -64,16 +65,31 @@ const ABOUT_ME = /\b(?:i|me|mine|we|us)\b/i;
 export function losingPlaysSubject(
   question: string,
   tags: readonly AskPromptTag[],
+  team = false,
 ): AskPlaysSubject {
-  const ownPossessive = OWN_POSSESSIVE.test(question);
-  const otherPossessive = OTHER_POSSESSIVE.test(question);
-  if (ownPossessive !== otherPossessive) {
-    return ownPossessive ? "mine" : "opponent";
+  // In a team, "his", "her" and "this player" name the program's own player
+  // — the one the question is about. Only a word for the opponent, or an
+  // opponent tagged with no player beside it, is the other side.
+  if (team) {
+    if (OPPONENT_WORD.test(question)) return "opponent";
+    const opponentTag = tags.some((tag) => tag.kind === "opponent");
+    const playerTag = tags.some((tag) => tag.kind === "player");
+    return opponentTag && !playerTag ? "opponent" : "mine";
   }
-  const own = ABOUT_ME.test(question);
-  const other = ABOUT_THE_OPPONENT.test(question);
-  if (own !== other) return own ? "mine" : "opponent";
-  return tags.some((tag) => tag.kind === "opponent") ? "opponent" : "mine";
+  // Each rule names a side by the word for it that comes FIRST: "which shots
+  // do I miss against him" is about me, "where does he beat me" about him.
+  const first = (own: RegExp, other: RegExp): AskPlaysSubject | null => {
+    const a = question.search(own);
+    const b = question.search(other);
+    if (a < 0 && b < 0) return null;
+    if (b < 0 || (a >= 0 && a < b)) return "mine";
+    return "opponent";
+  };
+  return (
+    first(OWN_POSSESSIVE, OTHER_POSSESSIVE) ??
+    first(ABOUT_ME, ABOUT_THE_OPPONENT) ??
+    (tags.some((tag) => tag.kind === "opponent") ? "opponent" : "mine")
+  );
 }
 
 /**
@@ -184,7 +200,7 @@ function label(row: AskRow): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function sentenceCase(text: string): string {
+export function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -194,7 +210,7 @@ function joined(parts: readonly string[]): string {
     : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-function count(value: unknown): number {
+export function count(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
@@ -351,8 +367,6 @@ const WINNING_PLAYS =
 export function asksForWinningPlays(question: string): boolean {
   return WINNING_PLAYS.test(question);
 }
-
-const OPPONENT_WORD = /\bopponents?'?s?\b/i;
 
 /**
  * Whose winning plays. In a team, "this player" and "his" are the program's

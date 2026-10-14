@@ -528,6 +528,7 @@ test.describe("the new flags are stops for ] and the header's count", () => {
       pointId: lone.id,
       pointNumber: lone.pointIndex + 1,
       code: "first_serve_fault_alone",
+      data: false,
     });
   });
 
