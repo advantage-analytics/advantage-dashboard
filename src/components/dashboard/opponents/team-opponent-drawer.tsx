@@ -33,7 +33,7 @@ import type {
 } from "@/lib/data/team-opponents";
 import { TEAM_NAV } from "@/lib/dashboard/nav";
 import { advButton } from "@/lib/ui/adv-button";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { playedSets } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
 import {
@@ -174,7 +174,9 @@ export function TeamOpponentDrawer({
               match: {
                 id: match.id,
                 opponent: opponent.name,
-                date: match.date ? formatShortDate(match.date) : "No date",
+                date: match.date
+                  ? formatMatchDayShortYear(match.date)
+                  : "No date",
               },
             },
           ];

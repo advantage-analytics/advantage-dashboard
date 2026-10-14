@@ -43,6 +43,11 @@ info:
     figures, the builder's `details` or the resubmit `reason` beside `error`
     where the handler adds them; the admin upload routes answer
     `{ ok: false, message }`; and the two insight routes answer plain text.
+
+    `/api/ask` is same-origin and body-capped exactly as the video mutations
+    are, and refuses through the same `errorResponse()` — `ErrorResponse`
+    with a `code` of its own (`AskRefusalCode`). Once its stream has opened
+    the status is 200 and a failure is an `error` event inside the stream.
 servers:
   - url: https://app.advantage-analytics.com
     description: Production
@@ -76,6 +81,13 @@ tags:
     description: Scheduled jobs, called by Vercel Cron with `CRON_SECRET`.
   - name: Insights
     description: The Focus cards' streamed one-sentence claims.
+  - name: Ask
+    description: >-
+      The Ask pages — one question about the signed-in player's own
+      matches, or (with `programId`) about the matches of a program they are
+      a member of, answered as a stream of events. The route is
+      `src/app/api/ask/route.ts`; the orchestration is
+      `src/lib/services/ask/ask.ts`.
   - name: Admin uploads
     description: The admin console's file and video submissions.
   - name: Billing
@@ -2347,6 +2359,296 @@ paths:
         "500":
           $ref: "#/components/responses/InsightLlmError"
 
+  /api/ask:
+    post:
+      tags: [Ask]
+      operationId: askQuestion
+      summary: Ask one question about the player's own matches, or a program's
+      description: |
+        Plans a read-only query over the caller's personal matches, runs it,
+        and streams an answer whose every figure is a cell of that query's
+        result. The answer and its question are saved to a conversation —
+        the one `conversationId` names, or a new one.
+
+        **Team scope.** With `programId` the question is about that
+        program's matches instead: every match of the program, each read
+        from the side of the program's own player, and answered in the third
+        person. The caller must be a member of the program (any role);
+        otherwise `403 not_a_member`. The conversation is saved to that
+        program's workspace and is still private to the member who asked; a
+        `conversationId` from the other workspace is `404`. A team question
+        spends the caller's own monthly questions — there is no separate
+        program allowance.
+
+        **Before the stream.** Refusals are JSON, in this order, each
+        answered before the next rung reads anything: `403 cross_origin`,
+        `401 unauthenticated`, `413 request_too_large`, `400 invalid_request`
+        (the body's shape), `403 not_a_member`, `400 invalid_request` (a tag
+        that is not in scope),
+        `404 conversation_not_found`, `409 no_matches`, `429 ask_limit_reached`.
+        Nothing is spent by a refused request. The 429 is the refusal of the
+        `ask_reserve_question()` database function, which counts and reserves
+        in one step; the route never compares a count itself.
+
+        **Tags.** A tag is `{ kind, id }` only. Each is re-resolved against
+        the matches in scope; any other key on a tag is ignored, and one
+        id that is not in scope refuses the whole question. A `player` tag
+        exists in team scope only and stands for every match of the program
+        that roster player played.
+
+        **The stream.** `200 application/x-ndjson`: one `AskEvent` JSON
+        object per line, each line ended by `\n`. A completed answer is
+        `status` (planning, querying, writing) → `headline` → zero to three
+        `figure` → zero or one `visual` → `text` deltas → an optional
+        `notice` → `sources` → `done`. A failed one ends with
+        a single `error` event instead of `sources` and `done`, and gives its
+        question back: only an answer that reached `done` counts against the
+        monthly limit. A client that stops reading before `done` is not
+        charged either.
+
+        **Mock mode.** With no LLM provider configured the route still
+        answers 200: a fixed query and a sample answer, computed from the
+        caller's real matches. Nothing is reserved and `done.used` is the
+        month's unchanged count.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskRequest"
+            examples:
+              first:
+                summary: The first question of a conversation
+                value:
+                  question: How is my second serve holding up against left-handers?
+                  tags: []
+              tagged:
+                summary: A follow-up about one opponent and one match
+                value:
+                  conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+                  question: What changed between these?
+                  tags:
+                    - kind: opponent
+                      id: anna lee
+                    - kind: match
+                      id: 3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f
+              team:
+                summary: A coach's question about one roster player
+                value:
+                  programId: edaf1aa0-1b2c-4d3e-8f4a-5b6c7d8e9f0a
+                  question: How is she serving this season?
+                  tags:
+                    - kind: player
+                      id: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+      responses:
+        "200":
+          description: >-
+            The stream opened. Newline-delimited JSON, one `AskEvent` per
+            line. The status says nothing about whether the answer succeeded:
+            read the last event, which is `done` or `error`. An exception on
+            the server after the first byte errors the body, not the status.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: "#/components/schemas/AskEvent"
+        "400":
+          description: >-
+            The body is not JSON, not an object, or carries an unknown key;
+            the question is missing, empty after trimming, or longer than
+            1000 characters; `tags` is not an array, holds more than 10, or
+            holds one that is not `{ kind, id }`; `programId` is neither null
+            nor a UUID; or a tag names a match, opponent or player that is not
+            in scope (a `player` tag on a personal question included).
+            `error` is the sentence the composer shows.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                emptyQuestion:
+                  summary: Nothing typed
+                  value:
+                    error: Type a question first.
+                    code: invalid_request
+                    detail: question_empty
+                questionTooLong:
+                  summary: Over 1000 characters
+                  value:
+                    error: That question is too long. Keep it under 1000 characters.
+                    code: invalid_request
+                    detail: question_too_long
+                malformedTag:
+                  summary: A tag that is not { kind, id }
+                  value:
+                    error: This request is not valid.
+                    code: invalid_request
+                    detail: tag_shape
+                tagNotViewers:
+                  summary: A match that is not the caller's
+                  value:
+                    error: That match is not one of yours.
+                    code: invalid_request
+                    detail: tag_not_resolved
+                programIdNotUuid:
+                  summary: A programId that is not a UUID
+                  value:
+                    error: This request is not valid.
+                    code: invalid_request
+                    detail: program_id_type
+                playerNotOnRoster:
+                  summary: Team scope — a player who is not on the roster
+                  value:
+                    error: That player is not on the program's roster.
+                    code: invalid_request
+                    detail: tag_not_resolved
+        "401":
+          description: No session.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                unauthenticated:
+                  summary: unauthenticated
+                  value:
+                    error: Sign in to ask a question.
+                    code: unauthenticated
+                    detail: no_session
+        "403":
+          description: >-
+            `cross_origin`: not a request from a page this deployment served
+            (`checkSameOrigin`), checked before the session. `not_a_member`:
+            `programId` names a program the caller does not belong to (or no
+            program at all); answered before any of the program's rows are
+            read.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                crossOrigin:
+                  $ref: "#/components/examples/CrossOrigin"
+                notAMember:
+                  summary: not_a_member
+                  value:
+                    error: You are not a member of this program.
+                    code: not_a_member
+                    detail: program_not_available
+        "404":
+          description: >-
+            `conversationId` is not a UUID, does not exist, is someone
+            else's, or was asked in the other workspace (a personal
+            conversation named with a `programId`, or the reverse). All are
+            indistinguishable on purpose.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                conversationNotFound:
+                  summary: conversation_not_found
+                  value:
+                    error: This conversation is not available.
+                    code: conversation_not_found
+                    detail: not_visible
+        "409":
+          description: >-
+            The scope has no match — the caller has no personal match, or in
+            team scope the program has none — so there is nothing to ask
+            about. Decided from the same match list the page reads as its day
+            zero; a match with no statistics yet does not refuse here — a
+            question about one ends as a `no_data` event.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                noMatches:
+                  summary: no_matches
+                  value:
+                    error: Add a match before you ask a question.
+                    code: no_matches
+                    detail: no_personal_match
+                noTeamMatches:
+                  summary: no_matches, team scope
+                  value:
+                    error: Add a team match before you ask a question.
+                    code: no_matches
+                    detail: no_program_match
+        "413":
+          description: The body exceeds 4096 bytes, by `Content-Length` or as streamed.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                requestTooLarge:
+                  $ref: "#/components/examples/RequestTooLarge"
+        "429":
+          description: >-
+            This month's questions are spent. Unlike every other refusal,
+            `detail` here is an object the client renders — the count behind
+            the page's meter — and it is sent in production too. It is
+            omitted only when neither the refusal nor the meter could supply
+            the figures.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskLimitReachedResponse"
+              examples:
+                limitReached:
+                  summary: ask_limit_reached
+                  value:
+                    error: You have used all 20 questions for this month.
+                    code: ask_limit_reached
+                    detail:
+                      used: 20
+                      cap: 20
+                      resets_on: "2026-11-01"
+        "500":
+          description: >-
+            The caller's matches could not be read, the reservation failed
+            for a reason other than the limit, or the stream could not be
+            opened (a question reserved by then is released).
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlPrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+              examples:
+                internalError:
+                  summary: internal_error
+                  value:
+                    error: Something went wrong on our side. Try again in a moment.
+                    code: internal_error
+                    detail: reserve_failed
+
   /api/admin/uploads/file:
     get:
       tags: [Admin uploads]
@@ -4485,3 +4787,540 @@ components:
         jobId:
           type: string
           format: uuid
+    AskTag:
+      type: object
+      description: >-
+        Something the question is about. `id` is a match id for `match`, the
+        opponent option's key (the normalised name) for `opponent`, and the
+        roster player's id for `player` — team scope only. Any other key is
+        ignored — a label is never read from the request.
+      required: [kind, id]
+      properties:
+        kind:
+          type: string
+          enum: [match, opponent, player]
+        id:
+          type: string
+          minLength: 1
+    AskRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        conversationId:
+          description: The conversation to append to. Omit or send null to start one.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        programId:
+          description: >-
+            The program a team question is about; the caller must be a member
+            of it. Omit or send null for a personal question.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        question:
+          type: string
+          description: >-
+            Trimmed by the route; must then be 1 to 1000 characters (UTF-16
+            code units).
+          minLength: 1
+          maxLength: 1000
+        tags:
+          type: array
+          description: Omitted means none. Duplicates are folded.
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/AskTag"
+    AskRefusalCode:
+      type: string
+      description: >-
+        The `code` of a refusal before the stream: this route's own five plus
+        the transport codes of `src/lib/services/match-video/http.ts`.
+      enum:
+        - unauthenticated
+        - not_a_member
+        - cross_origin
+        - invalid_request
+        - request_too_large
+        - conversation_not_found
+        - no_matches
+        - ask_limit_reached
+        - internal_error
+    AskRefusalResponse:
+      description: An `ErrorResponse` whose `code` is always present.
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          required: [code]
+          properties:
+            code:
+              $ref: "#/components/schemas/AskRefusalCode"
+    AskLimitReachedResponse:
+      type: object
+      description: >-
+        The 429. Same envelope, but `detail` is the question count rather
+        than a cause slug, and a client may depend on it.
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          const: ask_limit_reached
+        detail:
+          oneOf:
+            - type: object
+              required: [used, cap, resets_on]
+              properties:
+                used:
+                  type: integer
+                  minimum: 0
+                  description: Questions spent this UTC month.
+                cap:
+                  type: integer
+                  minimum: 0
+                resets_on:
+                  type: string
+                  format: date
+                  description: The first day of next month.
+            - type: string
+              description: A cause slug, outside production, when no count could be read.
+    AskStatusEvent:
+      type: object
+      description: Which step the route is on. Sent as each step begins.
+      required: [type, stage]
+      properties:
+        type:
+          type: string
+          const: status
+        stage:
+          type: string
+          enum: [planning, querying, writing]
+      examples:
+        - type: status
+          stage: planning
+    AskHeadlineEvent:
+      type: object
+      description: The answer's first line, one claim. Sent once, whole.
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          const: headline
+        text:
+          type: string
+      examples:
+        - type: headline
+          text: Your second serve holds up better against right-handers.
+    AskFigureEvent:
+      type: object
+      description: >-
+        One figure tile, at most three per answer. `value` is a cell of the
+        query's result, already formatted for display.
+      required: [type, label, value]
+      properties:
+        type:
+          type: string
+          const: figure
+        label:
+          type: string
+        value:
+          type: string
+      examples:
+        - type: figure
+          label: Second-serve points won
+          value: 55.5%
+    AskTextEvent:
+      type: object
+      description: The next piece of the evidence paragraphs; append `delta` to what came before.
+      required: [type, delta]
+      properties:
+        type:
+          type: string
+          const: text
+        delta:
+          type: string
+      examples:
+        - type: text
+          delta: "Across 12 recorded matches you have won 8 and lost 4. "
+    AskVisualNumber:
+      type: object
+      description: >-
+        One resolved number of a visual block. `value` is the cell as the
+        database returned it, for a component that computes geometry from
+        it; `text` is the same cell formatted for display (`54.6%`, `1,204`,
+        `—`), for wherever the component prints it. The client never formats
+        a value itself.
+      required: [value, text]
+      properties:
+        value:
+          type: number
+        text:
+          type: string
+    AskVisualBars:
+      type: object
+      description: >-
+        Comparison bars: one measure per row, the subject's bar over the
+        baseline's. Both values are percentages, 0–100. 1–6 rows.
+      required: [kind, caption, subjectLabel, baselineLabel, rows]
+      properties:
+        kind:
+          type: string
+          const: bars
+        caption:
+          type: string
+        subjectLabel:
+          type: string
+        baselineLabel:
+          type: string
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            type: object
+            required: [label, subject, baseline]
+            properties:
+              label:
+                type: string
+              subject:
+                $ref: "#/components/schemas/AskVisualNumber"
+              baseline:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualTable:
+      type: object
+      description: >-
+        Stat table: measures down the side, 1–3 columns across, 1–8 rows.
+        Every cell is already a display string; each row has exactly one
+        cell per column.
+      required: [kind, caption, columns, rows]
+      properties:
+        kind:
+          type: string
+          const: table
+        caption:
+          type: string
+        columns:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            required: [label, cells]
+            properties:
+              label:
+                type: string
+              cells:
+                type: array
+                items:
+                  type: string
+    AskVisualTrend:
+      type: object
+      description: >-
+        Trend line: one value per match in date order, oldest first, 2–30
+        points. `label` is the x value as the axis shows it — a date as
+        `Sep 14`, with the year added when the points span more than one.
+      required: [kind, caption, points]
+      properties:
+        kind:
+          type: string
+          const: trend
+        caption:
+          type: string
+        points:
+          type: array
+          minItems: 2
+          maxItems: 30
+          items:
+            type: object
+            required: [label, value]
+            properties:
+              label:
+                type: string
+              value:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualSplit:
+      type: object
+      description: Parts of a whole, 2–4 counts (each ≥ 0) that sum to the total.
+      required: [kind, caption, parts]
+      properties:
+        kind:
+          type: string
+          const: split
+        caption:
+          type: string
+        parts:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label:
+                type: string
+              count:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualServe:
+      type: object
+      description: >-
+        Serve placement: 1–2 bars, each split T / Body / Wide (counts ≥ 0).
+        The views record no deuce/ad split, so a court is whatever the
+        answer labelled it — "All serves", "Second serves".
+      required: [kind, caption, courts]
+      properties:
+        kind:
+          type: string
+          const: serve
+        caption:
+          type: string
+        courts:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: object
+            required: [label, t, body, wide]
+            properties:
+              label:
+                type: string
+              t:
+                $ref: "#/components/schemas/AskVisualNumber"
+              body:
+                $ref: "#/components/schemas/AskVisualNumber"
+              wide:
+                $ref: "#/components/schemas/AskVisualNumber"
+    AskVisualForm:
+      type: object
+      description: A win/loss strip, oldest first, 1–30 results. `true` is a win.
+      required: [kind, caption, results]
+      properties:
+        kind:
+          type: string
+          const: form
+        caption:
+          type: string
+        results:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            type: boolean
+    AskVisual:
+      description: >-
+        The one visual block an answer may carry, told apart by `kind`
+        (`AskVisual` in `src/lib/services/ask/events.ts`). The model chose
+        the kind, the caption and the labels; every number is a cell of the
+        query result, resolved by the server. The same object is saved with
+        the answer.
+      oneOf:
+        - $ref: "#/components/schemas/AskVisualBars"
+        - $ref: "#/components/schemas/AskVisualTable"
+        - $ref: "#/components/schemas/AskVisualTrend"
+        - $ref: "#/components/schemas/AskVisualSplit"
+        - $ref: "#/components/schemas/AskVisualServe"
+        - $ref: "#/components/schemas/AskVisualForm"
+      discriminator:
+        propertyName: kind
+        mapping:
+          bars: "#/components/schemas/AskVisualBars"
+          table: "#/components/schemas/AskVisualTable"
+          trend: "#/components/schemas/AskVisualTrend"
+          split: "#/components/schemas/AskVisualSplit"
+          serve: "#/components/schemas/AskVisualServe"
+          form: "#/components/schemas/AskVisualForm"
+    AskVisualEvent:
+      type: object
+      description: >-
+        The answer's visual block, at most one per answer. Sent once, whole,
+        after the figures and before the text. A block the server could not
+        resolve — a cell the result does not hold, a value of the wrong
+        type, a limit exceeded — is left out, and the answer streams without
+        it.
+      required: [type, visual]
+      properties:
+        type:
+          type: string
+          const: visual
+        visual:
+          $ref: "#/components/schemas/AskVisual"
+      examples:
+        - type: visual
+          visual:
+            kind: bars
+            caption: Share of points, from 4 matches against left-handers.
+            subjectLabel: Against left-handers
+            baselineLabel: All matches
+            rows:
+              - label: First serves in
+                subject: { value: 58.2, text: 58.2% }
+                baseline: { value: 61.4, text: 61.4% }
+    AskNoticeEvent:
+      type: object
+      description: >-
+        A signal beside the answer, not part of its text. Sent after the text
+        deltas. `no_advice`: the question asked what to do, which Ask does
+        not answer; the client shows the fixed no-advice sentence
+        (`ASK_NO_ADVICE_SENTENCE` in `src/lib/services/ask/events.ts`) next
+        to the answer. Before this event existed the sentence was appended to
+        the body text; answers saved then still carry it there.
+      required: [type, notice]
+      properties:
+        type:
+          type: string
+          const: notice
+        notice:
+          type: string
+          enum: [no_advice]
+      examples:
+        - type: notice
+          notice: no_advice
+    AskSourceMatch:
+      type: object
+      description: One match the answer was computed from.
+      required: [matchId, opponentName, playedOn, iWon, scoreText, playerName]
+      properties:
+        matchId:
+          type: string
+          format: uuid
+        opponentName:
+          oneOf:
+            - type: string
+            - type: "null"
+        playedOn:
+          oneOf:
+            - type: string
+              format: date
+            - type: "null"
+        iWon:
+          description: Null when the score cannot say (an unfinished match) — never a loss.
+          oneOf:
+            - type: boolean
+            - type: "null"
+        scoreText:
+          oneOf:
+            - type: string
+            - type: "null"
+        playerName:
+          description: >-
+            Team scope: the program's player this match is read from the side
+            of. Always null for a personal question, and for a team match
+            whose side is unknown. Absent from answers saved before team Ask.
+          oneOf:
+            - type: string
+            - type: "null"
+    AskSourcesEvent:
+      type: object
+      description: The matches the answer was computed from. Sent after the answer is saved.
+      required: [type, matches]
+      properties:
+        type:
+          type: string
+          const: sources
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/AskSourceMatch"
+      examples:
+        - type: sources
+          matches:
+            - matchId: 3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f
+              opponentName: Anna Lee
+              playedOn: "2026-09-14"
+              iWon: true
+              scoreText: 6-4 6-3
+              playerName: null
+    AskDoneEvent:
+      type: object
+      description: >-
+        The last event of a completed answer: it is saved to `conversationId`
+        and `used` of `cap` questions are spent this month.
+      required: [type, conversationId, used, cap]
+      properties:
+        type:
+          type: string
+          const: done
+        conversationId:
+          type: string
+          format: uuid
+        used:
+          type: integer
+          minimum: 0
+        cap:
+          type: integer
+          minimum: 0
+      examples:
+        - type: done
+          conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+          used: 6
+          cap: 20
+    AskErrorCode:
+      type: string
+      description: |
+        Why an answer failed after the stream opened (`AskErrorCode` in
+        `src/lib/services/ask/events.ts`). Every one releases the question.
+
+        - `cannot_answer` — the model said the data cannot answer it, or the
+          query was refused or failed twice.
+        - `no_data` — the query ran and no match fits it.
+        - `llm_unavailable` — the provider errored, before or during the answer.
+        - `answer_failed` — the answer could not be shown or kept: it cited a
+          cell the result does not hold, was empty, or could not be saved.
+      enum:
+        - cannot_answer
+        - no_data
+        - llm_unavailable
+        - answer_failed
+    AskErrorEvent:
+      type: object
+      description: >-
+        The last event of a failed answer. `error` is the sentence to show,
+        `code` the slug to branch on. Whatever streamed before it is void.
+      required: [type, code, error]
+      properties:
+        type:
+          type: string
+          const: error
+        code:
+          $ref: "#/components/schemas/AskErrorCode"
+        error:
+          type: string
+      examples:
+        - type: error
+          code: no_data
+          error: None of your matches fit that question, so there was nothing to compute.
+    AskEvent:
+      description: >-
+        One line of the `/api/ask` stream, told apart by `type`
+        (`src/lib/services/ask/events.ts`).
+      oneOf:
+        - $ref: "#/components/schemas/AskStatusEvent"
+        - $ref: "#/components/schemas/AskHeadlineEvent"
+        - $ref: "#/components/schemas/AskFigureEvent"
+        - $ref: "#/components/schemas/AskVisualEvent"
+        - $ref: "#/components/schemas/AskTextEvent"
+        - $ref: "#/components/schemas/AskNoticeEvent"
+        - $ref: "#/components/schemas/AskSourcesEvent"
+        - $ref: "#/components/schemas/AskDoneEvent"
+        - $ref: "#/components/schemas/AskErrorEvent"
+      discriminator:
+        propertyName: type
+        mapping:
+          status: "#/components/schemas/AskStatusEvent"
+          headline: "#/components/schemas/AskHeadlineEvent"
+          figure: "#/components/schemas/AskFigureEvent"
+          visual: "#/components/schemas/AskVisualEvent"
+          text: "#/components/schemas/AskTextEvent"
+          notice: "#/components/schemas/AskNoticeEvent"
+          sources: "#/components/schemas/AskSourcesEvent"
+          done: "#/components/schemas/AskDoneEvent"
+          error: "#/components/schemas/AskErrorEvent"

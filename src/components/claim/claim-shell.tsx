@@ -180,7 +180,7 @@ export function ClaimHeading({
   body,
   bodyMax,
 }: {
-  gap: 2 | 6 | 8;
+  gap: 2 | 6 | 8 | 12;
   /** "Step 1 of 2" — on the two numbered steps only. */
   step?: string;
   /** "Meridian State · Men's · D-I · Big Twelve" — the program being acted on. */

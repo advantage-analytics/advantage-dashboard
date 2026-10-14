@@ -1,5 +1,5 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
-import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import { ProgramMark } from "@/components/claim/program-mark";
 
 /**
  * The chrome every join screen shares.
@@ -59,16 +59,7 @@ export function JoinPane({
       aside={aside}
       asideWidth={300}
     >
-      {mark && (
-        <WorkspaceMark
-          workspace={{
-            kind: "team",
-            mark: mark.trim().charAt(0).toUpperCase(),
-            iconUrl: crestUrl ?? null,
-          }}
-          className="size-8 rounded-[var(--radius-button)] text-[12px]"
-        />
-      )}
+      {mark && <ProgramMark name={mark} crestUrl={crestUrl} />}
       <ClaimHeading
         gap={2}
         eyebrow={eyebrow}

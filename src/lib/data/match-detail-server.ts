@@ -11,6 +11,7 @@ import {
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
+import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
@@ -58,16 +59,6 @@ export interface DbMatch {
       weaknesses?: Array<{ name: string; value: number; description: string }>;
     };
   } | null;
-}
-
-function formatDisplayDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  if (isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function buildSets(row: DbMatch): SetScore[] {
@@ -201,7 +192,7 @@ export function transformDbMatchToMatch(
   return {
     id: row.id,
     tournamentName: row.tournament_name,
-    date: formatDisplayDate(row.date),
+    date: formatMatchDayLong(row.date),
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
     verificationStatus: row.verified ? "Verified result" : undefined,

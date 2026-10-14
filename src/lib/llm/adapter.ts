@@ -95,6 +95,24 @@ function posthogOptions(context: LLMObservabilityContext, provider?: "google") {
 }
 
 /**
+ * True exactly when `getLLMStream()` below would call a real provider, false
+ * when it would answer with the mock stream. A caller that needs structured
+ * output from the model (Ask) branches on this, because the mock stream's
+ * warning sentence is not something it can parse.
+ *
+ * The two conditions here are the two provider branches of `getLLMStream()`,
+ * restated: change one and you must change the other.
+ * `tests/ask-prompt.spec.ts` holds them together.
+ */
+export function isLLMConfigured(): boolean {
+  const provider = process.env.LLM_PROVIDER ?? "";
+  return (
+    (provider === "anthropic" && Boolean(process.env.ANTHROPIC_API_KEY)) ||
+    (provider === "openai" && Boolean(process.env.OPENAI_API_KEY))
+  );
+}
+
+/**
  * Returns an AsyncIterable<string> of text chunks for the given conversation.
  * Each chunk is a raw text delta (not JSON-wrapped).
  */

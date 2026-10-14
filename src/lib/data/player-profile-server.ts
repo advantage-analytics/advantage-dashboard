@@ -1,10 +1,10 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { formatMatchDayShort } from "@/lib/data/match-day";
 import {
   buildScoreString,
   getInitials,
   matchOutcome,
-  shortDate,
   shortName,
   type MatchScore,
 } from "@/lib/data/match-utils";
@@ -514,7 +514,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     const school = resolveSchool(entry, event, result.tournamentName);
     return {
       id: result.id,
-      date: result.date ? shortDate(result.date) : "",
+      date: formatMatchDayShort(result.date),
       opponent: shortName(result.opponentName),
       school,
       schoolAbbr: school ? getInitials(school) : null,

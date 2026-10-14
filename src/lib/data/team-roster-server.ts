@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { UploadPolicy } from "@/lib/workspace/types";
+import { formatMatchDayShort } from "@/lib/data/match-day";
 import {
   matchOutcome,
   shortDate,
@@ -621,7 +622,7 @@ export const getRosterData = cache(async function getRosterData(
                     uploadPercent: latestJob.uploadPercent,
                   }
                 : null,
-            date: latest.match.date ? shortDate(latest.match.date) : "",
+            date: formatMatchDayShort(latest.match.date),
           }
         : null,
       recent: recentResults.map((r) => ({
@@ -632,7 +633,7 @@ export const getRosterData = cache(async function getRosterData(
         ),
         sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
         won: r.won,
-        date: r.match.date ? shortDate(r.match.date) : "",
+        date: formatMatchDayShort(r.match.date),
         values: r.values,
       })),
       measures,

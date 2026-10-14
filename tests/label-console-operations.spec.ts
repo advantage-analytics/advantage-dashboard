@@ -438,6 +438,7 @@ test.describe("move point", () => {
         pointId: P2,
         pointNumber: 2,
         to: { setNumber: 1, gameNumber: 2 },
+        gameInSet: 2,
         server: "p2",
         swaps: "shots-and-winner",
       },

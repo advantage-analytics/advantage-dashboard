@@ -280,10 +280,22 @@ test.describe("what both drawers share", () => {
   });
 
   test("the recent row's date drops the day once it is not this year", () => {
-    const now = new Date("2026-10-12T12:00:00");
+    const now = new Date("2026-10-12T12:00:00Z");
     expect(rowDate("2026-09-14T12:00:00", now)).toBe("Sep 14");
     expect(rowDate("2025-09-14T12:00:00", now)).toBe("Sep ’25");
     expect(rowDate("not a date", now)).toBe("not a date");
+  });
+
+  test("the recent row's date is the match's stored day, at either edge of it", () => {
+    // `matches.date` holds a calendar day in its UTC date part
+    // (`match-day.ts`). Read as an instant in the viewer's zone, a match
+    // stored at 00:00Z was the 13th in the Americas and one stored at 23:59Z
+    // the 15th in Asia; `tests/match-day.spec.ts` runs that under real zones.
+    const now = new Date("2026-10-12T12:00:00Z");
+    expect(rowDate("2026-09-14T00:00:00+00:00", now)).toBe("Sep 14");
+    expect(rowDate("2026-09-14T23:59:00+00:00", now)).toBe("Sep 14");
+    expect(rowDate("2025-12-31T23:59:00+00:00", now)).toBe("Dec ’25");
+    expect(rowDate("2026-01-01T00:00:00+00:00", now)).toBe("Jan 1");
   });
 });
 

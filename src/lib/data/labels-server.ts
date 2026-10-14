@@ -606,9 +606,11 @@ const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
 /**
  * The labelled job's own file, signed for playback. Not `getMatchVideo`: that
  * loader goes through the viewer's own RLS and plays the NEWEST job. A label
- * session is pinned to one job, so this asks `choosePlaybackFile` (the same
- * upload-first, vendor-copy-second rule and the same offset) about exactly that
- * job, and signs with `mintPlaybackSas`.
+ * session is pinned to one job, so this asks `choosePlaybackFile` about exactly
+ * that job, and signs with `mintPlaybackSas`. Vendor copy FIRST, our upload as
+ * the fallback (the offset rule is unchanged): measured 2026-10-14, uploads ran
+ * 8–12 Mbps against a 10–15 Mbps link to the container, so the console stalled
+ * on every seek; the vendor's re-encode is the same 1080p at about 2 Mbps.
  */
 async function loadJobVideo(
   db: AdminClient,
@@ -625,11 +627,14 @@ async function loadJobVideo(
   if (!job) return null;
 
   const container = videoContainerClient();
-  const choice = await choosePlaybackFile([job], (blobName) =>
-    container
-      .getBlockBlobClient(blobName)
-      .exists()
-      .catch(() => false),
+  const choice = await choosePlaybackFile(
+    [job],
+    (blobName) =>
+      container
+        .getBlockBlobClient(blobName)
+        .exists()
+        .catch(() => false),
+    "vendor-copy",
   );
   if (!choice) return null;
 

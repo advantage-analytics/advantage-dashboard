@@ -106,6 +106,53 @@ test("no files at all is no video", async () => {
   ).toBeNull();
 });
 
+test.describe('prefer "vendor-copy" (the labelling console)', () => {
+  const job = {
+    video_object_key: "videos/u/m/original.mp4",
+    trimmed_object_key: "trimmed/u/m/j.mp4",
+    start_time_seconds: "15.136",
+  };
+
+  test("plays the vendor copy, offset by the trim start, when both exist", async () => {
+    const choice = await choosePlaybackFile(
+      [job],
+      exists("videos/u/m/original.mp4", "trimmed/u/m/j.mp4"),
+      "vendor-copy",
+    );
+    expect(choice).toEqual({
+      blobName: "trimmed/u/m/j.mp4",
+      startTimeSeconds: 15.136,
+      source: "vendor-copy",
+    });
+  });
+
+  test("falls back to our upload, with no offset, when the copy's blob is missing", async () => {
+    const choice = await choosePlaybackFile(
+      [job],
+      exists("videos/u/m/original.mp4"),
+      "vendor-copy",
+    );
+    expect(choice).toEqual({
+      blobName: "videos/u/m/original.mp4",
+      startTimeSeconds: 0,
+      source: "upload",
+    });
+  });
+
+  test("falls back to our upload when the job never got a copy", async () => {
+    const choice = await choosePlaybackFile(
+      [{ ...job, trimmed_object_key: null }],
+      exists("videos/u/m/original.mp4"),
+      "vendor-copy",
+    );
+    expect(choice?.source).toBe("upload");
+  });
+
+  test("neither file stored is no video", async () => {
+    expect(await choosePlaybackFile([job], exists(), "vendor-copy")).toBeNull();
+  });
+});
+
 test.describe("analysedWindowSeconds", () => {
   test("is the job's window in whole seconds (Revelli vs Stepanov)", () => {
     expect(

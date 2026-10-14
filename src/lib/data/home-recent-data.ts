@@ -9,6 +9,11 @@ import {
 import { viewerSide } from "@/lib/data/viewer-side";
 // The shared rule: a stored winner (retired, defaulted) first, then sets.
 import { didUserWin } from "@/lib/data/match-utils";
+import {
+  formatMatchDayRelative,
+  matchDay,
+  type TodayInput,
+} from "@/lib/data/match-day";
 
 export interface DbRecentMatch {
   id: string;
@@ -101,33 +106,6 @@ export interface MatchRow {
   analysisStatus?: AnalysisStatus;
 }
 
-function formatDisplayDate(isoDate: string): string {
-  try {
-    const d = new Date(isoDate);
-    if (Number.isNaN(d.getTime())) return isoDate;
-    const now = new Date();
-    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const diffDays = Math.round(
-      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays > 1 && diffDays <= 6) return `${diffDays} days ago`;
-    if (diffDays > 6 && diffDays <= 13) return "Last week";
-
-    const sameYear = d.getFullYear() === now.getFullYear();
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(sameYear ? {} : { year: "numeric" }),
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
 /** Cheap record count from the base rows Personal Home already resolved. */
 export function countViewerWins(
   rows: readonly DbRecentMatch[],
@@ -148,11 +126,15 @@ export function groupMatchesIntoEvents(
   viewerId: string,
   statsMap: Map<string, MatchStats>,
   analysisMap: Map<string, AnalysisStatus>,
+  /** The day "Today" and "Yesterday" count from — a spec holds it still. */
+  today?: TodayInput,
 ): EventGroup[] {
   const byKey = new Map<string, DbRecentMatch[]>();
   for (const row of rows) {
-    const dateOnly =
-      row.date && row.date.length >= 10 ? row.date.slice(0, 10) : row.date;
+    // The match's day by the one rule (`match-day.ts`) — the same reading the
+    // group's label below is printed from, so two matches under one heading
+    // are two matches the heading is true of.
+    const dateOnly = matchDay(row.date) ?? row.date;
     // Same event, same day → one group. A match filed with no event shares an
     // occasion with nothing, so it is its own group.
     const key =
@@ -216,7 +198,7 @@ export function groupMatchesIntoEvents(
     events.push({
       id: first.id,
       tournamentName: first.tournament_name,
-      date: formatDisplayDate(first.date),
+      date: formatMatchDayRelative(first.date, today),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,
       // Sentence case — the DS's one register for labels, and how Pa2 spells it.
