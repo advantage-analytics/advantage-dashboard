@@ -135,6 +135,13 @@ export const SHOT_FIELDS_MOVING_ENDING = [
  * new one is not null or what the point already holds, and the point is not a
  * let or a non-point. When the rows now settle who won and the point says
  * otherwise, the patch carries the `winner` too.
+ *
+ * One patch is due even when the derived ending did not move: the rows settle
+ * a winner and the point holds the other player. That is not a hand-set
+ * ending surviving, it is a contradiction — "error by Quan", won by Quan —
+ * left by a write from before the winner was kept in step, and a labeller who
+ * re-saves the stroke is asking for it to be put right. The winner alone
+ * moves; the stored ending stays.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,
@@ -151,9 +158,27 @@ export function endingPatchForShotChange(
     was.endedBy === now.endedBy &&
     was.winner === now.winner
   ) {
-    return null;
+    return winnerContradicted(after, now) ? { winner: now.winner } : null;
   }
   return endingPatchTo(after, now);
+}
+
+/**
+ * Whether the rows settle who won and the point holds the other player: a
+ * last ball that missed with its own hitter as the winner, or one marked in
+ * with the other. Never true while the rows settle nothing, or no winner is
+ * labelled yet.
+ */
+export function winnerContradicted(
+  point: Pick<LabelPoint, "winner">,
+  derived: DerivedEnding | null,
+): derived is DerivedEnding & { winner: LabelSide } {
+  return (
+    derived !== null &&
+    derived.winner !== null &&
+    point.winner !== null &&
+    point.winner !== derived.winner
+  );
 }
 
 /**

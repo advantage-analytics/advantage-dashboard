@@ -822,18 +822,24 @@ export function useAskStream(initial: {
     dispatch({ type: "reset" });
   }, []);
 
-  const { exchanges } = state;
+  // The thread as of the last render, read only when a thumb is pressed, so
+  // `rate` keeps one identity while an answer streams in.
+  const exchangesRef = useRef(state.exchanges);
+  useEffect(() => {
+    exchangesRef.current = state.exchanges;
+  }, [state.exchanges]);
   const rate = useCallback(
     async (answerId: string, feedback: AskFeedback | null) => {
       const before =
-        exchanges.find((exchange) => exchange.answer.answerId === answerId)
-          ?.answer.feedback ?? null;
+        exchangesRef.current.find(
+          (exchange) => exchange.answer.answerId === answerId,
+        )?.answer.feedback ?? null;
       dispatch({ type: "feedback", answerId, feedback });
       const saved = await postAskFeedback(answerId, feedback);
       if (!saved) dispatch({ type: "feedback", answerId, feedback: before });
       return saved;
     },
-    [exchanges],
+    [],
   );
 
   return { state, setDraft, ask, reset, rate };

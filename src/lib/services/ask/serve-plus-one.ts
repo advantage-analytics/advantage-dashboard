@@ -5,7 +5,12 @@ import {
 } from "@/lib/services/ask/answer-render";
 import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import { ASK_SHOT_ROLE_CTES } from "@/lib/services/ask/pattern";
-import type { AskPlaysSubject, AskPlaysVoice } from "@/lib/services/ask/plays";
+import {
+  count,
+  sentenceCase,
+  type AskPlaysSubject,
+  type AskPlaysVoice,
+} from "@/lib/services/ask/plays";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
 
 /**
@@ -57,8 +62,11 @@ export function asksForServePlusOne(question: string): boolean {
   return SERVE_PLUS_ONE.test(question) && !SPECIFIC_SHOT.test(question);
 }
 
+// Words that ask for more of the same table, never a new subject: "which",
+// "all", "won" and the like also open "which matches did he lose?", which is
+// a question of its own.
 const CONTINUES =
-  /\b(?:table|compar\w*|all|detail\w*|break ?down|winning|losing|won|lost|which|each|every|patterns?|plays?)\b/i;
+  /\b(?:table|compar\w*|detail\w*|break ?down|winning|losing|patterns?|plays?)\b/i;
 
 /**
  * Whether a follow-up to a serve +1 answer asks for more of the same — "Can
@@ -81,14 +89,14 @@ const THIRD_PERSON_SERVE = /\b(?:his|her)\s+(?:first |second )?serv/i;
  */
 export function servePlusOneRequest(
   question: string,
-  tags: readonly AskPromptTag[],
+  _tags: readonly AskPromptTag[],
   team: boolean,
 ): AskServePlusOne {
+  // On the personal page "his serve" is the opponent's, as in the losing
+  // plays (`losingPlaysSubject`); in a team it is the program's player's.
   const opponent =
     OPPONENT_SERVE.test(question) ||
-    (!team &&
-      THIRD_PERSON_SERVE.test(question) &&
-      tags.some((tag) => tag.kind === "opponent"));
+    (!team && THIRD_PERSON_SERVE.test(question));
   const serveType = /\bfirst serves?\b/i.test(question)
     ? "first"
     : /\bsecond serves?\b/i.test(question)
@@ -226,14 +234,6 @@ function patternPhrase(row: AskRow): string {
 function patternLabel(row: AskRow): string {
   const zone = String(row.serve_zone ?? "");
   return `${SERVE_LABEL[zone] ?? zone} → ${shotPhrase(row)}`;
-}
-
-function sentenceCase(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 /**

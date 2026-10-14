@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
 import { LabelConsole } from "@/components/admin/labels/label-console";
+import { getLabelUploadInfo } from "@/lib/data/label-overview-server";
 import { getLabelSession } from "@/lib/data/labels-server";
 import {
   addLabelShotAction,
@@ -28,6 +29,7 @@ import {
   shiftLabelGameOverflowAction,
   splitLabelPointAction,
   switchLabelPointPlayersAction,
+  undoLabelOpAction,
   updateLabelPoint,
   updateLabelSessionFieldsAction,
   updateLabelShot,
@@ -75,7 +77,11 @@ export default async function AdminLabelSessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const result = await getLabelSession(sessionId);
+  const [result, upload] = await Promise.all([
+    getLabelSession(sessionId),
+    // Allowed to fail: the overview says the inputs could not be read.
+    getLabelUploadInfo(sessionId).catch(() => null),
+  ]);
 
   if (!result.ok) {
     if (result.reason === "not-found") notFound();
@@ -93,6 +99,8 @@ export default async function AdminLabelSessionPage({
     <AdminPage className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6">
       <LabelConsole
         session={session}
+        initialLayoutMode="overview"
+        upload={upload}
         video={video}
         marks={marks}
         onSaveShot={updateLabelShot}
@@ -123,6 +131,7 @@ export default async function AdminLabelSessionPage({
           updateSessionFields: updateLabelSessionFieldsAction,
           completeSession: completeLabelSessionAction,
           reopenSession: reopenLabelSessionAction,
+          undo: undoLabelOpAction,
         }}
         headerAction={
           <Link

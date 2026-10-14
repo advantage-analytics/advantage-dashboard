@@ -225,6 +225,24 @@ be. Doubles teams and existing users depend on it.
 > columns), `20261012071550_set_opponent_team.sql` and
 > `20261012080828_set_opponent_team_lock_fix.sql` (the function; the first
 > version's lock-on-aggregate statement failed every call and was replaced).
+>
+> **A second writer of the same two columns, added 2026-10-13: the admin
+> console's upload wizard.** It is _not_ the action above and meets none of
+> its preconditions: a platform administrator, not the program's staff; the
+> service-role client, not `set_opponent_team`; one plain UPDATE with no row
+> lock. What keeps it narrow is where it runs — in the two console submission
+> services, after `checkAdmin` and after `admin_submit_match_video` /
+> `admin_submit_match_file` have admitted the operation — and what it can
+> reach: the match id the RPC itself returned, also matched on `program_id`,
+> only while both columns are still null (so a replay of the operation never
+> undoes a later edit), and never on an attachment to a recorded match, which
+> both routes refuse. A named program is checked against `programs` before
+> anything is created. Neither column is on the list the `preserve_admin_*`
+> triggers hold. It writes **no** `program_audit_log` row, and the team is not
+> part of the operation's stored request — the same open gap as above, now
+> with a second door. The other admin-console entries in this file describe
+> the RPCs and do not mention this follow-up write.
+> `src/lib/admin/uploads/opponent-team.ts`.
 
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >

@@ -594,6 +594,8 @@ function renderConsole(
       session,
       video: null,
       marks: null,
+      // The page's header, with Mark complete and Reopen, is the overview's.
+      initialLayoutMode: "overview",
       operations,
       onSaveShot: async () => ({ ok: true, status: "edited" }),
       onSavePoint: async () => ({ ok: true, status: "edited" }),
