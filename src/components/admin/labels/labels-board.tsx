@@ -50,7 +50,7 @@ const VIEWS: readonly { id: LabelJobState | "all"; label: string }[] = [
 
 /** Match · analysed · points · flagCounts · status · the row's chevron. */
 const GRID =
-  "grid grid-cols-[minmax(0,1fr)_170px_52px_104px_176px_13px] items-center gap-x-4";
+  "grid grid-cols-[minmax(0,1fr)_200px_52px_128px_160px_13px] items-center gap-x-4";
 
 const NO_FLAGS: FlagCounts = { amber: 0, grey: 0 };
 
@@ -233,7 +233,12 @@ function ProgramDropdown({
             <span className="eyebrow-sm">Match</span>
             <span className="eyebrow-sm">Analysed</span>
             <span className="eyebrow-sm">Points</span>
-            <span className="eyebrow-sm">Flagged</span>
+            <span
+              className="eyebrow-sm"
+              title="The analysis's own marks on the points, before anyone labelled them. Open a match for what is still left to check."
+            >
+              Flagged at upload
+            </span>
             <span className="eyebrow-sm">Status</span>
             <span aria-hidden="true" />
           </div>
@@ -308,8 +313,8 @@ function FlagPair({ counts }: { counts: FlagCounts }) {
       role="img"
       aria-label={
         tone === "amber"
-          ? `${n} that can move the score`
-          : `${n} about the data`
+          ? `${n} flagged at upload that can move the score`
+          : `${n} flagged at upload about the data`
       }
       className="tabular inline-flex items-center gap-1 text-[12px]"
       style={{
