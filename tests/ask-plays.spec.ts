@@ -226,9 +226,11 @@ test.describe("the query", () => {
     });
   }
   test("each side reads its own shots and its own lost points", () => {
-    expect(losingPlaysSql("opponent")).toContain("where mine = false and zone");
+    expect(losingPlaysSql("opponent")).toContain(
+      "where mine = false and direction",
+    );
     expect(losingPlaysSql("opponent")).toContain("i_won = true");
-    expect(losingPlaysSql("mine")).toContain("where mine = true and zone");
+    expect(losingPlaysSql("mine")).toContain("where mine = true and direction");
     expect(losingPlaysSql("mine")).toContain("i_won = false");
   });
   test("is recognised as the server's own", () => {

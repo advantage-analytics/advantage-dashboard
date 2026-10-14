@@ -91,7 +91,7 @@ export function losingPlaysSql(subject: AskPlaysSubject): string {
   const theirs = subject === "mine" ? "true" : "false";
   const lost = subject === "mine" ? "false" : "true";
   return `with sh as (
-  select s.match_id, s.shot_number, s.mine, s.shot_type, s.zone, s.result, p.i_won,
+  select s.match_id, s.shot_number, s.mine, s.shot_type, s.direction, s.result, p.i_won,
     s.shot_number = max(s.shot_number) over (partition by s.match_id, s.point_number) as last_shot
   from ask.shots s
   join ask.points p on p.match_id = s.match_id and p.point_number = s.point_number
@@ -99,21 +99,21 @@ export function losingPlaysSql(subject: AskPlaysSubject): string {
 ),
 grouped as (
   select case when shot_type in ('First Serve', 'Second Serve') then 'serve' else 'rally' end as section,
-    shot_type as stroke, zone as direction, count(*) as shots,
+    shot_type as stroke, direction, count(*) as shots,
     count(*) filter (where result in ('Out', 'Net')) as missed,
     round(100.0 * count(*) filter (where result in ('Out', 'Net')) / count(*), 1) as miss_pct
   from sh
-  where mine = ${theirs} and zone is not null
+  where mine = ${theirs} and direction is not null
     and shot_type in ('Forehand', 'Backhand', 'Volley', 'Overhead', 'First Serve', 'Second Serve')
-  group by shot_type, zone
+  group by shot_type, direction
   having count(*) >= ${MIN_ASK_PLAYS_SHOTS}
   union all
   select case when mine = ${theirs} then 'lost_error' else 'lost_winner' end,
-    shot_type, zone, count(*), null, null
+    shot_type, direction, count(*), null, null
   from sh
-  where last_shot and i_won = ${lost} and shot_type is not null and zone is not null
+  where last_shot and i_won = ${lost} and shot_type is not null and direction is not null
     and ((mine = ${theirs} and result in ('Out', 'Net')) or (mine <> ${theirs} and result = 'In'))
-  group by 1, shot_type, zone
+  group by 1, shot_type, direction
   union all
   select 'total', null, null,
     count(*) filter (where last_shot and i_won = ${lost}),
@@ -166,6 +166,8 @@ const DIRECTION_PHRASE: Record<string, string> = {
   "Down the Line": "down the line",
   Crosscourt: "crosscourt",
   Middle: "through the middle",
+  "Inside Out": "inside out",
+  "Inside In": "inside in",
   T: "to the T",
   Wide: "out wide",
   Body: "into the body",

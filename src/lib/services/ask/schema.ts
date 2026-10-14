@@ -873,7 +873,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "shot_number",
         type: "integer",
         meaning:
-          "The shot's order within the point, counting from 1: 1 is the serve, 2 the return, 3 the server's next shot, and so on.",
+          "The shot's order within the point: 1 is the serve that started the rally (the second serve after a fault), 2 the return, 3 the server's next shot, and so on. 0 is a faulted first serve or a feed, never part of the rally.",
       },
       {
         name: "mine",
@@ -903,7 +903,13 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "zone",
         type: "text",
         meaning:
-          "Where the shot was aimed, as text: for serves Wide, Body or T; for other shots Crosscourt, Down the Line or Middle; null when not recorded.",
+          "Where the shot was aimed, as stored: for serves Wide, Body or T; for other shots Crosscourt, Down the Line or Middle; null when not recorded. Use direction instead for any question about direction.",
+      },
+      {
+        name: "direction",
+        type: "text",
+        meaning:
+          "Where the shot went, as the Video tab's Direction filter names it: for serves Wide, Body or T; for other shots Crosscourt, Down the Line, Inside Out, Inside In or Middle. A forehand hit from the backhand side is Inside Out (crosscourt) or Inside In (down the line), never Crosscourt or Down the Line; null when not recorded.",
       },
       {
         name: "result",
