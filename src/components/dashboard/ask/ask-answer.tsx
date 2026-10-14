@@ -2,10 +2,12 @@
 
 import { useState, type CSSProperties } from "react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
+import type { AskFeedback } from "@/lib/services/ask/feedback";
 import { advButton } from "@/lib/ui/adv-button";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
+import { AskFeedbackControl } from "./ask-feedback";
 import { AskSources } from "./ask-sources";
 import type { AskAnswerState } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
@@ -30,6 +32,11 @@ export interface AskAnswerProps {
    * Omitted for an exchange whose choices can no longer be picked.
    */
   onChoose?: (option: string) => void;
+  /**
+   * Saves the asker's thumb on this answer. Omitted (and the thumbs not
+   * drawn) when the answer has no saved id to point at.
+   */
+  onRate?: (feedback: AskFeedback | null) => Promise<boolean>;
 }
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
@@ -92,6 +99,7 @@ export function AskAnswer({
   answer,
   scope = PERSONAL_ASK_SCOPE,
   onChoose,
+  onRate,
 }: AskAnswerProps) {
   const copy = askCopy(scope);
   // An answer that mounted mid-stream is arriving now, and its parts move as
@@ -111,7 +119,7 @@ export function AskAnswer({
       ) : answer.status === "error" ? (
         <AnswerError error={answer.error} copy={copy} />
       ) : (
-        <AnswerBody answer={answer} copy={copy} />
+        <AnswerBody answer={answer} copy={copy} onRate={onRate} />
       )}
     </div>
   );
@@ -185,9 +193,11 @@ function AnswerError({
 function AnswerBody({
   answer,
   copy,
+  onRate,
 }: {
   answer: AskAnswerState;
   copy: AskCopy;
+  onRate?: AskAnswerProps["onRate"];
 }) {
   const paragraphs = answer.body
     .split(/\n{2,}/)
@@ -279,6 +289,9 @@ function AnswerBody({
               <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
               {answer.noAdvice && ` · ${copy.noAdvice}`}
             </p>
+          )}
+          {answer.status === "done" && onRate && (
+            <AskFeedbackControl feedback={answer.feedback} onRate={onRate} />
           )}
         </div>
       )}

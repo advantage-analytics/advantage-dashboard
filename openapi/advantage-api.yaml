@@ -2603,6 +2603,83 @@ paths:
                     code: internal_error
                     detail: reserve_failed
 
+  /api/ask/feedback:
+    post:
+      tags: [Ask]
+      operationId: rateAskAnswer
+      summary: Thumbs up or down on one of the caller's own Ask answers
+      description: |
+        Sets, changes or (with `rating: null`) takes back the caller's thumb
+        on one saved answer — the `answerId` an answer's `done` event named.
+        A thumbs down may carry reasons from a fixed list and a note; a
+        thumbs up carries neither, and any sent are dropped. Runs as the
+        signed-in user: `ask_set_feedback()` checks the answer is theirs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [answerId, rating]
+              properties:
+                answerId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: [string, "null"]
+                  enum: [up, down, null]
+                reasons:
+                  type: array
+                  items:
+                    type: string
+                    enum: [wrong_numbers, misread, not_useful, other]
+                note:
+                  type: [string, "null"]
+                  maxLength: 500
+            examples:
+              down:
+                value:
+                  answerId: 7a1e2b3c-4d5e-4f60-8a71-b2c3d4e5f607
+                  rating: down
+                  reasons: [wrong_numbers]
+                  note: The second-serve count is off.
+      responses:
+        "204":
+          description: Saved.
+        "400":
+          description: A malformed body, an unknown key, a reason off the list or a note over 500 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+        "401":
+          description: No session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+        "403":
+          description: Not a request from a page this app served.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+        "404":
+          description: >-
+            The answer is not the caller's, or is not an answer — the same
+            refusal for both, so an id cannot be used to probe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+        "500":
+          description: The write failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskRefusalResponse"
+
   /api/admin/uploads/file:
     get:
       tags: [Admin uploads]
@@ -5206,6 +5283,12 @@ components:
         conversationId:
           type: string
           format: uuid
+        answerId:
+          type: string
+          format: uuid
+          description: >-
+            The saved answer's id, for `POST /api/ask/feedback`. Absent when
+            it could not be read back; the answer is saved either way.
         used:
           type: integer
           minimum: 0
@@ -5215,6 +5298,7 @@ components:
       examples:
         - type: done
           conversationId: 5d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+          answerId: 7a1e2b3c-4d5e-4f60-8a71-b2c3d4e5f607
           used: 6
           cap: 20
     AskErrorCode:

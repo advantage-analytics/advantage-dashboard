@@ -216,6 +216,8 @@ const ANSWER: AskAnswerState = {
   noAdvice: false,
   sources: TAG_OPTIONS.matches,
   error: null,
+  answerId: null,
+  feedback: null,
 };
 
 const FOLLOW_UP = "And on break points?";
@@ -331,6 +333,8 @@ function Thread({ composer }: { composer: ReactNode }) {
               noAdvice: false,
               sources: null,
               error: null,
+              answerId: null,
+              feedback: null,
             }}
           />
         </div>

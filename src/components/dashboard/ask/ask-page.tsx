@@ -11,6 +11,7 @@ import type {
   AskQuota,
 } from "@/lib/data/ask-server";
 import type { AskTagOptions } from "@/lib/data/ask-tags";
+import type { AskFeedback } from "@/lib/services/ask/feedback";
 import {
   askBasePath,
   askScopeProgramId,
@@ -178,7 +179,7 @@ function AskThread({
   const router = useRouter();
   const basePath = askBasePath(scope);
   const copy = askCopy(scope);
-  const { state, setDraft, ask, reset } = useAskStream({
+  const { state, setDraft, ask, reset, rate } = useAskStream({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
     programId: askScopeProgramId(scope),
@@ -331,6 +332,7 @@ function AskThread({
                   key={exchange.id}
                   exchange={exchange}
                   scope={scope}
+                  onRate={rate}
                   // Only the latest question's choices can still be picked.
                   onChoose={
                     index === state.exchanges.length - 1
@@ -370,16 +372,24 @@ function AskExchangeView({
   exchange,
   scope,
   onChoose,
+  onRate,
 }: {
   exchange: AskExchange;
   scope: AskScope;
   onChoose?: (option: string) => void;
+  onRate: (answerId: string, feedback: AskFeedback | null) => Promise<boolean>;
 }) {
   const { question, answer } = exchange;
+  const { answerId } = answer;
   return (
     <article className="flex flex-col gap-8">
       <AskPrompt text={question.text} tags={question.tags} />
-      <AskAnswer answer={answer} scope={scope} onChoose={onChoose} />
+      <AskAnswer
+        answer={answer}
+        scope={scope}
+        onChoose={onChoose}
+        onRate={answerId ? (feedback) => onRate(answerId, feedback) : undefined}
+      />
     </article>
   );
 }

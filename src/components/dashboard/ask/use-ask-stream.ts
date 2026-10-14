@@ -31,6 +31,7 @@
  */
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import type { AskFeedback } from "@/lib/services/ask/feedback";
 import {
   ASK_STATUS_STAGES,
   type AskEvent,
@@ -109,6 +110,10 @@ export interface AskAnswerState {
   /** Null until the route says which matches it computed from. */
   sources: AskSourceMatch[] | null;
   error: AskAnswerError | null;
+  /** The saved answer's id, which feedback points at. Null until saved, or if the route could not read it. */
+  answerId: string | null;
+  /** The asker's thumb on this answer, as last saved. */
+  feedback: AskFeedback | null;
 }
 
 export interface AskExchange {
@@ -145,6 +150,7 @@ export type AskThreadAction =
   | { type: "event"; event: AskEvent }
   | { type: "refused"; refusal: AskRefusal; usage?: AskThreadState["usage"] }
   | { type: "interrupted"; message: string }
+  | { type: "feedback"; answerId: string; feedback: AskFeedback | null }
   | { type: "reset" };
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
@@ -173,6 +179,8 @@ function pendingAnswer(): AskAnswerState {
     noAdvice: false,
     sources: null,
     error: null,
+    answerId: null,
+    feedback: null,
   };
 }
 
@@ -213,7 +221,12 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
     case "sources":
       return { ...answer, sources: event.matches };
     case "done":
-      return { ...answer, status: "done", stage: null };
+      return {
+        ...answer,
+        status: "done",
+        stage: null,
+        answerId: event.answerId ?? null,
+      };
     case "error":
       return {
         ...answer,
@@ -321,6 +334,19 @@ export function askThreadReducer(
       };
     }
 
+    case "feedback":
+      return {
+        ...state,
+        exchanges: state.exchanges.map((exchange) =>
+          exchange.answer.answerId === action.answerId
+            ? {
+                ...exchange,
+                answer: { ...exchange.answer, feedback: action.feedback },
+              }
+            : exchange,
+        ),
+      };
+
     case "reset":
       // "New question". The count is the account's, not the conversation's.
       return { ...emptyAskThread(), usage: state.usage };
@@ -394,6 +420,9 @@ export function parseAskEvent(line: string): AskEvent | null {
         ? {
             type: "done",
             conversationId: value.conversationId,
+            ...(typeof value.answerId === "string"
+              ? { answerId: value.answerId }
+              : {}),
             used: value.used,
             cap: value.cap,
           }
@@ -661,6 +690,8 @@ export function readSavedAnswer(content: unknown): AskAnswerState {
     noAdvice: record.noAdvice === true,
     sources: readSourceMatches(sources),
     error: null,
+    answerId: null,
+    feedback: null,
   };
 }
 
@@ -674,6 +705,8 @@ const NO_SAVED_ANSWER: AskAnswerState = {
   noAdvice: false,
   sources: null,
   error: null,
+  answerId: null,
+  feedback: null,
 };
 
 /** The minimum of `AskConversationMessage` this file needs. */
@@ -681,6 +714,8 @@ export interface SavedAskMessage {
   id: string;
   role: "user" | "assistant";
   content: unknown;
+  /** An answer's saved thumb (`ask_feedback`); absent when there is none. */
+  feedback?: AskFeedback | null;
 }
 
 /**
@@ -703,7 +738,11 @@ export function exchangesFromMessages(
       };
       exchanges.push(open);
     } else if (open) {
-      open.answer = readSavedAnswer(message.content);
+      open.answer = {
+        ...readSavedAnswer(message.content),
+        answerId: message.id,
+        feedback: message.feedback ?? null,
+      };
       open = null;
     }
   }
@@ -725,6 +764,12 @@ export interface AskStream {
   ask: (question?: AskQuestion) => Promise<AskOutcome | null>;
   /** Abandon the thread and whatever is in flight. */
   reset: () => void;
+  /**
+   * Set (or, with null, take back) the asker's thumb on one saved answer.
+   * Shown at once; put back as it was if the save fails. Resolves true when
+   * it was saved.
+   */
+  rate: (answerId: string, feedback: AskFeedback | null) => Promise<boolean>;
 }
 
 export function useAskStream(initial: {
@@ -776,5 +821,41 @@ export function useAskStream(initial: {
     dispatch({ type: "reset" });
   }, []);
 
-  return { state, setDraft, ask, reset };
+  const { exchanges } = state;
+  const rate = useCallback(
+    async (answerId: string, feedback: AskFeedback | null) => {
+      const before =
+        exchanges.find((exchange) => exchange.answer.answerId === answerId)
+          ?.answer.feedback ?? null;
+      dispatch({ type: "feedback", answerId, feedback });
+      const saved = await postAskFeedback(answerId, feedback);
+      if (!saved) dispatch({ type: "feedback", answerId, feedback: before });
+      return saved;
+    },
+    [exchanges],
+  );
+
+  return { state, setDraft, ask, reset, rate };
+}
+
+/** `POST /api/ask/feedback`. False on any refusal or a dropped connection. */
+export async function postAskFeedback(
+  answerId: string,
+  feedback: AskFeedback | null,
+): Promise<boolean> {
+  try {
+    const response = await fetch("/api/ask/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        answerId,
+        rating: feedback?.rating ?? null,
+        reasons: feedback?.reasons ?? [],
+        note: feedback?.note ?? null,
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

@@ -1992,11 +1992,23 @@ export async function* askQuestion(
       return;
     }
 
+    // The answer's own id, for a thumbs up or down on it. Not having it is
+    // no failure: the answer is saved, and only the feedback control waits.
+    const answerId = await rpc(db, "ask_last_answer_id", {
+      p_conversation_id: saved.data,
+    });
+    if (answerId.error) {
+      console.warn("[ask] could not read the saved answer's id", {
+        sqlstate: answerId.error.code,
+      });
+    }
+
     settled = true;
     yield { type: "sources", matches: result.matches };
     yield {
       type: "done",
       conversationId: saved.data,
+      ...(typeof answerId.data === "string" ? { answerId: answerId.data } : {}),
       ...(await spentCount(db, input.reservation)),
     };
   } finally {

@@ -45,6 +45,7 @@ const USER_ID = "11111111-0000-4000-8000-000000000001";
 const USAGE_ID = "aaaaaaaa-0000-4000-8000-000000000001";
 const CONVERSATION_ID = "bbbbbbbb-0000-4000-8000-000000000002";
 const SAVED_ID = "cccccccc-0000-4000-8000-000000000003";
+const ANSWER_ID = "00000000-0000-4000-8000-0000000000a1";
 const MATCH_A = "3f1c2a9e-6b7d-4c1a-9e55-0a1b2c3d4e5f";
 const MATCH_B = "8a7b6c5d-4e3f-4a2b-8c1d-9e8f7a6b5c4d";
 const STRANGERS_MATCH = "dddddddd-0000-4000-8000-000000000004";
@@ -207,6 +208,7 @@ function world(overrides: Partial<World> = {}): World {
         error: null,
       }),
       ask_save_exchange: () => ({ data: SAVED_ID, error: null }),
+      ask_last_answer_id: () => ({ data: ANSWER_ID, error: null }),
       ask_quota: () => ({
         data: { used: 0, cap: 20, resets_on: "2026-11-01" },
         error: null,
@@ -482,6 +484,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_query", "service"],
       ["ask_save_exchange", "user"],
+      ["ask_last_answer_id", "user"],
       ["ask_quota", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
@@ -505,6 +508,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_team_query", "service"],
       ["ask_save_exchange", "user"],
+      ["ask_last_answer_id", "user"],
       ["ask_quota", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
@@ -951,6 +955,7 @@ test.describe("POST /api/ask · the answer", () => {
     expect(stream.at(-1)).toEqual({
       type: "done",
       conversationId: SAVED_ID,
+      answerId: ANSWER_ID,
       used: 0,
       cap: 20,
     });
@@ -959,6 +964,7 @@ test.describe("POST /api/ask · the answer", () => {
     expect(rpcNames(calls)).toEqual([
       "ask_run_query",
       "ask_save_exchange",
+      "ask_last_answer_id",
       "ask_quota",
     ]);
     expect(calls.llm).toBe(0);
@@ -1150,6 +1156,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect(rpcNames(calls)).toEqual([
       "ask_run_team_query",
       "ask_save_exchange",
+      "ask_last_answer_id",
       "ask_quota",
     ]);
     expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });

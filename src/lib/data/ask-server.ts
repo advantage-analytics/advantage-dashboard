@@ -35,6 +35,10 @@ import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
+import {
+  readAskFeedbackRow,
+  type AskFeedback,
+} from "@/lib/services/ask/feedback";
 import { createClient } from "@/lib/supabase/server";
 
 export type {
@@ -225,6 +229,8 @@ export interface AskConversationMessage {
    */
   content: unknown;
   createdAt: string;
+  /** An answer's thumb from its asker (`ask_feedback`); null when there is none. */
+  feedback: AskFeedback | null;
 }
 
 export interface AskConversation extends AskConversationSummary {
@@ -269,7 +275,11 @@ export const getAskConversation = cache(async function getAskConversation(
     ).maybeSingle(),
     supabase
       .from("ask_messages")
-      .select("id, role, content, created_at")
+      // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
+      // one object (or null) per message — the answer's thumb, in this read.
+      .select(
+        "id, role, content, created_at, ask_feedback(rating, reasons, note)",
+      )
       .eq("conversation_id", id)
       .eq("user_id", viewerId)
       .order("created_at", { ascending: true })
@@ -297,6 +307,7 @@ export const getAskConversation = cache(async function getAskConversation(
     role: "user" | "assistant";
     content: unknown;
     created_at: string;
+    ask_feedback: unknown;
   }[];
 
   return {
@@ -308,6 +319,7 @@ export const getAskConversation = cache(async function getAskConversation(
       role: row.role,
       content: row.content,
       createdAt: row.created_at,
+      feedback: readAskFeedbackRow(row.ask_feedback),
     })),
   };
 });
