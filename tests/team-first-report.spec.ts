@@ -5,7 +5,6 @@ import {
   type DbSeasonMatch,
 } from "@/lib/data/team-home-server";
 import type { AnalysisStatus, MatchAnalysis } from "@/lib/data/match-analysis";
-import { shortDate } from "@/lib/data/match-utils";
 
 /**
  * Team Home's setup checklist, first card.
@@ -108,7 +107,10 @@ test.describe("teamFirstReport — a report the list cannot see", () => {
     expect(answer?.state).toBe("done");
     if (answer?.state !== "done") return;
     expect(answer.id).toBe("the-report");
-    expect(answer.date).toBe(shortDate(week(0)));
+    // The match's stored day, by `match-day.ts` — not `new Date()` in the
+    // runner's zone, which made this "Jan 4" on a laptop west of Greenwich.
+    expect(week(0)).toBe("2026-01-05");
+    expect(answer.date).toBe("Jan 5");
   });
 
   test("a match still on its way behind the same six rows is still on its way", () => {

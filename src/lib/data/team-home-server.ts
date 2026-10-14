@@ -23,9 +23,9 @@ import {
   type AnalysisStatus,
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
+import { formatMatchDayShort, matchDay } from "@/lib/data/match-day";
 import {
   matchOutcome,
-  shortDate,
   zonedDayString,
   type MatchScore,
 } from "@/lib/data/match-utils";
@@ -136,6 +136,38 @@ const DEFAULT_TIME_ZONE = "UTC";
  */
 export function localDay(now: Date, timeZone: string): string {
   return zonedDayString(now, timeZone);
+}
+
+/**
+ * The calendar day a report landed on, for "N new results since Friday" — or
+ * null when neither input can be read.
+ *
+ * Two different kinds of value, read two different ways:
+ *
+ * - A job's `updatedAt` is a real **instant** — when the analysis finished —
+ *   so its day is whichever day that instant falls on in the program's zone.
+ * - An import has no job, and its match date stands in. `matches.date` is a
+ *   `timestamptz` that stores a calendar **day**, not a moment (the rule, and
+ *   its writers, are in `match-day.ts`): PostgREST returns it as a full ISO
+ *   string whose time part means nothing. Putting that through `new Date()`
+ *   and a zone moves a match stored at `00:00Z` to the evening before for
+ *   every program west of Greenwich, and a Friday import fell out of "since
+ *   Friday". Its day is `matchDay()`, whatever the zone.
+ *
+ * This used to test the stamp against a bare `YYYY-MM-DD` on the belief that
+ * the column was a `date`. It never is one, so the test never matched and the
+ * match date took the instant's path.
+ */
+export function reportLandedDay(
+  jobUpdatedAt: string | null | undefined,
+  matchDate: string | null | undefined,
+  timeZone: string,
+): string | null {
+  if (jobUpdatedAt) {
+    const landed = new Date(jobUpdatedAt);
+    return Number.isNaN(landed.getTime()) ? null : localDay(landed, timeZone);
+  }
+  return matchDay(matchDate);
 }
 
 /**
@@ -1187,7 +1219,7 @@ export function teamMatchRow(
     context: matchContext(row),
     status: analysis.status,
     label: ANALYSIS_LABEL[analysis.status],
-    date: shortDate(row.date),
+    date: formatMatchDayShort(row.date),
     // Sets counted, never a stored outcome: `matches.result` holds a CONTEXT
     // string ("Final Score"), so `matchOutcome` is the shared rule the matches
     // list, the schedule and every player profile already ask.
@@ -1262,7 +1294,7 @@ export function teamFirstReport(
         state: "done",
         id: row.id,
         title: oursFirst(row, rosterIds).title,
-        date: shortDate(row.date),
+        date: formatMatchDayShort(row.date),
       };
     }
 
@@ -1722,18 +1754,8 @@ const getTeamHomeAnalytics = cache(async function getTeamHomeAnalytics(
     // pipeline writes nothing to a finished row. An import never had a job and
     // so has no arrival time; its match date stands in, which is the closest
     // true thing about it — an imported file is filed for a match just played.
-    const stamp = analysis.updatedAt ?? row.date;
-    if (!stamp) continue;
-    // A job's `updatedAt` is an instant and is read in the program's zone. A
-    // match date is already a calendar day (`matches.date` is a `date`
-    // column; a bare YYYY-MM-DD), and putting one through `new Date()` reads
-    // it as UTC midnight — west of Greenwich, the evening before — so every
-    // Friday import fell out of "since Friday". The same trap `format.ts`
-    // documents for the schedule; here it is a comparison, not a print.
-    const day = /^\d{4}-\d{2}-\d{2}$/.test(stamp)
-      ? stamp
-      : localDay(new Date(stamp), timeZone);
-    if (day >= friday) newResultsCount += 1;
+    const day = reportLandedDay(analysis.updatedAt, row.date, timeZone);
+    if (day !== null && day >= friday) newResultsCount += 1;
   }
 
   // Same three inputs the strip is built from, and deliberately the same

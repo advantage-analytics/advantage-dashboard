@@ -3,7 +3,7 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { PersonalOpponent } from "@/lib/data/personal-opponents";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { playedSets } from "@/lib/ui/score-format";
 import { opponentPlaysLabel } from "./opponent-style";
 
@@ -83,7 +83,7 @@ export function OpponentLastMatchCell({
     <span className="flex min-w-0 items-center gap-2.5">
       <span className="tabular min-w-[52px] shrink-0 text-[12px] whitespace-nowrap text-[var(--ink-700)]">
         {lastMatch.date ? (
-          formatShortDate(lastMatch.date)
+          formatMatchDayShortYear(lastMatch.date)
         ) : (
           <EmptyMark label="No date" />
         )}

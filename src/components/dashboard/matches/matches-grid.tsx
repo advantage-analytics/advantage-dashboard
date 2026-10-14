@@ -16,6 +16,7 @@ import {
   LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,
   TEAM_LIST_MIN_WIDTH_COMPACT,
+  datesNeedYear,
   eventCellFade,
 } from "./match-list-layout";
 import { cn } from "@/lib/utils";
@@ -74,17 +75,19 @@ export function MatchesGrid({
      order; pagination caps the duplication at ten rows. */
   // The Date track widens for the whole card, not per row, so the columns keep
   // one x across the list — see `DATE_COL_WITH_YEAR`. A date needs the year
-  // whenever it is not from the current year, which is the exact rule
-  // `formatShortDate` applies — decided here by comparing years directly rather
+  // whenever it is not from the current year, which is the exact rule each
+  // row's formatter applies (`datesNeedYear` — a match's day and a draft's
+  // moment are read differently) — decided by comparing years directly rather
   // than formatting every date twice (once to detect, once to render), and
   // memoized so a re-render that does not change the rows does not re-scan them.
-  const needsYear = useMemo(() => {
-    const thisYear = new Date().getFullYear();
-    return [
-      ...drafts.map((d) => d.updatedAt),
-      ...matches.map((m) => m.date),
-    ].some((date) => new Date(date).getFullYear() !== thisYear);
-  }, [drafts, matches]);
+  const needsYear = useMemo(
+    () =>
+      datesNeedYear(
+        matches.map((m) => m.date),
+        drafts.map((d) => d.updatedAt),
+      ),
+    [drafts, matches],
+  );
   const cardStyle = {
     padding: "2px 24px 6px",
     "--date-col": needsYear ? DATE_COL_WITH_YEAR : DATE_COL,

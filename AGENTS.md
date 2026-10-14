@@ -102,6 +102,16 @@ Server-side loaders live in `src/lib/data/*-server.ts`. Key tables: `matches`,
 database is the only source of truth** — verify via the Supabase MCP (`list_tables`,
 `execute_sql`). `supabase/migrations/` runs roughly 100 migrations behind it.
 
+**`matches.date` is a calendar day, not a moment.** The column is a `timestamptz`, but
+every writer stores the day the user picked in the value's UTC date part and the time
+beside it means nothing. Read it only through `src/lib/data/match-day.ts` — `matchDay()`
+for the `YYYY-MM-DD`, the `formatMatchDay*` helpers for a label, `compareMatchDays()` to
+sort. Never `new Date(match.date)` followed by local getters or a `toLocaleDateString()`
+without `timeZone: "UTC"`: that prints the day before for anyone west of Greenwich, and a
+different day on the server than in the browser. `shortDate()` and `formatShortDate()`
+are for real moments (`created_at`, a job's `updated_at`).
+`tests/match-day-readers.spec.ts` fails the build when a match-date reader goes back.
+
 Edge functions in `supabase/functions/`: `process-match` (parses uploaded .xlsx
 asynchronously — upload returns immediately) and `generate-insights`.
 
