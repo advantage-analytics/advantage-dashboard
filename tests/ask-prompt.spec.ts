@@ -816,6 +816,15 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
+  test("says every serve cell is a count: a court is one row, never a count row and a percentage row", () => {
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).not.toContain(
+      "does not record the deuce or ad court",
+    );
+  });
+
   const expected: Record<AskModelVisualKind, AskVisual> = {
     bars: {
       kind: "bars",

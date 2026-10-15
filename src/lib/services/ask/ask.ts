@@ -2217,6 +2217,18 @@ async function planOnce(
 const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
 
 /**
+ * What a model writes in a required string field it means to leave empty:
+ * `cannot_answer` is required by the plan schema, so a plan may arrive with
+ * "N/A" or "None" there instead of "".
+ */
+const PLACEHOLDER = /^(?:n\/?a|none|null|nil|-+|—|\.+)$/i;
+
+function isBlankPlaceholder(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed === "" || PLACEHOLDER.test(trimmed);
+}
+
+/**
  * The planner's reply as an {@link AskPlanReply}, or null when it is not
  * one. A fenced code block around the object is tolerated, and so is a
  * missing `asks_for_advice` (read as false): the contract asks for both to
@@ -2244,10 +2256,10 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
   if (!record) return null;
   const advice = record.asks_for_advice === true;
   // A structured reply may carry every field of the schema, the unused ones
-  // empty: an empty cannot_answer is no refusal.
+  // empty or filled with a placeholder: neither is a refusal.
   if (
     typeof record.cannot_answer === "string" &&
-    record.cannot_answer.trim() !== ""
+    !isBlankPlaceholder(record.cannot_answer)
   ) {
     return { cannot_answer: record.cannot_answer, asks_for_advice: advice };
   }
