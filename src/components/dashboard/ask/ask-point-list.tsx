@@ -57,6 +57,12 @@ export interface AskPointListProps {
   filters?: string | null;
   /** The match held more points than the list could carry. */
   truncated?: boolean;
+  /**
+   * The rows are the points the answer's headline figure counts, so the
+   * heading may call them the answer's. Otherwise it says only what they
+   * are: the match's points, all of them when nothing cut them.
+   */
+  counted?: boolean;
   /** The film on the first point with the rest queued: the header's link. Omitted inside the film room. */
   href?: string;
   /**
@@ -111,6 +117,7 @@ export function AskPointList({
   points,
   filters = null,
   truncated = false,
+  counted = false,
   href,
   headingRef,
 }: AskPointListProps) {
@@ -120,11 +127,11 @@ export function AskPointList({
   const count = points.length;
   const noun = count === 1 ? "point" : "points";
   const heading =
-    filters !== null
+    counted && filters !== null
       ? `${count} ${noun} behind this answer`
-      : truncated
-        ? `${count} ${noun} in this match`
-        : `All ${count} ${noun} in this match`;
+      : filters === null && !truncated
+        ? `All ${count} ${noun} in this match`
+        : `${count} ${noun} in this match`;
   // Who the sides are, by name: the program's player on a team answer, the
   // viewer (unnamed to themselves) on a personal one.
   const you = match.playerName ? surname(match.playerName) : "You";
@@ -138,7 +145,9 @@ export function AskPointList({
     <section
       data-ask-point-list=""
       aria-label={
-        filters !== null ? "Points behind this answer" : "Points in this match"
+        counted && filters !== null
+          ? "Points behind this answer"
+          : "Points in this match"
       }
       className="flex max-w-[420px] flex-col gap-0.5"
     >

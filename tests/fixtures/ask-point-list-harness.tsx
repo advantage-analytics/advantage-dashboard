@@ -14,6 +14,7 @@ import type { AskShowPoint } from "@/lib/services/ask/show";
  * - `&scope=team`  the match names the program's player
  * - `&f=<filters>` the measure's cut, carried on every link
  * - `&truncated=1` the match held more points than the list carries
+ * - `&counted=1`   the rows are the points the headline figure counts
  */
 const params = new URLSearchParams(window.location.search);
 
@@ -72,6 +73,7 @@ const list = (
     points={POINTS}
     filters={params.get("f")}
     truncated={params.get("truncated") === "1"}
+    counted={params.get("counted") === "1"}
     href="/dashboard/matches/match-sep-28?tab=film&pn=3%2C7%2C40"
   />
 );

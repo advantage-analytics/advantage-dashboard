@@ -65,6 +65,7 @@ const post = (): Promise<AskShowPost> => {
       filters: null,
       points: [point(3), point(7), point(12)],
       truncated: false,
+      counted: false,
       film: { state: "none" },
     },
   });

@@ -62,6 +62,12 @@ export type AskShowResponse =
       points: AskShowPoint[];
       /** True when the match holds more points than `points` could carry. */
       truncated: boolean;
+      /**
+       * True when `points` are the points the headline figure counts. False
+       * for the whole match (`filters` null) and for a cut broader than the
+       * figure ("Aces: 6" lists every serve).
+       */
+      counted: boolean;
       film: AskShowFilm;
     }
   | {
@@ -180,6 +186,7 @@ export function readAskShowResponse(value: unknown): AskShowResponse | null {
     filters: stringOrNull(value.filters),
     points,
     truncated: value.truncated === true,
+    counted: value.counted === true,
     film,
   };
 }

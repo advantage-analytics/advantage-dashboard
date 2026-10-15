@@ -7,6 +7,7 @@ import {
 import type { MatchFilmEntry } from "@/lib/match-video/film-entry";
 import {
   askShowCountSql,
+  askShowMeasure,
   askShowMeasureFilters,
   askShowPlanOf,
   askShowPointsSql,
@@ -134,11 +135,26 @@ test.describe("the saved answer's plan", () => {
           columns: ["Selected matches", "All matches"],
           rows: [
             { label: "Second-serve points won", cells: ["41.2%", "49.2%"] },
-            { label: "Not a measure", cells: ["1", "2"] },
+            { label: "First-serve points won", cells: ["60%", "62%"] },
           ],
         },
       })?.rowMeasures,
     ).toEqual(["second_serve_points_won"]);
+    // The first row is the headline's: one with no preset ("Total points
+    // won") leaves none, and a later row never stands in for it.
+    expect(
+      askShowPlanOf({
+        scopeSql: SCOPE_SQL,
+        sql: ANSWER_SQL,
+        visual: {
+          kind: "bars",
+          rows: [
+            { label: "Total points won" },
+            { label: "Second-serve points won" },
+          ],
+        },
+      })?.rowMeasures,
+    ).toEqual([]);
     expect(
       askShowPlanOf({ scopeSql: SCOPE_SQL, sql: ANSWER_SQL, mock: true })?.mock,
     ).toBe(true);
@@ -215,6 +231,40 @@ test.describe("the measure", () => {
       askShowMeasureFilters(["first_serve_pct"], ["second_serve_points_won"])
         ?.serveType,
     ).toEqual(["first"]);
+  });
+
+  test("a count the cut cannot narrow to still cuts, but is not called the answer's points", () => {
+    // "Double faults: 4" opens every serve; "Aces: 6" too; a service-games figure every service point.
+    for (const column of ["double_faults", "aces", "service_games_won"]) {
+      expect(askShowMeasure([column])).toEqual({
+        filters: { ...EMPTY_MATCH_FILTERS, server: "you" },
+        counted: false,
+      });
+    }
+    expect(askShowMeasure(["second_serve_won_pct"])?.counted).toBe(true);
+    expect(askShowMeasure(["second_serves"])?.counted).toBe(true);
+  });
+
+  test("break points saved and converted narrow to the ones won", () => {
+    expect(askShowMeasure(["break_points_saved"])).toEqual({
+      filters: {
+        ...EMPTY_MATCH_FILTERS,
+        server: "you",
+        scoreType: ["breakpoint"],
+        resultOutcome: ["won"],
+      },
+      counted: true,
+    });
+    expect(askShowMeasure(["break_points_converted"])?.filters).toEqual({
+      ...EMPTY_MATCH_FILTERS,
+      server: "opponent",
+      scoreType: ["breakpoint"],
+      resultOutcome: ["won"],
+    });
+    // The rate lists every break point it is a share of.
+    expect(
+      askShowMeasure(["break_points_saved_pct"])?.filters.resultOutcome,
+    ).toEqual([]);
   });
 
   test("the predicate speaks ask.points and, through exists, ask.point_plays", () => {
@@ -418,6 +468,8 @@ test.describe("showAnswerPoints", () => {
         },
       ],
       truncated: false,
+      // No figure, so no cut: the whole match, not the answer's points.
+      counted: false,
       film: READY,
     });
   });
@@ -567,6 +619,7 @@ test.describe("showAnswerPoints", () => {
       expect(String(call.args?.sql)).not.toContain("point_plays");
     }
     expect(outcome.value.filters).toBeNull();
+    expect(outcome.value.counted).toBe(false);
   });
 
   test("a team conversation runs the team function with its program", async () => {
@@ -725,6 +778,7 @@ test("the response reads back whole, and a foreign link does not", () => {
       },
     ],
     truncated: false,
+    counted: true,
     film: READY,
   };
   expect(readAskShowResponse(JSON.parse(JSON.stringify(match)))).toEqual(match);

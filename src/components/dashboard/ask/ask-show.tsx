@@ -185,6 +185,7 @@ export function AskShowMe({
             points={state.value.points}
             filters={state.value.filters}
             truncated={state.value.truncated}
+            counted={state.value.counted}
             href={state.value.href}
             headingRef={resultRef}
           />

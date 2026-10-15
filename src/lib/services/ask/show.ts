@@ -103,8 +103,8 @@ export interface AskShowSavedAnswer {
   /** The result columns the figures were cited from (`AskFigureEvent.column`). */
   figureColumns: string[];
   /**
-   * The measures the visual block's rows name (`measureForLabel`), in row
-   * order: the headline's measure when the answer saved no figures, as a
+   * The measure the visual block's FIRST row names (`measureForLabel`), or
+   * none: the headline's measure when the answer saved no figures, as a
    * table comparing this match with the rest does.
    */
   rowMeasures?: string[];
@@ -141,13 +141,16 @@ export function askShowPlanOf(
     isRecord(content.visual) && Array.isArray(content.visual.rows)
       ? content.visual.rows
       : [];
-  const rowMeasures = rows.flatMap((row) => {
-    const column =
-      isRecord(row) && typeof row.label === "string"
-        ? measureForLabel(row.label)
-        : null;
-    return column ? [column] : [];
-  });
+  // The FIRST row only: it is the headline's. `measureForLabel` knows only
+  // measures with a Video preset, so a first row it cannot read ("Total
+  // points won", "Winners", a match) leaves none — the whole match, honestly
+  // labelled — rather than letting a later row stand in for the headline.
+  const first = rows[0];
+  const firstColumn =
+    isRecord(first) && typeof first.label === "string"
+      ? measureForLabel(first.label)
+      : null;
+  const rowMeasures = firstColumn ? [firstColumn] : [];
   return {
     scopeSql,
     sql,
@@ -181,23 +184,67 @@ function showMeasure(column: string): {
 /** A count of points won ("second_serve_points_won", "long_rally_won") — not games, not a rate. */
 const POINTS_WON_KEY = /_points_won$|_rally_won$/;
 
+/** Counts of points won on a preset that already names whose break point it was. */
+const BREAK_POINTS_WON: ReadonlySet<string> = new Set([
+  "break_points_saved",
+  "break_points_converted",
+]);
+
+/**
+ * Measures whose Video preset holds more points than the figure counts: an
+ * ace count opens every serve, a service-games figure every service point,
+ * "first serves in" every first serve. The list is still the right film to
+ * watch, but not the counted points, so it is not headed as the answer's.
+ * Set points carry no side in the preset, so saved and converted cannot be
+ * narrowed to the viewer's either.
+ */
+const BROADER_THAN_COUNTED: ReadonlySet<string> = new Set([
+  "aces",
+  "double_faults",
+  "service_winners",
+  "service_games",
+  "service_games_won",
+  "service_games_won_pct",
+  "return_games",
+  "return_games_won",
+  "return_games_won_pct",
+  "first_serves_in",
+  "second_serves_in",
+  "first_returns_in",
+  "second_returns_in",
+  "return_contact_inside",
+  "return_contact_middle",
+  "return_contact_deep",
+  "set_points_saved",
+  "set_points_converted",
+]);
+
+/** The headline's cut, and whether the points it selects are the points it counts. */
+export interface AskShowMeasure {
+  filters: MatchFilters;
+  /** False when the cut is broader than the figure ("Aces: 6" over every serve). */
+  counted: boolean;
+}
+
 /**
  * The Video-tab cut for the answer's headline figure, or null when it has
  * none. The headline is the first figure column that names a measure; with
- * no such figure, the block's first row that does. Later figures never
- * stand in for it: a headline with no filter ("Total points won") shows the
- * whole match, honestly labelled, rather than a secondary figure's points
- * under the headline's number.
+ * no such figure, the block's first row. Later figures never stand in for
+ * it: a headline with no filter ("Total points won") shows the whole match,
+ * honestly labelled, rather than a secondary figure's points under the
+ * headline's number.
  *
  * A figure that counts points won or lost (not a rate, and not read off a
  * row label, which cannot tell "7" from "41%") narrows to those points as
- * well: "Second-serve points lost: 10" lists the ten. A rate lists the
- * points it is a share of, each marked won or lost.
+ * well: "Second-serve points lost: 10" lists the ten, "Break points saved"
+ * the ones saved. A rate lists the points it is a share of, each marked won
+ * or lost. A count the cut cannot narrow to (`BROADER_THAN_COUNTED`) still
+ * cuts, with `counted: false`.
  */
-export function askShowMeasureFilters(
+export function askShowMeasure(
   figureColumns: readonly string[],
   rowMeasures: readonly string[] = [],
-): MatchFilters | null {
+): AskShowMeasure | null {
   const pick = (columns: readonly string[]) => {
     for (const column of columns) {
       const measure = showMeasure(column);
@@ -209,19 +256,28 @@ export function askShowMeasureFilters(
   const headline = fromFigure ?? pick(rowMeasures);
   if (!headline) return null;
   const filters = figureMatchFilters(headline.column);
-  if (!filters) return null;
   const resolved = askMeasure(headline.column);
-  if (
-    !fromFigure ||
-    headline.rate ||
-    !resolved ||
-    !POINTS_WON_KEY.test(resolved.key)
-  ) {
-    return filters;
-  }
+  if (!filters || !resolved) return null;
+  const counted = !BROADER_THAN_COUNTED.has(resolved.key);
+  const narrows =
+    fromFigure !== null &&
+    !headline.rate &&
+    (POINTS_WON_KEY.test(resolved.key) || BREAK_POINTS_WON.has(resolved.key));
+  if (!narrows) return { filters, counted };
   // From the viewer's side: the opponent's points won are the viewer's lost.
   const won = headline.lost === (resolved.qualifier === "opponent");
-  return { ...filters, resultOutcome: [won ? "won" : "lost"] };
+  return {
+    filters: { ...filters, resultOutcome: [won ? "won" : "lost"] },
+    counted: true,
+  };
+}
+
+/** {@link askShowMeasure}'s cut alone. */
+export function askShowMeasureFilters(
+  figureColumns: readonly string[],
+  rowMeasures: readonly string[] = [],
+): MatchFilters | null {
+  return askShowMeasure(figureColumns, rowMeasures)?.filters ?? null;
 }
 
 const SERVE_TYPE: Record<ServeType, string> = {
@@ -474,7 +530,8 @@ export async function showAnswerPoints(
   }
 
   const scope = scopeOf(saved.programId);
-  const filters = askShowMeasureFilters(saved.figureColumns, saved.rowMeasures);
+  const measure = askShowMeasure(saved.figureColumns, saved.rowMeasures);
+  const filters = measure?.filters ?? null;
   const predicate = askShowPredicate(filters);
   const serialized = filters ? serializeMatchFilters(filters) || null : null;
 
@@ -590,6 +647,7 @@ export async function showAnswerPoints(
         };
       }),
       truncated: total > numbers.length,
+      counted: measure?.counted ?? false,
       film,
     },
   };

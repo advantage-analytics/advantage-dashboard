@@ -143,7 +143,10 @@ test("a row per point under its game, linked into the film on that point", async
 test("the measure's cut rides every row's link, and the team's player serves", async ({
   page,
 }) => {
-  await openFixture(page, "?case=page&scope=team&f=sp.y_st.2&truncated=1");
+  await openFixture(
+    page,
+    "?case=page&scope=team&f=sp.y_st.2&truncated=1&counted=1",
+  );
   await expect(row(page, 3)).toHaveAttribute(
     "href",
     "/dashboard/matches/match-sep-28?tab=film&f=sp.y_st.2&pn=3",
@@ -155,6 +158,15 @@ test("the measure's cut rides every row's link, and the team's player serves", a
   // A cut: these are the answer's points, not the match's.
   await expect(list(page).getByRole("heading")).toHaveText(
     "3 points behind this answer",
+  );
+});
+
+test("a cut broader than the figure (every serve for an ace count): the match's points, not the answer's", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=page&f=sv.y");
+  await expect(list(page).getByRole("heading")).toHaveText(
+    "3 points in this match",
   );
 });
 
