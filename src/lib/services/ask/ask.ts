@@ -205,16 +205,22 @@ export interface AskDatabase {
   rpc(fn: string, args?: Record<string, unknown>): PromiseLike<AskRpcResult>;
 }
 
+/** Which step of a question a model call is for; the route names the call by it in LLM analytics. */
+export type AskModelStage = "plan" | "pattern" | "answer";
+
 /**
  * The model behind both steps. `configured` is `isLLMConfigured()` and
- * `stream` is `getLLMStream()` with the observability context already bound;
- * the route builds this from `adapter.ts`, the spec from strings.
+ * `stream` is `getLLMStream()` with the observability context already bound
+ * (one context per question, so its calls share a trace) and the stage
+ * passed on as the call's span name; the route builds this from
+ * `adapter.ts`, the spec from strings.
  */
 export interface AskModel {
   configured: boolean;
   stream(
     systemPrompt: string,
     messages: ChatMessage[],
+    stage?: AskModelStage,
   ): Promise<AsyncIterable<string>>;
 }
 
@@ -927,6 +933,7 @@ export async function* askQuestion(
               team,
             }),
             [{ role: "user", content: input.question }],
+            "pattern",
           ),
         );
         return readPatternReply(reply);
@@ -1951,6 +1958,7 @@ export async function* askQuestion(
             ...(team ? { scope } : {}),
           }),
           [{ role: "user", content: ASK_ANSWER_USER_MESSAGE }],
+          "answer",
         );
       } catch {
         yield await fail("llm_unavailable", ASK_LLM_UNAVAILABLE_MESSAGE);
@@ -2086,7 +2094,7 @@ async function planOnce(
 
   let reply: string;
   try {
-    const chunks = await model.stream(systemPrompt, messages);
+    const chunks = await model.stream(systemPrompt, messages, "plan");
     const parts: string[] = [];
     for await (const chunk of chunks) parts.push(chunk);
     reply = parts.join("");

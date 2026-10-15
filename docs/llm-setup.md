@@ -1,123 +1,153 @@
 # LLM Setup Guide
 
-This guide explains how to connect a real LLM to the dashboard's AI-generated insight
-claims: the Focus card's headline sentence on personal Home (`/api/home-insight`) and
-Team Home (`/api/team-insight`).
+How to connect a real model to the features that call one through the adapter
+at `src/lib/llm/adapter.ts`:
+
+- the Focus card's claim line on personal Home (`/api/home-insight`) and Team
+  Home (`/api/team-insight`);
+- **Ask** (`/api/ask`, `/dashboard/ask`, `/dashboard/team/ask`): the model
+  writes the SQL for a question and then the prose over the rows it returned,
+  two calls on the common path and up to five with retries
+  (`src/lib/services/ask/ask.ts`).
+
+Match-report insights are **not** this adapter: they come from the
+`generate-insights` edge function with its own `GEMINI_KEY` (see `AGENTS.md`).
 
 ---
 
-## 1. Choose a Provider
+## 1. Choose a provider
 
-| Provider      | SDK                 | Key env var         | Model used        |
-| ------------- | ------------------- | ------------------- | ----------------- |
-| **Anthropic** | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-4-6` |
-| **OpenAI**    | `openai`            | `OPENAI_API_KEY`    | `gpt-4o`          |
+| `LLM_PROVIDER` | SDK                 | Key env var         | Model                   |
+| -------------- | ------------------- | ------------------- | ----------------------- |
+| `anthropic`    | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-4-6`       |
+| `openai`       | `openai`            | `OPENAI_API_KEY`    | `gemini-3.5-flash-lite` |
 
-Pick one and follow the steps below.
-
----
-
-## 2. Install the SDK
-
-Run **one** of:
-
-```bash
-# Anthropic
-npm install @anthropic-ai/sdk
-
-# OpenAI
-npm install openai
-```
+`openai` is a misnomer kept for compatibility: the branch drives the OpenAI
+SDK against **Gemini's OpenAI-compatible endpoint**
+(`generativelanguage.googleapis.com/v1beta/openai/`), so `OPENAI_API_KEY`
+holds a **Google AI Studio key**, not an OpenAI one. **Production runs this
+branch.** Both SDKs are already dependencies and are imported on demand, so
+nothing needs installing.
 
 ---
 
-## 3. Get an API Key
+## 2. Get an API key
 
-- **Anthropic**: https://console.anthropic.com → API Keys → Create key
-- **OpenAI**: https://platform.openai.com/api-keys → Create new secret key
+- **Gemini** (the `openai` branch): https://aistudio.google.com/apikey.
+  Gemini 2.5 models are closed to new Google Cloud projects, which is why the
+  adapter names a 3.5 model.
+- **Anthropic**: https://console.anthropic.com → API Keys → Create key.
 
 ---
 
-## 4. Configure `.env.local`
-
-Add these lines to `.env.local` in the project root (create it if it doesn't exist):
+## 3. Configure `.env.local`
 
 ```env
-# Select provider: "anthropic" or "openai"
-LLM_PROVIDER=anthropic
+# Select provider: "anthropic" or "openai" (Gemini through the OpenAI SDK)
+LLM_PROVIDER=openai
 
-# Anthropic key (if using Anthropic)
-ANTHROPIC_API_KEY=sk-ant-...
+# Google AI Studio key (if using "openai")
+OPENAI_API_KEY=AIza...
 
-# OpenAI key (if using OpenAI)
-# OPENAI_API_KEY=sk-...
+# Anthropic key (if using "anthropic")
+# ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-> `.env.local` is git-ignored. Never commit API keys.
+`.env.local` is git-ignored. Never commit API keys. `.env.example` documents
+every variable.
 
 ---
 
-## 5. Run Locally and Verify
+## 4. Run locally and verify
 
 ```bash
 npm run dev
 ```
 
-1. Sign in and open the dashboard **Home** page (or **Team Home**, from a team
-   workspace).
-2. If you (or the program) have recorded matches, the Focus card's claim line
-   should stream in as one short sentence, generated from recent performance.
+1. Sign in and open **Home** (or **Team Home** from a team workspace). With
+   recorded matches, the Focus card's claim line streams in as one sentence.
+2. Open **Ask** and ask a question about your matches. The status line walks
+   through "Planning the query", "Reading your matches", "Writing the answer".
 
-If you see:
+If the Focus card shows "⚠️ No LLM provider is configured…", or Ask answers
+from its fixed mock query, either `LLM_PROVIDER` is unset or its key is
+missing. Check `.env.local` and restart the dev server.
 
-> ⚠️ No LLM provider is configured…
-
-…then either `LLM_PROVIDER` is not set or the corresponding key is missing —
-double-check `.env.local` and restart the dev server.
-
-A player or program with no recorded matches gets no claim line at all — the
-route answers with an empty 204, regardless of provider configuration. That's
-the route refusing to invent a judgement, not a misconfiguration.
+A player or program with no recorded matches gets no claim line (the route
+answers 204) and Ask shows its day-zero state. That is the product refusing to
+invent a judgement, not a misconfiguration.
 
 ---
 
-## 6. How to Switch Providers
+## 5. Switch providers
 
-1. Change `LLM_PROVIDER` in `.env.local` to `anthropic` or `openai`.
-2. Make sure the corresponding `*_API_KEY` is present.
-3. Restart the dev server.
-
-No code changes are needed — the adapter at `src/lib/llm/adapter.ts` handles the switch.
+Change `LLM_PROVIDER`, make sure the matching key is present, restart. No code
+changes: `isLLMConfigured()` and `getLLMStream()` in the adapter branch on the
+same two conditions, and `tests/ask-prompt.spec.ts` holds them together.
 
 ---
 
-## 7. Rough Cost Estimates
+## 6. Rough costs
 
-Each insight request sends a compact summary of recent performance (a few hundred
-tokens of prompt) and receives one short sentence back (well under 50 tokens).
+What one call sends, measured 2026-10-14 (`docs/ask-improvement-roadmap.md`):
 
-| Provider        | Input           | Output          | ~Cost per insight |
-| --------------- | --------------- | --------------- | ----------------- |
-| Claude Opus 4.6 | $15 / 1M tokens | $75 / 1M tokens | ~$0.01            |
-| GPT-4o          | $5 / 1M tokens  | $15 / 1M tokens | ~$0.003           |
+| Call           | Input         | Output      |
+| -------------- | ------------- | ----------- |
+| Insight claim  | a few hundred | under 50    |
+| Ask plan (SQL) | ~9,000 tokens | ~300 tokens |
+| Ask answer     | ~4,500 tokens | ~400 tokens |
 
-Prices are approximate and subject to change. Check the provider's pricing page for current rates.
+List prices per million tokens on that date:
+
+| Model                   | Input | Output | ≈ per Ask question | ≈ per insight |
+| ----------------------- | ----- | ------ | ------------------ | ------------- |
+| `gemini-3.5-flash-lite` | $0.30 | $2.50  | $0.006             | under $0.001  |
+| `claude-opus-4-6`       | $5    | $25    | $0.09              | $0.003        |
+
+Prices change; the roadmap's §1.1 compares the current alternatives. The
+actual spend is in PostHog (§7).
 
 ---
 
-## 8. Dev Without a Key (Mock Mode)
+## 7. Telemetry
 
-If neither `LLM_PROVIDER` nor an API key is set, the adapter automatically uses a mock stream. The Focus card remains fully functional — it displays a "no provider configured" notice in place of a real claim.
+Every real call is one `$ai_generation` event in PostHog's LLM analytics,
+sent through the `@posthog/ai` wrappers (`posthogPrivacyMode: true`, so no
+prompt or reply text leaves the server; only model, tokens, cost and latency).
+What the adapter adds so the events can be read:
 
-This means the UI can be developed and tested without any credentials.
+- **`$ai_span_name`** names the call: `home.insight`, `team.insight`,
+  `ask.plan`, `ask.pattern`, `ask.answer`. Pass it as `getLLMStream()`'s
+  `options.span`.
+- **One trace per request.** `createLLMObservabilityContext()` is created
+  once per request and shared by every call in it, so an Ask question's plan,
+  pattern and answer calls (and retries) sit under one `$ai_trace_id`.
+- **Tokens and cost on the Gemini path** come from the stream's final usage
+  chunk, which Gemini sends only when asked (the request's
+  `stream_options.include_usage`). Before 2026-10-15 every event from this
+  path recorded zero tokens and zero cost.
+
+Nothing is sent when the PostHog server config is absent.
 
 ---
 
-## 9. Optional: Rate Limiting
+## 8. Dev without a key (mock mode)
 
-Neither `/api/home-insight` nor `/api/team-insight` includes rate limiting. For production, consider:
+With no provider or key set, `getLLMStream()` yields a fixed warning sentence
+and the Focus card shows it in place of a claim. Ask cannot parse that as a
+query, so it branches on `isLLMConfigured()` and runs a fixed `scope_sql` /
+`sql` pair with a fixed answer template instead (`src/lib/services/ask/mock.ts`).
+The query still runs against the real `ask` views, so mock mode exercises
+everything but the model. Mock questions do not count against the monthly
+limit.
 
-- **Upstash Ratelimit** with `@upstash/ratelimit` + Redis — limits per user/IP
-- **Vercel Edge Middleware** — token-bucket or sliding-window limiting
+---
 
-The auth guard already ensures only authenticated (and, for the team route, workspace-scoped) users can hit either endpoint.
+## 9. Limits and rate limiting
+
+- **Ask** reserves one of the user's monthly questions before any model call
+  (`ask_reserve_question()`, 20 a month, unlimited for platform admins) and
+  releases it when the answer fails, so a failure never costs a question.
+- **The insight routes** have no rate limiting beyond authentication. If that
+  changes, Upstash Ratelimit or a token bucket in `src/proxy.ts` are the usual
+  places.

@@ -8,10 +8,17 @@ import { getPostHogServerConfig } from "@/lib/posthog-logs";
  *
  * Switch providers by setting LLM_PROVIDER in .env.local:
  *   LLM_PROVIDER=anthropic   (requires ANTHROPIC_API_KEY)
- *   LLM_PROVIDER=openai      (requires OPENAI_API_KEY)
+ *   LLM_PROVIDER=openai      (requires OPENAI_API_KEY — a Google AI key: the
+ *                             OpenAI SDK pointed at Gemini's OpenAI-compatible
+ *                             endpoint; production runs this)
  *
  * If no provider/key is set the adapter emits a mock stream so the UI
  * remains testable in local dev without credentials.
+ *
+ * Every real call is one `$ai_generation` event in PostHog LLM analytics,
+ * named by `LLMCallOptions.span` so the stages of one Ask question and the
+ * insight cards can be told apart, with tokens and cost from the provider's
+ * usage report (`docs/llm-setup.md` §7).
  */
 
 export interface ChatMessage {
@@ -23,6 +30,16 @@ interface LLMObservabilityContext {
   distinctId: string;
   sessionId: string;
   traceId: string;
+}
+
+export interface LLMCallOptions {
+  /**
+   * What this call is for, recorded as `$ai_span_name` on its PostHog event:
+   * `home.insight`, `team.insight`, `ask.plan`, `ask.pattern`, `ask.answer`.
+   * Every call under one context shares a trace; the span is what tells a
+   * question's plan call from its answer call inside that trace.
+   */
+  span?: string;
 }
 
 /**
@@ -77,7 +94,11 @@ function flushAfterResponse(posthog: PostHog | null) {
   }
 }
 
-function posthogOptions(context: LLMObservabilityContext, provider?: "google") {
+function posthogOptions(
+  context: LLMObservabilityContext,
+  options: LLMCallOptions,
+  provider?: "google",
+) {
   return {
     posthogDistinctId: context.distinctId,
     // Prompts and replies carry player first names and match stats, and some
@@ -90,6 +111,7 @@ function posthogOptions(context: LLMObservabilityContext, provider?: "google") {
     posthogProperties: {
       $ai_session_id: context.sessionId,
       ...(provider ? { $ai_provider: provider } : {}),
+      ...(options.span ? { $ai_span_name: options.span } : {}),
     },
   };
 }
@@ -120,6 +142,7 @@ export async function getLLMStream(
   systemPrompt: string,
   messages: ChatMessage[],
   context: LLMObservabilityContext,
+  options: LLMCallOptions = {},
 ): Promise<AsyncIterable<string>> {
   const provider = process.env.LLM_PROVIDER ?? "";
 
@@ -128,6 +151,7 @@ export async function getLLMStream(
       systemPrompt,
       messages,
       context,
+      options,
       process.env.ANTHROPIC_API_KEY,
     );
   }
@@ -137,6 +161,7 @@ export async function getLLMStream(
       systemPrompt,
       messages,
       context,
+      options,
       process.env.OPENAI_API_KEY,
     );
   }
@@ -151,6 +176,7 @@ async function anthropicStream(
   systemPrompt: string,
   messages: ChatMessage[],
   context: LLMObservabilityContext,
+  options: LLMCallOptions,
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
@@ -173,7 +199,7 @@ async function anthropicStream(
         posthog,
       }).messages.create({
         ...request,
-        ...posthogOptions(context),
+        ...posthogOptions(context, options),
       })
     : await new (await import("@anthropic-ai/sdk")).default({
         apiKey,
@@ -200,6 +226,7 @@ async function openaiStream(
   systemPrompt: string,
   messages: ChatMessage[],
   context: LLMObservabilityContext,
+  options: LLMCallOptions,
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
@@ -208,6 +235,11 @@ async function openaiStream(
     // is refused with a 404 on 2.5-flash-lite. Same model as generate-insights.
     model: "gemini-3.5-flash-lite",
     stream: true as const,
+    // A streamed completion reports its token usage only on request, in one
+    // last chunk with no choices. Without it every event PostHog recorded
+    // from this path carried zero tokens and zero cost (checked 2026-10-14:
+    // 701 of 701 calls). The chunk loop below ignores a chunk with no delta.
+    stream_options: { include_usage: true },
     messages: [
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -224,7 +256,7 @@ async function openaiStream(
         posthog,
       }).chat.completions.create({
         ...request,
-        ...posthogOptions(context, "google"),
+        ...posthogOptions(context, options, "google"),
       })
     : await new (await import("openai")).default({
         apiKey,
@@ -234,7 +266,8 @@ async function openaiStream(
 
   async function* iterate(): AsyncIterable<string> {
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
+      // The trailing usage chunk may omit `choices` entirely rather than send [].
+      const delta = chunk.choices?.[0]?.delta?.content;
       if (delta) yield delta;
     }
   }

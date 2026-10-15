@@ -456,14 +456,17 @@ export async function POST(request: Request): Promise<Response> {
     service,
     viewerId: user.id,
   });
+  // One context for the whole question, so every model call it makes (plan,
+  // pattern, answer, and any retry) lands under one PostHog trace, each call
+  // named by its stage. A context per call, as this once was, split a
+  // question across traces and made its calls look like the insight cards'.
+  const observability = createLLMObservabilityContext(user.id);
   const model: AskModel = {
     configured: isLLMConfigured(),
-    stream: (systemPrompt, messages) =>
-      getLLMStream(
-        systemPrompt,
-        messages,
-        createLLMObservabilityContext(user.id),
-      ),
+    stream: (systemPrompt, messages, stage) =>
+      getLLMStream(systemPrompt, messages, observability, {
+        span: stage ? `ask.${stage}` : "ask",
+      }),
   };
 
   // Everything that could refuse has. From here a question is spent (unless
