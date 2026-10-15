@@ -57,6 +57,25 @@ test.describe("the timeline", () => {
     );
   });
 
+  test("close points never overlap: each window ends at the next one's padded start, an untimed length included", () => {
+    // Serves 4 s apart: a 6 s rally, an untimed one (assumed 10 s), a 3 s one.
+    const windows = clipWindows(
+      [point(1, 100, 6), point(2, 104), point(3, 108, 3)],
+      { offset: 0, duration: null },
+    );
+    expect(windows).toEqual([
+      { pointNumber: 1, start: 98.5, end: 102.5 },
+      { pointNumber: 2, start: 102.5, end: 106.5 },
+      { pointNumber: 3, start: 106.5, end: 112.5 },
+    ]);
+    // Advancing only ever seeks forward: no footage plays twice.
+    for (let i = 1; i < windows.length; i += 1) {
+      expect(windows[i].start).toBeGreaterThanOrEqual(windows[i - 1].end);
+    }
+    expect(clipAdvance(windows, 0, 102.5)).toBe(1);
+    expect(clipAdvance(windows, 1, 106.5)).toBe(2);
+  });
+
   test("advance: keep playing inside a window, the next index once it has run out, end after the last", () => {
     const windows = clipWindows([point(3, 100, 4), point(7, 130)], {
       offset: 90,

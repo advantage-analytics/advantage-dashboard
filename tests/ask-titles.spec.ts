@@ -35,6 +35,18 @@ test.describe("askTitle", () => {
     );
   });
 
+  test("an initial or a decimal is not a sentence end", () => {
+    expect(askTitle("How did I play against J. Smith last week?")).toBe(
+      "How did I play against J. Smith last week?",
+    );
+    expect(askTitle("Did my 4.5 rating opponents beat me?")).toBe(
+      "Did my 4.5 rating opponents beat me?",
+    );
+    expect(
+      askTitle("Show my matches against J. R. Smith. Then my serve stats."),
+    ).toBe("Show my matches against J. R. Smith");
+  });
+
   test("a comma alone does not end the clause", () => {
     expect(askTitle("Against Marek, how did my serve go?")).toBe(
       "Against Marek, how did my serve go?",

@@ -372,8 +372,26 @@ export interface AskCsvFile {
   text: string;
 }
 
+/** A figure as the server writes one: "-3", "+1.5", "41%", "-2 pts", "37,5 %". */
+const NUMERIC_TEXT = /^[-+]?\d[\d.,]*\s?(?:%|[A-Za-z]+)?$/;
+
+/**
+ * A text cell a spreadsheet would run as a formula (CWE-1236) gets a leading
+ * `'`, which shows it as text. A number is left alone, sign and all.
+ */
+function inert(text: string): string {
+  return /^[=+\-@\t\r]/.test(text) && !NUMERIC_TEXT.test(text)
+    ? `'${text}`
+    : text;
+}
+
 function cell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? "" : String(value);
+  const text =
+    value === null || value === undefined
+      ? ""
+      : typeof value === "number"
+        ? String(value)
+        : inert(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

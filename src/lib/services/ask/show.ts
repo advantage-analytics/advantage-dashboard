@@ -1,4 +1,5 @@
 import { isUuid } from "@/lib/admin/validation";
+import { gameNumbersInSet } from "@/lib/data/game-in-set";
 import {
   filtersEqual,
   serializeMatchFilters,
@@ -257,6 +258,13 @@ export interface AskShowPointRow {
   duration: number | null;
 }
 
+/** One `public.points` row of a match, as `gameNumbersInSet()` reads it. */
+export interface AskShowGameRow {
+  set_number: number;
+  game_number: number;
+  game_score: string | null;
+}
+
 export interface AskShowDeps {
   /** `createAskDatabase()`'s: the two query functions ride the service role, pinned to the viewer. */
   db: AskDatabase;
@@ -267,6 +275,12 @@ export interface AskShowDeps {
     matchId: string,
     pointNumbers: readonly number[],
   ): Promise<AskShowPointRow[]>;
+  /**
+   * Every point of the match, in point order, through the signed-in client.
+   * `points.game_number` runs on across the match, and renumbering it per set
+   * needs every game, not only the points the answer picked.
+   */
+  readGames(matchId: string): Promise<AskShowGameRow[]>;
   /** Whether the match has film, as the Video tab would find it. */
   readFilm(matchId: string): Promise<AskShowFilm>;
 }
@@ -447,10 +461,12 @@ export async function showAnswerPoints(
   if (numbers.length === 0) return refuse("no_points");
 
   let rows: AskShowPointRow[];
+  let games: AskShowGameRow[];
   let film: AskShowFilm;
   try {
-    [rows, film] = await Promise.all([
+    [rows, games, film] = await Promise.all([
       deps.readPoints(matchId, numbers),
+      deps.readGames(matchId),
       deps.readFilm(matchId),
     ]);
   } catch (error) {
@@ -460,6 +476,8 @@ export async function showAnswerPoints(
     );
   }
   const detail = new Map(rows.map((row) => [row.pointNumber, row]));
+  // Counted from 1 in each set, as the film room numbers them.
+  const gameInSet = gameNumbersInSet(games);
 
   return {
     ok: true,
@@ -474,7 +492,13 @@ export async function showAnswerPoints(
         return {
           pointNumber,
           setNumber: row?.setNumber ?? null,
-          gameNumber: row?.gameNumber ?? null,
+          gameNumber:
+            row && row.setNumber !== null && row.gameNumber !== null
+              ? gameInSet({
+                  set_number: row.setNumber,
+                  game_number: row.gameNumber,
+                })
+              : null,
           pointScore: row?.pointScore ?? null,
           gameScore: row?.gameScore ?? null,
           resultType: row?.resultType ?? null,

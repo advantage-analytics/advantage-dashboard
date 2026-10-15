@@ -14,6 +14,7 @@ import type { AskShowPoint } from "@/lib/services/ask/show-response";
  * conversion through `toFilmTime` — which is where the trim offset is
  * applied — then the point's own duration padded by the room's buffer, or
  * the room's assumed length when the source timed starts but not lengths.
+ * A window ends no later than the next one's padded start, as the room's do.
  * Pure, so `tests/ask-clip-strip.spec.ts` pins it without a `<video>`.
  */
 
@@ -37,24 +38,36 @@ export function clipWindows(
   clock: FilmClock,
 ): ClipWindow[] {
   const limit = clock.duration ?? Infinity;
-  return points
+  const timed = points
     .filter(
       (point): point is AskShowPoint & { videoTime: number } =>
         point.videoTime !== null,
     )
-    .sort((a, b) => a.videoTime - b.videoTime)
-    .map((point) => {
-      const serve = toFilmTime(point.videoTime, clock);
-      const start = Math.max(0, serve - POINT_BUFFER_SECONDS);
-      const length =
-        point.duration && point.duration > 0 ? point.duration : ASSUMED_SECONDS;
-      const end = Math.min(serve + length + POINT_BUFFER_SECONDS, limit);
-      return {
-        pointNumber: point.pointNumber,
-        start,
-        end: Math.max(end, start),
-      };
-    });
+    .sort((a, b) => a.videoTime - b.videoTime);
+  // One conversion per point, reused as the bound of the window before it.
+  const starts = timed.map((point) =>
+    Math.max(0, toFilmTime(point.videoTime, clock) - POINT_BUFFER_SECONDS),
+  );
+  return timed.map((point, i) => {
+    const serve = toFilmTime(point.videoTime, clock);
+    const start = starts[i];
+    const length =
+      point.duration && point.duration > 0 ? point.duration : ASSUMED_SECONDS;
+    // As `filmStops` clamps: never past the next window's padded start, so
+    // windows never overlap and advancing never seeks backwards. An untimed
+    // length is only assumed, so the next serve cuts it too.
+    const nextStart = starts[i + 1] ?? Infinity;
+    const end = Math.min(
+      serve + length + POINT_BUFFER_SECONDS,
+      nextStart,
+      limit,
+    );
+    return {
+      pointNumber: point.pointNumber,
+      start,
+      end: Math.max(end, start),
+    };
+  });
 }
 
 /**

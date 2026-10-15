@@ -16,6 +16,7 @@ import {
   showAnswerPoints,
   type AskShowDeps,
   type AskShowFilm,
+  type AskShowGameRow,
   type AskShowResponse,
   type AskShowSavedAnswer,
 } from "@/lib/services/ask/show";
@@ -211,6 +212,7 @@ function fakeDeps(world: {
     i_served: boolean | null;
   }[];
   rows?: Record<string, unknown>[];
+  games?: AskShowGameRow[];
   film?: AskShowFilm;
   pointsFail?: boolean;
 }) {
@@ -272,6 +274,15 @@ function fakeDeps(world: {
         ]
       );
     },
+    async readGames(matchId) {
+      reads.push(`games:${matchId}`);
+      return (
+        world.games ?? [
+          { set_number: 1, game_number: 1, game_score: "0-0" },
+          { set_number: 1, game_number: 2, game_score: "1-0" },
+        ]
+      );
+    },
     async readFilm(matchId) {
       reads.push(`film:${matchId}`);
       return world.film ?? READY;
@@ -299,6 +310,7 @@ test.describe("showAnswerPoints", () => {
     expect(reads).toEqual([
       `answer:${ANSWER_ID}`,
       `points:${MATCH_A}:3,7`,
+      `games:${MATCH_A}`,
       `film:${MATCH_A}`,
     ]);
     expect(outcome.value).toEqual({
@@ -343,6 +355,56 @@ test.describe("showAnswerPoints", () => {
       truncated: false,
       film: READY,
     });
+  });
+
+  test("games are numbered per set, from every game of the match, tiebreak as one", async () => {
+    // A 6-4 first set (games 1–10), then set 2 stored match-cumulatively:
+    // its 4th game is game 14, and a tiebreak split across server changes.
+    const games: AskShowGameRow[] = [];
+    for (let game = 1; game <= 10; game += 1) {
+      for (let i = 0; i < 4; i += 1) {
+        games.push({ set_number: 1, game_number: game, game_score: "x" });
+      }
+    }
+    for (let game = 11; game <= 22; game += 1) {
+      for (let i = 0; i < 4; i += 1) {
+        games.push({ set_number: 2, game_number: game, game_score: `${game}` });
+      }
+    }
+    games.push({ set_number: 2, game_number: 23, game_score: "6-6" });
+    games.push({ set_number: 2, game_number: 24, game_score: "6-6" });
+    games.push({ set_number: 2, game_number: 24, game_score: "6-6" });
+    games.push({ set_number: 2, game_number: 25, game_score: "6-6" });
+    const { deps } = fakeDeps({
+      listed: [
+        { point_number: 5, i_won: true, i_served: true },
+        { point_number: 54, i_won: false, i_served: false },
+        { point_number: 92, i_won: true, i_served: true },
+        { point_number: 94, i_won: true, i_served: false },
+      ],
+      rows: [
+        { pointNumber: 5, setNumber: 1, gameNumber: 2 },
+        { pointNumber: 54, setNumber: 2, gameNumber: 14 },
+        { pointNumber: 92, setNumber: 2, gameNumber: 24 },
+        { pointNumber: 94, setNumber: 2, gameNumber: 25 },
+      ],
+      games,
+    });
+    const outcome = await showAnswerPoints(deps, ANSWER_ID);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok || outcome.value.kind !== "match") return;
+    expect(
+      outcome.value.points.map((point) => [
+        point.pointNumber,
+        point.setNumber,
+        point.gameNumber,
+      ]),
+    ).toEqual([
+      [5, 1, 2],
+      [54, 2, 4],
+      [92, 2, 13],
+      [94, 2, 13],
+    ]);
   });
 
   test("a figure's measure narrows the queries and rides the link as `?f=`", async () => {
@@ -744,6 +806,10 @@ function loadRoute(state: World) {
         record.filters.push(`in:${column}=${values.join(",")}`);
         return chain;
       },
+      order: (column: string) => {
+        record.filters.push(`order:${column}`);
+        return chain;
+      },
       maybeSingle: () => answer(),
       then: (
         resolve: (value: { data: unknown; error: unknown }) => unknown,
@@ -1008,11 +1074,18 @@ test.describe("POST /api/ask/show · the answer and the boundary", () => {
     expect(calls.tables.map((read) => read.table)).toEqual([
       "ask_messages",
       "points",
+      "points",
     ]);
     expect(calls.tables[0].filters).toContain(`eq:user_id=${USER_ID}`);
     expect(calls.tables[0].filters).toContain(`eq:id=${ANSWER_ID}`);
     expect(calls.tables[1].filters).toContain(`eq:match_id=${MATCH_A}`);
     expect(calls.tables[1].filters).toContain("in:point_number=3,7");
+    // Every game of the match, in point order, for the per-set numbering.
+    expect(calls.tables[2].filters).toContain(`eq:match_id=${MATCH_A}`);
+    expect(calls.tables[2].filters).toContain("order:point_number");
+    expect(calls.tables[2].filters.some((f) => f.startsWith("in:"))).toBe(
+      false,
+    );
     expect(calls.loaders).toEqual([`getMatchVideo:${MATCH_A}`]);
 
     expect(body.match.matchId).toBe(MATCH_A);

@@ -42,6 +42,7 @@ import {
   showAnswerPoints,
   type AskShowDeps,
   type AskShowFilm,
+  type AskShowGameRow,
   type AskShowPointRow,
   type AskShowRefusal,
   type AskShowSavedAnswer,
@@ -186,6 +187,30 @@ export async function POST(request: Request): Promise<Response> {
             resultType: stringOrNull(row.result_type),
             videoTime: numberOrNull(row.video_time),
             duration: numberOrNull(row.duration),
+          },
+        ];
+      });
+    },
+    // Every point's game, in point order, so `show.ts` can number games per
+    // set the way the film room does. Same client, same visibility.
+    async readGames(matchId): Promise<AskShowGameRow[]> {
+      const { data, error } = await supabase
+        .from("points")
+        .select("set_number, game_number, game_score")
+        .eq("match_id", matchId)
+        .order("point_number", { ascending: true });
+      if (error) {
+        throw new Error("Could not read the games", { cause: error });
+      }
+      return ((data ?? []) as Record<string, unknown>[]).flatMap((row) => {
+        const set = numberOrNull(row.set_number);
+        const game = numberOrNull(row.game_number);
+        if (set === null || game === null) return [];
+        return [
+          {
+            set_number: set,
+            game_number: game,
+            game_score: stringOrNull(row.game_score),
           },
         ];
       });

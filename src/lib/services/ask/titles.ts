@@ -26,9 +26,12 @@ const MIN_CLAUSE = 12;
 /**
  * Where a first clause ends: sentence punctuation, a spaced dash, or a comma
  * followed by a conjunction. A comma alone is kept — "Against Marek, how did
- * my serve go" is one clause with a name in it.
+ * my serve go" is one clause with a name in it. A full stop ends a clause
+ * only before a space and a capital, and never after a lone letter: "J.
+ * Smith" is a name and "4.5" a number, not two sentences.
  */
-const CLAUSE_BOUNDARY = /[?!.;:]|\s[—–-]\s|,\s+(?:and|but|or|so|then)\b/i;
+const CLAUSE_BOUNDARY =
+  /[?!;:]|(?<!(?:^|\s)[A-Za-z])\.(?=\s+[A-Z])|\s[—–-]\s|,\s+(?:[Aa]nd|[Bb]ut|[Oo]r|[Ss]o|[Tt]hen)\b/;
 
 const FALLBACK_TITLE = "New question";
 

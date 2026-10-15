@@ -197,6 +197,30 @@ test.describe("askVisualCsv", () => {
     );
   });
 
+  test("a text cell a spreadsheet would run is quoted; a signed figure is not", () => {
+    const n = (value: number, text: string) => ({ value, text });
+    const file = askVisualCsv({
+      kind: "split",
+      caption: "",
+      parts: [
+        { label: '=HYPERLINK("http://x")', count: n(-3, "-3") },
+        { label: "+cmd|' /C calc'!A0", count: n(2, "+2 pts") },
+        { label: "-2+3", count: n(1.5, "1,5 %") },
+        { label: "@SUM(A1)", count: n(0, "0") },
+        { label: "\tTabbed", count: n(-1, "-1.5") },
+        { label: "Winners", count: n(8, "8 pts") },
+      ],
+    });
+    expect(file.text.split("\n").slice(1)).toEqual([
+      `"'=HYPERLINK(""http://x"")",-3`,
+      "'+cmd|' /C calc'!A0,+2 pts",
+      '\'-2+3,"1,5 %"',
+      "'@SUM(A1),0",
+      "'\tTabbed,-1.5",
+      "Winners,8 pts",
+    ]);
+  });
+
   test("every kind prints the server's text, never a reformatted number", () => {
     const n = (value: number, text: string) => ({ value, text });
     const files = [
