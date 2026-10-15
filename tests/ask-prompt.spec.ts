@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { parsePlanReply } from "@/lib/services/ask/ask";
-import { compareSql } from "@/lib/services/ask/compare";
+import { ASK_COMPARE_KINDS, compareSql } from "@/lib/services/ask/compare";
 
 import { getLLMStream, isLLMConfigured } from "@/lib/llm/adapter";
 import {
@@ -30,6 +30,10 @@ import {
 } from "@/lib/services/ask/mock";
 import {
   ASK_ANSWER_EXAMPLE_REPLY,
+  ASK_ANSWER_PROMPT_DYNAMIC_HEADING,
+  ASK_PLAN_PROMPT_DYNAMIC_HEADING,
+  ASK_PLAN_REPLY_SCHEMA,
+  askPromptStaticPrefixLength,
   ASK_FOLLOW_UP_KEEPS_COLUMNS,
   ASK_FOLLOW_UP_KEEPS_SHAPE,
   ASK_ANSWER_EXAMPLE_ROWS,
@@ -446,7 +450,7 @@ test.describe("buildPlanPrompt", () => {
       "Serve direction is serve_t, serve_body and serve_wide in ask.match_stats",
     );
     expect(prompt).toContain(
-      "No view records which court (deuce or ad) a serve was hit from; do not invent a column for it.",
+      "Which court a point was played from, Deuce or Ad, is ask.points.court: join ask.shots to ask.points on match_id and point_number to split serves by court.",
     );
     // The columns it names exist.
     const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
@@ -744,9 +748,15 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
-  test("says the serve block has no deuce/ad court to draw", () => {
+  test("says the serve block labels Deuce and Ad rows only from a court column, one count row per court", () => {
     expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
-      "The result does not record the deuce or ad court, so do not label a row with one.",
+      "or the Deuce and Ad courts when the result has a court column — label those rows Deuce and Ad, and only then.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).not.toContain(
+      "does not record the deuce or ad court",
     );
   });
 
@@ -1945,5 +1955,194 @@ test.describe("the plan prompts — a follow-up keeps the previous query's colum
     });
     expect(long).toContain(`${"x".repeat(200)}…\n\nA follow-up`);
     expect(long).not.toContain("x".repeat(MAX_ASK_PREVIOUS_SQL_LENGTH + 1));
+  });
+});
+
+// ── A fixed prefix, then this question ───────────────────────────────────────
+
+test.describe("the prompts — everything fixed first, this question last", () => {
+  /** Where two prompts stop being the same text. */
+  const sharedPrefix = (a: string, b: string): number => {
+    let index = 0;
+    while (index < a.length && index < b.length && a[index] === b[index]) {
+      index += 1;
+    }
+    return index;
+  };
+
+  for (const [name, scope] of [
+    ["personal", undefined],
+    ["team", TEAM_SCOPE],
+  ] as const) {
+    test(`${name} plan prompts built on different days, with different tags and turns, share one prefix up to the dynamic heading`, () => {
+      const one = buildPlanPrompt({ ...PLAN_INPUT, scope });
+      const other = buildPlanPrompt({
+        today: "2027-03-02",
+        tags: [],
+        conversation: [],
+        previousPlan: {
+          scope_sql: "select match_id from ask.matches",
+          sql: null,
+        },
+        scope,
+      });
+      const prefix = askPromptStaticPrefixLength(one);
+      expect(prefix).toBe(askPromptStaticPrefixLength(other));
+      expect(sharedPrefix(one, other)).toBeGreaterThanOrEqual(prefix);
+      // The fixed text is the bulk of the prompt — what a cache can skip.
+      expect(prefix).toBeGreaterThan(one.length * 0.75);
+      // Exactly one dynamic heading, and the per-question parts are all after it.
+      expect(
+        one.match(new RegExp(`^${ASK_PLAN_PROMPT_DYNAMIC_HEADING}$`, "gm")),
+      ).toHaveLength(1);
+      for (const dynamic of [
+        "Today's date: 2026-10-11",
+        "### Tags on this question",
+        "### The conversation so far",
+        `${scope ? "Coach" : "Player"}: How did my first serve hold up on clay?`,
+        ASK_FOLLOW_UP_KEEPS_COLUMNS,
+      ]) {
+        expect(one.indexOf(dynamic)).toBeGreaterThan(prefix);
+      }
+      // And the rules the model reads first are all before it.
+      for (const fixed of [
+        "## The data",
+        "## Percentages",
+        "## What to reply",
+        "## Examples",
+      ]) {
+        expect(one.indexOf(fixed)).toBeLessThan(prefix);
+      }
+    });
+
+    test(`${name} answer prompts for different questions and results share one prefix up to the dynamic heading`, () => {
+      const one = buildAnswerPrompt({ ...ANSWER_INPUT, scope });
+      const other = buildAnswerPrompt({
+        question: "Who did I lose to most?",
+        rows: [{ opponent_name: "Sam Ortiz", losses: 3 }],
+        matchCount: 1,
+        scope,
+      });
+      const prefix = askPromptStaticPrefixLength(one);
+      expect(prefix).toBe(askPromptStaticPrefixLength(other));
+      expect(sharedPrefix(one, other)).toBeGreaterThanOrEqual(prefix);
+      expect(prefix).toBeGreaterThan(one.length * 0.5);
+      expect(
+        one.match(new RegExp(`^${ASK_ANSWER_PROMPT_DYNAMIC_HEADING}$`, "gm")),
+      ).toHaveLength(1);
+      for (const dynamic of [
+        JSON.stringify(ANSWER_INPUT.question),
+        "## The result",
+        "## What the numbers show",
+        "## The scope",
+        "Write the answer now:",
+      ]) {
+        expect(one.indexOf(dynamic)).toBeGreaterThan(prefix);
+      }
+      for (const fixed of [
+        "## The shape of your answer",
+        "## The visual block",
+        "## Rules",
+        "## Example",
+      ]) {
+        expect(one.indexOf(fixed)).toBeLessThan(prefix);
+      }
+    });
+  }
+
+  test("a prompt with no dynamic heading is all prefix", () => {
+    expect(askPromptStaticPrefixLength("You are a model.")).toBe(16);
+  });
+});
+
+// ── The planner's reply as a schema ──────────────────────────────────────────
+
+test.describe("ASK_PLAN_REPLY_SCHEMA", () => {
+  const properties = Object.keys(ASK_PLAN_REPLY_SCHEMA.schema.properties);
+
+  test("names every field of the four reply shapes and requires only asks_for_advice", () => {
+    const exampleKeys = new Set(
+      [
+        ASK_PLAN_EXAMPLE_QUERY,
+        ASK_PLAN_EXAMPLE_COMPARE,
+        ASK_PLAN_EXAMPLE_BASELINE,
+        ASK_PLAN_EXAMPLE_REVIEW,
+        ASK_PLAN_EXAMPLE_REFUSAL,
+        ASK_TEAM_PLAN_EXAMPLE_PLAYERS,
+      ].flatMap((example) => Object.keys(example)),
+    );
+    for (const key of exampleKeys) expect(properties).toContain(key);
+    expect(properties.sort()).toEqual(
+      [
+        "asks_for_advice",
+        "cannot_answer",
+        "compare",
+        "measures",
+        "review",
+        "scope_sql",
+        "sql",
+      ].sort(),
+    );
+    // Required, and written empty where a shape has no use for them: left
+    // optional, the model dropped fields the prose rules demand.
+    expect([...ASK_PLAN_REPLY_SCHEMA.schema.required].sort()).toEqual(
+      ["asks_for_advice", "cannot_answer", "review", "scope_sql", "sql"].sort(),
+    );
+    expect(ASK_PLAN_REPLY_SCHEMA.schema.properties.compare.enum).toEqual([
+      ...ASK_COMPARE_KINDS,
+    ]);
+    // Flat: no anyOf, so every provider's structured output accepts it.
+    expect(JSON.stringify(ASK_PLAN_REPLY_SCHEMA)).not.toMatch(/anyOf|oneOf/);
+  });
+
+  test("a structured reply that carries every field, the unused ones empty, still reads as its shape", () => {
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "select match_id from ask.matches",
+          sql: "select count(*) as n from scope",
+          cannot_answer: "",
+          review: false,
+          compare: "",
+          measures: [],
+          asks_for_advice: false,
+        }),
+      ),
+    ).toEqual({
+      scope_sql: "select match_id from ask.matches",
+      sql: "select count(*) as n from scope",
+      asks_for_advice: false,
+    });
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "",
+          sql: "",
+          cannot_answer: "Your matches do not record footwork.",
+          review: false,
+          measures: [],
+          asks_for_advice: true,
+        }),
+      ),
+    ).toEqual({
+      cannot_answer: "Your matches do not record footwork.",
+      asks_for_advice: true,
+    });
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "select match_id from ask.matches",
+          sql: "",
+          cannot_answer: "   ",
+          review: true,
+          compare: "",
+          asks_for_advice: true,
+        }),
+      ),
+    ).toEqual({
+      review: true,
+      scope_sql: "select match_id from ask.matches",
+      asks_for_advice: true,
+    });
   });
 });

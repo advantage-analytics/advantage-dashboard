@@ -43,7 +43,7 @@
  *
  * Two things are NOT real, on purpose:
  *   - nothing is reserved against the month's questions (`reservation: null`);
- *   - `ask_save_exchange` is intercepted, so no conversation is written.
+ *   - `ask_save_exchange_ids` is intercepted, so no conversation is written.
  *
  * The report holds the model's raw replies, the SQL and the rows — a player's
  * statistics. The verifier's matches are fixtures; if you point this at
@@ -56,6 +56,7 @@ import { writeFileSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { parseSubs, subArgs, substituteQuestion } from "./lib/ask-eval-subs";
 import { loadEnvLocal } from "./lib/env";
+import type { AskModelCall } from "@/lib/services/ask/ask";
 
 loadEnvLocal();
 for (const key of Object.keys(process.env)) {
@@ -483,8 +484,14 @@ async function main() {
 
     const db = {
       async rpc(fn: string, args?: Record<string, unknown>) {
-        if (fn === "ask_save_exchange") {
-          return { data: "00000000-0000-4000-8000-00000000e7a1", error: null };
+        if (fn === "ask_save_exchange_ids") {
+          return {
+            data: {
+              conversation_id: "00000000-0000-4000-8000-00000000e7a1",
+              answer_id: "00000000-0000-4000-8000-00000000e7a2",
+            },
+            error: null,
+          };
         }
         const result = await askDatabase.rpc(fn, args);
         if (fn === "ask_run_query" || fn === "ask_run_team_query") {
@@ -506,8 +513,17 @@ async function main() {
       async stream(
         system: string,
         messages: { role: "user" | "assistant"; content: string }[],
+        call?: AskModelCall,
       ) {
-        const source = await getLLMStream(system, messages, context);
+        // The same options the route sends (src/app/api/ask/route.ts), so an
+        // eval plans under the schema and settings production uses.
+        const source = await getLLMStream(system, messages, context, {
+          span: call ? `ask.${call.stage}` : "ask",
+          temperature: call?.temperature,
+          maxTokens: call?.maxTokens,
+          jsonSchema: call?.jsonSchema,
+          staticPrefixLength: call?.staticPrefixLength,
+        });
         const slot = modelReplies.push("") - 1;
         return (async function* () {
           for await (const chunk of source) {

@@ -9,8 +9,12 @@ is a menu, ranked at the end.
 
 **Status, 2026-10-15:** 2.1 (the `mine` CTE), 5.1 (usage on the Gemini path)
 and 5.2 (span names, one trace per question) landed together; see migration
-`20261015014557_ask_my_matches` and `docs/llm-setup.md` §7. Everything else
-below is still unbuilt.
+`20261015014557_ask_my_matches` and `docs/llm-setup.md` §7. Then 1.2 (prompts
+laid out fixed text first), 1.3 (the plan reply as a JSON schema at
+temperature 0), 1.10 (the court line), 2.6 (sources before the answer, one
+save call: `ask_save_exchange_ids`), 2.7 (the pre-stream reads in parallel,
+one auth read) and 2.8 (`maxDuration`, the abort signal) landed as Tier 1b.
+Everything else below is still unbuilt.
 
 Shipped so far: PR #436 (the feature), #442 (plays, patterns, Video links,
 clarifying questions), #443 (feedback), #446 (admin unlimited), #447 (exact +1).

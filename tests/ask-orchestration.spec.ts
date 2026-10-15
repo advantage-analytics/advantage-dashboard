@@ -179,10 +179,13 @@ function fakeDb(script: DbScript = {}) {
           );
         case "ask_release_question":
           return script.release ?? { data: true, error: null };
-        case "ask_save_exchange":
-          return script.save ?? { data: CONVERSATION_ID, error: null };
-        case "ask_last_answer_id":
-          return { data: ANSWER_ID, error: null };
+        case "ask_save_exchange_ids":
+          return (
+            script.save ?? {
+              data: { conversation_id: CONVERSATION_ID, answer_id: ANSWER_ID },
+              error: null,
+            }
+          );
         case "ask_quota":
           return (
             script.quota ?? {
@@ -199,7 +202,7 @@ function fakeDb(script: DbScript = {}) {
     db,
     calls,
     releases: () => calls.filter((call) => call.fn === "ask_release_question"),
-    saves: () => calls.filter((call) => call.fn === "ask_save_exchange"),
+    saves: () => calls.filter((call) => call.fn === "ask_save_exchange_ids"),
   };
 }
 
@@ -283,27 +286,29 @@ test.describe("a completed answer", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
-      "sources",
       "done",
     ]);
     expect(
       events.flatMap((event) => (event.type === "status" ? [event.stage] : [])),
     ).toEqual(["planning", "querying", "writing"]);
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: "Your second serve has held up across these matches.",
     });
-    expect(events[4]).toEqual({
+    expect(events[5]).toEqual({
       type: "figure",
       label: "Second-serve points won",
       value: "41.2%",
     });
     expect(text(events)).toBe(ANSWER_RENDERED);
-    expect(events[6]).toEqual({
+    // The sources come before the answer is written: the matches are settled
+    // once the query ran, and the page shows them while the model writes.
+    expect(events[2]).toEqual({
       type: "sources",
       matches: [
         {
@@ -336,8 +341,7 @@ test.describe("a completed answer", () => {
     // reserve (that is the caller's step before the stream opens).
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
     ]);
     expect(calls[0].args).toEqual({
       scope_sql: PLAN.scope_sql,
@@ -920,6 +924,7 @@ test.describe("the other failures", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
@@ -976,7 +981,9 @@ test.describe("the other failures", () => {
       code: "answer_failed",
       error: ASK_SAVE_FAILED_MESSAGE,
     });
-    expect(events.some((event) => event.type === "sources")).toBe(false);
+    // The sources were sent before the answer was written, as they always
+    // are now; what an unsaved answer never gets is `done`.
+    expect(events.some((event) => event.type === "done")).toBe(false);
     expect(releases()).toHaveLength(1);
   });
 
@@ -1030,15 +1037,15 @@ test.describe("a question that asks for advice", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
-    expect(events[6]).toEqual({ type: "notice", notice: "no_advice" });
+    expect(events[7]).toEqual({ type: "notice", notice: "no_advice" });
     expect(text(events)).toBe(ANSWER_RENDERED);
     expect(text(events)).not.toContain(ASK_NO_ADVICE_SENTENCE);
 
@@ -1115,15 +1122,15 @@ test.describe("an answer with a visual block", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "visual",
       "text",
-      "sources",
       "done",
     ]);
-    expect(events[5]).toEqual({ type: "visual", visual: VISUAL });
+    expect(events[6]).toEqual({ type: "visual", visual: VISUAL });
     expect(text(events)).toBe("One paragraph.");
     expect(warned).toEqual([]);
     expect(releases()).toHaveLength(0);
@@ -1159,11 +1166,11 @@ test.describe("an answer with a visual block", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
-      "sources",
       "done",
     ]);
     expect(warned).toEqual([
@@ -1228,13 +1235,12 @@ test.describe("an answer with a visual block", () => {
 
     const events = await collect(askQuestion(input({ db, model })));
 
-    expect(events.map((event) => event.type).slice(3)).toEqual([
+    expect(events.map((event) => event.type).slice(4)).toEqual([
       "headline",
       "figure",
       "visual",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
   });
@@ -1277,7 +1283,7 @@ test.describe("mock mode (no provider configured)", () => {
       fn: "ask_run_query",
       args: { scope_sql: ASK_MOCK_PLAN.scope_sql, sql: ASK_MOCK_PLAN.sql },
     });
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: ASK_MOCK_ANSWER_TEMPLATE.split("\n")[0],
     });
@@ -1313,8 +1319,7 @@ test.describe("mock mode (no provider configured)", () => {
     // The meter was read for the done event, since nothing was reserved.
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
   });
@@ -1418,6 +1423,14 @@ test.describe("parsePlanReply", () => {
       cannot_answer: "No.",
       asks_for_advice: false,
     });
+  });
+
+  test("reads a placeholder cannot_answer beside a plan as no refusal", () => {
+    for (const placeholder of ["", " ", "N/A", "n/a", "None", "null", "-"]) {
+      expect(
+        parsePlanReply(JSON.stringify({ ...PLAN, cannot_answer: placeholder })),
+      ).toEqual(PLAN);
+    }
   });
 
   test("refuses anything that is neither shape", () => {
@@ -1828,8 +1841,7 @@ The team's players won {{r1.second_serve_won_pct}} of second-serve points.`;
     expect(last(events).type).toBe("done");
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_team_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
     const body = text(events);
@@ -2157,14 +2169,15 @@ test.describe("a review question", () => {
         .filter((type, index, types) => type !== types[index - 1]),
     ).toEqual([
       "status",
+      "sources",
+      "status",
       "headline",
       "visual",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: "Second-serve points won was worse than both of your own averages in your last match.",
     });
@@ -3237,7 +3250,15 @@ test.describe("a pair-shaped result", () => {
       events
         .map((event) => event.type)
         .filter((type, index, types) => type !== types[index - 1]),
-    ).toEqual(["status", "headline", "visual", "text", "sources", "done"]);
+    ).toEqual([
+      "status",
+      "sources",
+      "status",
+      "headline",
+      "visual",
+      "text",
+      "done",
+    ]);
     // "Marek made more unforced errors than you" is the sentence this ends.
     expect(events.find((event) => event.type === "headline")).toEqual({
       type: "headline",
