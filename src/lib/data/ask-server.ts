@@ -36,6 +36,7 @@ import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
 import {
+  isMissingEmbed,
   readAskFeedbackRow,
   type AskFeedback,
 } from "@/lib/services/ask/feedback";
@@ -269,26 +270,35 @@ export const getAskConversation = cache(async function getAskConversation(
     .select("id, title, updated_at")
     .eq("id", id)
     .eq("user_id", viewerId);
-  const [conversationRead, messagesRead] = await Promise.all([
-    (programId === null
-      ? owned.is("program_id", null)
-      : owned.eq("program_id", programId)
-    ).maybeSingle(),
+  const readMessages = (columns: string) =>
     supabase
       .from("ask_messages")
-      // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
-      // one object (or null) per message — the answer's thumb, in this read.
-      .select(
-        "id, role, content, created_at, ask_feedback(rating, reasons, note)",
-      )
+      .select(columns)
       .eq("conversation_id", id)
       .eq("user_id", viewerId)
       .order("created_at", { ascending: true })
       // `ask_save_exchange()` inserts a question and its answer in one
       // statement, so the pair shares a `created_at` to the microsecond.
       // "user" sorts after "assistant"; descending puts the question first.
-      .order("role", { ascending: false }),
+      .order("role", { ascending: false });
+  const [conversationRead, messagesWithFeedback] = await Promise.all([
+    (programId === null
+      ? owned.is("program_id", null)
+      : owned.eq("program_id", programId)
+    ).maybeSingle(),
+    // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
+    // one object (or null) per message — the answer's thumb, in this read.
+    readMessages(
+      "id, role, content, created_at, ask_feedback(rating, reasons, note)",
+    ),
   ]);
+  // The thumb is decoration on a thread the player owns. When PostgREST
+  // cannot embed it (its relationship missing from the schema cache, as while
+  // an ask_feedback migration is reloading), read the thread without thumbs
+  // rather than tell the player their conversation could not load.
+  const messagesRead = isMissingEmbed(messagesWithFeedback.error)
+    ? await readMessages("id, role, content, created_at")
+    : messagesWithFeedback;
 
   if (conversationRead.error || messagesRead.error) {
     throw new Error("Could not load the conversation", {
@@ -303,12 +313,14 @@ export const getAskConversation = cache(async function getAskConversation(
   } | null;
   if (!conversation) return null;
 
-  const messages = (messagesRead.data ?? []) as {
+  // `readMessages` takes its column list as a plain string, which supabase-js
+  // cannot type; the shape is the one both column lists above select.
+  const messages = (messagesRead.data ?? []) as unknown as {
     id: string;
     role: "user" | "assistant";
     content: unknown;
     created_at: string;
-    ask_feedback: unknown;
+    ask_feedback?: unknown;
   }[];
 
   return {
