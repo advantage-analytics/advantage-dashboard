@@ -28,6 +28,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
+import { FloatMenuLabel } from "@/components/ui/float-menu";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
@@ -432,13 +433,9 @@ function pageMatches(page: PageLink, q: string): boolean {
 
 // --- Small pieces ---
 
-/** Sentence case, not an eyebrow — the same group label as `FloatMenuLabel`. */
+/** Sentence case, not an eyebrow — `FloatMenuLabel` at the palette's inset. */
 function GroupLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-2 pt-2.5 pb-1 text-[11px] text-[var(--ink-400)]">
-      {children}
-    </p>
-  );
+  return <FloatMenuLabel className="px-2 pt-2.5">{children}</FloatMenuLabel>;
 }
 
 const ROW_CLASS =
