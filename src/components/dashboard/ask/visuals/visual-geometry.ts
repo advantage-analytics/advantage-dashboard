@@ -34,13 +34,15 @@ export function shareWeights(counts: readonly number[]): number[] | null {
   return weights.some((weight) => weight > 0) ? weights : null;
 }
 
-/** The trend plot's box, in viewBox units. The right gutter holds the last
- *  point's value, so the label never sits on the line. */
+/** The trend plot's box, in viewBox units. The last point's value sits in a
+ *  fixed 48px gutter outside the box (`trend-visual.tsx`'s `pr-12`), not in
+ *  a share of the width: a percentage gutter shrank under the 46px label on
+ *  a phone or in Home's narrow pinned card. */
 export const TREND_BOX = {
   width: 640,
   height: 120,
   top: 12,
-  right: 60,
+  right: 6,
   bottom: 12,
   left: 6,
 } as const;

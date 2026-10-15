@@ -453,7 +453,9 @@ function AskThread({
         <>
           <h1 className="sr-only">Ask</h1>
           <div className={cn(ASK_SCROLL, ASK_GUTTER, "pt-7 pb-4")}>
-            <div className={cn(ASK_COLUMN, "flex flex-col gap-8")}>
+            {/* Exchanges sit further apart (48px) than a question from its
+                own answer (24px), so where one ends reads at a glance. */}
+            <div className={cn(ASK_COLUMN, "flex flex-col gap-12")}>
               {state.exchanges.map((exchange, index) => (
                 <AskExchangeView
                   key={exchange.id}
@@ -573,7 +575,7 @@ function AskExchangeView({
         })
       : [];
   return (
-    <article className="flex flex-col gap-8">
+    <article className="flex flex-col gap-6">
       <AskPrompt text={question.text} tags={question.tags} />
       <AskAnswer
         answer={answer}

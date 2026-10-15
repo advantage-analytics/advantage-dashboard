@@ -136,20 +136,40 @@ export function AskAnswer({
   // motion must not replay when the stream ends or the page re-renders.
   const [live] = useState(answer.status === "streaming");
   return (
-    <div
-      data-ask-answer=""
-      data-ask-live={live ? "" : undefined}
-      className="flex min-w-0 flex-col gap-5"
-    >
-      {answer.status === "error" &&
-      answer.error?.code === "needs_clarification" ? (
-        <AnswerQuestion error={answer.error} copy={copy} onChoose={onChoose} />
-      ) : answer.status === "error" ? (
-        <AnswerError error={answer.error} copy={copy} />
-      ) : (
-        <AnswerBody answer={answer} copy={copy} onRate={onRate} />
-      )}
-    </div>
+    <>
+      {/* One live region for the answer's whole life, mounted from the
+          start: a region that mounts already holding its text is often not
+          read out. Its text follows the route's step and ends on "Answer
+          ready" for an answer that arrived here (not one reopened). */}
+      <p role="status" className="sr-only">
+        {answer.status === "streaming"
+          ? answer.stage
+            ? copy.stage[answer.stage]
+            : "Sending your question"
+          : live && answer.status === "done"
+            ? "Answer ready"
+            : ""}
+      </p>
+      <div
+        data-ask-answer=""
+        data-ask-live={live ? "" : undefined}
+        aria-busy={answer.status === "streaming" || undefined}
+        className="flex min-w-0 flex-col gap-5"
+      >
+        {answer.status === "error" &&
+        answer.error?.code === "needs_clarification" ? (
+          <AnswerQuestion
+            error={answer.error}
+            copy={copy}
+            onChoose={onChoose}
+          />
+        ) : answer.status === "error" ? (
+          <AnswerError error={answer.error} copy={copy} />
+        ) : (
+          <AnswerBody answer={answer} copy={copy} onRate={onRate} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -338,7 +358,7 @@ function AnswerBody({
 
       {answer.status === "streaming" && (
         <p
-          role="status"
+          aria-hidden="true"
           key={answer.stage ?? "sending"}
           data-ask-stage=""
           className="text-body-sm"

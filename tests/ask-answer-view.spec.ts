@@ -179,8 +179,9 @@ test.describe("a full answer", () => {
     ).toBeVisible();
     await expect(page.getByText("The gap is on the ad court.")).toBeVisible();
 
-    // Finished: nothing says it is still working, and nothing failed.
-    await expect(page.getByRole("status")).toHaveCount(0);
+    // Finished: the one live region is silent (an answer reopened, not one
+    // that arrived here), and nothing failed.
+    await expect(page.getByRole("status")).toHaveText("");
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expectNoProgress(page);
   });
@@ -450,7 +451,13 @@ test.describe("in flight", () => {
   test("no block has arrived: nothing holds its place", async ({ page }) => {
     await openFixture(page, "?case=streaming&stage=writing");
     await expect(visual(page)).toHaveCount(0);
-    await expect(page.locator("figure, [aria-busy]")).toHaveCount(0);
+    await expect(page.locator("figure")).toHaveCount(0);
+    // The answer itself says it is busy; nothing inside it holds a place.
+    await expect(page.locator("[data-ask-answer]")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await expect(page.locator("[data-ask-answer] [aria-busy]")).toHaveCount(0);
   });
 });
 
@@ -475,7 +482,7 @@ test.describe("a failed answer", () => {
       await expect(page.getByText(HEADLINE)).toHaveCount(0);
       await expect(page.getByText(/Computed from/)).toHaveCount(0);
       await expect(page.getByRole("link")).toHaveCount(0);
-      await expect(page.getByRole("status")).toHaveCount(0);
+      await expect(page.getByRole("status")).toHaveText("");
       // No block, and no footer: a failed answer has nothing to sign.
       await expect(visual(page)).toHaveCount(0);
       await expect(signature(page)).toHaveCount(0);
@@ -671,7 +678,8 @@ test.describe("the visual block", () => {
     const lefts = await links.evaluateAll((nodes) =>
       nodes.map((node) => (node as HTMLElement).style.left),
     );
-    expect(lefts).toEqual(["0.9375%", "45.7812%", "90.625%"]);
+    // The label's gutter is a fixed `pr-12` outside the box now.
+    expect(lefts).toEqual(["0.9375%", "50%", "99.0625%"]);
     const tops = await links.evaluateAll((nodes) =>
       nodes.map((node) => parseFloat((node as HTMLElement).style.top)),
     );
