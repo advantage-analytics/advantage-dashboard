@@ -199,6 +199,19 @@ export async function askOnArrival(
       console.warn(`${LOG} match has no uploader, no first question`, where);
       return null;
     }
+    // The answer is written as the match's creator and its headline goes on
+    // the mail to the job's creator: the two must be one person, or one
+    // user's private answer would land in another's inbox.
+    const job = await supabase
+      .from("processing_jobs")
+      .select("created_by")
+      .eq("id", jobId)
+      .maybeSingle();
+    const jobOwner = (job.data as { created_by?: unknown } | null)?.created_by;
+    if (job.error || jobOwner !== uploader) {
+      console.log(`${LOG} job and match have different owners`, where);
+      return null;
+    }
 
     // Whose side the uploader is: their login, or a roster profile they
     // claimed — `playerSide()`, the rule `ask.my_side()` restates in SQL.
