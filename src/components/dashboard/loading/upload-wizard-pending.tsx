@@ -67,7 +67,7 @@ export function UploadWizardPending({ pinned }: { pinned: boolean }) {
 
         <div className={`${CONTENT_CLS} pt-16 pb-24`}>
           <div className="flex flex-col gap-3">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+            <span className="eyebrow">
               Step {index + 1} of {order.length}
             </span>
             <h1
