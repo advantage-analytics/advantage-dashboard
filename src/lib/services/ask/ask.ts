@@ -205,6 +205,9 @@ export interface AskDatabase {
   rpc(fn: string, args?: Record<string, unknown>): PromiseLike<AskRpcResult>;
 }
 
+/** Which step of a question a model call is for; the route names the call by it in LLM analytics. */
+export type AskModelStage = "plan" | "pattern" | "answer";
+
 /**
  * The model behind both steps. `configured` is `isLLMConfigured()` and
  * `stream` is `getLLMStream()` with the observability context already bound
@@ -212,9 +215,6 @@ export interface AskDatabase {
  * passed on as the call's span name; the route builds this from
  * `adapter.ts`, the spec from strings.
  */
-/** Which step of a question a model call is for; the route names the call by it in LLM analytics. */
-export type AskModelStage = "plan" | "pattern" | "answer";
-
 export interface AskModel {
   configured: boolean;
   stream(
