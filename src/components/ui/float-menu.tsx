@@ -69,6 +69,10 @@ export function FloatMenu({
   width = 232,
   tone = "light",
   label,
+  role = "menu",
+  listId,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   className,
   children,
 }: {
@@ -89,6 +93,22 @@ export function FloatMenu({
   tone?: FloatMenuTone;
   /** Accessible name for the menu. */
   label: string;
+  /**
+   * What the surface is to a screen reader. `"menu"` for every dropdown whose
+   * rows are `FloatMenuItem`s. `"listbox"` is for the one caller whose rows
+   * are `role="option"` and whose focus never enters the surface — the Ask
+   * composer's tag menu, driven from its textarea by `aria-activedescendant`.
+   */
+  role?: "menu" | "listbox";
+  /** An id for the element carrying `role`, for the owner's `aria-controls`. */
+  listId?: string;
+  /**
+   * Radix moves focus into the surface when it opens and back to the trigger
+   * when it closes. A caller that types into a field while the menu is open
+   * prevents both, so the caret stays where it is.
+   */
+  onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -99,6 +119,8 @@ export function FloatMenu({
         align={align}
         side={side}
         sideOffset={sideOffset}
+        onOpenAutoFocus={onOpenAutoFocus}
+        onCloseAutoFocus={onCloseAutoFocus}
         className={cn(
           floatMenuToneClasses(tone),
           width === "trigger" &&
@@ -108,7 +130,12 @@ export function FloatMenu({
         style={typeof width === "number" ? { width } : undefined}
       >
         <FloatMenuToneContext.Provider value={tone}>
-          <div role="menu" aria-label={label} className="flex flex-col">
+          <div
+            role={role}
+            id={listId}
+            aria-label={label}
+            className="flex flex-col"
+          >
             {children}
           </div>
         </FloatMenuToneContext.Provider>

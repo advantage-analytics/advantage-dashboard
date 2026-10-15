@@ -91,6 +91,7 @@ type MarkAnchor = {
 export function VizFocused({
   savedViews,
   savedViewsBand,
+  canSaveViews = true,
   workspaceKind,
   workspaceName,
   hasPlayableVideo = false,
@@ -101,6 +102,9 @@ export function VizFocused({
   readOnly?: boolean;
   savedViews: SavedViewRow[];
   savedViewsBand?: ReactNode;
+  /** `shotsWriteAccess(meta).canSaveViews` — `false` on a read-only report
+   * (share page, sample match): no "Save this view…" row, no Save dialog. */
+  canSaveViews?: boolean;
   /** Save-dialog needs (Task 9): "Share with team" only exists in a team
    * workspace, and its micro copy names the workspace it shares into. */
   workspaceKind: WorkspaceKind;
@@ -127,9 +131,9 @@ export function VizFocused({
   const { state, setState, runCourtMorph, morphTargetKey } = useVizState();
   const reducedMotion = usePrefersReducedMotion();
 
-  // Everyone — including players — may save a view, so this is always on;
-  // the ref is what lets the dialog anchor under the SAME button that opens
-  // the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
+  // Everyone — including players — may save a view, so this is on except on
+  // a read-only report (`canSaveViews`); the ref is what lets the dialog
+  // anchor under the SAME button that opens the cut menu, via `VizToolbar`'s `cutMenuTriggerRef` pass-through.
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const courtArtRef = useRef<HTMLDivElement>(null);
@@ -407,7 +411,7 @@ export function VizFocused({
       <VizToolbar
         className="viz-vt-toolbar"
         savedViews={savedViews}
-        onSaveRequest={readOnly ? undefined : () => setSaveDialogOpen(true)}
+        onSaveRequest={canSaveViews ? () => setSaveDialogOpen(true) : undefined}
         cutMenuTriggerRef={cutMenuTriggerRef}
         filtersSlot={
           <FiltersPopover
@@ -682,7 +686,7 @@ export function VizFocused({
 
       {savedViewsBand}
 
-      {!readOnly && (
+      {canSaveViews && (
         <SaveViewDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}

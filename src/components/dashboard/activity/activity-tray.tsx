@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
-import { Activity, ChevronRight, Users } from "lucide-react";
+import { unstable_rethrow, usePathname } from "next/navigation";
+import { Activity, Check, ChevronRight, Circle, Users } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -14,6 +14,8 @@ import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scop
 import { AnalysisProgressTrack } from "@/components/dashboard/matches/analysis-progress-track";
 import { StepMark } from "@/components/dashboard/shared/vertical-steps";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
+import { activityHintDue } from "@/lib/onboarding/hints";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -31,6 +33,7 @@ import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { trayDetail } from "./tray-detail";
+import { setupOutstanding, type SetupStep } from "./tray-setup";
 import { trayStartedDay, trayStartedTitle } from "./tray-started";
 import {
   isTrayFailure,
@@ -61,6 +64,12 @@ import { cn } from "@/lib/utils";
  * settled row, and an ETA restating a bar restating a title. The receipt now
  * lives behind one footer line that covers the whole history rather than the
  * last two rows of it, so the panel holds two row shapes and one blue.
+ *
+ * One thing sits outside that job, above the feed and apart from it: the
+ * "Getting set up" section (`SetupSection`, `tray-setup.ts`). It is a standing
+ * to-do list, not activity, so it is drawn in grey, counted nowhere, and gone
+ * once setup is done — the rules below about the dot and the blue are about
+ * the feed, and setup takes neither.
  *
  * ── The leading column carries state, not air ──────────────────────────────
  * 14px, always present, so every row's text starts on the same x. Work rows
@@ -524,12 +533,113 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
   );
 }
 
+/**
+ * "Getting set up", above the feed, while a step is still open.
+ *
+ * Grey on purpose. Blue in the tray means waiting on you, and it clears itself
+ * when the job settles; setup stays open for days, so it borrows neither the
+ * row's dot nor the trigger's (`tray-setup.ts`). The one blue here is the step
+ * bar's filled segments — the wizard's `StepBar`, counting what is done.
+ *
+ * A done step keeps its row, ticked and muted, so the section reads as a list
+ * being worked through; an open one is a link whose trailing word names where
+ * it goes, the stopped row's grammar at the section's tighter measure.
+ */
+export function SetupSection({
+  steps,
+  onOpen,
+}: {
+  steps: SetupStep[];
+  onOpen: () => void;
+}) {
+  const done = steps.filter((step) => step.done).length;
+
+  return (
+    <section aria-label="Getting set up">
+      <div className="px-2.5 pt-2.5 pb-1.5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[12px] font-medium text-[var(--ink-900)]">
+            Getting set up
+          </p>
+          <p className="text-[11px] text-[var(--ink-600)] tabular-nums">
+            {done} of {steps.length}
+          </p>
+        </div>
+        <div aria-hidden="true" className="mt-2 flex gap-1">
+          {steps.map((step) => (
+            <span
+              key={step.key}
+              className={cn(
+                "h-[3px] flex-1 rounded-full",
+                step.done ? "bg-[var(--blue)]" : "bg-[var(--border-medium)]",
+              )}
+            />
+          ))}
+        </div>
+      </div>
+      <ul>
+        {steps.map((step) => (
+          <li key={step.key}>
+            {step.done ? (
+              <div className="flex items-center gap-3 rounded-[9px] px-2.5 py-2">
+                <Lead>
+                  <Check
+                    className="size-[14px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </Lead>
+                <span className="text-[12px] text-[var(--ink-600)]">
+                  {step.label}
+                  <span className="sr-only">, done</span>
+                </span>
+              </div>
+            ) : (
+              <Link
+                href={step.href}
+                onClick={onOpen}
+                className={cn(
+                  "group flex items-center gap-3 rounded-[9px] px-2.5 py-2",
+                  ROW_INTERACTIVE_CLASS,
+                )}
+              >
+                <Lead>
+                  <Circle
+                    className="size-[14px] text-[var(--ink-700)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </Lead>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
+                  {step.label}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]">
+                    {step.action}
+                  </span>
+                  <ChevronRight
+                    className="size-[13px] text-[var(--ink-400)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </span>
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mx-2.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+    </section>
+  );
+}
+
 export function ActivityTray({
   feed,
   invites,
   approvedInviteIds,
   elsewhere,
   joins,
+  setup = [],
 }: {
   feed: ActivityFeed;
   invites: PendingInvite[];
@@ -538,9 +648,16 @@ export function ActivityTray({
   elsewhere: ElsewhereWork[];
   /** Recent joins to the active program — empty unless the viewer is staff. */
   joins: MemberJoin[];
+  /**
+   * The workspace's setup steps, done and open — drawn only while one is
+   * open, and never counted toward the dot or the tooltip.
+   */
+  setup?: SetupStep[];
 }) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+  const armed = useActivityHintArmed(viewer.id);
 
   /**
    * Subscribe only when an update is actually coming.
@@ -623,6 +740,7 @@ export function ActivityTray({
         <PopoverTrigger asChild>
           <button
             type="button"
+            data-tour="activity-tray"
             aria-label={`Activity, ${detail}`}
             className={cn(
               "group relative flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none",
@@ -680,6 +798,9 @@ export function ActivityTray({
         </div>
 
         <div className="flex max-h-[420px] flex-col overflow-y-auto p-2">
+          {setupOutstanding(setup) && (
+            <SetupSection steps={setup} onOpen={() => setIsOpen(false)} />
+          )}
           {unread > 0 || joins.length > 0 ? (
             <>
               {invites.map((invite) => (
@@ -741,6 +862,60 @@ export function ActivityTray({
           />
         </Link>
       </PopoverContent>
+      {/* The first upload the viewer leaves running: the wizard is gone, and
+          this trigger is where the job is now. Popover Root renders no DOM, so
+          this sits beside the tray, not in it. Reads `inFlight` as computed
+          above — no query or subscription of its own. */}
+      <HintRunner
+        hint="activity-tray"
+        viewerId={viewer.id}
+        when={activityHintDue({
+          inFlightCount: inFlight.length,
+          onWizard: pathname.startsWith("/dashboard/matches/new"),
+          armed,
+          doneAt: viewer.activityHintDoneAt,
+        })}
+        // Opening the tray answers the hint: close it rather than stack two
+        // boxes under one trigger.
+        resolved={isOpen}
+      />
     </Popover>
   );
+}
+
+/**
+ * Whether the viewer started an upload from the wizard this session — the
+ * tray hint's `armed`. Set by the wizard's `match-created` event, which fires
+ * just before it navigates away and `router.refresh()`es 300 ms later; that
+ * refresh is what brings the new job into `feed.items`. Mirrored to
+ * `sessionStorage` so a remount between the two (the tray sits in a Suspense
+ * boundary the refresh re-runs) does not drop it. Storage can throw (private
+ * windows, blocked site data); the hint simply stays unarmed then.
+ */
+function useActivityHintArmed(viewerId: string): boolean {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    const key = `activity-hint-armed:${viewerId}`;
+    try {
+      // Read after mount, not in the initializer: the server render has no
+      // storage, and a different first client render would not hydrate.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (window.sessionStorage.getItem(key) === "1") setArmed(true);
+    } catch {
+      // Unreadable storage: unarmed until this mount sees the event.
+    }
+    const arm = () => {
+      setArmed(true);
+      try {
+        window.sessionStorage.setItem(key, "1");
+      } catch {
+        // The in-memory flag still holds for this mount.
+      }
+    };
+    window.addEventListener("match-created", arm);
+    return () => window.removeEventListener("match-created", arm);
+  }, [viewerId]);
+
+  return armed;
 }

@@ -8,9 +8,10 @@
  * - `video_object_key` — OUR file: the athlete's upload, which since September
  *   2026 is cut to the selected window in the browser before upload. It keeps
  *   the original bitrate and the audio. Preferred whenever the blob exists.
- * - `trimmed_object_key` — the vendor's re-encode of the window, copied in by
- *   the webhook until that was retired. Only older matches whose original was
- *   deleted by the (also retired) reclaim have nothing else. It can be silent.
+ * - `trimmed_object_key` — the vendor's re-encode of the window, about 2 Mbps,
+ *   copied into our container by the webhook (`vendor-archive.ts`) before the
+ *   vendor's 7-day link expires. Older jobs, and any whose copy missed, have
+ *   none. It can be silent.
  *
  * ── The clock ───────────────────────────────────────────────────────────────
  * `points.video_time` is seconds into the file the vendor analysed, plus the
@@ -38,12 +39,29 @@ export interface PlaybackChoice {
 /**
  * @param jobs The match's jobs, NEWEST FIRST — a resubmitted match's newest
  *   job is the analysis the page is showing.
+ * @param prefer Which file to try first. `"upload"` (the default) is the rule
+ *   above. `"vendor-copy"` is the admin labelling console's: the re-encode
+ *   runs near 2 Mbps where an upload runs 8–12, which is about all a link to
+ *   the Canada East container carries, so the upload stalls on every seek.
+ *   The vendor copy is checked for existence too, since older jobs and missed
+ *   copies have no blob, and our upload is the fallback.
  */
 export async function choosePlaybackFile(
   jobs: PlaybackJobRow[],
   blobExists: (blobName: string) => Promise<boolean>,
+  prefer: PlaybackChoice["source"] = "upload",
 ): Promise<PlaybackChoice | null> {
   for (const job of jobs) {
+    const vendorCopy = job.trimmed_object_key
+      ? vendorCopyChoice(job.trimmed_object_key, job.start_time_seconds)
+      : null;
+    if (
+      prefer === "vendor-copy" &&
+      vendorCopy &&
+      (await blobExists(vendorCopy.blobName))
+    ) {
+      return vendorCopy;
+    }
     if (job.video_object_key && (await blobExists(job.video_object_key))) {
       return {
         blobName: job.video_object_key,
@@ -51,16 +69,21 @@ export async function choosePlaybackFile(
         source: "upload",
       };
     }
-    if (job.trimmed_object_key) {
-      const start = Number(job.start_time_seconds ?? 0);
-      return {
-        blobName: job.trimmed_object_key,
-        startTimeSeconds: Number.isFinite(start) && start > 0 ? start : 0,
-        source: "vendor-copy",
-      };
-    }
+    if (prefer === "upload" && vendorCopy) return vendorCopy;
   }
   return null;
+}
+
+function vendorCopyChoice(
+  blobName: string,
+  startTimeSeconds: PlaybackJobRow["start_time_seconds"],
+): PlaybackChoice {
+  const start = Number(startTimeSeconds ?? 0);
+  return {
+    blobName,
+    startTimeSeconds: Number.isFinite(start) && start > 0 ? start : 0,
+    source: "vendor-copy",
+  };
 }
 
 /** The two columns `analysedWindowSeconds` reads off a job row. */

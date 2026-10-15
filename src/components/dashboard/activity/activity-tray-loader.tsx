@@ -10,6 +10,7 @@ import {
   getApprovedInviteIds,
   getPendingInvites,
 } from "@/lib/data/pending-invites-server";
+import { getSetupSteps } from "@/lib/data/setup-progress-server";
 import { ActivityTray } from "./activity-tray";
 
 /**
@@ -40,6 +41,9 @@ import { ActivityTray } from "./activity-tray";
  * The fourth is who joined the program lately — staff of a team workspace
  * only, empty for everyone else without a query. Approval notices follow the
  * invitations, since they only mean anything on an invitation's row.
+ *
+ * The fifth is the setup steps still open in this workspace — see
+ * `getSetupSteps`. It answers `[]` on a failed read, like the rest.
  */
 export async function ActivityTrayLoader() {
   const workspace = await getWorkspaceContext();
@@ -56,13 +60,14 @@ export async function ActivityTrayLoader() {
       invites.map((invite) => invite.id),
     ),
   );
-  const [feed, invites, elsewhere, joins, approvedInviteIds] =
+  const [feed, invites, elsewhere, joins, approvedInviteIds, setup] =
     await Promise.all([
       getActivityFeed(supabase, workspace.active),
       invitesPromise,
       getElsewhereWork(supabase, workspace.active, workspace.available),
       getRecentJoins(supabase, workspace.active),
       approvedInviteIdsPromise,
+      getSetupSteps(supabase, workspace.active, workspace.viewer),
     ]);
 
   return (
@@ -72,6 +77,7 @@ export async function ActivityTrayLoader() {
       approvedInviteIds={approvedInviteIds}
       elsewhere={elsewhere}
       joins={joins}
+      setup={setup}
     />
   );
 }

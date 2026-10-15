@@ -112,7 +112,8 @@ export interface FilmTransportProps {
   onSeek: (seconds: number) => void;
   onTogglePlay: () => void;
   onStep: (direction: -1 | 1) => void;
-  onToggleSaved: () => void;
+  /** Absent on a read-only report: the Save glyph is then not drawn. */
+  onToggleSaved?: () => void;
   onToggleSkipDeadTime: () => void;
   onCycleRate: () => void;
   onToggleLoop: () => void;
@@ -164,7 +165,7 @@ export function FilmTransport(p: FilmTransportProps) {
     if (p.canStep) p.onStep(1);
   };
   const toggleSaved = () => {
-    if (p.saved !== null) p.onToggleSaved();
+    if (p.saved !== null) p.onToggleSaved?.();
   };
 
   // A shared link's reader has no bookmarks to keep (`film-read-only.ts`).
@@ -289,7 +290,7 @@ export function FilmTransport(p: FilmTransportProps) {
 
         <div className="flex-1" />
 
-        {shown("saved") && (
+        {shown("saved") && p.onToggleSaved && (
           <Glyph
             label={p.saved ? "Saved — remove bookmark" : "Save point"}
             shortcut="S"

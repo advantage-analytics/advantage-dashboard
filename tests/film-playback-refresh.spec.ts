@@ -50,6 +50,22 @@ const FIXTURES = resolve("tests/fixtures/match-video");
 
 /** Every `/video` request the server saw, per match. */
 const polls = new Map<string, number>();
+/**
+ * Every request under `/api/matches/` the server saw, whatever the path —
+ * the credential poll, the `/video/viewed` POST, `/ball-paths` — as
+ * `METHOD path`, for every match the worker has run. The read-only case
+ * (T6) asserts nothing at all lands here after its page opens: on the sample
+ * the id names no row, so any of them, under any id, is a wrong turn.
+ */
+const matchesApiHits: string[] = [];
+/** Credentials minted by the sample route (`SAMPLE_ENDPOINT`), 1-based. */
+let sampleMints = 0;
+/**
+ * The read-only mount's renewal route — `MatchReportMeta.playbackEndpoint`
+ * on the sample match. Spelled out here AND in the harness so the two
+ * cannot drift apart silently.
+ */
+const SAMPLE_ENDPOINT = "/api/sample-match/video";
 /** Responses parked until the spec releases them, per match. */
 const held = new Map<string, (() => void)[]>();
 /**
@@ -89,7 +105,7 @@ interface Answer {
 }
 
 function credential(
-  poll: number,
+  poll: number | string,
   overrides: { id?: string; version?: number; offsetSeconds?: number } = {},
 ): Answer {
   return {
@@ -269,6 +285,13 @@ test.beforeAll(async () => {
       response.end(JSON.stringify({ polls: polls.get(matchId) ?? 0 }));
       return;
     }
+    if (path === "/__api-hits") {
+      // Every `/api/matches/*` request this server has seen, any match, any
+      // method, in order — the caller slices from where it started looking.
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ hits: matchesApiHits, sampleMints }));
+      return;
+    }
     if (path === "/__release") {
       const matchId = url.searchParams.get("matchId") ?? "";
       released.add(matchId);
@@ -292,6 +315,22 @@ test.beforeAll(async () => {
         request.headers.range,
       );
       return;
+    }
+
+    // The sample route: a fresh credential every time, released at once —
+    // there is no match id to park it under, and the read-only case asserts
+    // on where the renewal WENT, not on what the page shows in between.
+    if (path === SAMPLE_ENDPOINT) {
+      sampleMints += 1;
+      const answer = credential(`sample-${sampleMints}`);
+      response.statusCode = answer.status;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(answer.body));
+      return;
+    }
+
+    if (path.startsWith("/api/matches/")) {
+      matchesApiHits.push(`${request.method ?? "GET"} ${path}`);
     }
 
     const video = /^\/api\/matches\/([^/]+)\/video$/.exec(path);
@@ -844,6 +883,89 @@ test("the provider lineage still answers a media error with Reload", async ({
     await page.request.get(`${origin}/__polls?matchId=${matchId}`)
   ).json();
   expect(count).toBe(0);
+});
+
+/* -------------------------------------------------------------------------
+ * A read-only report (T6) — the sample match's shape
+ *
+ * Under `MatchReportProvider readOnly playbackEndpoint`, the tab renews its
+ * credential from the endpoint the report names and sends NOTHING to
+ * `/api/matches/*`: not the poll, not the view count a first play would
+ * stamp, not the ball-paths file. And it offers no write: no bookmark button
+ * on any row, no Save glyph on the player, no Replace/Align row.
+ * ---------------------------------------------------------------------- */
+
+test("a read-only report renews from the endpoint the report names and never touches /api/matches", async ({
+  page,
+}) => {
+  const matchId = "readonly-sample";
+  // Everything `/api/matches/*` the server saw before this page existed:
+  // the earlier cases' polls and view counts, which are theirs. Anything
+  // past this mark is this page's, whatever match id it names — and the
+  // assertion below is over ALL of it, not the ones naming `matchId`.
+  const { hits: before } = await (
+    await page.request.get(`${origin}/__api-hits`)
+  ).json();
+  const mark = (before as string[]).length;
+  await open(page, matchId, { readOnly: "1" });
+
+  // No bookmark control anywhere on the shell: not on a row, not on the
+  // transport. Disabled would be wrong too — the control must not exist.
+  await expect(page.locator('[data-point-id="a"]')).toHaveCount(1);
+  await expect(
+    page.locator('[data-point-id] button[aria-label="Bookmark this point"]'),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[data-point-id] button[aria-label="Remove bookmark"]'),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save point" })).toHaveCount(0);
+  await expect(page.locator('[data-testid="film-entry-actions"]')).toHaveCount(
+    0,
+  );
+
+  // A first play is what counts a view on a real match; here it must not.
+  await page.getByRole("button", { name: "Play", exact: true }).first().click();
+  await page.waitForFunction(
+    (sel) => document.querySelector<HTMLVideoElement>(sel)?.paused === false,
+    REPORT,
+  );
+
+  // The scheduled renewal (the credential expires in `ttl`, a second) goes to
+  // the sample route — and the element really plays what it minted.
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector<HTMLVideoElement>(sel);
+      return !!el && el.src.includes("cred=sample-1") && el.readyState >= 1;
+    },
+    REPORT,
+    { timeout: 10_000 },
+  );
+  // The S key reaches the write through the keyboard, not a button: it too
+  // must send nothing and change nothing.
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("s");
+  // Open the room as well: its transport, drawer and ball-paths fetch are
+  // the other surfaces a write could leak from.
+  await page
+    .getByRole("button", { name: "Open the film room fullscreen" })
+    .click();
+  await page.waitForSelector(ROOM);
+  await expect(
+    page.locator('[data-film-chrome] button[aria-label="Save point"]'),
+  ).toHaveCount(0);
+  await page.keyboard.press("s");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(ROOM)).toHaveCount(0);
+  // Long past the one-second floor of anything scheduled.
+  await page.waitForTimeout(1500);
+
+  const { hits, sampleMints: mints } = await (
+    await page.request.get(`${origin}/__api-hits`)
+  ).json();
+  expect(mints).toBeGreaterThanOrEqual(1);
+  // Zero requests reached ANY `/api/matches/*` path since the page opened.
+  expect((hits as string[]).slice(mark)).toEqual([]);
+  expect(await polled(page, matchId)).toBe(0);
 });
 
 test("an unmounted tab stops asking", async ({ page }) => {

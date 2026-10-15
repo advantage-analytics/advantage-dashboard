@@ -77,7 +77,7 @@ export function RailScoreboard({
   return (
     // No card of its own (F1, settled): the rail's head, set off from the view
     // switcher by a hairline that stops 12px short of each rail edge.
-    <div className="px-3">
+    <div className="px-3" data-tour="scoreboard">
       <div
         className="flex flex-col gap-[14px] border-b border-[var(--border-hairline)]"
         style={{ padding: "18px 13px 20px" }}

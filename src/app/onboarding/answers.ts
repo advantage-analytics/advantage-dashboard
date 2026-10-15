@@ -1,3 +1,4 @@
+import { soloDestination } from "@/lib/onboarding/tours";
 import type { ProviderId } from "@/lib/services/upload/types";
 
 /**
@@ -163,5 +164,48 @@ export function providerForRecordingSource(
     case null:
     case undefined:
       return null;
+  }
+}
+
+/**
+ * The three ways `finishOnboarding` resolves. The persona step's "I coach"
+ * finishes immediately; "I play" branches into the college question, whose
+ * answers collapse to `college` (on a roster) or `solo` (everything else,
+ * including Skip — a recruit is a club player with a college in their future).
+ *
+ * "I manage a junior's account" is deliberately NOT here. That persona
+ * continues into the guardian step (screen 3.1) and resolves only through
+ * `finishGuardianOnboarding`, where consent is recorded. Listing it would
+ * leave a raw-RPC path that stamps `onboarded_at` for a guardian who never saw
+ * the consent screen.
+ */
+export type OnboardingChoice = "coach" | "college" | "solo";
+
+/**
+ * Where `finishOnboarding` sends a person once their answers are saved.
+ *
+ * A coach lands on the team-workspace fork (`/claim/team`, screen 5.1), where
+ * college-vs-other is decided; the earlier interim `/claim/program` skipped
+ * that junction and sent every coach down the collegiate claim. A college
+ * player keeps `intent=join`, which keeps them on the program search but off
+ * the "Set up this program" action — see `claim/role-choice.tsx` for why that
+ * routing matters. A solo player goes by how they record
+ * (`soloDestination`): into the upload wizard, or into the sample report's
+ * tour when there is nothing to upload yet (including a skipped answer).
+ *
+ * `recordingSource` must be the validated answer — the value written to
+ * `users.recording_source` — never a raw form string.
+ */
+export function resolveDestination(
+  choice: OnboardingChoice,
+  recordingSource: RecordingSource | null,
+): string {
+  switch (choice) {
+    case "coach":
+      return "/claim/team";
+    case "college":
+      return "/claim/program?intent=join";
+    case "solo":
+      return soloDestination(recordingSource);
   }
 }

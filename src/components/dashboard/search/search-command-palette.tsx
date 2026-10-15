@@ -33,7 +33,7 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
-import { formatShortDate } from "@/lib/ui/date-format";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { createClient } from "@/lib/supabase/client";
 import {
   PERSONAL_BOTTOM,
@@ -724,7 +724,7 @@ export function SearchCommandPalette({
             // `swap` when the viewer is stored as player2, so the row reads
             // from their side — game counts and tiebreaks flipped together.
             score: scoreSetsFrom(m.score, { swap: !isP1 }),
-            date: formatShortDate(m.date),
+            date: formatMatchDayShortYear(m.date),
             outcome: matchOutcome(m.score, isP1),
             hasScore: setTally(m.score) !== null,
             workspaceName: workspaceNames(m.program_id),

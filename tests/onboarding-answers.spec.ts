@@ -7,6 +7,7 @@ import {
   isRosterSizeBand,
   isWeeklyFilmBand,
   providerForRecordingSource,
+  resolveDestination,
 } from "@/app/onboarding/answers";
 
 /**
@@ -182,5 +183,43 @@ test.describe("ACQUISITION_SOURCES order", () => {
       "linkedin",
       "other",
     ]);
+  });
+});
+
+test.describe("resolveDestination", () => {
+  test("sends a coach to the team-workspace fork", () => {
+    expect(resolveDestination("coach", null)).toBe("/claim/team");
+    expect(resolveDestination("coach", "video")).toBe("/claim/team");
+  });
+
+  test("sends a college player to the program search to join", () => {
+    expect(resolveDestination("college", null)).toBe(
+      "/claim/program?intent=join",
+    );
+    expect(resolveDestination("college", "swing-vision")).toBe(
+      "/claim/program?intent=join",
+    );
+  });
+
+  test("sends a solo video player into the upload wizard", () => {
+    expect(resolveDestination("solo", "video")).toBe("/dashboard/matches/new");
+  });
+
+  test("sends a solo SwingVision player into the wizard with SwingVision pre-selected", () => {
+    expect(resolveDestination("solo", "swing-vision")).toBe(
+      "/dashboard/matches/new?source=swing-vision",
+    );
+  });
+
+  test("sends a solo player who doesn't record yet to the sample tour", () => {
+    expect(resolveDestination("solo", "none")).toBe(
+      "/dashboard/matches/sample?tour=1",
+    );
+  });
+
+  test("sends a solo player who skipped the question to the sample tour", () => {
+    expect(resolveDestination("solo", null)).toBe(
+      "/dashboard/matches/sample?tour=1",
+    );
   });
 });

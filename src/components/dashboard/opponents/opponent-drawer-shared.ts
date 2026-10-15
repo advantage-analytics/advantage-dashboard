@@ -1,4 +1,5 @@
 import type { NavLink } from "@/lib/dashboard/nav";
+import { formatMatchDayCompact } from "@/lib/data/match-day";
 import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
 
 /**
@@ -19,16 +20,13 @@ export const RECENT_ROWS = 3;
  * "Sep ’25" once it is not. `formatShortDate`'s "Sep 14, 2025" is twice the
  * track and would run under the score; the match page carries the whole date.
  *
- * `now` is a parameter only so a spec can hold the year still.
+ * The match's day by the one rule (`match-day.ts`): the stored value's date
+ * part, never the reader's zone — a match stored at `00:00Z` is that day in
+ * Los Angeles too. `now` is a parameter only so a spec can hold the year
+ * still; its UTC day is what "this year" is read off.
  */
-export function rowDate(isoDate: string, now: Date = new Date()): string {
-  const d = new Date(isoDate);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-  const month = d.toLocaleDateString("en-US", { month: "short" });
-  return `${month} ’${String(d.getFullYear()).slice(-2)}`;
+export function rowDate(isoDate: string, now?: Date): string {
+  return formatMatchDayCompact(isoDate, now);
 }
 
 /**

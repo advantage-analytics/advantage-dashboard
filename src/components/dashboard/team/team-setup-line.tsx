@@ -1,29 +1,27 @@
 import Link from "next/link";
 import type { TeamSetupProgress } from "@/lib/data/team-home-server";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
-import { capitalize } from "@/lib/utils";
 
 /**
- * "Getting set up · 1 of 3 · A dual on the schedule. Add a dual" — a quiet
- * status bar right under the title row, above the KPI strip.
+ * Team Home's pointer to setup: two or three progress ticks and one blue
+ * link, "Finish setup: send a first match", on the title's summary line.
  *
- * This replaces round 45's three-card checklist. Platform Audit Ta3 has no
- * slot for a card row, and CJ asked for the personal Home's treatment: the
- * page is the thing being set up, and every region above this line already
- * shows what it will hold, so what is left to say is which of three steps
- * remain and where the next one is. Staff only — every step is a write the
- * database refuses a player.
+ * The checklist itself lives in the activity tray's "Getting set up" section
+ * (`activity/activity-tray.tsx`), which is quiet by design — setup never
+ * lights the tray's dot — so something on the page still has to say setup
+ * exists and where the next step is. This is that, and only that.
  *
- * Promoted here from the footer (below the usage line, past five waiting-
- * state cards) because that placement buried the one thing a coach with an
- * empty roster or an empty schedule actually needs to see first. The bar
- * uses `--ink-100` — the same neutral the page's own hairlines and ghost
- * placeholders draw with — rather than a bordered card or a blue-tinted
- * banner: a card competes with the KPI strip directly below it, and a tinted
- * banner or a second button reads as a second primary action next to the
- * title row's "New match". A plain link keeps it to one accent, one purpose.
+ * It was a full-width `--ink-100` bar carrying an eyebrow, a mono count, a
+ * sentence and a far-right link: four grey fragments of equal weight on a
+ * grey slab, which read as a disabled field, with the action a page-width
+ * away from the words it belonged to. Before that it was round 45's
+ * three-card checklist. The ticks are the wizard's `StepBar` colours — blue
+ * for done, hairline for what is left — and the link is the title row's own
+ * 11px blue link, so the line adds no surface and no second button beside
+ * the row's "New match". Staff only — every step is a write the database
+ * refuses a player.
  *
- * Renders nothing once all three are done. The line leaves once and does not
+ * Renders nothing once every step is done. The line leaves once and does not
  * come back, which is what makes the populated page the end of setup rather
  * than a state somebody declares.
  *
@@ -33,27 +31,24 @@ import { capitalize } from "@/lib/utils";
  */
 const ALL_STEPS: ReadonlyArray<{
   key: keyof TeamSetupProgress;
-  phrase: string;
+  /** The step as an instruction, lower case, to follow "Finish setup: ". */
+  ask: string;
   href: string;
-  link: string;
 }> = [
   {
     key: "roster",
-    phrase: "players on the roster",
+    ask: "add players to the roster",
     href: "/dashboard/team/roster",
-    link: "Open roster",
   },
   {
     key: "schedule",
-    phrase: "a dual on the schedule",
+    ask: "add a dual to the schedule",
     href: "/dashboard/team/schedule/new/dual",
-    link: "Add a dual",
   },
   {
     key: "report",
-    phrase: "a first match sent",
+    ask: "send a first match",
     href: "/dashboard/matches/new",
-    link: "Send a match",
   },
 ];
 const STEPS = ALL_STEPS.filter(
@@ -64,31 +59,30 @@ export function TeamSetupLine({ setup }: { setup: TeamSetupProgress }) {
   const remaining = STEPS.filter((step) => !setup[step.key]);
   if (remaining.length === 0) return null;
 
-  const done = STEPS.length - remaining.length;
   const next = remaining[0];
-  const phrase =
-    remaining.length === STEPS.length
-      ? STEPS.map((step) => step.phrase).join(", ")
-      : next.phrase;
-  const sentence = `${capitalize(phrase)}.`;
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2.5 rounded-[8px] px-3.5 py-2.5"
-      style={{ background: "var(--ink-100)" }}
+    <Link
+      href={next.href}
+      className="inline-flex items-baseline gap-2 rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
     >
-      <span className="eyebrow">Getting set up</span>
-      <span className="mono tabular text-[11px] text-[var(--ink-500)]">
-        {done} of {STEPS.length}
+      <span aria-hidden="true" className="flex gap-[3px] self-center">
+        {STEPS.map((step) => (
+          <span
+            key={step.key}
+            className={`h-[3px] w-3 rounded-full ${
+              setup[step.key] ? "bg-[var(--blue)]" : "bg-[var(--border-medium)]"
+            }`}
+          />
+        ))}
       </span>
-      <span className="text-micro">{sentence}</span>
-      <div className="flex-1" />
-      <Link
-        href={next.href}
-        className="rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
-      >
-        {next.link}
-      </Link>
-    </div>
+      <span>
+        Finish setup: {next.ask}
+        <span className="sr-only">
+          , step {STEPS.length - remaining.length + 1} of {STEPS.length}
+        </span>{" "}
+        →
+      </span>
+    </Link>
   );
 }

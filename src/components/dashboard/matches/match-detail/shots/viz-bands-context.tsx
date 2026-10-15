@@ -18,6 +18,7 @@ import {
   type ActionResult,
 } from "@/app/dashboard/matches/(detail)/[matchId]/viz-bands-actions";
 import { bandsEqual, type BandSettings } from "@/lib/data/viz-bands";
+import { shotsWriteAccess } from "./shots-write-access";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
@@ -71,8 +72,13 @@ export interface VizBandsValue {
   /** The bands every band-aware reader must use — the optimistic override
    *  while one is pending, otherwise the workspace's saved record. */
   bands: BandSettings;
-  /** `meta.canEditBands` — personal owner, or team owner/coach/staff. */
+  /** `shotsWriteAccess(meta).canEditBands` — personal owner, or team
+   *  owner/coach/staff; always `false` on a read-only report. */
   canEdit: boolean;
+  /** `meta.readOnly` (share page, sample match): the band editor's entry is
+   *  not drawn at all, rather than drawn disabled with a "coaches and staff"
+   *  note that is not the reason. */
+  readOnly: boolean;
   /** The unit every band label is rendered in — the viewer's Units
    *  preference (`meta.unit`, Stage 2C), never a per-chart toggle. */
   unit: DistanceUnit;
@@ -149,17 +155,19 @@ function refuseBands(): Promise<BandSaveOutcome> {
 export function useVizBands(): VizBandsValue {
   const ctx = useContext(VizBandsContext);
   const { meta } = useMatchReport();
+  const { canEditBands } = shotsWriteAccess(meta);
   const fallback = useMemo<VizBandsValue>(
     () => ({
       bands: meta.bandSettings,
-      canEdit: meta.canEditBands,
+      canEdit: canEditBands,
+      readOnly: meta.readOnly,
       unit: meta.unit,
       contactHidden: false,
       toggleContactHidden: noop,
       applyBands: refuseBands,
       receipt: null,
     }),
-    [meta.bandSettings, meta.canEditBands, meta.unit],
+    [meta.bandSettings, canEditBands, meta.readOnly, meta.unit],
   );
   return ctx ?? fallback;
 }
@@ -167,6 +175,7 @@ export function useVizBands(): VizBandsValue {
 export function VizBandsProvider({ children }: { children: ReactNode }) {
   const { meta } = useMatchReport();
   const saved = meta.bandSettings;
+  const { canEditBands } = shotsWriteAccess(meta);
 
   const [override, setOverride] = useState<BandSettings | null>(null);
   const [contactHidden, setContactHidden] = useState(false);
@@ -221,6 +230,10 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   const workspaceName = meta.workspaceName;
   const applyBands = useCallback(
     (next: BandSettings): Promise<BandSaveOutcome> => {
+      // A viewer who may not edit never reaches the server: no optimistic
+      // redraw, no refused write (every caller is gated already — this is
+      // the backstop).
+      if (!canEditBands) return refuseBands();
       // Claim this generation BEFORE the optimistic write, so the guard
       // below can tell "my save" from "a save that started after mine".
       const seq = ++seqRef.current;
@@ -271,7 +284,7 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
         });
       });
     },
-    [showReceipt, workspaceName],
+    [showReceipt, workspaceName, canEditBands],
   );
 
   const toggleContactHidden = useCallback(() => {
@@ -281,7 +294,8 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<VizBandsValue>(
     () => ({
       bands: effectiveBands,
-      canEdit: meta.canEditBands,
+      canEdit: canEditBands,
+      readOnly: meta.readOnly,
       unit: meta.unit,
       contactHidden,
       toggleContactHidden,
@@ -290,7 +304,8 @@ export function VizBandsProvider({ children }: { children: ReactNode }) {
     }),
     [
       effectiveBands,
-      meta.canEditBands,
+      canEditBands,
+      meta.readOnly,
       meta.unit,
       contactHidden,
       toggleContactHidden,

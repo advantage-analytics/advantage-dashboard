@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef } from "react";
  * - Safari needs the `webkit` spellings on older versions; its
  *   `webkitRequestFullscreen` returns nothing rather than a promise.
  * - A browser may refuse (no gesture, a denied permission). A refusal is
- *   reported (`"refused"`), never thrown, and the console goes back to docked.
+ *   reported (`"refused"`), never thrown, and the console goes back to the overview.
  * - Nothing is remembered: without a gesture a stored choice could not be
  *   restored on reload.
  *

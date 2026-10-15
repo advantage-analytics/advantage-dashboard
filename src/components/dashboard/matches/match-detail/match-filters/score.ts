@@ -54,13 +54,18 @@ const RUNG: Record<string, number> = {
  * (0-0, 15-15, 30-0 and 40-40 are deuce; 15-0, 30-15, AD-40 are ad). Without
  * one, the point's index within its game gives the same parity — a let or a
  * replayed point would shift it, which is the accepted approximation.
+ *
+ * A point whose score was never recorded (`pointScoreRaw` null) takes the
+ * index too: the loader fills it in as "0-0", which would read as deuce
+ * every time. Ask's `ask.points.court` is the same rule
+ * (20261014214810_ask_points_court.sql).
  */
 export function courtSideOf(
-  point: Pick<MatchPoint, "pointScore">,
+  point: Pick<MatchPoint, "pointScore"> & { pointScoreRaw?: string | null },
   indexInGame: number,
   hasPointScore: boolean,
 ): "deuce" | "ad" {
-  if (hasPointScore) {
+  if (hasPointScore && point.pointScoreRaw !== null) {
     const parts = point.pointScore
       .split("-")
       .map((p) => p.trim().toUpperCase());
@@ -73,10 +78,10 @@ export function courtSideOf(
   return indexInGame % 2 === 0 ? "deuce" : "ad";
 }
 
-type CourtSidePoints = readonly Pick<
+type CourtSidePoints = readonly (Pick<
   MatchPoint,
   "pointScore" | "setNumber" | "gameNumber"
->[];
+> & { pointScoreRaw?: string | null })[];
 
 // Keyed by array identity, never by content: every caller passes the same
 // whole-match array (`applyMatchFilters`, `optionAvailability`, and every

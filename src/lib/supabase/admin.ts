@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { opHeaders } from "./op-context";
 
 /**
  * Admin client with service role key for admin operations
@@ -14,11 +15,14 @@ export function createAdminClient() {
     );
   }
 
+  // A labeller's action names itself to the database (op-context.ts).
+  const headers = opHeaders();
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
+    ...(headers ? { global: { headers } } : {}),
   });
 }
 

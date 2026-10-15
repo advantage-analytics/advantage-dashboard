@@ -14,9 +14,9 @@ export const metadata = { title: "Check your email" };
  *
  * One gate, one link, and the narrowest screen in the flow: 440px, because
  * there is nothing to do here and a wide page would imply there was. The
- * address is spelled out so a typo is caught here rather than in a support
- * thread, and there is no progress bar and no estimate — the link either
- * arrives or it is resent.
+ * address is spelled out (body face, medium weight) so a typo is caught here
+ * rather than in a support thread, and there is no progress bar and no
+ * estimate — the link either arrives or it is resent.
  */
 export default async function CheckEmailPage({
   searchParams,
@@ -29,21 +29,25 @@ export default async function CheckEmailPage({
   const backHref = program ? `/claim/${program}/setup` : "/claim/program";
 
   return (
-    <ClaimShell width={440} gap={16} back={backHref}>
-      <Mail
-        className="size-5 text-[var(--ink-700)]"
-        strokeWidth={1.5}
+    <ClaimShell width={440} gap={20} back={backHref}>
+      {/* The envelope sits where the program's mark sits on the screens before
+          this one, in the same 32px square — the page is about the address,
+          not the program. */}
+      <span
         aria-hidden="true"
-      />
+        className="flex size-8 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[var(--ink-700)]"
+      >
+        <Mail className="size-4" strokeWidth={1.5} />
+      </span>
 
       <ClaimHeading
-        gap={6}
+        gap={12}
         title="Check your email"
         body={
           <>
             We sent a link to{" "}
-            <span className="mono text-[var(--ink-900)]">{email}</span>. Open it
-            and the program is yours.
+            <span className="font-medium text-[var(--ink-900)]">{email}</span>.
+            Open it and the program is yours.
           </>
         }
         bodyMax="44ch"

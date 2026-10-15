@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
+import {
+  teamLabel,
+  programSubtitle,
+  CRESTS_BUCKET,
+} from "@/lib/data/programs-server";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
+import { ProgramMark } from "@/components/claim/program-mark";
 import { SetupAside, SetupForm } from "@/components/claim/setup-form";
 
 export const metadata = { title: "Set up your program" };
@@ -33,7 +38,7 @@ export default async function SetupProgramPage({
   const { data: program } = await supabase
     .from("programs")
     .select(
-      "school_name, team, division, conference, status, primary_domain, athletics_domains, domain_match_skips_review",
+      "school_name, team, division, conference, status, primary_domain, athletics_domains, domain_match_skips_review, crest_path",
     )
     .eq("program_key", programKey)
     .maybeSingle();
@@ -41,6 +46,11 @@ export default async function SetupProgramPage({
   if (!program) notFound();
 
   const squad = teamLabel(program.team as string);
+  const crest = program.crest_path
+    ? supabase.storage
+        .from(CRESTS_BUCKET)
+        .getPublicUrl(program.crest_path as string).data.publicUrl
+    : null;
   const qualifiers = [
     squad,
     programSubtitle(
@@ -59,6 +69,7 @@ export default async function SetupProgramPage({
       back={`/claim/${programKey}`}
       aside={<SetupAside />}
     >
+      <ProgramMark name={program.school_name as string} crestUrl={crest} />
       <ClaimHeading
         gap={2}
         eyebrow={qualifiers}

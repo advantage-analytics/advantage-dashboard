@@ -135,6 +135,14 @@ export const SHOT_FIELDS_MOVING_ENDING = [
  * new one is not null or what the point already holds, and the point is not a
  * let or a non-point. When the rows now settle who won and the point says
  * otherwise, the patch carries the `winner` too.
+ *
+ * One patch is due even when the derived ending did not move: the rows settle
+ * a winner and the point holds the other player. That is not a hand-set
+ * ending surviving, it is a contradiction — "error by Quan", won by Quan —
+ * left by a write from before the winner was kept in step, and a labeller who
+ * re-saves the stroke is asking for it to be put right. The winner alone
+ * moves and the stored ending stays. Not for an edit further back in the
+ * rally that left the last shot as it was: a winner set by hand stands.
  */
 export function endingPatchForShotChange(
   before: EndingPoint,
@@ -151,9 +159,50 @@ export function endingPatchForShotChange(
     was.endedBy === now.endedBy &&
     was.winner === now.winner
   ) {
-    return null;
+    return winnerContradicted(after, now) &&
+      !editedEarlierShot(before, after, ghosts)
+      ? { winner: now.winner }
+      : null;
   }
   return endingPatchTo(after, now);
+}
+
+/**
+ * Whether the edit moved a shot before the last and left the last as it was.
+ * Every field counts: a placement or a time is as much an edit as a stroke.
+ * A re-save that changed nothing, or one of the last shot, is the labeller
+ * standing behind the rally's end; an edit further back is not.
+ */
+function editedEarlierShot(
+  before: EndingPoint,
+  after: EndingPoint,
+  ghosts: boolean,
+): boolean {
+  const keys = (point: EndingPoint) =>
+    liveShotsInOrder(point, ghosts)
+      .filter((shot) => !isLetServe(shot))
+      .map((shot) => JSON.stringify(shot));
+  const was = keys(before);
+  const now = keys(after);
+  return was.join("\n") !== now.join("\n") && was.at(-1) === now.at(-1);
+}
+
+/**
+ * Whether the rows settle who won and the point holds the other player: a
+ * last ball that missed with its own hitter as the winner, or one marked in
+ * with the other. Never true while the rows settle nothing, or no winner is
+ * labelled yet.
+ */
+export function winnerContradicted(
+  point: Pick<LabelPoint, "winner">,
+  derived: DerivedEnding | null,
+): derived is DerivedEnding & { winner: LabelSide } {
+  return (
+    derived !== null &&
+    derived.winner !== null &&
+    point.winner !== null &&
+    point.winner !== derived.winner
+  );
 }
 
 /**

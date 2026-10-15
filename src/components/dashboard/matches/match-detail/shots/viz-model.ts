@@ -39,7 +39,9 @@ import {
   errorMadeBy,
   hasActiveMatchFilters,
   hasCustom,
+  hasThen,
   shotMatchesCustom,
+  shotMatchesThen,
   finalShotOf,
   lastShotOf,
   type MatchFilterContext,
@@ -827,13 +829,18 @@ function matchFilterPass(
   );
   return {
     point: (p) => ids.has(p.id),
-    shot: hasCustom(match) ? (s) => shotMatchesCustom(s, match, context) : null,
+    shot: hasCustom(match)
+      ? (s) => shotMatchesCustom(s, match, context)
+      : hasThen(match)
+        ? (s) => shotMatchesThen(s, match, context)
+        : null,
   };
 }
 
 /** `matchFilterPass`' answer: the points the advanced filters keep, and —
  * when a Custom group is chosen — whether a drawn SHOT is the one it names
- * (`shotMatchesCustom`). The point cuts need only `point`; the rally and
+ * (`shotMatchesCustom`; with only Then chosen, `shotMatchesThen`. With both,
+ * the drawn shot is the Custom one, in a point the sequence already kept). The point cuts need only `point`; the rally and
  * errors cuts plot a shot, so they test that shot too. */
 interface MatchPass {
   point: (p: MatchPoint) => boolean;

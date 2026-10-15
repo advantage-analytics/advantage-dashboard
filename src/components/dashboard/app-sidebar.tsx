@@ -22,6 +22,8 @@ import {
 } from "@/lib/dashboard/nav";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
+import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
+import { workspaceHintDue } from "@/lib/onboarding/hints";
 
 /**
  * Two committed widths: a 64px icon rail and a 232px panel.
@@ -38,7 +40,7 @@ import { useConfirmLeave } from "@/components/dashboard/leave-guard-context";
  */
 export function AppSidebar() {
   const pathname = usePathname();
-  const { active } = useWorkspace();
+  const { active, available, viewer } = useWorkspace();
   const { expanded, toggle } = useSidebarState();
   // Every link here asks first while an upload screen is busy.
   const guardLeave = useConfirmLeave();
@@ -73,6 +75,23 @@ export function AppSidebar() {
       }}
     >
       <WorkspaceRow expanded={expanded} />
+      {/* The first time a second workspace appears, the viewer has just been
+          redirected into the team's home (an accepted invite, a claim), so the
+          hint names the team they are in and points at the way back. It
+          anchors on the row's trigger, which exists at both widths; the box
+          portals out of this clipped <nav> and opens to its right. */}
+      <HintRunner
+        hint="workspace-switcher"
+        viewerId={viewer.id}
+        when={workspaceHintDue({
+          activeKind: active.kind,
+          workspaceCount: available.length,
+          doneAt: viewer.workspaceHintDoneAt,
+        })}
+        copyFacts={{ teamName: active.name }}
+        // Back in their own matches: the hint's "switch back here" is done.
+        resolved={active.kind === "personal"}
+      />
 
       <div className="h-6 shrink-0" />
 

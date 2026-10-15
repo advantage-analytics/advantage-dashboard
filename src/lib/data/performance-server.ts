@@ -5,6 +5,7 @@ import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
 import { scoreWinner } from "./match-utils";
+import { matchDay, utcToday } from "./match-day";
 
 /** Did player1 take this match? The shared rule; level sets are not a win. */
 function player1Took(score: NonNullable<DbMatch["score"]>): boolean {
@@ -438,20 +439,24 @@ function calculateHeatmap(
   playerIds: readonly string[],
   viewerId: string,
 ): HeatmapDay[] {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`; // "YYYY-MM"
+  // The current month, read off the same UTC "today" every match-day label
+  // uses (`match-day.ts`) — not the server's local getters, which name a
+  // different month than the buckets below for some hours at each month's end
+  // on any machine that is not on UTC.
+  const monthPrefix = utcToday().slice(0, 7); // "YYYY-MM"
+  const year = Number(monthPrefix.slice(0, 4));
+  const month = Number(monthPrefix.slice(5, 7)) - 1;
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
-  // Bucket by the stored calendar-date string (YYYY-MM-DD), NOT new Date(match.date):
-  // re-parsing the timestamptz applies the server timezone and can disagree with the
-  // day key below, landing the square on the wrong day. The leading date is the day
-  // the user picked at upload, so string bucketing is timezone-independent.
+  // Bucket by the match's day (`matchDay`: the stored value's leading
+  // YYYY-MM-DD), NOT new Date(match.date): re-parsing the timestamptz applies
+  // the server timezone and can disagree with the day key below, landing the
+  // square on the wrong day. The leading date is the day the user picked at
+  // upload, so string bucketing is timezone-independent.
   const dayMap = new Map<string, DbMatch[]>();
   for (const match of matches) {
-    const key = match.date.slice(0, 10);
-    if (key.startsWith(monthPrefix)) {
+    const key = matchDay(match.date);
+    if (key?.startsWith(monthPrefix)) {
       const list = dayMap.get(key) ?? [];
       list.push(match);
       dayMap.set(key, list);

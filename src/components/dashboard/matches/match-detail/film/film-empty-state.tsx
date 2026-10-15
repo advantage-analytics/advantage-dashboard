@@ -73,15 +73,24 @@ const MAX_VIDEO_GB = Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000);
 
 export function FilmEmptyState({
   entry = NO_FILM_ENTRY,
+  readOnly = false,
 }: {
   entry?: MatchFilmEntry;
+  /**
+   * `MatchReportMeta.readOnly`, resolved by `FilmTab`. The sentence stays and
+   * no offer is drawn — not the attachment wizard, not the analysis wizard —
+   * since nothing on a read-only report is the viewer's to add to. The
+   * attachment list still decides every real match; this only ever
+   * withholds.
+   */
+  readOnly?: boolean;
 }) {
   const { match } = useMatchData();
   const fromSwingVision = match.sourceProvider === "swing-vision";
   const mayAttach = canTakeFilmAction(entry, "add");
   // An import offers the attachment wizard or nothing at all; every other
   // match keeps the analysis wizard it has always had.
-  const offered = fromSwingVision ? mayAttach : true;
+  const offered = !readOnly && (fromSwingVision ? mayAttach : true);
   // The allowance only ever rides an attachment offer.
   const quota = fromSwingVision && mayAttach ? entry.quota : null;
   const atCap = atMatchVideoCap(quota);

@@ -85,7 +85,6 @@ export function inertOutside(
  * The rail's width: the default, then the stored width after mount (a first
  * client render that disagreed with the server's would not hydrate), then
  * whatever the handle asks for, clamped and written to storage once it settles.
- * Shared with the docked view.
  */
 function useRailWidth(initialRailWidth?: number) {
   const [railWidth, setRailWidth] = useState(() =>
@@ -217,21 +216,18 @@ export function LabelBlackView({
 }
 
 /**
- * The rail's box, the same in both views: `relative` for the handle on its left
- * edge, which hangs 4px outside it, so the aside itself never clips and a view
- * that rounds its rail clips the box inside (`boxClassName`).
+ * The rail's box: `relative` for the handle on its left edge, which hangs 4px
+ * outside it, so the aside itself never clips.
  */
 export function LabelRailAside({
   tone,
   initialRailWidth,
   className,
-  boxClassName,
   children,
 }: {
   tone: RailTone;
   initialRailWidth?: number;
   className?: string;
-  boxClassName?: string;
   /** The rail's contents — `LabelBlackRail`. */
   children: ReactNode;
 }) {
@@ -253,9 +249,7 @@ export function LabelRailAside({
         onResize={resizeRail}
         onReset={resetRail}
       />
-      <div className={cn("flex min-h-0 flex-1 flex-col", boxClassName)}>
-        {children}
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </aside>
   );
 }

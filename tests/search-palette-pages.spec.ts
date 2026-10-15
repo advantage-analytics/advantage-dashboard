@@ -41,6 +41,7 @@ test("a team workspace lists its live rail pages first, under its own name", () 
     "Matches",
     "Roster",
     "Opponents",
+    "Ask",
   ]);
   expect(workspace.every((page) => page.area === "UCLA")).toBe(true);
 });
@@ -48,7 +49,8 @@ test("a team workspace lists its live rail pages first, under its own name", () 
 test("coming-soon pages are never shortcuts", () => {
   for (const kind of ["team", "personal"] as const) {
     const labels = pagesFor(kind, true).map((page) => page.label);
-    for (const stub of ["Statistics", "Ask", "Schedule"]) {
+    // Ask is a built page in both workspaces, so it is a shortcut in both.
+    for (const stub of ["Statistics", "Schedule"]) {
       expect(labels).not.toContain(stub);
     }
   }
@@ -83,6 +85,7 @@ test("Teams is only listed for someone on a team", () => {
     "Home",
     "Matches",
     "Opponents",
+    "Ask",
     "Profile",
     "Account",
     "Preferences",

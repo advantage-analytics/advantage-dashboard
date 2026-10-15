@@ -343,41 +343,25 @@ export function zonedDayString(now: Date, timeZone: string): string {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-/** "2026-08-08T…" → "Aug 8". */
+/**
+ * "2026-08-08T…" → "Aug 8", for a real MOMENT — a join, an invite, an upload —
+ * read in UTC.
+ *
+ * Pinned to UTC because client components call this during render: the
+ * server renders in UTC and the browser in its own zone, so an evening-Pacific
+ * instant was "Oct 9" on the server and "Oct 8" in the browser — React error
+ * #418 on /admin/requests. Server loaders already ran in UTC on Vercel, so
+ * their output does not change. Same rule as `formatCompletedAt` in
+ * labels-table.tsx.
+ *
+ * Not for a match's date: `matches.date` stores a calendar day, and reading it
+ * as a moment prints the day before, west of Greenwich. That is
+ * `formatMatchDayShort()` in `match-day.ts`.
+ */
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
-}
-
-/**
- * Format an ISO date into a relative/short label: "Today", "Yesterday",
- * "N days ago", "Last week", then a locale date ("May 1", "May 1, 2024").
- */
-export function formatDisplayDate(isoDate: string): string {
-  try {
-    const d = new Date(isoDate);
-    if (Number.isNaN(d.getTime())) return isoDate;
-    const now = new Date();
-    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const diffDays = Math.round(
-      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays > 1 && diffDays <= 6) return `${diffDays} days ago`;
-    if (diffDays > 6 && diffDays <= 13) return "Last week";
-
-    const sameYear = d.getFullYear() === now.getFullYear();
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(sameYear ? {} : { year: "numeric" }),
-    });
-  } catch {
-    return isoDate;
-  }
 }

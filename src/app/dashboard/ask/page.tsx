@@ -1,14 +1,82 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { AskPage } from "@/components/dashboard/ask/ask-page";
+import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import {
+  getAskConversation,
+  getAskConversations,
+  getAskQuota,
+  getAskTagOptions,
+} from "@/lib/data/ask-server";
+import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Ask" };
 
-export default function AskPage() {
+/**
+ * The personal Ask page. A Server Component: everything the client shell
+ * needs before it can render — what can be tagged, the question count, the
+ * saved conversations and the one `?c=` names — is read here, through
+ * `ask-server.ts` and the viewer's own session.
+ *
+ * `?c=` is whatever the address bar says. `getAskConversation()` answers null
+ * for an id that is malformed, unknown or someone else's — all three the
+ * same — and null is simply "no conversation open": the page renders with an
+ * empty thread, never an error and never a hint that the id exists.
+ *
+ * The `key` is what makes opening another conversation a fresh thread: the
+ * shell holds the thread in client state, and without it a navigation from
+ * one `?c=` to another would keep showing the first.
+ *
+ * The scope is personal by construction: nothing about the active workspace
+ * decides what is asked about, so it answers about the viewer's own matches
+ * whichever workspace is active. The program's page is `/dashboard/team/ask`,
+ * the same shell with a team scope.
+ *
+ * The workspace IS read for one thing: its time zone, which the rail dates
+ * earlier questions in (`ask-earlier.ts`). `getWorkspaceContext()` is
+ * `cache()`d — the same read the dashboard layout already made — and a
+ * string from the server is what keeps the server's render and the browser's
+ * on the same day. No workspace reads as UTC; the layout has already turned
+ * away a signed-out viewer.
+ *
+ * The reads happen in `AskContent`, inside a `WidgetBoundary`: when the
+ * viewer's matches cannot be read `getAskTagOptions()` throws, and the page
+ * shows the boundary's retry rather than falling through to the app-wide
+ * error screen. `loading.tsx` is the Suspense fallback while they resolve.
+ */
+type AskRouteProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default function AskRoute(props: AskRouteProps) {
   return (
-    <ComingSoonPage
-      title="Ask"
-      heading="Ask questions about your matches."
-      description="Put a question to the matches already in your account: how a second serve held up under pressure, or what changed between sets."
-      action={{ label: "View your matches", href: "/dashboard/matches" }}
+    <WidgetBoundary label="Ask">
+      <AskContent {...props} />
+    </WidgetBoundary>
+  );
+}
+
+async function AskContent({ searchParams }: AskRouteProps) {
+  const { c } = await searchParams;
+  const conversationId = typeof c === "string" ? c : null;
+
+  const [workspace, tagOptions, quota, conversations, conversation] =
+    await Promise.all([
+      getWorkspaceContext(),
+      getAskTagOptions(),
+      getAskQuota(),
+      getAskConversations(),
+      conversationId ? getAskConversation(conversationId) : null,
+    ]);
+
+  return (
+    <AskPage
+      key={conversation?.id ?? "new"}
+      scope={PERSONAL_ASK_SCOPE}
+      timeZone={workspace?.active.timeZone}
+      tagOptions={tagOptions}
+      quota={quota}
+      conversations={conversations}
+      conversation={conversation}
     />
   );
 }

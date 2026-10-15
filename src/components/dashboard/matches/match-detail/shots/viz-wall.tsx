@@ -29,9 +29,14 @@ export type WallCollection = "default" | "saved";
 
 export function VizWall({
   savedViewsBand,
-  collection,
+  collection: requestedCollection,
   onCollectionChange,
 }: {
+  /**
+   * The Saved collection's content. Absent (a read-only report with no saved
+   * views, where there is nothing to list and no "Create view" tile to offer)
+   * drops the Default/Saved switch and keeps the wall on Default.
+   */
   savedViewsBand?: ReactNode;
   collection: WallCollection;
   onCollectionChange: (collection: WallCollection) => void;
@@ -43,6 +48,9 @@ export function VizWall({
   // F5: mirrors `viz-focused.tsx`'s identical fallback — see
   // `useExternalSwapFadeIn`'s doc comment.
   const fallbackFadeIn = useExternalSwapFadeIn();
+
+  const hasSaved = savedViewsBand != null;
+  const collection: WallCollection = hasSaved ? requestedCollection : "default";
 
   // Keyed on `points`/`you.isPlayer1`/the names/`hrefFor` — `opp.isPlayer1`
   // is always `you.isPlayer1`'s inverse, so it carries no information the
@@ -71,9 +79,7 @@ export function VizWall({
           : "@container flex flex-col gap-6"
       }
     >
-      {/* No Saved collection to switch to without a band (the public share
-          page) — the default cuts stand alone. */}
-      {savedViewsBand !== undefined && (
+      {hasSaved && (
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
@@ -103,7 +109,7 @@ export function VizWall({
           })}
         </div>
       )}
-      {collection === "default" || savedViewsBand === undefined ? (
+      {collection === "default" ? (
         visibleTiles.length > 0 ? (
           <div
             role="list"
@@ -136,9 +142,7 @@ export function VizWall({
           <EmptyWall />
         )
       ) : null}
-      {savedViewsBand !== undefined && (
-        <div hidden={collection !== "saved"}>{savedViewsBand}</div>
-      )}
+      {hasSaved && <div hidden={collection !== "saved"}>{savedViewsBand}</div>}
     </div>
   );
 }

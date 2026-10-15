@@ -141,12 +141,13 @@ export function DashboardShell({
                     cannot shrink a flex item below its min-content height, so
                     tall pages keep scrolling in normal flow. */}
                     <main className="flex flex-1 flex-col">
-                      {/* Once per account, and never over the upload wizard:
-                        a task you're inside is not interrupted by news about
-                        the account. */}
-                      {!pathname.startsWith("/dashboard/matches/new") && (
-                        <BetaWelcome />
-                      )}
+                      {/* Once per account, and never over the upload wizard
+                        or the sample match: a task you're inside is not
+                        interrupted by news about the account. */}
+                      {!pathname.startsWith("/dashboard/matches/new") &&
+                        !pathname.startsWith("/dashboard/matches/sample") && (
+                          <BetaWelcome />
+                        )}
                       <PageTransition>{children}</PageTransition>
                     </main>
                   </div>

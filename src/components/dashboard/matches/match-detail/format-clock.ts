@@ -1,12 +1,14 @@
-/** `match.date` ("August 2, 2026") → the page's short-month form ("Aug 2, 2026"). */
+import { formatMatchDayMedium } from "@/lib/data/match-day";
+
+/**
+ * `match.date` ("August 2, 2026") → the page's short-month form ("Aug 2, 2026").
+ *
+ * The label is read back by `match-day.ts`'s month table, not by
+ * `new Date(label)`: the day the server printed is the day this prints, in
+ * every zone and every browser's date parser.
+ */
 export function shortMonthDate(displayDate: string): string {
-  const date = new Date(displayDate);
-  if (Number.isNaN(date.getTime())) return displayDate;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatMatchDayMedium(displayDate);
 }
 
 /**

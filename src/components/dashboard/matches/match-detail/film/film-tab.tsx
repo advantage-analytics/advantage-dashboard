@@ -39,6 +39,7 @@ import {
   type PointFocus,
 } from "./film-timeline";
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
+import { useOptionalMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
@@ -109,8 +110,8 @@ export function FilmTab({
   video,
   entry = NO_FILM_ENTRY,
   unit,
-  readOnly = false,
-  playbackEndpoint,
+  readOnly: readOnlyProp = false,
+  playbackEndpoint: playbackEndpointProp,
 }: {
   video: MatchVideo | null;
   entry?: MatchFilmEntry;
@@ -130,12 +131,28 @@ export function FilmTab({
   /**
    * The viewer's Units preference (Stage 2C), from the match page. Threaded
    * as a PROP rather than read off `useMatchReport()`: the film subtree
-   * deliberately depends on no report context (its own browser harness
-   * mounts it with only the workspace and match-data providers), and shot
-   * speeds are the one film value the preference changes.
+   * deliberately REQUIRES no report context (its own browser harness
+   * mounts it with only the workspace and match-data providers — the two
+   * facts below are read through the non-throwing variant for that reason),
+   * and shot speeds are the one film value the preference changes.
    */
   unit: DistanceUnit;
 }) {
+  // The two report facts the room needs, read ONCE here through the
+  // non-throwing variant and handed down as props, the same way `unit` is:
+  // the harness mounts this tab with no report provider, where both take a
+  // real match's defaults. `readOnly` (the share page, the sample match)
+  // turns every write off — the view count, the bookmark, the ball-paths
+  // fetch, the maintenance links; `playbackEndpoint` is where the sample's
+  // credential is renewed, since its placeholder id names no `/api/matches`
+  // row.
+  // The share page says so by prop (it mounts no report provider of its
+  // own meta); the sample says so through the report's meta.
+  const report = useOptionalMatchReport();
+  const readOnly = readOnlyProp || (report?.meta.readOnly ?? false);
+  const playbackEndpoint =
+    playbackEndpointProp ?? report?.meta.playbackEndpoint ?? null;
+
   // The filters drawer's open state lives with the room, so a switch to
   // another view (which unmounts this tab) always leaves it shut.
   if (video) {
@@ -147,28 +164,42 @@ export function FilmTab({
             entry={entry}
             unit={unit}
             playbackEndpoint={playbackEndpoint}
+            sharedLink={readOnlyProp}
           />
         </FilterRailProvider>
       </FilmReadOnlyContext>
     );
   }
+  // The no-video states honour `readOnly` the same way the room does: each
+  // keeps its sentence and drops its offer — Add video, the Replace/Align
+  // row — since none of them is the viewer's to take on a report that is
+  // not theirs.
   const view = filmEntryView(entry);
-  if (view === "empty") return <FilmEmptyState entry={entry} />;
-  if (view === "expired") return <FilmExpiredState entry={entry} />;
-  return <UnavailableFilm entry={entry} state={view} />;
+  if (view === "empty")
+    return <FilmEmptyState entry={entry} readOnly={readOnly} />;
+  if (view === "expired")
+    return <FilmExpiredState entry={entry} readOnly={readOnly} />;
+  return <UnavailableFilm entry={entry} state={view} readOnly={readOnly} />;
 }
 
 /** Split out only so the match id can come from the provider, as it does below. */
 function UnavailableFilm({
   entry,
   state,
+  readOnly,
 }: {
   entry: MatchFilmEntry;
   state: "unavailable" | "stale";
+  readOnly: boolean;
 }) {
   const { match } = useMatchData();
   return (
-    <FilmUnavailableState matchId={match.id} entry={entry} state={state} />
+    <FilmUnavailableState
+      matchId={match.id}
+      entry={entry}
+      state={state}
+      readOnly={readOnly}
+    />
   );
 }
 
@@ -177,11 +208,24 @@ function FilmRoom({
   entry,
   unit,
   playbackEndpoint,
+  sharedLink,
 }: {
   video: MatchVideo;
   entry: MatchFilmEntry;
   unit: DistanceUnit;
-  playbackEndpoint?: string;
+  /**
+   * The public share page (`FilmTab`'s own `readOnly` prop), as opposed to
+   * a report that is read-only for another reason — the sample. Only a
+   * shared link's refused renewal means "the link stopped carrying the
+   * video"; the sample's means what it means anywhere else.
+   */
+  sharedLink: boolean;
+  /**
+   * Where the player renews its playback URL, resolved by `FilmTab`: the
+   * share page's `/api/share/<token>/video`, the sample's
+   * `/api/sample-match/video`, or `null` for the match's own route.
+   */
+  playbackEndpoint: string | null;
 }) {
   const readOnly = useFilmReadOnly();
   // The points and their saved flags come from `MatchDataProvider`, not from
@@ -345,29 +389,11 @@ function FilmRoom({
    * Advantage Intelligence lineage gets the same two values out of its
    * passthrough branch, built from exactly the same `filmClock` fields.
    */
-  // The share page renews through its own token route. Memoised so the
-  // hook's controller is handed one stable seam.
-  const playbackDeps = useMemo(
-    () =>
-      playbackEndpoint
-        ? {
-            fetchPlayback: (id: string, signal: AbortSignal | undefined) =>
-              fetchPlaybackSource(
-                id,
-                (...args: Parameters<typeof fetch>) =>
-                  globalThis.fetch(...args),
-                signal,
-                playbackEndpoint,
-              ),
-          }
-        : undefined,
-    [playbackEndpoint],
-  );
   const playback = useAttachmentPlayback({
     matchId: match.id,
     video,
     points,
-    deps: playbackDeps,
+    endpoint: playbackEndpoint,
   });
   // On a shared link a refused renewal means the link stopped carrying the
   // video — turned off, the video taken off it, or its sharer no longer
@@ -376,7 +402,7 @@ function FilmRoom({
   // file is still attached — and "Sign in again" (`denied`) is no help to a
   // reader who never signed in. Both say what actually happened instead.
   const problem =
-    readOnly &&
+    sharedLink &&
     (playback.problem?.reason === "removed" ||
       playback.problem?.reason === "denied")
       ? {
@@ -422,6 +448,8 @@ function FilmRoom({
    * the two, so opening the room on a film that is already playing does not
    * count it twice. The Advantage Intelligence lineage has no attachment to
    * stamp. Rendering and credential refreshes send nothing — only a `play`.
+   * A read-only report has no retention clock of the viewer's to restart, and
+   * the sample's id names no row to stamp: nothing is sent.
    */
   const viewedGenerationRef = useRef<number | null>(null);
   const passthrough = playback.passthrough;
@@ -693,6 +721,10 @@ function FilmRoom({
    * DELETE, which is fine: the loader only renders points from matches the
    * viewer can see, and T4's DELETE policy admits anyone who can see the
    * match.
+   *
+   * Read-only: no row to write and no control offers it (`onToggleSaved` is
+   * withheld from every surface below), but the S key reaches here too, so
+   * the guard sits on the write itself rather than only on the buttons.
    */
   const handleToggleSaved = useCallback(
     async (pointId: string) => {
@@ -728,11 +760,19 @@ function FilmRoom({
     },
     [supabase, pointsRef, setPoints, readOnly],
   );
+  /**
+   * What the surfaces get: the toggle, or nothing. A surface given no
+   * `onToggleSaved` draws no bookmark control at all — not a disabled one,
+   * which would tell a reader of the share page or the sample that saving is
+   * a thing this page does and that they are the wrong person.
+   */
+  const toggleSaved = readOnly ? undefined : handleToggleSaved;
 
   const activePointId = activePoint?.id ?? null;
   const toggleSavedActive = useCallback(() => {
     if (activePointId) void handleToggleSaved(activePointId);
   }, [activePointId, handleToggleSaved]);
+  const toggleSavedActiveOrNone = readOnly ? undefined : toggleSavedActive;
 
   /**
    * The room's keys, on the page while this view is open: ← ↑ step to the
@@ -962,8 +1002,10 @@ function FilmRoom({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
           {/* Above the player and right-aligned: maintenance for the person who
             owns the file, out of the way of the person watching. Renders
-            nothing at all for everyone else. */}
-          <FilmEntryActions matchId={match.id} entry={entry} />
+            nothing at all for everyone else — and is not mounted on a
+            read-only report, whose links would lead into a wizard the
+            reader has no match in. */}
+          {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
 
           <FilmPlayer
             ref={playerRef}
@@ -987,7 +1029,7 @@ function FilmRoom({
             onPlayRejected={reportPlayRejected}
             onFirstPlay={recordFirstPlay}
             onRetry={retry}
-            onToggleSaved={toggleSavedActive}
+            onToggleSaved={toggleSavedActiveOrNone}
             onEnterFullscreen={enterRoom}
             // Every point step — the transport's two glyphs, the arrow keys
             // above, the card's stepper — runs the player's own `step`, which
@@ -1024,7 +1066,7 @@ function FilmRoom({
               activeStart={active?.stop.start ?? 0}
               activeEnd={active?.stop.end ?? 0}
               onSelect={handleSelect}
-              onToggleSaved={handleToggleSaved}
+              onToggleSaved={toggleSaved}
               // Only this column gets the door; the room's own drawer renders
               // the same component without it.
               onOpenInRoom={openPointInRoom}
@@ -1065,7 +1107,7 @@ function FilmRoom({
             // filter-applied points rather than a tab-scoped slice of its own.
             visiblePoints={filteredPoints}
             filmFilters={filmFilters}
-            onToggleSaved={handleToggleSaved}
+            onToggleSaved={toggleSaved}
             // The room derives its own displayed point from its own playhead
             // — `displayedPointId` here is the shell's, and the shell's clock
             // does not move while the room is open.

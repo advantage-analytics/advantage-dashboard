@@ -135,6 +135,22 @@ ring = only elsewhere; nothing = quiet. No "mark all read" — the mark clears
 itself.
 Empty state: "Nothing running here."
 
+**Getting set up** — while a setup step is open in the active workspace, a
+section sits above the feed: "Getting set up" (12px medium) with "1 of 3"
+right, a 3px step bar (done `--blue`, open `--border-medium`), then one row
+per step at the tighter `py-2` measure. A done step is a 14px ink-400 `Check`
+and a muted label; an open one is a link with a 14px ink-700 `Circle`, the
+label, and the stopped row's trailing grey word + chevron naming where it
+goes. Setup is a standing state, so it is **never counted**: not in the
+trigger's dot, not in the tooltip sentence, and no blue dot on its rows — the
+step bar's filled segments are its only blue. All steps done, no section.
+Personal: a tour of the sample report (done once either report tour is),
+hand and backhand, report notifications. Team (staff only): roster,
+a dual while the Schedule is open, a first match. Team Home keeps a one-line
+pointer on its title's summary line — the same ticks and one 11px blue link, "Finish
+setup: send a first match →" (`team/team-setup-line.tsx`). _Shipped:_
+`activity/tray-setup.ts`, `lib/data/setup-progress-server.ts`.
+
 ### Header (v3)
 
 ```

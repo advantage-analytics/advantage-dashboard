@@ -7,10 +7,14 @@ import {
   applyMatchFilters,
   buildFilterContext,
   filtersEqual,
+  matchFiltersQuery,
   optionAvailability,
   parseMatchFilters,
   returnContactOf,
   serializeMatchFilters,
+  shotMatchesCustom,
+  shotMatchesThen,
+  shotStrokeOf,
   toggleMatchFilter,
   type MatchFilterContext,
   type MatchFilters,
@@ -720,6 +724,210 @@ test("Custom Direction: a right-hander's forehand crosscourt from the ad half is
   ]);
 });
 
+/* ── Custom › Stroke and the Custom → Then sequence ─────────────────────── */
+
+/** You serve, Rudy returns, then you: forehand crosscourt, Rudy, backhand DTL. */
+function sequencePoint(id = "seq"): MatchPoint {
+  return pt({
+    id,
+    shots: [
+      from("low", "deuce", {
+        shotNumber: 0,
+        isPlayer1: true,
+        shotType: "Feed",
+      }),
+      from("low", "deuce", {
+        shotNumber: 1,
+        isPlayer1: true,
+        shotType: "First Serve",
+        zone: "Crosscourt",
+      }),
+      from("high", "deuce", {
+        shotNumber: 2,
+        isPlayer1: false,
+        shotType: "Backhand",
+        zone: "Middle",
+      }),
+      from("low", "deuce", {
+        shotNumber: 3,
+        isPlayer1: true,
+        shotType: "Forehand",
+        zone: "Crosscourt",
+      }),
+      from("high", "deuce", {
+        shotNumber: 4,
+        isPlayer1: false,
+        shotType: "Forehand Volley",
+        zone: "Middle",
+      }),
+      from("low", "deuce", {
+        shotNumber: 5,
+        isPlayer1: true,
+        shotType: "Backhand",
+        zone: "Down the Line",
+      }),
+    ],
+  });
+}
+
+test("Custom › Stroke: matches the rally stroke case-insensitively; serves and feeds never match", () => {
+  const points = [sequencePoint()];
+  expect(run(points, { customStroke: ["Forehand"] })).toEqual(["seq"]);
+  // "Forehand Volley" is a volley — the Result › Shot classifier's order.
+  expect(
+    run(points, { customStroke: ["Volley"], customPlayer: "opponent" }),
+  ).toEqual(["seq"]);
+  expect(
+    run(points, { customStroke: ["Forehand"], customPlayer: "opponent" }),
+  ).toEqual([]);
+  expect(run(points, { customStroke: ["Overhead"] })).toEqual([]);
+  // Same shot: your forehand is shot 3, so shot 5 with Forehand is none.
+  expect(
+    run(points, { customStroke: ["Forehand"], customRallyShot: [5] }),
+  ).toEqual([]);
+  expect(
+    run(points, { customStroke: ["Backhand"], customRallyShot: [5] }),
+  ).toEqual(["seq"]);
+  const lowerCase = pt({
+    id: "lc",
+    shots: [shot({ shotNumber: 3, shotType: "backhand slice" })],
+  });
+  expect(run([lowerCase], { customStroke: ["Backhand"] })).toEqual(["lc"]);
+  // A serve row and a feed row are no stroke at all, whatever else they say.
+  const serveOnly = pt({
+    id: "serve-only",
+    shots: [
+      shot({ shotNumber: 1, shotType: "First Serve" }),
+      shot({ shotNumber: 1, shotType: "Second Serve" }),
+      shot({ shotNumber: 0, shotType: "Feed" }),
+    ],
+  });
+  for (const stroke of [
+    "Forehand",
+    "Backhand",
+    "Volley",
+    "Overhead",
+  ] as const) {
+    expect(run([serveOnly], { customStroke: [stroke] })).toEqual([]);
+  }
+  expect(shotStrokeOf({ shotType: "First Serve" })).toBeNull();
+  expect(shotStrokeOf({ shotType: "Feed" })).toBeNull();
+  expect(shotStrokeOf({ shotType: "OVERHEAD" })).toBe("Overhead");
+});
+
+test("Custom → Then: a Custom shot followed by a LATER Then shot in the same point matches", () => {
+  const points = [sequencePoint()];
+  // Your forehand crosscourt within the first 7 shots, then a down-the-line shot.
+  expect(
+    run(points, {
+      server: "you",
+      customPlayer: "you",
+      customStroke: ["Forehand"],
+      customDirection: ["Crosscourt"],
+      customRallyShot: [1, 2, 3, 4, 5, 6, 7],
+      thenDirection: ["Down the Line"],
+    }),
+  ).toEqual(["seq"]);
+  // B before A does not match: the DTL backhand (5) is not after itself, and
+  // nothing crosscourt by you comes after it.
+  expect(
+    run(points, {
+      customDirection: ["Down the Line"],
+      thenStroke: ["Forehand"],
+      thenDirection: ["Crosscourt"],
+    }),
+  ).toEqual([]);
+  // One shot is never both steps: shot 3 alone satisfies each.
+  expect(run(points, { customRallyShot: [3], thenRallyShot: [3] })).toEqual([]);
+  expect(run(points, { customRallyShot: [3], thenRallyShot: [4, 5] })).toEqual([
+    "seq",
+  ]);
+  // Then's player resolves through youIsPlayer1, like Custom's.
+  expect(
+    run(points, {
+      customRallyShot: [2],
+      thenPlayer: "you",
+      thenStroke: ["Backhand"],
+    }),
+  ).toEqual(["seq"]);
+  expect(
+    run(
+      points,
+      { customRallyShot: [2], thenPlayer: "you", thenStroke: ["Backhand"] },
+      FLIPPED,
+    ),
+  ).toEqual([]);
+  // Shot numbers below 1 never match a step: your deuce-side feed (shot 0)
+  // would otherwise be a Custom shot before the serve.
+  expect(
+    run(points, {
+      customPlayer: "you",
+      customSide: ["deuce"],
+      thenRallyShot: [1],
+    }),
+  ).toEqual([]);
+  expect(
+    run(points, {
+      customPlayer: "you",
+      customSide: ["deuce"],
+      thenRallyShot: [3],
+    }),
+  ).toEqual(["seq"]);
+});
+
+test("Custom → Then: the two shots must be in the SAME point", () => {
+  const a = pt({
+    id: "a",
+    shots: [shot({ shotNumber: 3, shotType: "Forehand", zone: "Crosscourt" })],
+  });
+  const b = pt({
+    id: "b",
+    shots: [
+      shot({ shotNumber: 5, shotType: "Backhand", zone: "Down the Line" }),
+    ],
+  });
+  expect(
+    run([a, b], { customStroke: ["Forehand"], thenStroke: ["Backhand"] }),
+  ).toEqual([]);
+});
+
+test("Then alone acts as a single-shot rule, exactly like Custom", () => {
+  const points = [sequencePoint(), rudyPoint()];
+  const cases: Partial<MatchFilters>[] = [
+    { customStroke: ["Backhand"], customDirection: ["Down the Line"] },
+    { customPlayer: "opponent", customDirection: ["Crosscourt"] },
+    { customRallyShot: [6] },
+    { customSide: ["ad"] },
+  ];
+  for (const c of cases) {
+    const asThen: Partial<MatchFilters> = {
+      thenPlayer: c.customPlayer ?? null,
+      thenSide: c.customSide ?? [],
+      thenStroke: c.customStroke ?? [],
+      thenDirection: c.customDirection ?? [],
+      thenRallyShot: c.customRallyShot ?? [],
+    };
+    expect(run(points, asThen)).toEqual(run(points, c));
+  }
+  expect(run(points, { thenRallyShot: [6] })).toEqual(["rudy"]);
+  // Availability of a Then option is the Custom option's.
+  const av = optionAvailability(points, CTX);
+  expect([...av.thenStroke]).toEqual([...av.customStroke]);
+  expect([...av.thenRallyShot]).toEqual([...av.customRallyShot]);
+  expect(av.customStroke.has("Overhead")).toBe(false);
+  expect(av.customStroke.has("Volley")).toBe(true);
+});
+
+test("shotMatchesCustom / shotMatchesThen share one per-shot test", () => {
+  const s = shot({ shotNumber: 3, shotType: "Forehand", zone: "Crosscourt" });
+  const fc = f({ customStroke: ["Forehand"], customRallyShot: [3] });
+  const ft = f({ thenStroke: ["Forehand"], thenRallyShot: [3] });
+  expect(shotMatchesCustom(s, fc, CTX)).toBe(true);
+  expect(shotMatchesThen(s, ft, CTX)).toBe(true);
+  expect(shotMatchesCustom(s, ft, CTX)).toBe(true); // Custom empty: no constraint
+  expect(shotMatchesThen(s, f({ thenStroke: ["Backhand"] }), CTX)).toBe(false);
+});
+
 test("buildFilterContext: the match row's hand first, else inferred from forehands", () => {
   // Player2's forehands all from the ad half at the high end → a left-hander.
   const lefty = Array.from({ length: 12 }, (_, i) =>
@@ -993,9 +1201,22 @@ const EVERYTHING: MatchFilters = {
   resultRallyLength: ["short", "medium", "long"],
   customPlayer: "opponent",
   customSide: ["deuce", "ad"],
+  customStroke: ["Forehand", "Backhand", "Volley", "Overhead"],
   customDirection: ["Crosscourt", "Down the Line", "Inside Out", "Inside In"],
   customRallyShot: [1, 4, 12],
+  thenPlayer: "you",
+  thenSide: ["ad"],
+  thenStroke: ["Backhand", "Overhead"],
+  thenDirection: ["Down the Line", "Inside In"],
+  thenRallyShot: [2, 7],
 };
+
+/**
+ * `serializeMatchFilters(EVERYTHING)` as it was BEFORE Custom › Stroke and
+ * Then existed — a link already out in the world.
+ */
+const PRE_THEN_EVERYTHING =
+  "s.1.3_st.p.bp.sp.mp_sc.0-0.30-30.Ad-40.40-Ad_sv.o_ct.a_vt.1.2_vs.f.s.k_vz.w.b.t_vr.a.sw.re.ip.df_rt.fh.bh_rs.ts.sl_rz.dl.m.cc_rc.i.m.n_rr.w.e.ip_xo.w.l_xp.y_xs.sv.rt.fh.bh.vo.oh_xe.wn.er_xm.o.n_xr.s.m.l_cp.o_cs.d.a_cd.cc.dl.io.ii_cr.1.4.12";
 
 test("serialize/parse round-trips a filter with every field set", () => {
   // Every group is set, so every field is exercised.
@@ -1009,6 +1230,47 @@ test("serialize/parse round-trips a filter with every field set", () => {
   const back = parseMatchFilters(text);
   expect(filtersEqual(back, EVERYTHING)).toBe(true);
   expect(serializeMatchFilters(back)).toBe(text);
+});
+
+test("an older ?f= string parses exactly as before and re-serializes unchanged", () => {
+  const back = parseMatchFilters(PRE_THEN_EVERYTHING);
+  expect(
+    filtersEqual(
+      back,
+      f({
+        ...EVERYTHING,
+        customStroke: [],
+        thenPlayer: null,
+        thenSide: [],
+        thenStroke: [],
+        thenDirection: [],
+        thenRallyShot: [],
+      }),
+    ),
+  ).toBe(true);
+  expect(serializeMatchFilters(back)).toBe(PRE_THEN_EVERYTHING);
+});
+
+test("Custom › Stroke and Then use their own short codes and round-trip", () => {
+  const filters = f({
+    customStroke: ["Overhead", "Forehand"],
+    customRallyShot: [3],
+    thenPlayer: "opponent",
+    thenSide: ["deuce"],
+    thenStroke: ["Volley"],
+    thenDirection: ["Inside Out"],
+    thenRallyShot: [9, 5],
+  });
+  const text = serializeMatchFilters(filters);
+  expect(text).toBe("ck.fh.oh_cr.3_tp.o_ts.d_tk.vo_td.io_tr.5.9");
+  expect(filtersEqual(parseMatchFilters(text), filters)).toBe(true);
+  // The full every-field string carries the new groups after the old ones.
+  expect(serializeMatchFilters(EVERYTHING)).toBe(
+    PRE_THEN_EVERYTHING.replace("_cd.", "_ck.fh.bh.vo.oh_cd.") +
+      "_tp.y_ts.a_tk.bh.oh_td.dl.ii_tr.2.7",
+  );
+  // matchFiltersQuery carries the same value as ?f=.
+  expect(matchFiltersQuery("tab=film", filters)).toBe(`tab=film&f=${text}`);
 });
 
 test("serialization is deterministic and empty filters serialize to ''", () => {

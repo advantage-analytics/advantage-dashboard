@@ -231,7 +231,10 @@ function renderTray(updatedAt: string): string {
           children?: React.ReactNode;
         }) => React.createElement("a", { href }, children),
       },
-      "next/navigation": { unstable_rethrow: () => {} },
+      "next/navigation": {
+        unstable_rethrow: () => {},
+        usePathname: () => "/dashboard",
+      },
       "@/components/ui/popover": {
         Popover: passThrough,
         PopoverTrigger: passThrough,
@@ -242,6 +245,9 @@ function renderTray(updatedAt: string): string {
       },
       "@/components/dashboard/shared/workspace-scope-chip": {
         WorkspaceScopeChip: marker("WorkspaceScopeChip"),
+      },
+      "@/components/dashboard/onboarding/hint-runner": {
+        HintRunner: marker("HintRunner"),
       },
       "@/components/dashboard/workspace-provider": {
         useWorkspace: () => ({ viewer: { id: "viewer-1" } }),

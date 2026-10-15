@@ -41,7 +41,17 @@ test.describe("nav data: icons and comingSoon flags", () => {
    * stub route nobody flagged, and — the one that will actually bite — a page
    * that graduates out of `ComingSoonPage` while the nav still promises
    * "coming soon".
+   *
+   * `BUILT_AHEAD_OF_NAV` is the one way out, and it closes itself. A feature
+   * that lands over several commits has a page before it has everything the
+   * page needs, and its nav entry keeps saying "coming soon" until the last
+   * piece is in. An href listed here must be in exactly that state — flagged,
+   * and no longer rendering `ComingSoonPage` — so the commit that unflags it
+   * fails this test until the href is taken off the list. Empty is the
+   * normal state.
    */
+  const BUILT_AHEAD_OF_NAV: readonly string[] = [];
+
   test("a nav entry is flagged exactly when its page renders ComingSoonPage", () => {
     const appDir = path.join(process.cwd(), "src/app");
 
@@ -82,6 +92,14 @@ test.describe("nav data: icons and comingSoon flags", () => {
         const rendersComingSoon = fs
           .readFileSync(file as string, "utf8")
           .includes("ComingSoonPage");
+
+        if (BUILT_AHEAD_OF_NAV.includes(link.href)) {
+          expect(
+            Boolean(link.comingSoon) && !rendersComingSoon,
+            `${link.href} is listed in BUILT_AHEAD_OF_NAV but is no longer a built page behind a comingSoon flag — take it off the list`,
+          ).toBe(true);
+          continue;
+        }
 
         expect(
           Boolean(link.comingSoon),

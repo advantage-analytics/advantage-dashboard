@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { CLAIM_BUTTON, ClaimActions } from "@/components/claim/claim-shell";
+import { JOIN_LABEL } from "@/components/join/join-forms";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   JoinQuotaFooter,
@@ -46,8 +47,8 @@ export type OfferedInvite = PendingInvite & {
  * button on each looks like a settings screen, not like a decision.
  *
  * Two shapes, because one invitation and several are different questions. One
- * is "will you join this program", and gets the primary button and the
- * program's name on it. Several is "which of these", and a primary button on
+ * is "will you join this program", and gets the primary button, under a
+ * heading that names the program. Several is "which of these", and a primary button on
  * any single row would answer it on the reader's behalf; so every row gets the
  * same quiet outline button and its own allowance line, and the screen keeps
  * its hands off the choice.
@@ -108,7 +109,7 @@ function useAccept(inviteId: string) {
   return { pending, error, run };
 }
 
-/** One invitation: the primary button, named after the program it joins. */
+/** One invitation: the primary button. */
 function SingleInvite({
   invite,
   notNowHref,
@@ -127,7 +128,9 @@ function SingleInvite({
           className={CLAIM_BUTTON}
           onClick={run}
         >
-          {pending ? "Joining…" : `Join ${invite.programName}`}
+          {/* The action, not the program: the heading above names it. See
+              JOIN_LABEL, shared with the `/join/[token]` screens. */}
+          {pending ? "Joining…" : JOIN_LABEL}
         </button>
         <NotNowLink href={notNowHref} />
         <JoinQuotaFooter

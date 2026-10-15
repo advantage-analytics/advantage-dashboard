@@ -672,7 +672,7 @@ test.describe("the console", () => {
     return { called, operations };
   }
 
-  test("not on a session with marks off; the default layout draws them with marks on", () => {
+  test("not on a session with marks off; drawn with marks on", () => {
     const { called, operations } = countingOperations();
     const saves = {
       onSaveShot: async () => ({ ok: true, status: "edited" }),
@@ -690,7 +690,7 @@ test.describe("the console", () => {
     expect(off).not.toContain("data-shot-suggestion");
     expect(off).toContain('data-shot-id="s-b"');
 
-    // The default layout (docked side) is the same rail: with marks on it
+    // Asked for no layout, the console is full screen: with marks on it
     // draws the suggestion too.
     const docked = renderConsole({
       session: sessionWithPair(),
@@ -700,7 +700,7 @@ test.describe("the console", () => {
       operations,
       ...saves,
     });
-    expect(docked).toContain('data-label-layout-mode="docked-side"');
+    expect(docked).toContain('data-label-layout-mode="black"');
     expect(docked).toContain(`data-shot-suggestion="${KEY}"`);
     expect(docked).toContain('data-shot-id="s-b"');
     // A render asked the console's operations for nothing.

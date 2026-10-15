@@ -1253,6 +1253,7 @@ export function HeadToHeadCard() {
   return (
     <section
       aria-labelledby="head-to-head-heading"
+      data-tour="head-to-head"
       className="surface-card flex flex-col"
       style={
         {
