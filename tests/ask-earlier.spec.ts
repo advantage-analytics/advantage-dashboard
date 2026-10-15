@@ -229,3 +229,56 @@ test.describe("askDayLabel", () => {
     expect(askDayLabel("soon")).toBeNull();
   });
 });
+
+// ── Pins and the filter ─────────────────────────────────────────────────────
+
+import {
+  askConversationsMatching,
+  askPinnedFirst,
+} from "@/components/dashboard/ask/ask-earlier";
+
+test.describe("askPinnedFirst", () => {
+  const rows = [
+    { id: "a", title: "A", pinnedAt: null },
+    { id: "b", title: "B", pinnedAt: "2026-10-03T00:00:00Z" },
+    { id: "c", title: "C", pinnedAt: null },
+    { id: "d", title: "D", pinnedAt: "2026-10-10T00:00:00Z" },
+  ];
+
+  test("pinned rows apart, newest pin first; the rest keep their order", () => {
+    const { pinned, rest } = askPinnedFirst(rows);
+    expect(pinned.map((row) => row.id)).toEqual(["d", "b"]);
+    expect(rest.map((row) => row.id)).toEqual(["a", "c"]);
+  });
+
+  test("nothing pinned: an empty first group", () => {
+    expect(askPinnedFirst(rows.slice(0, 1)).pinned).toEqual([]);
+  });
+});
+
+test.describe("askConversationsMatching", () => {
+  const rows = [
+    { id: "1", title: "Why do I lose to Marek Dvorsky" },
+    { id: "2", title: "First serve trend since June" },
+    { id: "3", title: "Serve placement on break points" },
+  ];
+
+  test("every word of the query, case and spacing aside", () => {
+    expect(askConversationsMatching(rows, "serve").map((r) => r.id)).toEqual([
+      "2",
+      "3",
+    ]);
+    expect(
+      askConversationsMatching(rows, "  BREAK   serve ").map((r) => r.id),
+    ).toEqual(["3"]);
+    expect(askConversationsMatching(rows, "marek june")).toEqual([]);
+  });
+
+  test("a blank query is every row, in order", () => {
+    expect(askConversationsMatching(rows, "   ").map((r) => r.id)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+  });
+});

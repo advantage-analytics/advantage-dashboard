@@ -18,7 +18,7 @@ export function AskPrompt({ text, tags }: { text: string; tags: AskTag[] }) {
   return (
     <div data-ask-prompt="" className="flex flex-col items-end gap-1.5">
       <h2 className="sr-only">You asked</h2>
-      <p className="max-w-[80%] rounded-[var(--radius-card)] rounded-br-[var(--radius-cell)] bg-[var(--surface-subtle)] px-3.5 py-2.5 text-[13px] leading-[1.55] break-words whitespace-pre-wrap text-[var(--ink-900)]">
+      <p className="max-w-[80%] rounded-[var(--radius-card)] rounded-br-[var(--radius-cell)] bg-[var(--surface-subtle)] px-3.5 py-2.5 text-[13px] leading-[1.55] break-words whitespace-pre-wrap text-[var(--ink-900)] max-md:max-w-[92%]">
         {text}
       </p>
       {tags.length > 0 && (

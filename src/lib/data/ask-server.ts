@@ -35,6 +35,7 @@ import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
+import { readAskVisual, type AskVisual } from "@/lib/services/ask/events";
 import {
   readAskFeedbackRow,
   type AskFeedback,
@@ -179,33 +180,50 @@ export interface AskConversationSummary {
   title: string;
   /** ISO timestamp of the last exchange. */
   updatedAt: string;
+  /** ISO timestamp of the owner's pin, or null: pinned rows lead the rail. */
+  pinnedAt: string | null;
+}
+
+/** `%`, `_` and `\` as literal characters in an `ilike` pattern. */
+function ilikeLiteral(text: string): string {
+  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**
- * The viewer's saved conversations in one workspace, most recently used
- * first: `program_id is null` for the personal page, the program's for a
- * team one, so each lists only its own. Still the viewer's alone — a team
- * conversation is private to the member who asked. Empty on a read failure:
- * the list is the rail's "Earlier questions", and losing it should not take
- * the composer down with it.
+ * The viewer's saved conversations in one workspace, pinned ones first
+ * (newest pin first) and then most recently used first: `program_id is
+ * null` for the personal page, the program's for a team one, so each lists
+ * only its own. Still the viewer's alone — a team conversation is private to
+ * the member who asked. Empty on a read failure: the list is the rail's
+ * "Earlier questions", and losing it should not take the composer down with
+ * it.
+ *
+ * `q` narrows the list to titles holding that text, case aside — the rail
+ * filters what it was handed on its own, so this is for a caller that wants
+ * fewer rows over the wire. Blank is no filter.
  */
 export const getAskConversations = cache(async function getAskConversations(
   programId: string | null = null,
+  q: string = "",
 ): Promise<AskConversationSummary[]> {
   const viewerId = await getViewerId();
   if (!viewerId) return [];
   if (programId !== null && !isUuid(programId)) return [];
 
   const supabase = await createClient();
-  const mine = supabase
+  let mine = supabase
     .from("ask_conversations")
-    .select("id, title, updated_at")
+    .select("id, title, updated_at, pinned_at")
     .eq("user_id", viewerId);
+  const needle = q.trim();
+  if (needle !== "") mine = mine.ilike("title", `%${ilikeLiteral(needle)}%`);
   const { data, error } = await (
     programId === null
       ? mine.is("program_id", null)
       : mine.eq("program_id", programId)
-  ).order("updated_at", { ascending: false });
+  )
+    .order("pinned_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false });
 
   if (error) {
     console.error("[ask] could not load conversations", {
@@ -215,11 +233,17 @@ export const getAskConversations = cache(async function getAskConversations(
   }
 
   return (
-    (data ?? []) as { id: string; title: string; updated_at: string }[]
+    (data ?? []) as {
+      id: string;
+      title: string;
+      updated_at: string;
+      pinned_at: string | null;
+    }[]
   ).map((row) => ({
     id: row.id,
     title: row.title,
     updatedAt: row.updated_at,
+    pinnedAt: row.pinned_at ?? null,
   }));
 });
 
@@ -234,6 +258,8 @@ export interface AskConversationMessage {
   createdAt: string;
   /** An answer's thumb from its asker (`ask_feedback`); null when there is none. */
   feedback: AskFeedback | null;
+  /** The viewer's pin of this answer's visual (`ask_pins`); null when there is none. */
+  pinId: string | null;
 }
 
 export interface AskConversation extends AskConversationSummary {
@@ -270,7 +296,7 @@ export const getAskConversation = cache(async function getAskConversation(
   const supabase = await createClient();
   const owned = supabase
     .from("ask_conversations")
-    .select("id, title, updated_at")
+    .select("id, title, updated_at, pinned_at")
     .eq("id", id)
     .eq("user_id", viewerId);
   const [conversationRead, messagesRead] = await Promise.all([
@@ -282,8 +308,11 @@ export const getAskConversation = cache(async function getAskConversation(
       .from("ask_messages")
       // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
       // one object (or null) per message — the answer's thumb, in this read.
+      // `ask_pins` points at a message too, as a list (one pin per answer
+      // per owner, so at most one row): the answer's pin, for the card under
+      // it that says so.
       .select(
-        "id, role, content, created_at, ask_feedback(rating, reasons, note)",
+        "id, role, content, created_at, ask_feedback(rating, reasons, note), ask_pins(id)",
       )
       .eq("conversation_id", id)
       .eq("user_id", viewerId)
@@ -304,6 +333,7 @@ export const getAskConversation = cache(async function getAskConversation(
     id: string;
     title: string;
     updated_at: string;
+    pinned_at: string | null;
   } | null;
   if (!conversation) return null;
 
@@ -313,20 +343,102 @@ export const getAskConversation = cache(async function getAskConversation(
     content: unknown;
     created_at: string;
     ask_feedback: unknown;
+    ask_pins: unknown;
   }[];
 
   return {
     id: conversation.id,
     title: conversation.title,
     updatedAt: conversation.updated_at,
+    pinnedAt: conversation.pinned_at ?? null,
     messages: messages.map((row) => ({
       id: row.id,
       role: row.role,
       content: row.content,
       createdAt: row.created_at,
       feedback: readAskFeedbackRow(row.ask_feedback),
+      pinId: readPinId(row.ask_pins),
     })),
   };
+});
+
+/** The first pin id in an embedded `ask_pins(id)` list, or null. */
+function readPinId(value: unknown): string | null {
+  const rows = Array.isArray(value) ? value : value ? [value] : [];
+  for (const row of rows) {
+    const id = (row as { id?: unknown } | null)?.id;
+    if (typeof id === "string" && isUuid(id)) return id;
+  }
+  return null;
+}
+
+// ── Pins ────────────────────────────────────────────────────────────────────
+
+/** One visual block a player kept from an answer (`ask_pins`), as Home draws it. */
+export interface AskPin {
+  id: string;
+  caption: string;
+  visual: AskVisual;
+  /** ISO timestamp of the pin. */
+  createdAt: string;
+  /** The conversation it came from, or null once that was deleted. */
+  conversationId: string | null;
+}
+
+/** Home shows at most this many pins, newest first. */
+export const MAX_HOME_ASK_PINS = 3;
+
+/**
+ * The viewer's pins in one workspace, newest first, at most
+ * `MAX_HOME_ASK_PINS`: `program_id is null` for the personal Home. A pin
+ * whose block no longer reads whole (`readAskVisual`) is left out rather
+ * than half drawn.
+ *
+ * Throws when the read fails: the Home region sits in a `WidgetBoundary`,
+ * and a failed read is a retry there, not an absent card.
+ */
+export const getAskPins = cache(async function getAskPins(
+  programId: string | null = null,
+): Promise<AskPin[]> {
+  const viewerId = await getViewerId();
+  if (!viewerId) return [];
+  if (programId !== null && !isUuid(programId)) return [];
+
+  const supabase = await createClient();
+  const mine = supabase
+    .from("ask_pins")
+    .select("id, caption, visual, created_at, conversation_id")
+    .eq("user_id", viewerId);
+  const { data, error } = await (
+    programId === null
+      ? mine.is("program_id", null)
+      : mine.eq("program_id", programId)
+  )
+    .order("created_at", { ascending: false })
+    .limit(MAX_HOME_ASK_PINS);
+  if (error) {
+    throw new Error("Could not load the pinned charts", { cause: error });
+  }
+
+  const pins: AskPin[] = [];
+  for (const row of (data ?? []) as {
+    id: string;
+    caption: string;
+    visual: unknown;
+    created_at: string;
+    conversation_id: string | null;
+  }[]) {
+    const visual = readAskVisual(row.visual);
+    if (!visual) continue;
+    pins.push({
+      id: row.id,
+      caption: row.caption,
+      visual,
+      createdAt: row.created_at,
+      conversationId: row.conversation_id,
+    });
+  }
+  return pins;
 });
 
 /**

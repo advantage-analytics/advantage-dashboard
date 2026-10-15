@@ -19,6 +19,7 @@ import {
   type DbRecentMatch,
 } from "@/lib/data/home-recent-data";
 import { loadHomeServes } from "@/lib/data/home-serve-data";
+import { getAskPins } from "@/lib/data/ask-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { buildInsightEvidenceWithCaption } from "@/lib/ui/insight-evidence";
 import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
@@ -39,6 +40,7 @@ import {
   FocusCardPending,
 } from "@/components/dashboard/loading/home-skeleton";
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
+import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 
 export const metadata = { title: "Home" };
@@ -141,6 +143,11 @@ export default async function Home() {
               )}
             </HomeWidgetFrame>
           }
+          // The last card in the right column, and only while something is
+          // pinned: no skeleton (a bar would promise a card most Home pages
+          // never get, and nothing sits below it to shift) and no empty
+          // state (see `AskPinCard`). A failed read is still the retry.
+          pins={region("Pinned from Ask", null, <Pins resources={resources} />)}
           footer={region(
             "Usage",
             <HomeFooterPending />,
@@ -177,6 +184,7 @@ function startHomeResources(
     countViewerWins(matches as DbRecentMatch[], ids, userId),
   );
   const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
+  const pins = getAskPins(null);
   return {
     matches,
     userId,
@@ -188,6 +196,7 @@ function startHomeResources(
     players,
     activity,
     serves,
+    pins,
   };
 }
 type HomeResources = ReturnType<typeof startHomeResources>;
@@ -269,6 +278,12 @@ async function Insight({ resources }: { resources: HomeResources }) {
       />
     </FocusCard>
   );
+}
+async function Pins({ resources }: { resources: HomeResources }) {
+  const pins = await resources.pins;
+  // Absent, not empty — the card's own rule (`AskPinCard`).
+  if (pins.length === 0) return null;
+  return <AskPinCard pins={pins} />;
 }
 async function Footer({ resources }: { resources: HomeResources }) {
   const u = await resources.usage;

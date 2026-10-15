@@ -175,11 +175,20 @@ test.describe("the routes", () => {
     expect(rail).toContain("askBasePath(scope)");
     expect(shell).toContain("deleteAskConversation(id, scope.kind)");
 
-    // The action revalidates one of two literals, never its argument.
+    // Every action revalidates one of two literals — through `askPath()`,
+    // which picks between them — or Home's own literal, never its argument.
     const actions = read("src/app/dashboard/ask/actions.ts");
+    expect(actions).toContain(
+      'return scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal;',
+    );
+    expect(actions).toContain('const HOME_PATH = "/dashboard";');
     const calls = actions.match(/revalidatePath\([^)]*\)/g) ?? [];
-    expect(calls).toEqual([
-      'revalidatePath(scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal)',
-    ]);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect([
+        "revalidatePath(askPath(scopeKind))",
+        "revalidatePath(HOME_PATH)",
+      ]).toContain(call);
+    }
   });
 });

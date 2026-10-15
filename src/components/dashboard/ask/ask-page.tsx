@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteAskConversation } from "@/app/dashboard/ask/actions";
+import {
+  deleteAskConversation,
+  pinAskAnswer,
+  renameAskConversation,
+  setAskConversationPinned,
+  unpinAskAnswer,
+} from "@/app/dashboard/ask/actions";
+import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import {
   DayZeroOffer,
   MatchOfferActions,
@@ -17,13 +24,23 @@ import type {
 import type { AskTagOptions } from "@/lib/data/ask-tags";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
 import {
+  askActionsFor,
+  type AskSavedViewDraft,
+} from "@/lib/services/ask/actions";
+import {
   askBasePath,
   askScopeProgramId,
   type AskScope,
 } from "@/lib/services/ask/scope";
 import { askFollowUps, type AskStarter } from "@/lib/services/ask/starters";
+import { askTitle } from "@/lib/services/ask/titles";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
+import {
+  AskActionCards,
+  type AskPinOutcome,
+  type AskSaveViewOutcome,
+} from "./ask-actions";
 import { AskAnswer } from "./ask-answer";
 import { askCopy, askDayZeroCopy } from "./ask-copy";
 import { AskComposer, type AskQuotaView } from "./ask-composer";
@@ -38,7 +55,7 @@ import { AskPrompt } from "./ask-prompt";
 import { AskRail } from "./ask-rail";
 import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
 import { AskStarters } from "./ask-starters";
-import { useAskStream, type AskExchange } from "./use-ask-stream";
+import { useAskStream, type AskExchange, type AskTag } from "./use-ask-stream";
 
 /**
  * The Ask page, as a chat: earlier questions in a rail on the left, and
@@ -80,6 +97,24 @@ import { useAskStream, type AskExchange } from "./use-ask-stream";
  * then navigates, so the server drops `?c=` and re-reads the list. The rail
  * owns its button; ⇧⌘O (Ctrl+Shift+O off a Mac) runs the same handler from
  * anywhere on the page, except while an answer is arriving.
+ *
+ * A first answer also names the conversation: `ask_save_exchange()` titles
+ * it after the whole question, and the page renames it to the question's
+ * first clause (`askTitle`) without a re-render — the list carries the
+ * short title on its next read, and `created` carries it until then.
+ *
+ * ── Arriving with a tag ─────────────────────────────────────────────────────
+ * `?match=`, `?opponent=` and (team) `?player=` — "Ask about this match"
+ * from a match page, a profile or an opponent's drawer — arrive as
+ * `initialTags`, already checked by the route against what can be tagged,
+ * and are put on the composer's draft once, when no thread is open.
+ *
+ * ── Under an answer ─────────────────────────────────────────────────────────
+ * What the answer offers to do next (`askActionsFor`, the catalogue of
+ * roadmap 6.4) is drawn as cards under it. The page wires the two that
+ * write — pin to Home, save a view — to the server actions; the cards do
+ * nothing until clicked. Which answers already have a pin comes with the
+ * saved conversation (`AskConversationMessage.pinId`).
  *
  * ── Deleting a conversation ─────────────────────────────────────────────────
  * The rail's row action calls `deleteAskConversation`, which revalidates this
@@ -127,6 +162,12 @@ export interface AskPageProps {
    * omitted otherwise, including once its first answer is in the rail.
    */
   sentMatchId?: string | null;
+  /**
+   * Tags the route read off the address bar (`?match=`, `?opponent=`,
+   * `?player=`), each already one of `tagOptions`'. Put on the composer
+   * once, for a page opened with no conversation. None when omitted.
+   */
+  initialTags?: AskTag[];
 }
 
 export function AskPage(props: AskPageProps) {
@@ -199,6 +240,7 @@ function AskThread({
   conversations,
   conversation,
   sentMatchId = null,
+  initialTags = [],
 }: AskPageProps) {
   const router = useRouter();
   const basePath = askBasePath(scope);
@@ -213,6 +255,10 @@ function AskThread({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
     programId: askScopeProgramId(scope),
+    // The tags the page arrived with (`entry.ts`), onto an empty page only.
+    ...(initialTags.length > 0
+      ? { initialDraft: { text: "", tags: initialTags } }
+      : {}),
   });
 
   // The conversation a first answer just created, for "Earlier questions".
@@ -233,6 +279,14 @@ function AskThread({
 
   const hasThread = state.exchanges.length > 0;
 
+  // Which saved answers already have a pin on Home, by the answer's id.
+  const pinByAnswer = new Map<string, string>();
+  for (const message of conversation?.messages ?? []) {
+    if (message.role === "assistant" && message.pinId) {
+      pinByAnswer.set(message.id, message.pinId);
+    }
+  }
+
   // A question that was just sent should be on screen, not below the fold of
   // a long thread. Only on growth: a saved conversation opens at its top.
   const end = useRef<HTMLDivElement>(null);
@@ -246,7 +300,7 @@ function AskThread({
 
   async function send(question?: AskExchange["question"]) {
     const first = state.conversationId === null;
-    const title = (question ?? state.draft).text.trim();
+    const asked = (question ?? state.draft).text.trim();
     const outcome = await ask(question);
     if (outcome?.status !== "done" || !first) return;
 
@@ -255,14 +309,22 @@ function AskThread({
       "",
       `${basePath}?c=${encodeURIComponent(outcome.conversationId)}`,
     );
+    // The short title, saved without a re-render: the answer is on screen,
+    // and the list carries it on its next read. A refusal leaves the
+    // question's own text as the title, which is what it was anyway.
+    const title = askTitle(asked);
     setCreated({
       summary: {
         id: outcome.conversationId,
         title,
         updatedAt: new Date().toISOString(),
+        pinnedAt: null,
       },
       against: conversations,
     });
+    void renameAskConversation(outcome.conversationId, title, scope.kind, {
+      revalidate: false,
+    }).catch(() => undefined);
   }
 
   // A starter or a follow-up is a question with its tags, sent as typed.
@@ -287,6 +349,25 @@ function AskThread({
       router.replace(basePath);
     }
     return true;
+  }
+
+  async function renameConversation(id: string, title: string) {
+    const result = await renameAskConversation(id, title, scope.kind);
+    return result.ok;
+  }
+
+  async function pinConversation(id: string, pinned: boolean) {
+    const result = await setAskConversationPinned(id, pinned, scope.kind);
+    return result.ok;
+  }
+
+  async function saveView(
+    draft: AskSavedViewDraft,
+  ): Promise<AskSaveViewOutcome> {
+    const result = await createSavedView(draft);
+    return result.ok
+      ? { ok: true, view: result.data }
+      : { ok: false, error: result.error };
   }
 
   // Where the composer is, so "New question" can put the caret in it: with
@@ -362,6 +443,8 @@ function AskThread({
           activeConversationId={state.conversationId}
           onNewQuestion={newQuestion}
           onDeleteConversation={deleteConversation}
+          onRenameConversation={renameConversation}
+          onPinConversation={pinConversation}
           deleteDisabled={state.inFlight}
         />
       }
@@ -377,6 +460,16 @@ function AskThread({
                   exchange={exchange}
                   scope={scope}
                   onRate={rate}
+                  initialPinId={
+                    exchange.answer.answerId
+                      ? (pinByAnswer.get(exchange.answer.answerId) ?? null)
+                      : null
+                  }
+                  onPinAnswer={(answerId) => pinAskAnswer(answerId, scope.kind)}
+                  onUnpinAnswer={async (pinId) =>
+                    (await unpinAskAnswer(pinId, scope.kind)).ok
+                  }
+                  onSaveView={saveView}
                   // Only the latest question's choices can still be picked.
                   onChoose={
                     index === state.exchanges.length - 1
@@ -440,22 +533,45 @@ function AskThread({
 
 /**
  * One exchange: the asker's prompt against the right edge, what came back
- * on the left. Both in the same column, so an answer's left edge is the
- * column's.
+ * on the left, and — under a finished answer — the cards for what to do
+ * next. All in the same column, so an answer's left edge is the column's.
+ *
+ * The pin is this exchange's own state, seeded from the saved conversation
+ * and moved by the card's own pin and unpin; the page is not re-read for it.
  */
 function AskExchangeView({
   exchange,
   scope,
   onChoose,
   onRate,
+  initialPinId,
+  onPinAnswer,
+  onUnpinAnswer,
+  onSaveView,
 }: {
   exchange: AskExchange;
   scope: AskScope;
   onChoose?: (option: string) => void;
   onRate: (answerId: string, feedback: AskFeedback | null) => Promise<boolean>;
+  /** The pin this answer already has on Home, from the saved conversation. */
+  initialPinId: string | null;
+  onPinAnswer: (answerId: string) => Promise<AskPinOutcome>;
+  onUnpinAnswer: (pinId: string) => Promise<boolean>;
+  onSaveView: (draft: AskSavedViewDraft) => Promise<AskSaveViewOutcome>;
 }) {
   const { question, answer } = exchange;
   const { answerId } = answer;
+  const [pinId, setPinId] = useState(initialPinId);
+  const actions =
+    answer.status === "done"
+      ? askActionsFor({
+          sources: answer.sources,
+          figures: answer.figures,
+          visual: answer.visual,
+          scope,
+          tags: question.tags,
+        })
+      : [];
   return (
     <article className="flex flex-col gap-8">
       <AskPrompt text={question.text} tags={question.tags} />
@@ -465,6 +581,27 @@ function AskExchangeView({
         onChoose={onChoose}
         onRate={answerId ? (feedback) => onRate(answerId, feedback) : undefined}
       />
+      {actions.length > 0 && (
+        <AskActionCards
+          actions={actions}
+          pinId={pinId}
+          onPin={
+            answerId
+              ? async () => {
+                  const outcome = await onPinAnswer(answerId);
+                  if (outcome.ok) setPinId(outcome.pinId);
+                  return outcome;
+                }
+              : undefined
+          }
+          onUnpin={async (id) => {
+            const done = await onUnpinAnswer(id);
+            if (done) setPinId(null);
+            return done;
+          }}
+          onSaveView={onSaveView}
+        />
+      )}
     </article>
   );
 }

@@ -44,6 +44,7 @@ import { resolveDefaultView } from "@/components/dashboard/matches/match-detail/
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
+  MatchReportAskLink,
   MatchReportTitle,
   MatchReportTitleActions,
   MatchReportTitleRow,
@@ -443,6 +444,7 @@ export default async function MatchDetailPage({
                   <MatchReportFacts />
                 </div>
                 <MatchReportTitleActions>
+                  <MatchReportAskLink />
                   <MatchReportCompareButton />
                   <MatchReportMoreMenu />
                 </MatchReportTitleActions>

@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { REPORT_VIEWS } from "@/components/dashboard/matches/match-detail/report-view";
+import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
  * The pane's title row (design 04 F1/F4/F5/F6): the view's name in display
@@ -48,6 +50,35 @@ export function MatchReportTitle() {
     >
       {label}
     </h1>
+  );
+}
+
+/**
+ * "Ask about this match": the quietest control in the title row, a text
+ * link into Ask with this match already tagged (`askEntryHref`,
+ * `/dashboard/ask?match=…`, or the team page's when the match is read in a
+ * team workspace). Ink that darkens, never blue — the row's one primary is
+ * Compare — and absent on a read-only report (the public link, the sample
+ * match): there is nothing of the reader's to ask about.
+ */
+export function MatchReportAskLink() {
+  const { meta } = useMatchReport();
+  if (meta.readOnly) return null;
+  const href = askEntryHref(
+    meta.workspaceKind === "team"
+      ? { kind: "team", programId: "", programName: "" }
+      : { kind: "personal" },
+    { kind: "match", id: meta.matchId },
+  );
+  if (!href) return null;
+  return (
+    <Link
+      href={href}
+      data-ask-about="match"
+      className="text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+    >
+      Ask about this match
+    </Link>
   );
 }
 

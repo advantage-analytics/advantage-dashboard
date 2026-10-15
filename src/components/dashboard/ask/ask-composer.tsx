@@ -390,7 +390,8 @@ export function AskComposer({
                 aria-expanded={open}
                 onClick={onTagButton}
                 className={cn(
-                  "-ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
+                  // 28px tall; 32px on a phone, where a finger is the pointer.
+                  "-ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] max-md:h-8",
                   open
                     ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
                     : "text-[var(--ink-600)]",
@@ -406,13 +407,16 @@ export function AskComposer({
             }
           />
 
-          {/* A label. Not a button, no chevron: there is one engine. */}
+          {/* A label. Not a button, no chevron: there is one engine. Under
+              768px the mark stands alone and the name is read, not drawn:
+              the row is 330px wide there and the Send button must not wrap
+              under it. */}
           <span
             data-ask-engine=""
             className="flex items-center gap-2 text-[12px] text-[var(--ink-700)]"
           >
             <AskEngineMark />
-            Advantage Intelligence
+            <span className="max-md:sr-only">Advantage Intelligence</span>
           </span>
 
           <div className="flex-1" />
