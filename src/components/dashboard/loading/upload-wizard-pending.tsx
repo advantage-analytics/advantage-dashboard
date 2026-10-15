@@ -112,9 +112,18 @@ function EyebrowBar({ className }: { className: string }) {
   );
 }
 
+/** A `FieldCaption`'s line, as a bar: 11px text on a 1.4 line, 15.4px tall. */
+function CaptionBar({ className }: { className: string }) {
+  return (
+    <span className="flex h-[15.4px] items-center">
+      <PendingBar className={cn("h-2", className)} />
+    </span>
+  );
+}
+
 /**
  * `SourceStepContent`: Workspace · For · Source, 36px apart. Each `Field` is
- * an eyebrow over a 40px row on a hairline — the lead mark, the 20px value
+ * its `FieldCaption` over a 40px row on a hairline — the lead mark, the 20px value
  * and 16px subline, Source's mono file types and chevron. Every rule is the
  * resting hairline: which field carries the blue one depends on the
  * workspace kind, and a skeleton does not claim a field is being worked.
@@ -122,14 +131,14 @@ function EyebrowBar({ className }: { className: string }) {
 function ProviderStepBody() {
   const fields = [
     {
-      eyebrow: "w-[76px]",
+      caption: "w-[59px]",
       lead: "rounded-[var(--radius-button)]",
       value: "w-40",
       sub: "w-56",
     },
-    { eyebrow: "w-7", lead: "rounded-full", value: "w-36", sub: "w-72" },
+    { caption: "w-[17px]", lead: "rounded-full", value: "w-36", sub: "w-72" },
     {
-      eyebrow: "w-12",
+      caption: "w-[37px]",
       lead: "rounded-[var(--radius-button)]",
       value: "w-44",
       sub: "w-80",
@@ -139,8 +148,8 @@ function ProviderStepBody() {
   return (
     <div className="flex flex-col gap-9">
       {fields.map((field) => (
-        <div key={field.eyebrow} className="flex flex-col gap-[14px]">
-          <EyebrowBar className={field.eyebrow} />
+        <div key={field.caption} className="flex flex-col gap-[14px]">
+          <CaptionBar className={field.caption} />
           <div className="flex items-center gap-4 pb-4 shadow-[inset_0_-1px_0_var(--border-hairline)]">
             <PendingBar className={cn("size-10 shrink-0", field.lead)} />
             <span className="flex min-w-0 flex-1 flex-col gap-1">
