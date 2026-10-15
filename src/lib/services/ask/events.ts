@@ -274,8 +274,9 @@ export interface AskSplitVisual {
 
 /**
  * Serve placement: one bar per court (or per group of serves), split T /
- * Body / Wide. Each count is ≥ 0. The views record no deuce/ad split, so a
- * court is whatever the model labelled it: "All serves", "Second serves".
+ * Body / Wide. Each count is ≥ 0. A court is whatever the model labelled
+ * it: "Deuce" and "Ad" when the query split by `ask.points.court`, otherwise
+ * a group such as "All serves" or "Second serves".
  */
 export interface AskServeVisual {
   kind: "serve";

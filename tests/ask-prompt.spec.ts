@@ -5,7 +5,11 @@ import { expect, test } from "@playwright/test";
 import { parsePlanReply } from "@/lib/services/ask/ask";
 import { ASK_COMPARE_KINDS, compareSql } from "@/lib/services/ask/compare";
 
-import { getLLMStream, isLLMConfigured } from "@/lib/llm/adapter";
+import {
+  getLLMStream,
+  isLLMConfigured,
+  resolvedLLMModel,
+} from "@/lib/llm/adapter";
 import {
   ASK_CELL_REFERENCE_SYNTAX,
   ASK_FIGURE_LINE_SYNTAX,
@@ -812,6 +816,15 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
+  test("says every serve cell is a count: a court is one row, never a count row and a percentage row", () => {
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).not.toContain(
+      "does not record the deuce or ad court",
+    );
+  });
+
   const expected: Record<AskModelVisualKind, AskVisual> = {
     bars: {
       kind: "bars",
@@ -1081,6 +1094,21 @@ test.describe("isLLMConfigured", () => {
       Object.assign(process.env, env);
       expect(isLLMConfigured(), JSON.stringify(env)).toBe(configured);
     }
+  });
+
+  test("the model recorded for a run is the one the adapter resolves, null in mock mode", () => {
+    expect(resolvedLLMModel("gemini-x")).toBeNull();
+    Object.assign(process.env, { LLM_PROVIDER: "openai", OPENAI_API_KEY: "k" });
+    expect(resolvedLLMModel("gemini-x")).toBe("gemini-x");
+    // Another provider's id, or none at all, runs the provider's default.
+    expect(resolvedLLMModel("claude-x")).toBe("gemini-3.5-flash-lite");
+    expect(resolvedLLMModel(undefined)).toBe("gemini-3.5-flash-lite");
+    Object.assign(process.env, {
+      LLM_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "k",
+    });
+    expect(resolvedLLMModel("claude-x")).toBe("claude-x");
+    expect(resolvedLLMModel("gemini-x")).toBe("claude-opus-4-6");
   });
 
   test("whenever it is false, getLLMStream answers with the mock stream", async () => {

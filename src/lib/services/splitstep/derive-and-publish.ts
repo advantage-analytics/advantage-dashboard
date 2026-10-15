@@ -27,6 +27,13 @@ import type { Transcript } from "./derivation";
 const LOG = "[splitstep:derive]";
 
 /**
+ * Taken off `deadline` for Ask's first answer only. The ready mail waits on
+ * that answer, and the caller's ball paths come after the mail; the webhook's
+ * deadline is already 8s short of maxDuration, so this leaves them ~20s.
+ */
+const ARRIVAL_RESERVE_MS = 12_000;
+
+/**
  * `processing_jobs.error_code` for a failed derivation. The recovery
  * classifier (`src/lib/data/match-analysis.ts`) offers a rebuild only for
  * `DERIVATION_ERROR`; `DERIVATION_REFUSED` shows the match without stats,
@@ -245,7 +252,13 @@ export async function deriveAndPublish(params: {
     // match's first answer.
     const arrival: Promise<AskArrivalAnswer | null> =
       onArrival && !rebuild
-        ? onArrival({ matchId, deadline }).catch((error: unknown) => {
+        ? onArrival({
+            matchId,
+            deadline:
+              deadline === undefined
+                ? undefined
+                : deadline - ARRIVAL_RESERVE_MS,
+          }).catch((error: unknown) => {
             console.error(`${LOG} first question threw`, {
               jobId,
               matchId,

@@ -1433,6 +1433,14 @@ test.describe("parsePlanReply", () => {
     });
   });
 
+  test("reads a placeholder cannot_answer beside a plan as no refusal", () => {
+    for (const placeholder of ["", " ", "N/A", "n/a", "None", "null", "-"]) {
+      expect(
+        parsePlanReply(JSON.stringify({ ...PLAN, cannot_answer: placeholder })),
+      ).toEqual(PLAN);
+    }
+  });
+
   test("refuses anything that is neither shape", () => {
     expect(parsePlanReply("select 1")).toBeNull();
     expect(parsePlanReply("[1, 2]")).toBeNull();

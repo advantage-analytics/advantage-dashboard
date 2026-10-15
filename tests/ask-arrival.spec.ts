@@ -159,6 +159,7 @@ const loader = createLoader({
   stubs: {
     "@/lib/llm/adapter": {
       isLLMConfigured: () => true,
+      resolvedLLMModel: () => null,
       getLLMStream: async () => {
         throw new Error("the adapter is never reached: the stream is a script");
       },
