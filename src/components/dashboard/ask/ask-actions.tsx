@@ -2,6 +2,18 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
+import {
+  ArrowUpRight,
+  Bookmark,
+  Download,
+  Grid2x2,
+  Pin,
+  Play,
+  Share2,
+  User,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { SavedView } from "@/lib/data/saved-views-logic";
 import {
   askCsvDataUrl,
@@ -99,7 +111,31 @@ const HOME_HREF: Record<AskScope["kind"], string> = {
  * reader can act on, not a second surface competing with it.
  */
 const ACTION =
-  "cursor-pointer text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:text-[var(--text-disabled)]";
+  "inline-flex cursor-pointer items-center gap-1.5 text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:text-[var(--text-disabled)]";
+/**
+ * One glyph per action, before its words, in the row's own ink: the film
+ * room's play mark for the film, the pin for Home, the court grid for the
+ * Visualizations tab, the bookmark for a saved view, and the arrow for a
+ * page the action leaves for. 12px, stroke 1.5 — the sidebar's weight.
+ */
+const ACTION_ICON: Record<AskAction["kind"], LucideIcon> = {
+  watch: Play,
+  pin: Pin,
+  visualize: Grid2x2,
+  save_view: Bookmark,
+  export: Download,
+  share: Share2,
+  open_match: ArrowUpRight,
+  open_player: User,
+  open_opponent: Users,
+};
+
+function Glyph({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <Icon className="size-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+  );
+}
+
 /** A line that reports a state ("On your Home page") beside the actions. */
 const STATUS = "text-[12px] whitespace-nowrap text-[var(--ink-700)]";
 const PROBLEM = "text-[11px] text-[var(--danger-text)]";
@@ -164,10 +200,12 @@ export function AskActionCards({
               download={action.file.filename}
               className={ACTION}
             >
+              <Glyph icon={ACTION_ICON.export} />
               {action.label}
             </a>
           ) : (
             <Link href={action.href} className={ACTION}>
+              <Glyph icon={ACTION_ICON[action.kind]} />
               {action.label}
             </Link>
           )}
@@ -227,6 +265,7 @@ function PinControl({
           {ASK_ACTIONS_COPY.pinned[scopeKind]}
         </span>
         <Link href={HOME_HREF[scopeKind]} className={ACTION}>
+          <Glyph icon={ArrowUpRight} />
           {ASK_ACTIONS_COPY.openHome}
         </Link>
         <button
@@ -256,6 +295,7 @@ function PinControl({
         disabled={!onPin || pending !== null}
         className={ACTION}
       >
+        <Glyph icon={ACTION_ICON.pin} />
         {pending === "pin" ? ASK_ACTIONS_COPY.pinning : ASK_ACTIONS_COPY.pin}
       </button>
       {!onPin && (
@@ -317,6 +357,7 @@ function SaveViewControl({
           {ASK_ACTIONS_COPY.saved} · {saved.name}
         </span>
         <Link href={href} className={ACTION}>
+          <Glyph icon={ArrowUpRight} />
           {ASK_ACTIONS_COPY.openView}
         </Link>
       </>
@@ -336,6 +377,7 @@ function SaveViewControl({
         }}
         className={ACTION}
       >
+        <Glyph icon={ACTION_ICON.save_view} />
         {ASK_ACTIONS_COPY.save}
       </button>
       <ConfirmDialog
