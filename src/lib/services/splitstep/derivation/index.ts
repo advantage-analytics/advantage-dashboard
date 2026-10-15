@@ -116,8 +116,14 @@
  * (flags.ts `SIDE_DEAD_ZONE_M`), so `score_side_mismatch` reads the side of a
  * serve struck 0.1–0.3 m off the centre mark, where many deuce stances sit.
  * No published game, server, winner or score moves; only that flag can.
+ * 0.8.2 (2026-10-14) keeps one results row per `event_id` (parse.ts
+ * `uniqueRawStrokes`). Job 4e0dac8e's file carries two strokes on one frame
+ * cross-joined with their two rally slots, so events 410 and 411 appeared
+ * twice each and rally 51 gained two phantom strokes; each event now keeps
+ * one copy per slot. A file with no repeated `event_id` derives exactly as
+ * 0.8.1.
  */
-export const DERIVATION_VERSION = "0.8.1-unreconciled";
+export const DERIVATION_VERSION = "0.8.2-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -130,6 +136,7 @@ export type {
 export {
   parseStrokes,
   normalizeStroke,
+  uniqueRawStrokes,
   GEOMETRY_BOUNDS,
   type ParseOptions,
   type ParseResult,
