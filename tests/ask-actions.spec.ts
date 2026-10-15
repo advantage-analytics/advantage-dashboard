@@ -85,6 +85,29 @@ test.describe("askActionsFor", () => {
     });
   });
 
+  test("a saved answer has Show me, so Watch on video is not offered beside it", () => {
+    const actions = askActionsFor({
+      sources: [ONE],
+      figures: [
+        {
+          label: "Second serves won",
+          value: "55%",
+          column: "second_serve_won_pct",
+        },
+      ],
+      visual: TABLE,
+      scope: PERSONAL_ASK_SCOPE,
+      showMe: true,
+    });
+    expect(actions.map((action) => action.kind)).toEqual([
+      "pin",
+      "visualize",
+      "save_view",
+      "export",
+      "share",
+    ]);
+  });
+
   test("no block, no pin and no file; two matches, no film and no court", () => {
     const actions = askActionsFor({
       sources: [ONE, TWO],

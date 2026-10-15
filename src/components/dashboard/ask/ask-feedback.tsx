@@ -39,7 +39,8 @@ export const ASK_FEEDBACK_KEPT =
  * with a toolbar stacked under it. The icons are 12px, the size of the micro
  * type beside them, inside 28px hit areas that pull back by their padding,
  * so the row keeps the text's height and the icons sit a word-gap from the
- * name.
+ * name. They sit half a pixel under the box centre: on 11px text the eye
+ * reads the middle between the capitals and the lowercase, a hair low.
  *
  * A thumb is saved the moment it is pressed; pressing it again takes it back.
  * A thumbs down then opens one optional step — reasons from a fixed list and
@@ -100,14 +101,20 @@ export function AskFeedbackControl({
             pressed={feedback?.rating === "up"}
             onClick={() => press("up")}
           >
-            <ThumbsUp className="size-3" aria-hidden="true" />
+            <ThumbsUp
+              className="size-3 translate-y-[0.5px]"
+              aria-hidden="true"
+            />
           </Thumb>
           <Thumb
             label={ASK_FEEDBACK_COPY.down}
             pressed={feedback?.rating === "down"}
             onClick={() => press("down")}
           >
-            <ThumbsDown className="size-3" aria-hidden="true" />
+            <ThumbsDown
+              className="size-3 translate-y-[0.5px]"
+              aria-hidden="true"
+            />
           </Thumb>
         </div>
         <p role="status" className="text-micro">

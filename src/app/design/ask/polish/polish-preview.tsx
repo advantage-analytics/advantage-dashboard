@@ -1,8 +1,18 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronRight, Play, ThumbsDown, ThumbsUp } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronRight,
+  Download,
+  Pin,
+  Play,
+  ThumbsDown,
+  ThumbsUp,
+  type LucideIcon,
+} from "lucide-react";
+import { AskActionCards } from "@/components/dashboard/ask/ask-actions";
 import { ASK_SIGNATURE } from "@/components/dashboard/ask/ask-answer";
 import { AskFeedbackControl } from "@/components/dashboard/ask/ask-feedback";
 import { AskPointList } from "@/components/dashboard/ask/ask-point-list";
@@ -16,6 +26,7 @@ import {
   ASK_NO_ADVICE_SENTENCE,
   type AskSourceMatch,
 } from "@/lib/services/ask/events";
+import type { AskAction } from "@/lib/services/ask/actions";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
 import type { AskShowPoint } from "@/lib/services/ask/show-response";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
@@ -193,6 +204,9 @@ export function AskPolishPreview() {
             on the same sixteen points.
           </p>
           <nav className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+            <a href="#tail" className="text-body-sm text-[var(--blue)]">
+              Answer tail — footer + next steps
+            </a>
             <a href="#footer" className="text-body-sm text-[var(--blue)]">
               Footer
             </a>
@@ -209,6 +223,7 @@ export function AskPolishPreview() {
         </header>
 
         <main className="flex flex-col gap-10 p-4 sm:p-6">
+          <TailSection />
           <FooterSection />
           <CompactSection />
           <QuietSection />
@@ -216,6 +231,271 @@ export function AskPolishPreview() {
         </main>
       </div>
     </WorkspaceProvider>
+  );
+}
+
+// ── Answer tail: footer + next steps ────────────────────────────────────────
+// Below an answer sit two things that were laid out apart: the sign-off
+// (signature and thumbs) and the next-steps row (`AskActionCards`: Watch on
+// video · Pin to Home · Download CSV · Open the match), 24px under it. These
+// sheets try them together.
+
+const TAIL_ACTIONS: AskAction[] = [
+  { kind: "watch", label: "Watch on video", detail: "", href: "#watch" },
+  { kind: "pin", label: "Pin to Home", detail: "" },
+  {
+    kind: "export",
+    label: "Download CSV",
+    detail: "",
+    file: {
+      filename: "ask-bars.csv",
+      text: "measure,you\nFirst serve in,37.5%",
+    },
+  },
+  { kind: "open_match", label: "Open the match", detail: "", href: "#match" },
+];
+
+const pinAnswer = async () => ({ ok: true as const, pinId: "pin-demo" });
+const unpinAnswer = async () => true;
+
+/** The real next-steps row, wired to no-op pin handlers. */
+function RealActions() {
+  return (
+    <AskActionCards
+      actions={TAIL_ACTIONS}
+      pinId={null}
+      onPin={pinAnswer}
+      onUnpin={unpinAnswer}
+    />
+  );
+}
+
+/** The actions row's own voice (`ask-actions.tsx` ACTION), for the sketches. */
+const TAIL_ACTION =
+  "inline-flex cursor-pointer items-center gap-1.5 text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+
+const TAIL_ICON: Record<string, LucideIcon> = {
+  watch: Play,
+  pin: Pin,
+  export: Download,
+  open_match: ArrowUpRight,
+};
+
+/** A sketch of the actions, dot-separated like the real row. */
+function SketchActions({ only }: { only?: string[] }) {
+  const shown = TAIL_ACTIONS.filter(
+    (action) => !only || only.includes(action.kind),
+  );
+  return (
+    <ul className="flex list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0">
+      {shown.map((action, index) => {
+        const Icon = TAIL_ICON[action.kind];
+        return (
+          <li key={action.kind} className="flex items-center gap-x-2.5">
+            {index > 0 && (
+              <span
+                aria-hidden="true"
+                className="size-[3px] rounded-full bg-[var(--ink-300)]"
+              />
+            )}
+            <a href="#tail" className={TAIL_ACTION}>
+              <Icon className="size-3 shrink-0" strokeWidth={1.5} />
+              {action.label}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Signature and thumbs, interactive. `nudge` drops the icons half a pixel:
+ * on 11px text the eye reads the middle between the cap height and the
+ * x-height, a hair under the box centre the icons sit on.
+ */
+function SignOff({ nudge = false }: { nudge?: boolean }) {
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const thumb = (kind: "up" | "down") => {
+    const Icon = kind === "up" ? ThumbsUp : ThumbsDown;
+    const pressed = rating === kind;
+    return (
+      <button
+        type="button"
+        aria-label={kind === "up" ? "Good answer" : "Bad answer"}
+        aria-pressed={pressed}
+        onClick={() => setRating(pressed ? null : kind)}
+        className={cn(
+          "inline-flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-button)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
+          pressed && "bg-[var(--surface-subtle)]",
+        )}
+        style={{ color: pressed ? "var(--blue)" : "var(--ink-500)" }}
+      >
+        <Icon
+          className={cn("size-3", nudge && "translate-y-[0.5px]")}
+          aria-hidden="true"
+        />
+      </button>
+    );
+  };
+  return (
+    <div className="flex items-center gap-x-3">
+      <Signature advice={false} />
+      <div className="-my-1.5 -ml-2 flex items-center gap-0.5">
+        {thumb("up")}
+        {thumb("down")}
+      </div>
+    </div>
+  );
+}
+
+/** The last paragraph of an answer and its "Show me" line, above a tail. */
+function TailAnswer({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex max-w-[640px] flex-col">
+      <p className="text-body text-pretty" style={{ lineHeight: 1.65 }}>
+        You won 10 of the 16 points across these three games and held serve both
+        times.
+      </p>
+      <div className="pt-3">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--blue)]">
+          <Play className="size-3" strokeWidth={1.5} aria-hidden="true" />
+          Show me these points
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const TAIL: { id: string; name: string; summary: string; body: ReactNode }[] = [
+  {
+    id: "current",
+    name: "0 · Current",
+    summary:
+      "The sign-off, then 24px of air, then the next-steps row. The answer seems to end at the signature, and Pin to Home and Download CSV float under it as an afterthought that belongs to nothing.",
+    body: (
+      <TailAnswer>
+        <div className="pt-3">
+          <AskFeedbackControl
+            feedback={null}
+            onRate={async () => true}
+            lead={<Signature advice={false} />}
+          />
+        </div>
+        <div className="pt-6">
+          <RealActions />
+        </div>
+      </TailAnswer>
+    ),
+  },
+  {
+    id: "steps-first",
+    name: "A · Next steps, then the sign-off",
+    summary:
+      "Swap the two. What the player can do with the answer comes right after it, and the signature and thumbs close the answer, as a signature closes a letter. 12px apart, so they read as one block. The real row, moved, with nothing else changed.",
+    body: (
+      <TailAnswer>
+        <div className="flex flex-col gap-3 pt-3">
+          <RealActions />
+          <SignOff nudge />
+        </div>
+      </TailAnswer>
+    ),
+  },
+  {
+    id: "one-line",
+    name: "B · One line",
+    summary:
+      "Signature and thumbs on the left, a hairline, then the actions on the same line. One row for everything that is about the answer rather than the answer itself; it wraps to two on a phone or a long action list.",
+    body: (
+      <TailAnswer>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-3">
+          <SignOff nudge />
+          <span
+            aria-hidden="true"
+            className="h-3.5 w-px bg-[var(--border-hairline)]"
+          />
+          <SketchActions />
+        </div>
+      </TailAnswer>
+    ),
+  },
+  {
+    id: "band",
+    name: "C · A footer band",
+    summary:
+      "A hairline closes the answer; under it, actions on the left and the sign-off on the right. The line makes the split between content and controls explicit, the way a card's footer does, without making the answer a card.",
+    body: (
+      <TailAnswer>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--border-hairline)] pt-3">
+          <SketchActions />
+          <SignOff nudge />
+        </div>
+      </TailAnswer>
+    ),
+  },
+  {
+    id: "two",
+    name: "D · Two actions inline",
+    summary:
+      "Only Pin to Home and Download CSV stay on the sign-off's line; Watch on video duplicates 'Show me these points' above it, and Open the match is one click from the sources list. Fewest words, no second row.",
+    body: (
+      <TailAnswer>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-3">
+          <SignOff nudge />
+          <span
+            aria-hidden="true"
+            className="h-3.5 w-px bg-[var(--border-hairline)]"
+          />
+          <SketchActions only={["pin", "export"]} />
+        </div>
+      </TailAnswer>
+    ),
+  },
+];
+
+function TailSection() {
+  return (
+    <section id="tail" className="flex scroll-mt-6 flex-col gap-4">
+      <SectionHead
+        title="Answer tail — sign-off and next steps"
+        body="The signature with its thumbs, and the Pin to Home / Download CSV row, laid out together. Sheets A to D also drop the thumbs half a pixel (the zoom at the end shows why). Thumbs work; the actions are links to nowhere here."
+      />
+      <div className="grid gap-4 xl:grid-cols-2">
+        {TAIL.map((variant) => (
+          <div
+            key={variant.id}
+            id={`tail-${variant.id}`}
+            className="flex flex-col gap-5 rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] p-4 sm:p-6"
+          >
+            <div className="flex flex-col gap-1">
+              <h3 className="text-body font-medium">{variant.name}</h3>
+              <p className="text-body-sm max-w-[70ch]">{variant.summary}</p>
+            </div>
+            {variant.body}
+          </div>
+        ))}
+        <div className="flex flex-col gap-5 rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] p-4 sm:p-6">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-body font-medium">Centring, at 3×</h3>
+            <p className="text-body-sm max-w-[70ch]">
+              Top: the icons on the text box&apos;s centre, as shipped. Bottom:
+              half a pixel lower, on the middle the eye reads between the
+              capitals and the lowercase.
+            </p>
+          </div>
+          <div className="flex flex-col gap-6 overflow-hidden">
+            <div className="h-12 origin-top-left scale-[3]">
+              <SignOff />
+            </div>
+            <div className="h-12 origin-top-left scale-[3]">
+              <SignOff nudge />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

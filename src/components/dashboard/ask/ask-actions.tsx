@@ -187,7 +187,8 @@ function Dot() {
 }
 
 /**
- * What the answer offers to do next, as one quiet line under its footer:
+ * What the answer offers to do next, as one quiet line above its sign-off
+ * (`AskAnswer`'s `actions` slot, between "Show me" and the signature):
  * each action a text control in reading order, the filter strip's dot
  * between them. Nothing executes on render — a link action is a link, a
  * pin or a save runs only on a click and only through the page's server

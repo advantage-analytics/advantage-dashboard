@@ -41,6 +41,12 @@ export interface AskAnswerProps {
    * drawn) when the answer has no saved id to point at.
    */
   onRate?: (feedback: AskFeedback | null) => Promise<boolean>;
+  /**
+   * What the answer offers to do next (the page's `AskActionCards`), drawn
+   * between "Show me these points" and the sign-off once the answer is
+   * saved: what to do with the answer comes before who signed it.
+   */
+  actions?: ReactNode;
 }
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
@@ -128,6 +134,7 @@ export function AskAnswer({
   scope = PERSONAL_ASK_SCOPE,
   onChoose,
   onRate,
+  actions,
 }: AskAnswerProps) {
   const copy = askCopy(scope);
   // An answer that mounted mid-stream is arriving now, and its parts move as
@@ -166,7 +173,12 @@ export function AskAnswer({
         ) : answer.status === "error" ? (
           <AnswerError error={answer.error} copy={copy} />
         ) : (
-          <AnswerBody answer={answer} copy={copy} onRate={onRate} />
+          <AnswerBody
+            answer={answer}
+            copy={copy}
+            onRate={onRate}
+            actions={actions}
+          />
         )}
       </div>
     </>
@@ -242,10 +254,12 @@ function AnswerBody({
   answer,
   copy,
   onRate,
+  actions,
 }: {
   answer: AskAnswerState;
   copy: AskCopy;
   onRate?: AskAnswerProps["onRate"];
+  actions?: ReactNode;
 }) {
   const paragraphs = answer.body
     .split(/\n{2,}/)
@@ -381,6 +395,9 @@ function AnswerBody({
           {answer.status === "done" && answer.answerId && (
             <AskShowMe answerId={answer.answerId} sources={answer.sources} />
           )}
+          {/* What to do with the answer, before who signed it: the sign-off
+              closes the answer, so the next steps never float under it. */}
+          {answer.status === "done" && actions}
           {/* Provenance: who signed it and how it landed, one tight pair,
               so the signature reads as the rating's caption rather than a
               stray line between the sources and the thumbs. */}
