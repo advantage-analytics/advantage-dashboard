@@ -159,7 +159,11 @@ call/query/time ceilings, regexes over the answer and the final query —
 `## Score` section, and `--grade` exits 1 on any failure. Each question is
 embedded and the nearest rated pairs are retrieved exactly as the route does
 (§11), and the block names them; `--no-examples` skips that read so a run
-judges the prompt on its own.
+judges the prompt on its own. The planner is not deterministic even at
+temperature 0 — a shape or a refusal flips on one or two questions from run
+to run — so `--retries 1` (what the nightly passes) runs a failed scored
+question once more and scores the last run; a failure that holds twice is
+a finding.
 `.github/workflows/ask-eval.yml` runs the season list that way nightly once
 the repository variable `ASK_EVAL_ENABLED` is `"true"` and the seven secrets
 it names are set; until then it is off, because it needs a service-role key

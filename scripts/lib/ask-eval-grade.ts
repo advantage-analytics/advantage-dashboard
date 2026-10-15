@@ -70,8 +70,13 @@ export interface AskEvalExpect {
   absent?: string[];
   /** Patterns the final query — its scope_sql and sql as one text — must each match. A tagged opponent is `match_id in (...)`, never a name. */
   sql?: string[];
-  /** The planner's shape, read from the last model reply that parses as a plan. */
-  shape?: AskEvalShape;
+  /**
+   * The planner's shape, read from the last model reply that parses as a
+   * plan — or a list of the shapes that each answer the question, for one
+   * the planner may fairly take either way ("compare my three matches": a
+   * row per match, or the player beside the opponent across them).
+   */
+  shape?: AskEvalShape | AskEvalShape[];
   /** Why the block checks what it checks, for the reader; not graded. */
   note?: string;
 }
@@ -167,9 +172,16 @@ export function expectProblems(expect: unknown): string[] {
   }
   if (
     shape !== undefined &&
-    !(ASK_EVAL_SHAPES as readonly unknown[]).includes(shape)
+    !(Array.isArray(shape)
+      ? shape.length > 0 &&
+        shape.every((one) =>
+          (ASK_EVAL_SHAPES as readonly unknown[]).includes(one),
+        )
+      : (ASK_EVAL_SHAPES as readonly unknown[]).includes(shape))
   ) {
-    problems.push(`shape must be one of ${ASK_EVAL_SHAPES.join(", ")}`);
+    problems.push(
+      `shape must be one of ${ASK_EVAL_SHAPES.join(", ")}, or a list of them`,
+    );
   }
   if (note !== undefined && typeof note !== "string") {
     problems.push("note must be a string");
@@ -282,14 +294,15 @@ export function gradeTranscript(
 
   if (expect.shape !== undefined) {
     const actual = readShape(transcript.modelReplies);
-    const pass = actual === expect.shape;
+    const allowed = Array.isArray(expect.shape) ? expect.shape : [expect.shape];
+    const pass = actual !== null && allowed.includes(actual);
     checks.push(
       check(
         "shape",
         pass,
         pass
           ? `shape ${actual}`
-          : `shape: expected ${expect.shape}, got ${actual ?? "none (no reply parsed as a plan)"}`,
+          : `shape: expected ${allowed.join(" or ")}, got ${actual ?? "none (no reply parsed as a plan)"}`,
       ),
     );
   }

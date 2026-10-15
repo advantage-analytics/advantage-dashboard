@@ -2,7 +2,7 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1]
  *
  * A question may carry an `expect` block (`AskEvalExpect` in
  * `scripts/lib/ask-eval-grade.ts`): the error code or `none`, the planner's
@@ -50,6 +50,14 @@
  * roadmap 1.6) go into the plan prompt's tail, with the verifier's id pinned
  * as the viewer; each block names what was retrieved. `--no-examples` skips
  * that read, so a run can judge the prompt on its own.
+ *
+ * `--retries N` runs a scored question that failed up to N more times and
+ * scores its last run; each retry is its own block, marked. The planner is
+ * not deterministic at temperature 0 — on 2026-10-15 five graded runs of the
+ * season list failed five different sets of one to three questions, a shape
+ * or a refusal flipping on a question that passed the run before — so a
+ * failure that holds twice is a finding and one that does not is noise. The
+ * nightly workflow passes 1.
  *
  * The query functions are executable by `service_role` only, so — exactly as
  * the route does — the database it hands `askQuestion()` comes from
@@ -276,7 +284,7 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples]',
+      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples] [--retries 1]',
     );
     process.exit(2);
   }
@@ -323,6 +331,7 @@ async function main() {
     await import("./lib/ask-eval-grade");
   const grading = process.argv.includes("--grade");
   const withExamples = !process.argv.includes("--no-examples");
+  const retries = Math.max(0, Math.floor(Number(arg("retries") ?? 0)) || 0);
 
   if (!isLLMConfigured()) {
     console.error(
@@ -455,11 +464,17 @@ async function main() {
     answer: { headline: string; body: string; sql?: string; scopeSql?: string };
   } | null)[] = [];
 
-  for (const [index, entry] of questions.entries()) {
-    if (only && !only.includes(index)) {
-      transcripts.push(null);
-      continue;
-    }
+  /**
+   * One run of one question: its report block, its transcript slot, its
+   * stdout line, and the grade it earned. `attempt` above 0 is a retry
+   * (`--retries`), marked in the block and the line.
+   */
+  const runQuestion = async (
+    index: number,
+    entry: EvalQuestion,
+    attempt: number,
+  ): Promise<AskEvalGrade> => {
+    const retryMark = attempt > 0 ? ` (retry ${attempt})` : "";
     const requested = [
       ...(entry.opponents ?? []).map((name) => {
         const found = options.opponents.find(
@@ -481,7 +496,7 @@ async function main() {
       }),
     ];
     const resolved = resolveAskTags(requested, options, scope);
-    const lines: string[] = [`## ${index + 1}. ${entry.q}`, ""];
+    const lines: string[] = [`## ${index + 1}. ${entry.q}${retryMark}`, ""];
     if (requested.length > 0)
       lines.push(
         `Tags: ${JSON.stringify(requested.map((t) => t.kind))} ${(entry.opponents ?? []).concat(entry.matches ?? [], entry.players ?? []).join(", ")}`,
@@ -491,15 +506,14 @@ async function main() {
       // Never ran, so a graded question fails here rather than vanishing
       // from the score.
       const grade = refusedGrade(entry.expect, resolved.reason);
-      grades.push({ index, q: entry.q, grade });
       lines.push(`TAG REFUSED: ${resolved.reason}`, "");
       if (grade.scored) lines.push(`**Score:** ${gradeLabel(grade)}`, "");
       report.push(...lines);
       transcripts.push(null);
       process.stdout.write(
-        `${index + 1}/${questions.length} TAG REFUSED ${entry.q} · ${gradeLabel(grade)}\n`,
+        `${index + 1}/${questions.length} TAG REFUSED ${entry.q}${retryMark} · ${gradeLabel(grade)}\n`,
       );
-      continue;
+      return grade;
     }
 
     const modelReplies: string[] = [];
@@ -676,7 +690,6 @@ async function main() {
       error: failure ? String(failure.code ?? failure.type) : null,
       notice,
     });
-    grades.push({ index, q: entry.q, grade });
 
     lines.push(
       `_${seconds}s · ${queries.length} quer${queries.length === 1 ? "y" : "ies"} · ${modelReplies.length} model calls_`,
@@ -744,8 +757,28 @@ async function main() {
         : null,
     );
     process.stdout.write(
-      `${index + 1}/${questions.length} ${failure ? "ERR " + String(failure.code ?? "") : visual ? "ok +" + String(visual.kind) : "ok"} (${seconds}s) ${entry.q} · ${gradeLabel(grade)}\n`,
+      `${index + 1}/${questions.length} ${failure ? "ERR " + String(failure.code ?? "") : visual ? "ok +" + String(visual.kind) : "ok"} (${seconds}s) ${entry.q}${retryMark} · ${gradeLabel(grade)}\n`,
     );
+    return grade;
+  };
+
+  for (const [index, entry] of questions.entries()) {
+    if (only && !only.includes(index)) {
+      transcripts.push(null);
+      continue;
+    }
+    let grade = await runQuestion(index, entry, 0);
+    // A scored failure is run again, up to `--retries` times, and the last
+    // run is what the score counts; the earlier blocks stay in the report.
+    for (
+      let attempt = 1;
+      attempt <= retries && grade.scored && !grade.pass;
+      attempt++
+    ) {
+      transcripts.pop();
+      grade = await runQuestion(index, entry, attempt);
+    }
+    grades.push({ index, q: entry.q, grade });
   }
 
   // ── Score ──────────────────────────────────────────────────────────────
