@@ -124,7 +124,11 @@ interface DbLabelPoint {
   checked_at: string | null;
 }
 
-/** List every completed Advantage Intelligence job, newest-completed first. */
+/**
+ * List every completed Advantage Intelligence job that has a results file,
+ * newest-completed first. A job with none (a copied or sample match, never
+ * run by the vendor) cannot be seeded, so it is not offered.
+ */
 export async function listLabelJobs(
   deps: Dependencies = defaults,
 ): Promise<ListLabelJobsResult> {
@@ -144,6 +148,7 @@ export async function listLabelJobs(
     .select("id, match_id, completed_at")
     .eq("provider", PROVIDER_ID)
     .eq("status", "completed")
+    .not("results_object_key", "is", null)
     .order("completed_at", { ascending: false, nullsFirst: false })
     .returns<DbJob[]>();
   if (jobsError) {
