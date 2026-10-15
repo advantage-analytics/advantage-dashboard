@@ -128,6 +128,28 @@ async function deleted(page: Page) {
   ) as string[];
 }
 
+async function renamed(page: Page) {
+  return JSON.parse(
+    (await page.getByLabel("Renamed").textContent()) ?? "[]",
+  ) as [string, string][];
+}
+
+async function pinned(page: Page) {
+  return JSON.parse(
+    (await page.getByLabel("Pinned").textContent()) ?? "[]",
+  ) as [string, boolean][];
+}
+
+/** The row's one button: its ⋯, named for the question. */
+const options = (page: Page, title: string) =>
+  rail(page).getByRole("button", { name: `Options for ${title}` });
+
+/** Open the row's menu and choose one of its rows. */
+async function choose(page: Page, title: string, item: string) {
+  await options(page, title).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: item }).click();
+}
+
 test.describe("what the rail holds", () => {
   test("a landmark with New question, the months, then the limit", async ({
     page,
@@ -209,7 +231,7 @@ test.describe("earlier questions, by month", () => {
     await expect(months(page).nth(2).getByRole("link")).toHaveCount(1);
   });
 
-  test("a row is its title and its date, and links to its conversation", async ({
+  test("a row is its title and its date — read, not drawn, under a month — and links to its conversation", async ({
     page,
   }) => {
     await openFixture(page);
@@ -307,7 +329,7 @@ test.describe("earlier questions, by month", () => {
     await expect(limit(page)).toBeVisible();
   });
 
-  test("each row has a named delete that takes the date's place on hover and focus-within", async ({
+  test("each row has a named ⋯ that takes the date's place on hover and focus-within", async ({
     page,
   }) => {
     await openFixture(page);
@@ -316,7 +338,7 @@ test.describe("earlier questions, by month", () => {
     const button = rows.nth(0).getByRole("button");
     await expect(button).toHaveAttribute(
       "aria-label",
-      "Delete Why did my second serve hold up against Marcus?",
+      "Options for Why did my second serve hold up against Marcus?",
     );
 
     // The row is the group the swap hangs on.
@@ -328,22 +350,366 @@ test.describe("earlier questions, by month", () => {
         "opacity-0",
         "group-hover:opacity-100",
         "group-focus-within:opacity-100",
-        // Out of flow, so revealing it moves nothing.
-        "absolute",
       ]),
     );
+    // Out of flow, so revealing it moves nothing: the menu's anchor is.
+    expect(
+      (await button.locator("..").getAttribute("class"))?.split(/\s+/),
+    ).toContain("absolute");
+    // Under a month the heading already says when: the date is read, not
+    // drawn, and the title runs to the ⋯'s edge instead.
     expect(
       (await rows.nth(0).locator("time").getAttribute("class"))?.split(/\s+/),
+    ).toContain("sr-only");
+    expect(
+      (await rows.nth(0).getByRole("link").getAttribute("class"))?.split(/\s+/),
+    ).toContain("pr-9");
+
+    // And it answers hover with the dark tooltip.
+    await button.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Options");
+  });
+
+  test("a pinned row, with no month above it, keeps its date at the edge — and the ⋯ takes its place", async ({
+    page,
+  }) => {
+    await openFixture(page, "?earlier=many");
+
+    const row = months(page).nth(0).getByRole("listitem").first();
+    await expect(row.locator("time")).toHaveText("Sep 1");
+    await expect(row.locator("time")).toBeVisible();
+    expect(
+      (await row.locator("time").getAttribute("class"))?.split(/\s+/),
     ).toEqual(
       expect.arrayContaining([
         "group-hover:opacity-0",
         "group-focus-within:opacity-0",
       ]),
     );
+    expect(
+      (await row.getByRole("link").getAttribute("class"))?.split(/\s+/),
+    ).toContain("pr-14");
+  });
 
-    // And it answers hover with the dark tooltip.
-    await button.hover();
-    await expect(page.getByRole("tooltip")).toHaveText("Delete");
+  test("the ⋯ opens Rename, Pin to top and — below a hairline — Delete", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await options(page, "First serve trend since June").click();
+    const menu = page.getByRole("menu", {
+      name: "Options for First serve trend since June",
+    });
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Rename",
+      "Pin to top",
+      "Delete",
+    ]);
+  });
+});
+
+test.describe("the filter", () => {
+  const field = (page: Page) =>
+    rail(page).getByRole("textbox", { name: "Filter questions" });
+
+  test("four rows have no field; eight do, and it narrows the list as typed", async ({
+    page,
+  }) => {
+    await openFixture(page);
+    await expect(rail(page).locator("input")).toHaveCount(0);
+
+    await openFixture(page, "?earlier=many");
+    await expect(field(page)).toBeVisible();
+    await expect(rail(page).getByRole("listitem")).toHaveCount(8);
+    // Once the list overflows, the field keeps its 32px rather than being
+    // squeezed by the scroller's column (it measured 20px). The harness has
+    // no stylesheet, so the class is what can be held here.
+    expect(
+      (
+        await rail(page)
+          .locator("label:has([data-ask-rail-filter])")
+          .getAttribute("class")
+      )?.split(/\s+/),
+    ).toEqual(expect.arrayContaining(["h-8", "shrink-0"]));
+
+    await field(page).fill("serve");
+    await expect(rail(page).getByRole("link")).toHaveText([
+      "Serve placement on break points",
+      "Why did my second serve hold up against Marcus?",
+      "First serve trend since June",
+    ]);
+    // A month with nothing left in it is not drawn.
+    await expect(rail(page).getByRole("heading")).toHaveText([
+      "Pinned",
+      "October",
+    ]);
+
+    await field(page).fill("nothing like this");
+    await expect(rail(page).locator("[data-ask-rail-nomatch]")).toHaveText(
+      "No question matches “nothing like this”",
+    );
+    await expect(rail(page).getByRole("link")).toHaveCount(0);
+
+    // Escape clears it; the list comes back whole.
+    await field(page).press("Escape");
+    await expect(field(page)).toHaveValue("");
+    await expect(rail(page).getByRole("listitem")).toHaveCount(8);
+  });
+});
+
+test.describe("pinned questions", () => {
+  test("pinned rows lead under their own label, newest pin first, and leave their months", async ({
+    page,
+  }) => {
+    await openFixture(page, "?earlier=many");
+
+    await expect(rail(page).getByRole("heading")).toHaveText([
+      "Pinned",
+      "October",
+      "September",
+      "November 2025",
+      "October 2025",
+    ]);
+    const first = months(page).nth(0);
+    await expect(first).toHaveAttribute("data-ask-month", "pinned");
+    await expect(first.getByRole("link")).toHaveText([
+      "Serve placement on break points",
+      "Record against left-handers this season",
+    ]);
+    await expect(first.getByRole("listitem").first()).toHaveAttribute(
+      "data-ask-pinned",
+      "true",
+    );
+  });
+
+  test("Pin to top calls the action and moves the row up; Unpin sends it back", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await choose(page, "How do I do against left-handers?", "Pin to top");
+    await expect.poll(() => pinned(page)).toEqual([[SECOND, true]]);
+    await expect(rail(page).getByRole("heading").first()).toHaveText("Pinned");
+    await expect(rail(page).getByRole("link").first()).toHaveText(
+      "How do I do against left-handers?",
+    );
+
+    await choose(page, "How do I do against left-handers?", "Unpin");
+    await expect
+      .poll(() => pinned(page))
+      .toEqual([
+        [SECOND, true],
+        [SECOND, false],
+      ]);
+    await expect(rail(page).getByRole("heading")).toHaveText([
+      "October",
+      "September",
+      "November 2025",
+    ]);
+  });
+
+  test("a pin says so to a screen reader, and focus follows the row to its new group", async ({
+    page,
+  }) => {
+    await openFixture(page);
+    const status = rail(page).getByRole("status");
+
+    await options(page, "How do I do against left-handers?").focus();
+    await page.keyboard.press("Enter");
+    await page
+      .getByRole("menu")
+      .getByRole("menuitem", { name: "Pin to top" })
+      .press("Enter");
+    await expect(status).toHaveText("Pinned");
+    await expect(months(page).nth(0)).toHaveAttribute(
+      "data-ask-month",
+      "pinned",
+    );
+    await expect(
+      options(page, "How do I do against left-handers?"),
+    ).toBeFocused();
+
+    await choose(page, "How do I do against left-handers?", "Unpin");
+    await expect(status).toHaveText("Unpinned");
+  });
+
+  test("while a pin is on its way the row's Pin waits, and nothing else does", async ({
+    page,
+  }) => {
+    await openFixture(page, "?slow=1");
+
+    await choose(page, "First serve trend since June", "Pin to top");
+    await options(page, "First serve trend since June").click();
+    const menu = page.getByRole("menu");
+    await expect(
+      menu.getByRole("menuitem", { name: "Pin to top" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await expect(
+      menu.getByRole("menuitem", { name: "Rename" }),
+    ).not.toHaveAttribute("aria-disabled");
+    await page.keyboard.press("Escape");
+
+    await expect(rail(page).getByRole("status")).toHaveText("Pinned");
+    expect(await pinned(page)).toEqual([[FOURTH, true]]);
+  });
+
+  test("a refused pin says so and moves nothing", async ({ page }) => {
+    await openFixture(page, "?pin=fail");
+
+    await choose(page, "First serve trend since June", "Pin to top");
+    await expect(rail(page).getByRole("alert")).toHaveText(
+      "That question could not be pinned. Try again.",
+    );
+    await expect(rail(page).getByRole("heading").first()).toHaveText("October");
+  });
+});
+
+test.describe("renaming", () => {
+  const field = (page: Page) =>
+    rail(page).getByRole("textbox", { name: "Rename question" });
+
+  test("Rename turns the title into a field in place; Enter saves the typed title", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await choose(page, "First serve trend since June", "Rename");
+    await expect(field(page)).toBeVisible();
+    await expect(field(page)).toHaveValue("First serve trend since June");
+    await expect(field(page)).toBeFocused();
+    // The row's link is the field for the moment.
+    await expect(rail(page).getByRole("link")).toHaveCount(3);
+
+    await field(page).fill("Serve trend");
+    await field(page).press("Enter");
+
+    await expect.poll(() => renamed(page)).toEqual([[FOURTH, "Serve trend"]]);
+    await expect(field(page)).toHaveCount(0);
+    await expect(rail(page).getByRole("link")).toHaveText([
+      "Why did my second serve hold up against Marcus?",
+      "Serve trend",
+      "How do I do against left-handers?",
+      "Break points saved last season",
+    ]);
+  });
+
+  test("Escape leaves the title as it was, and an unchanged title is not sent", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await choose(page, "First serve trend since June", "Rename");
+    await field(page).fill("Something else");
+    await field(page).press("Escape");
+    await expect(field(page)).toHaveCount(0);
+    expect(await renamed(page)).toEqual([]);
+    await expect(rail(page).getByRole("link").nth(1)).toHaveText(
+      "First serve trend since June",
+    );
+
+    await choose(page, "First serve trend since June", "Rename");
+    await field(page).press("Enter");
+    await expect(field(page)).toHaveCount(0);
+    expect(await renamed(page)).toEqual([]);
+  });
+
+  test("a refused rename keeps the field open and says so", async ({
+    page,
+  }) => {
+    await openFixture(page, "?rename=fail");
+
+    await choose(page, "First serve trend since June", "Rename");
+    await field(page).fill("Serve trend");
+    await field(page).press("Enter");
+
+    await expect.poll(() => renamed(page)).toEqual([[FOURTH, "Serve trend"]]);
+    await expect(field(page)).toBeVisible();
+    await expect(rail(page).getByRole("alert")).toHaveText(
+      "That question could not be renamed. Try again.",
+    );
+  });
+
+  test("while a rename saves the field is read-only and busy, and keeps the focus", async ({
+    page,
+  }) => {
+    await openFixture(page, "?slow=1&rename=fail");
+
+    await choose(page, "First serve trend since June", "Rename");
+    await field(page).fill("Serve trend");
+    await field(page).press("Enter");
+
+    await expect(field(page)).toHaveAttribute("readonly", "");
+    await expect(field(page)).toHaveAttribute("aria-busy", "true");
+    await expect(field(page)).toBeEnabled();
+    await expect(field(page)).toBeFocused();
+
+    await expect(rail(page).getByRole("alert")).toHaveText(
+      "That question could not be renamed. Try again.",
+    );
+    await expect(field(page)).not.toHaveAttribute("readonly");
+    await expect(field(page)).toBeFocused();
+  });
+});
+
+test.describe("under 768px", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const bar = (page: Page) => page.locator('nav[data-ask-rail="bar"]');
+  const opener = (page: Page) =>
+    bar(page).getByRole("button", { name: /^Earlier questions/ });
+  const sheet = (page: Page) =>
+    page.getByRole("dialog", { name: "Earlier questions" });
+
+  test("the rail is a bar: Earlier questions with the count, and New question", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await expect(bar(page)).toBeVisible();
+    await expect(page.locator('nav[data-ask-rail="open"]')).toHaveCount(0);
+    await expect(opener(page)).toHaveText("Earlier questions · 4");
+    await expect(opener(page)).toHaveAttribute("aria-expanded", "false");
+    // Nothing from the list is on the page until the sheet opens.
+    await expect(page.getByRole("link")).toHaveCount(0);
+
+    await bar(page).getByRole("button", { name: "New question" }).click();
+    await expect(page.getByLabel("New questions")).toHaveText("1");
+  });
+
+  test("the sheet holds the list and the limit, and Escape closes it", async ({
+    page,
+  }) => {
+    await openFixture(page);
+
+    await opener(page).click();
+    await expect(sheet(page)).toBeVisible();
+    await expect(sheet(page).getByRole("link")).toHaveCount(4);
+    // The sheet's own title is the first heading; the months follow.
+    await expect(sheet(page).getByRole("heading", { level: 2 })).toHaveText([
+      "Earlier questions",
+      "October",
+      "September",
+      "November 2025",
+    ]);
+    await expect(sheet(page).locator('[data-ask-rail="limit"]')).toContainText(
+      "12 questions left",
+    );
+
+    await page.keyboard.press("Escape");
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(opener(page)).toBeFocused();
+  });
+
+  test("zero questions: no count in the words, and the sheet says the list is empty", async ({
+    page,
+  }) => {
+    await openFixture(page, "?earlier=none");
+
+    await expect(opener(page)).toHaveText("Earlier questions");
+    await opener(page).click();
+    await expect(sheet(page).locator("[data-ask-rail-empty]")).toHaveText(
+      "Questions you ask are kept here.",
+    );
   });
 });
 
@@ -561,19 +927,15 @@ test.describe("collapsing the rail", () => {
 });
 
 test.describe("deleting an earlier question", () => {
-  const deleteButtons = (page: Page) =>
-    rail(page).getByRole("button", { name: /^Delete / });
+  const optionButtons = (page: Page) =>
+    rail(page).getByRole("button", { name: /^Options for / });
 
-  test("the row action asks first, and Cancel deletes nothing", async ({
+  test("the row's menu asks first, and Cancel deletes nothing", async ({
     page,
   }) => {
     await openFixture(page);
 
-    await rail(page)
-      .getByRole("button", {
-        name: "Delete How do I do against left-handers?",
-      })
-      .click();
+    await choose(page, "How do I do against left-handers?", "Delete");
 
     await expect(dialog(page)).toBeVisible();
     await expect(dialog(page)).toContainText("Delete this question?");
@@ -594,7 +956,11 @@ test.describe("deleting an earlier question", () => {
   }) => {
     await openFixture(page);
 
-    await deleteButtons(page).first().click();
+    await choose(
+      page,
+      "Why did my second serve hold up against Marcus?",
+      "Delete",
+    );
 
     await expect(dialog(page)).toContainText("stays used");
     // Feedback outlives the thread, and the dialog says so before it goes.
@@ -611,11 +977,7 @@ test.describe("deleting an earlier question", () => {
   }) => {
     await openFixture(page);
 
-    await rail(page)
-      .getByRole("button", {
-        name: "Delete How do I do against left-handers?",
-      })
-      .click();
+    await choose(page, "How do I do against left-handers?", "Delete");
     await dialog(page).getByRole("button", { name: "Delete question" }).click();
 
     await expect.poll(() => deleted(page)).toEqual([SECOND]);
@@ -637,7 +999,11 @@ test.describe("deleting an earlier question", () => {
   test("a refused delete says so and keeps the row", async ({ page }) => {
     await openFixture(page, "?fail=1");
 
-    await deleteButtons(page).first().click();
+    await choose(
+      page,
+      "Why did my second serve hold up against Marcus?",
+      "Delete",
+    );
     await dialog(page).getByRole("button", { name: "Delete question" }).click();
 
     await expect(dialog(page)).toContainText(
@@ -648,13 +1014,13 @@ test.describe("deleting an earlier question", () => {
     await expect(page.locator("nav li")).toHaveCount(4);
   });
 
-  test("while an answer is in flight the action is disabled", async ({
+  test("while an answer is in flight the row's menu is disabled", async ({
     page,
   }) => {
     await openFixture(page, "?busy=1");
 
-    await expect(deleteButtons(page)).toHaveCount(4);
-    for (const button of await deleteButtons(page).all()) {
+    await expect(optionButtons(page)).toHaveCount(4);
+    for (const button of await optionButtons(page).all()) {
       await expect(button).toBeDisabled();
     }
   });

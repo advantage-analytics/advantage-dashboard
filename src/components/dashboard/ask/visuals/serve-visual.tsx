@@ -1,10 +1,24 @@
 import type { CSSProperties } from "react";
-import type { AskServeVisual } from "@/lib/services/ask/events";
+import type { AskServeVisual, AskSourceMatch } from "@/lib/services/ask/events";
+import { serveZoneVideoHref } from "@/lib/services/ask/figure-video";
 import { ServeCourt, SERVE_ZONE_COLORS } from "./serve-court";
-import { SERVE_ZONES, serveCourtSides, shareWeights } from "./visual-geometry";
+import {
+  SERVE_ZONES,
+  type ServeCourtSide,
+  type ServeZoneKey,
+  serveCourtSides,
+  shareWeights,
+} from "./visual-geometry";
 import { VisualFrame, VisualKey } from "./visual-frame";
 
 const ZONE_LABEL = { t: "T", body: "Body", wide: "Wide" } as const;
+
+/** The block's zone keys as the Video filter spells them. */
+const FILTER_ZONE: Record<ServeZoneKey, "T" | "Body" | "Wide"> = {
+  t: "T",
+  body: "Body",
+  wide: "Wide",
+};
 
 /**
  * Serve placement. With exactly two courts labelled Deuce and Ad it is the
@@ -16,9 +30,26 @@ const ZONE_LABEL = { t: "T", body: "Body", wide: "Wide" } as const;
  *
  * Under each court either way, the three counts as the query returned them;
  * no total and no share, since neither is a cell of the result.
+ *
+ * Over one source match, when the block says whose serves these are
+ * (`server`), each drawn zone opens that match's film on that side's
+ * serves into the zone from that court (`figure-video.ts`).
  */
-export function ServeVisual({ visual }: { visual: AskServeVisual }) {
+export function ServeVisual({
+  visual,
+  sources,
+}: {
+  visual: AskServeVisual;
+  sources?: readonly AskSourceMatch[] | null;
+}) {
   const sides = serveCourtSides(visual.courts);
+  const server = visual.server;
+  const matchId = sources?.length === 1 ? sources[0].matchId : null;
+  const href =
+    server && matchId
+      ? (side: ServeCourtSide, zone: ServeZoneKey) =>
+          serveZoneVideoHref(matchId, server, side, FILTER_ZONE[zone])
+      : undefined;
   return (
     <VisualFrame kind="serve" caption={visual.caption}>
       <VisualKey
@@ -27,7 +58,7 @@ export function ServeVisual({ visual }: { visual: AskServeVisual }) {
           color: SERVE_ZONE_COLORS[zone],
         }))}
       />
-      {sides && <ServeCourt courts={visual.courts} sides={sides} />}
+      {sides && <ServeCourt courts={visual.courts} sides={sides} href={href} />}
       <ul className="m-0 flex max-w-[520px] list-none flex-col gap-3.5 p-0">
         {visual.courts.map((court, index) => {
           const weights = shareWeights(

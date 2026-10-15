@@ -38,15 +38,25 @@
  * is `ask_reserve_question()`'s own refusal — no count is read and compared
  * here.
  *
- * Every database call rides the cookie-authenticated client but three:
+ * Every database call rides the cookie-authenticated client but four:
  * `ask_run_query`, `ask_run_team_query` and `ask_release_question` are
  * executable by `service_role` only, so that a signed-in user cannot run
  * SQL of their own through them from the browser. `createAskDatabase()`
  * (`src/lib/services/ask/database.ts`) sends exactly those three to the
  * service-role client, with this request's `auth.getUser()` id as the viewer
- * — never anything from the body. That module is the only place Ask uses the
- * service role, and this route reads no table through it. A deployment
- * without the service key refuses with a 500 before a question is reserved.
+ * — never anything from the body. The fourth, `ask_similar_examples`, is
+ * read here before the orchestrator runs, through `retrieveAskExamples()`
+ * (`src/lib/services/ask/examples.ts`) with the same viewer pinned the same
+ * way; that file says why it is not on `database.ts`'s list. This route
+ * reads no table through the service role. A deployment without the service
+ * key refuses with a 500 before a question is reserved.
+ *
+ * Coach mode (`src/lib/services/ask/coach.ts`): with `ASK_COACH_MODE` on, a
+ * team question from the program's owner or coach is answered by the prompt
+ * variant that may recommend. The role is the workspace read's, decided
+ * here, and such an answer is never cached — the cache is keyed by question,
+ * tags and scope, and a coach's answer replayed to a player of the same
+ * program would recommend to someone Ask promised not to.
  *
  * A team question (`programId`) is the same ladder over the program's rows.
  * Membership is `getWorkspaceContext()`'s answer — the id must be one of the
@@ -65,7 +75,9 @@
 import {
   flushPostHogAfterResponse,
   getPostHogServerClient,
+  isLLMConfigured,
 } from "@/lib/llm/adapter";
+import { embedText } from "@/lib/llm/embeddings";
 import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
 import { isUuid } from "@/lib/admin/validation";
 import {
@@ -90,6 +102,8 @@ import {
   readAskDataVersion,
   replayCachedAnswer,
 } from "@/lib/services/ask/cache";
+import { askCoachMode, isAskCoachModeEnabled } from "@/lib/services/ask/coach";
+import { retrieveAskExamples } from "@/lib/services/ask/examples";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
   askRunProperties,
@@ -350,6 +364,9 @@ export async function POST(request: Request): Promise<Response> {
   // The scope. A program id from the browser names a workspace; whether the
   // viewer is in it is read here, before a row of the program is.
   let scope: AskScope = PERSONAL_ASK_SCOPE;
+  // Coach mode: the flag, a team scope and the viewer's role in the program,
+  // the last read off the same workspace list as the membership (`coach.ts`).
+  let coach = false;
   if (body.programId !== null) {
     // A read that failed is not an answer. Only a list that was read and
     // does not hold the program says "not a member"; a thrown read — or one
@@ -391,8 +408,39 @@ export async function POST(request: Request): Promise<Response> {
       programId: program.id,
       programName: program.name,
     };
+    coach = askCoachMode({
+      enabled: isAskCoachModeEnabled(),
+      scope,
+      role: program.role,
+    });
   }
   const team = scope.kind === "team";
+
+  // The question's embedding, for the nearest rated examples (`examples.ts`).
+  // Started here, beside the reads, since it needs nothing but the question;
+  // null at once when no provider is configured, and null on any failure.
+  // Its own controller beside the request's, so a cache hit below can stop it:
+  // a replayed answer has no use for the vector.
+  const embeddingAbort = new AbortController();
+  const embedding: Promise<number[] | null> = isLLMConfigured()
+    ? embedText(body.question, {
+        signal: AbortSignal.any([request.signal, embeddingAbort.signal]),
+      }).catch(() => null)
+    : Promise.resolve(null);
+
+  // The answer cache's data version (see "The answer cache" below) needs
+  // only the viewer's own client and the scope, so it starts here too, beside
+  // the reads, rather than waiting on them. `ask_data_version` is a
+  // user-client call (`database.ts` routes nothing else), so it goes straight
+  // to the session client. A read that throws is a miss, like one that
+  // fails; on a refusal below its answer is simply never awaited.
+  const dataVersionRead: Promise<string | null> =
+    isLLMConfigured() && !coach && !body.conversationId
+      ? readAskDataVersion(
+          { rpc: (fn, args) => supabase.rpc(fn, args) },
+          scope,
+        ).catch(() => null)
+      : Promise.resolve(null);
 
   // The two reads that need nothing from each other go out together, both
   // for the viewer this request has just authenticated: the tag options
@@ -486,7 +534,6 @@ export async function POST(request: Request): Promise<Response> {
     signal: request.signal,
   });
   const stageModels = askStageModels();
-
   // Every question leaves a row in ask_runs (as the asker) and one `ask_run`
   // event in PostHog (without the question's text), however it ended.
   // Neither can fail the answer: a run that could not be recorded is logged
@@ -517,24 +564,24 @@ export async function POST(request: Request): Promise<Response> {
   // for it last time: no reservation, no model, no query (`cache.ts`). The
   // version is a hash over the viewer's matches in scope and their
   // statistics' update times, so any change to the data is a miss. Mock mode
-  // is never cached, and a cache that cannot be read is a miss too. Nor is a
-  // follow-up: its meaning rests on the conversation, which the key does not
-  // carry, so "and on second serves?" must never replay a standalone answer.
+  // is never cached, nor is coach mode (see the header), and a cache that
+  // cannot be read is a miss too. Nor is a follow-up: its meaning rests on
+  // the conversation, which the key does not carry, so "and on second
+  // serves?" must never replay a standalone answer.
   const cacheKey = askCacheKey({
     question: body.question,
     tags: resolved.tags,
     scope,
   });
-  const dataVersion =
-    model.configured && !body.conversationId
-      ? await readAskDataVersion(db, scope)
-      : null;
+  const dataVersion = await dataVersionRead;
   const cached = dataVersion
     ? await readAskCache(db, { key: cacheKey, version: dataVersion, scope })
     : null;
 
   let events: AsyncGenerator<AskEvent, void, undefined>;
   if (cached) {
+    // A replay needs no examples: stop the embedding, skip the vector search.
+    embeddingAbort.abort();
     events = replayCachedAnswer({
       db,
       cached,
@@ -548,6 +595,15 @@ export async function POST(request: Request): Promise<Response> {
     // Everything that could refuse has. From here a question is spent (unless
     // this is mock mode, which spends nothing), so the only statements left
     // are the two that hand the reservation to the generator that owns it.
+    // The nearest examples, through the service client with this request's
+    // viewer pinned — the fourth service-role call, explained in
+    // `examples.ts`. Only on a miss, and beside the reservation.
+    const examplesRead = retrieveAskExamples({
+      service,
+      viewerId: user.id,
+      scope,
+      embedding,
+    });
     const reserved = await reserveAskQuestion(db, model);
     if (!reserved.ok) {
       if (reserved.code === "ask_limit_reached") {
@@ -575,6 +631,9 @@ export async function POST(request: Request): Promise<Response> {
       reservation: reserved.reservation,
       scope,
       pageSeats: getAskPageSeats,
+      // In flight: the orchestrator awaits it after the "planning" status.
+      examples: examplesRead,
+      coach,
     };
     const recorded = (run: AskQuestionInput) =>
       recordAskRun(run, {

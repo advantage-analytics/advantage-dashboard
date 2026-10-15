@@ -132,9 +132,10 @@ export interface AskTextEvent {
  * The kinds of visual block an answer may carry, at most one per answer
  * (`MAX_ASK_VISUALS`). The model chooses the kind, its caption and its
  * labels; every number is a cell of the query result, resolved by the server
- * (`answer-render.ts`) — never text the model typed. `momentum` is the one
- * kind the model is never offered (`ASK_MODEL_VISUAL_KINDS`): the server
- * writes it, for one match, from one row per point.
+ * (`answer-render.ts`) — never text the model typed. `momentum` and `tree`
+ * are the two kinds the model is never offered (`ASK_MODEL_VISUAL_KINDS`):
+ * the server writes them — momentum for one match from one row per point,
+ * the tree for a +1 or plays breakdown from one row per branch.
  */
 export const ASK_VISUAL_KINDS = [
   "bars",
@@ -144,6 +145,7 @@ export const ASK_VISUAL_KINDS = [
   "serve",
   "form",
   "momentum",
+  "tree",
 ] as const;
 
 export type AskVisualKind = (typeof ASK_VISUAL_KINDS)[number];
@@ -192,6 +194,12 @@ export const MAX_ASK_FORM_RESULTS = 30;
 /** `momentum`: points of one match with a known winner, inclusive. */
 export const MIN_ASK_MOMENTUM_POINTS = 2;
 export const MAX_ASK_MOMENTUM_POINTS = 400;
+/** `tree`: steps on every branch (the serve, then the +1), inclusive. */
+export const MIN_ASK_TREE_LEVELS = 1;
+export const MAX_ASK_TREE_LEVELS = 3;
+/** `tree`: branches, inclusive — the serve +1 breakdown's twelve patterns. */
+export const MIN_ASK_TREE_BRANCHES = 1;
+export const MAX_ASK_TREE_BRANCHES = 12;
 
 /**
  * One resolved number: `value` is the cell as the database returned it, for
@@ -235,8 +243,15 @@ export interface AskTableVisual {
   caption: string;
   /** `MIN_ASK_TABLE_COLUMNS`–`MAX_ASK_TABLE_COLUMNS` headings. */
   columns: string[];
-  /** 1–`MAX_ASK_TABLE_ROWS` rows, each with exactly `columns.length` cells. */
-  rows: { label: string; cells: string[] }[];
+  /**
+   * 1–`MAX_ASK_TABLE_ROWS` rows, each with exactly `columns.length` cells.
+   * `matchId` is the match a row is, when every cell it cites came from one
+   * result row that carried one (`match_id`): the row then opens that
+   * match's Video tab (`figure-video.ts`). Absent on every other row, and
+   * on one saved before it existed. A row that is one measure is known by
+   * its label, which the server canonicalises to the measure's own name.
+   */
+  rows: { label: string; cells: string[]; matchId?: string }[];
 }
 
 /**
@@ -281,6 +296,13 @@ export interface AskSplitVisual {
 export interface AskServeVisual {
   kind: "serve";
   caption: string;
+  /**
+   * Whose serves the counts are, when every cited cell is a serve measure
+   * of one side (`serve_t`, `opp_serve_wide` …): the drawn court's zones
+   * then open the Video tab on that side's serves there. Absent when the
+   * cells cannot say.
+   */
+  server?: "you" | "opponent";
   /** `MIN_ASK_SERVE_COURTS`–`MAX_ASK_SERVE_COURTS` courts. */
   courts: {
     label: string;
@@ -290,12 +312,33 @@ export interface AskServeVisual {
   }[];
 }
 
+/**
+ * One tick of a form strip, as the result row described the match: each
+ * field already formatted for display (`formatAskCell`), and absent when the
+ * row did not carry it. `matchId` makes the tick a link to the match.
+ */
+export interface AskFormTick {
+  opponent?: string;
+  score?: string;
+  date?: string;
+  /** Team scope: the program's player the match was. */
+  player?: string;
+  matchId?: string;
+}
+
 /** A win/loss strip, oldest first. `true` is a win. */
 export interface AskFormVisual {
   kind: "form";
   caption: string;
   /** `MIN_ASK_FORM_RESULTS`–`MAX_ASK_FORM_RESULTS` results. */
   results: boolean[];
+  /**
+   * One tick per result, in the same order, when the rows named the
+   * matches (`opponent_name`, `score_text`, `played_on`, `match_id`):
+   * the words each tick carries and the match it opens. Absent for a strip
+   * saved before it existed, or plotted from rows that name no match.
+   */
+  ticks?: AskFormTick[];
 }
 
 /** The pressure a point was played under, the heaviest named. */
@@ -317,6 +360,45 @@ export interface AskMomentumVisual {
 }
 
 /**
+ * One branch of a play tree: its path of steps, one per level ("T serve",
+ * then "forehand crosscourt"), how often it was played, and the share of
+ * those that went the subject's way — the bar. `part` is the count the
+ * share is of (the points won, the shots missed), when the rows held one.
+ * `watch` is the Video tab's filter (`?f=…`) for the branch's points, when
+ * the filter can express it; the client adds the one source match's id.
+ */
+export interface AskTreeBranch {
+  /** Exactly `levels.length` steps. */
+  steps: string[];
+  count: AskVisualNumber;
+  part?: AskVisualNumber;
+  /** 0–100. */
+  share: AskVisualNumber;
+  watch?: string;
+}
+
+/**
+ * A play tree: the serve +1 breakdown's patterns, or the plays, as branches
+ * — grouped by their first step, each with a share bar and its counts —
+ * instead of a twelve-row table. Server-written only (`serve-plus-one.ts`,
+ * `plays.ts`); the model is never offered the kind.
+ */
+export interface AskTreeVisual {
+  kind: "tree";
+  caption: string;
+  /** What each step of a branch is: ["Serve", "Plus one"]. `MIN_ASK_TREE_LEVELS`–`MAX_ASK_TREE_LEVELS`. */
+  levels: string[];
+  /** What `count` counts: "Points", "Shots". */
+  countLabel: string;
+  /** What `part` counts, when the branches carry one: "Won", "Missed". */
+  partLabel?: string;
+  /** What `share` is: "Won", "Missed". */
+  shareLabel: string;
+  /** `MIN_ASK_TREE_BRANCHES`–`MAX_ASK_TREE_BRANCHES` branches, most played first. */
+  branches: AskTreeBranch[];
+}
+
+/**
  * The one visual block an answer may carry, told apart by `kind`. Resolved
  * data, ready to draw, and plain JSON: it is what the `visual` event carries
  * and what is saved with the answer.
@@ -328,20 +410,30 @@ export type AskVisual =
   | AskSplitVisual
   | AskServeVisual
   | AskFormVisual
-  | AskMomentumVisual;
+  | AskMomentumVisual
+  | AskTreeVisual;
 
-/** The answer's visual block. Sent once, whole, after the figures and before the text. */
+/**
+ * The answer's visual block. Sent once, whole, after the figures and before
+ * the text. `lead` is set when the question asked for a chart
+ * (`chart-request.ts`): the block then leads the answer, above the prose,
+ * which folds behind a disclosure. Absent otherwise.
+ */
 export interface AskVisualEvent {
   type: "visual";
   visual: AskVisual;
+  lead?: true;
 }
 
 /**
  * What a notice says. `no_advice`: the question asked what to do, which Ask
  * does not answer; the client shows `ASK_NO_ADVICE_SENTENCE` beside the
- * answer, not in its body.
+ * answer, not in its body. `coach`: the same question in coach mode
+ * (`coach.ts`, behind `ASK_COACH_MODE`, team owners and coaches only), where
+ * the answer may say what to work on, each recommendation tied to a cited
+ * figure.
  */
-export type AskNoticeKind = "no_advice";
+export type AskNoticeKind = "no_advice" | "coach";
 
 /** A signal beside the answer, not part of its text. Sent after the text. */
 export interface AskNoticeEvent {
@@ -416,6 +508,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+export function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function isLabel(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
@@ -452,6 +552,28 @@ function readList<T>(
 const isPercent = (n: number) => n >= 0 && n <= 100;
 const isCount = (n: number) => n >= 0;
 const anyNumber = () => true;
+
+/** An optional string field: the value when it is a non-empty string, else nothing. */
+function optionalLabel<K extends string>(
+  key: K,
+  value: unknown,
+): { [P in K]?: string } {
+  return isLabel(value) ? ({ [key]: value } as { [P in K]?: string }) : {};
+}
+
+/** A form strip's ticks, one per result, or null when they are not that. */
+function readFormTicks(value: unknown, count: number): AskFormTick[] | null {
+  return readList(value, count, count, (tick) => {
+    if (!isRecord(tick)) return null;
+    return {
+      ...optionalLabel("opponent", tick.opponent),
+      ...optionalLabel("score", tick.score),
+      ...optionalLabel("date", tick.date),
+      ...optionalLabel("player", tick.player),
+      ...optionalLabel("matchId", tick.matchId),
+    };
+  });
+}
 
 /**
  * `value` as an {@link AskVisual}, or null when it is not one: the wrong
@@ -503,7 +625,13 @@ export function readAskVisual(value: unknown): AskVisual | null {
           columns.length,
           (cell) => (typeof cell === "string" ? cell : null),
         );
-        return cells ? { label: row.label, cells } : null;
+        return cells
+          ? {
+              label: row.label,
+              cells,
+              ...optionalLabel("matchId", row.matchId),
+            }
+          : null;
       });
       return rows ? { kind: "table", caption, columns, rows } : null;
     }
@@ -576,8 +704,15 @@ export function readAskVisual(value: unknown): AskVisual | null {
             : null;
         },
       );
-      return courts ? { kind: "serve", caption, courts } : null;
+      if (!courts) return null;
+      // Whose serves, when the block says; anything but the two sides is
+      // left out rather than refusing the block.
+      const side = value.server;
+      const server: Pick<AskServeVisual, "server"> =
+        side === "you" || side === "opponent" ? { server: side } : {};
+      return { kind: "serve", caption, ...server, courts };
     }
+
     case "form": {
       const results = readList(
         value.results,
@@ -585,8 +720,63 @@ export function readAskVisual(value: unknown): AskVisual | null {
         MAX_ASK_FORM_RESULTS,
         (result) => (typeof result === "boolean" ? result : null),
       );
-      return results ? { kind: "form", caption, results } : null;
+      if (!results) return null;
+      // Ticks that do not match the results one for one are left out, and
+      // the strip still draws: the words are extra, the results are not.
+      const ticks =
+        value.ticks === undefined
+          ? null
+          : readFormTicks(value.ticks, results.length);
+      return { kind: "form", caption, results, ...(ticks ? { ticks } : {}) };
     }
+    case "tree": {
+      const levels = readList(
+        value.levels,
+        MIN_ASK_TREE_LEVELS,
+        MAX_ASK_TREE_LEVELS,
+        (level) => (isLabel(level) ? level : null),
+      );
+      if (!levels || !isLabel(value.countLabel) || !isLabel(value.shareLabel)) {
+        return null;
+      }
+      const branches = readList(
+        value.branches,
+        MIN_ASK_TREE_BRANCHES,
+        MAX_ASK_TREE_BRANCHES,
+        (branch) => {
+          if (!isRecord(branch)) return null;
+          const steps = readList(
+            branch.steps,
+            levels.length,
+            levels.length,
+            (step) => (isLabel(step) ? step : null),
+          );
+          const count = readNumber(branch.count, isCount);
+          const share = readNumber(branch.share, isPercent);
+          if (!steps || !count || !share) return null;
+          const out: AskTreeBranch = { steps, count, share };
+          if (branch.part !== undefined) {
+            const part = readNumber(branch.part, isCount);
+            if (!part) return null;
+            out.part = part;
+          }
+          if (isLabel(branch.watch)) out.watch = branch.watch;
+          return out;
+        },
+      );
+      return branches
+        ? {
+            kind: "tree",
+            caption,
+            levels,
+            countLabel: value.countLabel,
+            ...optionalLabel("partLabel", value.partLabel),
+            shareLabel: value.shareLabel,
+            branches,
+          }
+        : null;
+    }
+
     case "momentum": {
       const points = readList(
         value.points,

@@ -31,6 +31,11 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * reaches through its drawer's Options menu. Removing archives the profile,
  * so this page would 404 on its next render; the dialog's confirm step says
  * so, and success replaces the history entry with the roster.
+ *
+ * **Ask about …** leads the cluster as its quietest control — a text link
+ * into the team's Ask page with this player already tagged (`askHref`,
+ * built by the page from `askEntryHref`). Ink that darkens, never blue, and
+ * never a button: the slot's one primary is New match.
  */
 export function ProfileActions({
   mode,
@@ -38,6 +43,8 @@ export function ProfileActions({
   roster,
   canUpload,
   newMatchHref,
+  askHref = null,
+  askSubject,
 }: {
   /** `self`: the viewer's own page. `staff`: someone with roster rights. `viewer`: a teammate. */
   mode: "self" | "staff" | "viewer";
@@ -54,6 +61,10 @@ export function ProfileActions({
   canUpload: boolean;
   /** The wizard for this page's athlete — built once by the page. */
   newMatchHref: string;
+  /** The team's Ask page with this player tagged, or null to draw no link. */
+  askHref?: string | null;
+  /** The player's first name, for the link's words; "you" on the viewer's own page. */
+  askSubject?: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<RosterMember | null>(null);
@@ -63,6 +74,17 @@ export function ProfileActions({
 
   return (
     <div className="flex shrink-0 items-center gap-2">
+      {askHref && (
+        <Link
+          href={askHref}
+          data-ask-about="player"
+          className="mr-1 text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+        >
+          {mode === "self"
+            ? "Ask about your matches"
+            : `Ask about ${askSubject ?? "this player"}`}
+        </Link>
+      )}
       {mode === "self" && (
         <Link href="/dashboard/settings/profile" className={advButton("ghost")}>
           Edit profile

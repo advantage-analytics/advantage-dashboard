@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { getAskPins } from "@/lib/data/ask-server";
 import { createClient } from "@/lib/supabase/server";
 import { getProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
@@ -1488,6 +1489,8 @@ export function getTeamHomeResources(
     roster: getRosterData(programId),
     schedule: getTeamHomeSchedule(programId),
     analytics: getTeamHomeAnalytics(programId),
+    // The viewer's own pins from the team's Ask (`ask_pins.program_id`).
+    pins: getAskPins(programId),
   };
 }
 

@@ -10,7 +10,6 @@ import { getSavedViews } from "@/lib/data/saved-views-server";
 import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
-import { hasComparisonBaseline } from "@/lib/data/match-stats-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canEditBandsFor } from "@/lib/workspace/types";
 import {
@@ -44,12 +43,12 @@ import { resolveDefaultView } from "@/components/dashboard/matches/match-detail/
 import { MatchReportScoreboard } from "@/components/dashboard/matches/match-detail/report-scoreboard";
 import { MatchReportViewSwitcher } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
+  MatchReportAskLink,
   MatchReportTitle,
   MatchReportTitleActions,
   MatchReportTitleRow,
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
-import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import {
   ShareMatchButton,
@@ -406,7 +405,6 @@ export default async function MatchDetailPage({
           // baseline, so a non-empty one is exactly that; `kpiHistory !== null`
           // would be wrong on a first match, whose own stat row keeps the
           // history non-null.
-          canCompare={hasComparisonBaseline(kpiHistory)}
           isDerived={isDerived}
           statsPublished={statsPublished}
           statsUnavailable={statsUnavailable}
@@ -443,7 +441,7 @@ export default async function MatchDetailPage({
                   <MatchReportFacts />
                 </div>
                 <MatchReportTitleActions>
-                  <MatchReportCompareButton />
+                  <MatchReportAskLink />
                   <MatchReportMoreMenu />
                 </MatchReportTitleActions>
               </MatchReportTitleRow>

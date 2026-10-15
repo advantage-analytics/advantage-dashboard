@@ -15,7 +15,6 @@ import {
   MatchReportTitleRow,
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
-import { MatchReportCompareButton } from "@/components/dashboard/matches/match-detail/report-compare-button";
 import { MatchReportMoreMenu } from "@/components/dashboard/matches/match-detail/report-more-menu";
 import { MatchReportInsight } from "@/components/dashboard/matches/match-detail/report-insight-card";
 import { cn } from "@/lib/utils";
@@ -182,7 +181,6 @@ export const MatchReport = {
   Title: MatchReportTitle,
   Facts: MatchReportFacts,
   TitleActions: MatchReportTitleActions,
-  CompareButton: MatchReportCompareButton,
   MoreMenu: MatchReportMoreMenu,
   // Rendered inside the Statistics view's `When`, not beside it (spec ›
   // Decisions 5); it follows the title row in reading order either way.

@@ -10,6 +10,11 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { createClient } from "@/lib/supabase/client";
 import type { DistanceUnit } from "@/lib/format/distance";
+import {
+  parsePointSet,
+  pointSetQuery,
+  POINT_SET_PARAM,
+} from "@/lib/match-video/point-set";
 
 import {
   filmEntryView,
@@ -18,6 +23,7 @@ import {
 } from "@/lib/match-video/film-entry";
 
 import { FilmEmptyState } from "./film-empty-state";
+import { sequenceStep } from "./film-sequence";
 import { FilmEntryActions } from "./film-entry-actions";
 import { FilmExpiredState } from "./film-expired-state";
 import { FilmExpiryNotice } from "./film-expiry-notice";
@@ -49,6 +55,7 @@ import {
   useFilterRailHost,
 } from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
 import {
+  EMPTY_MATCH_FILTERS,
   filtersEqual,
   type MatchFilters,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -275,10 +282,37 @@ function FilmRoom({
     // `?saved` would open on "You haven't saved a point yet".
     () => !readOnly && (parseLegacyFilmQuery(searchParams)?.savedOnly ?? false),
   );
+  /*
+   * The fourth layer (`film-list-filters.ts`): a point set — the Ask "Show
+   * me" action's queue, or a shared link's preset — by point number
+   * (`lib/match-video/point-set.ts`). Film only, like `savedOnly`, and held
+   * here for the same reason; mirrored to `?pn=` while applied (the same
+   * native-history write the room param uses, so the film never reloads)
+   * and seeded from it on arrival below, so a reload or a forwarded link
+   * opens the same points.
+   */
+  const [pointSet, setPointSetState] = useState<readonly number[] | null>(null);
+  const writePointSetParam = useCallback((next: readonly number[] | null) => {
+    const current = window.location.search.replace(/^\?/, "");
+    const after = pointSetQuery(current, next);
+    if (after === current) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${after ? `?${after}` : ""}${window.location.hash}`,
+    );
+  }, []);
+  const setPointSet = useCallback(
+    (next: readonly number[] | null) => {
+      setPointSetState(next && next.length > 0 ? next : null);
+      writePointSetParam(next);
+    },
+    [writePointSetParam],
+  );
   // The pure input shape the list's rules take.
   const local = useMemo<FilmLocalFilters>(
-    () => ({ remainder, savedOnly }),
-    [remainder, savedOnly],
+    () => ({ remainder, savedOnly, pointSet }),
+    [remainder, savedOnly, pointSet],
   );
   // Old links carry the pre-T7 quick cut as `cut=break|saved` and
   // `serve=you|opp`. They still open the same cut: Break points and the
@@ -309,7 +343,8 @@ function FilmRoom({
     clearFilters();
     setFilmRemainder(null);
     setSavedOnly(false);
-  }, [clearFilters, setFilmRemainder]);
+    setPointSet(null);
+  }, [clearFilters, setFilmRemainder, setPointSet]);
   // ONE object for both `PointList` mounts — this column and the room's
   // drawer — so the two can never show different cuts.
   const filmFilters = useMemo<FilmListFilters>(
@@ -319,9 +354,11 @@ function FilmRoom({
       remainder,
       savedOnly,
       setSavedOnly,
+      pointSet,
+      setPointSet,
       clearAll,
     }),
-    [shared, setShared, remainder, savedOnly, clearAll],
+    [shared, setShared, remainder, savedOnly, pointSet, setPointSet, clearAll],
   );
   // Stable across a playback tick (`currentTime` re-renders this component
   // ~4x/second) so `FilmFilterStrip`'s own `memo` actually skips re-rendering
@@ -536,6 +573,67 @@ function FilmRoom({
   }, [stops, filteredPoints]);
 
   /**
+   * "Play in sequence" (roadmap 6.3): the applied cut's points one after
+   * another, the dead time between them skipped (`film-sequence.ts`). It is
+   * the player's own "Skip dead time" over `walkStops` rather than over
+   * every point, so what plays is exactly what the list shows, and the
+   * transport's prev/next still walk the same array.
+   *
+   * It runs off the shell player's reports alone — `shellPlaying` is its
+   * play/pause as this surface hears it — and stands down while the
+   * fullscreen room is up: the room is what is being watched then. A jump
+   * is remembered so a seek that lands a hair before the window it asked
+   * for (a keyframe) is not re-issued every tick; the lead-in then plays
+   * into the window on its own. Past the last point the film pauses and the
+   * mode switches itself off: the cut has been played.
+   */
+  const [sequence, setSequence] = useState(false);
+  const [shellPlaying, setShellPlaying] = useState(false);
+  const lastJumpRef = useRef<number | null>(null);
+  const reportShellPlaying = useCallback(
+    (playing: boolean) => {
+      reportPlaying(playing);
+      setShellPlaying(playing);
+    },
+    [reportPlaying],
+  );
+  useEffect(() => {
+    if (!sequence || room !== null || !shellPlaying) return;
+    const step = sequenceStep(walkStops, currentTime);
+    if (step.kind === "playing") return;
+    if (step.kind === "end") {
+      playerRef.current?.pause();
+      // The sequence ending is this effect's own event, once.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSequence(false);
+      return;
+    }
+    if (
+      lastJumpRef.current === step.stop.start &&
+      currentTime >= step.stop.start - 1
+    ) {
+      return;
+    }
+    lastJumpRef.current = step.stop.start;
+    playerRef.current?.seekTo(step.stop.start);
+  }, [sequence, shellPlaying, room, walkStops, currentTime]);
+  const toggleSequence = useCallback(() => {
+    if (sequence) {
+      setSequence(false);
+      return;
+    }
+    const step = sequenceStep(walkStops, currentTime);
+    if (step.kind === "end") return;
+    lastJumpRef.current = null;
+    setSequence(true);
+    if (step.kind === "jump") {
+      lastJumpRef.current = step.stop.start;
+      playerRef.current?.seekTo(step.stop.start);
+    }
+    playerRef.current?.play();
+  }, [sequence, walkStops, currentTime]);
+
+  /**
    * A "watch this cut" intent from the report (T2, `film-cut-context.tsx`),
    * in two steps because the first admitted point is only known once the
    * filters it sets have been applied.
@@ -568,6 +666,8 @@ function FilmRoom({
   const [landing, setLanding] = useState<{
     shared: MatchFilters;
     remainder: LandedFilmCut | null;
+    /** Land playing in sequence: a point set's first point now, the rest queued. */
+    sequence?: boolean;
   } | null>(null);
   useEffect(() => {
     if (!pendingCut) return;
@@ -581,9 +681,11 @@ function FilmRoom({
     // per `watchCut`, never per frame.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSavedOnly(false);
+    // A statistic's cut replaces a point set as it replaces every other layer.
+    setPointSet(null);
     setLanding({ shared: next.shared, remainder: landedRemainder });
     pendingCut.clear();
-  }, [pendingCut, shared, setShared, setFilmRemainder]);
+  }, [pendingCut, shared, setShared, setFilmRemainder, setPointSet]);
   useEffect(() => {
     if (!landing) return;
     if (
@@ -598,6 +700,12 @@ function FilmRoom({
     if (!playback.url) return;
     const first = walkStops[0];
     if (first) landOnStop(first);
+    // A point set lands playing in sequence: the first point now, the rest
+    // queued (roadmap 6.1's "Show me").
+    if (landing.sequence && first) {
+      lastJumpRef.current = first.start;
+      setSequence(true);
+    }
     setLanding(null);
   }, [
     landing,
@@ -913,6 +1021,30 @@ function FilmRoom({
     );
   }, [pointToWatch, playback.url, stops, landOnStop]);
 
+  /**
+   * `?pn=` — a point set on arrival (`point-set.ts`): the Ask "Show me"
+   * link, or a shared link with the preset. Unlike `?point=` it is a CUT,
+   * so it is not stripped: it narrows the list, and it stays in the address
+   * bar until the cut is cleared. It lands once per parameter value,
+   * against whatever shared filters and remainder the report holds at that
+   * moment (`?f=` beside it has already seeded the provider), playing the
+   * first point with the rest queued — the landing effect above does the
+   * seek once the media is playable, as it does for a statistic's cut.
+   */
+  const latestLayers = useRef({ shared, remainder });
+  useEffect(() => {
+    latestLayers.current = { shared, remainder };
+  });
+  const pointSetParam = searchParams?.get(POINT_SET_PARAM) ?? null;
+  useEffect(() => {
+    const numbers = parsePointSet(pointSetParam);
+    if (!numbers) return;
+    // The URL arriving is the external event; this runs once per value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPointSetState(numbers);
+    setLanding({ ...latestLayers.current, sequence: true });
+  }, [pointSetParam]);
+
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {
@@ -971,7 +1103,11 @@ function FilmRoom({
     // content height of its own — its card is absolutely positioned inside
     // it — so it inherits that height and its rows scroll within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
-    // stacks at) the columns stack and the list takes what is left.
+    // stacks at) the columns stack and the list takes what is left. Stacked,
+    // the player column keeps its content height (`flex-none`): as a
+    // shrinkable `flex-1` beside a list hundreds of rows tall it was squeezed
+    // to nothing, and "This point" with it (0–20px at 1024×768). The pane
+    // (`@container … overflow-y-auto`) scrolls what no longer fits.
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* SwingVision Add video T10 (canvas frame ExpiryNotice): full width,
           above the player and the point list, in the last 30 days before an
@@ -999,12 +1135,14 @@ function FilmRoom({
         ref={clockRef}
         className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 @max-[720px]:flex-none">
           {/* Above the player and right-aligned: maintenance for the person who
             owns the file, out of the way of the person watching. Renders
             nothing at all for everyone else — and is not mounted on a
             read-only report, whose links would lead into a wizard the
-            reader has no match in. */}
+            reader has no match in. Ask is the title row's chat glyph
+            (`report-title-row.tsx`), a link into Ask with this match tagged;
+            the sequence walk is on the player's own transport. */}
           {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
 
           <FilmPlayer
@@ -1022,9 +1160,12 @@ function FilmRoom({
             stops={walkStops}
             allStops={stops}
             saved={activePoint ? activePoint.saved : null}
+            sequence={sequence}
+            onToggleSequence={toggleSequence}
+            sequenceDisabled={walkStops.length === 0}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
-            onPlaybackPlaying={reportPlaying}
+            onPlaybackPlaying={reportShellPlaying}
             onLoadFailure={reportLoadFailure}
             onPlayRejected={reportPlayRejected}
             onFirstPlay={recordFirstPlay}

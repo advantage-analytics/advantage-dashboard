@@ -34,8 +34,32 @@ checks; the nightly workflow is written but off by default; still open are
 p50/p95 per stage and the PostHog rubric). 2.2 (a participation table) was
 deferred: after 2.1 `ask.my_matches()` runs in 4 ms, and keeping a table
 current from the roster's claim and merge paths is the only risk left in
-it. Everything else below is still unbuilt unless its section says
-otherwise.
+it. Tier 3 followed on `claude/ask-tier-3`: 1.6 (`ask_examples` with
+`gemini-embedding-001` vectors; the three nearest rated pairs in the plan
+prompt's tail; a thumbs-up learnt as it happens; `scripts/ask-examples-seed.ts`
+— the store is empty until it is run), 1.7 (a routed view shortlist in the
+tail, the schema block kept in the cached prefix; measurement in
+`prompts.ts`), 4.5 (the planner's state object saved with the answer and shown
+ahead of a shortened turn tail; the writer gets the previous headline), 4.3
+(coach mode behind `ASK_COACH_MODE`, team owners and coaches, off: a product
+decision not yet taken), 3.6–3.10 (the play tree for +1 and pattern answers,
+form ticks with opponent and score, clicks on bars, rows, zones and ticks into
+the Video tab, server-chosen visuals validated against the rows, visual-first
+layout when a chart was asked for), 4.6–4.9 (Ask about this match, a player
+or an opponent, and Ask in the palette; rail titles, rename, pin and a
+filter; the page below 768 px; Admin › Ask feedback reader, `/admin/ask`),
+6.4 (action cards from a fixed catalogue: watch, pin, visualize, save a view,
+export CSV, share, open), 3.11 (pins: `ask_pins` + `ask_pin_answer()`, the
+"Pinned from Ask" card on the personal Home), 6.1's strip ("Show me" through
+`POST /api/ask/show`, which re-runs the saved scope only; a point list and an
+inline clip strip under the answer — a 340-px Ask drawer in the film room was
+built and taken out the same day: the match page's one chat glyph links into
+Ask on every view, and an answer's film links bring the reader back to the
+Video tab on the points they counted) and 6.3's playlist and preset (`?pn=` point sets, "Play in sequence", "Open on these points" on the
+share popover; no mp4 export). Still open from Tier 3: model-written titles,
+a pins slot on the team Home, thumbnails in the point list, and the live
+model has not been run against any of it. Everything else below is still
+unbuilt unless its section says otherwise.
 
 Shipped so far: PR #436 (the feature), #442 (plays, patterns, Video links,
 clarifying questions), #443 (feedback), #446 (admin unlimited), #447 (exact +1).

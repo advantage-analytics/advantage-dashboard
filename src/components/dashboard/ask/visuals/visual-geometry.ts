@@ -282,3 +282,49 @@ export function serveCourtCells(
     };
   });
 }
+
+// ── The play tree ────────────────────────────────────────────────────────────
+
+/**
+ * One node of a play tree as it is drawn: a step shared by the branches
+ * under it, or — with `branch` set — one branch's last step. Children keep
+ * the branches' own order, so a tree written most-played first reads that
+ * way down each level.
+ */
+export interface TreeNode {
+  label: string;
+  /** The index of the branch this leaf is; absent on a step with children. */
+  branch?: number;
+  children: TreeNode[];
+}
+
+/**
+ * Branches grouped by their steps, level by level, in order of first
+ * appearance: "T serve" once, with its +1s under it. A branch with one step
+ * is a leaf at the root; a branch with no steps is left out.
+ */
+export function treeLayout(
+  branches: readonly { steps: readonly string[] }[],
+): TreeNode[] {
+  const nodes: TreeNode[] = [];
+  const place = (
+    into: TreeNode[],
+    steps: readonly string[],
+    branch: number,
+  ): void => {
+    const [step, ...rest] = steps;
+    if (step === undefined) return;
+    if (rest.length === 0) {
+      into.push({ label: step, branch, children: [] });
+      return;
+    }
+    let node = into.find((n) => n.label === step && n.branch === undefined);
+    if (!node) {
+      node = { label: step, children: [] };
+      into.push(node);
+    }
+    place(node.children, rest, branch);
+  };
+  branches.forEach((branch, index) => place(nodes, branch.steps, index));
+  return nodes;
+}

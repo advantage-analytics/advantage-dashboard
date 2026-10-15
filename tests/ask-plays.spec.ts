@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+import { parseMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { type AskRow, renderAskAnswer } from "@/lib/services/ask/answer-render";
 import type { AskAnswerEvent } from "@/lib/services/ask/events";
+
 import {
   ASK_PLAYS_CLARIFY_OPTIONS,
   asksAboutPlays,
@@ -269,26 +271,44 @@ test.describe("the query", () => {
 test.describe("the answer", () => {
   const voice = losingPlaysVoice("opponent", "Eli Stephenson");
 
-  test("renders with every figure from a cell, and a table of rally shots", async () => {
+  test("renders with every figure from a cell, and a tree of rally shots", async () => {
     const text = buildLosingPlaysAnswer(ROWS, voice, 1);
     expect(text).not.toBeNull();
+    expect(text).toContain("WATCH: plays | opponent");
     const { events, result } = await rendered(text ?? "", ROWS);
     expect(events.some((event) => event.type === "error")).toBe(false);
     expect(result.failure).toBeNull();
     expect(result.droppedDigits).toEqual([]);
+    expect(result.droppedVisuals).toEqual([]);
 
     expect(result.headline).toBe(
       "Eli Stephenson's most-missed rally shots were the volley down the line (4 of 13, 30.8%) and the backhand down the line (8 of 48, 16.7%).",
     );
-    expect(result.visual?.kind).toBe("table");
-    if (result.visual?.kind !== "table") throw new Error("no table");
-    expect(result.visual.columns).toEqual(["Shots", "Missed", "Miss rate"]);
-    expect(result.visual.rows.map((row) => row.label)).toEqual([
-      "Volley down the line",
-      "Backhand down the line",
-      "Forehand down the line",
-      "Backhand through the middle",
+    expect(result.visual?.kind).toBe("tree");
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(result.visual.levels).toEqual(["Stroke", "Direction"]);
+    expect(result.visual.countLabel).toBe("Shots");
+    expect(result.visual.partLabel).toBe("Missed");
+    expect(result.visual.shareLabel).toBe("Miss rate");
+    expect(result.visual.branches.map((branch) => branch.steps)).toEqual([
+      ["Volley", "down the line"],
+      ["Backhand", "down the line"],
+      ["Forehand", "down the line"],
+      ["Backhand", "through the middle"],
     ]);
+    expect(result.visual.branches[1]).toMatchObject({
+      count: { value: 48, text: "48" },
+      part: { value: 8, text: "8" },
+      share: { value: 16.7, text: "16.7%" },
+    });
+    // Eli's backhand down the line opens the film on the points it was
+    // hit in; the middle is a direction the filter does not offer.
+    expect(parseMatchFilters(result.visual.branches[1].watch)).toMatchObject({
+      customPlayer: "opponent",
+      customStroke: ["Backhand"],
+      customDirection: ["Down the Line"],
+    });
+    expect(result.visual.branches[3].watch).toBeUndefined();
 
     expect(result.text).toContain(
       "Of the 90 points Eli Stephenson lost, the most common finish was their own miss: the forehand down the line (13) and the backhand down the line (8).",

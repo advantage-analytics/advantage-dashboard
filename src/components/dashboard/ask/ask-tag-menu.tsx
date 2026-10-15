@@ -317,7 +317,9 @@ export function AskTagMenu({
       align="start"
       sideOffset={8}
       width={340}
-      className="max-h-[min(340px,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain"
+      // On a phone the menu is the screen's width less the gutters; the
+      // `!` beats the primitive's inline width.
+      className="max-h-[min(340px,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain max-md:w-[calc(100vw-32px)]!"
       // The caret stays in the question, opening and closing.
       onOpenAutoFocus={(event) => event.preventDefault()}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -367,7 +369,8 @@ export function AskTagMenu({
                       onChoose(row);
                     }}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 rounded-[7px] px-2 py-[7px]",
+                      // 36px rows; 40px on a phone, a finger's height.
+                      "flex cursor-pointer items-center gap-2.5 rounded-[7px] px-2 py-[7px] max-md:py-[9px]",
                       active && "bg-[var(--surface-subtle)]",
                     )}
                   >

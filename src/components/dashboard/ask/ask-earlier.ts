@@ -159,3 +159,38 @@ export function askDayLabel(
   if (!date) return null;
   return `${MONTHS[date.month].slice(0, 3)} ${date.day}`;
 }
+
+// ── Pins and the filter ─────────────────────────────────────────────────────
+
+/**
+ * The rows the owner pinned, newest pin first, apart from the rest, which
+ * keep the order they were given (the loader's: most recently used first).
+ * The rail lists the first group under "Pinned" and files the rest by month.
+ */
+export function askPinnedFirst<Row extends { pinnedAt: string | null }>(
+  rows: readonly Row[],
+): { pinned: Row[]; rest: Row[] } {
+  const pinned = rows
+    .filter((row) => row.pinnedAt !== null)
+    .sort((a, b) => ((a.pinnedAt ?? "") < (b.pinnedAt ?? "") ? 1 : -1));
+  const rest = rows.filter((row) => row.pinnedAt === null);
+  return { pinned, rest };
+}
+
+/**
+ * The rows whose title holds every word of `query`, case and extra spaces
+ * aside, in the order given. A blank query is every row. Client-side over
+ * the list the rail already holds — a rail of a season's questions is a few
+ * hundred rows at most — so typing never waits on the server.
+ */
+export function askConversationsMatching<Row extends { title: string }>(
+  rows: readonly Row[],
+  query: string,
+): Row[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [...rows];
+  return rows.filter((row) => {
+    const title = row.title.toLowerCase();
+    return words.every((word) => title.includes(word));
+  });
+}

@@ -383,7 +383,7 @@ test.describe("expectProblems", () => {
       `error must be "none" or one of ${ASK_EVAL_ERROR_CODES.join(", ")}`,
       `visual must be "none" or one of ${ASK_VISUAL_KINDS.join(", ")}`,
       "notice must be true or false",
-      "shape must be one of A, B, C, D",
+      "shape must be one of A, B, C, D, or a list of them",
       "note must be a string",
       "modelCalls must be a number of 0 or more",
       "queries must be a number of 0 or more",

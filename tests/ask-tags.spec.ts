@@ -518,3 +518,92 @@ test.describe("personal options carry no player", () => {
     expect(options.players).toEqual([]);
   });
 });
+
+// ── Entry points ────────────────────────────────────────────────────────────
+
+import { askEntryHref, askTagsFromQuery } from "@/lib/services/ask/entry";
+import { askAboutOpponentHref } from "@/components/dashboard/opponents/opponent-drawer-shared";
+import type { AskTagOptions } from "@/lib/data/ask-tags";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
+
+test.describe("the Ask entry points (`entry.ts`)", () => {
+  const TEAM: AskScope = {
+    kind: "team",
+    programId: "pppppppp-0000-4000-8000-000000000001",
+    programName: "Westbrook",
+  };
+  const OPTIONS: AskTagOptions = {
+    matches: [
+      {
+        matchId: "m1",
+        opponentName: "Marcus Hale",
+        playerName: null,
+        playedOn: "2026-09-28",
+        iWon: true,
+        scoreText: "6-4, 6-3",
+        tournamentName: null,
+      },
+    ],
+    opponents: [
+      {
+        id: askOpponentKey("Marcus Hale")!,
+        name: "Marcus Hale",
+        matchCount: 1,
+        hand: null,
+      },
+    ],
+    players: [{ id: "p1", name: "Ana Sokolov", matchCount: 3 }],
+  };
+
+  test("hrefs: a match, an opponent by its key, a player on the team page only", () => {
+    expect(askEntryHref(PERSONAL_ASK_SCOPE, { kind: "match", id: "m1" })).toBe(
+      "/dashboard/ask?match=m1",
+    );
+    expect(
+      askEntryHref(TEAM, { kind: "opponent", name: " Marcus  Hale " }),
+    ).toBe("/dashboard/team/ask?opponent=marcus%20hale");
+    expect(
+      askEntryHref(PERSONAL_ASK_SCOPE, { kind: "opponent", name: "  " }),
+    ).toBeNull();
+    expect(askEntryHref(TEAM, { kind: "player", id: "p1" })).toBe(
+      "/dashboard/team/ask?player=p1",
+    );
+    expect(
+      askEntryHref(PERSONAL_ASK_SCOPE, { kind: "player", id: "p1" }),
+    ).toBeNull();
+  });
+
+  test("the drawer's Ask link carries the opponent's key; an unnamed group opens the page bare", () => {
+    expect(askAboutOpponentHref("/dashboard/ask", "Marcus Hale")).toBe(
+      "/dashboard/ask?opponent=marcus%20hale",
+    );
+    expect(askAboutOpponentHref("/dashboard/ask", "Unknown opponent")).toBe(
+      "/dashboard/ask",
+    );
+  });
+
+  test("the page reads back only what its menu can tag, labelled as the menu would", () => {
+    expect(
+      askTagsFromQuery(
+        { match: "m1", opponent: "marcus hale", player: "p1" },
+        OPTIONS,
+        TEAM,
+      ),
+    ).toEqual([
+      { kind: "player", id: "p1", label: "Ana Sokolov" },
+      { kind: "opponent", id: "marcus hale", label: "Marcus Hale" },
+      { kind: "match", id: "m1", label: "vs Marcus Hale" },
+    ]);
+    // On the personal page a player is not a tag; an unknown id is nothing.
+    expect(
+      askTagsFromQuery(
+        { match: "someone-elses", opponent: "nobody", player: "p1" },
+        OPTIONS,
+        PERSONAL_ASK_SCOPE,
+      ),
+    ).toEqual([]);
+    expect(askTagsFromQuery({ match: ["m1", "m1"] }, OPTIONS, TEAM)).toEqual(
+      [],
+    );
+  });
+});

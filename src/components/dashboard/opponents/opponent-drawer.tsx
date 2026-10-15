@@ -26,6 +26,7 @@ import { playedSets } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
 import {
   RECENT_ROWS,
+  askAboutOpponentHref,
   opponentDrawerFooter,
   opponentFirstName,
   opponentMatchesHref,
@@ -152,7 +153,8 @@ export function OpponentDrawer({
         <>
           {footer.ghost && (
             <Link
-              href={footer.ghost.href}
+              // Into Ask with this opponent already tagged.
+              href={askAboutOpponentHref(footer.ghost.href, opponent.name)}
               className={cn(advButton("ghost", "md"), "w-full")}
             >
               {footer.ghost.label}

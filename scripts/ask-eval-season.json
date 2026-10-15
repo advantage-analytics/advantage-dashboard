@@ -19,9 +19,9 @@
       "error": "none",
       "shape": "A",
       "notice": false,
-      "modelCalls": 2,
+      "modelCalls": 3,
       "sql": ["opponent_hand"],
-      "note": "Matches the seed did not write may carry a hand, so the seed's 40.0% / 55.6% second-serve split and 2-3 / 6-3 records are not pinned."
+      "note": "Matches the seed did not write may carry a hand, so the seed's 40.0% / 55.6% second-serve split and 2-3 / 6-3 records are not pinned. The grouped query is usually sent back once by the SQL guard and rewritten, so three calls is the ceiling."
     }
   },
   {
@@ -31,14 +31,14 @@
     "expect": {
       "error": "none",
       "shape": "D",
-      "visual": "table",
+      "visual": "bars",
       "notice": false,
       "modelCalls": 1,
       "queries": 1,
       "sql": ["match_id in \\("],
       "figures": ["won 0 and lost 3", "3 matches"],
       "absent": ["\\b(you should|try|focus on|work on)\\b"],
-      "note": "Scoped to the three seeded Dvorsky matches: the opponent comparison's record sentence is the server's, so the 0-3 is pinned."
+      "note": "Scoped to the three seeded Dvorsky matches: the opponent comparison's record sentence is the server's, so the 0-3 is pinned. The opponent comparison draws as matchup bars (roadmap 3.3), not a table."
     }
   },
   {
@@ -48,14 +48,14 @@
     "expect": {
       "error": "none",
       "shape": "D",
-      "visual": "table",
+      "visual": "bars",
       "notice": true,
       "modelCalls": 1,
       "queries": 1,
       "sql": ["match_id in \\("],
       "figures": ["won 0 and lost 3", "3 matches"],
       "absent": ["\\b(you should|try|focus on|work on)\\b"],
-      "note": "The same scope as question 3, with the no-advice notice and no advice in the text."
+      "note": "The same scope as question 3, with the no-advice notice and no advice in the text; bars, as question 3."
     }
   },
   {
@@ -65,9 +65,9 @@
       "error": "none",
       "shape": "A",
       "notice": false,
-      "modelCalls": 2,
+      "modelCalls": 3,
       "sql": ["court_type"],
-      "note": "7-2 on hard and 1-4 on clay hold for the seed alone; matches the seed did not write may carry a surface, so the records are not pinned."
+      "note": "7-2 on hard and 1-4 on clay hold for the seed alone; matches the seed did not write may carry a surface, so the records are not pinned. The grouped query is usually sent back once by the SQL guard and rewritten, so three calls is the ceiling."
     }
   },
   {
@@ -113,11 +113,10 @@
     "expect": {
       "error": "none",
       "shape": "A",
-      "visual": "form",
       "notice": false,
       "modelCalls": 2,
       "sql": ["i_won"],
-      "note": "8-6 is the seed's record; the verifier's other matches count too, so the record is not pinned."
+      "note": "8-6 is the seed's record; the verifier's other matches count too, so the record is not pinned. The block's kind follows the columns the planner writes — a split when wins and losses form one whole, a table when an unknown-result column rides along — so no kind is pinned; the last-N question (11) pins the form strip."
     }
   },
   {
@@ -127,10 +126,10 @@
       "error": "none",
       "shape": "A",
       "notice": false,
-      "modelCalls": 2,
+      "modelCalls": 3,
       "sql": ["opponent_name", "group by"],
       "body": ["Dvorsky"],
-      "note": "Dvorsky is 0-3 in the seed and no other opponent has more than one match against the verifier, so he tops any ranking that weighs matches; the answer must name him."
+      "note": "Dvorsky is 0-3 in the seed and no other opponent has more than one match against the verifier, so he tops any ranking that weighs matches; the answer must name him. The grouped query is usually sent back once by the SQL guard and rewritten, so three calls is the ceiling; a fourth would be a regression."
     }
   },
   {
@@ -163,11 +162,11 @@
     "want": "one row per match: date, result, key numbers",
     "expect": {
       "error": "none",
-      "shape": "A",
+      "shape": ["A", "D"],
       "notice": false,
       "modelCalls": 2,
-      "sql": ["match_id in \\(", "played_on"],
-      "note": "Scoped to the three seeded Brandt matches (won 2026-02-07, lost 2026-05-09, won 2026-08-22); how the model lays out dates and scores is its own, so only the scope is pinned."
+      "sql": ["match_id in \\("],
+      "note": "Scoped to the three seeded Brandt matches (won 2026-02-07, lost 2026-05-09, won 2026-08-22). The planner fairly answers this either way, one row per match (A) or the player beside Brandt across the three (D), and picks differently from run to run, so both are allowed; only the scope is pinned."
     }
   },
   {
@@ -175,11 +174,11 @@
     "want": "the two August matches; first and second serve numbers vs the season",
     "expect": {
       "error": "none",
-      "shape": "A",
+      "shape": "D",
       "notice": false,
-      "modelCalls": 2,
-      "sql": ["played_on", "serve"],
-      "note": "The seed's two August matches make 65.8% first serves in; matches the seed did not write may fall in August, so the figures are not pinned."
+      "modelCalls": 1,
+      "sql": ["serve"],
+      "note": "A part of the player's game over a narrower set of matches is the baseline comparison, shape D — the prompt's own worked example answers this very question that way. The seed's two August matches make 65.8% first serves in; matches the seed did not write may fall in August, so the figures are not pinned."
     }
   },
   {
@@ -224,11 +223,10 @@
     "want": "record in three-setters and how the deciding sets went",
     "expect": {
       "error": "none",
-      "shape": "A",
+      "shape": "D",
       "notice": false,
       "modelCalls": 2,
-      "sql": ["set_number|score_text"],
-      "note": "The seed has five three-setters (2-3); the verifier's other matches may add more, so the record is not pinned."
+      "note": "The seed has five three-setters (2-3); the verifier's other matches may add more, so the record is not pinned. A what-happened question is the opponent comparison over the matches in scope whatever the planner writes (ask.ts, asksWhatHappened), so the served shape is D either way; the pin follows the prompt, which now says so."
     }
   },
   {

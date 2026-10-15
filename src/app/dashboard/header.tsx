@@ -375,7 +375,7 @@ export function Header({
            The bottom edge is the hairline the frames draw, and it stays that
            hairline on scroll — firming it up to a darker rule once the column
            moved read as the bar changing colour under the reader. */
-        className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b border-[var(--border-hairline)] bg-white px-6"
+        className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b border-[var(--border-hairline)] bg-white px-6 max-md:gap-2 max-md:px-4"
       >
         {/* Left: the workspace title, or breadcrumbs — one or the other, never
             both. The collapse toggle moved into the sidebar's bottom group,
@@ -397,14 +397,14 @@ export function Header({
               facts. The qualifier is dropped entirely — not emptied — where
               there is none, so `gap-2` has nothing to space. */}
           {title && (
-            <span className="inline-flex items-baseline gap-2">
+            <span className="inline-flex min-w-0 items-baseline gap-2">
               {/* No screen-reader separator between the two spans, and none
                   needed: both are flex items, so both blockify and already
                   announce as separate nodes. `element.textContent` runs them
                   together, but nothing reads that — check the accessibility
                   tree before "fixing" it. Naming the pair is the rail's job;
                   its trigger already announces the workspace by name. */}
-              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+              <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
                 {title.name}
               </span>
               {title.qualifier && (
@@ -418,8 +418,11 @@ export function Header({
                    darker than the frames draw it, deliberately: contrast is a
                    floor, and one rule in one slot beats two. Inline because the
                    DS class is unlayered and beats a Tailwind colour utility. */
+                /* Under 768px (Ask is the one page a phone reaches) the
+                   header is 326px beside the icon rail, and the qualifier is
+                   what gives way so the account menu is not cut off. */
                 <span
-                  className="text-micro"
+                  className="text-micro whitespace-nowrap max-md:hidden"
                   style={{ color: "var(--ink-600)" }}
                 >
                   {title.qualifier}
@@ -530,7 +533,9 @@ export function Header({
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
-                <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)]">
+                {/* Read, not drawn, under 768px: the magnifier carries it
+                    there, and the bar has no room for the word. */}
+                <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)] max-md:sr-only">
                   Search
                 </span>
               </button>

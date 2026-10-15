@@ -124,3 +124,55 @@ export function shareScopeLabel(scope: {
   if (scope.video) return "With video";
   return scope.visualizations ? "No video" : "Statistics only";
 }
+
+/* ── The Video tab's cut, on a link ──────────────────────────────────────── */
+
+/**
+ * What the Share popover may put on a public link beside the token: the
+ * Video tab's applied cut, as the address bar carries it — `?f=` (the
+ * shared filters, `match-filters/model.ts`) and/or `?pn=` (a point set,
+ * `lib/match-video/point-set.ts`). An answer's "Watch" link lands with
+ * both, so a coach or a parent can be sent exactly those points
+ * (roadmap 6.3).
+ */
+export interface FilmSharePreset {
+  /** The serialized shared filters, or null. */
+  filters: string | null;
+  /** The serialized point set, or null. */
+  points: string | null;
+}
+
+/**
+ * The preset the current page holds, read off its query string: only on
+ * the Video tab (`tab=film`), and only while a cut is applied. Null for
+ * every other page and for an unfiltered film — there is nothing to carry.
+ */
+export function filmSharePresetOf(
+  search: string | URLSearchParams,
+): FilmSharePreset | null {
+  const query = new URLSearchParams(search.toString());
+  if (query.get("tab") !== "film") return null;
+  const filters = query.get("f")?.trim() || null;
+  const points = query.get("pn")?.trim() || null;
+  return filters || points ? { filters, points } : null;
+}
+
+/**
+ * The public URL with the preset on it: `?tab=film` (the share page's own
+ * view parameter, `report-view.ts`), then `f` and `pn` as the Video tab
+ * reads them. Whatever query the URL already carried is kept.
+ */
+export function withFilmSharePreset(
+  url: string,
+  preset: FilmSharePreset,
+): string {
+  const [base, hash = ""] = url.split("#", 2);
+  const [path, search = ""] = base.split("?", 2);
+  const query = new URLSearchParams(search);
+  query.set("tab", "film");
+  if (preset.filters) query.set("f", preset.filters);
+  else query.delete("f");
+  if (preset.points) query.set("pn", preset.points);
+  else query.delete("pn");
+  return `${path}?${query.toString()}${hash ? `#${hash}` : ""}`;
+}

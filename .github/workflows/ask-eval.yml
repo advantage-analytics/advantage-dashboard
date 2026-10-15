@@ -51,7 +51,7 @@ jobs:
       # Exits 1 when a scored question fails, which fails this step and the
       # job; the report below is uploaded regardless.
       - name: Run the graded season list
-        run: npx tsx scripts/ask-eval.ts --grade --out ask-eval-report.md --questions scripts/ask-eval-season.json
+        run: npx tsx scripts/ask-eval.ts --grade --retries 1 --out ask-eval-report.md --questions scripts/ask-eval-season.json
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

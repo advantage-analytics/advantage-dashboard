@@ -7,8 +7,13 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
 import {
+  barRowVideoHref,
   figureMatchFilters,
   figureVideoHref,
+  measureForLabel,
+  serveZoneVideoHref,
+  tableRowVideoHref,
+  watchHref,
 } from "@/lib/services/ask/figure-video";
 
 /**
@@ -154,5 +159,107 @@ test.describe("figureVideoHref — the link", () => {
     expect(figureVideoHref("", ONE)).toBeNull();
     expect(figureVideoHref("total_points_won_pct", ONE)).toBeNull();
     expect(figureVideoHref("all_second_serve_won_pct", ONE)).toBeNull();
+  });
+});
+
+// ── The rest of a block: rows, zones, branches ──────────────────────────────
+
+test.describe("measureForLabel — a canonical row label back to its column", () => {
+  test("the dictionary's names, bare or the opponent's, for measures with a preset", () => {
+    expect(measureForLabel("First serves in")).toBe("first_serves_in");
+    expect(measureForLabel("first serves in")).toBe("first_serves_in");
+    expect(measureForLabel("Second-serve points won")).toMatch(
+      /^second_serve_(?:points_won|won_pct)$/,
+    );
+    expect(measureForLabel("Serves wide")).toBe("serve_wide");
+    expect(measureForLabel("Break points saved, opponent")).toBe(
+      "opp_break_points_saved",
+    );
+    // The paired table's own suffix for a share beside its count.
+    expect(measureForLabel("First serves in, share")).toBe("first_serves_in");
+  });
+
+  test("a label that is no measure, has no preset, or is over other matches is null", () => {
+    expect(measureForLabel("Total points won")).toBeNull();
+    expect(measureForLabel("Winners")).toBeNull();
+    expect(measureForLabel("First serves in, all matches")).toBeNull();
+    expect(measureForLabel("Rudy Quan")).toBeNull();
+    expect(measureForLabel("")).toBeNull();
+  });
+});
+
+test.describe("the rows and zones that open the film", () => {
+  test("a bars row is its label's measure over the one source", () => {
+    expect(opened(barRowVideoHref("Serves wide", ONE))).toEqual(
+      filters({ server: "you", serveZone: ["Wide"] }),
+    );
+    expect(barRowVideoHref("Total points won", ONE)).toBeNull();
+    expect(barRowVideoHref("Serves wide", [...ONE, ...ONE])).toBeNull();
+    expect(barRowVideoHref("Serves wide", null)).toBeNull();
+  });
+
+  test("a table row that is a match opens its film: the source's own points, else its measure's, else the whole", () => {
+    expect(
+      tableRowVideoHref({ label: "Theo Lindqvist", matchId: "m 1" }, ONE),
+    ).toBe("/dashboard/matches/m%201?tab=film");
+    expect(
+      tableRowVideoHref({ label: "Theo Lindqvist", matchId: "m 1" }, null),
+    ).toBe("/dashboard/matches/m%201?tab=film");
+    expect(
+      opened(tableRowVideoHref({ label: "Aces", matchId: "m 1" }, [])),
+    ).toEqual(filters({ server: "you" }));
+    expect(
+      tableRowVideoHref({ label: "Theo Lindqvist", matchId: "m 1" }, [
+        {
+          ...ONE[0],
+          matchId: "m 1",
+          watch: {
+            href: "/dashboard/matches/m%201?tab=film&f=cp.y",
+            points: 4,
+          },
+        },
+      ]),
+    ).toBe("/dashboard/matches/m%201?tab=film&f=cp.y");
+    // Another source's watch is not this row's.
+    expect(
+      tableRowVideoHref({ label: "Theo Lindqvist", matchId: "m 1" }, [
+        {
+          ...ONE[0],
+          matchId: "m 2",
+          watch: {
+            href: "/dashboard/matches/m%202?tab=film&f=cp.y",
+            points: 4,
+          },
+        },
+      ]),
+    ).toBe("/dashboard/matches/m%201?tab=film");
+  });
+
+  test("a table row that is a measure opens the one source's film on it; any other row nothing", () => {
+    expect(opened(tableRowVideoHref({ label: "Aces" }, ONE))).toEqual(
+      filters({ server: "you" }),
+    );
+    expect(tableRowVideoHref({ label: "Aces" }, [...ONE, ...ONE])).toBeNull();
+    expect(tableRowVideoHref({ label: "Winners" }, ONE)).toBeNull();
+  });
+
+  test("a serve court's zone: that side's serves into the zone from that court", () => {
+    expect(opened(serveZoneVideoHref("m 1", "you", "deuce", "T"))).toEqual(
+      filters({ server: "you", court: "deuce", serveZone: ["T"] }),
+    );
+    expect(opened(serveZoneVideoHref("m 1", "opponent", "ad", "Wide"))).toEqual(
+      filters({ server: "opponent", court: "ad", serveZone: ["Wide"] }),
+    );
+    expect(serveZoneVideoHref("m 1", "you", "deuce", "T")).toMatch(
+      /^\/dashboard\/matches\/m%201\?tab=film&f=/,
+    );
+  });
+
+  test("watchHref is the film with a filter already spelt, or the whole film", () => {
+    expect(watchHref("m 1", "sv.y_sz.t")).toBe(
+      "/dashboard/matches/m%201?tab=film&f=sv.y_sz.t",
+    );
+    expect(watchHref("m 1")).toBe("/dashboard/matches/m%201?tab=film");
+    expect(watchHref("m 1", "")).toBe("/dashboard/matches/m%201?tab=film");
   });
 });

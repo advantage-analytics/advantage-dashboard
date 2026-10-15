@@ -72,8 +72,6 @@ export interface MatchReportMeta {
   matchId: string;
   /** The viewer's insight, already `sides.pick`ed in `page.tsx`. */
   summary: string | null;
-  /** `hasComparisonBaseline(kpiHistory)` — computed on the server. */
-  canCompare: boolean;
   /** `sourceProvider === "splitstep"`. */
   isDerived: boolean;
   /** Both `match_stats` rows present. */
@@ -244,7 +242,6 @@ export interface MatchReportProviderProps extends Omit<
 export function MatchReportProvider({
   matchId,
   summary,
-  canCompare,
   isDerived,
   statsPublished,
   statsUnavailable = false,
@@ -322,7 +319,6 @@ export function MatchReportProvider({
     () => ({
       matchId,
       summary,
-      canCompare,
       isDerived,
       statsPublished,
       statsUnavailable,
@@ -343,7 +339,6 @@ export function MatchReportProvider({
     [
       matchId,
       summary,
-      canCompare,
       isDerived,
       statsPublished,
       statsUnavailable,

@@ -35,6 +35,11 @@ export function isMacPlatform(platform: string): boolean {
   return /mac|iphone|ipad|ipod/i.test(platform);
 }
 
+/** This browser's platform is a Mac; browser-only, so call it from an effect or a store snapshot. */
+export function readIsMac(): boolean {
+  return isMacPlatform(navigator.platform || navigator.userAgent);
+}
+
 /** The keycaps printed on the button, and the tooltip's one-string form. */
 export function newQuestionKeys(mac: boolean): readonly string[] {
   return mac ? ["⇧", "⌘", "O"] : ["Ctrl", "⇧", "O"];

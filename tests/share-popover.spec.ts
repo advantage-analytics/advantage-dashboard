@@ -353,3 +353,78 @@ test("anyone who may share the match can take the video back off", () => {
   expect(boxes(html)).toEqual([false, true]);
   expect(html).not.toContain("Team staff only");
 });
+
+test("the Video tab's cut is offered on the link only once the link carries the video, and only when there is one", () => {
+  const Panel = SharePopoverPanel as React.ComponentType<
+    Record<string, unknown>
+  >;
+  const preset = { filters: "sp.y_st.2", points: "3,7" };
+  const withVideo = renderToStaticMarkup(
+    React.createElement(Panel, {
+      match: MATCH,
+      share: {
+        link: {
+          url: PUBLIC_URL,
+          includesVisualizations: true,
+          includesVideo: true,
+        },
+        canShare: true,
+        canShareVideo: true,
+        audience: { kind: "personal" },
+        publicLinkOn: true,
+      },
+      hasVideo: true,
+      onClose: () => {},
+      filmPreset: preset,
+    }),
+  );
+  expect(withVideo).toContain("data-share-preset-row");
+  expect(withVideo).toContain("Open on these points");
+  // Unticked, the link row is the plain URL: nothing is added until asked.
+  expect(withVideo).toContain("app.example.com/m/abc123");
+  expect(withVideo).not.toContain("tab=film");
+
+  // The video not on the link: no Video tab to open on, so no row.
+  const videoOff = renderToStaticMarkup(
+    React.createElement(Panel, {
+      match: MATCH,
+      share: {
+        link: {
+          url: PUBLIC_URL,
+          includesVisualizations: true,
+          includesVideo: false,
+        },
+        canShare: true,
+        canShareVideo: true,
+        audience: { kind: "personal" },
+        publicLinkOn: true,
+      },
+      hasVideo: true,
+      onClose: () => {},
+      filmPreset: preset,
+    }),
+  );
+  expect(videoOff).not.toContain("data-share-preset-row");
+
+  // Opened from anywhere but a filtered Video tab: nothing to offer.
+  const noPreset = renderToStaticMarkup(
+    React.createElement(Panel, {
+      match: MATCH,
+      share: {
+        link: {
+          url: PUBLIC_URL,
+          includesVisualizations: true,
+          includesVideo: true,
+        },
+        canShare: true,
+        canShareVideo: true,
+        audience: { kind: "personal" },
+        publicLinkOn: true,
+      },
+      hasVideo: true,
+      onClose: () => {},
+      filmPreset: null,
+    }),
+  );
+  expect(noPreset).not.toContain("data-share-preset-row");
+});

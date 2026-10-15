@@ -15,8 +15,11 @@ const FACT_ICON = "size-[13px] shrink-0 text-[var(--ink-700)]";
 
 /**
  * The facts line under the title (design 04 F1/F4/F5/F6): what was played,
- * when, where, on what, and whether the result is verified — one line, never
- * wrapping.
+ * when, where, on what, and whether the result is verified. One line when it
+ * fits; when the title row's actions take the width (the Ask glyph, Compare,
+ * ⋯ at 1024), a fact wraps whole to a second line rather than the venue
+ * truncating to "Universit…". Only a tournament name longer than the whole
+ * line still ends in an ellipsis.
  *
  * Each fact draws only when the match carries it, so a sparse match gets a
  * shorter line rather than an icon beside nothing. Two of the frame's facts
@@ -43,7 +46,7 @@ export function MatchReportFacts() {
   const savedViewCount = meta.savedViews.length;
 
   return (
-    <div className="mt-[9px] flex h-[18px] min-w-0 flex-nowrap items-center gap-3.5">
+    <div className="mt-[9px] flex min-h-[18px] min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1">
       {points.length > 0 ? (
         <Fact
           tabular
@@ -138,21 +141,21 @@ function Fact({
   /** Figures that should line up — counts and dates. */
   tabular?: boolean;
   /**
-   * Free text of any length (the tournament name): the one fact that gives
-   * up width, ending in an ellipsis, so a long name cannot push the line
-   * under the title row's Compare and ⋯ buttons.
+   * Free text of any length (the tournament name). The line wraps before
+   * this gives anything up; it truncates only when the name alone is wider
+   * than the whole line, so it can never push past the title row's actions.
    */
   truncate?: boolean;
   children: ReactNode;
 }) {
   return (
     // `shrink-0` is the frame's `flex:0 0 auto`: the short facts never
-    // squeeze. A truncating fact is `min-w-0` instead, so it absorbs the
-    // shortfall.
+    // squeeze — they wrap. A truncating fact is `min-w-0 max-w-full`, so on
+    // a line of its own it still fits the line.
     <span
       className={cn(
         "inline-flex items-center gap-1.5",
-        truncate ? "min-w-0" : "shrink-0",
+        truncate ? "max-w-full min-w-0" : "shrink-0",
       )}
     >
       {icon}

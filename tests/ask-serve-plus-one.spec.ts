@@ -7,8 +7,10 @@ import {
   type AskQuestionInput,
   type AskRpcResult,
 } from "@/lib/services/ask/ask";
+import { parseMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { type AskRow, renderAskAnswer } from "@/lib/services/ask/answer-render";
 import type { AskAnswerEvent, AskEvent } from "@/lib/services/ask/events";
+
 import { losingPlaysVoice } from "@/lib/services/ask/plays";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import {
@@ -285,20 +287,37 @@ test.describe("the answer", () => {
   const voice = losingPlaysVoice("mine", "Rudy Quan");
   const request = { phase: "serve", subject: "mine", serveType: null } as const;
 
-  test("every pattern in a table, winning and losing named, every figure a cell", async () => {
+  test("every pattern a branch of the tree, winning and losing named, every figure a cell", async () => {
     const text = buildServePlusOneAnswer(RUDY, voice, request) ?? "";
+    expect(text).toContain("WATCH: plus-one | serve | mine | any");
     const { events, result } = await rendered(text, RUDY);
     expect(events.some((event) => event.type === "error")).toBe(false);
     expect(result.droppedDigits).toEqual([]);
+    expect(result.droppedVisuals).toEqual([]);
     expect(result.headline).toBe(
       "Rudy Quan's most-played serve plus one was a serve to the T then a backhand crosscourt: 29 points, 48.3% of them won.",
     );
-    if (result.visual?.kind !== "table") throw new Error("no table");
-    expect(result.visual.columns).toEqual(["Points", "Won", "Won %"]);
-    expect(result.visual.rows).toHaveLength(8);
-    expect(result.visual.rows[1]).toEqual({
-      label: "T serve → forehand inside out",
-      cells: ["20", "14", "70%"],
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(result.visual.levels).toEqual(["Serve", "Plus one"]);
+    expect(result.visual.countLabel).toBe("Points");
+    expect(result.visual.partLabel).toBe("Won");
+    expect(result.visual.shareLabel).toBe("Won %");
+    expect(result.visual.branches).toHaveLength(8);
+    expect(result.visual.branches[1]).toMatchObject({
+      steps: ["T serve", "Forehand inside out"],
+      count: { value: 20, text: "20" },
+      part: { value: 14, text: "14" },
+      share: { value: 70, text: "70%" },
+    });
+    // Each branch carries the Video filter for exactly its points: Rudy's
+    // serve to the T, then his forehand inside out as the server's shot 3.
+    expect(parseMatchFilters(result.visual.branches[1].watch)).toMatchObject({
+      server: "you",
+      serveZone: ["T"],
+      customPlayer: "you",
+      customStroke: ["Forehand"],
+      customDirection: ["Inside Out"],
+      customRallyShot: [3],
     });
     expect(result.text).toContain(
       "Across 244 serve-plus-one points, Rudy Quan won 135 (55.3%).",
@@ -646,12 +665,17 @@ test.describe("by side", () => {
       }) ?? "";
     const { result } = await rendered(text, rows);
     expect(result.droppedDigits).toEqual([]);
-    if (result.visual?.kind !== "table") throw new Error("no table");
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
     expect(result.visual.caption).toContain("deuce and ad sides apart");
-    expect(result.visual.rows.map((row) => row.label)).toEqual([
-      "Ad · Wide serve → forehand inside out",
-      "Deuce · T serve → backhand crosscourt",
+    expect(result.visual.levels).toEqual(["Side", "Serve", "Plus one"]);
+    expect(result.visual.branches.map((branch) => branch.steps)).toEqual([
+      ["Ad", "Wide serve", "Forehand inside out"],
+      ["Deuce", "T serve", "Backhand crosscourt"],
     ]);
+    expect(parseMatchFilters(result.visual.branches[0].watch)).toMatchObject({
+      court: "ad",
+      serveZone: ["Wide"],
+    });
     expect(result.headline).toContain("on the ad side, a serve out wide");
   });
 });

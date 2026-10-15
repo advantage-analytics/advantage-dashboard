@@ -12,8 +12,17 @@
  *
  * Runs entirely as the signed-in user: `ask_set_feedback()` checks the answer
  * is theirs with `auth.uid()`, so nothing here uses the service role.
+ *
+ * A thumbs up is also a (question → plan) pair worth learning from (roadmap
+ * 1.6, `examples.ts`): after the 204 is sent it is read back, embedded and
+ * stored as the viewer's own example — as the user, best effort, and never a
+ * reason the rating fails. A thumb taken back or turned down removes the
+ * example in the database (`ask_examples_follow_feedback`).
  */
 
+import { after } from "next/server";
+import { embedText } from "@/lib/llm/embeddings";
+import { addAskFeedbackExample } from "@/lib/services/ask/examples";
 import { readAskFeedbackRequest } from "@/lib/services/ask/feedback";
 import {
   checkSameOrigin,
@@ -85,6 +94,21 @@ export async function POST(request: Request): Promise<Response> {
     }
     console.error("[ask] could not save feedback", { sqlstate: error.code });
     return errorResponse(transportError("internal_error", "feedback_write"));
+  }
+
+  if (body.rating === "up") {
+    const learn = () =>
+      addAskFeedbackExample({
+        user: { rpc: (fn, args) => supabase.rpc(fn, args) },
+        messageId: body.answerId,
+        embed: (text) => embedText(text),
+      });
+    try {
+      after(learn);
+    } catch {
+      // Outside a request context (a script): run it now, unawaited.
+      void learn();
+    }
   }
 
   return new Response(null, {

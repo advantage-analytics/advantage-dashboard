@@ -273,6 +273,19 @@ test.describe("a full answer", () => {
     await expect(page.locator("[data-ask-figure-watch]")).toHaveCount(0);
   });
 
+  test("figures sit in tabular numerals, in the tiles and in the prose", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full");
+    for (const value of await figures(page)
+      .locator("[data-ask-figure-value]")
+      .all()) {
+      await expect(value).toHaveClass(/tabular-nums/);
+    }
+    const prose = page.locator("p", { hasText: "The gap is on the ad court." });
+    await expect(prose).toHaveClass(/tabular-nums/);
+  });
+
   test("figure tiles are ink, never an outcome colour", async ({ page }) => {
     await openFixture(page, "?case=full");
 
@@ -856,6 +869,7 @@ test.describe("the visual block", () => {
       "split",
       "serve",
       "momentum",
+      "tree",
     ]) {
       await openFixture(page, `?case=full&visual=${kind}`);
       const markup = await visual(page).evaluate((node) => node.outerHTML);
@@ -888,10 +902,288 @@ test.describe("the visual block", () => {
   }
 });
 
+test.describe("the play tree", () => {
+  const branches = (page: Page) =>
+    visual(page).locator("[data-ask-tree-branch]");
+
+  test("branches grouped under their first step, a share bar each, the counts as sent", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=tree");
+    const block = visual(page);
+    await expect(block).toHaveAttribute("data-ask-visual", "tree");
+    await expect(block.locator("figcaption")).toContainText(
+      "Your serve-plus-one patterns",
+    );
+    // Two serves, drawn once each; three plus ones under them.
+    const groups = block.locator("[data-ask-tree-group]");
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0).locator("> span")).toHaveText("T serve");
+    await expect(groups.nth(1).locator("> span")).toHaveText("Wide serve");
+    await expect(groups.nth(0).locator("[data-ask-tree-branch]")).toHaveCount(
+      2,
+    );
+    await expect(branches(page)).toHaveCount(3);
+    await expect(branches(page).nth(0)).toContainText("Forehand crosscourt");
+    await expect(branches(page).nth(0)).toContainText("29 points · 14 won");
+    await expect(branches(page).nth(0)).toContainText("48,3 %");
+    await expect(branches(page).nth(2)).toContainText("Forehand inside out");
+    // The bar is the share, as geometry; the words are the server's text.
+    const widths = await block
+      .locator("[data-ask-grow]")
+      .evaluateAll((bars) =>
+        bars.map((bar) => (bar as HTMLElement).style.width),
+      );
+    expect(widths).toEqual(["48.3%", "70%", "37.5%"]);
+    await expect(block).not.toContainText("48.3%");
+    await expect(block.getByText("Won %, as a share")).toHaveCount(1);
+    // Over four matches no branch has a film to open.
+    await expect(block.locator("a")).toHaveCount(0);
+    await expect(page.locator("[data-ask-watch]")).toHaveCount(0);
+  });
+
+  test("over one match, a branch that carries its filter opens that match's film on its points", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=one&visual=tree");
+    const links = visual(page).locator("a[data-ask-tree-watch]");
+    await expect(links).toHaveCount(2);
+    await expect(links.nth(0)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28?tab=film&f=sv.y_sz.t_cp.y_cs.f_cd.cc_cr.3",
+    );
+    await expect(links.nth(0)).toContainText("Forehand crosscourt · Watch");
+    await expect(links.nth(1)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28?tab=film&f=sv.y_sz.w_cp.y_cs.f_cd.io_cr.3",
+    );
+    // The branch with no filter is words alone.
+    await expect(branches(page).nth(1).locator("a")).toHaveCount(0);
+  });
+});
+
+test.describe("a block that opens the film", () => {
+  test("bars: over one match, a row that is a measure links to its points, and a hovered bar names its series", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=one&visual=bars");
+    const block = visual(page);
+    const links = block.locator("a[data-ask-bar-watch]");
+    // "First serves in" and "Break points saved" are both measures the
+    // Video tab can filter on.
+    await expect(links).toHaveCount(2);
+    const hrefs = await links.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("href")),
+    );
+    for (const href of hrefs) {
+      expect(href).toMatch(/^\/dashboard\/matches\/match-sep-28\?tab=film&f=/);
+    }
+    expect(hrefs[0]).toContain("vt.1");
+    expect(hrefs[1]).toContain("st.bp");
+    await expect(links.nth(0)).toContainText("First serves in · Watch");
+
+    // The readout: a label over each bar, shown by its bar's hover (the
+    // harness serves no stylesheet, so the class is what can be read), with
+    // the series and the figure as sent.
+    const readouts = block.locator("[data-ask-readout]");
+    await expect(readouts).toHaveCount(4);
+    await expect(readouts.nth(1)).toHaveText("All matches: 58,2 %");
+    await expect(readouts.nth(1)).toHaveClass(/group-hover\/bar:opacity-100/);
+    await expect(readouts.nth(1)).toHaveAttribute("aria-hidden", "true");
+    await expect(readouts.nth(1)).toHaveClass(/pointer-events-none/);
+  });
+
+  test("bars: over several matches no row links", async ({ page }) => {
+    await openFixture(page, "?case=full&visual=bars");
+    await expect(visual(page).locator("a")).toHaveCount(0);
+  });
+
+  test("table: a row that is one match opens its film, on the answer's points when the source has them; a measure row opens the one match's", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=one&visual=linked-table");
+    const rows = visual(page).locator("tbody tr");
+    await expect(rows.nth(0).locator("a")).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28?tab=film",
+    );
+    await expect(rows.nth(0)).toContainText("Theo Lindqvist · Watch");
+    const measure = await rows.nth(1).locator("a").getAttribute("href");
+    expect(measure).toMatch(/^\/dashboard\/matches\/match-sep-28\?tab=film&f=/);
+    expect(measure).toContain("vt.1");
+    await expect(rows.nth(2).locator("a")).toHaveCount(0);
+
+    // The pattern answer's source carries the points it counted: the match
+    // row opens exactly those.
+    await openFixture(page, "?case=watch&visual=linked-table");
+    await expect(
+      visual(page).locator("tbody tr").nth(0).locator("a"),
+    ).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28?tab=film&f=cp.y_cd.dl",
+    );
+    // Over four matches the measure row has no one film.
+    await expect(
+      visual(page).locator("tbody tr").nth(1).locator("a"),
+    ).toHaveCount(0);
+  });
+
+  test("serve court: over one match each zone opens that side's serves there; otherwise the zones only read out", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=one&visual=court-serve");
+    const block = visual(page);
+    const zones = block.locator("a[data-ask-zone-watch]");
+    await expect(zones).toHaveCount(6);
+    const deuceT = block.locator('a[data-ask-zone-watch="deuce-t"]');
+    const href = await deuceT.getAttribute("href");
+    expect(href).toMatch(/^\/dashboard\/matches\/match-sep-28\?tab=film&f=/);
+    expect(href).toContain("sv.y");
+    expect(href).toContain("ct.d");
+    expect(href).toContain("vz.t");
+
+    await expect(deuceT.locator(".sr-only")).toHaveText(
+      "Deuce, T: 9 srv, open the film",
+    );
+    await expect(deuceT.locator("[data-ask-readout]")).toHaveText(
+      "Deuce, T: 9 srv",
+    );
+    // Each hit area sits over its zone's third of the service box, as
+    // shares of the drawing (no stylesheet here, so the inline place is
+    // what can be read): the box runs from the service line to the net.
+    const place = await deuceT.evaluate((node) => {
+      const { left, top, width, height } = (node as HTMLElement).style;
+      return { left, top, width, height };
+    });
+    expect(place.top).toMatch(/^44\.3/);
+    expect(place.height).toBe("50%");
+    expect(place.width).toMatch(/^10\.3/);
+    expect(parseFloat(place.left)).toBeGreaterThan(39);
+
+    await openFixture(page, "?case=full&visual=court-serve");
+    await expect(visual(page).locator("a")).toHaveCount(0);
+    await expect(visual(page).locator("[data-ask-zone-hover]")).toHaveCount(6);
+  });
+
+  test("trend: a hovered point reads out its date and figure, outside the wipe", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=trend");
+    const block = visual(page);
+    await expect(block.locator("[data-ask-readout]")).toHaveCount(0);
+    const targets = block.locator("[data-ask-trend-hover]");
+    await expect(targets).toHaveCount(3);
+    // No stylesheet in the harness, so the hit areas have no size to hover:
+    // the pointer's arrival is dispatched instead.
+    await targets.nth(1).dispatchEvent("mouseover");
+    const readout = block.locator("[data-ask-readout]");
+    await expect(readout).toHaveText("Jul 9: 63,0 %");
+    // Not inside the clipped wrapper.
+    await expect(
+      block.locator("[data-ask-wipe] [data-ask-readout]"),
+    ).toHaveCount(0);
+    await targets.nth(1).dispatchEvent("mouseout");
+    await expect(block.locator("[data-ask-readout]")).toHaveCount(0);
+  });
+
+  test("form: ticks that carry their matches read out in words, and open the match when they can", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=labelled-form");
+    const block = visual(page);
+    const ticks = block.locator("[data-ask-form-tick]");
+    await expect(ticks).toHaveCount(8);
+    await expect(block.locator("p")).toHaveText("Won 5–, lost 3");
+    const links = block.locator("a");
+    await expect(links).toHaveCount(2);
+    await expect(links.nth(0)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28",
+    );
+    await expect(links.nth(0)).toHaveText(
+      "Won against Theo Lindqvist, 6-4, 6-3, Sep 28, 2026, open match",
+    );
+    await expect(links.nth(1)).toHaveText(
+      "Won against Jonah Reyes, 7-5, 6-4, May 20, 2026, open match",
+    );
+
+    // A tick with no match is words and a readout alone.
+    await expect(ticks.nth(1)).toContainText(
+      "Lost to Marcus Hale, 4-6, 3-6, Sep 14, 2026",
+    );
+    await expect(ticks.nth(3)).toContainText("Won against Priya Nair");
+    await expect(ticks.nth(5).locator(".sr-only")).toHaveText("Won");
+
+    await expect(ticks.nth(1).locator("[data-ask-readout]")).toHaveText(
+      "Lost to Marcus Hale, 4-6, 3-6, Sep 14, 2026",
+    );
+    // Still the outcome colours, oldest left.
+    const colours = await ticks
+      .locator("[aria-hidden]:not([data-ask-readout])")
+      .evaluateAll((bars) =>
+        bars.map((bar) => (bar as HTMLElement).style.background),
+      );
+    expect(colours).toHaveLength(8);
+    expect(colours[0]).toContain("--viz-good");
+    expect(colours[1]).toContain("--viz-bad");
+  });
+});
+
+test.describe("visual first", () => {
+  test("when the question asked for a chart, the block follows the claim and the prose folds behind a disclosure", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=bars&lead=1");
+    const claim = await page.getByText(HEADLINE).boundingBox();
+    const block = await visual(page).boundingBox();
+    const tiles = await page
+      .getByRole("list", { name: "Figures" })
+      .boundingBox();
+    expect(claim!.y).toBeLessThan(block!.y);
+    expect(block!.y + block!.height).toBeLessThanOrEqual(tiles!.y);
+
+    const details = page.locator("details[data-ask-prose]");
+    await expect(details).toHaveCount(1);
+    await expect(details).not.toHaveAttribute("open", "");
+    const summary = details.locator("summary");
+    await expect(summary).toHaveText("The numbers in full");
+    // Folded: the sentences are in the page, not on it.
+    const prose = page.getByText("The gap is on the ad court.");
+    await expect(prose).toBeHidden();
+    await summary.click();
+    await expect(details).toHaveAttribute("open", "");
+    await expect(prose).toBeVisible();
+    const open = await prose.boundingBox();
+    expect(open!.y).toBeGreaterThan(tiles!.y);
+    // The sources and the footer stay under everything.
+    const foot = await signature(page).boundingBox();
+    expect(foot!.y).toBeGreaterThan(open!.y);
+  });
+
+  test("with no block the flag changes nothing, and without the flag the prose is open", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&lead=1");
+    await expect(page.locator("details")).toHaveCount(0);
+    await expect(page.getByText("The gap is on the ad court.")).toBeVisible();
+
+    await openFixture(page, "?case=full&visual=bars");
+    await expect(page.locator("details")).toHaveCount(0);
+    await expect(page.getByText("The gap is on the ad court.")).toBeVisible();
+  });
+
+  test("a failed answer draws no disclosure", async ({ page }) => {
+    await openFixture(page, "?case=error&code=no_data&visual=bars&lead=1");
+    await expect(page.locator("details")).toHaveCount(0);
+    await expect(visual(page)).toHaveCount(0);
+  });
+});
+
 /**
  * The team page (`?scope=team`): the answer is about a program's matches, so
  * nothing in it says "your matches", and each source says whose match it was.
  */
+
 test.describe("on the team page", () => {
   test("sources lead with the program's player; a match with none is the opponent alone", async ({
     page,

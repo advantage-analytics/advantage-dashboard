@@ -23,6 +23,7 @@ markers is hand-written — edit it as things move.
 | `/sign-up-success` | [`src/app/(auth)/sign-up-success/page.tsx`](src/app/(auth)/sign-up-success/page.tsx) |
 | `/sign-up` | [`src/app/(auth)/sign-up/page.tsx`](src/app/(auth)/sign-up/page.tsx) |
 | `/update-password` | [`src/app/(auth)/update-password/page.tsx`](src/app/(auth)/update-password/page.tsx) |
+| `/admin/ask` | [`src/app/admin/ask/page.tsx`](src/app/admin/ask/page.tsx) |
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin/labels/[sessionId]` | [`src/app/admin/labels/[sessionId]/page.tsx`](src/app/admin/labels/[sessionId]/page.tsx) |
 | `/admin/labels` | [`src/app/admin/labels/page.tsx`](src/app/admin/labels/page.tsx) |

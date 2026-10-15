@@ -73,6 +73,8 @@ test.beforeAll(async () => {
       "<!doctype html><html><body>" +
         '<div id="no-filters-root"></div>' +
         '<div id="with-filters-root"></div>' +
+        '<div id="light-no-filters-root"></div>' +
+        '<div id="light-with-filters-root"></div>' +
         '<script src="/bundle.js"></script></body></html>',
     );
   });
@@ -117,4 +119,23 @@ test("exactly one Clear all button when a cut is applied, and it resets the filt
 
   // Every layer at once — the list filters' own `clearAll`.
   await expect(header).toHaveAttribute("data-cleared", "true");
+});
+
+test("the report column states a cut's count once: the strip's, not the header's", async ({
+  page,
+}) => {
+  await page.goto(origin);
+  await expect
+    .poll(() => page.locator("html").getAttribute("data-hydrated"))
+    .toBe("true");
+
+  const count = (root: string) =>
+    page.locator(`#${root} span.mono.tabular`).filter({ hasText: "/" });
+  // Unfiltered, the header keeps "1 / 1" in both tones.
+  await expect(count("light-no-filters-root")).toHaveText("1 / 1");
+  await expect(count("no-filters-root")).toHaveText("1 / 1");
+  // With a cut, the report column's header drops it (the strip above says
+  // "N of M points"); the room's drawer, which has no strip, keeps it.
+  await expect(count("light-with-filters-root")).toHaveCount(0);
+  await expect(count("with-filters-root")).toHaveText("1 / 1");
 });

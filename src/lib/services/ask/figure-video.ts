@@ -1,5 +1,6 @@
 import {
   EMPTY_MATCH_FILTERS,
+  type CourtHalf,
   type MatchFilters,
   type PlayerSide,
   type RallyLengthBand,
@@ -10,7 +11,7 @@ import {
   serializeMatchFilters,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
-import { askMeasure } from "@/lib/services/ask/measures";
+import { ASK_MEASURES, askMeasure } from "@/lib/services/ask/measures";
 
 /**
  * A figure's "Watch": the Video tab of the one match an answer was computed
@@ -35,6 +36,14 @@ import { askMeasure } from "@/lib/services/ask/measures";
  * team baseline, a previous window), and for any scope but one match: a
  * figure over four matches has no one film to open. An `opp_` figure is the
  * opponent's, and swaps the sides.
+ *
+ * The same link for the rest of a block (roadmap 3.8): a bars or table row
+ * is one measure when its label is the dictionary's own name for one —
+ * the server canonicalises row labels (`answer-render.ts`), so the label
+ * is read back to its column (`measureForLabel`); a table row that is one
+ * match (`matchId`) opens that match's film, on the pattern's own points
+ * when the answer's source carries them; and a serve court's zone opens
+ * the side's serves into that zone from that court (`serveZoneVideoHref`).
  *
  * Pure: the same URL shape `pattern-video.ts` writes (`tab=film&f=…`).
  */
@@ -166,6 +175,21 @@ export function figureMatchFilters(column: string): MatchFilters | null {
   return filters;
 }
 
+/** A match's Video tab, on the points a serialised filter (`?f=`) selects when there is one. */
+export function watchHref(matchId: string, f = ""): string {
+  const query = new URLSearchParams({ tab: VIDEO_TAB });
+  if (f !== "") query.set("f", f);
+  return `/dashboard/matches/${encodeURIComponent(matchId)}?${query.toString()}`;
+}
+
+/** A match's Video tab, on the points `filters` select when there are any. */
+export function videoHref(
+  matchId: string,
+  filters: MatchFilters | null = null,
+): string {
+  return watchHref(matchId, filters ? serializeMatchFilters(filters) : "");
+}
+
 /**
  * The link a figure opens, or null: the one source match's Video tab on the
  * figure's points. Needs exactly one match in scope.
@@ -177,8 +201,87 @@ export function figureVideoHref(
   if (!column || !sources || sources.length !== 1) return null;
   const filters = figureMatchFilters(column);
   if (filters === null) return null;
-  const f = serializeMatchFilters(filters);
-  const query = new URLSearchParams({ tab: VIDEO_TAB });
-  if (f !== "") query.set("f", f);
-  return `/dashboard/matches/${encodeURIComponent(sources[0].matchId)}?${query.toString()}`;
+  return videoHref(sources[0].matchId, filters);
+}
+
+/** A label as it is compared: lowercased, letters and digits only. */
+function labelKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * The dictionary's labels back to a column, for the measures that have a
+ * preset. Two measures that share a label — the count and its share —
+ * share a preset too, so whichever is found first opens the same points.
+ */
+const LABEL_TO_MEASURE: ReadonlyMap<string, string> = new Map(
+  Object.entries(ASK_MEASURES)
+    .filter(([key]) => key in PRESETS)
+    .map(([key, measure]) => [labelKey(measure.label), key] as const)
+    .reverse(),
+);
+
+/**
+ * The column a row's label names, when the label is a measure's own name
+ * (`measures.ts`): bare for the subject's ("First serves in"), `opp_` for
+ * the opponent's ("First serves in, opponent"). Null for a label that is
+ * no measure, a measure with no Video preset, or a qualifier that is not
+ * this match's own points ("…, all matches"). "…, share" is the paired
+ * table's own suffix for a percentage beside its count, and names the same.
+ */
+export function measureForLabel(label: string): string | null {
+  const [name, ...rest] = label.split(",");
+  const key = LABEL_TO_MEASURE.get(labelKey(name));
+  if (!key) return null;
+  const qualifier = rest.join(",").trim().toLowerCase();
+  if (qualifier === "" || qualifier === "share") return key;
+  if (qualifier === "opponent") return `opp_${key}`;
+  return null;
+}
+
+/** The link a bars row opens, or null: its label's measure over the one source match. */
+export function barRowVideoHref(
+  label: string,
+  sources: readonly AskSourceMatch[] | null | undefined,
+): string | null {
+  return figureVideoHref(measureForLabel(label) ?? undefined, sources);
+}
+
+/**
+ * The link a table row opens, or null. A row that is one match (`matchId`)
+ * opens that match's film — on the points the answer counted there when the
+ * source carries a pattern link, else on its label's measure when the label
+ * is one, else the whole film. Any other row is its label's measure over
+ * the one source match, as a figure is.
+ */
+export function tableRowVideoHref(
+  row: { label: string; matchId?: string },
+  sources: readonly AskSourceMatch[] | null | undefined,
+): string | null {
+  const column = measureForLabel(row.label);
+  if (row.matchId) {
+    const source = sources?.find((match) => match.matchId === row.matchId);
+    if (source?.watch) return source.watch.href;
+    return videoHref(row.matchId, column ? figureMatchFilters(column) : null);
+  }
+  return figureVideoHref(column ?? undefined, sources);
+}
+
+/**
+ * A serve court's zone: the side's serves into that zone from that court,
+ * on the one source match's film. The block says whose serves (`server`)
+ * only when every cell was a serve measure of one side.
+ */
+export function serveZoneVideoHref(
+  matchId: string,
+  server: PlayerSide,
+  court: CourtHalf,
+  zone: ServeZone,
+): string {
+  return videoHref(matchId, {
+    ...EMPTY_MATCH_FILTERS,
+    server,
+    court,
+    serveZone: [zone],
+  });
 }

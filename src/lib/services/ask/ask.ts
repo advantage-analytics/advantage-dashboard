@@ -6,11 +6,12 @@ import {
   type AskRow,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
-import type {
-  AskErrorCode,
-  AskEvent,
-  AskSourceMatch,
-  AskVisual,
+import {
+  stringOrNull,
+  type AskErrorCode,
+  type AskEvent,
+  type AskSourceMatch,
+  type AskVisual,
 } from "@/lib/services/ask/events";
 import {
   equalBaselineColumns,
@@ -42,6 +43,12 @@ import {
 } from "@/lib/services/ask/compare";
 import { askMeasure } from "@/lib/services/ask/measures";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
+import type { AskExample } from "@/lib/services/ask/examples";
+import {
+  type AskThreadState,
+  previousHeadlineFromTurns,
+  readAskThreadState,
+} from "@/lib/services/ask/thread-state";
 import type { AskScope } from "@/lib/services/ask/scope";
 import {
   type AskPlanQuery,
@@ -122,6 +129,7 @@ import {
   asksAboutMomentum,
   buildMomentumAnswer,
 } from "@/lib/services/ask/momentum";
+import { asksForChart } from "@/lib/services/ask/chart-request";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -296,6 +304,21 @@ export interface AskQuestionInput {
    * viewer where Ask does. Without it, no answer carries a link.
    */
   pageSeats?: (matchIds: string[]) => Promise<Map<string, AskPageSeat>>;
+  /**
+   * The nearest rated (question → plan) pairs to this question
+   * (`examples.ts`), shown to the planner; absent or empty, the prompt's
+   * fixed examples stand alone. May be a promise: the route passes the
+   * retrieval still in flight, so the "planning" status goes out first and
+   * the wait overlaps it.
+   */
+  examples?: readonly AskExample[] | PromiseLike<readonly AskExample[]>;
+  /**
+   * Coach mode (`coach.ts`): decided by the route from the flag, a team scope
+   * and the viewer's role in the program. Read only for a team question that
+   * asks for advice: the answer prompt may then recommend, and the notice is
+   * `coach` instead of `no_advice`.
+   */
+  coach?: boolean;
 }
 
 // ── Sentences the error events carry ─────────────────────────────────────────
@@ -773,9 +796,12 @@ export function previousPlanFromMessages(
     const sql = stringOrNull(record?.sql);
     if (!scopeSql || !sql || record?.mock === true) return null;
     const compare = compareKindOfSql(sql);
-    return compare
+    // The state that answer saved (`thread-state.ts`), when it saved one.
+    const state = readAskThreadState(record?.state);
+    const plan: AskPreviousPlan = compare
       ? { scope_sql: scopeSql, sql: null, compare }
       : { scope_sql: scopeSql, sql: sql === ASK_REVIEW_SQL ? null : sql };
+    return state ? { ...plan, state } : plan;
   }
   return null;
 }
@@ -822,6 +848,10 @@ export async function* askQuestion(
 ): AsyncGenerator<AskEvent, void, undefined> {
   const { db, model, scope } = input;
   const team = scope.kind === "team";
+  // Coach mode is a team matter; a personal flag, however it got there, is nothing.
+  const coach = team && input.coach === true;
+  /** The state the planner last wrote (`thread-state.ts`): saved with the answer for the next turn. */
+  const planState: { value: AskThreadState | null } = { value: null };
   const cannotAnswer = team
     ? ASK_TEAM_CANNOT_ANSWER_MESSAGE
     : ASK_CANNOT_ANSWER_MESSAGE;
@@ -855,12 +885,15 @@ export async function* askQuestion(
     // database refuses is told back to the planner once. The second failure
     // of any kind ends the question.
     const today = input.now().toISOString().slice(0, 10);
+    const examples = model.configured ? ((await input.examples) ?? []) : [];
     const systemPrompt = model.configured
       ? buildPlanPrompt({
           today,
           tags: input.tags.prompt,
           conversation: input.conversation,
           previousPlan: input.previousPlan ?? null,
+          question: input.question,
+          examples,
           ...(team ? { scope } : {}),
         })
       : "";
@@ -1352,7 +1385,14 @@ export async function* askQuestion(
       attempt += 1
     ) {
       let step = reroute(
-        await planOnce(model, systemPrompt, messages, cannotAnswer, team),
+        await planOnce(
+          model,
+          systemPrompt,
+          messages,
+          cannotAnswer,
+          team,
+          planState,
+        ),
       );
       // A shot pattern is read into a fixed form by the model and queried by
       // the server (`pattern.ts`); only the planner's scope is kept. Read
@@ -1980,6 +2020,10 @@ export async function* askQuestion(
     yield { type: "sources", matches: result.matches };
     yield { type: "status", stage: "writing" };
 
+    // The variant that may recommend: coach mode, advice asked, and the
+    // model writing it. A review is server-written, so it keeps the notice.
+    const coached = coach && plan.asks_for_advice && reviewText === null;
+
     let chunks: AsyncIterable<string>;
     if (reviewText !== null) {
       // Written by the server, not the model: the same syntax, through the
@@ -1991,7 +2035,10 @@ export async function* askQuestion(
           question: input.question,
           rows: result.rows,
           matchCount: result.matches.length,
+          // So a follow-up reads as one (`thread-state.ts`).
+          previousHeadline: previousHeadlineFromTurns(input.conversation),
           ...(team ? { scope } : {}),
+          ...(coached ? { coach: true } : {}),
         });
         chunks = await model.stream(
           answerPrompt,
@@ -2009,7 +2056,10 @@ export async function* askQuestion(
       chunks = mockAskAnswerStream(scope);
     }
 
-    const rendered = renderAskAnswer(guardedStream(chunks), result.rows);
+    const rendered = renderAskAnswer(guardedStream(chunks), result.rows, {
+      // A question that asked for a chart gets the visual first (`3.10`).
+      chartAsked: asksForChart(input.question),
+    });
     try {
       for await (const event of rendered.events) {
         if (event.type === "error") {
@@ -2056,7 +2106,9 @@ export async function* askQuestion(
 
     // The no-advice notice is this module's, never the model's: a signal
     // beside the answer, after whatever the model wrote, which the client
-    // shows as `ASK_NO_ADVICE_SENTENCE`.
+    // shows as `ASK_NO_ADVICE_SENTENCE`. In coach mode (`coach.ts`) the same
+    // signal is `coach`: the answer was written by the variant that may
+    // recommend, and the client says so instead.
     if (answer.droppedSentences > 0) {
       console.warn(ASK_DROPPED_SENTENCES_LOG, {
         count: answer.droppedSentences,
@@ -2067,7 +2119,7 @@ export async function* askQuestion(
     // with what the matches show, whatever the planner flagged.
     const noAdvice = plan.asks_for_advice || reviewed;
     if (noAdvice) {
-      yield { type: "notice", notice: "no_advice" };
+      yield { type: "notice", notice: coached ? "coach" : "no_advice" };
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -2076,7 +2128,10 @@ export async function* askQuestion(
     const saved = await rpc(db, "ask_save_exchange_ids", {
       p_conversation_id: input.conversationId,
       p_question: savedQuestion(input.question, input.tags),
-      p_answer: savedAnswer(answer, result, plan, noAdvice, model.configured),
+      p_answer: savedAnswer(answer, result, plan, noAdvice, model.configured, {
+        state: planState.value,
+        coach: coached,
+      }),
       // Named only for a team question: a personal save is the three
       // arguments it always was.
       ...(scope.kind === "team" ? { p_program_id: scope.programId } : {}),
@@ -2131,6 +2186,8 @@ async function planOnce(
   messages: ChatMessage[],
   cannotAnswer: string,
   team: boolean,
+  /** Where the reply's `state` is left for the save step; the last reply's wins. */
+  state: { value: AskThreadState | null } = { value: null },
 ): Promise<PlanStep> {
   if (!model.configured) {
     return {
@@ -2161,6 +2218,7 @@ async function planOnce(
   }
 
   const parsed = parsePlanReply(reply);
+  if (parsed !== null) state.value = parsed.state ?? null;
   if (parsed === null) {
     return {
       ok: false,
@@ -2255,13 +2313,21 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
   const record = asRecord(value);
   if (!record) return null;
   const advice = record.asks_for_advice === true;
+  // The thread state, when the reply carries one worth keeping; a missing or
+  // all-empty one is simply absent, so a reply without it reads as before.
+  const state = readAskThreadState(record.state);
+  const withState = <T extends object>(plan: T): T =>
+    state ? { ...plan, state } : plan;
   // A structured reply may carry every field of the schema, the unused ones
   // empty or filled with a placeholder: neither is a refusal.
   if (
     typeof record.cannot_answer === "string" &&
     !isBlankPlaceholder(record.cannot_answer)
   ) {
-    return { cannot_answer: record.cannot_answer, asks_for_advice: advice };
+    return withState({
+      cannot_answer: record.cannot_answer,
+      asks_for_advice: advice,
+    });
   }
   // The review: `review` exactly true and a scope. Any `sql` beside it is
   // ignored — the query is never the planner's.
@@ -2270,7 +2336,11 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
     typeof record.scope_sql === "string" &&
     record.scope_sql.trim() !== ""
   ) {
-    return { review: true, scope_sql: record.scope_sql, asks_for_advice: true };
+    return withState({
+      review: true as const,
+      scope_sql: record.scope_sql,
+      asks_for_advice: true,
+    });
   }
   // A comparison: `compare` one of the three kinds and a scope. Any `sql`
   // beside it is ignored — the query is never the planner's.
@@ -2287,12 +2357,12 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
           (entry): entry is string => typeof entry === "string",
         )
       : [];
-    return {
+    return withState({
       compare: record.compare.trim().toLowerCase() as AskCompareKind,
       scope_sql: record.scope_sql,
       ...(measures.length > 0 ? { measures } : {}),
       asks_for_advice: advice,
-    };
+    });
   }
   if (
     typeof record.scope_sql === "string" &&
@@ -2300,11 +2370,11 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
     typeof record.sql === "string" &&
     record.sql.trim() !== ""
   ) {
-    return {
+    return withState({
       scope_sql: record.scope_sql,
       sql: record.sql,
       asks_for_advice: advice,
-    };
+    });
   }
   return null;
 }
@@ -2716,6 +2786,8 @@ export interface AskSavedAnswer {
   figures: AskAnswerResult["figures"];
   /** The visual block, resolved; null when the answer had none. */
   visual: AskVisual | null;
+  /** True when the question asked for a chart: the page draws the visual first. */
+  visualLead?: boolean;
   body: string;
   /** True when the question asked for advice: the client shows the no-advice notice. */
   noAdvice: boolean;
@@ -2725,6 +2797,18 @@ export interface AskSavedAnswer {
   scopeSql: string;
   /** True when no provider was configured and the template answered. */
   mock: boolean;
+  /**
+   * What the planner said the conversation is about after this answer
+   * (`thread-state.ts`); the next turn's plan prompt reads it back. Absent
+   * when the planner wrote none.
+   */
+  state?: AskThreadState;
+  /**
+   * True when the answer was written in coach mode to a question that asked
+   * for advice: it may recommend, so `noAdvice` is false, and a reader may
+   * show the coach notice (`ASK_COACH_SENTENCE`) instead. Absent otherwise.
+   */
+  coach?: true;
 }
 
 function savedQuestion(
@@ -2740,18 +2824,27 @@ function savedAnswer(
   plan: AskPlanQuery,
   noAdvice: boolean,
   configured: boolean,
+  thread: { state: AskThreadState | null; coach: boolean } = {
+    state: null,
+    coach: false,
+  },
 ): AskSavedAnswer {
+  const coached = thread.coach;
   return {
     headline: answer.headline,
     figures: answer.figures,
     visual: answer.visual,
+    ...(answer.visualLead ? { visualLead: true as const } : {}),
     body: answer.text,
-    noAdvice,
+    // A coached answer may recommend: the no-advice sentence would be false.
+    noAdvice: coached ? false : noAdvice,
     sources: result.matches,
     matchIds: result.matches.map((match) => match.matchId),
     sql: plan.sql,
     scopeSql: plan.scope_sql,
     mock: !configured,
+    ...(thread.state ? { state: thread.state } : {}),
+    ...(coached ? { coach: true as const } : {}),
   };
 }
 
@@ -2853,10 +2946,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
 }
 
 function oneSentence(text: string): string {
