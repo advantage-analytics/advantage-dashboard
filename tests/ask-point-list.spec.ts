@@ -114,7 +114,7 @@ test("one line: a link into the film on every point, the stretch and time beside
     "Watch all 3 points in this match",
   );
   // Across two sets; 3s + 9s of timed film, the untimed point adds nothing.
-  await expect(meta(page)).toHaveText("Sets 1–2 · under a minute");
+  await expect(meta(page)).toHaveText("Sets 1–2 · Under a minute");
 
   // A link, not a list: no row per point, and the one link is the line's.
   await expect(page.locator("[data-ask-point]")).toHaveCount(0);
@@ -133,7 +133,7 @@ test("a counted cut is the answer's points, and a capped one says it is the firs
     "aria-label",
     "Watch the 3 points behind this answer",
   );
-  await expect(meta(page)).toHaveText("Sets 1–2 · under a minute · first 3");
+  await expect(meta(page)).toHaveText("Sets 1–2 · Under a minute · First 3");
   await expect(line(page)).toHaveAttribute(
     "aria-label",
     "Points behind this answer",
@@ -156,5 +156,5 @@ test('no cut and a capped list: the match\'s points, never "all"', async ({
 }) => {
   await openFixture(page, "?case=page&truncated=1");
   await expect(watch(page)).toHaveText("Watch 3 points");
-  await expect(meta(page)).toContainText("first 3");
+  await expect(meta(page)).toContainText("First 3");
 });

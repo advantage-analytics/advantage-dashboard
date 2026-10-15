@@ -25,9 +25,9 @@ import type { AskShowPoint } from "@/lib/services/ask/show-response";
  * The link's words keep the list's old honesty about whose points these are:
  * "Watch the 12 points" when they are the ones the headline figure counts,
  * "Watch all 54 points" for a whole match nothing cut, and "Watch 54 points"
- * otherwise. The grey part names the stretch — "Set 1 · games 2–4", or
+ * otherwise. The grey part names the stretch — "Set 1 · Games 2–4", or
  * "Sets 1–2" across sets — and the running time when the source timed them,
- * then "first 54" when the match held more points than the server sent.
+ * then "First 54" when the match held more points than the server sent.
  *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it
  * is rendered by an offline component harness (`tests/ask-point-list.spec.ts`).
@@ -80,7 +80,7 @@ export function askPointListLabel({
   return `Watch ${count} ${noun}`;
 }
 
-/** "Set 1 · games 2–4", "Set 2 · game 7", "Sets 1–2"; null when unrecorded. */
+/** "Set 1 · Games 2–4", "Set 2 · Game 7", "Sets 1–2"; null when unrecorded. */
 export function askPointSpan(points: readonly AskShowPoint[]): string | null {
   const placed = points.filter(
     (point) => point.setNumber !== null && point.gameNumber !== null,
@@ -92,11 +92,11 @@ export function askPointSpan(points: readonly AskShowPoint[]): string | null {
     return `Sets ${first.setNumber}–${last.setNumber}`;
   }
   return first.gameNumber === last.gameNumber
-    ? `Set ${first.setNumber} · game ${first.gameNumber}`
-    : `Set ${first.setNumber} · games ${first.gameNumber}–${last.gameNumber}`;
+    ? `Set ${first.setNumber} · Game ${first.gameNumber}`
+    : `Set ${first.setNumber} · Games ${first.gameNumber}–${last.gameNumber}`;
 }
 
-/** "about 3 min" / "under a minute"; null when no point was timed. */
+/** "About 3 min" / "Under a minute"; null when no point was timed. */
 export function askPointRunningTime(
   points: readonly AskShowPoint[],
 ): string | null {
@@ -106,8 +106,8 @@ export function askPointRunningTime(
     0,
   );
   if (seconds <= 0) return null;
-  if (seconds < 60) return "under a minute";
-  return `about ${Math.round(seconds / 60)} min`;
+  if (seconds < 60) return "Under a minute";
+  return `About ${Math.round(seconds / 60)} min`;
 }
 
 export function AskPointList({
@@ -127,7 +127,7 @@ export function AskPointList({
   const meta = [
     askPointSpan(points),
     askPointRunningTime(points),
-    truncated ? `first ${count}` : null,
+    truncated ? `First ${count}` : null,
   ].filter(Boolean);
 
   return (
