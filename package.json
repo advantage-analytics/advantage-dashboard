@@ -33,6 +33,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@internationalized/date": "^3.12.4",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@opentelemetry/api-logs": "^0.222.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.11.0",
@@ -70,7 +71,8 @@
     "recharts": "^2.15.0",
     "stripe": "^17.7.0",
     "tailwind-merge": "^3.3.1",
-    "tus-js-client": "^4.3.1"
+    "tus-js-client": "^4.3.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.14",
