@@ -2,11 +2,14 @@ import { expect, test } from "@playwright/test";
 
 import {
   POSTHOG_PROJECT_ID,
+  adminAskSummary,
   askerName,
   filterAdminAskFeedback,
   posthogAppOrigin,
   posthogLinks,
   readAdminAskFeedback,
+  shortProgramName,
+  shortSchoolName,
   sortAdminAskFeedback,
   type DbAdminAskFeedback,
 } from "@/lib/data/ask-admin-view";
@@ -95,7 +98,11 @@ test.describe("readAdminAskFeedback", () => {
       PEOPLE,
       ORIGIN,
     );
-    expect(read?.program).toEqual({ id: PROGRAM, name: "Westbrook College" });
+    expect(read?.program).toEqual({
+      id: PROGRAM,
+      name: "Westbrook College",
+      shortName: "Westbrook College",
+    });
     expect(read?.asker.name).toBe("Player 5ddf1688");
   });
 
@@ -207,4 +214,60 @@ test("askerName: first and last, else the id's head", () => {
   expect(askerName(ASKER, " Ana ", "Sokolov")).toBe("Ana Sokolov");
   expect(askerName(ASKER, null, "Sokolov")).toBe("Sokolov");
   expect(askerName(ASKER, "", "")).toBe("Player 303b22e6");
+});
+
+test.describe("the Scope column's short program name", () => {
+  test("drops the school's generic framing so campuses stay apart", () => {
+    expect(shortSchoolName("University of California, San Diego")).toBe(
+      "California, San Diego",
+    );
+    expect(shortSchoolName("University of California, Berkeley")).toBe(
+      "California, Berkeley",
+    );
+    expect(shortSchoolName("Western Kentucky University")).toBe(
+      "Western Kentucky",
+    );
+    expect(shortSchoolName("The Ohio State University")).toBe("Ohio State");
+    // Nothing but framing: the name stands.
+    expect(shortSchoolName("University")).toBe("University");
+  });
+
+  test("marks the squad so a school's two teams stay apart", () => {
+    expect(
+      shortProgramName("University of California, San Diego", "womens"),
+    ).toBe("California, San Diego · W");
+    expect(shortProgramName("Riverside Tennis Club", "coed")).toBe(
+      "Riverside Tennis Club · Co-ed",
+    );
+    expect(shortProgramName("Riverside Tennis Club", null)).toBe(
+      "Riverside Tennis Club",
+    );
+  });
+
+  test("a loader-built short name wins over the derived one", () => {
+    const read = readAdminAskFeedback(
+      row({ program_id: PROGRAM }),
+      { ...PEOPLE, shortPrograms: new Map([[PROGRAM, "Westbrook · W"]]) },
+      ORIGIN,
+    );
+    expect(read?.program?.shortName).toBe("Westbrook · W");
+  });
+});
+
+test.describe("adminAskSummary", () => {
+  const rows = (down: number, up: number) => [
+    ...Array.from({ length: down }, () => ({ rating: "down" as const })),
+    ...Array.from({ length: up }, () => ({ rating: "up" as const })),
+  ];
+
+  test("a list under the cap names its total", () => {
+    expect(adminAskSummary(rows(2, 1), false)).toBe("3 thumbs · 2 down · 1 up");
+    expect(adminAskSummary(rows(1, 0), false)).toBe("1 thumb · 1 down · 0 up");
+  });
+
+  test("a capped list never claims a total it does not know", () => {
+    const summary = adminAskSummary(rows(150, 50), true);
+    expect(summary).toBe("Newest 200 shown · 150 down · 50 up");
+    expect(summary).not.toMatch(/^200 thumbs/);
+  });
 });

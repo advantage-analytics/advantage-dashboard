@@ -485,8 +485,12 @@ test.describe("POST /api/ask · the service-role boundary", () => {
         const body = await refused(response);
         expect(body.code).toBe("internal_error");
         expect(body.detail).toBe("service_role_unavailable");
-        // Nothing reserved, nothing run, the provider never called.
-        expect(calls.rpc).toEqual([]);
+        // Nothing reserved, nothing run, the provider never called. The
+        // cache's data version is a read started beside the tag reads (in
+        // configured mode only) and is the one call allowed here.
+        expect(
+          calls.rpc.filter((call) => call.fn !== "ask_data_version"),
+        ).toEqual([]);
         expect(calls.llm).toBe(0);
       }
     } finally {

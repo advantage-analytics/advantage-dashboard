@@ -36,7 +36,10 @@ export interface AskShowPoint {
 export type AskShowFilm =
   | {
       state: "ready";
-      /** An attachment renews through `GET /api/matches/[id]/video`; a job's URL is this one. */
+      /**
+       * Both lineages play `playback.url` as signed here. Only an attachment
+       * can renew a lapsed one (`GET /api/matches/[id]/video`); a job's is final.
+       */
       source: "attachment" | "job";
       playback: {
         url: string;

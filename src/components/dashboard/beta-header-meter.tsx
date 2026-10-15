@@ -117,9 +117,19 @@ export function BetaMeterPill({
         className={cn(
           "brand-mesh-gradient mr-1 inline-flex h-7 cursor-pointer items-center gap-2 rounded-full pr-3 pl-1 text-white shadow-[0_1px_2px_rgba(59,130,246,0.35)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.97] motion-reduce:active:scale-100",
           "focus-visible:shadow-[0_0_0_2px_white,0_0_0_4px_var(--blue)] focus-visible:outline-none",
+          hours !== null && "max-md:pl-2",
         )}
       >
-        <span className="inline-flex h-5 items-center rounded-full bg-white/25 px-2 text-[9px] font-medium tracking-[0.08em] uppercase">
+        {/* The tag gives way under 768px — the header there is 326px and
+            the ring and hours are what the pill is for; the name is still
+            the button's label. Kept when the read failed: then it is all
+            the pill has. */}
+        <span
+          className={cn(
+            "inline-flex h-5 items-center rounded-full bg-white/25 px-2 text-[9px] font-medium tracking-[0.08em] uppercase",
+            hours !== null && "max-md:hidden",
+          )}
+        >
           {name}
         </span>
         {hours === "loading" && (

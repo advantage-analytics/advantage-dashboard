@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -270,12 +270,16 @@ function AskThread({
     summary: AskConversationSummary;
     against: AskConversationSummary[];
   } | null>(null);
-  const listed =
-    created &&
-    created.against === conversations &&
-    !conversations.some((row) => row.id === created.summary.id)
-      ? [created.summary, ...conversations]
-      : conversations;
+  // One array per change, not per render: the rail is memoised on it.
+  const listed = useMemo(
+    () =>
+      created &&
+      created.against === conversations &&
+      !conversations.some((row) => row.id === created.summary.id)
+        ? [created.summary, ...conversations]
+        : conversations,
+    [created, conversations],
+  );
 
   const hasThread = state.exchanges.length > 0;
 
@@ -327,55 +331,93 @@ function AskThread({
     }).catch(() => undefined);
   }
 
+  // The latest `send` and thread, for the handlers below that keep one
+  // identity across renders — every streamed event re-renders this shell,
+  // and a new handler would re-render every memoised exchange with it.
+  const latest = useRef<{
+    send: typeof send;
+    exchanges: AskExchange[];
+  } | null>(null);
+  useEffect(() => {
+    latest.current = { send, exchanges: state.exchanges };
+  });
+
   // A starter or a follow-up is a question with its tags, sent as typed.
-  function pick(starter: AskStarter) {
-    void send({ text: starter.text, tags: starter.tags });
-  }
+  const pick = useCallback((starter: AskStarter) => {
+    void latest.current?.send({ text: starter.text, tags: starter.tags });
+  }, []);
+
+  // A clarifying choice: the latest question again, with the option on it.
+  // Only the latest question's choices can still be picked.
+  const chooseLatest = useCallback((option: string) => {
+    const exchanges = latest.current?.exchanges ?? [];
+    const last = exchanges[exchanges.length - 1];
+    if (!last) return;
+    void latest.current?.send({
+      ...last.question,
+      text: `${last.question.text} (${option})`,
+    });
+  }, []);
 
   // Under the newest answer, once it has settled: what to ask next, from the
   // subject of what was just asked. Never under an error or a question still
   // being answered.
   const newest = state.exchanges[state.exchanges.length - 1];
-  const followUps =
-    newest && newest.answer.status === "done" && !state.inFlight
-      ? askFollowUps(newest.question.text, scope)
-      : [];
+  const newestText = newest?.question.text;
+  const newestDone = newest?.answer.status === "done";
+  const followUps = useMemo(
+    () =>
+      newestText !== undefined && newestDone && !state.inFlight
+        ? askFollowUps(newestText, scope)
+        : NO_FOLLOW_UPS,
+    [newestText, newestDone, state.inFlight, scope],
+  );
 
-  async function deleteConversation(id: string) {
-    const result = await deleteAskConversation(id, scope.kind);
-    if (!result.ok) return false;
-    if (id === state.conversationId) {
-      reset();
-      router.replace(basePath);
-    }
-    return true;
-  }
+  const conversationId = state.conversationId;
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      const result = await deleteAskConversation(id, scope.kind);
+      if (!result.ok) return false;
+      if (id === conversationId) {
+        reset();
+        router.replace(basePath);
+      }
+      return true;
+    },
+    [scope.kind, conversationId, reset, router, basePath],
+  );
 
-  async function renameConversation(id: string, title: string) {
-    const result = await renameAskConversation(id, title, scope.kind);
-    return result.ok;
-  }
+  const renameConversation = useCallback(
+    async (id: string, title: string) => {
+      const result = await renameAskConversation(id, title, scope.kind);
+      return result.ok;
+    },
+    [scope.kind],
+  );
 
-  async function pinConversation(id: string, pinned: boolean) {
-    const result = await setAskConversationPinned(id, pinned, scope.kind);
-    return result.ok;
-  }
+  const pinConversation = useCallback(
+    async (id: string, pinned: boolean) => {
+      const result = await setAskConversationPinned(id, pinned, scope.kind);
+      return result.ok;
+    },
+    [scope.kind],
+  );
 
-  async function saveView(
-    draft: AskSavedViewDraft,
-  ): Promise<AskSaveViewOutcome> {
-    const result = await createSavedView(draft);
-    return result.ok
-      ? { ok: true, view: result.data }
-      : { ok: false, error: result.error };
-  }
+  const pinAnswer = useCallback(
+    (answerId: string) => pinAskAnswer(answerId, scope.kind),
+    [scope.kind],
+  );
+  const unpinAnswer = useCallback(
+    async (pinId: string) => (await unpinAskAnswer(pinId, scope.kind)).ok,
+    [scope.kind],
+  );
 
   // Where the composer is, so "New question" can put the caret in it: with
   // no thread open the button changes nothing else on screen, and a control
   // that visibly does nothing reads as broken.
   const composerBox = useRef<HTMLDivElement>(null);
 
-  function newQuestion() {
+  const newQuestion = useCallback(() => {
     reset();
     // Already at the bare URL when nothing was saved; a push would only add
     // a history entry that goes nowhere.
@@ -383,7 +425,7 @@ function AskThread({
     requestAnimationFrame(() =>
       composerBox.current?.querySelector("textarea")?.focus(),
     );
-  }
+  }, [reset, router, basePath]);
 
   // ⇧⌘O / Ctrl+Shift+O. The listener is registered once and reads the
   // latest handler and flight state through a ref, so it never acts on a
@@ -406,9 +448,13 @@ function AskThread({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const quotaView: AskQuotaView | null = state.usage
-    ? { ...state.usage, resetsOn: quota?.resetsOn ?? null }
-    : quota;
+  const quotaView = useMemo<AskQuotaView | null>(
+    () =>
+      state.usage
+        ? { ...state.usage, resetsOn: quota?.resetsOn ?? null }
+        : quota,
+    [state.usage, quota],
+  );
 
   const composer = (
     <div ref={composerBox} className="flex flex-col gap-2">
@@ -456,48 +502,43 @@ function AskThread({
             {/* Exchanges sit further apart (48px) than a question from its
                 own answer (24px), so where one ends reads at a glance. */}
             <div className={cn(ASK_COLUMN, "flex flex-col gap-12")}>
-              {state.exchanges.map((exchange, index) => (
-                <AskExchangeView
-                  key={exchange.id}
-                  exchange={exchange}
-                  scope={scope}
-                  onRate={rate}
-                  initialPinId={
-                    exchange.answer.answerId
-                      ? (pinByAnswer.get(exchange.answer.answerId) ?? null)
-                      : null
-                  }
-                  onPinAnswer={(answerId) => pinAskAnswer(answerId, scope.kind)}
-                  onUnpinAnswer={async (pinId) =>
-                    (await unpinAskAnswer(pinId, scope.kind)).ok
-                  }
-                  onSaveView={saveView}
-                  // Only the latest question's choices can still be picked.
-                  onChoose={
-                    index === state.exchanges.length - 1
-                      ? (option) =>
-                          send({
-                            ...exchange.question,
-                            text: `${exchange.question.text} (${option})`,
-                          })
-                      : undefined
-                  }
-                />
-              ))}
-              {followUps.length > 0 && (
-                <AskStarters
-                  label={copy.followUps}
-                  starters={followUps}
-                  onPick={pick}
-                  className="-mt-4"
-                />
-              )}
+              {state.exchanges.map((exchange, index) => {
+                const isLatest = index === state.exchanges.length - 1;
+                return (
+                  <AskExchangeView
+                    key={exchange.id}
+                    exchange={exchange}
+                    scope={scope}
+                    onRate={rate}
+                    initialPinId={
+                      exchange.answer.answerId
+                        ? (pinByAnswer.get(exchange.answer.answerId) ?? null)
+                        : null
+                    }
+                    onPinAnswer={pinAnswer}
+                    onUnpinAnswer={unpinAnswer}
+                    onSaveView={saveView}
+                    // Only the latest question's choices can still be picked.
+                    onChoose={isLatest ? chooseLatest : undefined}
+                    followUps={isLatest ? followUps : NO_FOLLOW_UPS}
+                    followUpsLabel={copy.followUps}
+                    onPickFollowUp={pick}
+                  />
+                );
+              })}
               <div ref={end} aria-hidden="true" />
             </div>
           </div>
           {/* Outside the scroller, so it holds the foot of the thread area
               while the thread moves above it. */}
-          <div className={cn(ASK_GUTTER, "shrink-0 pt-3 pb-6")}>
+          {/* At 200% zoom (a 450px-tall window) every pixel of the foot is
+              one the thread loses, so the air under the composer halves. */}
+          <div
+            className={cn(
+              ASK_GUTTER,
+              "shrink-0 pt-3 pb-6 [@media(max-height:560px)]:pb-3",
+            )}
+          >
             <div className={ASK_COLUMN}>{composer}</div>
           </div>
         </>
@@ -508,13 +549,17 @@ function AskThread({
               {copy.sentNotice(sent.opponentName)}
             </p>
           )}
-          {composer}
-          <AskStarters
-            label={copy.starters}
-            starters={starters}
-            onPick={pick}
-            disabled={state.inFlight}
-          />
+          {/* The starters belong to the composer — 12px under it — and the
+              hand-off below is a separate thought, the intro's 24px away. */}
+          <div className="flex flex-col gap-3">
+            {composer}
+            <AskStarters
+              label={copy.starters}
+              starters={starters}
+              onPick={pick}
+              disabled={state.inFlight}
+            />
+          </div>
           {/* The hand-off (roadmap 6.2): the wizard, with a way back here.
               Personal only — the team wizard has no return path yet. The
               quietest link on the page, as the day-zero offer's sample
@@ -533,15 +578,32 @@ function AskThread({
   );
 }
 
+/** A save-view card's write: the server action, its result reshaped. */
+async function saveView(draft: AskSavedViewDraft): Promise<AskSaveViewOutcome> {
+  const result = await createSavedView(draft);
+  return result.ok
+    ? { ok: true, view: result.data }
+    : { ok: false, error: result.error };
+}
+
+/** One empty list, so an exchange without follow-ups keeps equal props. */
+const NO_FOLLOW_UPS: readonly AskStarter[] = [];
+
 /**
  * One exchange: the asker's prompt against the right edge, what came back
  * on the left, and — under a finished answer — the cards for what to do
- * next. All in the same column, so an answer's left edge is the column's.
+ * next, then (the newest only) what to ask next. All in the same column, so
+ * an answer's left edge is the column's, and all 24px apart, the article's
+ * own gap.
  *
  * The pin is this exchange's own state, seeded from the saved conversation
  * and moved by the card's own pin and unpin; the page is not re-read for it.
+ *
+ * Memoised: a streamed event re-renders the page, and an exchange that is
+ * already settled has nothing new to draw. Every prop the page hands it keeps
+ * its identity across renders for that reason.
  */
-function AskExchangeView({
+const AskExchangeView = memo(function AskExchangeView({
   exchange,
   scope,
   onChoose,
@@ -550,6 +612,9 @@ function AskExchangeView({
   onPinAnswer,
   onUnpinAnswer,
   onSaveView,
+  followUps,
+  followUpsLabel,
+  onPickFollowUp,
 }: {
   exchange: AskExchange;
   scope: AskScope;
@@ -560,6 +625,10 @@ function AskExchangeView({
   onPinAnswer: (answerId: string) => Promise<AskPinOutcome>;
   onUnpinAnswer: (pinId: string) => Promise<boolean>;
   onSaveView: (draft: AskSavedViewDraft) => Promise<AskSaveViewOutcome>;
+  /** What to ask next: the newest settled exchange's only. */
+  followUps: readonly AskStarter[];
+  followUpsLabel: string;
+  onPickFollowUp: (starter: AskStarter) => void;
 }) {
   const { question, answer } = exchange;
   const { answerId } = answer;
@@ -605,6 +674,13 @@ function AskExchangeView({
           onSaveView={onSaveView}
         />
       )}
+      {followUps.length > 0 && (
+        <AskStarters
+          label={followUpsLabel}
+          starters={followUps}
+          onPick={onPickFollowUp}
+        />
+      )}
     </article>
   );
-}
+});

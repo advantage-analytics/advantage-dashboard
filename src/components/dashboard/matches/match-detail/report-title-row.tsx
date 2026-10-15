@@ -21,8 +21,8 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  *   </MatchReport.TitleRow>
  *
  * Layout only — the parts inside decide what to draw. The left block wants
- * `min-w-0` (the frame's), so a long facts line cannot push the actions out
- * of the row.
+ * `min-w-0` (the frame's), so a long facts line wraps rather than pushing
+ * the actions out of the row.
  */
 export function MatchReportTitleRow({ children }: { children: ReactNode }) {
   return <div className="flex items-end gap-2.5">{children}</div>;
@@ -106,7 +106,8 @@ export function MatchReportTitleActions({ children }: { children: ReactNode }) {
     <>
       <div className="flex-1" />
       {/* `shrink-0`: when the title block runs long, the facts line gives up
-          width (its tournament fact truncates), never the actions. */}
+          width (it wraps to a second line), never the actions — which stay
+          at the row's end, on its last line (`items-end`). */}
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </>
   );

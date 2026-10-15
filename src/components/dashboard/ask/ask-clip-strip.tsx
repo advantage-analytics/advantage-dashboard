@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { FilmClock } from "@/components/dashboard/matches/match-detail/film/film-timeline";
@@ -32,10 +36,13 @@ import {
  * It is a `<video>` on the match's read-only playback URL and the film
  * room's own seek arithmetic (`ask-clip-sequence.ts` → `film-timeline.ts`,
  * the trim offset included), not a second player: one element, three
- * controls, a counter. An attachment's URL comes from
- * `GET /api/matches/[id]/video` (the credential-refresh route, through the
- * same `fetchPlaybackSource` the film room uses); the Advantage Intelligence
- * lineage has no refresh route and plays the URL `/api/ask/show` resolved.
+ * controls, a counter. Both lineages play the URL `/api/ask/show` already
+ * signed, so the strip makes no request of its own on mount. An attachment
+ * whose credential has lapsed by the time it plays (the element errors)
+ * renews ONCE through `GET /api/matches/[id]/video` — the same
+ * `fetchPlaybackSource` the film room uses — while the strip's skeleton
+ * holds its place; the Advantage Intelligence lineage has no refresh route,
+ * so its error is final.
  *
  * Retention: a video that expired is the Video tab's expired state in short
  * — the same heading and sentence `film-expired-state.tsx` prints — never a
@@ -154,25 +161,36 @@ function AskClipPlayer({
   film: Extract<AskShowFilm, { state: "ready" }>;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // The job lineage's URL is the route's answer; an attachment's is fetched
-  // fresh below, the way the film room fetches its first renewal.
-  const [source, setSource] = useState<Source>(() =>
-    film.source === "job"
-      ? {
-          kind: "ready",
-          url: film.playback.url,
-          clock: {
-            offset: film.playback.offsetSeconds,
-            duration: film.playback.durationSeconds,
-          },
-        }
-      : { kind: "loading" },
-  );
-  useEffect(() => {
-    if (film.source !== "attachment") return;
+  // Either lineage starts on the URL the route signed.
+  const [source, setSource] = useState<Source>(() => ({
+    kind: "ready",
+    url: film.playback.url,
+    clock: {
+      offset: film.playback.offsetSeconds,
+      duration: film.playback.durationSeconds,
+    },
+  }));
+
+  // One renewal at most, and only for an attachment: a second error after a
+  // fresh credential is the film, not the credential.
+  const renewed = useRef(false);
+  const renewal = useRef<AbortController | null>(null);
+  useEffect(() => () => renewal.current?.abort(), []);
+
+  const onVideoError = useCallback(() => {
+    if (film.source !== "attachment" || renewed.current) {
+      setSource({ kind: "unavailable" });
+      return;
+    }
+    renewed.current = true;
+    setSource({ kind: "loading" });
     const controller = new AbortController();
-    const send = fetchImpl ?? fetch;
-    void fetchPlaybackSource(matchId, send, controller.signal).then(
+    renewal.current = controller;
+    // Every exit settles the skeleton: a credential, removed, or unavailable
+    // (a refusal, the network, or a rejection fetchPlaybackSource never
+    // makes but a harness's fetch could). Only an unmount leaves it, and
+    // then there is nothing left to draw.
+    fetchPlaybackSource(matchId, fetchImpl ?? fetch, controller.signal).then(
       (outcome) => {
         if (controller.signal.aborted) return;
         if (outcome.kind === "attachment") {
@@ -187,9 +205,11 @@ function AskClipPlayer({
           setSource({ kind: "unavailable" });
         }
       },
+      () => {
+        if (!controller.signal.aborted) setSource({ kind: "unavailable" });
+      },
     );
-    return () => controller.abort();
-  }, [matchId, film.source, fetchImpl]);
+  }, [film.source, matchId, fetchImpl]);
 
   const windows = useMemo(
     () => (source.kind === "ready" ? clipWindows(points, source.clock) : []),
@@ -254,13 +274,7 @@ function AskClipPlayer({
     [index, windows.length, seekToWindow],
   );
 
-  if (source.kind === "loading") {
-    return (
-      <p role="status" data-ask-clip-loading="" className="text-body-sm">
-        Loading the film
-      </p>
-    );
-  }
+  if (source.kind === "loading") return <AskClipPending />;
   if (source.kind !== "ready" || windows.length === 0) {
     return (
       <p
@@ -310,7 +324,7 @@ function AskClipPlayer({
           onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onError={() => setSource({ kind: "unavailable" })}
+          onError={onVideoError}
         />
         <div className="flex items-center gap-1 px-0.5">
           <ChromeTooltip label="Previous point" side="top">
@@ -390,5 +404,36 @@ function AskClipPlayer({
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * The strip while its credential renews: the loaded card's own frame — the
+ * 16:9 film and the control row — in skeleton bars, so nothing jumps when
+ * the film lands. One status for the region (`PendingRegion`).
+ */
+function AskClipPending() {
+  return (
+    <div data-ask-clip-loading="" className="max-w-[420px]">
+      <PendingRegion
+        label="the film"
+        innerClassName="surface-card flex flex-col gap-2 p-2"
+      >
+        <PendingBar className="aspect-video h-auto w-full rounded-[var(--radius-element)]" />
+        <div className="flex h-7 items-center gap-1 px-0.5">
+          {[0, 1, 2].map((slot) => (
+            <span
+              key={slot}
+              className="inline-flex size-7 shrink-0 items-center justify-center"
+            >
+              <PendingBar className="size-3.5" />
+            </span>
+          ))}
+          <PendingBar className="ml-1.5 h-2.5 w-16" />
+          <span className="min-w-0 flex-1" />
+          <PendingBar className="h-2.5 w-14" />
+        </div>
+      </PendingRegion>
+    </div>
   );
 }

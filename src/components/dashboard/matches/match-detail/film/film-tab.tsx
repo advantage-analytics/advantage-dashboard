@@ -1103,7 +1103,11 @@ function FilmRoom({
     // content height of its own — its card is absolutely positioned inside
     // it — so it inherits that height and its rows scroll within the card.
     // Under 720px of pane (the `@container` breakpoint `statistics-view.tsx`
-    // stacks at) the columns stack and the list takes what is left.
+    // stacks at) the columns stack and the list takes what is left. Stacked,
+    // the player column keeps its content height (`flex-none`): as a
+    // shrinkable `flex-1` beside a list hundreds of rows tall it was squeezed
+    // to nothing, and "This point" with it (0–20px at 1024×768). The pane
+    // (`@container … overflow-y-auto`) scrolls what no longer fits.
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* SwingVision Add video T10 (canvas frame ExpiryNotice): full width,
           above the player and the point list, in the last 30 days before an
@@ -1131,7 +1135,7 @@ function FilmRoom({
         ref={clockRef}
         className="flex min-h-0 flex-1 flex-col gap-4 @min-[720px]:flex-row"
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 @max-[720px]:flex-none">
           {/* Above the player and right-aligned: maintenance for the person who
             owns the file, out of the way of the person watching. Renders
             nothing at all for everyone else — and is not mounted on a

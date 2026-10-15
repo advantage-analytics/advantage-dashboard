@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -139,6 +139,19 @@ function Glyph({ icon: Icon }: { icon: LucideIcon }) {
 
 /** A line that reports a state ("On your Home page") beside the actions. */
 const STATUS = "text-[12px] whitespace-nowrap text-[var(--ink-700)]";
+
+/**
+ * Each control's one status region, mounted for the control's whole life and
+ * its text changed in place: a region that mounts already holding its text
+ * is often not announced. The visible line beside it is plain text.
+ */
+function ControlStatus({ children }: { children: string }) {
+  return (
+    <span role="status" className="sr-only">
+      {children}
+    </span>
+  );
+}
 const PROBLEM = "text-[11px] text-[var(--danger-text)]";
 
 /** The filter strip's separator, between one action and the next. */
@@ -177,7 +190,7 @@ export function AskActionCards({
     <ul
       aria-label={ASK_ACTIONS_COPY.label}
       data-ask-actions=""
-      className="-mt-4 flex list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0"
+      className="flex list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0"
     >
       {actions.map((action, index) => (
         <li
@@ -231,15 +244,43 @@ function PinControl({
 }) {
   const [pending, setPending] = useState<"pin" | "unpin" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  // The control the click lived on unmounts with the state it changed (Pin
+  // becomes "Open Home", Unpin becomes Pin): move focus to its successor
+  // once the page's new `pinId` has drawn it, never on a pin read from the
+  // saved conversation.
+  const moved = useRef<"pinned" | "unpinned" | null>(null);
+  const openHomeRef = useRef<HTMLAnchorElement>(null);
+  const pinRef = useRef<HTMLButtonElement>(null);
+  // Armed before the request — the page may commit the new `pinId` before
+  // the request's promise settles here — and disarmed on a refusal.
+  const settleFocus = () => {
+    if (pinId && moved.current === "pinned") {
+      moved.current = null;
+      openHomeRef.current?.focus();
+    } else if (!pinId && pending === null && moved.current === "unpinned") {
+      // Pin is disabled until the request settles; focus it once enabled.
+      moved.current = null;
+      pinRef.current?.focus();
+    }
+  };
+  useEffect(settleFocus, [pinId, pending]);
 
   async function pin() {
     if (!onPin || pending) return;
     setPending("pin");
     setProblem(null);
+    moved.current = "pinned";
     try {
       const outcome = await onPin();
-      if (!outcome.ok) setProblem(ASK_ACTIONS_COPY.pinFailed[outcome.error]);
+      if (outcome.ok) {
+        setAnnouncement(ASK_ACTIONS_COPY.pinned[scopeKind]);
+      } else {
+        moved.current = null;
+        setProblem(ASK_ACTIONS_COPY.pinFailed[outcome.error]);
+      }
     } catch {
+      moved.current = null;
       setProblem(ASK_ACTIONS_COPY.pinFailed.failed);
     }
     setPending(null);
@@ -249,61 +290,97 @@ function PinControl({
     if (!onUnpin || !pinId || pending) return;
     setPending("unpin");
     setProblem(null);
+    moved.current = "unpinned";
     let done = false;
     try {
       done = await onUnpin(pinId);
     } catch {
       done = false;
     }
-    if (!done) setProblem(ASK_ACTIONS_COPY.unpinFailed);
+    if (done) {
+      setAnnouncement("");
+    } else {
+      moved.current = null;
+      setProblem(ASK_ACTIONS_COPY.unpinFailed);
+    }
     setPending(null);
-  }
-
-  if (pinId) {
-    return (
-      <>
-        <span role="status" className={STATUS}>
-          {ASK_ACTIONS_COPY.pinned[scopeKind]}
-        </span>
-        <Link href={HOME_HREF[scopeKind]} className={ACTION}>
-          <Glyph icon={ArrowUpRight} />
-          {ASK_ACTIONS_COPY.openHome}
-        </Link>
-        <button
-          type="button"
-          onClick={() => void unpin()}
-          disabled={pending !== null || !onUnpin}
-          className={ACTION}
-        >
-          {pending === "unpin"
-            ? ASK_ACTIONS_COPY.unpinning
-            : ASK_ACTIONS_COPY.unpin}
-        </button>
-        {problem && (
-          <span role="alert" className={PROBLEM}>
-            {problem}
-          </span>
-        )}
-      </>
-    );
   }
 
   return (
     <>
+      <ControlStatus>{announcement}</ControlStatus>
+      {pinId ? (
+        <PinnedRow
+          scopeKind={scopeKind}
+          openHomeRef={openHomeRef}
+          pending={pending}
+          canUnpin={Boolean(onUnpin)}
+          onUnpin={() => void unpin()}
+          problem={problem}
+        />
+      ) : (
+        <>
+          <button
+            ref={pinRef}
+            type="button"
+            onClick={() => void pin()}
+            disabled={!onPin || pending !== null}
+            className={ACTION}
+          >
+            <Glyph icon={ACTION_ICON.pin} />
+            {pending === "pin"
+              ? ASK_ACTIONS_COPY.pinning
+              : ASK_ACTIONS_COPY.pin}
+          </button>
+          {!onPin && (
+            <span className="text-[11px] text-[var(--ink-500)]">
+              {ASK_ACTIONS_COPY.pinWaits}
+            </span>
+          )}
+          {problem && (
+            <span role="alert" className={PROBLEM}>
+              {problem}
+            </span>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/** "On your Home page · Open Home · Unpin": a pinned answer's row. */
+function PinnedRow({
+  scopeKind,
+  openHomeRef,
+  pending,
+  canUnpin,
+  onUnpin,
+  problem,
+}: {
+  scopeKind: AskScope["kind"];
+  openHomeRef: RefObject<HTMLAnchorElement | null>;
+  pending: "pin" | "unpin" | null;
+  canUnpin: boolean;
+  onUnpin: () => void;
+  problem: string | null;
+}) {
+  return (
+    <>
+      <span className={STATUS}>{ASK_ACTIONS_COPY.pinned[scopeKind]}</span>
+      <Link ref={openHomeRef} href={HOME_HREF[scopeKind]} className={ACTION}>
+        <Glyph icon={ArrowUpRight} />
+        {ASK_ACTIONS_COPY.openHome}
+      </Link>
       <button
         type="button"
-        onClick={() => void pin()}
-        disabled={!onPin || pending !== null}
+        onClick={onUnpin}
+        disabled={pending !== null || !canUnpin}
         className={ACTION}
       >
-        <Glyph icon={ACTION_ICON.pin} />
-        {pending === "pin" ? ASK_ACTIONS_COPY.pinning : ASK_ACTIONS_COPY.pin}
+        {pending === "unpin"
+          ? ASK_ACTIONS_COPY.unpinning
+          : ASK_ACTIONS_COPY.unpin}
       </button>
-      {!onPin && (
-        <span className="text-[11px] text-[var(--ink-500)]">
-          {ASK_ACTIONS_COPY.pinWaits}
-        </span>
-      )}
       {problem && (
         <span role="alert" className={PROBLEM}>
           {problem}
@@ -331,6 +408,13 @@ function SaveViewControl({
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedView | null>(null);
+  // The dialog would hand focus back to "Save view", which the save swaps
+  // for "Saved": "Open the view" takes it instead.
+  const justSaved = useRef(false);
+  const openViewRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (saved && justSaved.current) openViewRef.current?.focus();
+  }, [saved]);
 
   async function save() {
     if (!onSaveView || pending) return;
@@ -339,6 +423,7 @@ function SaveViewControl({
     try {
       const outcome = await onSaveView({ ...action.view, name });
       if (outcome.ok) {
+        justSaved.current = true;
         setSaved(outcome.view);
         setOpen(false);
       } else {
@@ -351,14 +436,21 @@ function SaveViewControl({
     setPending(false);
   }
 
+  const status = (
+    <ControlStatus>
+      {saved ? `${ASK_ACTIONS_COPY.saved} · ${saved.name}` : ""}
+    </ControlStatus>
+  );
+
   if (saved) {
     const href = `${action.href}&view=${encodeURIComponent(saved.id)}`;
     return (
       <>
-        <span role="status" className={STATUS}>
+        {status}
+        <span className={STATUS}>
           {ASK_ACTIONS_COPY.saved} · {saved.name}
         </span>
-        <Link href={href} className={ACTION}>
+        <Link ref={openViewRef} href={href} className={ACTION}>
           <Glyph icon={ArrowUpRight} />
           {ASK_ACTIONS_COPY.openView}
         </Link>
@@ -368,6 +460,7 @@ function SaveViewControl({
 
   return (
     <>
+      {status}
       <button
         type="button"
         aria-haspopup="dialog"
@@ -395,6 +488,11 @@ function SaveViewControl({
         pending={pending}
         error={problem}
         onConfirm={() => void save()}
+        onCloseAutoFocus={(event) => {
+          if (!justSaved.current) return;
+          event.preventDefault();
+          openViewRef.current?.focus();
+        }}
       >
         <label htmlFor={nameId} className="flex min-w-0 flex-col gap-2">
           <span className="text-[11px] text-[var(--ink-600)]">

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  memo,
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
   type MouseEvent,
   type Ref,
@@ -140,6 +142,8 @@ const RAIL_COPY = {
   renameFailed: "That question could not be renamed. Try again.",
   pinFailed: "That question could not be pinned. Try again.",
   unpinFailed: "That question could not be unpinned. Try again.",
+  pinnedDone: "Pinned",
+  unpinnedDone: "Unpinned",
   deleteFailed: "That question could not be deleted. Try again.",
   close: "Close",
 } as const;
@@ -151,18 +155,22 @@ const RAIL_COPY = {
  *
  * It is the `<nav>` itself, width included, because open or closed is the
  * viewer's own choice: 280px open, a 52px strip of two icon buttons closed.
- * The choice lives in this component's state and in `localStorage`. It
- * renders open on the server and on first paint — the stored value is read
- * in an effect, so the two renders agree — and it changes on a click only;
- * nothing here opens under a passing cursor.
+ * The choice lives in `localStorage` (and in memory where storage is
+ * blocked), read through `useSyncExternalStore`. It renders open on the
+ * server and while hydrating — the server snapshot — so the two renders
+ * agree, and it changes on a click only; nothing here opens under a passing
+ * cursor.
  *
  * The list is the only part that scrolls: the head and the limit stay put.
  * An empty list says so in one line; a count that could not be read drops
  * the foot rather than print numbers nobody measured.
  *
  * ── Rows ────────────────────────────────────────────────────────────────────
- * A row is its title and its date; under the pointer, or once focus is in
- * the row, a ⋯ takes the date's place and opens the row's menu — Rename,
+ * A row is its title. Under a month's heading the date is read, not drawn —
+ * the heading already says when, and five rows that open alike need the
+ * width to tell apart; a pinned row has no month above it and keeps its date
+ * at the edge. Under the pointer, or once focus is in the row, a ⋯ takes
+ * the date's place and opens the row's menu — Rename,
  * Pin to top (or Unpin), then Delete below a hairline. Rename is in place:
  * the title becomes a field, Enter saves, Escape leaves it as it was. A
  * list of six or more rows gets a filter field above it, over the titles it
@@ -172,26 +180,81 @@ const RAIL_COPY = {
  * The rail is a bar across the top of the frame — "Earlier questions" and
  * "New question" — and the list opens in a sheet from the left edge, on the
  * dialog primitive (focus, Escape and the scrim are its). The narrow case
- * is read from a media query in an effect, so the server and the first paint
- * agree on the panel; the frame hides the panel under 768px by CSS until
- * the bar takes over (`ASK_RAIL`).
+ * is read from a media query with `useSyncExternalStore`: the server
+ * snapshot is the panel, so a hydrating page agrees with the server and a
+ * client navigation draws the bar straight away; the frame hides the panel
+ * under 768px by CSS until the bar takes over (`ASK_RAIL`). Whether this is
+ * a Mac (for the shortcut's keys) is read the same way, once, here.
  *
  * "New question", the delete, the rename and the pin arrive as props, not
  * an imported router or server action, and the links are `next/link`: keep
  * this file's imports clear of `next/navigation`, because it is rendered by
  * an offline component harness (`tests/ask-rail.spec.ts`).
  */
-export function AskRail(props: AskRailProps) {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia(ASK_RAIL_NARROW_QUERY);
-    const update = () => setNarrow(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return narrow ? <AskRailBar {...props} /> : <AskRailPanel {...props} />;
+export const AskRail = memo(function AskRail(props: AskRailProps) {
+  const narrow = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
+  const mac = useSyncExternalStore(subscribeNever, readMac, () => true);
+  return narrow ? (
+    <AskRailBar {...props} mac={mac} />
+  ) : (
+    <AskRailPanel {...props} mac={mac} />
+  );
+});
+
+function subscribeNarrow(onChange: () => void) {
+  const media = window.matchMedia(ASK_RAIL_NARROW_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
 }
+
+function readNarrow() {
+  return window.matchMedia(ASK_RAIL_NARROW_QUERY).matches;
+}
+
+/** The platform does not change under a page: nothing to listen for. */
+function subscribeNever() {
+  return () => {};
+}
+
+function readMac() {
+  return isMacPlatform(navigator.platform || navigator.userAgent);
+}
+
+// ── Open or closed, per device ──────────────────────────────────────────────
+
+const railChoiceListeners = new Set<() => void>();
+/** This visit's choice, for when storage is blocked and cannot hold it. */
+let railChoice: "open" | "closed" | null = null;
+
+function subscribeRailChoice(onChange: () => void) {
+  railChoiceListeners.add(onChange);
+  return () => {
+    railChoiceListeners.delete(onChange);
+  };
+}
+
+function readRailOpen(): boolean {
+  if (railChoice !== null) return railChoice === "open";
+  try {
+    return localStorage.getItem(ASK_RAIL_STORAGE_KEY) !== "closed";
+  } catch {
+    // Private mode or blocked storage — open is a fine default.
+    return true;
+  }
+}
+
+function writeRailOpen(open: boolean) {
+  railChoice = open ? "open" : "closed";
+  try {
+    localStorage.setItem(ASK_RAIL_STORAGE_KEY, railChoice);
+  } catch {
+    // A per-device convenience, never load-bearing.
+  }
+  for (const onChange of railChoiceListeners) onChange();
+}
+
+/** Read once in `AskRail` and handed down: ⇧⌘O on a Mac, Ctrl+Shift+O elsewhere. */
+type AskRailViewProps = AskRailProps & { mac: boolean };
 
 // ── The panel (768px and up) ────────────────────────────────────────────────
 
@@ -206,23 +269,16 @@ function AskRailPanel({
   onRenameConversation,
   onPinConversation,
   deleteDisabled = false,
-}: AskRailProps) {
-  const [open, setOpen] = useState(true);
+  mac,
+}: AskRailViewProps) {
+  const open = useSyncExternalStore(
+    subscribeRailChoice,
+    readRailOpen,
+    () => true,
+  );
   // The width eases only once the viewer has toggled it: the stored choice
-  // arriving after first paint should land, not perform.
+  // arriving after hydration should land, not perform.
   const [toggled, setToggled] = useState(false);
-  const [mac, setMac] = useState(true);
-
-  useEffect(() => {
-    setMac(isMacPlatform(navigator.platform || navigator.userAgent));
-    try {
-      if (localStorage.getItem(ASK_RAIL_STORAGE_KEY) === "closed") {
-        setOpen(false);
-      }
-    } catch {
-      // Private mode or blocked storage — open is a fine default.
-    }
-  }, []);
 
   // A toggle from the keyboard unmounts the button that had focus; hand it
   // to the button that replaced it. Not after a pointer click: there, focus
@@ -237,14 +293,8 @@ function AskRailPanel({
 
   function toggle(event: MouseEvent<HTMLButtonElement>) {
     refocus.current = event.detail === 0;
-    const next = !open;
-    setOpen(next);
     setToggled(true);
-    try {
-      localStorage.setItem(ASK_RAIL_STORAGE_KEY, next ? "open" : "closed");
-    } catch {
-      // A per-device convenience, never load-bearing.
-    }
+    writeRailOpen(!open);
   }
 
   const keys = newQuestionKeys(mac);
@@ -364,12 +414,9 @@ function AskRailBar({
   onRenameConversation,
   onPinConversation,
   deleteDisabled = false,
-}: AskRailProps) {
+  mac,
+}: AskRailViewProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [mac, setMac] = useState(true);
-  useEffect(() => {
-    setMac(isMacPlatform(navigator.platform || navigator.userAgent));
-  }, []);
   const keyShortcuts = mac ? "Meta+Shift+O" : "Control+Shift+O";
   const count = conversations.length;
 
@@ -490,7 +537,7 @@ function AskRailBody({
       className={cn(ASK_SCROLL, "flex flex-col gap-5 px-3 pt-2 pb-4")}
     >
       {filterable && (
-        <label className="flex h-8 items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] px-2.5 has-[input:focus-visible]:shadow-[var(--focus-ring-field)]">
+        <label className="flex h-8 shrink-0 items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] px-2.5 has-[input:focus-visible]:shadow-[var(--focus-ring-field)]">
           <Search
             aria-hidden="true"
             className="size-3.5 shrink-0 text-[var(--ink-500)]"
@@ -528,11 +575,15 @@ function AskRailBody({
       )}
 
       {conversations.length === 0 ? (
-        <p data-ask-rail-empty="" className="text-body-sm px-2">
+        <p data-ask-rail-empty="" className="text-body-sm shrink-0 px-2">
           {RAIL_COPY.empty}
         </p>
       ) : matching.length === 0 ? (
-        <p data-ask-rail-nomatch="" role="status" className="text-body-sm px-2">
+        <p
+          data-ask-rail-nomatch=""
+          role="status"
+          className="text-body-sm shrink-0 px-2"
+        >
           {RAIL_COPY.noMatch(query.trim())}
         </p>
       ) : (
@@ -702,6 +753,30 @@ function AskEarlier({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   // What the last rename or pin had to say when it failed.
   const [notice, setNotice] = useState<string | null>(null);
+  // The row whose pin is on its way to the server, and what the last one
+  // that landed said — read out by a status region that is always mounted,
+  // so the words are announced rather than mounted already holding them.
+  const [pendingPinId, setPendingPinId] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  // A pinned row moves to another group, so React mounts it anew and the
+  // focus its ⋯ held drops to the page. Handed back once the list shows it.
+  const list = useRef<HTMLDivElement>(null);
+  const refocusPin = useRef<{ id: string; pinned: boolean } | null>(null);
+  useEffect(() => {
+    const target = refocusPin.current;
+    if (!target) return;
+    const moved = conversations.find((row) => row.id === target.id);
+    if (!moved || (moved.pinnedAt !== null) !== target.pinned) return;
+    refocusPin.current = null;
+    // Only focus that fell to the page; never pull it from where it was put.
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    list.current
+      ?.querySelector<HTMLElement>(
+        `[data-ask-row="${CSS.escape(target.id)}"] button[aria-haspopup="menu"]`,
+      )
+      ?.focus();
+  }, [conversations]);
 
   async function confirmDelete() {
     if (!target || pending) return;
@@ -731,14 +806,24 @@ function AskEarlier({
   }
 
   async function pin(id: string, pinned: boolean) {
+    if (pendingPinId !== null) return;
     setNotice(null);
+    setAnnouncement("");
+    setPendingPinId(id);
+    refocusPin.current = { id, pinned };
     let done = false;
     try {
       done = await onPinConversation(id, pinned);
     } catch {
       done = false;
     }
-    if (!done) setNotice(pinned ? RAIL_COPY.pinFailed : RAIL_COPY.unpinFailed);
+    setPendingPinId(null);
+    if (done) {
+      setAnnouncement(pinned ? RAIL_COPY.pinnedDone : RAIL_COPY.unpinnedDone);
+    } else {
+      refocusPin.current = null;
+      setNotice(pinned ? RAIL_COPY.pinFailed : RAIL_COPY.unpinFailed);
+    }
   }
 
   const { pinned, rest } = askPinnedFirst(conversations);
@@ -749,14 +834,17 @@ function AskEarlier({
     ...askMonthGroups(rest, timeZone),
   ];
 
-  const row = (conversation: AskConversationSummary) => (
+  // A month's heading already says when; only a pinned row draws its date.
+  const row = (conversation: AskConversationSummary, dated: boolean) => (
     <AskEarlierRow
       key={conversation.id}
       conversation={conversation}
       timeZone={timeZone}
       basePath={basePath}
+      dated={dated}
       active={conversation.id === activeConversationId}
       actionsDisabled={deleteDisabled}
+      pinPending={conversation.id === pendingPinId}
       renaming={conversation.id === renamingId}
       onStartRename={() => {
         setNotice(null);
@@ -774,20 +862,31 @@ function AskEarlier({
   );
 
   return (
-    <>
+    // `contents`: the sections stay children of the scroller's own column.
+    <div ref={list} className="contents">
       {sections.map((group) => (
         <section
           key={group.key}
           data-ask-month={group.key}
-          className="flex flex-col gap-0.5"
+          className="flex shrink-0 flex-col gap-0.5"
         >
           <h2 className="eyebrow-sm px-2 pb-1.5">{group.label}</h2>
-          <ul className="flex flex-col gap-0.5">{group.rows.map(row)}</ul>
+          <ul className="flex flex-col gap-0.5">
+            {group.rows.map((conversation) =>
+              row(conversation, group.key === "pinned"),
+            )}
+          </ul>
         </section>
       ))}
 
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
       {notice && (
-        <p role="alert" className="px-2 text-[11px] text-[var(--danger-text)]">
+        <p
+          role="alert"
+          className="shrink-0 px-2 text-[11px] text-[var(--danger-text)]"
+        >
           {notice}
         </p>
       )}
@@ -817,15 +916,17 @@ function AskEarlier({
           </ConfirmProse>
         )}
       </ConfirmDialog>
-    </>
+    </div>
   );
 }
 
 /**
- * One line: the question, its date at the edge. Under the pointer, or once
- * focus is anywhere in the row, the date fades and the row's ⋯ takes its
- * place — the same 48px, so nothing in the row moves. On a screen with no
- * hover the ⋯ is simply there.
+ * One line: the question, and — in the pinned group, which has no month
+ * above it — its date at the edge. Under the pointer, or once focus is
+ * anywhere in the row, the date fades and the row's ⋯ takes its place — the
+ * same 48px, so nothing in the row moves. Under a month the date is read but
+ * not drawn, and the title runs to the ⋯'s edge. On a screen with no hover
+ * the ⋯ is simply there.
  *
  * The edge sits over the link's right padding and lets a click through to
  * it, so the whole row opens the conversation except the button itself.
@@ -835,8 +936,10 @@ function AskEarlierRow({
   conversation,
   timeZone,
   basePath,
+  dated,
   active,
   actionsDisabled,
+  pinPending,
   renaming,
   onStartRename,
   onEndRename,
@@ -849,8 +952,12 @@ function AskEarlierRow({
   timeZone: string | undefined;
   /** The page this conversation belongs to (`askBasePath`). */
   basePath: string;
+  /** Draw the date at the edge (pinned rows); otherwise it is read only. */
+  dated: boolean;
   active: boolean;
   actionsDisabled: boolean;
+  /** This row's pin is on its way: Pin / Unpin waits for it. */
+  pinPending: boolean;
   renaming: boolean;
   onStartRename: () => void;
   onEndRename: () => void;
@@ -865,6 +972,7 @@ function AskEarlierRow({
 
   return (
     <li
+      data-ask-row={conversation.id}
       data-ask-pinned={pinned || undefined}
       className={cn(
         "group relative flex h-9 items-center rounded-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
@@ -882,7 +990,10 @@ function AskEarlierRow({
           <Link
             href={`${basePath}?c=${conversation.id}`}
             aria-current={active ? "page" : undefined}
-            className="flex h-full min-w-0 flex-1 items-center rounded-[var(--radius-element)] pr-14 pl-2"
+            className={cn(
+              "flex h-full min-w-0 flex-1 items-center rounded-[var(--radius-element)] pl-2",
+              dated ? "pr-14" : "pr-9",
+            )}
           >
             <span
               className={cn(
@@ -900,8 +1011,10 @@ function AskEarlierRow({
               <time
                 dateTime={conversation.updatedAt}
                 className={cn(
-                  "pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-0",
-                  menuOpen && "opacity-0",
+                  dated
+                    ? "pr-1 font-mono text-[10px] whitespace-nowrap text-[var(--ink-500)] tabular-nums transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-0"
+                    : "sr-only",
+                  dated && menuOpen && "opacity-0",
                 )}
               >
                 {askedOn}
@@ -951,6 +1064,7 @@ function AskEarlierRow({
                   />
                   <FloatMenuItem
                     label={pinned ? RAIL_COPY.unpin : RAIL_COPY.pin}
+                    disabled={pinPending}
                     icon={
                       pinned ? (
                         <PinOff
@@ -1016,6 +1130,7 @@ function RenameField({
   const [pending, setPending] = useState(false);
   // Escape ends the edit before the field blurs; the blur must not then save.
   const cancelled = useRef(false);
+  const field = useRef<HTMLInputElement>(null);
 
   async function submit() {
     if (pending) return;
@@ -1028,6 +1143,8 @@ function RenameField({
     const saved = await onRename(next);
     setPending(false);
     if (saved) onEnd();
+    // Refused: the field stays, with the caret, for another try.
+    else if (document.activeElement === document.body) field.current?.focus();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -1051,12 +1168,16 @@ function RenameField({
       }}
     >
       <input
+        ref={field}
         autoFocus
         type="text"
         value={value}
         aria-label={RAIL_COPY.renameField}
         maxLength={MAX_ASK_CONVERSATION_TITLE}
-        disabled={pending}
+        // Read-only, not disabled, while saving: a disabled field drops the
+        // focus it holds, and the screen reader with it.
+        readOnly={pending}
+        aria-busy={pending || undefined}
         data-focus-ring="none"
         data-ask-rename=""
         onChange={(event) => setValue(event.target.value)}
@@ -1065,7 +1186,7 @@ function RenameField({
           if (cancelled.current) return;
           void submit();
         }}
-        className="h-7 w-full min-w-0 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-1.5 text-[12px] text-[var(--ink-900)] outline-none focus-visible:shadow-[var(--focus-ring-field)] disabled:text-[var(--text-disabled)]"
+        className="h-7 w-full min-w-0 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-1.5 text-[12px] text-[var(--ink-900)] outline-none read-only:text-[var(--text-disabled)] focus-visible:shadow-[var(--focus-ring-field)]"
       />
     </form>
   );

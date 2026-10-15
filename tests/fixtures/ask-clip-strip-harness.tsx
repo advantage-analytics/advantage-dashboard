@@ -12,10 +12,13 @@ import type { AskShowFilm, AskShowPoint } from "@/lib/services/ask/show";
  * Query string, `?case=`:
  * - `job`         the Advantage Intelligence lineage: the route's own URL,
  *                 no credential fetch
- * - `attachment`  an attachment: `GET /api/matches/[id]/video` (through the
- *                 recording `fetch` below) answers a credential
- * - `removed`     that route answers `attachment: null`
- * - `denied`      that route refuses with 403
+ * - `attachment`  an attachment: plays the route's own URL, no credential fetch
+ * - `renew`       an attachment whose signed URL fails (`/broken.mp4`, a 404):
+ *                 ONE renewal through `GET /api/matches/[id]/video` (the
+ *                 recording `fetch` below), which answers a fresh credential
+ * - `pending`     as `renew`, but that route never answers: the skeleton
+ * - `removed`     as `renew`, but that route answers `attachment: null`
+ * - `denied`      as `renew`, but that route refuses with 403
  * - `expired`     the video was removed for going a year unwatched
  * - `untimed`     ready, but no point has a time on the film
  */
@@ -95,7 +98,7 @@ const film: AskShowFilm =
           state: "ready",
           source: "attachment",
           playback: {
-            url: "/unused.mp4",
+            url: kind === "attachment" ? "/hang.mp4" : "/broken.mp4",
             expiresAt: EXPIRES_AT,
             offsetSeconds: 0,
             durationSeconds: null,
@@ -113,6 +116,7 @@ const fetchImpl: typeof fetch = async (input) => {
         ? input.href
         : input.url;
   (w.__clipFetches ??= []).push(url);
+  if (kind === "pending") return new Promise<Response>(() => {});
   if (kind === "removed") {
     return new Response(JSON.stringify({ attachment: null }), {
       status: 200,

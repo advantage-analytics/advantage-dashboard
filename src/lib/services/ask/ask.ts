@@ -306,9 +306,11 @@ export interface AskQuestionInput {
   /**
    * The nearest rated (question → plan) pairs to this question
    * (`examples.ts`), shown to the planner; absent or empty, the prompt's
-   * fixed examples stand alone.
+   * fixed examples stand alone. May be a promise: the route passes the
+   * retrieval still in flight, so the "planning" status goes out first and
+   * the wait overlaps it.
    */
-  examples?: readonly AskExample[];
+  examples?: readonly AskExample[] | PromiseLike<readonly AskExample[]>;
   /**
    * Coach mode (`coach.ts`): decided by the route from the flag, a team scope
    * and the viewer's role in the program. Read only for a team question that
@@ -882,6 +884,7 @@ export async function* askQuestion(
     // database refuses is told back to the planner once. The second failure
     // of any kind ends the question.
     const today = input.now().toISOString().slice(0, 10);
+    const examples = model.configured ? ((await input.examples) ?? []) : [];
     const systemPrompt = model.configured
       ? buildPlanPrompt({
           today,
@@ -889,7 +892,7 @@ export async function* askQuestion(
           conversation: input.conversation,
           previousPlan: input.previousPlan ?? null,
           question: input.question,
-          examples: input.examples ?? [],
+          examples,
           ...(team ? { scope } : {}),
         })
       : "";

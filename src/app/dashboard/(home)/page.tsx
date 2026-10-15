@@ -145,8 +145,12 @@ export default async function Home() {
           }
           // The last card in the right column, and only while something is
           // pinned: no skeleton (a bar would promise a card most Home pages
-          // never get, and nothing sits below it to shift) and no empty
-          // state (see `AskPinCard`). A failed read is still the retry.
+          // never get) and no empty state (see `AskPinCard`). A failed read
+          // is still the retry. When the right column is the taller one, the
+          // Usage footer under the grid moves down as the card streams in —
+          // accepted: the footer is a quiet last line read after everything
+          // else, and a placeholder for a card most players never pin would
+          // cost every page a gap to save a few of them one shift.
           pins={region("Pinned from Ask", null, <Pins resources={resources} />)}
           footer={region(
             "Usage",

@@ -219,21 +219,34 @@ test.describe("the cards under an answer", () => {
     await expect(
       card(page, "pin").getByRole("link", { name: "Open Home" }),
     ).toHaveAttribute("href", "/dashboard");
+    // The Pin button unmounted with the click; focus moved to its successor,
+    // and the one status region (mounted from the start) said where.
+    await expect(
+      card(page, "pin").getByRole("link", { name: "Open Home" }),
+    ).toBeFocused();
+    await expect(card(page, "pin").getByRole("status")).toHaveCount(1);
 
     await card(page, "pin").getByRole("button", { name: "Unpin" }).click();
     await expect.poll(async () => (await calls(page)).length).toBe(2);
     await expect(
       card(page, "pin").getByRole("button", { name: "Pin to Home" }),
     ).toBeVisible();
+    await expect(
+      card(page, "pin").getByRole("button", { name: "Pin to Home" }),
+    ).toBeFocused();
   });
 
   test("an answer already pinned opens pinned; a refused pin says why", async ({
     page,
   }) => {
     await openFixture(page, "?c=1&pinned=1");
-    await expect(card(page, "pin").getByRole("status")).toHaveText(
-      "On your Home page",
-    );
+    await expect(card(page, "pin")).toContainText("On your Home page");
+    // A pin read from the saved conversation is not news: the status region
+    // is there, silent, and focus stays where the reader left it.
+    await expect(card(page, "pin").getByRole("status")).toHaveText("");
+    await expect(
+      card(page, "pin").getByRole("link", { name: "Open Home" }),
+    ).not.toBeFocused();
 
     await openFixture(page, "?c=1&pin=fail");
     await card(page, "pin")
@@ -277,6 +290,11 @@ test.describe("the cards under an answer", () => {
     await expect(
       card(page, "save_view").getByRole("link", { name: "Open the view" }),
     ).toHaveAttribute("href", /&view=view-1$/);
+    // "Save view" was swapped for "Saved": focus lands on the view's link,
+    // not on <body>.
+    await expect(
+      card(page, "save_view").getByRole("link", { name: "Open the view" }),
+    ).toBeFocused();
   });
 
   test("a duplicate name is refused in the dialog", async ({ page }) => {

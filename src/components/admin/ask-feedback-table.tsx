@@ -1,6 +1,10 @@
 "use client";
 
 import { MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import type { AdminAskFeedbackRow } from "@/lib/data/ask-admin-view";
@@ -22,9 +26,14 @@ import { cn } from "@/lib/utils";
 const COL = {
   date: "w-[72px] shrink-0",
   verdict: "w-[56px] shrink-0",
-  question: "min-w-0 flex-1",
+  // A floor, so Question is never the column that disappears: it keeps
+  // 160px, and the Scope column gives up width first.
+  question: "min-w-[160px] flex-1",
   asker: "w-[150px] shrink-0",
-  scope: "w-[140px] shrink-0",
+  // minmax(96px, 140px): Scope gives up width before Question does — with
+  // the drawer open, say — and holds the program's short name, so it
+  // rarely needs all 140.
+  scope: "w-[140px] min-w-[96px] shrink",
   reasons: "w-[200px] shrink-0",
 } as const;
 
@@ -57,20 +66,9 @@ export function AskFeedbackTable({
   onSelect: (row: AdminAskFeedbackRow, viaKeyboard: boolean) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+    <div className={CARD}>
       <div className="min-w-[860px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-        >
-          {COLUMNS.map((column) => (
-            <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
-              {column.label}
-            </span>
-          ))}
-        </div>
+        <AskFeedbackHeader />
 
         {rows.length === 0 ? (
           <TableEmptyBody icon={MessageSquare} title={emptyTitle} />
@@ -84,6 +82,55 @@ export function AskFeedbackTable({
             />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+const CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+
+function AskFeedbackHeader() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {COLUMNS.map((column) => (
+        <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+          {column.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Proportional bar widths per column, so the skeleton reads as the table. */
+const SKELETON_BARS = ["w-12", "w-4", "w-3/4", "w-24", "w-20", "w-32"] as const;
+
+/**
+ * The table while the page loads (`app/admin/ask/loading.tsx`): the card and
+ * its column labels as themselves — chrome the page already knows — and five
+ * 52px rows of bars under the region's one `role="status"`.
+ */
+export function AskFeedbackTableSkeleton() {
+  return (
+    <div className={CARD}>
+      <div className="min-w-[860px] px-6 pt-0.5 pb-1.5">
+        <AskFeedbackHeader />
+        <PendingRegion label="Ask feedback">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-[52px]")}>
+              {COLUMNS.map((column, c) => (
+                <span key={column.label} className={column.col}>
+                  <PendingBar className={cn("h-3", SKELETON_BARS[c])} />
+                </span>
+              ))}
+            </div>
+          ))}
+        </PendingRegion>
       </div>
     </div>
   );
@@ -152,7 +199,7 @@ function AskFeedbackRow({
       <span
         className={cn(COL.scope, "truncate text-[12px] text-[var(--ink-600)]")}
       >
-        {row.program?.name ?? "Personal"}
+        {row.program?.shortName ?? "Personal"}
       </span>
       <span
         className={cn(

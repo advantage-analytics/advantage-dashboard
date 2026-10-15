@@ -542,11 +542,18 @@ export const PointList = memo(function PointList({
 
             {/* Always both numbers. A count that dropped its denominator once the
             cut emptied the list would leave the zero states saying nothing
-            about how much film they are hiding. */}
-            <span className={t.count}>
-              {visiblePoints.length}{" "}
-              <span style={{ color: t.countSlash }}>/</span> {allPoints.length}
-            </span>
+            about how much film they are hiding. In the report, though, a cut
+            is stated once: the filter strip above (film-tab.tsx, v3 Data
+            Table rule 6) already says "N of M points" while anything is
+            applied, so this count steps aside until the list is unfiltered.
+            The room's drawer has no strip and keeps it. */}
+            {!(filtered && tone === "light") && (
+              <span className={t.count}>
+                {visiblePoints.length}{" "}
+                <span style={{ color: t.countSlash }}>/</span>{" "}
+                {allPoints.length}
+              </span>
+            )}
 
             {/* The drawer's own control (frame R3): a 26px collapse glyph on
             the count's right. It exists only where a host can be collapsed —

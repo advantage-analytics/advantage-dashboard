@@ -5,10 +5,13 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { AskFeedbackDrawer } from "@/components/admin/ask-feedback-drawer";
 import {
   AskFeedbackTable,
+  AskFeedbackTableSkeleton,
   askFeedbackRowId,
 } from "@/components/admin/ask-feedback-table";
-import { ViewPills } from "@/components/admin/view-pills";
+import { ViewPills, viewPillProps } from "@/components/admin/view-pills";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import {
+  adminAskSummary,
   filterAdminAskFeedback,
   type AdminAskFeedbackRow,
   type AdminAskView,
@@ -46,9 +49,12 @@ function syncUrl(id: string | null) {
 
 export function AskFeedbackPageContent({
   rows,
+  capped,
   initialSelectedId,
 }: {
   rows: AdminAskFeedbackRow[];
+  /** The loader hit `MAX_ADMIN_ASK_FEEDBACK`: older thumbs may be unshown. */
+  capped: boolean;
   /** `?id=` from the URL, or null. Ignored unless it names a row. */
   initialSelectedId: string | null;
 }) {
@@ -139,8 +145,9 @@ export function AskFeedbackPageContent({
     else select(row, viaKeyboard);
   };
 
-  const down = rows.filter((row) => row.rating === "down").length;
-  const summary = `${rows.length} ${rows.length === 1 ? "thumb" : "thumbs"} · ${down} down · ${rows.length - down} up`;
+  // "Newest 200 shown" when the loader came back full: never a total the
+  // page does not know (`adminAskSummary`).
+  const summary = adminAskSummary(rows, capped);
 
   return (
     <AdminPage
@@ -176,6 +183,36 @@ export function AskFeedbackPageContent({
         selectedId={selectedId}
         onSelect={toggle}
       />
+    </AdminPage>
+  );
+}
+
+/**
+ * Admin › Ask while the page loads (`app/admin/ask/loading.tsx`): the same
+ * column, title and view pills as themselves — chrome the page already
+ * knows — with a bar where the summary will be and the table's skeleton.
+ * The pills draw as the loaded page opens (Thumbs down active) but are inert
+ * until it lands.
+ */
+export function AskFeedbackPageSkeleton() {
+  return (
+    <AdminPage className="gap-4">
+      <div className="flex items-end gap-2.5">
+        <div className="flex min-w-0 flex-1 items-baseline gap-4">
+          <h1 className="text-display">Ask</h1>
+          <PendingBar className="h-3 w-40" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2" aria-hidden="true">
+        {VIEW_OPTIONS.map((option) => (
+          <span key={option.value} {...viewPillProps(option.value === "down")}>
+            {option.label}
+          </span>
+        ))}
+      </div>
+
+      <AskFeedbackTableSkeleton />
     </AdminPage>
   );
 }

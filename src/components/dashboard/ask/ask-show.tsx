@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
@@ -12,7 +12,7 @@ import {
 
 import { ASK_CLIP_STRIP_MAX, AskClipStrip } from "./ask-clip-strip";
 import { AskPointList } from "./ask-point-list";
-import { askSourceDate } from "./ask-sources";
+import { ASK_SOURCES_SHOWN, askSourceDate } from "./ask-sources";
 import { askMatchPlayers } from "./ask-tag-menu";
 
 /**
@@ -86,6 +86,19 @@ export interface AskShowMeProps {
   post?: (answerId: string) => Promise<AskShowPost>;
 }
 
+/**
+ * What the one status region says once the points are in: the count over one
+ * match, the match count over several.
+ */
+export function askShowAnnouncement(value: AskShowResponse): string {
+  if (value.kind === "matches") {
+    const n = value.matches.length;
+    return `Points in ${n} ${n === 1 ? "match" : "matches"}`;
+  }
+  const n = value.points.length;
+  return `${n} ${n === 1 ? "point" : "points"} found`;
+}
+
 type ShowState =
   | { status: "idle" }
   | { status: "loading" }
@@ -98,6 +111,12 @@ export function AskShowMe({
   post = postAskShow,
 }: AskShowMeProps) {
   const [state, setState] = useState<ShowState>({ status: "idle" });
+  const resultRef = useRef<HTMLHeadingElement>(null);
+  // The button unmounts once the points are shown, taking focus with it:
+  // hand focus to the result's heading instead of dropping it on <body>.
+  useEffect(() => {
+    if (state.status === "shown") resultRef.current?.focus();
+  }, [state.status]);
   if (!sources || sources.length === 0) return null;
 
   async function show() {
@@ -111,15 +130,30 @@ export function AskShowMe({
   }
 
   const loading = state.status === "loading";
+  // One status region for the component's whole life, its text changed in
+  // place — a region mounted already holding text is often not announced.
+  // An error is the alert below, so the status falls quiet for it.
+  const announcement =
+    state.status === "loading"
+      ? "Finding the points"
+      : state.status === "shown"
+        ? askShowAnnouncement(state.value)
+        : "";
 
   return (
-    <div data-ask-show="" className="flex flex-col gap-3">
+    <div
+      data-ask-show=""
+      aria-busy={loading || undefined}
+      className="flex flex-col gap-3"
+    >
+      <p role="status" data-ask-show-status="" className="sr-only">
+        {announcement}
+      </p>
       {state.status !== "shown" && (
         <button
           type="button"
           onClick={show}
           disabled={loading}
-          aria-busy={loading || undefined}
           className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] disabled:cursor-default disabled:opacity-50"
         >
           <Play className="size-3" strokeWidth={1.5} aria-hidden="true" />
@@ -127,7 +161,7 @@ export function AskShowMe({
         </button>
       )}
       {loading && (
-        <p role="status" className="text-body-sm">
+        <p aria-hidden="true" className="text-body-sm">
           Finding the points
         </p>
       )}
@@ -152,31 +186,62 @@ export function AskShowMe({
             filters={state.value.filters}
             truncated={state.value.truncated}
             href={state.value.href}
+            headingRef={resultRef}
           />
         </>
       )}
       {state.status === "shown" && state.value.kind === "matches" && (
-        <AskShowMatches matches={state.value.matches} />
+        <AskShowMatches matches={state.value.matches} headingRef={resultRef} />
       )}
     </div>
   );
 }
 
-/** Several matches: one row each, as the sources draw a match, with its count. */
+/**
+ * Several matches: one row each, as the sources draw a match, with its count.
+ * Capped as the sources are (`ASK_SOURCES_SHOWN`): the first rows show and
+ * "All N" opens the rest in place, so a long list never pushes the answer's
+ * footer a screen down.
+ */
 function AskShowMatches({
   matches,
+  headingRef,
 }: {
   matches: Extract<AskShowResponse, { kind: "matches" }>["matches"];
+  headingRef?: Ref<HTMLHeadingElement>;
 }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
   const thisYear = new Date().getFullYear();
+  const count = matches.length;
+  const shown = open ? matches : matches.slice(0, ASK_SOURCES_SHOWN);
   return (
     <section
       data-ask-show-matches=""
       className="flex max-w-[420px] flex-col gap-0.5"
     >
-      <h3 className="eyebrow-sm pb-2">Points in {matches.length} matches</h3>
-      <ul className="flex flex-col">
-        {matches.map(({ match, points, href }) => {
+      <div className="flex items-center gap-3 pb-2">
+        <h3
+          ref={headingRef}
+          tabIndex={-1}
+          className="eyebrow-sm min-w-0 flex-1 outline-none"
+        >
+          Points in {count} {count === 1 ? "match" : "matches"}
+        </h3>
+        {count > ASK_SOURCES_SHOWN && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={() => setOpen((current) => !current)}
+            className="cursor-pointer rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
+          >
+            {open ? `First ${ASK_SOURCES_SHOWN}` : `All ${count}`}
+          </button>
+        )}
+      </div>
+      <ul id={listId} className="flex flex-col">
+        {shown.map(({ match, points, href }) => {
           const date = askSourceDate(match.playedOn, thisYear);
           return (
             <li key={match.matchId}>

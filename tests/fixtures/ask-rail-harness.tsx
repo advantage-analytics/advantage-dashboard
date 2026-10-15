@@ -32,11 +32,19 @@ import type { AskScope } from "@/lib/services/ask/scope";
  *                   the filter field, and a "Pinned" group above the months
  * - `?rename=fail`  the rename is refused
  * - `?pin=fail`     the pin is refused
+ * - `?slow=1`       renames and pins take 600ms to answer, so the rail's
+ *                   in-between state can be looked at
  *
  * Renames and pins are recorded the way deletes are, and applied to the
  * list the way the route's re-render would apply them.
  */
 const params = new URLSearchParams(window.location.search);
+
+/** `?slow=1`: the server taking its time. */
+const settle = () =>
+  params.get("slow") !== null
+    ? new Promise<void>((done) => setTimeout(done, 600))
+    : Promise.resolve();
 
 const TEAM: AskScope | undefined =
   params.get("scope") === "team"
@@ -163,6 +171,7 @@ function Harness() {
           }}
           onRenameConversation={async (id, title) => {
             setRenamed((current) => [...current, [id, title]]);
+            await settle();
             if (params.get("rename") === "fail") return false;
             setConversations((current) =>
               current.map((conversation) =>
@@ -175,6 +184,7 @@ function Harness() {
           }}
           onPinConversation={async (id, next) => {
             setPinned((current) => [...current, [id, next]]);
+            await settle();
             if (params.get("pin") === "fail") return false;
             setConversations((current) =>
               current.map((conversation) =>

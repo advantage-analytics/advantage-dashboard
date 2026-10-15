@@ -19,13 +19,14 @@ export default async function AdminAskPage({
 }: {
   searchParams: Promise<{ id?: string | string[] }>;
 }) {
-  const [rows, { id }] = await Promise.all([
+  const [{ rows, capped }, { id }] = await Promise.all([
     listAdminAskFeedback(),
     searchParams,
   ]);
   return (
     <AskFeedbackPageContent
       rows={rows}
+      capped={capped}
       initialSelectedId={typeof id === "string" ? id : null}
     />
   );

@@ -428,6 +428,20 @@ export async function POST(request: Request): Promise<Response> {
       }).catch(() => null)
     : Promise.resolve(null);
 
+  // The answer cache's data version (see "The answer cache" below) needs
+  // only the viewer's own client and the scope, so it starts here too, beside
+  // the reads, rather than waiting on them. `ask_data_version` is a
+  // user-client call (`database.ts` routes nothing else), so it goes straight
+  // to the session client. A read that throws is a miss, like one that
+  // fails; on a refusal below its answer is simply never awaited.
+  const dataVersionRead: Promise<string | null> =
+    isLLMConfigured() && !coach
+      ? readAskDataVersion(
+          { rpc: (fn, args) => supabase.rpc(fn, args) },
+          scope,
+        ).catch(() => null)
+      : Promise.resolve(null);
+
   // The two reads that need nothing from each other go out together, both
   // for the viewer this request has just authenticated: the tag options
   // (server-derived — never the browser's word for them) and, for a
@@ -557,8 +571,7 @@ export async function POST(request: Request): Promise<Response> {
     tags: resolved.tags,
     scope,
   });
-  const dataVersion =
-    model.configured && !coach ? await readAskDataVersion(db, scope) : null;
+  const dataVersion = await dataVersionRead;
   const cached = dataVersion
     ? await readAskCache(db, { key: cacheKey, version: dataVersion, scope })
     : null;
@@ -616,7 +629,8 @@ export async function POST(request: Request): Promise<Response> {
       reservation: reserved.reservation,
       scope,
       pageSeats: getAskPageSeats,
-      examples: await examplesRead,
+      // In flight: the orchestrator awaits it after the "planning" status.
+      examples: examplesRead,
       coach,
     };
     const recorded = (run: AskQuestionInput) =>

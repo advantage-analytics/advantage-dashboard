@@ -1,5 +1,6 @@
 "use client";
 
+import type { Ref } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
@@ -54,6 +55,11 @@ export interface AskPointListProps {
   truncated?: boolean;
   /** The film on the first point with the rest queued: the header's link. Omitted inside the film room. */
   href?: string;
+  /**
+   * The heading, made focusable (`tabIndex={-1}`), for "Show me" to move
+   * focus onto once its button has unmounted.
+   */
+  headingRef?: Ref<HTMLHeadingElement>;
 }
 
 interface Group {
@@ -102,6 +108,7 @@ export function AskPointList({
   filters = null,
   truncated = false,
   href,
+  headingRef,
 }: AskPointListProps) {
   const workspace = useOptionalWorkspace()?.active ?? null;
   const t = LIST_TONE.light;
@@ -123,7 +130,11 @@ export function AskPointList({
       className="flex max-w-[420px] flex-col gap-0.5"
     >
       <div className="flex items-center gap-3 pb-2">
-        <h3 className="eyebrow-sm min-w-0 flex-1">
+        <h3
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
+          className="eyebrow-sm min-w-0 flex-1 outline-none"
+        >
           {count} {count === 1 ? "point" : "points"} in this match
         </h3>
         {href && (

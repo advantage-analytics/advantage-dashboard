@@ -16,8 +16,9 @@ import type { AskShowPoint } from "@/lib/services/ask/show";
  * The inline clip strip (`ask-clip-strip.tsx`): its timeline offline
  * (`ask-clip-sequence.ts`), then the component in a real browser through
  * `tests/fixtures/ask-clip-strip-harness.tsx` — the transport over three
- * points, the credential fetch for an attachment, and the three ways a film
- * is not there: removed, refused, expired.
+ * points, an attachment playing the route's own URL and renewing it once
+ * when it fails (with the strip's skeleton meanwhile), and the three ways a
+ * film is not there: removed, refused, expired.
  */
 
 const point = (
@@ -129,6 +130,11 @@ test.beforeAll(async () => {
       response.end(bundle);
       return;
     }
+    if (request.url?.startsWith("/broken.mp4")) {
+      response.statusCode = 404;
+      response.end();
+      return;
+    }
     if (request.url?.startsWith("/hang.mp4")) {
       hanging.push(response);
       return;
@@ -205,17 +211,58 @@ test("the job lineage plays the route's own URL: three points, a counter, the po
   ).toBeUndefined();
 });
 
-test("an attachment fetches its credential from the match's playback route", async ({
+const clipFetches = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { __clipFetches?: string[] }).__clipFetches,
+  );
+
+test("an attachment plays the URL the show route signed: no second credential fetch", async ({
   page,
 }) => {
   await openFixture(page, "?case=attachment");
   await expect(strip(page)).toBeVisible();
+  await expect(strip(page).locator("video")).toHaveAttribute(
+    "src",
+    /\/hang\.mp4$/,
+  );
   await expect(position(page)).toHaveText("Point 1 of 3");
-  expect(
-    await page.evaluate(
-      () => (window as unknown as { __clipFetches?: string[] }).__clipFetches,
-    ),
-  ).toEqual([`/api/matches/${MATCH_ID}/video`]);
+  expect(await clipFetches(page)).toBeUndefined();
+});
+
+test("an attachment whose signed URL fails renews it once from the match's playback route", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=renew");
+  await expect(strip(page).locator("video")).toHaveAttribute(
+    "src",
+    /\/hang\.mp4$/,
+  );
+  await expect(position(page)).toHaveText("Point 1 of 3");
+  expect(await clipFetches(page)).toEqual([`/api/matches/${MATCH_ID}/video`]);
+});
+
+test("while the credential renews, the strip's own frame holds its place as one status", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=pending");
+  const pending = page.locator("[data-ask-clip-loading]");
+  await expect(pending).toBeAttached();
+  await expect(
+    pending.getByRole("status", { name: "Loading the film" }),
+  ).toHaveCount(1);
+  await expect(pending.locator("[role=status]")).toHaveCount(1);
+  // The loaded card's frame (the harness carries no stylesheet, so the
+  // classes are the contract): the 420px card, a 16:9 film bar, every bar
+  // silent under the one status.
+  await expect(pending).toHaveClass(/max-w-\[420px\]/);
+  await expect(pending.locator(".surface-card")).toHaveCount(1);
+  await expect(
+    pending.locator(".surface-card [data-pending-bar]").first(),
+  ).toHaveClass(/aspect-video/);
+  await expect(
+    pending.locator("[role=status] > [aria-hidden=true]"),
+  ).toHaveCount(1);
+  await expect(page.locator("video")).toHaveCount(0);
 });
 
 test("a video that is gone says so and hands over to the film room, never a broken player", async ({

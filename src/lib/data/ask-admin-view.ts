@@ -9,10 +9,35 @@
  * id, and the page prints no address anywhere.
  */
 
+import { squadMark, toSquad } from "@/lib/data/squad";
 import {
   readAskFeedbackRow,
   type AskFeedback,
 } from "@/lib/services/ask/feedback";
+
+/**
+ * The loader reads the newest this many thumbs by last change — the page is
+ * a reading queue, not an archive. Here, not in the loader, so the page can
+ * say when the list is cut (`adminAskSummary`).
+ */
+export const MAX_ADMIN_ASK_FEEDBACK = 200;
+
+/**
+ * The line beside the title. It never names a total it does not know: when
+ * the loader came back full (`capped`), older thumbs may lie past the cap, so
+ * the line says "Newest 200 shown" and the counts are of what is shown.
+ */
+export function adminAskSummary(
+  rows: readonly Pick<AdminAskFeedbackRow, "rating">[],
+  capped: boolean,
+): string {
+  const down = rows.filter((row) => row.rating === "down").length;
+  const up = rows.length - down;
+  const lead = capped
+    ? `Newest ${rows.length} shown`
+    : `${rows.length} ${rows.length === 1 ? "thumb" : "thumbs"}`;
+  return `${lead} · ${down} down · ${up} up`;
+}
 
 export interface AdminAskFeedbackRow {
   id: string;
@@ -26,8 +51,13 @@ export interface AdminAskFeedbackRow {
   /** When it was last changed, ISO. */
   updatedAt: string;
   asker: { id: string; name: string };
-  /** The program the question was asked in, or null for a personal one. */
-  program: { id: string; name: string } | null;
+  /**
+   * The program the question was asked in, or null for a personal one.
+   * `name` is the full name (the drawer); `shortName` is
+   * what the table's narrow Scope column can tell apart
+   * (`shortProgramName`).
+   */
+  program: { id: string; name: string; shortName: string } | null;
   question: { text: string; tags: { kind: string; label: string }[] };
   answer: {
     headline: string | null;
@@ -61,6 +91,40 @@ export interface AdminAskPeople {
   names: ReadonlyMap<string, string>;
   /** `programs.id` → the program's name. */
   programs: ReadonlyMap<string, string>;
+  /**
+   * `programs.id` → its short name, when the loader built one from the
+   * school and squad; otherwise it is derived from `programs`' name.
+   */
+  shortPrograms?: ReadonlyMap<string, string>;
+}
+
+/**
+ * The school's distinguishing words. At table width every University of
+ * California campus reads "University of California…", so the generic
+ * framing goes: a leading "The" and "University of", a trailing
+ * "University". "University of California, San Diego" → "California, San
+ * Diego"; "Western Kentucky University" → "Western Kentucky". A name that is
+ * nothing but the framing keeps it.
+ */
+export function shortSchoolName(schoolName: string): string {
+  const full = schoolName.trim();
+  const short = full
+    .replace(/^the\s+/i, "")
+    .replace(/^university\s+of\s+/i, "")
+    .replace(/\s+university$/i, "")
+    .trim();
+  return short || full;
+}
+
+/**
+ * The Scope column's name for a program: the short school name, and the
+ * squad's mark when it fields one, so a school's two teams stay apart —
+ * "California, San Diego · W".
+ */
+export function shortProgramName(schoolName: string, team: unknown): string {
+  const mark = squadMark(toSquad(team));
+  const school = shortSchoolName(schoolName);
+  return mark ? `${school} · ${mark}` : school;
 }
 
 /**
@@ -134,6 +198,19 @@ export function askerName(
   return name || `Player ${id.slice(0, 8)}`;
 }
 
+function readProgram(
+  id: string,
+  people: AdminAskPeople,
+): NonNullable<AdminAskFeedbackRow["program"]> {
+  const name = people.programs.get(id);
+  if (!name) return { id, name: "A program", shortName: "A program" };
+  return {
+    id,
+    name,
+    shortName: people.shortPrograms?.get(id) ?? shortSchoolName(name),
+  };
+}
+
 /** One raw row read into the page's shape; null when it does not read whole. */
 export function readAdminAskFeedback(
   row: DbAdminAskFeedback,
@@ -177,12 +254,7 @@ export function readAdminAskFeedback(
       id: row.user_id,
       name: people.names.get(row.user_id) ?? askerName(row.user_id, null, null),
     },
-    program: row.program_id
-      ? {
-          id: row.program_id,
-          name: people.programs.get(row.program_id) ?? "A program",
-        }
-      : null,
+    program: row.program_id ? readProgram(row.program_id, people) : null,
     question: {
       text:
         typeof row.question === "string"

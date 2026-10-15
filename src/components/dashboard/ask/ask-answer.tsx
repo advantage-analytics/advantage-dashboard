@@ -373,16 +373,24 @@ function AnswerBody({
           {answer.status === "done" && answer.answerId && (
             <AskShowMe answerId={answer.answerId} sources={answer.sources} />
           )}
+          {/* Provenance: who signed it and how it landed, one tight pair,
+              so the signature reads as the rating's caption rather than a
+              stray line between the sources and the thumbs. */}
           {answer.status === "done" && (
-            <p data-ask-signature="" className="text-micro max-w-[60ch]">
-              {/* `text-micro` is unlayered and would beat a colour utility. */}
-              <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
-              {answer.noAdvice && ` · ${copy.noAdvice}`}
-              {answer.coach && ` · ${copy.coach}`}
-            </p>
-          )}
-          {answer.status === "done" && onRate && (
-            <AskFeedbackControl feedback={answer.feedback} onRate={onRate} />
+            <div data-ask-provenance="" className="flex flex-col gap-1.5">
+              <p data-ask-signature="" className="text-micro max-w-[60ch]">
+                {/* `text-micro` is unlayered and would beat a colour utility. */}
+                <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
+                {answer.noAdvice && ` · ${copy.noAdvice}`}
+                {answer.coach && ` · ${copy.coach}`}
+              </p>
+              {onRate && (
+                <AskFeedbackControl
+                  feedback={answer.feedback}
+                  onRate={onRate}
+                />
+              )}
+            </div>
           )}
         </div>
       )}

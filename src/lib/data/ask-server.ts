@@ -31,7 +31,6 @@ import {
   type DbAskTeamMatch,
 } from "@/lib/data/ask-tags";
 import { getPersonalMatches } from "@/lib/data/personal-matches-server";
-import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
@@ -492,46 +491,121 @@ export async function getAskPageSeats(
   matchIds: readonly string[],
 ): Promise<Map<string, AskPageSeat>> {
   const seats = new Map<string, AskPageSeat>();
-  const ids = matchIds.filter(isUuid);
+  const ids = [...new Set(matchIds.filter(isUuid))];
   if (ids.length === 0) return seats;
   const supabase = await createClient();
-  const [{ data: rows, error }, myPlayerIds] = await Promise.all([
+  const [{ data: rows, error }, myPlayerIds, firstPoints] = await Promise.all([
     supabase
       .from("matches")
       .select("id, program_id, player1_id, player2_id")
       .in("id", ids),
     getMyPlayerIds(),
+    readFirstPoints(supabase, ids),
   ]);
   if (error || !rows) return seats;
+
+  // Every match's roster seats in one read, not one per match. A seat id is
+  // a roster seat when it names a `program_players` row of the match's OWN
+  // program — `resolveRosterSeatIds()`'s rule, applied to the batch.
+  const seatIds = [
+    ...new Set(
+      rows.flatMap((row) =>
+        row.program_id
+          ? [row.player1_id, row.player2_id].filter(
+              (id): id is string => id != null,
+            )
+          : [],
+      ),
+    ),
+  ];
+  const rosterProgram = new Map<string, string>();
+  if (seatIds.length > 0) {
+    const { data: roster } = await supabase
+      .from("program_players")
+      .select("id, program_id")
+      .in("id", seatIds);
+    for (const player of (roster ?? []) as {
+      id: string;
+      program_id: string;
+    }[]) {
+      rosterProgram.set(player.id, player.program_id);
+    }
+  }
+
+  // No served-by on the first point: nothing to check Ask's seat against,
+  // so no link (fail closed) — and no video lookup either.
+  const linkable = rows.filter((row) => firstPoints.has(row.id));
+  const videos = await Promise.all(
+    linkable.map((row) => getMatchVideo(row.id).catch(() => null)),
+  );
+  linkable.forEach((row, index) => {
+    const first = firstPoints.get(row.id);
+    if (!videos[index] || !first) return;
+    const rosterIds = [row.player1_id, row.player2_id].filter(
+      (id): id is string =>
+        id != null &&
+        row.program_id != null &&
+        rosterProgram.get(id) === row.program_id,
+    );
+    seats.set(row.id, {
+      youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
+      pointNumber: first.pointNumber,
+      serverIsPlayer1: first.serverIsPlayer1,
+    });
+  });
+  return seats;
+}
+
+/**
+ * Each match's first point and who served it, for many matches in one read.
+ * Every match numbers its points from 1, so point 1 is asked for across the
+ * batch; a match that does not have one (none today) falls back to its own
+ * lowest-numbered point, so the answer is still the FIRST point. A point
+ * with no served-by is left out — the caller links nothing for it.
+ */
+async function readFirstPoints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: readonly string[],
+): Promise<Map<string, { pointNumber: number; serverIsPlayer1: boolean }>> {
+  type FirstPoint = {
+    match_id: string;
+    point_number: number;
+    server_is_player1: boolean | null;
+  };
+  const first = new Map<
+    string,
+    { pointNumber: number; serverIsPlayer1: boolean }
+  >();
+  const seen = new Set<string>();
+  const take = (point: FirstPoint) => {
+    seen.add(point.match_id);
+    if (typeof point.server_is_player1 !== "boolean") return;
+    first.set(point.match_id, {
+      pointNumber: point.point_number,
+      serverIsPlayer1: point.server_is_player1,
+    });
+  };
+
+  const { data, error } = await supabase
+    .from("points")
+    .select("match_id, point_number, server_is_player1")
+    .in("match_id", ids)
+    .eq("point_number", 1);
+  if (error) return first;
+  for (const point of (data ?? []) as FirstPoint[]) take(point);
+
+  const missing = ids.filter((id) => !seen.has(id));
   await Promise.all(
-    rows.map(async (row) => {
-      const [rosterIds, first, video] = await Promise.all([
-        resolveRosterSeatIds(supabase, row),
-        supabase
-          .from("points")
-          .select("point_number, server_is_player1")
-          .eq("match_id", row.id)
-          .order("point_number", { ascending: true })
-          .limit(1)
-          .maybeSingle(),
-        getMatchVideo(row.id).catch(() => null),
-      ]);
-      // No served-by on the first point: nothing to check Ask's seat against,
-      // so no link (fail closed).
-      if (
-        !video ||
-        first.error ||
-        !first.data ||
-        typeof first.data.server_is_player1 !== "boolean"
-      ) {
-        return;
-      }
-      seats.set(row.id, {
-        youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
-        pointNumber: first.data.point_number,
-        serverIsPlayer1: first.data.server_is_player1,
-      });
+    missing.map(async (id) => {
+      const { data: point } = await supabase
+        .from("points")
+        .select("match_id, point_number, server_is_player1")
+        .eq("match_id", id)
+        .order("point_number", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (point) take(point as FirstPoint);
     }),
   );
-  return seats;
+  return first;
 }
