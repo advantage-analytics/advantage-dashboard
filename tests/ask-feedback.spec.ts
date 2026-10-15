@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   ASK_FEEDBACK_REASONS,
+  isMissingEmbed,
   MAX_ASK_FEEDBACK_NOTE,
   readAskFeedbackRequest,
   readAskFeedbackRow,
@@ -164,4 +165,19 @@ test("the migration lists the same reasons as the code", () => {
   expect(
     listed.split(",").map((value) => value.trim().replace(/'/g, "")),
   ).toEqual([...ASK_FEEDBACK_REASONS]);
+});
+
+test("a missing ask_feedback embed is recognised so the thread still loads", () => {
+  // The exact error PostgREST returned in PostHog issue 01a13bf3 / 01a13bf2.
+  expect(
+    isMissingEmbed({
+      code: "PGRST200",
+      message:
+        "Could not find a relationship between 'ask_messages' and 'ask_feedback' in the schema cache",
+    } as { code: string }),
+  ).toBe(true);
+  // Any other read failure still throws "Could not load the conversation".
+  expect(isMissingEmbed({ code: "42501" })).toBe(false);
+  expect(isMissingEmbed({ code: "PGRST116" })).toBe(false);
+  expect(isMissingEmbed(null)).toBe(false);
 });
