@@ -237,6 +237,20 @@ export function isLLMConfigured(): boolean {
 }
 
 /**
+ * The model a call asking for `requested` runs on, as `modelFor()` resolves
+ * it for the configured provider; null in mock mode, where no model runs.
+ * For telemetry: a request that fails over to the other provider runs that
+ * provider's model instead, which is not known here.
+ */
+export function resolvedLLMModel(requested: string | undefined): string | null {
+  if (!isLLMConfigured()) return null;
+  return modelFor(
+    process.env.LLM_PROVIDER === "anthropic" ? "anthropic" : "openai",
+    requested,
+  );
+}
+
+/**
  * Returns an AsyncIterable<string> of text chunks for the given conversation.
  * Each chunk is a raw text delta (not JSON-wrapped).
  */

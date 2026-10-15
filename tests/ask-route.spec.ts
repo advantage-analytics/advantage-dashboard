@@ -288,6 +288,7 @@ function loadRoute(state: World) {
     },
     "@/lib/llm/adapter": {
       isLLMConfigured: () => state.configured,
+      resolvedLLMModel: () => null,
       createLLMObservabilityContext: () => ({}),
       getLLMStream: async () => {
         calls.llm += 1;

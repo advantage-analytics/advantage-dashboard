@@ -144,12 +144,15 @@ export function buildMomentumAnswer(
       ? `${cell(SUBJECT_NAME_COLUMN)}'s`
       : "The player's"
     : "Your";
+  // Lead and deficit are the same player's, so the comparison names that
+  // player twice; with no known pronoun the team form says "they".
+  const self = context.team ? "they" : "you";
   const deficit = -trail;
   const headline =
     lead > deficit
-      ? `${subject} led by more than ${context.team ? "the opponent" : "you"} ever trailed.`
+      ? `${subject} led by more than ${self} ever trailed.`
       : lead < deficit
-        ? `${subject} trailed by more than ${context.team ? "the opponent" : "you"} ever led.`
+        ? `${subject} trailed by more than ${self} ever led.`
         : lead === 0
           ? "Neither side ever led."
           : "Neither side led by more than the other did.";

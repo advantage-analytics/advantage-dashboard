@@ -555,7 +555,7 @@ test.describe("deriveAndPublish over hand labels", () => {
 test.describe("deriveAndPublish and Ask's first question", () => {
   quietConsole();
 
-  test("the hook runs with the match and deadline, and its answer rides on the ready mail", async () => {
+  test("the hook runs with the match and a deadline 12s early, and its answer rides on the ready mail", async () => {
     const { client } = fakeSupabase();
     const { deriveAndPublish, mail, asks } = load(written());
     const seen: unknown[] = [];
@@ -575,7 +575,9 @@ test.describe("deriveAndPublish and Ask's first question", () => {
       },
     });
     expect(out.ok).toBe(true);
-    expect(seen).toEqual([{ matchId: MATCH, deadline: 123_456 }]);
+    // Short of the job's deadline, so the mail and the ball paths after it
+    // are never left the last seconds of the invocation.
+    expect(seen).toEqual([{ matchId: MATCH, deadline: 123_456 - 12_000 }]);
     expect(mail).toEqual(["ready"]);
     expect(asks).toEqual([answer]);
   });

@@ -14,17 +14,34 @@ import {
   createLLMObservabilityContext,
   getLLMStream,
   isLLMConfigured,
+  resolvedLLMModel,
 } from "@/lib/llm/adapter";
 import type { AskModel } from "@/lib/services/ask/ask";
 
-/** The model ids the environment names per stage; null for the provider's default. */
+/** The model ids the environment asks for per stage; undefined (an empty value too) for the provider's default. */
+function requestedStageModels(): {
+  plan: string | undefined;
+  answer: string | undefined;
+} {
+  return {
+    plan: process.env.ASK_PLAN_MODEL || undefined,
+    answer: process.env.ASK_ANSWER_MODEL || undefined,
+  };
+}
+
+/**
+ * The model each stage runs on, for ask_runs and the `ask_run` event: the
+ * adapter's own resolution, so a substituted provider default is recorded as
+ * what ran. Null in mock mode. A provider failover is not reflected.
+ */
 export function askStageModels(): {
   plan: string | null;
   answer: string | null;
 } {
+  const requested = requestedStageModels();
   return {
-    plan: process.env.ASK_PLAN_MODEL ?? null,
-    answer: process.env.ASK_ANSWER_MODEL ?? null,
+    plan: resolvedLLMModel(requested.plan),
+    answer: resolvedLLMModel(requested.answer),
   };
 }
 
@@ -34,14 +51,13 @@ export function askAdapterModel(input: {
   signal?: AbortSignal;
 }): AskModel {
   const observability = createLLMObservabilityContext(input.userId);
-  const stage = askStageModels();
+  const stage = requestedStageModels();
   return {
     configured: isLLMConfigured(),
     stream: (systemPrompt, messages, call) =>
       getLLMStream(systemPrompt, messages, observability, {
         span: call ? `ask.${call.stage}` : "ask",
-        model:
-          (call?.stage === "answer" ? stage.answer : stage.plan) ?? undefined,
+        model: call?.stage === "answer" ? stage.answer : stage.plan,
         temperature: call?.temperature,
         maxTokens: call?.maxTokens,
         jsonSchema: call?.jsonSchema,
