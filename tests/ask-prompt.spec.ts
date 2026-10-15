@@ -748,9 +748,15 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
-  test("says the serve block has no deuce/ad court to draw", () => {
+  test("says the serve block labels Deuce and Ad rows only from a court column, one count row per court", () => {
     expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
-      "The result does not record the deuce or ad court, so do not label a row with one.",
+      "or the Deuce and Ad courts when the result has a court column — label those rows Deuce and Ad, and only then.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).not.toContain(
+      "does not record the deuce or ad court",
     );
   });
 

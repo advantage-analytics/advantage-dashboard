@@ -40,9 +40,9 @@ export interface LLMCallOptions {
    * question's plan call from its answer call inside that trace.
    */
   span?: string;
-  /** Sampling temperature. Omitted, the provider's default applies. */
+  /** Sampling temperature, Anthropic path only (Gemini refuses sampling parameters). */
   temperature?: number;
-  /** The reply's length cap in tokens. The Anthropic path's default is 1024. */
+  /** The reply's length cap in tokens, Anthropic path only; its default is 1024. */
   maxTokens?: number;
   /**
    * When set, the reply is one JSON object of this shape and nothing else:
@@ -311,12 +311,10 @@ async function openaiStream(
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ],
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
-    ...(options.maxTokens !== undefined
-      ? { max_tokens: options.maxTokens }
-      : {}),
+    // No `temperature` and no `max_tokens` on this path. Gemini is retiring
+    // sampling parameters and answers them with a 400, and a 3.x model counts
+    // its thinking tokens against `max_tokens`, so a cap sized for the reply
+    // can cut a JSON plan off mid-object. Both apply on the Anthropic path only.
     ...(options.jsonSchema
       ? {
           response_format: {

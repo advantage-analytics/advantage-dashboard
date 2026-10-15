@@ -56,6 +56,7 @@ import { writeFileSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { parseSubs, subArgs, substituteQuestion } from "./lib/ask-eval-subs";
 import { loadEnvLocal } from "./lib/env";
+import type { AskModelCall } from "@/lib/services/ask/ask";
 
 loadEnvLocal();
 for (const key of Object.keys(process.env)) {
@@ -512,8 +513,17 @@ async function main() {
       async stream(
         system: string,
         messages: { role: "user" | "assistant"; content: string }[],
+        call?: AskModelCall,
       ) {
-        const source = await getLLMStream(system, messages, context);
+        // The same options the route sends (src/app/api/ask/route.ts), so an
+        // eval plans under the schema and settings production uses.
+        const source = await getLLMStream(system, messages, context, {
+          span: call ? `ask.${call.stage}` : "ask",
+          temperature: call?.temperature,
+          maxTokens: call?.maxTokens,
+          jsonSchema: call?.jsonSchema,
+          staticPrefixLength: call?.staticPrefixLength,
+        });
         const slot = modelReplies.push("") - 1;
         return (async function* () {
           for await (const chunk of source) {
