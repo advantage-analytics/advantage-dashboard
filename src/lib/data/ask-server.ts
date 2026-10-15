@@ -108,8 +108,10 @@ async function getTeamAskTagOptions(programId: string): Promise<AskTagOptions> {
  */
 export const getAskTagOptions = cache(async function getAskTagOptions(
   programId: string | null = null,
+  /** The signed-in user's id when the caller already has it (`POST /api/ask`): one auth read, not two. */
+  knownViewerId?: string,
 ): Promise<AskTagOptions> {
-  const viewerId = await getViewerId();
+  const viewerId = knownViewerId ?? (await getViewerId());
   if (!viewerId) return NO_ASK_TAG_OPTIONS;
 
   if (programId !== null) {
@@ -255,12 +257,14 @@ export interface AskConversation extends AskConversationSummary {
 export const getAskConversation = cache(async function getAskConversation(
   id: string,
   programId: string | null = null,
+  /** The signed-in user's id when the caller already has it (`POST /api/ask`): one auth read, not two. */
+  knownViewerId?: string,
 ): Promise<AskConversation | null> {
   // A malformed `?c=` would otherwise reach Postgres and fail the uuid cast.
   if (!isUuid(id)) return null;
   if (programId !== null && !isUuid(programId)) return null;
 
-  const viewerId = await getViewerId();
+  const viewerId = knownViewerId ?? (await getViewerId());
   if (!viewerId) return null;
 
   const supabase = await createClient();

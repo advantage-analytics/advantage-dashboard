@@ -122,6 +122,13 @@ What the adapter adds so the events can be read:
 - **One trace per request.** `createLLMObservabilityContext()` is created
   once per request and shared by every call in it, so an Ask question's plan,
   pattern and answer calls (and retries) sit under one `$ai_trace_id`.
+- **What a call asks for** travels in `getLLMStream()`'s options too:
+  `temperature`, `maxTokens`, a `jsonSchema` the reply must hold to
+  (`response_format` on the Gemini path, a forced tool on the Anthropic one),
+  a `staticPrefixLength` marking the fixed part of the system prompt for the
+  Anthropic prompt cache, and the request's `signal` so a closed tab aborts
+  the provider call. Ask's plan step uses all of them; its prompts put the
+  fixed text first so the prefix is cacheable (`prompts.ts`).
 - **Tokens and cost on the Gemini path** come from the stream's final usage
   chunk, which Gemini sends only when asked (the request's
   `stream_options.include_usage`). Before 2026-10-15 every event from this

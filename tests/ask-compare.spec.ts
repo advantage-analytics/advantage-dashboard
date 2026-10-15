@@ -1133,9 +1133,15 @@ function fakeDb(answer: (run: Run) => AskRpcResult) {
         runs.push(run);
         return answer(run);
       }
-      if (fn === "ask_save_exchange") {
+      if (fn === "ask_save_exchange_ids") {
         saves.push(args ?? {});
-        return { data: "bbbbbbbb-0000-4000-8000-000000000002", error: null };
+        return {
+          data: {
+            conversation_id: "bbbbbbbb-0000-4000-8000-000000000002",
+            answer_id: "bbbbbbbb-0000-4000-8000-000000000003",
+          },
+          error: null,
+        };
       }
       if (fn === "ask_quota")
         return { data: { used: 1, cap: 20 }, error: null };

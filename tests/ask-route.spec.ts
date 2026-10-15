@@ -207,8 +207,10 @@ function world(overrides: Partial<World> = {}): World {
         },
         error: null,
       }),
-      ask_save_exchange: () => ({ data: SAVED_ID, error: null }),
-      ask_last_answer_id: () => ({ data: ANSWER_ID, error: null }),
+      ask_save_exchange_ids: () => ({
+        data: { conversation_id: SAVED_ID, answer_id: ANSWER_ID },
+        error: null,
+      }),
       ask_quota: () => ({
         data: { used: 0, cap: 20, resets_on: "2026-11-01" },
         error: null,
@@ -404,7 +406,12 @@ test.describe("POST /api/ask · the route file", () => {
     const { route } = loadRoute(world());
     expect(route.runtime).toBe("nodejs");
     expect(route.dynamic).toBe("force-dynamic");
-    expect(Object.keys(route).sort()).toEqual(["POST", "dynamic", "runtime"]);
+    expect(Object.keys(route).sort()).toEqual([
+      "POST",
+      "dynamic",
+      "maxDuration",
+      "runtime",
+    ]);
   });
 
   test("reaches the service-role client only through createAskDatabase()", () => {
@@ -483,8 +490,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     expect(calls.adminBuilt).toBe(1);
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_query", "service"],
-      ["ask_save_exchange", "user"],
-      ["ask_last_answer_id", "user"],
+      ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
@@ -507,8 +513,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
 
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_team_query", "service"],
-      ["ask_save_exchange", "user"],
-      ["ask_last_answer_id", "user"],
+      ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
@@ -757,7 +762,7 @@ test.describe("POST /api/ask · refusals before the stream", () => {
     );
     expect(response.status).toBe(200);
     await response.text();
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange")
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids")
       ?.args as { p_question: { tags: { label: string }[] } };
     expect(saved.p_question.tags.map((tag) => tag.label)).toEqual([
       "Sep 14, 2026 · Anna Lee",
@@ -951,7 +956,9 @@ test.describe("POST /api/ask · the answer", () => {
       expect.arrayContaining(["status", "headline", "figure", "text"]),
     );
     expect(stream.slice(0, 1)).toEqual([{ type: "status", stage: "planning" }]);
-    expect(stream.at(-2)).toMatchObject({ type: "sources" });
+    expect(stream.find((event) => event.type === "sources")).toMatchObject({
+      type: "sources",
+    });
     expect(stream.at(-1)).toEqual({
       type: "done",
       conversationId: SAVED_ID,
@@ -963,8 +970,7 @@ test.describe("POST /api/ask · the answer", () => {
     // A sample answer is not a question: no reservation, no provider.
     expect(rpcNames(calls)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
     expect(calls.llm).toBe(0);
@@ -989,7 +995,7 @@ test.describe("POST /api/ask · the answer", () => {
     );
     expect(response.status).toBe(200);
     await response.text();
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange");
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids");
     expect(saved?.args).toMatchObject({
       p_conversation_id: CONVERSATION_ID,
       p_question: { text: QUESTION.question, tags: [] },
@@ -1084,7 +1090,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect(calls.loaders).toEqual(["getAskTagOptions"]);
     expect(rpcNames(calls)).toContain("ask_run_query");
     expect(rpcNames(calls)).not.toContain("ask_run_team_query");
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange");
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids");
     expect(Object.keys(saved?.args as object)).not.toContain("p_program_id");
   });
 
@@ -1155,8 +1161,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     ]);
     expect(rpcNames(calls)).toEqual([
       "ask_run_team_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
     expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });
@@ -1167,7 +1172,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
         tags: [{ kind: "player", id: PLAYER_ID, label: "Mara Sokolov" }],
       },
     });
-    expect(stream.at(-2)).toMatchObject({
+    expect(stream.find((event) => event.type === "sources")).toMatchObject({
       type: "sources",
       matches: [{ matchId: MATCH_A, playerName: "Mara Sokolov" }],
     });

@@ -349,10 +349,14 @@ function fakeDb() {
             },
             error: null,
           };
-        case "ask_save_exchange":
-          return { data: "bbbbbbbb-0000-4000-8000-000000000002", error: null };
-        case "ask_last_answer_id":
-          return { data: "00000000-0000-4000-8000-0000000000a1", error: null };
+        case "ask_save_exchange_ids":
+          return {
+            data: {
+              conversation_id: "bbbbbbbb-0000-4000-8000-000000000002",
+              answer_id: "00000000-0000-4000-8000-0000000000a1",
+            },
+            error: null,
+          };
         case "ask_quota":
           return {
             data: { used: 1, cap: 20, resets_on: "2026-11-01" },

@@ -44,12 +44,14 @@ import { askMeasure } from "@/lib/services/ask/measures";
 import { ASK_MOCK_PLAN, mockAskAnswerStream } from "@/lib/services/ask/mock";
 import type { AskScope } from "@/lib/services/ask/scope";
 import {
-  ASK_PLAN_EXAMPLE_NAMES,
-  ASK_SCOPE_COUNT_COLUMN,
   type AskPlanQuery,
   type AskPlanReply,
   type AskPreviousPlan,
   type AskPromptTurn,
+  ASK_PLAN_EXAMPLE_NAMES,
+  ASK_PLAN_REPLY_SCHEMA,
+  ASK_SCOPE_COUNT_COLUMN,
+  askPromptStaticPrefixLength,
   buildAnswerPrompt,
   buildPlanPrompt,
   oneLine,
@@ -215,12 +217,27 @@ export interface AskDatabase {
 /** Which step of a question a model call is for; the route names the call by it in LLM analytics. */
 export type AskModelStage = "plan" | "pattern" | "answer";
 
+/** What one model call asks of the adapter beyond its prompt. */
+export interface AskModelCall {
+  stage: AskModelStage;
+  /** 0 for the steps that read or write a plan: the same question should plan the same way twice. */
+  temperature?: number;
+  maxTokens?: number;
+  /** The reply must be one JSON object of this shape (the plan step). */
+  jsonSchema?: {
+    name: string;
+    schema: { type: "object" } & Record<string, unknown>;
+  };
+  /** How many leading characters of the system prompt every call shares (`askPromptStaticPrefixLength`). */
+  staticPrefixLength?: number;
+}
+
 export interface AskModel {
   configured: boolean;
   stream(
     systemPrompt: string,
     messages: ChatMessage[],
-    stage?: AskModelStage,
+    call?: AskModelCall,
   ): Promise<AsyncIterable<string>>;
 }
 
@@ -933,7 +950,7 @@ export async function* askQuestion(
               team,
             }),
             [{ role: "user", content: input.question }],
-            "pattern",
+            { stage: "pattern", temperature: 0 },
           ),
         );
         return readPatternReply(reply);
@@ -1941,6 +1958,10 @@ export async function* askQuestion(
     }
 
     // ── Answer ─────────────────────────────────────────────────────────────
+    // The matches are settled here — every retry and fallback is behind us —
+    // so the page can show "Computed from N matches" while the answer is
+    // still being written, not after it was saved.
+    yield { type: "sources", matches: result.matches };
     yield { type: "status", stage: "writing" };
 
     let chunks: AsyncIterable<string>;
@@ -1950,15 +1971,19 @@ export async function* askQuestion(
       chunks = oneChunk(reviewText);
     } else if (model.configured) {
       try {
+        const answerPrompt = buildAnswerPrompt({
+          question: input.question,
+          rows: result.rows,
+          matchCount: result.matches.length,
+          ...(team ? { scope } : {}),
+        });
         chunks = await model.stream(
-          buildAnswerPrompt({
-            question: input.question,
-            rows: result.rows,
-            matchCount: result.matches.length,
-            ...(team ? { scope } : {}),
-          }),
+          answerPrompt,
           [{ role: "user", content: ASK_ANSWER_USER_MESSAGE }],
-          "answer",
+          {
+            stage: "answer",
+            staticPrefixLength: askPromptStaticPrefixLength(answerPrompt),
+          },
         );
       } catch {
         yield await fail("llm_unavailable", ASK_LLM_UNAVAILABLE_MESSAGE);
@@ -2030,7 +2055,9 @@ export async function* askQuestion(
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
-    const saved = await rpc(db, "ask_save_exchange", {
+    // One round trip saves both messages and returns both ids: the
+    // conversation's, and the answer's for a thumbs up or down on it.
+    const saved = await rpc(db, "ask_save_exchange_ids", {
       p_conversation_id: input.conversationId,
       p_question: savedQuestion(input.question, input.tags),
       p_answer: savedAnswer(answer, result, plan, noAdvice, model.configured),
@@ -2038,32 +2065,21 @@ export async function* askQuestion(
       // arguments it always was.
       ...(scope.kind === "team" ? { p_program_id: scope.programId } : {}),
     });
-    if (saved.error || typeof saved.data !== "string") {
+    const ids = savedIds(saved.data);
+    if (saved.error || ids === null) {
       console.error("[ask] could not save the exchange", {
         sqlstate: saved.error?.code,
-        error: saved.error?.message ?? "ask_save_exchange() answered no id",
+        error: saved.error?.message ?? "ask_save_exchange_ids() answered no id",
       });
       yield await fail("answer_failed", ASK_SAVE_FAILED_MESSAGE);
       return;
     }
 
-    // The answer's own id, for a thumbs up or down on it. Not having it is
-    // no failure: the answer is saved, and only the feedback control waits.
-    const answerId = await rpc(db, "ask_last_answer_id", {
-      p_conversation_id: saved.data,
-    });
-    if (answerId.error) {
-      console.warn("[ask] could not read the saved answer's id", {
-        sqlstate: answerId.error.code,
-      });
-    }
-
     settled = true;
-    yield { type: "sources", matches: result.matches };
     yield {
       type: "done",
-      conversationId: saved.data,
-      ...(typeof answerId.data === "string" ? { answerId: answerId.data } : {}),
+      conversationId: ids.conversationId,
+      ...(ids.answerId !== null ? { answerId: ids.answerId } : {}),
       ...(await spentCount(db, input.reservation)),
     };
   } finally {
@@ -2071,6 +2087,24 @@ export async function* askQuestion(
     // receive an answer. Settled paths return at once.
     await release();
   }
+}
+
+/**
+ * What `ask_save_exchange_ids()` answered: the conversation's id, and the
+ * saved answer's when the function could read it back. Null when the
+ * conversation id is missing — then nothing was saved that the page could
+ * open — while a missing answer id only leaves the feedback control without
+ * a target.
+ */
+function savedIds(
+  data: unknown,
+): { conversationId: string; answerId: string | null } | null {
+  const record = asRecord(data);
+  if (!record || typeof record.conversation_id !== "string") return null;
+  return {
+    conversationId: record.conversation_id,
+    answerId: typeof record.answer_id === "string" ? record.answer_id : null,
+  };
 }
 
 // ── Plan step ────────────────────────────────────────────────────────────────
@@ -2094,7 +2128,15 @@ async function planOnce(
 
   let reply: string;
   try {
-    const chunks = await model.stream(systemPrompt, messages, "plan");
+    const chunks = await model.stream(systemPrompt, messages, {
+      stage: "plan",
+      temperature: 0,
+      // A team query with a baseline runs to a few thousand characters; the
+      // Anthropic path's default of 1024 tokens would cut it short.
+      maxTokens: 4096,
+      jsonSchema: ASK_PLAN_REPLY_SCHEMA,
+      staticPrefixLength: askPromptStaticPrefixLength(systemPrompt),
+    });
     const parts: string[] = [];
     for await (const chunk of chunks) parts.push(chunk);
     reply = parts.join("");
@@ -2185,7 +2227,12 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
   const record = asRecord(value);
   if (!record) return null;
   const advice = record.asks_for_advice === true;
-  if (typeof record.cannot_answer === "string") {
+  // A structured reply may carry every field of the schema, the unused ones
+  // empty: an empty cannot_answer is no refusal.
+  if (
+    typeof record.cannot_answer === "string" &&
+    record.cannot_answer.trim() !== ""
+  ) {
     return { cannot_answer: record.cannot_answer, asks_for_advice: advice };
   }
   // The review: `review` exactly true and a scope. Any `sql` beside it is

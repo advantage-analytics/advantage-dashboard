@@ -40,6 +40,50 @@ export interface LLMCallOptions {
    * question's plan call from its answer call inside that trace.
    */
   span?: string;
+  /** Sampling temperature. Omitted, the provider's default applies. */
+  temperature?: number;
+  /** The reply's length cap in tokens. The Anthropic path's default is 1024. */
+  maxTokens?: number;
+  /**
+   * When set, the reply is one JSON object of this shape and nothing else:
+   * `response_format` on the OpenAI-compatible path, a single forced tool on
+   * the Anthropic path, whose arguments then stream as JSON text. The caller
+   * still parses and checks what comes back.
+   */
+  jsonSchema?: {
+    name: string;
+    schema: { type: "object" } & Record<string, unknown>;
+  };
+  /**
+   * How many leading characters of the system prompt are the same on every
+   * call. The Anthropic path marks that prefix for its prompt cache, so a
+   * call within the cache window skips reading it again; Gemini's implicit
+   * caching keys on the prefix by itself, so there nothing more is sent.
+   */
+  staticPrefixLength?: number;
+  /** Aborts the provider request: the client went away, so stop paying for the reply. */
+  signal?: AbortSignal;
+}
+
+/**
+ * The Anthropic system prompt as content blocks when a static prefix is
+ * named, its first block marked for the prompt cache; the plain string
+ * otherwise. A prefix shorter than the cache's minimum is still harmless:
+ * the API ignores the mark.
+ */
+function anthropicSystem(
+  systemPrompt: string,
+  staticPrefixLength: number | undefined,
+):
+  | string
+  | { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[] {
+  if (!staticPrefixLength || staticPrefixLength <= 0) return systemPrompt;
+  const head = systemPrompt.slice(0, staticPrefixLength);
+  const tail = systemPrompt.slice(staticPrefixLength);
+  return [
+    { type: "text", text: head, cache_control: { type: "ephemeral" } },
+    ...(tail.length > 0 ? [{ type: "text" as const, text: tail }] : []),
+  ];
 }
 
 /**
@@ -182,11 +226,31 @@ async function anthropicStream(
   const posthog = getPostHogClient();
   const request = {
     model: "claude-opus-4-6",
-    max_tokens: 1024,
+    max_tokens: options.maxTokens ?? 1024,
     stream: true as const,
-    system: systemPrompt,
+    system: anthropicSystem(systemPrompt, options.staticPrefixLength),
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    ...(options.temperature !== undefined
+      ? { temperature: options.temperature }
+      : {}),
+    // A JSON reply is a forced call of one tool whose input is the schema:
+    // the one way this API constrains a reply's shape. Its arguments arrive
+    // as `input_json_delta` events, yielded below as the reply's text.
+    ...(options.jsonSchema
+      ? {
+          tools: [
+            {
+              name: options.jsonSchema.name,
+              description:
+                "The reply, in the shape the system prompt asks for.",
+              input_schema: options.jsonSchema.schema,
+            },
+          ],
+          tool_choice: { type: "tool" as const, name: options.jsonSchema.name },
+        }
+      : {}),
   };
+  const requestOptions = options.signal ? { signal: options.signal } : {};
   // `create({ stream: true })`, not `messages.stream()`: PostHog's wrapper
   // only instruments `create`, and `stream()` through it throws on first read.
   // Imported inside each branch, not at module scope: `@posthog/ai/anthropic`
@@ -197,22 +261,25 @@ async function anthropicStream(
     ? await new (await import("@posthog/ai/anthropic")).Anthropic({
         apiKey,
         posthog,
-      }).messages.create({
-        ...request,
-        ...posthogOptions(context, options),
-      })
+      }).messages.create(
+        {
+          ...request,
+          ...posthogOptions(context, options),
+        },
+        requestOptions,
+      )
     : await new (await import("@anthropic-ai/sdk")).default({
         apiKey,
-      }).messages.create(request);
+      }).messages.create(request, requestOptions);
   flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {
     for await (const event of stream) {
-      if (
-        event.type === "content_block_delta" &&
-        event.delta.type === "text_delta"
-      ) {
+      if (event.type !== "content_block_delta") continue;
+      if (event.delta.type === "text_delta") {
         yield event.delta.text;
+      } else if (event.delta.type === "input_json_delta") {
+        yield event.delta.partial_json;
       }
     }
   }
@@ -244,7 +311,25 @@ async function openaiStream(
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ],
+    ...(options.temperature !== undefined
+      ? { temperature: options.temperature }
+      : {}),
+    ...(options.maxTokens !== undefined
+      ? { max_tokens: options.maxTokens }
+      : {}),
+    ...(options.jsonSchema
+      ? {
+          response_format: {
+            type: "json_schema" as const,
+            json_schema: {
+              name: options.jsonSchema.name,
+              schema: options.jsonSchema.schema,
+            },
+          },
+        }
+      : {}),
   };
+  const requestOptions = options.signal ? { signal: options.signal } : {};
   // Imported inside each branch, not at module scope: `@posthog/ai/openai`
   // pulls in the full `openai` package itself, so loading both here
   // unconditionally would double the SDK weight on every request regardless
@@ -254,14 +339,17 @@ async function openaiStream(
         apiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
         posthog,
-      }).chat.completions.create({
-        ...request,
-        ...posthogOptions(context, options, "google"),
-      })
+      }).chat.completions.create(
+        {
+          ...request,
+          ...posthogOptions(context, options, "google"),
+        },
+        requestOptions,
+      )
     : await new (await import("openai")).default({
         apiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      }).chat.completions.create(request);
+      }).chat.completions.create(request, requestOptions);
   flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {

@@ -116,6 +116,13 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/**
+ * A question is two model calls on the common path and five on the worst
+ * (three plan attempts, a pattern read, the answer), each a second or two,
+ * plus the queries: well inside a minute, and a question that is not is one
+ * to cut off rather than let run.
+ */
+export const maxDuration = 60;
 
 /* -------------------------------------------------------------------------
  * Refusals
@@ -373,16 +380,26 @@ export async function POST(request: Request): Promise<Response> {
   }
   const team = scope.kind === "team";
 
-  // Server-derived, for this viewer — never the browser's word for it.
-  let options: AskTagOptions;
-  try {
-    options = await getAskTagOptions(body.programId);
-  } catch (error) {
+  // The two reads that need nothing from each other go out together, both
+  // for the viewer this request has just authenticated: the tag options
+  // (server-derived — never the browser's word for them) and, for a
+  // follow-up, the conversation. Each is reported on its own below, in the
+  // order the refusals always came.
+  const [optionsRead, conversationRead] = await Promise.allSettled([
+    getAskTagOptions(body.programId, user.id),
+    body.conversationId
+      ? getAskConversation(body.conversationId, body.programId, user.id)
+      : Promise.resolve(null),
+  ]);
+
+  if (optionsRead.status === "rejected") {
+    const error: unknown = optionsRead.reason;
     console.error("[ask] could not read the viewer's matches", {
       error: error instanceof Error ? error.message : String(error),
     });
     return errorResponse(transportError("internal_error", "matches_read"));
   }
+  const options: AskTagOptions = optionsRead.value;
 
   const resolved = resolveAskTags(body.tags, options, scope);
   if (!resolved.ok) {
@@ -393,22 +410,14 @@ export async function POST(request: Request): Promise<Response> {
   // other workspace — all the same answer, so the field cannot be used to
   // probe. A read that failed throws, and is the server's fault: retryable,
   // never "not found".
-  let conversation: Awaited<ReturnType<typeof getAskConversation>> = null;
-  if (body.conversationId) {
-    try {
-      conversation = await getAskConversation(
-        body.conversationId,
-        body.programId,
-      );
-    } catch (error) {
-      console.error("[ask] could not read the conversation", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return errorResponse(
-        transportError("internal_error", "conversation_read"),
-      );
-    }
+  if (conversationRead.status === "rejected") {
+    const error: unknown = conversationRead.reason;
+    console.error("[ask] could not read the conversation", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return errorResponse(transportError("internal_error", "conversation_read"));
   }
+  const conversation = conversationRead.value;
   if (body.conversationId && !conversation) {
     return errorResponse(
       refusal(
@@ -463,9 +472,15 @@ export async function POST(request: Request): Promise<Response> {
   const observability = createLLMObservabilityContext(user.id);
   const model: AskModel = {
     configured: isLLMConfigured(),
-    stream: (systemPrompt, messages, stage) =>
+    stream: (systemPrompt, messages, call) =>
       getLLMStream(systemPrompt, messages, observability, {
-        span: stage ? `ask.${stage}` : "ask",
+        span: call ? `ask.${call.stage}` : "ask",
+        temperature: call?.temperature,
+        maxTokens: call?.maxTokens,
+        jsonSchema: call?.jsonSchema,
+        staticPrefixLength: call?.staticPrefixLength,
+        // The browser closing the tab aborts the provider request too.
+        signal: request.signal,
       }),
   };
 

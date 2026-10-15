@@ -43,7 +43,7 @@
  *
  * Two things are NOT real, on purpose:
  *   - nothing is reserved against the month's questions (`reservation: null`);
- *   - `ask_save_exchange` is intercepted, so no conversation is written.
+ *   - `ask_save_exchange_ids` is intercepted, so no conversation is written.
  *
  * The report holds the model's raw replies, the SQL and the rows — a player's
  * statistics. The verifier's matches are fixtures; if you point this at
@@ -483,8 +483,14 @@ async function main() {
 
     const db = {
       async rpc(fn: string, args?: Record<string, unknown>) {
-        if (fn === "ask_save_exchange") {
-          return { data: "00000000-0000-4000-8000-00000000e7a1", error: null };
+        if (fn === "ask_save_exchange_ids") {
+          return {
+            data: {
+              conversation_id: "00000000-0000-4000-8000-00000000e7a1",
+              answer_id: "00000000-0000-4000-8000-00000000e7a2",
+            },
+            error: null,
+          };
         }
         const result = await askDatabase.rpc(fn, args);
         if (fn === "ask_run_query" || fn === "ask_run_team_query") {
