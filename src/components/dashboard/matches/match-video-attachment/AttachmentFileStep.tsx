@@ -50,6 +50,7 @@ import {
   noteStripCls,
 } from "../new-match-wizard/styles";
 import { formatFileSize, formatTimecode } from "../new-match-wizard/utils";
+import { FieldCaption } from "../new-match-wizard/FieldCaption";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_EXTENSION_LABEL,
@@ -267,7 +268,7 @@ function AttachmentFileStepImpl({
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
-          <span className="eyebrow">Video</span>
+          <FieldCaption label="Video" />
 
           {/* A checked file becomes a step-1 field: 40px lead, 14px name, mono
               facts in the subline. Replace is the quiet blue action; remove is
