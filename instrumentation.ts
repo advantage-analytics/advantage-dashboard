@@ -6,6 +6,7 @@ import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import type { Instrumentation } from "next";
 import type { PostHog } from "posthog-node";
+import { isPostHogOffInDev } from "@/lib/posthog-client";
 import { getPostHogServerConfig } from "@/lib/posthog-logs";
 
 // Next compiles this file as its own entry, so a module-level export here is a
@@ -92,7 +93,8 @@ export function register() {
   // boots with PostHog off. Only the Supabase keys are needed to start.
   const config = getPostHogServerConfig();
   if (!config) {
-    if (process.env.NODE_ENV !== "production") {
+    // Unset keys only; `next dev` with PostHog off by default stays quiet.
+    if (process.env.NODE_ENV !== "production" && !isPostHogOffInDev) {
       console.warn(
         "[posthog] PostHog is off: set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN and NEXT_PUBLIC_POSTHOG_HOST to enable it (see .env.example).",
       );

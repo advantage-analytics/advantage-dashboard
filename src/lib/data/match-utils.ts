@@ -345,7 +345,14 @@ export function zonedDayString(now: Date, timeZone: string): string {
 
 /**
  * "2026-08-08T…" → "Aug 8", for a real MOMENT — a join, an invite, an upload —
- * read in the runtime's zone.
+ * read in UTC.
+ *
+ * Pinned to UTC because client components call this during render: the
+ * server renders in UTC and the browser in its own zone, so an evening-Pacific
+ * instant was "Oct 9" on the server and "Oct 8" in the browser — React error
+ * #418 on /admin/requests. Server loaders already ran in UTC on Vercel, so
+ * their output does not change. Same rule as `formatCompletedAt` in
+ * labels-table.tsx.
  *
  * Not for a match's date: `matches.date` stores a calendar day, and reading it
  * as a moment prints the day before, west of Greenwich. That is
@@ -355,5 +362,6 @@ export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
