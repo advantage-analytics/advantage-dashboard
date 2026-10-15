@@ -266,7 +266,8 @@ async function openaiStream(
 
   async function* iterate(): AsyncIterable<string> {
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
+      // The trailing usage chunk may omit `choices` entirely rather than send [].
+      const delta = chunk.choices?.[0]?.delta?.content;
       if (delta) yield delta;
     }
   }
