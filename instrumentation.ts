@@ -6,6 +6,7 @@ import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import type { Instrumentation } from "next";
 import type { PostHog } from "posthog-node";
+import { isClientDisconnect } from "@/lib/client-disconnect";
 import { isPostHogOffInDev } from "@/lib/posthog-client";
 import { getPostHogServerConfig } from "@/lib/posthog-logs";
 
@@ -57,6 +58,8 @@ export const onRequestError: Instrumentation.onRequestError = async (
   context,
 ) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // The visitor left before the page finished streaming; nothing failed.
+  if (isClientDisconnect(error)) return;
   const config = getPostHogServerConfig();
   if (!config) return;
   const { token, host } = config;
