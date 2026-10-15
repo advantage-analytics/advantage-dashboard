@@ -10,7 +10,6 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { ListVideo, MessageSquareText } from "lucide-react";
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
@@ -23,8 +22,6 @@ import {
   pointSetQuery,
   POINT_SET_PARAM,
 } from "@/lib/match-video/point-set";
-import { advButton } from "@/lib/ui/adv-button";
-import { cn } from "@/lib/utils";
 import type { AskFilmWatchTarget } from "@/components/dashboard/ask/ask-film-seek";
 
 import {
@@ -1103,6 +1100,18 @@ function FilmRoom({
   }, [filterRail]);
   const closeAsk = useCallback(() => dispatchAsk("close"), []);
   const exitAsk = useCallback(() => dispatchAsk("closed"), []);
+  // The title row's chat glyph toggles this drawer (`MatchReportAskLink`):
+  // the tab hands the report its state and its toggle while mounted, and
+  // takes them back on unmount, when the glyph goes back to being a link.
+  const setAskControl = useOptionalMatchReport()?.setAskControl;
+  useEffect(() => {
+    if (!setAskControl || readOnly) return;
+    setAskControl({ open: askPhase === "open", toggle: toggleAsk });
+  }, [setAskControl, readOnly, askPhase, toggleAsk]);
+  useEffect(() => {
+    if (!setAskControl) return;
+    return () => setAskControl(null);
+  }, [setAskControl]);
 
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
@@ -1195,52 +1204,10 @@ function FilmRoom({
             owns the file, out of the way of the person watching. Renders
             nothing at all for everyone else — and is not mounted on a
             read-only report, whose links would lead into a wizard the
-            reader has no match in. */}
-          {/* The room's quiet row of controls, right-aligned above the
-              player: Ask (a session's, so never on a shared link), the
-              sequence toggle, then the creator's maintenance links. Ghosts
-              all — the action on this surface is watching. */}
-          <div
-            className="flex flex-wrap items-center justify-end gap-2"
-            data-film-chrome-row=""
-          >
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={toggleAsk}
-                aria-pressed={askPhase === "open"}
-                aria-controls={ASK_FILM_DRAWER_ID}
-                className={advButton("ghost", "sm")}
-                data-testid="film-ask-open"
-              >
-                <MessageSquareText
-                  className="size-3.5"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Ask about this match
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={toggleSequence}
-              aria-pressed={sequence}
-              disabled={walkStops.length === 0}
-              className={cn(
-                advButton("ghost", "sm"),
-                sequence && "bg-[var(--surface-subtle)]",
-              )}
-              data-testid="film-sequence-toggle"
-            >
-              <ListVideo
-                className="size-3.5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              {sequence ? "Playing in sequence" : "Play in sequence"}
-            </button>
-            {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
-          </div>
+            reader has no match in. Ask lives in the title row's chat glyph
+            (`report-title-row.tsx`, through `setAskControl` below) and the
+            sequence walk on the player's own transport. */}
+          {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
 
           <FilmPlayer
             ref={playerRef}
@@ -1257,6 +1224,9 @@ function FilmRoom({
             stops={walkStops}
             allStops={stops}
             saved={activePoint ? activePoint.saved : null}
+            sequence={sequence}
+            onToggleSequence={toggleSequence}
+            sequenceDisabled={walkStops.length === 0}
             onTimeChange={setCurrentTime}
             onPlaybackTime={reportTime}
             onPlaybackPlaying={reportShellPlaying}

@@ -149,7 +149,6 @@ function SampleReport() {
             <MatchReportProvider
               matchId={SAMPLE_MATCH_ID}
               summary={summary}
-              canCompare={false}
               isDerived={isDerived}
               statsPublished={statsPublished}
               foldUnreconciled={data.foldUnreconciled}

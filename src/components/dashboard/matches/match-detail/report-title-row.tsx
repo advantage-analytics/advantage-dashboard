@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { MessageSquare } from "lucide-react";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { REPORT_VIEWS } from "@/components/dashboard/matches/match-detail/report-view";
 import { askEntryHref } from "@/lib/services/ask/entry";
@@ -14,7 +16,7 @@ import { askEntryHref } from "@/lib/services/ask/entry";
  *   <MatchReport.TitleRow>
  *     <div className="min-w-0"><MatchReport.Title /><MatchReport.Facts /></div>
  *     <MatchReport.TitleActions>
- *       <MatchReport.CompareButton /> <MatchReport.MoreMenu />
+ *       <MatchReport.AskLink /> <MatchReport.MoreMenu />
  *     </MatchReport.TitleActions>
  *   </MatchReport.TitleRow>
  *
@@ -54,16 +56,42 @@ export function MatchReportTitle() {
 }
 
 /**
- * "Ask about this match": the quietest control in the title row, a text
- * link into Ask with this match already tagged (`askEntryHref`,
+ * "Ask about this match": one chat glyph in the title row, the sidebar's own
+ * `MessageSquare` so it reads as the same Ask everywhere. On the Video view
+ * the film tab has registered its drawer (`askControl`) and the glyph toggles
+ * it in place, pressed while it is open; on every other view it is a link
+ * into Ask with this match already tagged (`askEntryHref`,
  * `/dashboard/ask?match=…`, or the team page's when the match is read in a
- * team workspace). Ink that darkens, never blue — the row's one primary is
- * Compare — and absent on a read-only report (the public link, the sample
- * match): there is nothing of the reader's to ask about.
+ * team workspace). Icon-only, so it carries its label and the dark tooltip.
+ * Absent on a read-only report (the public link, the sample match): there is
+ * nothing of the reader's to ask about.
  */
 export function MatchReportAskLink() {
-  const { meta } = useMatchReport();
+  const { meta, askControl } = useMatchReport();
   if (meta.readOnly) return null;
+  const className =
+    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] aria-pressed:bg-[var(--surface-subtle)] aria-pressed:text-[var(--ink-900)]";
+  const glyph = (
+    <MessageSquare className="size-4" strokeWidth={1.5} aria-hidden="true" />
+  );
+  if (askControl) {
+    return (
+      <ChromeTooltip label="Ask about this match">
+        <button
+          type="button"
+          aria-label="Ask about this match"
+          aria-pressed={askControl.open}
+          aria-controls="ask-film-drawer"
+          onClick={askControl.toggle}
+          data-ask-about="match"
+          data-testid="film-ask-open"
+          className={className}
+        >
+          {glyph}
+        </button>
+      </ChromeTooltip>
+    );
+  }
   const href = askEntryHref(
     meta.workspaceKind === "team"
       ? { kind: "team", programId: "", programName: "" }
@@ -72,13 +100,16 @@ export function MatchReportAskLink() {
   );
   if (!href) return null;
   return (
-    <Link
-      href={href}
-      data-ask-about="match"
-      className="text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
-    >
-      Ask about this match
-    </Link>
+    <ChromeTooltip label="Ask about this match">
+      <Link
+        href={href}
+        aria-label="Ask about this match"
+        data-ask-about="match"
+        className={className}
+      >
+        {glyph}
+      </Link>
+    </ChromeTooltip>
   );
 }
 

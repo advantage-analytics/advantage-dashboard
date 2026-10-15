@@ -17,6 +17,7 @@ import {
   Repeat,
   SkipBack,
   SkipForward,
+  ListVideo,
   Timer,
   TimerOff,
   Volume2,
@@ -131,6 +132,16 @@ export interface FilmPlayerHandle {
 }
 
 interface FilmPlayerProps {
+  /**
+   * "Play in sequence" (roadmap 6.3): the tab's walk over the applied cut,
+   * drawn as a glyph on the transport beside Skip dead time when the tab
+   * hands it over, pressed while the walk is on. Absent on a player with no
+   * cut to walk (the fullscreen room, the report player on a shared link).
+   */
+  sequence?: boolean;
+  onToggleSequence?: () => void;
+  /** No stop to walk: the glyph stays, inert, as the transport's others do. */
+  sequenceDisabled?: boolean;
   /**
    * The credential to play — `AttachmentPlaybackApi.url`, not
    * `MatchVideo.url`, so a refreshed credential reaches the element without
@@ -302,6 +313,9 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
       onFirstPlay,
       onRetry,
       onToggleSaved,
+      sequence,
+      onToggleSequence,
+      sequenceDisabled,
       onEnterFullscreen,
       onStep,
       clockTargetRef,
@@ -881,6 +895,19 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
                     aria-hidden="true"
                     fill={saved ? "currentColor" : "none"}
                   />
+                </Glyph>
+              )}
+
+              {onToggleSequence && (
+                <Glyph
+                  label={
+                    sequence ? "Playing in sequence — on" : "Play in sequence"
+                  }
+                  pressed={sequence === true}
+                  disabled={sequenceDisabled}
+                  onClick={onToggleSequence}
+                >
+                  <ListVideo {...ICON} aria-hidden="true" />
                 </Glyph>
               )}
 

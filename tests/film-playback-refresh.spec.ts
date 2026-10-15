@@ -3874,7 +3874,7 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
 test("Ask about this match: opens pre-tagged, posts the match tag, keeps its draft across a close", async ({
   page,
 }) => {
-  await open(page, "ask-drawer");
+  await open(page, "ask-drawer", { ask: "1" });
   await page.getByRole("button", { name: "Ask about this match" }).click();
 
   const drawer = page.locator("#ask-film-drawer");
