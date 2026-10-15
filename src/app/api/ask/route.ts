@@ -435,7 +435,7 @@ export async function POST(request: Request): Promise<Response> {
   // to the session client. A read that throws is a miss, like one that
   // fails; on a refusal below its answer is simply never awaited.
   const dataVersionRead: Promise<string | null> =
-    isLLMConfigured() && !coach
+    isLLMConfigured() && !coach && !body.conversationId
       ? readAskDataVersion(
           { rpc: (fn, args) => supabase.rpc(fn, args) },
           scope,
@@ -565,7 +565,9 @@ export async function POST(request: Request): Promise<Response> {
   // version is a hash over the viewer's matches in scope and their
   // statistics' update times, so any change to the data is a miss. Mock mode
   // is never cached, nor is coach mode (see the header), and a cache that
-  // cannot be read is a miss too.
+  // cannot be read is a miss too. Nor is a follow-up: its meaning rests on
+  // the conversation, which the key does not carry, so "and on second
+  // serves?" must never replay a standalone answer.
   const cacheKey = askCacheKey({
     question: body.question,
     tags: resolved.tags,

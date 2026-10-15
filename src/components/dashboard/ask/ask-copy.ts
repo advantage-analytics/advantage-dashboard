@@ -112,7 +112,7 @@ export const PERSONAL_ASK_COPY: AskCopy = {
   starters: "Questions to start with",
   followUps: "Ask next",
   sentNotice: (opponentName) =>
-    `${opponentName ? `Your match against ${opponentName}` : "Your match"} is being analysed. A first answer about it will be waiting here once the video is processed.`,
+    `${opponentName ? `Your match against ${opponentName}` : "Your match"} is being analysed. Once it is, you can ask about it here, and the email that says it is ready may carry a first answer.`,
   sendVideo: "Send a match video",
 };
 
