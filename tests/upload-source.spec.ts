@@ -282,6 +282,32 @@ const stepModule = (() => {
         );
         return note;
       }
+      // The field caption is the REAL module: the label's words are what the
+      // tests below read.
+      if (id === "./FieldCaption") {
+        const caption: Record<string, unknown> = {};
+        runInNewContext(
+          ts.transpileModule(
+            readFileSync(resolve(`${WIZARD}/FieldCaption.tsx`), "utf8"),
+            {
+              compilerOptions: {
+                module: ts.ModuleKind.CommonJS,
+                jsx: ts.JsxEmit.ReactJSX,
+                target: ts.ScriptTarget.ES2022,
+              },
+            },
+          ).outputText,
+          {
+            exports: caption,
+            require: (dep: string) => {
+              if (dep === "react/jsx-runtime") return jsx;
+              if (dep === "@/lib/utils") return { cn };
+              throw new Error(`unexpected import in the field caption: ${dep}`);
+            },
+          },
+        );
+        return caption;
+      }
       // The roster menu is rendered for real too: it is the For menu's rows,
       // shared with the Edit Match dialog.
       if (id === "./RosterMenu") {
