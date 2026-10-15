@@ -323,6 +323,7 @@ async function main() {
   type AskTagOptions = import("@/lib/data/ask-tags").AskTagOptions;
   const { getLLMStream, isLLMConfigured, createLLMObservabilityContext } =
     await import("@/lib/llm/adapter");
+  const { requestedStageModels } = await import("@/lib/services/ask/model");
   const { createAskDatabase } = await import("@/lib/services/ask/database");
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { embedText } = await import("@/lib/llm/embeddings");
@@ -570,8 +571,10 @@ async function main() {
       ) {
         // The same options the route sends (src/app/api/ask/route.ts), so an
         // eval plans under the schema and settings production uses.
+        const stage = requestedStageModels();
         const source = await getLLMStream(system, messages, context, {
           span: call ? `ask.${call.stage}` : "ask",
+          model: call?.stage === "answer" ? stage.answer : stage.plan,
           temperature: call?.temperature,
           maxTokens: call?.maxTokens,
           jsonSchema: call?.jsonSchema,

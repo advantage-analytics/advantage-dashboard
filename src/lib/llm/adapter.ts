@@ -402,15 +402,13 @@ async function anthropicStream(
 const GEMINI_OPENAI_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/openai/";
 
-async function openaiStream(
+/** The Gemini (OpenAI-compatible) request body, apart from PostHog's options. Exported for its spec. */
+export function geminiRequestBody(
   systemPrompt: string,
   messages: ChatMessage[],
-  context: LLMObservabilityContext,
   options: LLMCallOptions,
-  apiKey: string,
-): Promise<AsyncIterable<string>> {
-  const posthog = getPostHogClient();
-  const request = {
+) {
+  return {
     // 2.5 models are closed to new Google Cloud projects, so a key from one
     // is refused with a 404 on 2.5-flash-lite. Same model as generate-insights.
     model: modelFor("openai", options.model),
@@ -440,6 +438,17 @@ async function openaiStream(
         }
       : {}),
   };
+}
+
+async function openaiStream(
+  systemPrompt: string,
+  messages: ChatMessage[],
+  context: LLMObservabilityContext,
+  options: LLMCallOptions,
+  apiKey: string,
+): Promise<AsyncIterable<string>> {
+  const posthog = getPostHogClient();
+  const request = geminiRequestBody(systemPrompt, messages, options);
   const requestOptions = options.signal ? { signal: options.signal } : {};
   // Imported inside each branch, not at module scope: `@posthog/ai/openai`
   // pulls in the full `openai` package itself, so loading both here

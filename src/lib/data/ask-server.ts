@@ -325,7 +325,16 @@ export const getAskConversation = cache(async function getAskConversation(
   // cache, as while an ask_feedback migration is reloading), read the thread
   // without thumbs or pins — every pinId null, "not pinned" — rather than
   // tell the player their conversation could not load.
-  const messagesRead = isMissingEmbed(messagesWithFeedback.error)
+  const embedMissing = isMissingEmbed(messagesWithFeedback.error);
+  if (embedMissing) {
+    // Logged so a lasting failure (a renamed embed, a dropped foreign key)
+    // is seen, not silently read as "no thumbs, no pins" for every thread.
+    console.warn("[ask] conversation read without thumbs and pins", {
+      code: messagesWithFeedback.error?.code,
+      message: messagesWithFeedback.error?.message,
+    });
+  }
+  const messagesRead = embedMissing
     ? await readMessages("id, role, content, created_at")
     : messagesWithFeedback;
 

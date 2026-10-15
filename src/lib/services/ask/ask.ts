@@ -225,8 +225,13 @@ export type AskModelStage = "plan" | "pattern" | "answer";
 /** What one model call asks of the adapter beyond its prompt. */
 export interface AskModelCall {
   stage: AskModelStage;
-  /** 0 for the steps that read or write a plan: the same question should plan the same way twice. */
+  /**
+   * 0 for the steps that read or write a plan: the same question should plan
+   * the same way twice. Anthropic path only — Gemini refuses sampling
+   * parameters, so production (`LLM_PROVIDER=openai`) does not send it.
+   */
   temperature?: number;
+  /** The reply's cap in tokens. Anthropic path only, as `temperature`. */
   maxTokens?: number;
   /** The reply must be one JSON object of this shape (the plan step). */
   jsonSchema?: {

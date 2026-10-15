@@ -123,7 +123,9 @@ What the adapter adds so the events can be read:
   once per request and shared by every call in it, so an Ask question's plan,
   pattern and answer calls (and retries) sit under one `$ai_trace_id`.
 - **What a call asks for** travels in `getLLMStream()`'s options too:
-  `temperature`, `maxTokens`, a `jsonSchema` the reply must hold to
+  `temperature` and `maxTokens` (Anthropic path only: Gemini answers sampling
+  parameters with a 400 and counts thinking tokens against a cap, so
+  `geminiRequestBody()` sends neither), a `jsonSchema` the reply must hold to
   (`response_format` on the Gemini path, a forced tool on the Anthropic one),
   a `staticPrefixLength` marking the fixed part of the system prompt for the
   Anthropic prompt cache, and the request's `signal` so a closed tab aborts
