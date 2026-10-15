@@ -185,7 +185,6 @@ function evalPairs(): Pair[] {
     { scope: "personal", file: "scripts/ask-eval-season.json" },
     { scope: "team", file: "scripts/ask-eval-team.json" },
   ];
-  const [playerA] = ASK_PLAN_EXAMPLE_NAMES;
   const pairs: Pair[] = [];
   for (const { scope, file } of lists) {
     let questions: EvalQuestion[];
@@ -201,9 +200,24 @@ function evalPairs(): Pair[] {
       if (question.plan && typeof question.plan === "object") {
         reply = JSON.stringify(question.plan);
       } else if (question.expect?.shape === "C") {
+        // The tagged player's own name, so the anonymiser below turns it
+        // into the placeholder in the question AND the filter together; a
+        // placeholder written here alone left the question naming one
+        // player and the filter another.
+        const tagged = question.players?.[0]?.trim();
+        // A team review with no tagged player is the whole program's only
+        // when the question says so; one that names a player in its text
+        // alone is left out, since its true reply filters by that name.
+        if (
+          scope === "team" &&
+          !tagged &&
+          !/\b(we|our|us|team)\b/i.test(question.q)
+        ) {
+          continue;
+        }
         const scopeSql =
-          scope === "team" && question.players?.length
-            ? `select match_id from ask.matches where player_name ilike '%${playerA.toLowerCase()}%'`
+          scope === "team" && tagged
+            ? `select match_id from ask.matches where player_name ilike '%${tagged.toLowerCase().replace(/'/g, "''")}%'`
             : "select match_id from ask.matches";
         reply = JSON.stringify({ review: true, scope_sql: scopeSql });
       }
