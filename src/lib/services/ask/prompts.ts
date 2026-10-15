@@ -1052,7 +1052,7 @@ ROW: Opponent forced errors ${S} {{r1.opponent_forced_errors}}
 ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
   },
   serve: {
-    when: `serve direction: the T, body and wide counts, in that order. One row for the serves it counts; two rows when the result holds two groups — one row per court when it has a court column (ask.points.court, Deuce or Ad), or first serves and second serves. Label a court row exactly Deuce or Ad, copied from that row's court cell: the app then draws the two service boxes as a court. Never more than ${MAX_ASK_SERVE_COURTS}.`,
+    when: `serve direction: the T, body and wide counts, in that order. One row for the serves it counts; two rows when the result holds two groups — one row per court when it has a court column (ask.points.court, Deuce or Ad), or first serves and second serves. Label a court row exactly Deuce or Ad, copied from that row's court cell: the app then draws the two service boxes as a court. Never more than ${MAX_ASK_SERVE_COURTS}. Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.`,
     rows: [
       {
         [ASK_SCOPE_COUNT_COLUMN]: 22,

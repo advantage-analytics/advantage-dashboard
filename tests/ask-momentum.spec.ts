@@ -137,7 +137,7 @@ test.describe("buildMomentumAnswer", () => {
     );
     const { answer, result } = await rendered(rows, true, "Rudy Quan");
     expect(result.headline).toBe(
-      "Rudy Quan led by more than the opponent ever trailed.",
+      "Rudy Quan led by more than they ever trailed.",
     );
     expect(result.text).toContain("Rudy Quan won 4 of the 7 points");
     expect(result.text).toContain("Rudy Quan's largest lead was 2 points");
@@ -160,6 +160,17 @@ test.describe("buildMomentumAnswer", () => {
         { won: true },
       ],
     });
+  });
+
+  test("a team headline compares the player's lead with their own deficit, never the opponent", async () => {
+    const behind = await rendered(
+      [point(1, false), point(2, false), point(3, true), point(4, false)],
+      true,
+    );
+    expect(behind.result.headline).toBe(
+      "The team's player trailed by more than they ever led.",
+    );
+    expect(behind.result.text).not.toContain("opponent");
   });
 
   test("undecided points are skipped; order follows point_number", async () => {

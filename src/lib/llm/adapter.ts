@@ -41,9 +41,9 @@ export interface LLMCallOptions {
    * question's plan call from its answer call inside that trace.
    */
   span?: string;
-  /** Sampling temperature. Omitted, the provider's default applies. */
+  /** Sampling temperature, Anthropic path only (Gemini refuses sampling parameters). */
   temperature?: number;
-  /** The reply's length cap in tokens. The Anthropic path's default is 1024. */
+  /** The reply's length cap in tokens, Anthropic path only; its default is 1024. */
   maxTokens?: number;
   /**
    * When set, the reply is one JSON object of this shape and nothing else:
@@ -238,6 +238,20 @@ export function isLLMConfigured(): boolean {
 }
 
 /**
+ * The model a call asking for `requested` runs on, as `modelFor()` resolves
+ * it for the configured provider; null in mock mode, where no model runs.
+ * For telemetry: a request that fails over to the other provider runs that
+ * provider's model instead, which is not known here.
+ */
+export function resolvedLLMModel(requested: string | undefined): string | null {
+  if (!isLLMConfigured()) return null;
+  return modelFor(
+    process.env.LLM_PROVIDER === "anthropic" ? "anthropic" : "openai",
+    requested,
+  );
+}
+
+/**
  * Returns an AsyncIterable<string> of text chunks for the given conversation.
  * Each chunk is a raw text delta (not JSON-wrapped).
  */
@@ -410,12 +424,10 @@ async function openaiStream(
       { role: "system" as const, content: systemPrompt },
       ...messages.map((m) => ({ role: m.role, content: m.content })),
     ],
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
-    ...(options.maxTokens !== undefined
-      ? { max_tokens: options.maxTokens }
-      : {}),
+    // No `temperature` and no `max_tokens` on this path. Gemini is retiring
+    // sampling parameters and answers them with a 400, and a 3.x model counts
+    // its thinking tokens against `max_tokens`, so a cap sized for the reply
+    // can cut a JSON plan off mid-object. Both apply on the Anthropic path only.
     ...(options.jsonSchema
       ? {
           response_format: {
@@ -465,7 +477,8 @@ async function openaiStream(
 
   async function* iterate(): AsyncIterable<string> {
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
+      // The trailing usage chunk may omit `choices` entirely rather than send [].
+      const delta = chunk.choices?.[0]?.delta?.content;
       if (delta) yield delta;
     }
   }

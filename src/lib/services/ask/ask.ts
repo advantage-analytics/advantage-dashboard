@@ -219,13 +219,6 @@ export interface AskDatabase {
   rpc(fn: string, args?: Record<string, unknown>): PromiseLike<AskRpcResult>;
 }
 
-/**
- * The model behind both steps. `configured` is `isLLMConfigured()` and
- * `stream` is `getLLMStream()` with the observability context already bound
- * (one context per question, so its calls share a trace) and the stage
- * passed on as the call's span name; the route builds this from
- * `adapter.ts`, the spec from strings.
- */
 /** Which step of a question a model call is for; the route names the call by it in LLM analytics. */
 export type AskModelStage = "plan" | "pattern" | "answer";
 
@@ -244,6 +237,13 @@ export interface AskModelCall {
   staticPrefixLength?: number;
 }
 
+/**
+ * The model behind both steps. `configured` is `isLLMConfigured()` and
+ * `stream` is `getLLMStream()` with the observability context already bound
+ * (one context per question, so its calls share a trace) and the stage
+ * passed on as the call's span name; the route builds this from
+ * `adapter.ts`, the spec from strings.
+ */
 export interface AskModel {
   configured: boolean;
   stream(
@@ -2275,6 +2275,18 @@ async function planOnce(
 const FENCE = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/;
 
 /**
+ * What a model writes in a required string field it means to leave empty:
+ * `cannot_answer` is required by the plan schema, so a plan may arrive with
+ * "N/A" or "None" there instead of "".
+ */
+const PLACEHOLDER = /^(?:n\/?a|none|null|nil|-+|—|\.+)$/i;
+
+function isBlankPlaceholder(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed === "" || PLACEHOLDER.test(trimmed);
+}
+
+/**
  * The planner's reply as an {@link AskPlanReply}, or null when it is not
  * one. A fenced code block around the object is tolerated, and so is a
  * missing `asks_for_advice` (read as false): the contract asks for both to
@@ -2307,10 +2319,10 @@ export function parsePlanReply(reply: string): AskPlanReply | null {
   const withState = <T extends object>(plan: T): T =>
     state ? { ...plan, state } : plan;
   // A structured reply may carry every field of the schema, the unused ones
-  // empty: an empty cannot_answer is no refusal.
+  // empty or filled with a placeholder: neither is a refusal.
   if (
     typeof record.cannot_answer === "string" &&
-    record.cannot_answer.trim() !== ""
+    !isBlankPlaceholder(record.cannot_answer)
   ) {
     return withState({
       cannot_answer: record.cannot_answer,

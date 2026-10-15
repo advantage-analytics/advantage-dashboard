@@ -78,7 +78,7 @@ export interface AskRunOptions {
   /** Called once, after the stream ended however it ended. Errors are logged, never thrown. */
   onRun: (run: AskRunRecord) => Promise<void> | void;
   preStreamMs?: number;
-  /** The model ids the route configured for the two stages; null for the provider's default. */
+  /** The model each stage runs on, as the adapter resolves it (`askStageModels()`); null in mock mode. */
   planModel?: string | null;
   answerModel?: string | null;
   /** The clock, for tests. */
