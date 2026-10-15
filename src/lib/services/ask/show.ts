@@ -19,7 +19,12 @@ import {
   stringOrNull,
   type AskSourceMatch,
 } from "@/lib/services/ask/events";
-import { figureMatchFilters, watchHref } from "@/lib/services/ask/figure-video";
+import {
+  figureMatchFilters,
+  measureForLabel,
+  watchHref,
+} from "@/lib/services/ask/figure-video";
+import { askMeasure } from "@/lib/services/ask/measures";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type {
@@ -38,13 +43,16 @@ import type {
  *   select p.match_id, count(*) … from ask.points p
  *   where p.match_id in (select match_id from scope) [and <the measure>]
  *
- * never the answer's aggregate `sql`. The measure is the answer's own figure
- * column when `figure-video.ts` knows the Video tab's filter for it (second
- * serves, break points, long rallies), translated here into the same
- * predicate over `ask.points` / `ask.point_plays`; the link carries `?f=` as
- * well, so the tab's own filter — the authoritative one — makes the same cut
- * over whatever the server admitted. Two figures with different presets name
- * no one cut, and narrow nothing.
+ * never the answer's aggregate `sql`. The measure is the answer's HEADLINE
+ * figure — its first figure that names a measure, or, when it saved no
+ * figures, its block's first row that does — and narrows when
+ * `figure-video.ts` knows the Video tab's filter for it (second serves,
+ * break points, long rallies), translated here into the same predicate over
+ * `ask.points` / `ask.point_plays`; the link carries `?f=` as well, so the
+ * tab's own filter — the authoritative one — makes the same cut over
+ * whatever the server admitted. A headline with no filter narrows nothing,
+ * and the response says so (`filters: null`) rather than passing every point
+ * of the match off as the answer's.
  *
  * One match in scope answers the points themselves (number, set, game,
  * score, result, won) and a link that opens the film on the first with the
@@ -94,6 +102,12 @@ export interface AskShowSavedAnswer {
   mock: boolean;
   /** The result columns the figures were cited from (`AskFigureEvent.column`). */
   figureColumns: string[];
+  /**
+   * The measures the visual block's rows name (`measureForLabel`), in row
+   * order: the headline's measure when the answer saved no figures, as a
+   * table comparing this match with the rest does.
+   */
+  rowMeasures?: string[];
   /** The conversation's program, or null for a personal one. */
   programId: string | null;
 }
@@ -107,7 +121,7 @@ export function askShowPlanOf(
   content: unknown,
 ): Pick<
   AskShowSavedAnswer,
-  "scopeSql" | "sql" | "mock" | "figureColumns"
+  "scopeSql" | "sql" | "mock" | "figureColumns" | "rowMeasures"
 > | null {
   if (!isRecord(content)) return null;
   const scopeSql =
@@ -123,27 +137,91 @@ export function askShowPlanOf(
           : [],
       )
     : [];
-  return { scopeSql, sql, mock: content.mock === true, figureColumns };
+  const rows =
+    isRecord(content.visual) && Array.isArray(content.visual.rows)
+      ? content.visual.rows
+      : [];
+  const rowMeasures = rows.flatMap((row) => {
+    const column =
+      isRecord(row) && typeof row.label === "string"
+        ? measureForLabel(row.label)
+        : null;
+    return column ? [column] : [];
+  });
+  return {
+    scopeSql,
+    sql,
+    mock: content.mock === true,
+    figureColumns,
+    rowMeasures,
+  };
 }
 
 /* ── The measure ──────────────────────────────────────────────────────────── */
 
 /**
- * The one Video-tab cut the answer's figures name, or null: no figure with a
- * known preset, or two figures with different presets (which would make the
- * action show one figure's points under another figure's number).
+ * A column as a measure this file can cut on. The planner writes `_lost`
+ * columns the dictionary does not carry ("second_serve_points_lost_pct"):
+ * they count the same points as their `_won` twin, so they read as it.
+ */
+function showMeasure(column: string): {
+  column: string;
+  lost: boolean;
+  rate: boolean;
+} | null {
+  const lost = column.includes("_lost");
+  const rate = column.endsWith("_pct");
+  const won = column.replace(/_lost/g, "_won");
+  for (const candidate of rate ? [won, won.slice(0, -4)] : [won]) {
+    if (askMeasure(candidate)) return { column: candidate, lost, rate };
+  }
+  return null;
+}
+
+/** A count of points won ("second_serve_points_won", "long_rally_won") — not games, not a rate. */
+const POINTS_WON_KEY = /_points_won$|_rally_won$/;
+
+/**
+ * The Video-tab cut for the answer's headline figure, or null when it has
+ * none. The headline is the first figure column that names a measure; with
+ * no such figure, the block's first row that does. Later figures never
+ * stand in for it: a headline with no filter ("Total points won") shows the
+ * whole match, honestly labelled, rather than a secondary figure's points
+ * under the headline's number.
+ *
+ * A figure that counts points won or lost (not a rate, and not read off a
+ * row label, which cannot tell "7" from "41%") narrows to those points as
+ * well: "Second-serve points lost: 10" lists the ten. A rate lists the
+ * points it is a share of, each marked won or lost.
  */
 export function askShowMeasureFilters(
-  columns: readonly string[],
+  figureColumns: readonly string[],
+  rowMeasures: readonly string[] = [],
 ): MatchFilters | null {
-  let chosen: MatchFilters | null = null;
-  for (const column of columns) {
-    const filters = figureMatchFilters(column);
-    if (!filters) continue;
-    if (chosen === null) chosen = filters;
-    else if (!filtersEqual(chosen, filters)) return null;
+  const pick = (columns: readonly string[]) => {
+    for (const column of columns) {
+      const measure = showMeasure(column);
+      if (measure) return measure;
+    }
+    return null;
+  };
+  const fromFigure = pick(figureColumns);
+  const headline = fromFigure ?? pick(rowMeasures);
+  if (!headline) return null;
+  const filters = figureMatchFilters(headline.column);
+  if (!filters) return null;
+  const resolved = askMeasure(headline.column);
+  if (
+    !fromFigure ||
+    headline.rate ||
+    !resolved ||
+    !POINTS_WON_KEY.test(resolved.key)
+  ) {
+    return filters;
   }
-  return chosen;
+  // From the viewer's side: the opponent's points won are the viewer's lost.
+  const won = headline.lost === (resolved.qualifier === "opponent");
+  return { ...filters, resultOutcome: [won ? "won" : "lost"] };
 }
 
 const SERVE_TYPE: Record<ServeType, string> = {
@@ -175,8 +253,8 @@ function inList(values: readonly string[]): string {
  * The preset as a predicate over `ask.points p` (and, through `exists`,
  * `ask.point_plays pp`), ready to append to a `where`: `""` when the preset
  * says nothing these views can test. Only the keys `figure-video.ts` writes
- * are translated — Serve › Player, Type and Zone, Return › Zone, Score type
- * and Rally length; the tab's own `?f=` applies the whole preset again.
+ * are translated — Serve › Player, Type and Zone, Return › Zone, Score type,
+ * Result › Outcome and Rally length; the tab's own `?f=` applies the whole preset again.
  */
 export function askShowPredicate(filters: MatchFilters | null): string {
   if (!filters) return "";
@@ -184,6 +262,9 @@ export function askShowPredicate(filters: MatchFilters | null): string {
   const plays: string[] = [];
   if (filters.server === "you") where.push("p.i_served = true");
   else if (filters.server === "opponent") where.push("p.i_served = false");
+  if (filters.resultOutcome.length === 1) {
+    where.push(`p.i_won = ${filters.resultOutcome[0] === "won"}`);
+  }
   if (filters.scoreType.length > 0) {
     where.push(
       `(${filters.scoreType.map((type) => `${SCORE_FLAG[type]} = true`).join(" or ")})`,
@@ -393,7 +474,7 @@ export async function showAnswerPoints(
   }
 
   const scope = scopeOf(saved.programId);
-  const filters = askShowMeasureFilters(saved.figureColumns);
+  const filters = askShowMeasureFilters(saved.figureColumns, saved.rowMeasures);
   const predicate = askShowPredicate(filters);
   const serialized = filters ? serializeMatchFilters(filters) || null : null;
 

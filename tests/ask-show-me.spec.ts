@@ -122,7 +122,7 @@ test("one match: the count is announced and focus moves to the point list", asyn
   await expect(status(page)).toHaveText("3 points found");
   await expect(region(page)).not.toHaveAttribute("aria-busy", /.*/);
   await expect(
-    page.getByRole("heading", { name: "3 points in this match" }),
+    page.getByRole("heading", { name: "All 3 points in this match" }),
   ).toBeFocused();
 });
 

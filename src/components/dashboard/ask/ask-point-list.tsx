@@ -49,7 +49,11 @@ export interface AskPointListProps {
   match: AskSourceMatch;
   /** In match order, as `/api/ask/show` answered them. */
   points: readonly AskShowPoint[];
-  /** The measure's cut, serialized for `?f=`, carried on every row's link. */
+  /**
+   * The measure's cut, serialized for `?f=`, carried on every row's link.
+   * Null when the answer named no cut: the list is then the whole match, and
+   * its heading says so instead of passing them off as the answer's points.
+   */
   filters?: string | null;
   /** The match held more points than the list could carry. */
   truncated?: boolean;
@@ -114,6 +118,13 @@ export function AskPointList({
   const t = LIST_TONE.light;
   const groups = groupsOf(points);
   const count = points.length;
+  const noun = count === 1 ? "point" : "points";
+  const heading =
+    filters !== null
+      ? `${count} ${noun} behind this answer`
+      : truncated
+        ? `${count} ${noun} in this match`
+        : `All ${count} ${noun} in this match`;
   // Who the sides are, by name: the program's player on a team answer, the
   // viewer (unnamed to themselves) on a personal one.
   const you = match.playerName ? surname(match.playerName) : "You";
@@ -126,7 +137,9 @@ export function AskPointList({
   return (
     <section
       data-ask-point-list=""
-      aria-label="Points in this match"
+      aria-label={
+        filters !== null ? "Points behind this answer" : "Points in this match"
+      }
       className="flex max-w-[420px] flex-col gap-0.5"
     >
       <div className="flex items-center gap-3 pb-2">
@@ -135,7 +148,7 @@ export function AskPointList({
           tabIndex={headingRef ? -1 : undefined}
           className="eyebrow-sm min-w-0 flex-1 outline-none"
         >
-          {count} {count === 1 ? "point" : "points"} in this match
+          {heading}
         </h3>
         {href && (
           <Link

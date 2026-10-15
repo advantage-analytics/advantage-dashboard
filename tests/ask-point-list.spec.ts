@@ -101,8 +101,9 @@ test("a row per point under its game, linked into the film on that point", async
 }) => {
   await openFixture(page, "?case=page");
 
+  // No cut: the whole match, and the heading says so.
   await expect(list(page).getByRole("heading")).toHaveText(
-    "3 points in this match",
+    "All 3 points in this match",
   );
   await expect(
     list(page).getByRole("link", { name: "Watch all" }),
@@ -150,5 +151,18 @@ test("the measure's cut rides every row's link, and the team's player serves", a
   await expect(row(page, 3)).toContainText("Sokolov served");
   await expect(page.locator("[data-ask-point-list-truncated]")).toHaveText(
     "Showing the first 3 points.",
+  );
+  // A cut: these are the answer's points, not the match's.
+  await expect(list(page).getByRole("heading")).toHaveText(
+    "3 points behind this answer",
+  );
+});
+
+test('no cut and a capped list: the match\'s points, never "All"', async ({
+  page,
+}) => {
+  await openFixture(page, "?case=page&truncated=1");
+  await expect(list(page).getByRole("heading")).toHaveText(
+    "3 points in this match",
   );
 });

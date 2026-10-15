@@ -121,7 +121,24 @@ test.describe("the saved answer's plan", () => {
       sql: ANSWER_SQL,
       mock: false,
       figureColumns: ["second_serve_won_pct"],
+      rowMeasures: [],
     });
+    // No figures saved: the block's rows name the measure.
+    expect(
+      askShowPlanOf({
+        scopeSql: SCOPE_SQL,
+        sql: ANSWER_SQL,
+        figures: [],
+        visual: {
+          kind: "table",
+          columns: ["Selected matches", "All matches"],
+          rows: [
+            { label: "Second-serve points won", cells: ["41.2%", "49.2%"] },
+            { label: "Not a measure", cells: ["1", "2"] },
+          ],
+        },
+      })?.rowMeasures,
+    ).toEqual(["second_serve_points_won"]);
     expect(
       askShowPlanOf({ scopeSql: SCOPE_SQL, sql: ANSWER_SQL, mock: true })?.mock,
     ).toBe(true);
@@ -132,24 +149,72 @@ test.describe("the saved answer's plan", () => {
 });
 
 test.describe("the measure", () => {
-  test("one known figure narrows; the same preset twice is one; two different presets narrow nothing", () => {
-    expect(askShowMeasureFilters(["second_serve_won_pct"])).toEqual({
+  test("the headline figure decides: the first figure naming a measure, never a later one", () => {
+    const secondServes = {
+      ...EMPTY_MATCH_FILTERS,
+      server: "you" as const,
+      serveType: ["second" as const],
+    };
+    expect(askShowMeasureFilters(["second_serve_won_pct"])).toEqual(
+      secondServes,
+    );
+    // Not-a-measure columns are skipped to reach the headline.
+    expect(
+      askShowMeasureFilters(["n", "second_serve_won_pct", "first_serves_in"]),
+    ).toEqual(secondServes);
+    // A headline with no filter shows the whole match; a later figure never stands in.
+    expect(
+      askShowMeasureFilters(["total_points_won", "second_serves"]),
+    ).toBeNull();
+    expect(askShowMeasureFilters(["matches", "wins"])).toBeNull();
+    expect(askShowMeasureFilters([])).toBeNull();
+  });
+
+  test("a `_lost` rate reads as its won twin's points: second serves, not every service point", () => {
+    // The live thread: "Second-serve points lost 58.8%" then "Double faults".
+    expect(
+      askShowMeasureFilters(["second_serve_points_lost_pct", "double_faults"]),
+    ).toEqual({ ...EMPTY_MATCH_FILTERS, server: "you", serveType: ["second"] });
+  });
+
+  test("a count of points won or lost narrows to those points; a rate does not", () => {
+    expect(askShowMeasureFilters(["second_serve_points_won"])).toEqual({
+      ...EMPTY_MATCH_FILTERS,
+      server: "you",
+      serveType: ["second"],
+      resultOutcome: ["won"],
+    });
+    expect(askShowMeasureFilters(["second_serve_points_lost"])).toEqual({
+      ...EMPTY_MATCH_FILTERS,
+      server: "you",
+      serveType: ["second"],
+      resultOutcome: ["lost"],
+    });
+    // The opponent's points won are the viewer's lost.
+    expect(
+      askShowMeasureFilters(["opp_first_serve_points_won"])?.resultOutcome,
+    ).toEqual(["lost"]);
+    expect(
+      askShowMeasureFilters(["second_serve_won_pct"])?.resultOutcome,
+    ).toEqual([]);
+    expect(askShowPredicate(askShowMeasureFilters(["long_rally_won"]))).toBe(
+      " and p.i_won = true and exists (select 1 from ask.point_plays pp where pp.match_id = p.match_id and pp.point_number = p.point_number and pp.rally_band in ('long'))",
+    );
+  });
+
+  test("no figures: the block's first row names the headline, as a rate", () => {
+    // "Second-serve points won" reads back as the count key, but a row label
+    // cannot tell "7" from "41%": it narrows to second serves, not to wins.
+    expect(askShowMeasureFilters([], ["second_serve_points_won"])).toEqual({
       ...EMPTY_MATCH_FILTERS,
       server: "you",
       serveType: ["second"],
     });
+    // A figure, when there is one, wins over the rows.
     expect(
-      askShowMeasureFilters([
-        "second_serves",
-        "second_serve_won_pct",
-        "matches",
-      ]),
-    ).toEqual({ ...EMPTY_MATCH_FILTERS, server: "you", serveType: ["second"] });
-    expect(
-      askShowMeasureFilters(["first_serves_in", "second_serves"]),
-    ).toBeNull();
-    expect(askShowMeasureFilters(["matches", "wins"])).toBeNull();
-    expect(askShowMeasureFilters([])).toBeNull();
+      askShowMeasureFilters(["first_serve_pct"], ["second_serve_points_won"])
+        ?.serveType,
+    ).toEqual(["first"]);
   });
 
   test("the predicate speaks ask.points and, through exists, ask.point_plays", () => {
@@ -433,6 +498,75 @@ test.describe("showAnswerPoints", () => {
       serveType: ["second"],
     });
     expect(outcome.value.href).toContain(`f=${outcome.value.filters}`);
+  });
+
+  test("a second-serve answer with no figures: its table row narrows both queries, never the whole match", async () => {
+    const { deps, calls } = fakeDeps({
+      saved: {
+        scopeSql: SCOPE_SQL,
+        sql: ANSWER_SQL,
+        mock: false,
+        figureColumns: [],
+        rowMeasures: ["second_serve_points_won"],
+        programId: null,
+      },
+    });
+    const outcome = await showAnswerPoints(deps, ANSWER_ID);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok || outcome.value.kind !== "match") return;
+    for (const call of calls) {
+      expect(String(call.args?.sql)).toContain(
+        "pp.serve_type in ('Second Serve')",
+      );
+      expect(String(call.args?.sql)).not.toContain("p.i_won =");
+    }
+    expect(parseMatchFilters(outcome.value.filters)).toEqual({
+      ...EMPTY_MATCH_FILTERS,
+      server: "you",
+      serveType: ["second"],
+    });
+  });
+
+  test("a points-lost count lists only the lost points, and its link says so", async () => {
+    const { deps, calls } = fakeDeps({
+      saved: {
+        scopeSql: SCOPE_SQL,
+        sql: ANSWER_SQL,
+        mock: false,
+        figureColumns: ["second_serve_points_lost"],
+        programId: null,
+      },
+    });
+    const outcome = await showAnswerPoints(deps, ANSWER_ID);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok || outcome.value.kind !== "match") return;
+    for (const call of calls) {
+      expect(String(call.args?.sql)).toContain("p.i_won = false");
+    }
+    expect(parseMatchFilters(outcome.value.filters).resultOutcome).toEqual([
+      "lost",
+    ]);
+  });
+
+  test("an answer with no point-level measure: every point, and `filters: null` to say so", async () => {
+    const { deps, calls } = fakeDeps({
+      saved: {
+        scopeSql: SCOPE_SQL,
+        sql: ANSWER_SQL,
+        mock: false,
+        figureColumns: ["total_points_won"],
+        rowMeasures: [],
+        programId: null,
+      },
+    });
+    const outcome = await showAnswerPoints(deps, ANSWER_ID);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok || outcome.value.kind !== "match") return;
+    for (const call of calls) {
+      expect(String(call.args?.sql)).not.toContain(" and p.i_");
+      expect(String(call.args?.sql)).not.toContain("point_plays");
+    }
+    expect(outcome.value.filters).toBeNull();
   });
 
   test("a team conversation runs the team function with its program", async () => {
