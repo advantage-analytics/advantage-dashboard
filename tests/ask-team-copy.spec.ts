@@ -182,7 +182,9 @@ test.describe("the routes", () => {
       'return scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal;',
     );
     expect(actions).toContain('const HOME_PATH = "/dashboard";');
-    const calls = actions.match(/revalidatePath\([^)]*\)/g) ?? [];
+    // One nesting level, so `askPath(scopeKind)` is read whole.
+    const calls =
+      actions.match(/revalidatePath\((?:[^()]|\([^()]*\))*\)/g) ?? [];
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
       expect([
