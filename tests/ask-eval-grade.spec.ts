@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
+import { ASK_VISUAL_KINDS } from "@/lib/services/ask/events";
+
 import {
   ASK_EVAL_ERROR_CODES,
   expectProblems,
@@ -379,7 +381,7 @@ test.describe("expectProblems", () => {
     ).toEqual([
       'unknown key "want"',
       `error must be "none" or one of ${ASK_EVAL_ERROR_CODES.join(", ")}`,
-      'visual must be "none" or one of bars, table, trend, split, serve, form',
+      `visual must be "none" or one of ${ASK_VISUAL_KINDS.join(", ")}`,
       "notice must be true or false",
       "shape must be one of A, B, C, D",
       "note must be a string",
