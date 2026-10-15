@@ -649,9 +649,20 @@ const AskExchangeView = memo(function AskExchangeView({
             visual: answer.visual,
             scope,
             tags: question.tags,
+            // A saved answer carries "Show me these points", the film's one
+            // door; Watch on video only stands in when there is no Show me.
+            showMe: answerId !== null,
           })
         : NO_ACTIONS,
-    [done, answer.sources, answer.figures, answer.visual, scope, question.tags],
+    [
+      done,
+      answer.sources,
+      answer.figures,
+      answer.visual,
+      scope,
+      question.tags,
+      answerId,
+    ],
   );
   return (
     <article className="flex flex-col gap-6">
@@ -661,29 +672,31 @@ const AskExchangeView = memo(function AskExchangeView({
         scope={scope}
         onChoose={onChoose}
         onRate={answerId ? (feedback) => onRate(answerId, feedback) : undefined}
+        actions={
+          actions.length > 0 && (
+            <AskActionCards
+              actions={actions}
+              scope={scope}
+              pinId={pinId}
+              onPin={
+                answerId
+                  ? async () => {
+                      const outcome = await onPinAnswer(answerId);
+                      if (outcome.ok) setPinId(outcome.pinId);
+                      return outcome;
+                    }
+                  : undefined
+              }
+              onUnpin={async (id) => {
+                const done = await onUnpinAnswer(id);
+                if (done) setPinId(null);
+                return done;
+              }}
+              onSaveView={onSaveView}
+            />
+          )
+        }
       />
-      {actions.length > 0 && (
-        <AskActionCards
-          actions={actions}
-          scope={scope}
-          pinId={pinId}
-          onPin={
-            answerId
-              ? async () => {
-                  const outcome = await onPinAnswer(answerId);
-                  if (outcome.ok) setPinId(outcome.pinId);
-                  return outcome;
-                }
-              : undefined
-          }
-          onUnpin={async (id) => {
-            const done = await onUnpinAnswer(id);
-            if (done) setPinId(null);
-            return done;
-          }}
-          onSaveView={onSaveView}
-        />
-      )}
       {followUps.length > 0 && (
         <AskStarters
           label={followUpsLabel}

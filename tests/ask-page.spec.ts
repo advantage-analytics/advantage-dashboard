@@ -184,12 +184,23 @@ test.describe("the cards under an answer", () => {
         .evaluateAll((nodes) =>
           nodes.map((node) => node.getAttribute("data-ask-action")),
         ),
-    ).resolves.toEqual(["watch", "pin", "visualize", "save_view", "export"]);
+    ).resolves.toEqual(["pin", "visualize", "save_view", "export", "share"]);
 
-    await expect(card(page, "watch").getByRole("link")).toHaveAttribute(
-      "href",
-      /^\/dashboard\/matches\/match-sep-28\?tab=film&f=/,
-    );
+    // Saved, so "Show me these points" is the film's one door: Watch on video
+    // is not offered beside it, and its slot goes to the next action.
+    await expect(card(page, "watch")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Show me these points" }),
+    ).toHaveCount(1);
+    // The next steps sit above the sign-off, inside the answer.
+    const order = await page
+      .locator("[data-ask-actions], [data-ask-provenance]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) =>
+          node.hasAttribute("data-ask-actions") ? "actions" : "sign-off",
+        ),
+      );
+    expect(order).toEqual(["actions", "sign-off"]);
     await expect(card(page, "visualize").getByRole("link")).toHaveAttribute(
       "href",
       /^\/dashboard\/matches\/match-sep-28\?tab=shots&cut=serve/,
@@ -312,7 +323,8 @@ test.describe("the cards under an answer", () => {
     page,
   }) => {
     await openFixture(page, "?c=1&scope=team");
-    await expect(card(page, "watch")).toHaveCount(1);
+    // Saved: the film is reached through Show me, not a Watch card.
+    await expect(card(page, "watch")).toHaveCount(0);
     await card(page, "pin")
       .getByRole("button", { name: "Pin to Home" })
       .click();

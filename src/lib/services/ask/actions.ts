@@ -129,6 +129,13 @@ export interface AskActionsInput {
   scope: AskScope;
   /** The question's tags, as saved with it. */
   tags?: readonly AskSavedTag[];
+  /**
+   * The answer is saved, so "Show me these points" (`ask-show.tsx`) sits
+   * under it: that re-runs the answer's own scope and opens exactly its
+   * points, so it is the film's one door and Watch on video is not offered
+   * beside it. Watch stands in only when there is no Show me.
+   */
+  showMe?: boolean;
 }
 
 // ── Measures → the Visualizations tab ───────────────────────────────────────
@@ -248,7 +255,7 @@ export function askActionsFor(input: AskActionsInput): AskAction[] {
         : null,
     )
     .find((entry) => entry?.href);
-  if (watched?.href && one) {
+  if (watched?.href && one && !input.showMe) {
     out.push({
       kind: "watch",
       label: "Watch on video",
