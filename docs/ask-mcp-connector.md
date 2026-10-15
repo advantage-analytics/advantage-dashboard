@@ -135,13 +135,18 @@ from Supabase's metadata URL.
 | `list_matches`   | `program_id?`                                               | The matches in scope from `ask.matches`, newest first: id, `played_on`, opponent, score (player's seat), `i_won`, `source` (`video` / `swingvision` / null), tournament, match type, `has_stats`; `player` in a program scope. The rows a query can read. |
 | `describe_views` | `scope?` (`personal` \| `team`)                             | The five views and every column (`renderAskSchemaBlock`, so hidden columns stay hidden), the percentage definitions, and the rules a query is held to.                                                                                                    |
 | `run_query`      | `sql`, `scope_sql?`, `program_id?`                          | `checkAskSql()` first, then `ask_run_query` / `ask_run_team_query` as the caller. Rows (≤ 200, the `ask.exec_query()` cap), `row_count`, `truncated`, the scope's matches.                                                                                |
-| `ask`            | `question`, `program_id?`, `conversation_id?`, `match_ids?` | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation, answer cache and `ask_runs` record as the page.                        |
+| `ask`            | `question`, `program_id?`, `conversation_id?`, `match_ids?` | A whole question through `askQuestion()`, drained: headline, figures, body, visual, sources, `conversation_id`, `answer_id`, `questions_used` / `questions_cap`. Same reservation and `ask_runs` record as the page; see below for the cache.             |
 
 A `program_id` names a program the caller is a member of (any role); membership
 is read as the caller from `program_members` before a row of the program is.
 `match_ids` are the page's match tags; opponent and player tags are not exposed
-— name them in the question. Refusals come back as the SDK's `isError` tool
-result whose text starts with a stable slug: `sql_refused`, `query_failed`,
+— name them in the question. `ask` replays the page's answer cache for a
+standalone question but never writes it (an entry must carry the page's Watch
+links, which need the cookie session), and a follow-up with `conversation_id`
+skips the cache entirely, as `/api/ask` does. Refusals come back as an
+`isError` tool result whose text starts with a stable slug and a colon —
+`sql_refused: …` — returned by the tool itself rather than thrown, so no
+JSON-RPC error code is involved: `sql_refused`, `query_failed`,
 `not_a_member`, `invalid_program_id`, `no_matches`, `tag_not_resolved`,
 `conversation_not_found`, `rate_limited`, `daily_cap_reached`,
 `ask_limit_reached`, `needs_session`, `cannot_answer`, `no_data`,
@@ -172,7 +177,7 @@ email"):
 - **Reads are read-only** at every layer: the SQL guard allows one SELECT,
   `ask.exec_query()` sets `transaction_read_only`, and the tools are annotated
   `readOnlyHint`. The only thing a call changes is what the page's own
-  question would: a saved answer, a run row, a cache entry, a question spent.
+  question would: a saved answer, a run row, a question spent.
 - **The token is wider than the tools.** It is a full user JWT: only
   `/api/mcp` limits its holder to these read tools, and it could call
   PostgREST directly within the user's RLS. The consent page says so — it

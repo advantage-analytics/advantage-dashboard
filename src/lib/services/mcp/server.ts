@@ -11,7 +11,8 @@
  *                   SQL guard and run as the caller through the two
  *                   server-only query functions
  *   ask             a whole question through `askQuestion()`, with the same
- *                   reservation, cache and run record as `POST /api/ask`
+ *                   reservation and run record as `POST /api/ask`; it reads
+ *                   the page's answer cache but never writes it (below)
  *
  * The security boundary is the one `/api/ask` already has, reused whole:
  * every SQL string — the model's, the caller's, this file's own
@@ -24,23 +25,19 @@
  * reservation, the save, the run record, the cache, the membership read —
  * runs as the user, on their bearer client.
  *
- * Refusals are `McpError`s. Inside a tool the SDK shapes one into the
- * tool result's `isError` form (`createToolError`), with the message
- * carrying a stable slug first — `sql_refused: …` — so a client can branch
- * on it; outside a tool (an unknown tool, bad arguments) the SDK answers a
- * JSON-RPC error itself. The two limits (`rate-limit.ts`) and the question
- * allowance use codes of their own in the server-defined range.
+ * Refusals are tool results, never thrown at the SDK: `guarded()` turns a
+ * `Refusal` into `{ isError: true }` whose text starts with a stable slug —
+ * `sql_refused: …` — so a client can branch on it. (A thrown `McpError`
+ * would not do: the SDK rewrites its message to `MCP error <code>: …` and
+ * drops its data.) Outside a tool (an unknown tool, bad arguments) the SDK
+ * answers a JSON-RPC error itself.
  *
  * Takes its collaborators as arguments and imports no client factory, so an
  * offline spec can drive it over an in-memory transport.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  ErrorCode,
-  McpError,
-  type CallToolResult,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { isUuid } from "@/lib/admin/validation";
@@ -57,7 +54,6 @@ import {
 } from "@/lib/services/ask/ask";
 import {
   askCacheKey,
-  captureAskAnswer,
   readAskCache,
   readAskDataVersion,
   replayCachedAnswer,
@@ -113,13 +109,6 @@ export interface AskMcpContext {
 /** The retry `rate_limited` names when the daily counter could not be read. */
 export const COUNT_UNAVAILABLE_RETRY_SECONDS = 30;
 
-/** JSON-RPC codes in the server-defined range, beside the SDK's own. */
-export const MCP_ERROR_CODES = {
-  rateLimited: -32029,
-  dailyCapReached: -32030,
-  askLimitReached: -32031,
-} as const;
-
 export const MCP_SERVER_NAME = "advantage-ask";
 export const MCP_SERVER_VERSION = "1.0.0";
 
@@ -130,14 +119,27 @@ const MAX_LISTED_SOURCES = 100;
 
 const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). Call describe_views once to learn the five ask views and the query rules, list_matches to see what is in scope, run_query for a read-only SELECT over the views, and ask to have Advantage answer a whole question (it spends one of the player's monthly questions). Every number you report must come from a tool result; the views hold nobody else's data.`;
 
-/** A refusal: `slug: sentence`, with the slug kept on `data` as well. */
-function refusal(code: number, slug: string, sentence: string): McpError {
-  return new McpError(code, `${slug}: ${sentence}`, { code: slug });
+/** A refusal a tool throws; `guarded()` answers it as the tool result `refusalResult()` shapes. */
+class Refusal extends Error {
+  readonly slug: string;
+  readonly sentence: string;
+  constructor(slug: string, sentence: string) {
+    super(`${slug}: ${sentence}`);
+    this.slug = slug;
+    this.sentence = sentence;
+  }
 }
 
-function slugOf(error: McpError): string {
-  const data = error.data as { code?: unknown } | undefined;
-  return typeof data?.code === "string" ? data.code : String(error.code);
+function refusal(slug: string, sentence: string): Refusal {
+  return new Refusal(slug, sentence);
+}
+
+/** A refusal as the tool result a client reads: `slug: sentence`. */
+function refusalResult(slug: string, sentence: string): CallToolResult {
+  return {
+    isError: true,
+    content: [{ type: "text", text: `${slug}: ${sentence}` }],
+  };
 }
 
 /** The column list `list_matches` reads; `player_name` only where it names a roster player. */
@@ -246,8 +248,8 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
 
   // ── The guard every tool runs under ────────────────────────────────────
   // The two limits first, then the tool; one `mcp_tool_call` event however
-  // it ended. A refusal passes through as the McpError it is; anything else
-  // is logged and becomes a fixed sentence, as `errorResponse()` would.
+  // it ended. A refusal becomes the `isError` result naming it; anything
+  // else is logged and becomes a fixed sentence, as `errorResponse()` would.
   function guarded<Args>(
     name: string,
     run: (args: Args) => Promise<CallToolResult>,
@@ -260,7 +262,6 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         const window = context.limiter.check(context.caller.userId);
         if (!window.ok) {
           throw refusal(
-            MCP_ERROR_CODES.rateLimited,
             "rate_limited",
             `Too many calls. Try again in ${window.retryAfterSeconds} seconds.`,
           );
@@ -270,14 +271,12 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         // fails closed (`usage.ts`).
         if (count === null) {
           throw refusal(
-            MCP_ERROR_CODES.rateLimited,
             "rate_limited",
             `Too many calls. Try again in ${COUNT_UNAVAILABLE_RETRY_SECONDS} seconds.`,
           );
         }
         if (count > dailyCap) {
           throw refusal(
-            MCP_ERROR_CODES.dailyCapReached,
             "daily_cap_reached",
             `You have used today's ${dailyCap} connector calls. The cap resets at midnight UTC.`,
           );
@@ -286,16 +285,15 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         ok = true;
         return result;
       } catch (error) {
-        if (error instanceof McpError) {
-          code = slugOf(error);
-          throw error;
+        if (error instanceof Refusal) {
+          code = error.slug;
+          return refusalResult(error.slug, error.sentence);
         }
         console.error(`[mcp] ${name} failed`, {
           error: error instanceof Error ? error.message : String(error),
         });
         code = "internal_error";
-        throw refusal(
-          ErrorCode.InternalError,
+        return refusalResult(
           "internal_error",
           "Something went wrong on our side. Try again in a moment.",
         );
@@ -319,19 +317,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
   ): Promise<AskScope> {
     if (programId === undefined) return PERSONAL_ASK_SCOPE;
     if (!isUuid(programId)) {
-      throw refusal(
-        ErrorCode.InvalidParams,
-        "invalid_program_id",
-        "program_id must be a uuid.",
-      );
+      throw refusal("invalid_program_id", "program_id must be a uuid.");
     }
     const program = await context.reads.program(programId);
     if (!program) {
-      throw refusal(
-        ErrorCode.InvalidParams,
-        "not_a_member",
-        "You are not a member of this program.",
-      );
+      throw refusal("not_a_member", "You are not a member of this program.");
     }
     return { kind: "team", programId: program.id, programName: program.name };
   }
@@ -344,7 +334,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
   ): Promise<{ rows: Row[]; matches: AskSourceMatch[] }> {
     const checked = checkAskSql({ scopeSql, sql });
     if (!checked.ok) {
-      throw refusal(ErrorCode.InvalidParams, "sql_refused", checked.reason);
+      throw refusal("sql_refused", checked.reason);
     }
     const team = scope.kind === "team";
     const { data, error } = team
@@ -355,11 +345,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         })
       : await context.db.rpc("ask_run_query", { scope_sql: scopeSql, sql });
     if (error) {
-      throw refusal(
-        ErrorCode.InvalidParams,
-        "query_failed",
-        databaseHint(error.message),
-      );
+      throw refusal("query_failed", databaseHint(error.message));
     }
     const record = asRecord(data);
     if (
@@ -486,7 +472,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "ask",
     {
       title: "Ask a question",
-      description: `Ask Advantage a whole question about the player's matches (or a program's, with program_id) and get its answer: a headline, the figures it rests on, the explanation, an optional visual block and the matches it was computed from. Spends one of the player's monthly questions, as asking on the Ask page does; the same question over unchanged data is answered from the cache and spends nothing. Pass conversation_id to ask a follow-up in a saved conversation, and match_ids to pin the question to particular matches.`,
+      description: `Ask Advantage a whole question about the player's matches (or a program's, with program_id) and get its answer: a headline, the figures it rests on, the explanation, an optional visual block and the matches it was computed from. Spends one of the player's monthly questions, as asking on the Ask page does; a question the Ask page already answered over unchanged data is replayed from its cache and spends nothing (never a follow-up). Pass conversation_id to ask a follow-up in a saved conversation, and match_ids to pin the question to particular matches.`,
       inputSchema: {
         question: z
           .string()
@@ -516,19 +502,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
       async ({ question, program_id, conversation_id, match_ids }) => {
         const allowed = assertAskAllowed(context.caller);
         if (!allowed.ok) {
-          throw refusal(
-            ErrorCode.InvalidRequest,
-            "needs_session",
-            allowed.reason,
-          );
+          throw refusal("needs_session", allowed.reason);
         }
         const asked = question.trim();
         if (asked === "") {
-          throw refusal(
-            ErrorCode.InvalidParams,
-            "question_empty",
-            "Type a question first.",
-          );
+          throw refusal("question_empty", "Type a question first.");
         }
 
         const scope = await resolveScope(program_id);
@@ -543,7 +521,6 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         );
         if (rows.length === 0) {
           throw refusal(
-            ErrorCode.InvalidRequest,
             "no_matches",
             team
               ? "Add a team match before you ask a question."
@@ -557,11 +534,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           scope,
         );
         if (!resolved.ok) {
-          throw refusal(
-            ErrorCode.InvalidParams,
-            "tag_not_resolved",
-            resolved.reason,
-          );
+          throw refusal("tag_not_resolved", resolved.reason);
         }
 
         const conversation = conversation_id
@@ -572,7 +545,6 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           : null;
         if (conversation_id && !conversation) {
           throw refusal(
-            ErrorCode.InvalidParams,
             "conversation_not_found",
             "This conversation is not available.",
           );
@@ -595,15 +567,21 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           });
         };
 
-        // The answer cache, as the route keeps it: a hit spends nothing.
+        // The answer cache, read as the route reads it: a hit spends nothing.
+        // Never for a follow-up — its meaning rests on the conversation, which
+        // the key does not carry. Nor is an answer written from here: an
+        // entry the page replays must carry its Watch links, and those need
+        // the page's seat loader (`getAskPageSeats`), which reads the cookie
+        // session this request does not have.
         const cacheKey = askCacheKey({
           question: asked,
           tags: resolved.tags,
           scope,
         });
-        const dataVersion = context.model.configured
-          ? await readAskDataVersion(db, scope)
-          : null;
+        const dataVersion =
+          context.model.configured && !conversation_id
+            ? await readAskDataVersion(db, scope)
+            : null;
         const cached = dataVersion
           ? await readAskCache(db, {
               key: cacheKey,
@@ -628,7 +606,6 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           if (!reserved.ok) {
             if (reserved.code === "ask_limit_reached") {
               throw refusal(
-                MCP_ERROR_CODES.askLimitReached,
                 "ask_limit_reached",
                 reserved.detail
                   ? `You have used all ${reserved.detail.cap} questions for this month. They reset on ${reserved.detail.resets_on}.`
@@ -656,18 +633,11 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             reservation: reserved.reservation,
             scope,
           };
-          const recorded = (run: AskQuestionInput) =>
-            recordAskRun(run, {
-              planModel: context.stageModels.plan,
-              answerModel: context.stageModels.answer,
-              onRun,
-            });
-          events = dataVersion
-            ? captureAskAnswer(input, recorded, {
-                key: cacheKey,
-                version: dataVersion,
-              })
-            : recorded(input);
+          events = recordAskRun(input, {
+            planModel: context.stageModels.plan,
+            answerModel: context.stageModels.answer,
+            onRun,
+          });
         }
 
         return drainAnswer(events);
@@ -730,9 +700,6 @@ async function drainAnswer(
         break;
       case "error":
         throw refusal(
-          event.code === "llm_unavailable" || event.code === "answer_failed"
-            ? ErrorCode.InternalError
-            : ErrorCode.InvalidParams,
           event.code,
           event.options?.length
             ? `${event.error} Options: ${event.options.join(" | ")}`

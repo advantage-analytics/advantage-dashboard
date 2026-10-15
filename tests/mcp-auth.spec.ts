@@ -3,6 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   consentPath,
+  EXPIRED_AUTHORIZATION_ERROR,
+  getOAuthAuthorizationDetails,
+  OAUTH_UNAVAILABLE_ERROR,
   parseAuthorizationDetails,
   readAuthorizationId,
 } from "@/lib/auth/oauth-consent";
@@ -280,6 +283,51 @@ test.describe("the consent page", () => {
     expect(parseAuthorizationDetails({})).toBeNull();
     expect(parseAuthorizationDetails("nope")).toBeNull();
     expect(parseAuthorizationDetails(null)).toBeNull();
+  });
+
+  test("an upstream refusal becomes a written sentence, never Supabase's own text", async () => {
+    const read = (status: number, body: unknown) =>
+      getOAuthAuthorizationDetails({
+        supabaseUrl: "https://proj.supabase.co",
+        anonKey: "anon",
+        accessToken: "token",
+        authorizationId: "abc123-XYZ_789",
+        fetch: async () =>
+          new Response(typeof body === "string" ? body : JSON.stringify(body), {
+            status,
+          }),
+      });
+    const cases: [number, unknown, string][] = [
+      [
+        404,
+        {
+          code: 404,
+          error_code: "feature_disabled",
+          msg: "OAuth server is disabled",
+        },
+        OAUTH_UNAVAILABLE_ERROR,
+      ],
+      [503, "<html>bad gateway</html>", OAUTH_UNAVAILABLE_ERROR],
+      [404, { msg: "authorization not found" }, EXPIRED_AUTHORIZATION_ERROR],
+      [
+        400,
+        { msg: "authorization request has expired" },
+        EXPIRED_AUTHORIZATION_ERROR,
+      ],
+    ];
+    for (const [status, body, sentence] of cases) {
+      expect(await read(status, body)).toEqual({
+        ok: false,
+        status,
+        message: sentence,
+      });
+    }
+    const other = await read(403, { msg: "forbidden by policy" });
+    expect(other.ok).toBe(false);
+    expect(!other.ok && other.message).not.toContain("forbidden by policy");
+    expect(!other.ok && other.message).toContain(
+      "Start again from the app you are connecting.",
+    );
   });
 });
 

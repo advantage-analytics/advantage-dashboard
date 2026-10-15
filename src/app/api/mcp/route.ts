@@ -18,8 +18,8 @@
  *   500 internal_error     the service key is not configured
  *   JSON-RPC               everything after: the SDK parses the body, lists
  *                          the tools and runs them; a tool's refusal is an
- *                          `isError` result the SDK shapes from the
- *                          `McpError` the tool threw (`server.ts`).
+ *                          `isError` result whose text starts with its
+ *                          slug (`server.ts`).
  *
  * No same-origin check, on purpose: this is not a browser mutation but an
  * API for a non-browser client, and the bearer token is the credential. A

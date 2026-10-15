@@ -119,6 +119,8 @@ interface World {
   configured: boolean;
   serviceKey: boolean;
   programs: { id: string; name: string }[];
+  /** The one saved conversation `reads.conversation()` finds, if any. */
+  conversation: { id: string; messages: [] } | null;
   rpc: Record<string, (args: unknown) => RpcResult>;
   limiter: rateLimit.RateLimiter;
   llm: () => Promise<AsyncIterable<string>>;
@@ -150,6 +152,7 @@ function world(overrides: Partial<World> = {}): World {
     configured: false,
     serviceKey: true,
     programs: [{ id: PROGRAM_ID, name: "Westbrook College" }],
+    conversation: null,
     limiter: rateLimit.createRateLimiter(),
     rpc: {
       ask_mcp_count_call: () => ({ data: 1, error: null }),
@@ -271,7 +274,7 @@ function fakes(state: World) {
         },
         conversation: async (id: string) => {
           calls.reads.push(`conversation:${id}`);
-          return null;
+          return state.conversation?.id === id ? state.conversation : null;
         },
       }),
     },
@@ -396,6 +399,15 @@ async function refused(response: Response) {
   };
 }
 
+/**
+ * Run with `NEXT_PUBLIC_SITE_URL` and `NODE_ENV` cleared, so `mcpOrigin()`
+ * falls back to the request's own origin (`http://localhost`) whatever CI or
+ * `.env.local` configured.
+ */
+function withRequestOrigin<T>(fn: () => Promise<T>): Promise<T> {
+  return withEnv(["NEXT_PUBLIC_SITE_URL", "NODE_ENV"], {}, fn);
+}
+
 const serviceCalls = (calls: Calls) =>
   calls.rpc.filter((call) => call.via === "service");
 const userCalls = (calls: Calls) =>
@@ -434,10 +446,12 @@ test.describe("POST /api/mcp · the route file", () => {
 test.describe("POST /api/mcp · the auth ladder", () => {
   test("no token: 401 with the resource metadata in WWW-Authenticate, nothing verified, nothing built", async () => {
     const { route, calls } = loadRoute(world());
-    const response = await route.POST(
-      post(
-        { jsonrpc: "2.0", id: 1, method: "tools/list" },
-        { authorization: null },
+    const response = await withRequestOrigin(() =>
+      route.POST(
+        post(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { authorization: null },
+        ),
       ),
     );
     expect(response.status).toBe(401);
@@ -467,10 +481,12 @@ test.describe("POST /api/mcp · the auth ladder", () => {
 
   test("a token Supabase Auth refuses: 401 naming invalid_token, and the database is never reached", async () => {
     const { route, calls } = loadRoute(world());
-    const response = await route.POST(
-      post(
-        { jsonrpc: "2.0", id: 1, method: "tools/list" },
-        { authorization: "Bearer not.the.token" },
+    const response = await withRequestOrigin(() =>
+      route.POST(
+        post(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { authorization: "Bearer not.the.token" },
+        ),
       ),
     );
     expect(response.status).toBe(401);
@@ -668,7 +684,7 @@ test.describe("POST /api/mcp · describe_views and list_matches", () => {
       program_id: OTHER_PROGRAM_ID,
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("not_a_member");
+    expect(textOf(result)).toMatch(/^not_a_member: /);
     expect(serviceCalls(calls)).toEqual([]);
     expect(calls.captured[0].properties).toMatchObject({
       tool: "list_matches",
@@ -691,7 +707,7 @@ test.describe("POST /api/mcp · run_query", () => {
     ]) {
       const result = await callTool(route, "run_query", { sql });
       expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("sql_refused");
+      expect(textOf(result)).toMatch(/^sql_refused: /);
     }
     expect(serviceCalls(calls)).toEqual([]);
     expect(
@@ -765,7 +781,7 @@ test.describe("POST /api/mcp · run_query", () => {
       sql: "select round(avg(aces), 1) as aces from ask.match_stats join scope using (match_id) where side = 'me'",
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("query_failed");
+    expect(textOf(result)).toMatch(/^query_failed: /);
     expect(textOf(result)).toContain("::numeric");
   });
 });
@@ -779,7 +795,7 @@ test.describe("POST /api/mcp · the limits", () => {
     expect((await callTool(route, "describe_views")).isError).toBeUndefined();
     const result = await callTool(route, "describe_views");
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("rate_limited");
+    expect(textOf(result)).toMatch(/^rate_limited: /);
     expect(
       calls.rpc.filter((call) => call.fn === "ask_mcp_count_call"),
     ).toHaveLength(1);
@@ -799,7 +815,7 @@ test.describe("POST /api/mcp · the limits", () => {
     );
     const result = await callTool(route, "describe_views");
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("daily_cap_reached");
+    expect(textOf(result)).toMatch(/^daily_cap_reached: /);
   });
 
   test("a counter that cannot be read refuses the call as rate_limited, with a short retry", async () => {
@@ -816,7 +832,7 @@ test.describe("POST /api/mcp · the limits", () => {
     );
     const result = await callTool(route, "describe_views");
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("rate_limited");
+    expect(textOf(result)).toMatch(/^rate_limited: /);
     expect(textOf(result)).toContain("Try again in 30 seconds");
     expect(serviceCalls(calls)).toEqual([]);
   });
@@ -832,7 +848,7 @@ test.describe("POST /api/mcp · the limits", () => {
     );
     const result = await callTool(route, "describe_views");
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("rate_limited");
+    expect(textOf(result)).toMatch(/^rate_limited: /);
   });
 });
 
@@ -889,7 +905,7 @@ test.describe("POST /api/mcp · ask", () => {
       match_ids: ["dddddddd-0000-4000-8000-000000000004"],
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("tag_not_resolved");
+    expect(textOf(result)).toMatch(/^tag_not_resolved: /);
     expect(calls.rpc.map((call) => call.fn)).not.toContain(
       "ask_reserve_question",
     );
@@ -910,12 +926,48 @@ test.describe("POST /api/mcp · ask", () => {
       question: "How is my serve?",
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("ask_limit_reached");
+    expect(textOf(result)).toMatch(/^ask_limit_reached: /);
     expect(textOf(result)).toContain("20 questions");
     expect(calls.llm).toBe(0);
     expect(calls.rpc.map((call) => call.fn)).not.toContain(
       "ask_save_exchange_ids",
     );
+  });
+
+  test("a standalone question reads the answer cache; a follow-up never touches it", async () => {
+    const spent = {
+      configured: true,
+      rpc: {
+        ...world().rpc,
+        ask_reserve_question: () => ({ data: null, error: LIMIT_ERROR }),
+      },
+    };
+    const cacheFns = (calls: Calls) =>
+      calls.rpc
+        .map((call) => call.fn)
+        .filter(
+          (fn) => fn.startsWith("ask_cache_") || fn === "ask_data_version",
+        );
+
+    const standalone = loadRoute(world(spent));
+    await callTool(standalone.route, "ask", { question: "How is my serve?" });
+    expect(cacheFns(standalone.calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+    ]);
+
+    // Same question, but continuing a conversation: the key carries no
+    // conversation, so a hit would replay an answer to a different question.
+    const followUp = loadRoute(
+      world({ ...spent, conversation: { id: SAVED_ID, messages: [] } }),
+    );
+    const result = await callTool(followUp.route, "ask", {
+      question: "How is my serve?",
+      conversation_id: SAVED_ID,
+    });
+    expect(followUp.calls.reads).toContain(`conversation:${SAVED_ID}`);
+    expect(textOf(result)).toMatch(/^ask_limit_reached: /);
+    expect(cacheFns(followUp.calls)).toEqual([]);
   });
 
   test("a scope with no match is refused before a question is reserved", async () => {
@@ -935,7 +987,7 @@ test.describe("POST /api/mcp · ask", () => {
       question: "How is my serve?",
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("no_matches");
+    expect(textOf(result)).toMatch(/^no_matches: /);
     expect(calls.rpc.map((call) => call.fn)).not.toContain(
       "ask_reserve_question",
     );
@@ -993,7 +1045,7 @@ test.describe("createAskMcpServer · a token caller", () => {
       arguments: { question: "How is my serve?" },
     })) as ToolResult;
     expect(asked.isError).toBe(true);
-    expect(textOf(asked)).toContain("needs_session");
+    expect(textOf(asked)).toMatch(/^needs_session: /);
     expect(textOf(asked)).toContain(ASK_NEEDS_SESSION_MESSAGE);
     expect(calls.rpc).toEqual([]);
 

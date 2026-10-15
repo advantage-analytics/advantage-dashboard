@@ -93,6 +93,14 @@ interface ConsentCall {
 const UNAVAILABLE =
   "This connection request could not be read. Start again from the app you are connecting.";
 
+/** A request Supabase no longer knows: an id that expired, was used, or never was. */
+export const EXPIRED_AUTHORIZATION_ERROR =
+  "This connection link has expired or was already used. Start again from the app you are connecting.";
+
+/** Supabase's OAuth server is switched off or failing: nothing the person can fix but wait. */
+export const OAUTH_UNAVAILABLE_ERROR =
+  "Connecting apps to Advantage is not available right now. Try again later from the app you are connecting.";
+
 function authorizationUrl(input: ConsentCall): string {
   return `${input.supabaseUrl.replace(/\/+$/, "")}/auth/v1/oauth/authorizations/${encodeURIComponent(input.authorizationId)}`;
 }
@@ -105,22 +113,33 @@ function headersFor(input: ConsentCall): Record<string, string> {
   };
 }
 
-/** A failure's sentence: GoTrue's `msg`/`error_description` when it has one, else the fixed line. */
+/**
+ * A failure as one of the written sentences. GoTrue's own text ("OAuth
+ * server is disabled", "authorization not found") is read only to choose
+ * between them and is never shown: it is written for developers, and it
+ * names nothing the person can do.
+ */
 async function failure(
   response: Response,
 ): Promise<{ ok: false; status: number; message: string }> {
-  let message = UNAVAILABLE;
+  let said = "";
   try {
     const body = (await response.json()) as Record<string, unknown>;
-    const said =
-      stringOrNull(body.msg) ??
-      stringOrNull(body.error_description) ??
-      stringOrNull(body.message);
-    if (said) message = said;
+    said = [body.error_code, body.error, body.msg, body.message]
+      .filter((part): part is string => typeof part === "string")
+      .join(" ")
+      .toLowerCase();
   } catch {
-    // Not JSON: the fixed sentence.
+    // Not JSON: judged on the status alone.
   }
-  return { ok: false, status: response.status, message };
+  const status = response.status;
+  let message = UNAVAILABLE;
+  if (status >= 500 || /disabled|not enabled/.test(said)) {
+    message = OAUTH_UNAVAILABLE_ERROR;
+  } else if (status === 400 || status === 404 || status === 410) {
+    message = EXPIRED_AUTHORIZATION_ERROR;
+  }
+  return { ok: false, status, message };
 }
 
 export async function getOAuthAuthorizationDetails(
