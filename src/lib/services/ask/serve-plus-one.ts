@@ -13,6 +13,10 @@ import {
   type AskPlaysVoice,
 } from "@/lib/services/ask/plays";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
+import {
+  ASK_VISUAL_WATCH_PREFIX,
+  treeWatchFields,
+} from "@/lib/services/ask/tree";
 
 /**
  * The serve +1 breakdown: "What are Rudy's serve +1 patterns?", "show me
@@ -327,6 +331,33 @@ function patternLabel(row: AskRow, phase: AskServePlusOne["phase"]): string {
 }
 
 /**
+ * A pattern row as the steps of a tree branch — the side when the sides
+ * are apart, where the serve (or return) went, then the +1 — or null when
+ * the row names no zone, stroke or direction, which keeps the table.
+ */
+function treeSteps(
+  row: AskRow,
+  phase: AskServePlusOne["phase"],
+  bySide: boolean,
+): string[] | null {
+  if (
+    typeof row.zone !== "string" ||
+    typeof row.stroke !== "string" ||
+    typeof row.direction !== "string"
+  ) {
+    return null;
+  }
+  const opening =
+    phase === "serve"
+      ? (SERVE_LABEL[row.zone] ?? row.zone)
+      : (RETURN_LABEL[row.zone] ?? row.zone);
+  const side = bySide
+    ? [typeof row.court === "string" ? row.court : "Either side"]
+    : [];
+  return [...side, opening, sentenceCase(shotPhrase(row))];
+}
+
+/**
  * The answer, in the renderer's syntax, from `servePlusOneSql()`'s rows, or
  * null when there is no serve +1 to show — the caller says "no shot data".
  * Every figure is a cell reference.
@@ -357,15 +388,43 @@ export function buildServePlusOneAnswer(
   const top = patterns[0];
   const headline = `${sentenceCase(voice.possessive)} most-played ${kind} plus one${firstOrSecond} was ${patternPhrase(top.row, phase)}: ${cell(top.ref, "points")} points, ${cell(top.ref, "won_pct")} of them won.`;
 
-  // ── Table: every pattern, most played first ──
-  const table = [
-    `${ASK_VISUAL_LINE_PREFIX} table ${S} ${sentenceCase(voice.possessive)} ${kind}-plus-one patterns${firstOrSecond}${request.bySide ? ", deuce and ad sides apart" : ""}: where the ${kind} went, then ${their} next shot. Most played first.`,
-    `COLUMNS: Points ${S} Won ${S} Won %`,
-    ...patterns.map(
-      (entry) =>
-        `ROW: ${patternLabel(entry.row, phase)} ${S} ${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "won")} ${S} ${cell(entry.ref, "won_pct")}`,
-    ),
-  ];
+  // ── The tree: every pattern as a branch — the serve, then the +1, with
+  // the share won as its bar — most played first; the table when a row
+  // cannot be a branch (`treeSteps`) ──
+  const caption = `${sentenceCase(voice.possessive)} ${kind}-plus-one patterns${firstOrSecond}${request.bySide ? ", deuce and ad sides apart" : ""}: where the ${kind} went, then ${their} next shot. Most played first.`;
+  const bySide = request.bySide === true;
+  const branches = patterns.map((entry) => ({
+    entry,
+    steps: treeSteps(entry.row, phase, bySide),
+  }));
+  const cells = (entry: { ref: string }) =>
+    `${cell(entry.ref, "points")} ${S} ${cell(entry.ref, "won")} ${S} ${cell(entry.ref, "won_pct")}`;
+  const table = branches.every((branch) => branch.steps !== null)
+    ? [
+        `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
+        `COLUMNS: ${[...(bySide ? ["Side"] : []), phase === "serve" ? "Serve" : "Return", "Plus one"].join(` ${S} `)}`,
+        `SERIES: Points ${S} Won ${S} Won %`,
+        // The request the rows answer, so each branch can open the film on
+        // exactly its points (`tree.ts`).
+        `${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields({
+          kind: "plus-one",
+          phase,
+          subject: request.subject,
+          serveType: request.serveType,
+        }).join(` ${S} `)}`,
+        ...branches.map(
+          ({ entry, steps }) =>
+            `ROW: ${(steps ?? []).join(` ${S} `)} ${S} ${cells(entry)}`,
+        ),
+      ]
+    : [
+        `${ASK_VISUAL_LINE_PREFIX} table ${S} ${caption}`,
+        `COLUMNS: Points ${S} Won ${S} Won %`,
+        ...patterns.map(
+          (entry) =>
+            `ROW: ${patternLabel(entry.row, phase)} ${S} ${cells(entry)}`,
+        ),
+      ];
 
   // ── Winning and losing: best and worst among the ones played enough ──
   const paragraphs: string[] = [];

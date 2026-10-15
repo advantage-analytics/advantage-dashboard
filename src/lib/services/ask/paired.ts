@@ -1010,8 +1010,15 @@ export function absentMatchupLead(
 
 // ── A list of matches ────────────────────────────────────────────────────────
 
-/** The most matches a list is written out for; a longer one stays with the model. */
-export const MAX_MATCH_LIST = 10;
+/** The most matches a list is written for; a longer one stays with the model. */
+export const MAX_MATCH_LIST = 20;
+/**
+ * The most matches retold one sentence each. A longer list — "how have I
+ * been doing" over a season — is the strip, each tick carrying its match's
+ * opponent and score (`events.ts`, `AskFormTick`), and two sentences for the
+ * ends of it.
+ */
+export const MAX_MATCH_SENTENCES = 10;
 
 /** The columns the server adds to row 1 so the tally is cited, never typed. */
 const LIST_WON_COLUMN = `${PAIRED_NAME_PREFIX}list_won`;
@@ -1027,6 +1034,10 @@ const LIST_LOST_COLUMN = `${PAIRED_NAME_PREFIX}list_lost`;
  * Null unless every row is a match (played_on, opponent_name and i_won all
  * present), there are at most {@link MAX_MATCH_LIST}, and no row carries a
  * numeric measure — a per-match list of figures is a trend, not a retelling.
+ * Beyond {@link MAX_MATCH_SENTENCES} matches only the oldest and the most
+ * recent are retold; the strip, whose ticks the renderer labels from these
+ * same rows, carries the rest. A `match_id` column, when the query selected
+ * one, links each tick to its match.
  */
 export function buildMatchListAnswer(
   rows: readonly AskRow[],
@@ -1083,9 +1094,20 @@ export function buildMatchListAnswer(
     won + lost >= 2
       ? `\n${ASK_VISUAL_LINE_PREFIX} form ${S} These matches, oldest first.\nPLOT: i_won`
       : "";
+  // A long list is not read out match by match: the ends of it, and the
+  // strip for the rest.
+  const retold =
+    sentences.length > MAX_MATCH_SENTENCES
+      ? [
+          `Oldest — ${sentences[0]}`,
+          `Most recent — ${sentences[sentences.length - 1]}`,
+          "Each tick of the strip is one match, oldest first, with its opponent and score.",
+        ]
+      : sentences;
 
   return {
-    text: `${headline}${strip}\n\n${sentences.join(" ")}`,
+    text: `${headline}${strip}\n\n${retold.join(" ")}`,
+
     rows: ordered.map((row, index) =>
       index === 0
         ? { ...row, [LIST_WON_COLUMN]: won, [LIST_LOST_COLUMN]: lost }

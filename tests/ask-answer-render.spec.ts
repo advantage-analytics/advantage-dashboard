@@ -34,9 +34,12 @@ import {
   columnLabel,
   siblingHeadline,
   statedFigures,
+  visualFromRows,
 } from "@/lib/services/ask/answer-render";
+import { asksForChart } from "@/lib/services/ask/chart-request";
 import { uniqueRowLabelTokens } from "@/lib/services/ask/facts";
 import {
+  ASK_MODEL_VISUAL_KINDS,
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
   type AskEvent,
@@ -47,6 +50,8 @@ import {
   MAX_ASK_SPLIT_PARTS,
   MAX_ASK_TABLE_COLUMNS,
   MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREE_BRANCHES,
+  MAX_ASK_TREE_LEVELS,
   MAX_ASK_TREND_POINTS,
   MAX_ASK_VISUALS,
   MIN_ASK_SPLIT_PARTS,
@@ -298,6 +303,8 @@ test.describe("renderAskAnswer — shape", () => {
       droppedVisualRows: 0,
       droppedSentences: 0,
       renamedLabels: 1,
+      convertedVisuals: [],
+      visualLead: false,
       failure: null,
     });
   });
@@ -908,8 +915,17 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
       ],
       rows,
     );
-    expect(missing.result.visual).toBeNull();
+    // The model's block drops; the rows — one measure and its all-matches
+    // baseline over dates — are the trend the server draws instead.
     expect(missing.result.droppedVisuals[0]?.reason).toBe("bad_reference");
+    expect(missing.result.visual).toMatchObject({
+      kind: "trend",
+      caption: "First serves in over time, oldest first.",
+      baseline: { label: "All matches" },
+    });
+    expect(missing.result.convertedVisuals).toEqual([
+      { from: "trend", to: "trend", reason: "shape" },
+    ]);
     const words = await render(
       [
         "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | played_on\n",
@@ -1031,6 +1047,8 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     expect(visualOf(events)).toEqual({
       kind: "serve",
       caption: "Where your serves went across 4 matches.",
+      // Every cell a serve measure of the viewer's: the court knows whose.
+      server: "you",
       courts: [
         {
           label: "All serves",
@@ -1190,6 +1208,8 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
       kind: "form",
       caption: "Your matches, oldest first.",
       results: [true, false],
+      // Each tick carries what its row said of the match: here the date.
+      ticks: [{ date: "Jun 4, 2026" }, { date: "Sep 28, 2026" }],
     });
   });
 
@@ -1440,13 +1460,26 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
         rows,
       );
 
+      // The model's block is dropped — and the rows, one row of convention
+      // pairs, are drawn as the table they fit (`visualFromRows`).
       expect(events.map((event) => event.type)).toEqual([
         "headline",
         "figure",
+        "visual",
         "text",
       ]);
       expect(body(events)).toBe("The body still shows.");
-      expect(result.visual).toBeNull();
+      expect(result.visual).toMatchObject({
+        kind: "table",
+        columns: ["Selected matches", "All matches"],
+      });
+      expect(result.convertedVisuals).toEqual([
+        {
+          from: reason === "unknown_kind" ? null : expect.any(String),
+          to: "table",
+          reason: "shape",
+        },
+      ]);
       expect(result.failure).toBeNull();
       expect(result.droppedVisuals).toHaveLength(1);
       expect(result.droppedVisuals[0].reason).toBe(reason);
@@ -1637,7 +1670,9 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       ],
       COMPARISON,
     );
-    expect(split.result.visual).toBeNull();
+    // Dropped whole; what is drawn is the rows' own table.
+    expect(split.result.visual?.kind).toBe("table");
+    expect(split.result.convertedVisuals[0]?.reason).toBe("shape");
     expect(split.result.droppedVisualRows).toBe(0);
     expect(split.result.droppedVisuals).toEqual([
       { reason: "bad_reference", kind: "split", detail: expect.any(String) },
@@ -1791,8 +1826,10 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     );
     expect(inBlock.result.failure).toBeNull();
     expect(inBlock.result.droppedVisuals[0].reason).toBe("bad_reference");
-    // The block was the answer's only figures, so the server states them.
-    expect(body(inBlock.events)).toBe(`Fine.\n\n${statedRows(COMPARISON)}`);
+    // The block was the answer's only figures: the rows' own table stands
+    // in for it, so nothing is stated in prose.
+    expect(inBlock.result.visual?.kind).toBe("table");
+    expect(body(inBlock.events)).toBe("Fine.");
     expect(statedRows(COMPARISON)).toMatch(/^Matches: 4\. First serves in: /);
 
     const inProse = await render(
@@ -2888,8 +2925,20 @@ test.describe("labels and plots the server can only read one way", () => {
       ],
       rows.map((row) => ({ ...row, served_first: true })),
     );
-    expect(unsure.visual).toBeNull();
     expect(unsure.droppedVisuals).toHaveLength(1);
+    // What is drawn instead is the strip the rows' own `i_won` makes —
+    // the views' column, not a guess between the two.
+    expect(unsure.visual).toMatchObject({
+      kind: "form",
+      results: [false, true],
+      ticks: [
+        { date: "Sep 25, 2026", player: "Emon van Loben Sels" },
+        { date: "Sep 26, 2026", player: "Rudy Quan" },
+      ],
+    });
+    expect(unsure.convertedVisuals).toEqual([
+      { from: "form", to: "form", reason: "shape" },
+    ]);
   });
 });
 
@@ -3128,5 +3177,827 @@ test.describe("an answer that cites no cell but the match count", () => {
       [{ odd_rate: 3, matches_in_scope: 18 }],
     );
     expect(unknown.text).toBe("From 18 matches.");
+  });
+});
+
+// ── The server's own kinds and choices (roadmap 3.6, 3.9, 3.10) ────────────
+
+/** The serve +1 breakdown's rows: a total, then one row per pattern. */
+const PATTERNS: AskRow[] = [
+  {
+    section: "total",
+    court: null,
+    zone: null,
+    stroke: null,
+    direction: null,
+    points: 49,
+    won: 28,
+    won_pct: 57.1,
+  },
+  {
+    section: "pattern",
+    court: null,
+    zone: "T",
+    stroke: "Forehand",
+    direction: "Crosscourt",
+    points: 29,
+    won: 14,
+    won_pct: 48.3,
+  },
+  {
+    section: "pattern",
+    court: null,
+    zone: "T",
+    stroke: "Backhand",
+    direction: "Middle",
+    points: 12,
+    won: 8,
+    won_pct: 66.7,
+  },
+  {
+    section: "pattern",
+    court: "Ad",
+    zone: "Wide",
+    stroke: "Forehand",
+    direction: "Inside Out",
+    points: 8,
+    won: 6,
+    won_pct: 75,
+  },
+];
+
+const TREE_LINES = [
+  "Headline.",
+  "CHART: tree | Caption.",
+  "COLUMNS: Serve | Plus one",
+  "SERIES: Points | Won | Won %",
+  "WATCH: plus-one | serve | mine | any",
+  "ROW: T serve | Forehand crosscourt | {{r2.points}} | {{r2.won}} | {{r2.won_pct}}",
+  "ROW: T serve | Backhand through the middle | {{r3.points}} | {{r3.won}} | {{r3.won_pct}}",
+  "ROW: Wide serve | Forehand inside out | {{r4.points}} | {{r4.won}} | {{r4.won_pct}}",
+  "",
+  "Body.",
+];
+
+test.describe("renderAskAnswer — the play tree", () => {
+  test("is the server's kind: known to the renderer, never offered to the model, with its own WATCH line", () => {
+    expect(ASK_VISUAL_KINDS).toContain("tree");
+    expect(ASK_MODEL_VISUAL_KINDS).not.toContain("tree");
+    expect(ASK_VISUAL_SYNTAX.tree).toContain("CHART: tree | <caption>");
+    expect(ASK_VISUAL_SYNTAX.tree).toContain("WATCH: <request>");
+  });
+
+  test("levels, series, a branch per row with its cells, and a Video filter where the filter can say it", async () => {
+    const { events, result } = await render([TREE_LINES.join("\n")], PATTERNS);
+    expect(events.map((event) => event.type)).toEqual([
+      "headline",
+      "visual",
+      "text",
+    ]);
+    const visual = visualOf(events);
+    expect(visual).toMatchObject({
+      kind: "tree",
+      caption: "Caption.",
+      levels: ["Serve", "Plus one"],
+      countLabel: "Points",
+      partLabel: "Won",
+      shareLabel: "Won %",
+    });
+    if (visual?.kind !== "tree") throw new Error("no tree");
+    expect(visual.branches).toHaveLength(3);
+    expect(visual.branches[0]).toMatchObject({
+      steps: ["T serve", "Forehand crosscourt"],
+      count: { value: 29, text: "29" },
+      part: { value: 14, text: "14" },
+      share: { value: 48.3, text: "48.3%" },
+    });
+    // The filter for exactly this branch's points, from the row its count
+    // was cited from; the middle is a direction the filter cannot say.
+    expect(visual.branches[0].watch).toMatch(/^[a-z0-9._]+$/);
+    expect(visual.branches[0].watch).toContain("vz.t");
+    expect(visual.branches[1].watch).toBeUndefined();
+    expect(visual.branches[2].watch).toContain("ct.a");
+    expect(readAskVisual(JSON.parse(JSON.stringify(visual)))).toEqual(visual);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.droppedVisualRows).toBe(0);
+    expect(result.convertedVisuals).toEqual([]);
+    expect(result.droppedDigits).toEqual([]);
+    expect(body(events)).toBe("Body.");
+  });
+
+  test("without a WATCH line nothing links; without a part label a row is a count and a share", async () => {
+    const lines = [
+      "Headline.",
+      "CHART: tree | Caption.",
+      "COLUMNS: Serve | Plus one",
+      "SERIES: Points | Won %",
+      "ROW: T serve | Forehand crosscourt | {{r2.points}} | {{r2.won_pct}}",
+      "ROW: Wide serve | Forehand inside out | {{r4.points}} | {{r4.won_pct}}",
+    ];
+    const visual = visualOf(
+      (await render([lines.join("\n")], PATTERNS)).events,
+    );
+    expect(visual).toEqual({
+      kind: "tree",
+      caption: "Caption.",
+      levels: ["Serve", "Plus one"],
+      countLabel: "Points",
+      shareLabel: "Won %",
+      branches: [
+        {
+          steps: ["T serve", "Forehand crosscourt"],
+          count: { value: 29, text: "29" },
+          share: { value: 48.3, text: "48.3%" },
+        },
+        {
+          steps: ["Wide serve", "Forehand inside out"],
+          count: { value: 8, text: "8" },
+          share: { value: 75, text: "75%" },
+        },
+      ],
+    });
+  });
+
+  test("a row of the wrong shape, or with a reference the result lacks, is left out on its own", async () => {
+    const lines = [
+      ...TREE_LINES.slice(0, 5),
+      "ROW: T serve | {{r2.points}} | {{r2.won}} | {{r2.won_pct}}",
+      "ROW: T serve | Backhand crosscourt | {{r9.points}} | {{r3.won}} | {{r3.won_pct}}",
+      "ROW: Wide serve | Forehand inside out | {{r4.points}} | {{r4.won}} | {{r4.won_pct}}",
+    ];
+    const { result } = await render([lines.join("\n")], PATTERNS);
+    expect(result.visual?.kind).toBe("tree");
+    expect(
+      result.visual?.kind === "tree" &&
+        result.visual.branches.map((branch) => branch.steps[1]),
+    ).toEqual(["Forehand inside out"]);
+    expect(result.droppedVisualRows).toBe(2);
+    expect(result.droppedVisuals).toEqual([]);
+  });
+
+  test("a share that is not a share, no rows, or every row bad drops the block", async () => {
+    for (const [lines, reason] of [
+      [
+        [
+          ...TREE_LINES.slice(0, 5),
+          "ROW: T serve | Forehand crosscourt | {{r2.points}} | {{r2.won}} | {{r2.zone}}",
+        ],
+        "bad_value",
+      ],
+      [TREE_LINES.slice(0, 5), "limit"],
+      [
+        [
+          ...TREE_LINES.slice(0, 5),
+          "ROW: T serve | {{r2.points}} | {{r2.won_pct}}",
+        ],
+        "malformed",
+      ],
+    ] as const) {
+      const { result } = await render(
+        [[...lines, "", "Body."].join("\n")],
+        PATTERNS,
+      );
+      expect(result.droppedVisuals[0]?.reason, lines.join("\n")).toBe(reason);
+      expect(result.droppedVisuals[0]?.kind).toBe("tree");
+    }
+  });
+
+  test("a WATCH line the server does not know, a second one, or one on another kind is a malformed block", async () => {
+    const unknown = [...TREE_LINES];
+    unknown[4] = "WATCH: plus-one | volley | mine | any";
+    const twice = [
+      ...TREE_LINES.slice(0, 5),
+      TREE_LINES[4],
+      ...TREE_LINES.slice(5),
+    ];
+    const onSplit =
+      "Headline.\nCHART: split | Caption.\nWATCH: plays | mine\nROW: A | {{r1.points}}\nROW: B | {{r1.won}}";
+    for (const text of [unknown.join("\n"), twice.join("\n"), onSplit]) {
+      const { result } = await render([text], PATTERNS);
+      expect(result.droppedVisuals[0]?.reason, text).toBe("malformed");
+    }
+  });
+
+  test("the limits: levels and branches", async () => {
+    const levels = [...TREE_LINES];
+    levels[2] = `COLUMNS: ${Array.from({ length: MAX_ASK_TREE_LEVELS + 1 }, (_, i) => `L${i}`).join(" | ")}`;
+    const many = [
+      ...TREE_LINES.slice(0, 5),
+      ...Array.from(
+        { length: MAX_ASK_TREE_BRANCHES + 1 },
+        (_, i) =>
+          `ROW: Serve ${i} | Shot | {{r2.points}} | {{r2.won}} | {{r2.won_pct}}`,
+      ),
+    ];
+    for (const text of [levels.join("\n"), many.join("\n")]) {
+      const { result } = await render([text], PATTERNS);
+      expect(result.droppedVisuals[0]?.reason, text).toBe("limit");
+    }
+  });
+});
+
+test.describe("renderAskAnswer — a split that is not one whole", () => {
+  /** One row with shares and counts and no convention pair: nothing to fall back to. */
+  const ROW: AskRow[] = [
+    {
+      first_serve_pct: 58.2,
+      second_serve_won_pct: 48.7,
+      serve_t_pct: 30,
+      serve_body_pct: 20,
+      serve_wide_pct: 50,
+      winners: 8,
+      forced: 11,
+      unforced: 15,
+      total: 34,
+      first_serves: 40,
+      first_serves_in: 25,
+      break_points_faced: 6,
+      break_points_saved: 4,
+      none_a: 0,
+      none_b: 0,
+    },
+  ];
+  const split = (rows: string) =>
+    render([`Headline.\nCHART: split | Caption.\n${rows}\n\nBody.`], ROW);
+
+  test("shares that sum to a hundred are a split; shares that do not are a table of them", async () => {
+    const whole = await split(
+      "ROW: T | {{r1.serve_t_pct}}\nROW: Body | {{r1.serve_body_pct}}\nROW: Wide | {{r1.serve_wide_pct}}",
+    );
+    expect(whole.result.visual?.kind).toBe("split");
+    expect(whole.result.convertedVisuals).toEqual([]);
+
+    const apart = await split(
+      "ROW: First serves in | {{r1.first_serve_pct}}\nROW: Second-serve points won | {{r1.second_serve_won_pct}}",
+    );
+    expect(apart.result.visual).toEqual({
+      kind: "table",
+      caption: "Caption.",
+      columns: ["Share"],
+      rows: [
+        { label: "First serves in", cells: ["58.2%"] },
+        { label: "Second-serve points won", cells: ["48.7%"] },
+      ],
+    });
+    expect(apart.result.convertedVisuals).toEqual([
+      {
+        from: "split",
+        to: "table",
+        reason: "shares that do not sum to one whole",
+      },
+    ]);
+    expect(apart.result.droppedVisuals).toEqual([]);
+    expect(apart.events.map((event) => event.type)).toEqual([
+      "headline",
+      "visual",
+      "text",
+    ]);
+  });
+
+  test("counts that are a whole stay a split; counts that nest, or miss the row's total, are a table", async () => {
+    const whole = await split(
+      "ROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}\nROW: Unforced | {{r1.unforced}}",
+    );
+    expect(whole.result.visual?.kind).toBe("split");
+
+    const nested = await split(
+      "ROW: First serves | {{r1.first_serves}}\nROW: First serves in | {{r1.first_serves_in}}",
+    );
+    expect(nested.result.visual).toMatchObject({
+      kind: "table",
+      columns: ["Count"],
+      // The model's own labels: a converted split is not a bars or table
+      // block the structural pass renames.
+      rows: [
+        { label: "First serves", cells: ["40"] },
+        { label: "First serves in", cells: ["25"] },
+      ],
+    });
+    expect(nested.result.convertedVisuals[0]?.reason).toBe("counts that nest");
+
+    const faced = await split(
+      "ROW: Faced | {{r1.break_points_faced}}\nROW: Saved | {{r1.break_points_saved}}",
+    );
+    expect(faced.result.convertedVisuals[0]?.reason).toBe("counts that nest");
+
+    const short = await split(
+      "ROW: Winners | {{r1.winners}}\nROW: Forced | {{r1.forced}}",
+    );
+    expect(short.result.visual?.kind).toBe("table");
+    expect(short.result.convertedVisuals[0]?.reason).toBe(
+      "counts that do not sum to the total",
+    );
+  });
+
+  test("a share beside a count is no whole and no block; all-zero parts stay a split", async () => {
+    const unlike = await split(
+      "ROW: In | {{r1.first_serve_pct}}\nROW: Winners | {{r1.winners}}",
+    );
+    expect(unlike.result.visual).toBeNull();
+    expect(unlike.result.droppedVisuals).toEqual([
+      { reason: "bad_value", kind: "split", detail: expect.any(String) },
+    ]);
+    expect(unlike.result.convertedVisuals).toEqual([]);
+
+    const empty = await split("ROW: A | {{r1.none_a}}\nROW: B | {{r1.none_b}}");
+    expect(empty.result.visual?.kind).toBe("split");
+  });
+});
+
+test.describe("renderAskAnswer — a block the rows themselves fit", () => {
+  const PIE =
+    "Headline.\nCHART: pie | Caption.\nROW: A | {{r1.matches}}\n\nBody.";
+
+  test("one row of pairs: bars when at least four are shares, else a two-column table, named by whose", async () => {
+    const shares: AskRow[] = [
+      {
+        matches_in_scope: 5,
+        first_serve_pct: 58.2,
+        all_first_serve_pct: 61.4,
+        second_serve_won_pct: 41.2,
+        all_second_serve_won_pct: 52.8,
+        return_won_pct: 38,
+        all_return_won_pct: 36,
+        break_points_saved_pct: 50,
+        all_break_points_saved_pct: 55,
+      },
+    ];
+    expect(visualFromRows(shares)).toEqual({
+      kind: "bars",
+      caption: "From 5 matches.",
+      subjectLabel: "Selected matches",
+      baselineLabel: "All matches",
+      rows: [
+        {
+          label: "First serves in",
+          subject: { value: 58.2, text: "58.2%" },
+          baseline: { value: 61.4, text: "61.4%" },
+        },
+        {
+          label: "Second-serve points won",
+          subject: { value: 41.2, text: "41.2%" },
+          baseline: { value: 52.8, text: "52.8%" },
+        },
+        {
+          label: "Return points won",
+          subject: { value: 38, text: "38%" },
+          baseline: { value: 36, text: "36%" },
+        },
+        {
+          label: "Break points saved",
+          subject: { value: 50, text: "50%" },
+          baseline: { value: 55, text: "55%" },
+        },
+      ],
+    });
+    const { result } = await render([PIE], [{ ...shares[0], matches: 5 }]);
+    expect(result.visual?.kind).toBe("bars");
+    expect(result.convertedVisuals).toEqual([
+      { from: null, to: "bars", reason: "shape" },
+    ]);
+
+    expect(
+      visualFromRows([
+        { me_aces: 8, opp_aces: 3, me_double_faults: 4, opp_double_faults: 6 },
+      ]),
+    ).toEqual({
+      kind: "table",
+      caption: "",
+      columns: ["You", "Opponent"],
+      rows: [
+        { label: "Aces", cells: ["8", "3"] },
+        { label: "Double faults", cells: ["4", "6"] },
+      ],
+    });
+  });
+
+  test("dated rows with one measure, or with its qualified twin, are a trend with its links", () => {
+    const rows: AskRow[] = [
+      {
+        match_id: "m-sep",
+        played_on: "2026-09-28",
+        first_serve_pct: 37.5,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        match_id: "m-jun",
+        played_on: "2026-06-04",
+        first_serve_pct: 61,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        match_id: "m-jul",
+        played_on: "2026-07-09",
+        first_serve_pct: null,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        match_id: "m-aug",
+        played_on: "2026-08-01",
+        first_serve_pct: 50,
+        all_first_serve_pct: 58.2,
+      },
+    ];
+    expect(visualFromRows(rows)).toEqual({
+      kind: "trend",
+      caption: "First serves in over time, oldest first.",
+      points: [
+        { label: "Jun 4", value: { value: 61, text: "61%" }, matchId: "m-jun" },
+        { label: "Aug 1", value: { value: 50, text: "50%" }, matchId: "m-aug" },
+        {
+          label: "Sep 28",
+          value: { value: 37.5, text: "37.5%" },
+          matchId: "m-sep",
+        },
+      ],
+      baseline: {
+        label: "All matches",
+        values: [
+          { value: 58.2, text: "58.2%" },
+          { value: 58.2, text: "58.2%" },
+          { value: 58.2, text: "58.2%" },
+        ],
+      },
+    });
+    // Two unrelated measures are no trend — and, with a date for a label,
+    // no table either.
+    expect(visualFromRows(rows.map((row) => ({ ...row, aces: 2 })))).toBeNull();
+  });
+
+  test("match rows with results and no measure are the strip, with its ticks", () => {
+    const rows: AskRow[] = [
+      {
+        match_id: "m-2",
+        played_on: "2026-09-05",
+        opponent_name: "Sam Okafor",
+        score_text: "3-6, 6-7",
+        i_won: false,
+      },
+      {
+        match_id: "m-1",
+        played_on: "2026-08-22",
+        opponent_name: "Ilya Brandt",
+        score_text: "6-3, 6-4",
+        i_won: true,
+      },
+      {
+        match_id: "m-3",
+        played_on: "2026-09-28",
+        opponent_name: "Riley",
+        i_won: null,
+      },
+    ];
+    expect(visualFromRows(rows)).toEqual({
+      kind: "form",
+      caption: "These matches, oldest first.",
+      results: [true, false],
+      ticks: [
+        {
+          opponent: "Ilya Brandt",
+          score: "6-3, 6-4",
+          date: "Aug 22, 2026",
+          matchId: "m-1",
+        },
+        {
+          opponent: "Sam Okafor",
+          score: "3-6, 6-7",
+          date: "Sep 5, 2026",
+          matchId: "m-2",
+        },
+      ],
+    });
+    // Points are not matches, whatever their winner column says.
+    expect(
+      visualFromRows([
+        { match_id: "m", point_number: 1, i_won: true },
+        { match_id: "m", point_number: 2, i_won: false },
+      ]),
+    ).toBeNull();
+  });
+
+  test("labelled rows with a few measures are a table, a match id never its label; rows that fit nothing are nothing", async () => {
+    expect(
+      visualFromRows([
+        { surface: "Hard", wins: 6, losses: 2, matches_in_scope: 12 },
+        { surface: "Clay", wins: 1, losses: 3, matches_in_scope: 12 },
+      ]),
+    ).toEqual({
+      kind: "table",
+      caption: "From 12 matches.",
+      columns: ["Wins", "Losses"],
+      rows: [
+        { label: "Hard", cells: ["6", "2"] },
+        { label: "Clay", cells: ["1", "3"] },
+      ],
+    });
+    expect(
+      visualFromRows([
+        { match_id: "a", aces: 3 },
+        { match_id: "b", aces: 5 },
+      ]),
+    ).toBeNull();
+    expect(visualFromRows([{ note: "nothing here" }])).toBeNull();
+    expect(visualFromRows([])).toBeNull();
+    const { result } = await render([PIE], [{ matches: 1, note: "x" }]);
+    expect(result.visual).toBeNull();
+    expect(result.droppedVisuals[0]?.reason).toBe("unknown_kind");
+    expect(result.convertedVisuals).toEqual([]);
+  });
+});
+
+test.describe("renderAskAnswer — rows that are a match, whose serves, and what a tick carries", () => {
+  test("a table row whose cells all come from one result row that is a match carries its id", async () => {
+    const rows: AskRow[] = [
+      { match_id: "m-1", opponent_name: "A", points: 4, won: 3 },
+      { match_id: "m-2", opponent_name: "B", points: 2, won: 0 },
+      { match_id: null, opponent_name: "C", points: 1, won: 1 },
+    ];
+    const { events } = await render(
+      [
+        "Headline.\nCHART: table | Caption.\nCOLUMNS: Points | Won\nROW: Alpha | {{r1.points}} | {{r1.won}}\nROW: Beta | {{r2.points}} | {{r2.won}}\nROW: Both | {{r1.points}} | {{r2.won}}\nROW: Gamma | {{r3.points}} | {{r3.won}}\n",
+      ],
+      rows,
+    );
+    expect(visualOf(events)).toMatchObject({
+      kind: "table",
+      rows: [
+        { label: "Alpha", matchId: "m-1" },
+        { label: "Beta", matchId: "m-2" },
+        { label: "Both" },
+        { label: "Gamma" },
+      ],
+    });
+    const visual = visualOf(events);
+    expect(visual?.kind === "table" && "matchId" in visual.rows[2]).toBe(false);
+    expect(readAskVisual(JSON.parse(JSON.stringify(visual)))).toEqual(visual);
+  });
+
+  test("a serve block says whose serves when every cell is a serve measure of one side", async () => {
+    const rows: AskRow[] = [
+      {
+        court: "Deuce",
+        serve_t: 9,
+        serve_body: 3,
+        serve_wide: 6,
+        opp_serve_t: 4,
+        opp_serve_body: 5,
+        opp_serve_wide: 12,
+        t: 1,
+        b: 1,
+        w: 1,
+      },
+    ];
+    const serve = async (cells: string) =>
+      visualOf(
+        (await render([`Headline.\nCHART: serve | Caption.\n${cells}\n`], rows))
+          .events,
+      );
+    expect(
+      await serve(
+        "ROW: All | {{r1.serve_t}} | {{r1.serve_body}} | {{r1.serve_wide}}",
+      ),
+    ).toMatchObject({ kind: "serve", server: "you" });
+    expect(
+      await serve(
+        "ROW: Theirs | {{r1.opp_serve_t}} | {{r1.opp_serve_body}} | {{r1.opp_serve_wide}}",
+      ),
+    ).toMatchObject({ kind: "serve", server: "opponent" });
+    for (const cells of [
+      "ROW: Mixed | {{r1.serve_t}} | {{r1.opp_serve_body}} | {{r1.serve_wide}}",
+      "ROW: Named | {{r1.t}} | {{r1.b}} | {{r1.w}}",
+    ]) {
+      const visual = await serve(cells);
+      expect(visual?.kind).toBe("serve");
+      expect(visual).not.toHaveProperty("server");
+    }
+  });
+
+  test("a form strip's ticks carry the rows' opponent, score, date, player and match", async () => {
+    const rows: AskRow[] = [
+      {
+        match_id: "m-1",
+        played_on: "2026-08-22",
+        opponent_name: "Ilya Brandt",
+        score_text: "6-3, 6-4",
+        player_name: "Rudy Quan",
+        i_won: true,
+      },
+      {
+        match_id: "",
+        played_on: "2026-09-05",
+        opponent_name: " ",
+        score_text: null,
+        player_name: null,
+        i_won: false,
+      },
+      {
+        match_id: "m-3",
+        played_on: "2026-09-28",
+        opponent_name: "R",
+        i_won: null,
+      },
+    ];
+    const { events } = await render(
+      ["Headline.\nCHART: form | Caption.\nPLOT: i_won\n"],
+      rows,
+    );
+    expect(visualOf(events)).toEqual({
+      kind: "form",
+      caption: "Caption.",
+      results: [true, false],
+      ticks: [
+        {
+          opponent: "Ilya Brandt",
+          score: "6-3, 6-4",
+          date: "Aug 22, 2026",
+          player: "Rudy Quan",
+          matchId: "m-1",
+        },
+        { date: "Sep 5, 2026" },
+      ],
+    });
+  });
+});
+
+test.describe("renderAskAnswer — when the question asked for a chart", () => {
+  const TEXT =
+    "Headline.\nCHART: bars | Caption.\nSERIES: A | B\nROW: First serves in | {{r1.first_serve_pct}} | {{r1.all_first_serve_pct}}\n\nBody.";
+
+  async function rendered(text: string, chartAsked: boolean) {
+    const { events, result } = renderAskAnswer(chunksOf(text), COMPARISON, {
+      chartAsked,
+    });
+    const seen: AskAnswerEvent[] = [];
+    for await (const event of events) seen.push(event);
+    return { events: seen, result };
+  }
+
+  test("the visual event carries lead, and the result says so; otherwise neither", async () => {
+    const asked = await rendered(TEXT, true);
+    expect(asked.events.find((event) => event.type === "visual")).toMatchObject(
+      { type: "visual", lead: true },
+    );
+    expect(asked.result.visualLead).toBe(true);
+
+    const plain = await rendered(TEXT, false);
+    const visual = plain.events.find((event) => event.type === "visual");
+    expect(visual).toBeDefined();
+    expect(visual).not.toHaveProperty("lead");
+    expect(plain.result.visualLead).toBe(false);
+    expect((await render([TEXT], COMPARISON)).result.visualLead).toBe(false);
+
+    // Asked for, but nothing to lead with.
+    const none = await rendered("Headline.\n\nBody.", true);
+    expect(none.result.visual).toBeNull();
+    expect(none.result.visualLead).toBe(false);
+  });
+
+  test("asksForChart: the words that ask for one, and the draw that is a bracket", () => {
+    for (const question of [
+      "Chart my first serve over the season",
+      "Can you graph it?",
+      "plot my return points won by match",
+      "Visualize how my serve has changed",
+      "Show me a visualisation of my break points",
+      "Draw me my serve placement",
+      "draw a picture of where I serve",
+      "I'd like a diagram of my serve +1",
+      "Show it as a picture",
+    ]) {
+      expect(asksForChart(question), question).toBe(true);
+    }
+    for (const question of [
+      "How did I serve against Beau?",
+      "What's my record on clay?",
+      "Who is in the main draw at nationals?",
+      "Did I make the draw?",
+      "How did the match against the draw's top seed go?",
+      "Where do I serve on break points?",
+    ]) {
+      expect(asksForChart(question), question).toBe(false);
+    }
+  });
+});
+
+test.describe("readAskVisual — the tree, and the new fields on the rest", () => {
+  const TREE: AskVisual = {
+    kind: "tree",
+    caption: "C",
+    levels: ["Serve", "Plus one"],
+    countLabel: "Points",
+    partLabel: "Won",
+    shareLabel: "Won %",
+    branches: [
+      {
+        steps: ["T serve", "Forehand crosscourt"],
+        count: { value: 29, text: "29" },
+        part: { value: 14, text: "14" },
+        share: { value: 48.3, text: "48.3%" },
+        watch: "sv.y_vz.t",
+      },
+      {
+        steps: ["Wide serve", "Backhand crosscourt"],
+        count: { value: 8, text: "8" },
+        share: { value: 0, text: "0%" },
+      },
+    ],
+  };
+
+  test("a tree round-trips, with or without a part label and watches", () => {
+    expect(readAskVisual(JSON.parse(JSON.stringify(TREE)))).toEqual(TREE);
+    const bare = { ...TREE, partLabel: undefined };
+    expect(readAskVisual(JSON.parse(JSON.stringify(bare)))).toEqual({
+      ...TREE,
+      partLabel: undefined,
+    });
+  });
+
+  test("a tree with a branch of the wrong depth, a share past a hundred, a bad part, or no levels is refused", () => {
+    const branch = TREE.kind === "tree" ? TREE.branches[0] : null;
+    if (!branch) throw new Error("no branch");
+    for (const broken of [
+      { ...TREE, branches: [{ ...branch, steps: ["T serve"] }] },
+      {
+        ...TREE,
+        branches: [{ ...branch, share: { value: 101, text: "101%" } }],
+      },
+      { ...TREE, branches: [{ ...branch, part: { value: -1, text: "-1" } }] },
+      { ...TREE, branches: [{ ...branch, count: "29" }] },
+      { ...TREE, levels: [] },
+      { ...TREE, countLabel: "" },
+      { ...TREE, branches: [] },
+    ]) {
+      expect(readAskVisual(JSON.parse(JSON.stringify(broken)))).toBeNull();
+    }
+    // A watch that is not a filter string is left off, not refused: the
+    // branch still draws, with nothing to open.
+    const unwatched = readAskVisual(
+      JSON.parse(
+        JSON.stringify({ ...TREE, branches: [{ ...branch, watch: 4 }] }),
+      ),
+    );
+    expect(unwatched?.kind === "tree" && "watch" in unwatched.branches[0]).toBe(
+      false,
+    );
+  });
+
+  test("a serve block keeps whose serves it says, and loses anything else; a table row keeps its match; a strip keeps matching ticks", () => {
+    const serve = {
+      kind: "serve",
+      caption: "C",
+      server: "opponent",
+      courts: [
+        {
+          label: "All",
+          t: { value: 1, text: "1" },
+          body: { value: 2, text: "2" },
+          wide: { value: 3, text: "3" },
+        },
+      ],
+    };
+    expect(readAskVisual(serve)).toEqual(serve);
+    expect(readAskVisual({ ...serve, server: "them" })).toEqual({
+      ...serve,
+      server: undefined,
+    });
+    const table = {
+      kind: "table",
+      caption: "",
+      columns: ["A"],
+      rows: [
+        { label: "X", cells: ["1"], matchId: "m-1" },
+        { label: "Y", cells: ["2"] },
+      ],
+    };
+    expect(readAskVisual(table)).toEqual(table);
+    expect(
+      readAskVisual({
+        ...table,
+        rows: [{ label: "X", cells: ["1"], matchId: 3 }],
+      }),
+    ).toEqual({
+      ...table,
+      rows: [{ label: "X", cells: ["1"] }],
+    });
+    const form = {
+      kind: "form",
+      caption: "C",
+      results: [true, false],
+      ticks: [{ opponent: "A", matchId: "m-1" }, {}],
+    };
+    expect(readAskVisual(form)).toEqual(form);
+    expect(readAskVisual({ ...form, ticks: [{ opponent: "A" }] })).toEqual({
+      kind: "form",
+      caption: "C",
+      results: [true, false],
+    });
+    expect(
+      readAskVisual({ ...form, ticks: [{ opponent: 4 }, { score: "" }] }),
+    ).toEqual({
+      kind: "form",
+      caption: "C",
+      results: [true, false],
+      ticks: [{}, {}],
+    });
   });
 });

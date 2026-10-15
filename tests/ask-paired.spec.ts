@@ -572,6 +572,57 @@ test.describe("buildMatchListAnswer — a short list of matches", () => {
     expect(result.text).toBe(
       "Aug 22, 2026: won against Ilya Brandt, 6-3, 3-6, 6-4. Sep 5, 2026: lost to Sam Okafor, 3-6, 6-7. Sep 28, 2026: won against Riley Marsh, 6-3, 6-4.",
     );
+    // Each tick carries its match's words, from the row it was drawn from.
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.results).toEqual([true, false, true]);
+    expect(result.visual.ticks).toEqual([
+      { opponent: "Ilya Brandt", score: "6-3, 3-6, 6-4", date: "Aug 22, 2026" },
+      { opponent: "Sam Okafor", score: "3-6, 6-7", date: "Sep 5, 2026" },
+      { opponent: "Riley Marsh", score: "6-3, 6-4", date: "Sep 28, 2026" },
+    ]);
+  });
+
+  test("a match id on the rows links each tick to its match; a team list names the player on it", async () => {
+    const result = await listed(
+      LIST.map((row, index) => ({
+        ...row,
+        match_id: `m-${index + 1}`,
+        player_name: "Rudy Quan",
+      })),
+      true,
+    );
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.ticks?.map((tick) => tick.matchId)).toEqual([
+      "m-2",
+      "m-1",
+      "m-3",
+    ]);
+    expect(result.visual.ticks?.[0].player).toBe("Rudy Quan");
+  });
+
+  test("a season of matches: up to twenty, the strip for all and sentences for the ends", async () => {
+    const season = Array.from({ length: 14 }, (_, index) => ({
+      played_on: `2026-03-${String(index + 1).padStart(2, "0")}`,
+      opponent_name: `Opponent ${String.fromCharCode(65 + index)}`,
+      i_won: index % 3 !== 0,
+      score_text: "6-4, 6-4",
+      matches_in_scope: 14,
+    }));
+    const result = await listed(season);
+    expect(result.headline).toBe("Won 9, lost 5.");
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.results).toHaveLength(14);
+    expect(result.visual.ticks).toHaveLength(14);
+    expect(result.visual.ticks?.[13]).toEqual({
+      opponent: "Opponent N",
+      score: "6-4, 6-4",
+      date: "Mar 14, 2026",
+    });
+    expect(result.text).toBe(
+      "Oldest — Mar 1, 2026: lost to Opponent A, 6-4, 6-4. Most recent — Mar 14, 2026: won against Opponent N, 6-4, 6-4. Each tick of the strip is one match, oldest first, with its opponent and score.",
+    );
+
+    expect(result.droppedDigits).toEqual([]);
   });
 
   test("a team list names each match's player", async () => {
@@ -595,10 +646,16 @@ test.describe("buildMatchListAnswer — a short list of matches", () => {
     ).toBeNull();
     expect(
       buildMatchListAnswer(
-        Array.from({ length: 11 }, () => LIST[0]),
+        Array.from({ length: 21 }, () => LIST[0]),
         { team: false },
       ),
     ).toBeNull();
+    expect(
+      buildMatchListAnswer(
+        Array.from({ length: 20 }, () => LIST[0]),
+        { team: false },
+      ),
+    ).not.toBeNull();
   });
 });
 

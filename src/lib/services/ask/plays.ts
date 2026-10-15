@@ -5,6 +5,10 @@ import {
 } from "@/lib/services/ask/answer-render";
 import { ASK_TABLE_ROWS, MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
+import {
+  ASK_VISUAL_WATCH_PREFIX,
+  treeWatchFields,
+} from "@/lib/services/ask/tree";
 
 /**
  * Losing plays: "What are Eli's losing plays?", "which of my shots miss the
@@ -184,6 +188,12 @@ export interface AskPlaysVoice {
   possessive: string;
   /** True when `name` is "you": the verbs agree with it. */
   second: boolean;
+  /**
+   * Whose side the plays are, for the tree's Video links (`tree.ts`).
+   * Absent on a voice built by hand before it existed: the tree then draws
+   * with no links.
+   */
+  subject?: AskPlaysSubject;
 }
 
 /** The voice for a subject: the one name the matches agree on, or a plain word for the side. */
@@ -191,11 +201,16 @@ export function losingPlaysVoice(
   subject: AskPlaysSubject,
   name: string | null,
 ): AskPlaysVoice {
-  if (name) return { name, possessive: `${name}'s`, second: false };
+  if (name) return { name, possessive: `${name}'s`, second: false, subject };
   if (subject === "mine") {
-    return { name: "you", possessive: "your", second: true };
+    return { name: "you", possessive: "your", second: true, subject };
   }
-  return { name: "the opponent", possessive: "the opponent's", second: false };
+  return {
+    name: "the opponent",
+    possessive: "the opponent's",
+    second: false,
+    subject,
+  };
 }
 
 const S = ASK_VISUAL_FIELD_SEPARATOR;
@@ -220,6 +235,17 @@ function phrase(row: AskRow): string {
 function label(row: AskRow): string {
   const text = phrase(row);
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** A shot row as the two steps of a tree branch — the stroke, then the direction in words — or null when it names neither. */
+function treeSteps(row: AskRow): string[] | null {
+  if (typeof row.stroke !== "string" || typeof row.direction !== "string") {
+    return null;
+  }
+  return [
+    row.stroke,
+    DIRECTION_PHRASE[row.direction] ?? row.direction.toLowerCase(),
+  ];
 }
 
 export function sentenceCase(text: string): string {
@@ -284,20 +310,44 @@ export function buildLosingPlaysAnswer(
     headline = `${sentenceCase(voice.possessive)} most common losing shot was the ${phrase(top.row)}, which missed to end ${cell(top.ref, "shots")} points.`;
   }
 
-  // ── Table: rally shots, most missed first ──
+  // ── The tree: rally shots as branches — the stroke, then the direction,
+  // the miss rate as the bar — most missed first; the table when a row
+  // cannot be a branch ──
+  const caption = `${sentenceCase(voice.possessive)} rally shots by direction, most often missed first.`;
+  const shown = rally.slice(0, ASK_TABLE_ROWS);
+  const branches = shown.map((entry) => ({
+    entry,
+    steps: treeSteps(entry.row),
+  }));
+  const cells = (entry: { ref: string }) =>
+    `${cell(entry.ref, "shots")} ${S} ${cell(entry.ref, "missed")} ${S} ${cell(entry.ref, "miss_pct")}`;
   const table =
-    rally.length > 0
-      ? [
-          `${ASK_VISUAL_LINE_PREFIX} table ${S} ${sentenceCase(voice.possessive)} rally shots by direction, most often missed first.`,
-          `COLUMNS: Shots ${S} Missed ${S} Miss rate`,
-          ...rally
-            .slice(0, ASK_TABLE_ROWS)
-            .map(
-              (entry) =>
-                `ROW: ${label(entry.row)} ${S} ${cell(entry.ref, "shots")} ${S} ${cell(entry.ref, "missed")} ${S} ${cell(entry.ref, "miss_pct")}`,
+    rally.length === 0
+      ? []
+      : branches.every((branch) => branch.steps !== null)
+        ? [
+            `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
+            `COLUMNS: Stroke ${S} Direction`,
+            `SERIES: Shots ${S} Missed ${S} Miss rate`,
+            // Whose shots, so each branch can open the film on the points
+            // it was hit in (`tree.ts`); a voice with no side draws no links.
+            ...(voice.subject
+              ? [
+                  `${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields({ kind: "plays", subject: voice.subject }).join(` ${S} `)}`,
+                ]
+              : []),
+            ...branches.map(
+              ({ entry, steps }) =>
+                `ROW: ${(steps ?? []).join(` ${S} `)} ${S} ${cells(entry)}`,
             ),
-        ]
-      : [];
+          ]
+        : [
+            `${ASK_VISUAL_LINE_PREFIX} table ${S} ${caption}`,
+            `COLUMNS: Shots ${S} Missed ${S} Miss rate`,
+            ...shown.map(
+              (entry) => `ROW: ${label(entry.row)} ${S} ${cells(entry)}`,
+            ),
+          ];
 
   // ── How the points they lost ended ──
   const paragraphs: string[] = [];

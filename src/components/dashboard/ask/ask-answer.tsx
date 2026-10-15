@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
 import { figureVideoHref } from "@/lib/services/ask/figure-video";
@@ -11,6 +12,7 @@ import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
 import { AskFeedbackControl } from "./ask-feedback";
 import { AskSources } from "./ask-sources";
+import { AskShowMe } from "./ask-show";
 import type { AskAnswerState, AskFigure } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
 
@@ -46,6 +48,9 @@ export const ASK_FIGURE_TILES = 3;
 
 /** Who signs a finished answer, in its footer. */
 export const ASK_SIGNATURE = "Advantage Intelligence";
+
+/** The disclosure that holds the prose when the block leads the answer. */
+export const ASK_PROSE_DISCLOSURE = "The numbers in full";
 
 /**
  * What the player reads when an answer fails, by the stream's `code` — the
@@ -100,7 +105,20 @@ export const ASK_ERROR_COPY = PERSONAL_ASK_COPY.errors;
  * those points, with a quiet "Watch" after its label — the sources' own
  * affordance. The figure's `column` says which measure; a figure without
  * one (saved before it existed, or cited from words around a cell) is a
- * tile and nothing more.
+ * tile and nothing more. The block's own rows, zones and branches link the
+ * same way (`visuals/ask-visual.tsx`), so the sources go to it too.
+ *
+ * ── Visual first ────────────────────────────────────────────────────────────
+ * When the question asked for a chart (`visualLead`, from the `visual`
+ * event's `lead`), the block follows the claim and the figures follow it;
+ * the prose folds behind a native disclosure (design sheet "4 · Visual
+ * first", `src/app/design/ask/answers`), closed until opened, as the
+ * design has it. The status line, the sources and the footer stay where
+ * they are.
+ *
+ * Every figure, in the tiles and in the prose, sits in tabular numerals, so
+ * a column of them lines up and a sentence's figure does not shift its
+ * neighbours as it streams in.
  *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it is
  * rendered by an offline component harness (`tests/ask-answer-view.spec.ts`).
@@ -214,6 +232,41 @@ function AnswerBody({
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const figures = answer.figures.slice(0, ASK_FIGURE_TILES);
+  // The block leads when the question asked for a chart: it comes right
+  // after the claim, and the prose folds away.
+  const lead = answer.visual !== null && answer.visualLead === true;
+
+  const block = answer.visual && (
+    <div data-ask-part="" style={part(lead ? 1 : 2)}>
+      <AskVisualBlock
+        visual={answer.visual}
+        sources={answer.sources}
+        trendAverageLabel={copy.trendAverage}
+      />
+    </div>
+  );
+
+  const prose = paragraphs.length > 0 && (
+    <div className="flex flex-col gap-3">
+      {paragraphs.map((paragraph, index) => (
+        // `text-body` is unlayered and would beat a `leading-*` utility,
+        // so the reading line height is set inline.
+        <p
+          key={index}
+          className="text-body max-w-[66ch] text-pretty tabular-nums"
+          style={{ lineHeight: 1.65 }}
+        >
+          {/* A sentence at a time, as the stream sends them: one that has
+              been read keeps its key and stays put; a new one fades in. */}
+          {sentences(paragraph).map((sentence, at) => (
+            <span key={at} data-ask-sentence="">
+              {sentence}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -223,11 +276,13 @@ function AnswerBody({
         </p>
       )}
 
+      {lead && block}
+
       {figures.length > 0 && (
         <ul
           aria-label="Figures"
           data-ask-part=""
-          style={part(1)}
+          style={part(lead ? 2 : 1)}
           className="flex flex-wrap gap-x-8 gap-y-2.5"
         >
           {figures.map((figure, index) => {
@@ -235,7 +290,10 @@ function AnswerBody({
             // Value over label, in the markup as on screen.
             const tile = (
               <>
-                <div data-ask-figure-value="" className="text-scoreboard">
+                <div
+                  data-ask-figure-value=""
+                  className="text-scoreboard tabular-nums"
+                >
                   {figure.value}
                 </div>
                 <div data-ask-figure-label="" className="text-micro">
@@ -274,36 +332,9 @@ function AnswerBody({
         </ul>
       )}
 
-      {answer.visual && (
-        <div data-ask-part="" style={part(2)}>
-          <AskVisualBlock
-            visual={answer.visual}
-            trendAverageLabel={copy.trendAverage}
-          />
-        </div>
-      )}
+      {!lead && block}
 
-      {paragraphs.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {paragraphs.map((paragraph, index) => (
-            // `text-body` is unlayered and would beat a `leading-*` utility,
-            // so the reading line height is set inline.
-            <p
-              key={index}
-              className="text-body max-w-[66ch] text-pretty"
-              style={{ lineHeight: 1.65 }}
-            >
-              {/* A sentence at a time, as the stream sends them: one that has
-                  been read keeps its key and stays put; a new one fades in. */}
-              {sentences(paragraph).map((sentence, at) => (
-                <span key={at} data-ask-sentence="">
-                  {sentence}
-                </span>
-              ))}
-            </p>
-          ))}
-        </div>
-      )}
+      {lead && prose ? <ProseDisclosure>{prose}</ProseDisclosure> : prose}
 
       {answer.status === "streaming" && (
         <p
@@ -319,11 +350,15 @@ function AnswerBody({
       {(answer.sources || answer.status === "done") && (
         <div data-ask-part="" style={part(3)} className="flex flex-col gap-3">
           {answer.sources && <AskSources matches={answer.sources} />}
+          {answer.status === "done" && answer.answerId && (
+            <AskShowMe answerId={answer.answerId} sources={answer.sources} />
+          )}
           {answer.status === "done" && (
             <p data-ask-signature="" className="text-micro max-w-[60ch]">
               {/* `text-micro` is unlayered and would beat a colour utility. */}
               <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
               {answer.noAdvice && ` · ${copy.noAdvice}`}
+              {answer.coach && ` · ${copy.coach}`}
             </p>
           )}
           {answer.status === "done" && onRate && (
@@ -338,6 +373,29 @@ function AnswerBody({
 /** A part's place in the order the answer is read, for parts that land together. */
 function part(index: number): CSSProperties {
   return { "--ask-i": index } as CSSProperties;
+}
+
+/**
+ * The prose behind a native `<details>` when the block leads: the summary
+ * is the design sheet's own — a quiet blue line with a chevron that turns
+ * when open — and the browser's marker is hidden in favour of it. Closed
+ * by default, as the design has it; a reader who wants the sentences opens
+ * them, and they are in the page for a screen reader either way.
+ */
+function ProseDisclosure({ children }: { children: ReactNode }) {
+  return (
+    <details data-ask-prose="" className="group">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-[var(--radius-button)] text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3 transition-transform duration-[var(--duration-hover)] group-open:rotate-90"
+          strokeWidth={1.5}
+        />
+        {ASK_PROSE_DISCLOSURE}
+      </summary>
+      <div className="pt-3">{children}</div>
+    </details>
+  );
 }
 
 /**

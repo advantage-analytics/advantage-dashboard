@@ -1,5 +1,7 @@
 import {
   type AskSiblingRanking,
+  comparedPairs,
+  isNumber,
   perRowCountColumn,
   rowLabelColumn,
   siblingRankings,
@@ -14,9 +16,14 @@ import {
 import {
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
+  type AskBarsVisual,
   type AskErrorEvent,
   type AskFigureEvent,
+  type AskFormTick,
   type AskMomentumVisual,
+  type AskServeVisual,
+  type AskTableVisual,
+  type AskTreeVisual,
   type AskVisual,
   type AskTrendVisual,
   type AskVisualKind,
@@ -28,6 +35,8 @@ import {
   MAX_ASK_SPLIT_PARTS,
   MAX_ASK_TABLE_COLUMNS,
   MAX_ASK_TABLE_ROWS,
+  MAX_ASK_TREE_BRANCHES,
+  MAX_ASK_TREE_LEVELS,
   MAX_ASK_TREND_POINTS,
   MAX_ASK_VISUALS,
   MIN_ASK_FORM_RESULTS,
@@ -35,8 +44,16 @@ import {
   MIN_ASK_SERVE_COURTS,
   MIN_ASK_SPLIT_PARTS,
   MIN_ASK_TABLE_COLUMNS,
+  MIN_ASK_TREE_BRANCHES,
+  MIN_ASK_TREE_LEVELS,
   MIN_ASK_TREND_POINTS,
 } from "@/lib/services/ask/events";
+import {
+  ASK_VISUAL_WATCH_PREFIX,
+  type AskTreeWatch,
+  parseTreeWatch,
+  treeBranchWatch,
+} from "@/lib/services/ask/tree";
 
 /**
  * The streaming transform between the model's answer text and the events the
@@ -66,6 +83,14 @@ import {
  * second block — is dropped on its own and recorded in `droppedVisuals`; the
  * headline, figures and text still render. A bad reference anywhere else
  * still fails the whole answer, as it always has.
+ *
+ * Two things the server decides over the model's block (roadmap 3.9). A
+ * `split` whose parts are not one whole — shares that do not sum to a
+ * hundred, counts that nest or miss their total — is redrawn as a table of
+ * its parts (`convertSplit()`); and a block that drops for its shape is
+ * replaced by one picked from the rows themselves (`visualFromRows()`), the
+ * way the server-written answers choose theirs. Both are recorded in
+ * `convertedVisuals`.
  *
  * Pure: no database, no network, no Next.js.
  */
@@ -151,6 +176,17 @@ export const ASK_VISUAL_SYNTAX: Record<AskVisualKind, string> = {
     `${ASK_VISUAL_LINE_PREFIX} momentum ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
     `${ASK_VISUAL_PLOT_PREFIX} <point column> ${ASK_VISUAL_FIELD_SEPARATOR} <won column> ${ASK_VISUAL_FIELD_SEPARATOR} <set column> ${ASK_VISUAL_FIELD_SEPARATOR} <break-point column> ${ASK_VISUAL_FIELD_SEPARATOR} <set-point column> ${ASK_VISUAL_FIELD_SEPARATOR} <match-point column>`,
   ].join("\n"),
+  // Server-written only (`serve-plus-one.ts`, `plays.ts`, through `tree.ts`);
+  // never in the model's catalogue. COLUMNS names the steps of every
+  // branch, SERIES the count, an optional part of it, and the share; the
+  // WATCH line, which no model is told of, is the request the rows answer.
+  tree: [
+    `${ASK_VISUAL_LINE_PREFIX} tree ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_COLUMNS_PREFIX} <level> ${ASK_VISUAL_FIELD_SEPARATOR} <level>`,
+    `${ASK_VISUAL_SERIES_PREFIX} <count label> ${ASK_VISUAL_FIELD_SEPARATOR} <part label> ${ASK_VISUAL_FIELD_SEPARATOR} <share label>`,
+    `${ASK_VISUAL_WATCH_PREFIX} <request>`,
+    `${ASK_VISUAL_ROW_PREFIX} <step> ${ASK_VISUAL_FIELD_SEPARATOR} <step> ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX} ${ASK_VISUAL_FIELD_SEPARATOR} ${ASK_CELL_REFERENCE_SYNTAX}`,
+  ].join("\n"),
 };
 
 const VISUAL_LINE_PREFIXES = [
@@ -159,6 +195,7 @@ const VISUAL_LINE_PREFIXES = [
   ASK_VISUAL_COLUMNS_PREFIX,
   ASK_VISUAL_ROW_PREFIX,
   ASK_VISUAL_PLOT_PREFIX,
+  ASK_VISUAL_WATCH_PREFIX,
 ] as const;
 
 // ── Formatting ───────────────────────────────────────────────────────────────
@@ -379,8 +416,34 @@ export interface AskAnswerResult {
    * their cells hold (`canonicalLabel()`). A count only.
    */
   renamedLabels: number;
+  /**
+   * Blocks the server drew differently from how the model asked: a `split`
+   * whose parts were not one whole, redrawn as bars or a table, and a block
+   * that dropped for its shape, replaced by one picked from the rows
+   * (`reason: "shape"`). Kinds and a fixed reason only — never model text.
+   */
+  convertedVisuals: {
+    /** Null when the model's block named no kind in the catalogue. */
+    from: AskVisualKind | null;
+    to: AskVisualKind;
+    reason: string;
+  }[];
+  /**
+   * True when the question asked for a chart (`options.chartAsked`) and the
+   * answer carries a block: the `visual` event was sent with `lead`, and
+   * the saved answer should say so, so a reopened answer lays out the same.
+   */
+  visualLead: boolean;
   /** Why the stream ended with an `error` event; null when it did not. */
   failure: AskAnswerFailure | null;
+}
+
+export interface AskAnswerRenderOptions {
+  /**
+   * The question asked for a chart (`chart-request.ts`): the block, when
+   * there is one, leads the answer. Off when omitted.
+   */
+  chartAsked?: boolean;
 }
 
 export interface AskAnswerRender {
@@ -427,6 +490,8 @@ type Token =
   | {
       ok: true;
       reference: string;
+      /** The result row the cell is in, 0-based. */
+      row: number;
       column: string;
       raw: unknown;
       text: string;
@@ -466,7 +531,8 @@ function resolveReference(body: string, rows: readonly AskRow[]): Token {
     };
   }
 
-  const row = rows[Number(parsed[1]) - 1];
+  const index = Number(parsed[1]) - 1;
+  const row = rows[index];
   if (row === undefined || row === null) {
     return {
       ok: false,
@@ -492,7 +558,7 @@ function resolveReference(body: string, rows: readonly AskRow[]): Token {
       failure: { kind: "unformattable_cell", reference },
     };
   }
-  return { ok: true, reference, column, raw, text };
+  return { ok: true, reference, row: index, column, raw, text };
 }
 
 /**
@@ -573,7 +639,13 @@ function expand(
 // ── The visual block ─────────────────────────────────────────────────────────
 
 type BlockOutcome =
-  | { ok: true; visual: AskVisual; droppedRows: number }
+  | {
+      ok: true;
+      visual: AskVisual;
+      droppedRows: number;
+      /** Set when the block drawn is not the kind the model asked for (`convertSplit()`). */
+      converted?: AskAnswerResult["convertedVisuals"][number];
+    }
   | { ok: false; drop: AskDroppedVisual };
 
 /** The lone token a block cell must be, or why it is not one. */
@@ -684,6 +756,7 @@ function parseBlock(
   const columns: string[][] = [];
   const rowLines: string[][] = [];
   const plots: string[][] = [];
+  const watches: string[][] = [];
   const taken: Record<AskVisualKind, readonly string[]> = {
     bars: [ASK_VISUAL_SERIES_PREFIX, ASK_VISUAL_ROW_PREFIX],
     table: [ASK_VISUAL_COLUMNS_PREFIX, ASK_VISUAL_ROW_PREFIX],
@@ -692,6 +765,12 @@ function parseBlock(
     serve: [ASK_VISUAL_ROW_PREFIX],
     form: [ASK_VISUAL_PLOT_PREFIX],
     momentum: [ASK_VISUAL_PLOT_PREFIX],
+    tree: [
+      ASK_VISUAL_COLUMNS_PREFIX,
+      ASK_VISUAL_SERIES_PREFIX,
+      ASK_VISUAL_WATCH_PREFIX,
+      ASK_VISUAL_ROW_PREFIX,
+    ],
   };
   for (const line of body) {
     const keyword = VISUAL_LINE_PREFIXES.find((prefix) =>
@@ -704,6 +783,7 @@ function parseBlock(
     if (keyword === ASK_VISUAL_SERIES_PREFIX) series.push(fields);
     else if (keyword === ASK_VISUAL_COLUMNS_PREFIX) columns.push(fields);
     else if (keyword === ASK_VISUAL_ROW_PREFIX) rowLines.push(fields);
+    else if (keyword === ASK_VISUAL_WATCH_PREFIX) watches.push(fields);
     else plots.push(fields);
   }
 
@@ -728,7 +808,7 @@ function parseBlock(
     field: string,
     check: (n: number) => boolean,
   ):
-    | { ok: true; number: AskVisualNumber }
+    | { ok: true; number: AskVisualNumber; token: Extract<Token, { ok: true }> }
     | { ok: false; reason: AskVisualDropReason } => {
     const cell = readCell(field, tokens);
     if (!cell.ok) return cell;
@@ -736,7 +816,7 @@ function parseBlock(
     if (typeof raw !== "number" || !Number.isFinite(raw) || !check(raw)) {
       return { ok: false, reason: "bad_value" };
     }
-    return { ok: true, number: { value: raw, text } };
+    return { ok: true, number: { value: raw, text }, token: cell.token };
   };
 
   /**
@@ -894,6 +974,7 @@ function parseBlock(
           continue;
         }
         const cells: string[] = [];
+        const citedRows = new Set<number>();
         let bad: "malformed" | "bad_reference" | null = null;
         for (const field of fields.slice(1)) {
           if (field === "") {
@@ -906,12 +987,21 @@ function parseBlock(
             break;
           }
           cells.push(cell.token.text);
+          citedRows.add(cell.token.row);
         }
         if (bad) {
           skipped.add(bad, "a table cell");
           continue;
         }
-        out.rows.push({ label: rowLabel.labels[0], cells });
+        // A row whose cells all come from one result row that is a match
+        // (`match_id`) is that match: the row then opens its Video tab.
+        const matchId =
+          citedRows.size === 1 ? matchIdOf(rows[[...citedRows][0]]) : null;
+        out.rows.push({
+          label: rowLabel.labels[0],
+          cells,
+          ...(matchId ? { matchId } : {}),
+        });
       }
       if (out.rows.length === 0) return skipped.block();
       return { ok: true, visual: out, droppedRows: skipped.count() };
@@ -1073,7 +1163,7 @@ function parseBlock(
           `parts must be ${MIN_ASK_SPLIT_PARTS} to ${MAX_ASK_SPLIT_PARTS}`,
         );
       }
-      const out: AskVisual = { kind, caption, parts: [] };
+      const parts: SplitPart[] = [];
       for (const fields of rowLines) {
         if (fields.length !== 2) {
           return drop("malformed", kind, "a ROW needs a label and one cell");
@@ -1082,9 +1172,40 @@ function parseBlock(
         if (!rowLabel.ok) return drop(rowLabel.reason, kind, "a part label");
         const count = number(fields[1], isCount);
         if (!count.ok) return drop(count.reason, kind, "a count cell");
-        out.parts.push({ label: rowLabel.labels[0], count: count.number });
+        parts.push({
+          label: rowLabel.labels[0],
+          count: count.number,
+          token: count.token,
+        });
       }
-      return { ok: true, visual: out, droppedRows: 0 };
+      // The parts must be one whole (`convertSplit()`): shares that do not
+      // sum to a hundred, and counts that nest or miss their total, are a
+      // table of the parts; a share beside a count is no block at all.
+      const verdict = convertSplit(caption, parts, rows);
+      if (verdict.kind === "unlike") {
+        return drop("bad_value", kind, "a share beside a count");
+      }
+      if (verdict.kind === "converted") {
+        return {
+          ok: true,
+          visual: verdict.visual,
+          droppedRows: 0,
+          converted: {
+            from: kind,
+            to: verdict.visual.kind,
+            reason: verdict.reason,
+          },
+        };
+      }
+      return {
+        ok: true,
+        visual: {
+          kind,
+          caption,
+          parts: parts.map(({ label, count }) => ({ label, count })),
+        },
+        droppedRows: 0,
+      };
     }
 
     case "serve": {
@@ -1098,7 +1219,8 @@ function parseBlock(
           `courts must be ${MIN_ASK_SERVE_COURTS} to ${MAX_ASK_SERVE_COURTS}`,
         );
       }
-      const out: AskVisual = { kind, caption, courts: [] };
+      const out: AskServeVisual = { kind, caption, courts: [] };
+      const cited: string[] = [];
       for (const fields of rowLines) {
         if (fields.length !== 4) {
           return drop(
@@ -1116,6 +1238,7 @@ function parseBlock(
         const wide = number(fields[3], isCount);
         if (!wide.ok) return drop(wide.reason, kind, "the wide cell");
         const courtLabel = rowLabel.labels[0];
+        cited.push(t.token.column, bodyCount.token.column, wide.token.column);
         out.courts.push({
           label: courtLabel,
           t: t.number,
@@ -1123,6 +1246,10 @@ function parseBlock(
           wide: wide.number,
         });
       }
+      // Whose serves, when every cell says: the court's zones can then open
+      // the Video tab on that side's serves there.
+      const server = serveSide(cited);
+      if (server) out.server = server;
       return { ok: true, visual: out, droppedRows: 0 };
     }
 
@@ -1135,6 +1262,7 @@ function parseBlock(
         return drop("malformed", kind, "PLOT needs one column");
       }
       const results: boolean[] = [];
+      const ticks: AskFormTick[] = [];
       for (const row of rows) {
         if (!Object.prototype.hasOwnProperty.call(row, column)) {
           return drop(
@@ -1149,6 +1277,7 @@ function parseBlock(
           return drop("bad_value", kind, "a result that is not true or false");
         }
         results.push(value);
+        ticks.push(formTick(row));
       }
       if (
         results.length < MIN_ASK_FORM_RESULTS ||
@@ -1160,7 +1289,14 @@ function parseBlock(
           `results must be ${MIN_ASK_FORM_RESULTS} to ${MAX_ASK_FORM_RESULTS}`,
         );
       }
-      return { ok: true, visual: { kind, caption, results }, droppedRows: 0 };
+      // Each tick carries what its row said of the match — opponent, score,
+      // date, the match to open — when any row said anything.
+      const named = ticks.some((tick) => Object.keys(tick).length > 0);
+      return {
+        ok: true,
+        visual: { kind, caption, results, ...(named ? { ticks } : {}) },
+        droppedRows: 0,
+      };
     }
 
     case "momentum": {
@@ -1310,7 +1446,540 @@ function parseBlock(
       };
       return { ok: true, visual, droppedRows: 0 };
     }
+
+    case "tree": {
+      // COLUMNS names the levels, SERIES the count, an optional part and the
+      // share, WATCH (at most one) the request the rows answer, and each ROW
+      // is one branch: a step per level, then its cells. A row of the wrong
+      // shape is left out on its own, as a table's is.
+      if (columns.length !== 1) {
+        return drop("malformed", kind, "exactly one COLUMNS line is needed");
+      }
+      if (
+        columns[0].length < MIN_ASK_TREE_LEVELS ||
+        columns[0].length > MAX_ASK_TREE_LEVELS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `levels must be ${MIN_ASK_TREE_LEVELS} to ${MAX_ASK_TREE_LEVELS}`,
+        );
+      }
+      const levels = labels(columns[0]);
+      if (!levels.ok) return drop(levels.reason, kind, "a level heading");
+      if (series.length !== 1 || series[0].length < 2 || series[0].length > 3) {
+        return drop(
+          "malformed",
+          kind,
+          "SERIES needs a count label, an optional part label and a share label",
+        );
+      }
+      const names = labels(series[0]);
+      if (!names.ok) return drop(names.reason, kind, "a series label");
+      const withPart = names.labels.length === 3;
+      if (watches.length > 1) {
+        return drop("malformed", kind, "at most one WATCH line");
+      }
+      const watch: AskTreeWatch | null =
+        watches.length === 1 ? parseTreeWatch(watches[0]) : null;
+      if (watches.length === 1 && watch === null) {
+        return drop("malformed", kind, "a WATCH line the server does not know");
+      }
+      if (
+        rowLines.length < MIN_ASK_TREE_BRANCHES ||
+        rowLines.length > MAX_ASK_TREE_BRANCHES
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `branches must be ${MIN_ASK_TREE_BRANCHES} to ${MAX_ASK_TREE_BRANCHES}`,
+        );
+      }
+      const depth = levels.labels.length;
+      const width = depth + (withPart ? 3 : 2);
+      const out: AskTreeVisual = {
+        kind,
+        caption,
+        levels: levels.labels,
+        countLabel: names.labels[0],
+        ...(withPart ? { partLabel: names.labels[1] } : {}),
+        shareLabel: names.labels[withPart ? 2 : 1],
+        branches: [],
+      };
+      const skipped = rowSkips(kind);
+      for (const fields of rowLines) {
+        if (fields.length !== width) {
+          skipped.add(
+            "malformed",
+            "a ROW needs a step per level, then its cells",
+          );
+          continue;
+        }
+        const steps = labels(fields.slice(0, depth));
+        if (!steps.ok) {
+          if (!skipped.take(steps.reason, "a step label")) {
+            return drop(steps.reason, kind, "a step label");
+          }
+          continue;
+        }
+        const count = number(fields[depth], isCount);
+        if (!count.ok) {
+          if (!skipped.take(count.reason, "a count cell")) {
+            return drop(count.reason, kind, "a count cell");
+          }
+          continue;
+        }
+        let part: AskVisualNumber | undefined;
+        if (withPart) {
+          const read = number(fields[depth + 1], isCount);
+          if (!read.ok) {
+            if (!skipped.take(read.reason, "a part cell")) {
+              return drop(read.reason, kind, "a part cell");
+            }
+            continue;
+          }
+          part = read.number;
+        }
+        const share = number(fields[width - 1], isPercent);
+        if (!share.ok) {
+          if (!skipped.take(share.reason, "a share cell")) {
+            return drop(share.reason, kind, "a share cell");
+          }
+          continue;
+        }
+        // The branch's points as the Video filter selects them, read from
+        // the row its count was cited from (`tree.ts`).
+        const branchWatch = watch
+          ? treeBranchWatch(watch, rows[count.token.row])
+          : null;
+        out.branches.push({
+          steps: steps.labels,
+          count: count.number,
+          ...(part ? { part } : {}),
+          share: share.number,
+          ...(branchWatch ? { watch: branchWatch } : {}),
+        });
+      }
+      if (out.branches.length === 0) return skipped.block();
+      return { ok: true, visual: out, droppedRows: skipped.count() };
+    }
   }
+}
+
+/** The match a result row is, when it carries one (`match_id`); null otherwise. */
+function matchIdOf(row: AskRow | undefined): string | null {
+  const matchId = row?.match_id;
+  return typeof matchId === "string" && matchId.trim() !== "" ? matchId : null;
+}
+
+/** The serve measures a `serve` block's cells may cite for the court to know whose serves they are. */
+const SERVE_ZONE_MEASURE = /^serve_(?:t|body|wide)(?:_pct)?$/;
+
+/**
+ * Whose serves a serve block counts, from the columns its cells cite: every
+ * one a serve-direction measure (`measures.ts`) of the same side — bare for
+ * the viewer's, `opp_` for the opponent's. Undefined when the cells are
+ * anything else: a count the model named itself says nothing about whose.
+ */
+function serveSide(columns: readonly string[]): "you" | "opponent" | undefined {
+  const sides = new Set<string>();
+  for (const column of columns) {
+    const measure = askMeasure(column);
+    if (!measure || !SERVE_ZONE_MEASURE.test(measure.key)) return undefined;
+    if (measure.qualifier === "") sides.add("you");
+    else if (measure.qualifier === "opponent") sides.add("opponent");
+    else return undefined;
+  }
+  if (sides.size !== 1) return undefined;
+  return sides.has("you") ? "you" : "opponent";
+}
+
+/**
+ * What a form strip's tick says of its match, from the row's own columns —
+ * the views' names, as the trend reads `match_id`. Every field is formatted
+ * as the player reads it; a row that names nothing gives an empty tick.
+ */
+function formTick(row: AskRow): AskFormTick {
+  const text = (column: string): string | undefined => {
+    const value = row[column];
+    if (typeof value !== "string" || value.trim() === "") return undefined;
+    return formatAskCell(column, value) ?? undefined;
+  };
+  const tick: AskFormTick = {};
+  const opponent = text("opponent_name");
+  const score = text("score_text");
+  const date = text("played_on");
+  const player = text("player_name");
+  const matchId = matchIdOf(row);
+  if (opponent) tick.opponent = opponent;
+  if (score) tick.score = score;
+  if (date) tick.date = date;
+  if (player) tick.player = player;
+  if (matchId) tick.matchId = matchId;
+  return tick;
+}
+
+// ── A split that is not one whole ───────────────────────────────────────────
+
+interface SplitPart {
+  label: string;
+  count: AskVisualNumber;
+  token: Extract<Token, { ok: true }>;
+}
+
+type SplitVerdict =
+  | { kind: "whole" }
+  | { kind: "unlike" }
+  | { kind: "converted"; visual: AskTableVisual; reason: string };
+
+/**
+ * Pairs of measures one of which is part of the other, beyond what the
+ * names say by prefix (`first_serves` ⊂ `first_serves_in`): a split of
+ * these is a count beside its own subset, never parts of one whole.
+ */
+const NESTED_MEASURES: readonly (readonly [string, string])[] = [
+  ["first_serves", "first_serve_points_won"],
+  ["first_serves_in", "first_serve_points_won"],
+  ["second_serves", "second_serve_points_won"],
+  ["second_serves_in", "second_serve_points_won"],
+  ["first_returns", "first_return_points_won"],
+  ["first_returns_in", "first_return_points_won"],
+  ["second_returns", "second_return_points_won"],
+  ["second_returns_in", "second_return_points_won"],
+  ["break_points_faced", "break_points_saved"],
+  ["break_point_opportunities", "break_points_converted"],
+  ["set_points_faced", "set_points_saved"],
+  ["set_point_opportunities", "set_points_converted"],
+  ["net_points_appearances", "net_points_won"],
+  ["short_rally_total", "short_rally_won"],
+  ["medium_rally_total", "medium_rally_won"],
+  ["long_rally_total", "long_rally_won"],
+];
+
+function nestedMeasures(a: string, b: string): boolean {
+  if (a === b) return false;
+  if (b.startsWith(`${a}_`) || a.startsWith(`${b}_`)) return true;
+  return NESTED_MEASURES.some(
+    ([x, y]) => (x === a && y === b) || (x === b && y === a),
+  );
+}
+
+/**
+ * Whether a split's parts form one whole, and the block to draw when they
+ * do not (roadmap 3.9 — the known wrong-split bug):
+ *
+ * - shares (every cell a `_pct` column) must sum to a hundred, within what
+ *   rounding allows;
+ * - counts must not nest — one part a subset of another by its measure's
+ *   name — and, when every part is one row's and that row carries a bare
+ *   `total`, must sum to it;
+ * - a share beside a count is no whole and no block.
+ *
+ * Parts that are not one whole are listed in a one-column table instead:
+ * each figure as it is, and no bar that says they add up. (A bar each on
+ * its own track was the first thought; it would need a one-series shape of
+ * the bars block, which another module reads as two.) Parts that are all
+ * zero are left as they are: an empty split is honest.
+ */
+function convertSplit(
+  caption: string,
+  parts: readonly SplitPart[],
+  rows: readonly AskRow[],
+): SplitVerdict {
+  const percent = parts.map((part) => isPercentColumn(part.token.column));
+  if (percent.some(Boolean) && !percent.every(Boolean)) {
+    return { kind: "unlike" };
+  }
+  const sum = parts.reduce((total, part) => total + part.count.value, 0);
+  if (sum === 0) return { kind: "whole" };
+  const table = (reason: string, heading: string): SplitVerdict => ({
+    kind: "converted",
+    reason,
+    visual: {
+      kind: "table",
+      caption,
+      columns: [heading],
+      rows: parts.map((part) => ({
+        label: part.label,
+        cells: [part.count.text],
+      })),
+    },
+  });
+  if (percent.every(Boolean)) {
+    const tolerance = Math.max(1, 0.5 * parts.length);
+    if (Math.abs(sum - 100) <= tolerance) return { kind: "whole" };
+    return table("shares that do not sum to one whole", "Share");
+  }
+  const keys = parts.map(
+    (part) => askMeasure(part.token.column)?.key ?? part.token.column,
+  );
+  for (let i = 0; i < keys.length; i += 1) {
+    for (let j = i + 1; j < keys.length; j += 1) {
+      if (nestedMeasures(keys[i], keys[j])) {
+        return table("counts that nest", "Count");
+      }
+    }
+  }
+  const cited = new Set(parts.map((part) => part.token.row));
+  if (cited.size === 1) {
+    const total = rows[[...cited][0]]?.total;
+    if (isNumber(total) && Math.round(total) !== Math.round(sum)) {
+      return table("counts that do not sum to the total", "Count");
+    }
+  }
+  return { kind: "whole" };
+}
+
+// ── The block the rows themselves fit ───────────────────────────────────────
+
+const DATE_LIKE = /^\d{4}-\d{2}(?:-\d{2})?/;
+
+/**
+ * The fewest percentage pairs a one-row comparison needs to be bars rather
+ * than a table — `paired.ts`'s `MIN_MATCHUP_BARS`, spelt here because that
+ * module imports this one.
+ */
+const MIN_FALLBACK_BARS = 4;
+
+/**
+ * The one measure a trend is of, and the same measure under a qualifier
+ * when the rows carry one too (`all_first_serve_pct` beside
+ * `first_serve_pct`), as `buildTrendAnswer` reads them; null for any other
+ * set of measures.
+ */
+function trendColumns(
+  measures: readonly string[],
+): { measure: string; baseline: string | null } | null {
+  if (measures.length === 1) return { measure: measures[0], baseline: null };
+  if (measures.length !== 2) return null;
+  const [a, b] = measures.map((column) => askMeasure(column));
+  if (!a || !b || a.key !== b.key) return null;
+  if ((a.qualifier === "") === (b.qualifier === "")) return null;
+  return a.qualifier === ""
+    ? { measure: measures[0], baseline: measures[1] }
+    : { measure: measures[1], baseline: measures[0] };
+}
+
+/** `played_on` first among date columns, else the first; undefined when no column is a date on every row. */
+
+function dateColumn(rows: readonly AskRow[]): string | undefined {
+  const dates = Object.keys(rows[0] ?? {}).filter((column) =>
+    rows.every(
+      (row) =>
+        typeof row[column] === "string" &&
+        DATE_LIKE.test(row[column] as string),
+    ),
+  );
+  return dates.includes("played_on") ? "played_on" : dates[0];
+}
+
+/**
+ * The block a result's shape fits, chosen by the server with no model in the
+ * loop — what replaces a model's block that could not be drawn (roadmap
+ * 3.9). The same shapes the server-written answers recognise, in the same
+ * order: one measure over dates is a trend; matches with results and no
+ * measure, a form strip; one row of convention pairs, bars when mostly
+ * shares and a two-column table otherwise; rows with a label and a few
+ * measures, a table. Null when the rows fit none, and the answer stands on
+ * its figures and prose.
+ *
+ * Every number is a cell of the rows, formatted as the renderer formats a
+ * cell; the captions carry the scope count and no other figure.
+ */
+export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
+  if (rows.length === 0) return null;
+  const first = rows[0];
+  const measures = Object.keys(first).filter(
+    (column) =>
+      column !== SCOPE_TOTAL_COLUMN &&
+      !POSITION_COLUMN.test(column) &&
+      rows.some((row) => isNumber(row[column])) &&
+      rows.every(
+        (row) =>
+          row[column] === null ||
+          row[column] === undefined ||
+          isNumber(row[column]),
+      ),
+  );
+  const scope = first[SCOPE_TOTAL_COLUMN];
+  const fromScope = isNumber(scope)
+    ? `From ${formatAskCell(SCOPE_TOTAL_COLUMN, scope)} ${scope === 1 ? "match" : "matches"}.`
+    : "";
+  const cell = (row: AskRow, column: string): AskVisualNumber | null => {
+    const value = row[column];
+    const text = formatAskCell(column, value);
+    return isNumber(value) && text !== null ? { value, text } : null;
+  };
+  const byDate = (date: string) => (a: AskRow, b: AskRow) =>
+    String(a[date]).localeCompare(String(b[date]));
+
+  // One measure over dates — or the measure and the same one under a
+  // qualifier, the second drawn as the dashed line — is a trend.
+  const date = dateColumn(rows);
+  const trended = trendColumns(measures);
+  if (date !== undefined && trended !== null) {
+    const { measure, baseline } = trended;
+    const ordered = rows
+      .filter(
+        (row) =>
+          isNumber(row[measure]) &&
+          (baseline === null || isNumber(row[baseline])),
+      )
+      .sort(byDate(date));
+    if (
+      ordered.length >= MIN_ASK_TREND_POINTS &&
+      ordered.length <= MAX_ASK_TREND_POINTS
+    ) {
+      const years = new Set(
+        ordered.map((row) => parseDate(String(row[date]).trim())?.year),
+      );
+      const points: AskTrendVisual["points"] = [];
+      const values: AskVisualNumber[] = [];
+      for (const row of ordered) {
+        const label = trendLabel(date, row[date], years.size > 1);
+        const value = cell(row, measure);
+        const other = baseline === null ? null : cell(row, baseline);
+        if (label === null || value === null) return null;
+        if (baseline !== null && other === null) return null;
+        if (other) values.push(other);
+        const matchId = matchIdOf(row);
+        points.push({ label, value, ...(matchId ? { matchId } : {}) });
+      }
+      const qualifier =
+        baseline === null ? "" : (askMeasure(baseline)?.qualifier ?? "");
+      return {
+        kind: "trend",
+        caption: `${columnLabel(measure)} over time, oldest first.`,
+        points,
+        ...(baseline !== null
+          ? {
+              baseline: {
+                label:
+                  qualifier === ""
+                    ? columnLabel(baseline)
+                    : qualifier.charAt(0).toUpperCase() + qualifier.slice(1),
+                values,
+              },
+            }
+          : {}),
+      };
+    }
+  }
+
+  // Matches with results and nothing measured: a form strip. A match has
+  // a date; a point (`point_number`) is not one.
+  if (
+    measures.length === 0 &&
+    date !== undefined &&
+    !("point_number" in first) &&
+    rows.length >= 2 &&
+    rows.length <= MAX_ASK_FORM_RESULTS &&
+    rows.every((row) => typeof row.i_won === "boolean" || row.i_won === null)
+  ) {
+    const ordered = date !== undefined ? [...rows].sort(byDate(date)) : rows;
+    const decided = ordered.filter((row) => typeof row.i_won === "boolean");
+    if (decided.length >= 2) {
+      const ticks = decided.map(formTick);
+      const named = ticks.some((tick) => Object.keys(tick).length > 0);
+      return {
+        kind: "form",
+        caption: "These matches, oldest first.",
+        results: decided.map((row) => row.i_won as boolean),
+        ...(named ? { ticks } : {}),
+      };
+    }
+  }
+
+  // One row of convention pairs: bars when mostly shares, else a table.
+  if (rows.length === 1) {
+    const found = comparedPairs(first).filter(
+      (pair) => isNumber(first[pair.subject]) && isNumber(first[pair.other]),
+    );
+    if (found.length === 0) return null;
+    const pairs = found.filter((pair) => pair.kind === found[0].kind);
+    const qualifier = askMeasure(pairs[0].other)?.qualifier ?? "";
+    const headings =
+      found[0].kind === "opponent"
+        ? ["You", "Opponent"]
+        : [
+            "Selected matches",
+            qualifier === ""
+              ? "Baseline"
+              : qualifier.charAt(0).toUpperCase() + qualifier.slice(1),
+          ];
+    const label = (measure: string) =>
+      askMeasure(measure)?.label ?? columnLabel(measure);
+    const shares = pairs.filter(
+      (pair) =>
+        isPercentColumn(pair.measure) &&
+        [first[pair.subject], first[pair.other]].every(
+          (value) => isNumber(value) && value >= 0 && value <= 100,
+        ),
+    );
+    if (shares.length >= MIN_FALLBACK_BARS) {
+      const out: AskBarsVisual["rows"] = [];
+      for (const pair of shares.slice(0, MAX_ASK_BARS_ROWS)) {
+        const subject = cell(first, pair.subject);
+        const baseline = cell(first, pair.other);
+        if (subject && baseline) {
+          out.push({ label: label(pair.measure), subject, baseline });
+        }
+      }
+      if (out.length > 0) {
+        return {
+          kind: "bars",
+          caption: fromScope,
+          subjectLabel: headings[0],
+          baselineLabel: headings[1],
+          rows: out,
+        };
+      }
+    }
+    return {
+      kind: "table",
+      caption: fromScope,
+      columns: headings,
+      rows: pairs.slice(0, MAX_ASK_TABLE_ROWS).map((pair) => ({
+        label: label(pair.measure),
+        cells: [
+          formatAskCell(pair.subject, first[pair.subject]) ?? ASK_NULL_CELL,
+          formatAskCell(pair.other, first[pair.other]) ?? ASK_NULL_CELL,
+        ],
+      })),
+    };
+  }
+
+  // Rows with a label and a few measures: a table. A match id is no label.
+  const labelColumn = rowLabelColumn(rows);
+  if (
+    labelColumn !== null &&
+    labelColumn !== "match_id" &&
+    measures.length >= 1 &&
+    rows.length <= MAX_ASK_TABLE_ROWS
+  ) {
+    const shown = measures.slice(0, MAX_ASK_TABLE_COLUMNS);
+    const out: AskTableVisual["rows"] = [];
+    for (const row of rows) {
+      const name = formatAskCell(labelColumn, row[labelColumn]);
+      if (name === null || name === ASK_NULL_CELL) continue;
+      const matchId = matchIdOf(row);
+      out.push({
+        label: name,
+        cells: shown.map(
+          (column) => formatAskCell(column, row[column]) ?? ASK_NULL_CELL,
+        ),
+        ...(matchId ? { matchId } : {}),
+      });
+    }
+    if (out.length === 0) return null;
+    return {
+      kind: "table",
+      caption: fromScope,
+      columns: shown.map(columnLabel),
+      rows: out,
+    };
+  }
+  return null;
 }
 
 // ── The line stage ───────────────────────────────────────────────────────────
@@ -1331,6 +2000,7 @@ function createLineStage(
   result: AskAnswerResult,
   tokens: readonly Token[],
   rows: readonly AskRow[],
+  options: AskAnswerRenderOptions,
 ) {
   let section: "headline" | "figures" | "block" | "text" = "headline";
   let buffer = "";
@@ -1436,15 +2106,33 @@ function createLineStage(
       return flushFigures(result.visual);
     }
     const outcome = parseBlock(lines, tokens, rows);
-    if (!outcome.ok) {
+    let visual: AskVisual | null;
+    if (outcome.ok) {
+      visual = outcome.visual;
+      result.droppedVisualRows += outcome.droppedRows;
+      if (outcome.converted) result.convertedVisuals.push(outcome.converted);
+    } else {
+      // The model's block cannot be drawn. The rows still have a shape, and
+      // the block that fits it is drawn instead, the way the server-written
+      // answers pick theirs (`visualFromRows()`); the drop is still recorded.
       result.droppedVisuals.push(outcome.drop);
-      return flushFigures(null);
+      visual = visualFromRows(rows);
+      if (visual) {
+        result.convertedVisuals.push({
+          from: outcome.drop.kind,
+          to: visual.kind,
+          reason: "shape",
+        });
+      }
     }
-    result.visual = outcome.visual;
-    result.droppedVisualRows += outcome.droppedRows;
+    if (!visual) return flushFigures(null);
+    result.visual = visual;
+    // The block leads the answer when the question asked for a chart.
+    const lead = options.chartAsked === true;
+    result.visualLead = lead;
     return [
-      ...flushFigures(outcome.visual),
-      { type: "visual", visual: outcome.visual },
+      ...flushFigures(visual),
+      { type: "visual", visual, ...(lead ? { lead: true as const } : {}) },
     ];
   }
 
@@ -2364,9 +3052,10 @@ async function* render(
   chunks: AsyncIterable<string>,
   rows: readonly AskRow[],
   result: AskAnswerResult,
+  options: AskAnswerRenderOptions,
 ): AsyncGenerator<AskAnswerEvent, void, undefined> {
   const tokens: Token[] = [];
-  const lines = createLineStage(result, tokens, rows);
+  const lines = createLineStage(result, tokens, rows, options);
   let pending = "";
 
   for await (const chunk of dropSameCellRanges(chunks, rows, result)) {
@@ -2425,11 +3114,13 @@ async function* render(
  * itself (the provider failing) is not caught: it propagates to the
  * consumer, whose failure it is to name.
  *
- * `result` is live: read it after `events` is exhausted.
+ * `result` is live: read it after `events` is exhausted. `options.chartAsked`
+ * marks the `visual` event as leading the answer (`chart-request.ts`).
  */
 export function renderAskAnswer(
   chunks: AsyncIterable<string>,
   rows: readonly AskRow[],
+  options: AskAnswerRenderOptions = {},
 ): AskAnswerRender {
   const result: AskAnswerResult = {
     headline: "",
@@ -2442,7 +3133,9 @@ export function renderAskAnswer(
     droppedVisualRows: 0,
     droppedSentences: 0,
     renamedLabels: 0,
+    convertedVisuals: [],
+    visualLead: false,
     failure: null,
   };
-  return { events: render(chunks, rows, result), result };
+  return { events: render(chunks, rows, result, options), result };
 }

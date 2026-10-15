@@ -4,8 +4,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { createLoader } from "./fixtures/vm-modules";
 import type {
+  AskBarsVisual,
+  AskFormVisual,
   AskMomentumVisual,
   AskServeVisual,
+  AskSourceMatch,
+  AskTableVisual,
+  AskTreeVisual,
   AskTrendVisual,
 } from "@/lib/services/ask/events";
 
@@ -243,5 +248,337 @@ test.describe("TrendVisual", () => {
     // The second series prints nothing on the plot: the one figure there is
     // still the last point's.
     expect(markup.match(/58,2 %/g)).toHaveLength(3);
+  });
+});
+
+// ── The play tree, the labelled strip, and the rows that open the film ──────
+
+const ONE_SOURCE: AskSourceMatch[] = [
+  {
+    matchId: "m 1",
+    opponentName: "Theo Lindqvist",
+    playedOn: "2026-09-28",
+    iWon: true,
+    scoreText: "6-4, 6-3",
+    playerName: null,
+  },
+];
+const TWO_SOURCES: AskSourceMatch[] = [
+  ONE_SOURCE[0],
+  { ...ONE_SOURCE[0], matchId: "m-2", opponentName: "Marcus Hale" },
+];
+
+function renderTree(
+  visual: AskTreeVisual,
+  sources?: readonly AskSourceMatch[],
+): string {
+  const { TreeVisual } = loader.load(
+    "src/components/dashboard/ask/visuals/tree-visual.tsx",
+  ) as {
+    TreeVisual: React.FC<{
+      visual: AskTreeVisual;
+      sources?: readonly AskSourceMatch[];
+    }>;
+  };
+  return renderToStaticMarkup(
+    React.createElement(TreeVisual, { visual, sources }),
+  );
+}
+
+const TREE: AskTreeVisual = {
+  kind: "tree",
+  caption: "Patterns.",
+  levels: ["Serve", "Plus one"],
+  countLabel: "Points",
+  partLabel: "Won",
+  shareLabel: "Won %",
+  branches: [
+    {
+      steps: ["T serve", "Forehand crosscourt"],
+      count: n(29, "29"),
+      part: n(14, "14"),
+      share: n(48.3, "48,3 %"),
+      watch: "sv.y_sz.t",
+    },
+    {
+      steps: ["T serve", "Backhand crosscourt"],
+      count: n(20, "20"),
+      part: n(14, "14"),
+      share: n(70, "70 %"),
+    },
+    {
+      steps: ["Wide serve", "Forehand inside out"],
+      count: n(8, "8"),
+      part: n(3, "3"),
+      share: n(37.5, "37,5 %"),
+      watch: "sv.y_sz.w",
+    },
+  ],
+};
+
+test.describe("TreeVisual", () => {
+  test("draws each first step once with its branches under it, a share bar and the counts as sent", () => {
+    const markup = renderTree(TREE);
+    expect(markup.match(/data-ask-tree-group=""/g)).toHaveLength(2);
+    expect(markup.match(/data-ask-tree-branch=""/g)).toHaveLength(3);
+    expect(markup.indexOf("T serve")).toBeLessThan(
+      markup.indexOf("Wide serve"),
+    );
+    expect(markup.match(/>T serve</g)).toHaveLength(1);
+    for (const text of ["29", "14", "48,3 %", "70 %", "37,5 %"]) {
+      expect(markup).toContain(text);
+    }
+    expect(markup).toContain("points");
+    expect(markup).toContain("won");
+    expect(markup).not.toContain(">48.3%<");
+    expect(markup).toMatch(/width:48\.3%/);
+    expect(markup).toMatch(/width:70%/);
+    expect(markup).toContain("Won %, as a share");
+    expect(markup).toContain(
+      "Serve, then Plus one: 3 branches, most played first.",
+    );
+    // No source match: nothing links.
+    expect(markup).not.toContain("href=");
+    expect(markup).not.toMatch(/NaN|Infinity|undefined/);
+  });
+
+  test("over one source match, a branch with a filter links to that match's film on it", () => {
+    const markup = renderTree(TREE, ONE_SOURCE);
+    expect(markup.match(/data-ask-tree-watch=""/g)).toHaveLength(2);
+    expect(markup).toContain(
+      'href="/dashboard/matches/m%201?tab=film&amp;f=sv.y_sz.t"',
+    );
+    expect(markup).toContain(
+      'href="/dashboard/matches/m%201?tab=film&amp;f=sv.y_sz.w"',
+    );
+    expect(markup).toContain("· Watch");
+    // Over two, none.
+    expect(renderTree(TREE, TWO_SOURCES)).not.toContain("href=");
+  });
+
+  test("no part: the count and the share alone; three levels nest", () => {
+    const markup = renderTree({
+      ...TREE,
+      partLabel: undefined,
+      levels: ["Side", "Serve", "Plus one"],
+      branches: [
+        {
+          steps: ["Deuce", "T serve", "Forehand crosscourt"],
+          count: n(9, "9"),
+          share: n(50, "50 %"),
+        },
+        {
+          steps: ["Ad", "Wide serve", "Backhand crosscourt"],
+          count: n(4, "4"),
+          share: n(25, "25 %"),
+        },
+      ],
+    });
+    expect(markup.match(/data-ask-tree-group=""/g)).toHaveLength(4);
+    expect(markup.match(/data-ask-tree-branch=""/g)).toHaveLength(2);
+    expect(markup).not.toContain(" won");
+    expect(markup).toContain("Side, then Serve, then Plus one: 2 branches");
+  });
+});
+
+function renderForm(visual: AskFormVisual): string {
+  const { FormVisual } = loader.load(
+    "src/components/dashboard/ask/visuals/form-visual.tsx",
+  ) as { FormVisual: React.FC<{ visual: AskFormVisual }> };
+  return renderToStaticMarkup(React.createElement(FormVisual, { visual }));
+}
+
+test.describe("FormVisual", () => {
+  test("without ticks it is the shared strip; with them each tick carries its match in words", () => {
+    const plain = renderForm({
+      kind: "form",
+      caption: "C",
+      results: [true, false],
+    });
+    expect(plain).toContain("Last 2: W L");
+    expect(plain).not.toContain("data-ask-form-tick");
+
+    const labelled = renderForm({
+      kind: "form",
+      caption: "C",
+      results: [true, false, true],
+      ticks: [
+        {
+          opponent: "Theo Lindqvist",
+          score: "6-4, 6-3",
+          date: "Sep 28, 2026",
+          matchId: "m 1",
+        },
+        { opponent: "Marcus Hale", player: "Ana Sokolov" },
+        {},
+      ],
+    });
+    expect(labelled.match(/data-ask-form-tick=""/g)).toHaveLength(3);
+    expect(labelled).toContain('href="/dashboard/matches/m%201"');
+    expect(labelled).toContain(
+      "Won against Theo Lindqvist, 6-4, 6-3, Sep 28, 2026, open match",
+    );
+    expect(labelled).toContain("Lost, Ana Sokolov to Marcus Hale");
+    expect(labelled.match(/href=/g)).toHaveLength(1);
+    expect(labelled).toContain("--viz-good");
+    expect(labelled).toContain("--viz-bad");
+    // Ticks that do not match the results one for one are not drawn as such.
+    const mismatched = renderForm({
+      kind: "form",
+      caption: "C",
+      results: [true, false],
+      ticks: [{ opponent: "A" }],
+    });
+    expect(mismatched).toContain("Last 2: W L");
+  });
+});
+
+function renderTable(
+  visual: AskTableVisual,
+  sources?: readonly AskSourceMatch[],
+): string {
+  const { TableVisual } = loader.load(
+    "src/components/dashboard/ask/visuals/table-visual.tsx",
+  ) as {
+    TableVisual: React.FC<{
+      visual: AskTableVisual;
+      sources?: readonly AskSourceMatch[];
+    }>;
+  };
+  return renderToStaticMarkup(
+    React.createElement(TableVisual, { visual, sources }),
+  );
+}
+
+test.describe("TableVisual", () => {
+  const TABLE: AskTableVisual = {
+    kind: "table",
+    caption: "C",
+    columns: ["Points"],
+    rows: [
+      { label: "Theo Lindqvist", cells: ["4"], matchId: "m 1" },
+      { label: "First serves in", cells: ["58.2%"] },
+      { label: "Winners", cells: ["8"] },
+    ],
+  };
+
+  test("a match row opens its film; a measure row opens the one source's; the rest are words", () => {
+    const one = renderTable(TABLE, ONE_SOURCE);
+    expect(one.match(/data-ask-table-watch=""/g)).toHaveLength(2);
+    expect(one).toContain('href="/dashboard/matches/m%201?tab=film"');
+    expect(one).toMatch(
+      /href="\/dashboard\/matches\/m%201\?tab=film&amp;f=[^"]*vt\.1/,
+    );
+    expect(one).toContain("First serves in<span");
+    // Over two sources only the match row links.
+    const two = renderTable(TABLE, TWO_SOURCES);
+    expect(two.match(/data-ask-table-watch=""/g)).toHaveLength(1);
+    // A source that carries the pattern's points is what the match row opens.
+    const watched = renderTable(TABLE, [
+      {
+        ...ONE_SOURCE[0],
+        watch: { href: "/dashboard/matches/m%201?tab=film&f=cp.y", points: 4 },
+      },
+    ]);
+    expect(watched).toContain(
+      'href="/dashboard/matches/m%201?tab=film&amp;f=cp.y"',
+    );
+    expect(renderTable(TABLE)).toContain(
+      'href="/dashboard/matches/m%201?tab=film"',
+    );
+  });
+});
+
+function renderBars(
+  visual: AskBarsVisual,
+  sources?: readonly AskSourceMatch[],
+): string {
+  const { BarsVisual } = loader.load(
+    "src/components/dashboard/ask/visuals/bars-visual.tsx",
+  ) as {
+    BarsVisual: React.FC<{
+      visual: AskBarsVisual;
+      sources?: readonly AskSourceMatch[];
+    }>;
+  };
+  return renderToStaticMarkup(
+    React.createElement(BarsVisual, { visual, sources }),
+  );
+}
+
+test.describe("BarsVisual", () => {
+  const BARS: AskBarsVisual = {
+    kind: "bars",
+    caption: "C",
+    subjectLabel: "You",
+    baselineLabel: "All matches",
+    rows: [
+      { label: "Serves wide", subject: n(30, "30%"), baseline: n(25, "25%") },
+      {
+        label: "Total points won",
+        subject: n(52, "52%"),
+        baseline: n(50, "50%"),
+      },
+    ],
+  };
+
+  test("a readout per bar names the series and the figure; a measure row links over one source", () => {
+    const markup = renderBars(BARS, ONE_SOURCE);
+    expect(markup.match(/data-ask-readout=""/g)).toHaveLength(4);
+    expect(markup).toContain("You: 30%");
+    expect(markup).toContain("All matches: 25%");
+    // Serves wide is a Video filter; the share of all points is not.
+    expect(markup.match(/data-ask-bar-watch=""/g)).toHaveLength(1);
+    expect(markup).toMatch(
+      /href="\/dashboard\/matches\/m%201\?tab=film&amp;f=[^"]*vz\.w/,
+    );
+    expect(renderBars(BARS, TWO_SOURCES)).not.toContain("href=");
+    expect(renderBars(BARS)).not.toContain("href=");
+  });
+});
+
+function renderServeCourt(
+  visual: AskServeVisual,
+  sources?: readonly AskSourceMatch[],
+): string {
+  const { ServeVisual } = loader.load(
+    "src/components/dashboard/ask/visuals/serve-visual.tsx",
+  ) as {
+    ServeVisual: React.FC<{
+      visual: AskServeVisual;
+      sources?: readonly AskSourceMatch[];
+    }>;
+  };
+  return renderToStaticMarkup(
+    React.createElement(ServeVisual, { visual, sources }),
+  );
+}
+
+test.describe("ServeVisual — the court's zones", () => {
+  test("over one source, with the block saying whose serves, each zone with serves is a link; else a readout alone", () => {
+    const mine = renderServeCourt({ ...COURTS, server: "you" }, ONE_SOURCE);
+    // Five zones have serves (the ad court's wide has none).
+    expect(mine.match(/data-ask-zone-watch="/g)).toHaveLength(5);
+    expect(mine).toMatch(
+      /href="\/dashboard\/matches\/m%201\?tab=film&amp;f=[^"]*sv\.y[^"]*ct\.d[^"]*vz\.t" data-ask-zone-watch="deuce-t"/,
+    );
+
+    expect(mine).toContain("Deuce, T: 9 srv, open the film");
+    expect(mine.match(/data-ask-readout=""/g)).toHaveLength(5);
+
+    const theirs = renderServeCourt(
+      { ...COURTS, server: "opponent" },
+      ONE_SOURCE,
+    );
+    expect(theirs).toMatch(/href="[^"]*sv\.o/);
+
+    for (const markup of [
+      renderServeCourt(COURTS, ONE_SOURCE),
+      renderServeCourt({ ...COURTS, server: "you" }, TWO_SOURCES),
+      renderServeCourt({ ...COURTS, server: "you" }),
+    ]) {
+      expect(markup).not.toContain("href=");
+      expect(markup.match(/data-ask-zone-hover="/g)).toHaveLength(5);
+    }
   });
 });

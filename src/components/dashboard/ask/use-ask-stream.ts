@@ -105,6 +105,12 @@ export interface AskAnswerState {
   figures: AskFigure[];
   /** The answer's one visual block, resolved by the server. Null when it has none. */
   visual: AskVisual | null;
+  /**
+   * The question asked for a chart, so the block leads the answer and the
+   * prose folds behind a disclosure (`ask-answer.tsx`). Sent as `lead` on
+   * the `visual` event, saved as `visualLead`; absent or false otherwise.
+   */
+  visualLead?: boolean;
   /** The evidence paragraphs, as one string; blank lines separate them. */
   body: string;
   /**
@@ -113,6 +119,12 @@ export interface AskAnswerState {
    * existed — those carry the sentence at the end of `body`, left as it is.
    */
   noAdvice: boolean;
+  /**
+   * Written in coach mode to a question that asked what to do: the footer
+   * says so (`ASK_COACH_SENTENCE`) instead of the no-advice sentence. Absent
+   * for every other answer.
+   */
+  coach?: true;
   /** Null until the route says which matches it computed from. */
   sources: AskSourceMatch[] | null;
   error: AskAnswerError | null;
@@ -165,13 +177,16 @@ export type AskThreadAction =
 // ── Reducer ─────────────────────────────────────────────────────────────────
 
 export function emptyAskThread(
-  seed: Pick<Partial<AskThreadState>, "conversationId" | "exchanges"> = {},
+  seed: Pick<
+    Partial<AskThreadState>,
+    "conversationId" | "exchanges" | "draft"
+  > = {},
 ): AskThreadState {
   return {
     conversationId: seed.conversationId ?? null,
     exchanges: seed.exchanges ?? [],
     inFlight: false,
-    draft: EMPTY_ASK_QUESTION,
+    draft: seed.draft ?? EMPTY_ASK_QUESTION,
     refusal: null,
     usage: null,
   };
@@ -226,11 +241,19 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
       // One block per answer (`MAX_ASK_VISUALS`): were a second ever sent, the
       // first stands. Its place in the answer is the layout's, not the order
       // the events came in — a figure may still arrive after it.
-      return answer.visual ? answer : { ...answer, visual: event.visual };
+      return answer.visual
+        ? answer
+        : {
+            ...answer,
+            visual: event.visual,
+            ...(event.lead === true ? { visualLead: true } : {}),
+          };
     case "notice":
       return event.notice === "no_advice"
         ? { ...answer, noAdvice: true }
-        : answer;
+        : event.notice === "coach"
+          ? { ...answer, coach: true }
+          : answer;
     case "sources":
       return { ...answer, sources: event.matches };
     case "done":
@@ -423,11 +446,17 @@ export function parseAskEvent(line: string): AskEvent | null {
       // A block that does not read back whole is not drawn in part: the line
       // is skipped and the answer goes on without it.
       const visual = readAskVisual(value.visual);
-      return visual ? { type: "visual", visual } : null;
+      return visual
+        ? {
+            type: "visual",
+            visual,
+            ...(value.lead === true ? { lead: true } : {}),
+          }
+        : null;
     }
     case "notice":
-      return value.notice === "no_advice"
-        ? { type: "notice", notice: "no_advice" }
+      return value.notice === "no_advice" || value.notice === "coach"
+        ? { type: "notice", notice: value.notice }
         : null;
     case "sources": {
       const matches = readSourceMatches(value.matches);
@@ -712,10 +741,13 @@ export function readSavedAnswer(content: unknown): AskAnswerState {
     figures: readFigures(record.figures),
     // A block that no longer reads back whole is left out, not half drawn.
     visual: readAskVisual(record.visual),
+    ...(record.visualLead === true ? { visualLead: true } : {}),
+
     // The body is shown as saved: an answer from before the notice existed
     // has the sentence in it, and nothing here strips or adds one.
     body: stringOrNull(record.body) ?? "",
     noAdvice: record.noAdvice === true,
+    ...(record.coach === true ? { coach: true as const } : {}),
     sources: readSourceMatches(sources),
     error: null,
     answerId: null,
@@ -805,11 +837,20 @@ export function useAskStream(initial: {
   messages: readonly SavedAskMessage[];
   /** The team page's program; null or absent on the personal page. */
   programId?: string | null;
+  /**
+   * What the composer starts with — the tags an entry link arrived with
+   * (`?match=`, `entry.ts`). Read once, when the thread is seeded, and only
+   * onto an empty page: an open conversation is about what it is about.
+   */
+  initialDraft?: AskQuestion;
 }): AskStream {
   const [state, dispatch] = useReducer(askThreadReducer, initial, (seed) =>
     emptyAskThread({
       conversationId: seed.conversationId,
       exchanges: exchangesFromMessages(seed.messages),
+      ...(seed.initialDraft && seed.messages.length === 0
+        ? { draft: seed.initialDraft }
+        : {}),
     }),
   );
   const flight = useRef<AbortController | null>(null);

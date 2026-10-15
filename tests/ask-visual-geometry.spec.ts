@@ -8,8 +8,10 @@ import {
   serveCourtCells,
   serveCourtSides,
   shareWeights,
+  treeLayout,
   trendGeometry,
 } from "@/components/dashboard/ask/visuals/visual-geometry";
+
 import {
   BASELINE_Y,
   CENTER_X,
@@ -278,5 +280,57 @@ test.describe("serveCourtCells", () => {
     const one = serveCourtCells("ad", { t: 0, body: 4, wide: Number.NaN });
     expect(one.map((cell) => cell.share)).toEqual([0, 1, 0]);
     expect(JSON.stringify(one)).not.toMatch(/NaN|Infinity/);
+  });
+});
+
+test.describe("treeLayout", () => {
+  test("groups branches by their first step, in order of first appearance, leaves in their own order", () => {
+    const nodes = treeLayout([
+      { steps: ["T serve", "Forehand crosscourt"] },
+      { steps: ["Wide serve", "Backhand crosscourt"] },
+      { steps: ["T serve", "Backhand crosscourt"] },
+      { steps: ["Body serve", "Forehand inside out"] },
+    ]);
+    expect(nodes.map((node) => node.label)).toEqual([
+      "T serve",
+      "Wide serve",
+      "Body serve",
+    ]);
+    expect(nodes[0].children).toEqual([
+      { label: "Forehand crosscourt", branch: 0, children: [] },
+      { label: "Backhand crosscourt", branch: 2, children: [] },
+    ]);
+    expect(nodes[1].children[0].branch).toBe(1);
+    expect(nodes.every((node) => node.branch === undefined)).toBe(true);
+  });
+
+  test("three levels nest twice; one level is a leaf at the root", () => {
+    const nodes = treeLayout([
+      { steps: ["Deuce", "T serve", "Forehand crosscourt"] },
+      { steps: ["Deuce", "T serve", "Backhand crosscourt"] },
+      { steps: ["Ad", "Wide serve", "Forehand inside out"] },
+    ]);
+    expect(nodes.map((node) => node.label)).toEqual(["Deuce", "Ad"]);
+    expect(nodes[0].children.map((node) => node.label)).toEqual(["T serve"]);
+    expect(nodes[0].children[0].children.map((node) => node.branch)).toEqual([
+      0, 1,
+    ]);
+    expect(
+      treeLayout([{ steps: ["Forehand"] }, { steps: ["Backhand"] }]),
+    ).toEqual([
+      { label: "Forehand", branch: 0, children: [] },
+      { label: "Backhand", branch: 1, children: [] },
+    ]);
+  });
+
+  test("a branch with no steps is left out; a step shared by a leaf and a group stays two nodes", () => {
+    expect(treeLayout([{ steps: [] }])).toEqual([]);
+    const nodes = treeLayout([
+      { steps: ["Forehand"] },
+      { steps: ["Forehand", "crosscourt"] },
+    ]);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0].branch).toBe(0);
+    expect(nodes[1].children[0].branch).toBe(1);
   });
 });
