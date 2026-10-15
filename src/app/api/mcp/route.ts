@@ -6,8 +6,11 @@
  * The HTTP shell around `src/lib/services/mcp/server.ts`. The ladder, in
  * order, each rung answering before the next reads anything:
  *
- *   401 unauthenticated    no `Authorization: Bearer` token, or one Supabase
- *                          Auth does not recognise as a live user token. The
+ *   401 unauthenticated    no `Authorization: Bearer` token, one not shaped
+ *                          like a JWT (refused before any network call), or
+ *                          one Supabase Auth does not recognise as a live
+ *                          user token its OAuth server issued (a `client_id`
+ *                          claim; `verifyBearerUser`). The
  *                          `WWW-Authenticate` header names this host's
  *                          protected-resource metadata, which is how an MCP
  *                          client finds the authorization server
@@ -45,10 +48,12 @@ import {
 } from "@/lib/services/ask/database";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
+  isJwtShaped,
   MCP_SCOPES,
   readBearerToken,
   wwwAuthenticate,
 } from "@/lib/services/mcp/auth";
+import { mcpOrigin } from "@/lib/services/mcp/origin";
 import { sharedRateLimiter } from "@/lib/services/mcp/rate-limit";
 import {
   createAskMcpServer,
@@ -62,7 +67,6 @@ import {
   transportError,
   type MatchVideoHttpError,
 } from "@/lib/services/match-video/http";
-import { originFromHeaders } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyBearerUser } from "@/lib/supabase/bearer";
 
@@ -111,10 +115,12 @@ function methodNotAllowed(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const origin = originFromHeaders(request.headers);
+  const origin = mcpOrigin(request.headers);
 
   const token = readBearerToken(request.headers.get("authorization"));
   if (!token) return unauthorized(origin, false);
+  // Junk never costs a round trip to Supabase Auth.
+  if (!isJwtShaped(token)) return unauthorized(origin, true);
   const verified = await verifyBearerUser(token);
   if (!verified) return unauthorized(origin, true);
   const { client, user } = verified;

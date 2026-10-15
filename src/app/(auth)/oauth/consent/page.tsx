@@ -89,16 +89,17 @@ export default async function ConsentPage({
 
       <dl className="flex flex-col gap-[16px]">
         <div className="flex flex-col gap-[6px]">
-          <dt className="eyebrow">It can</dt>
+          <dt className="eyebrow">The connector</dt>
           <dd className="text-body-sm">
-            List your matches and their scores, run read-only queries over your
-            statistics, and ask questions that spend your monthly Ask allowance.
+            Lists your matches, runs read-only queries over your own statistics,
+            and asks questions that spend your monthly Ask allowance.
           </dd>
         </div>
         <div className="flex flex-col gap-[6px]">
-          <dt className="eyebrow">It cannot</dt>
+          <dt className="eyebrow">Before you allow</dt>
           <dd className="text-body-sm">
-            Upload, edit or delete anything, or see another player&apos;s data.
+            Allowing gives {request.client.name} a sign-in token for your
+            account. Only allow apps you trust.
           </dd>
         </div>
         {returnsTo ? (

@@ -66,6 +66,22 @@ export function readBearerToken(header: string | null): string | null {
   return /^[A-Za-z0-9\-._~+/]+=*$/.test(token) ? token : null;
 }
 
+/** The longest bearer token `/api/mcp` will send to Supabase Auth. A Supabase access token is well under 2 KiB. */
+export const MAX_BEARER_TOKEN_LENGTH = 8192;
+
+/**
+ * Whether a bearer token is shaped like a JWT: three non-empty base64url
+ * segments, at most `MAX_BEARER_TOKEN_LENGTH` characters. The route checks
+ * this before `verifyBearerUser()`, so junk is a 401 without a round trip
+ * to Supabase Auth. Shape only — nothing is decoded or trusted here.
+ */
+export function isJwtShaped(token: string): boolean {
+  return (
+    token.length <= MAX_BEARER_TOKEN_LENGTH &&
+    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)
+  );
+}
+
 /** The URL's origin with no path, or the string as given when it is not a URL. */
 function originOf(url: string): string {
   try {

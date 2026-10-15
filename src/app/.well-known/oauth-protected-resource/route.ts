@@ -8,13 +8,14 @@
  * `/.well-known/oauth-protected-resource/api/mcp`, re-exports these handlers.
  * Public by nature — it holds nothing but URLs — so it is cacheable and
  * answers cross-origin preflights, for a browser-based client such as the
- * MCP Inspector.
+ * MCP Inspector. The resource it names is this deployment's configured
+ * origin (`mcpOrigin`), never one read from a request header.
  */
 
 import { NextResponse } from "next/server";
 
 import { protectedResourceMetadata } from "@/lib/services/mcp/auth";
-import { originFromHeaders } from "@/lib/site-url";
+import { mcpOrigin } from "@/lib/services/mcp/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function GET(request: Request): Promise<Response> {
   }
   return NextResponse.json(
     protectedResourceMetadata({
-      origin: originFromHeaders(request.headers),
+      origin: mcpOrigin(request.headers),
       supabaseUrl,
     }),
     {

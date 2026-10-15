@@ -42,6 +42,29 @@ export interface VerifiedBearer {
 }
 
 /**
+ * The `client_id` claim of a JWT's payload, or null when there is none — a
+ * token the app's own sign-in issued has none; one Supabase Auth's OAuth 2.1
+ * server issued names the OAuth client. Decodes only: call it on a token
+ * Supabase Auth has already verified, never to decide who a token is. Pure,
+ * and never throws.
+ */
+export function jwtClientId(token: string): string | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const json = Buffer.from(payload, "base64url").toString("utf8");
+    const claims: unknown = JSON.parse(json);
+    if (!claims || typeof claims !== "object") return null;
+    const clientId = (claims as { client_id?: unknown }).client_id;
+    return typeof clientId === "string" && clientId.trim() !== ""
+      ? clientId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Ask Supabase Auth who a bearer token is. `getUser(token)` sends it to
  * `GET /auth/v1/user`, which checks the signature and expiry and answers
  * with the user — the server's own word, never a decoded claim trusted
@@ -49,6 +72,12 @@ export interface VerifiedBearer {
  * forged one, the anon key, the service key (no `sub`), a token of another
  * project. Never throws: a network failure is "not verified" too, and the
  * caller answers 401 rather than 500 so the client retries its token flow.
+ *
+ * Only a token the OAuth server issued is accepted: once Supabase has
+ * verified it, its payload must carry a `client_id` claim
+ * (`jwtClientId()`). An ordinary session token — the cookie's, or one a
+ * `signInWithPassword` returns — is refused like a forged one, so a token
+ * lifted from a browser session is not a connector credential.
  */
 export async function verifyBearerUser(
   token: string,
@@ -60,6 +89,7 @@ export async function verifyBearerUser(
     if (error || !user || !isUuid(user.id) || user.aud !== "authenticated") {
       return null;
     }
+    if (!jwtClientId(token)) return null;
     return { client, user };
   } catch (error) {
     console.warn("[bearer] token could not be verified", {

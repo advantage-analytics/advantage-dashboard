@@ -14,6 +14,8 @@ import {
   ASK_NEEDS_SESSION_MESSAGE,
   assertAskAllowed,
   authorizationServerMetadataUrl,
+  isJwtShaped,
+  MAX_BEARER_TOKEN_LENGTH,
   mcpResourceUrl,
   protectedResourceMetadata,
   readBearerToken,
@@ -27,6 +29,7 @@ import {
 } from "@/lib/services/mcp/describe";
 import { createRateLimiter } from "@/lib/services/mcp/rate-limit";
 import { createMcpUserReads } from "@/lib/services/mcp/user-reads";
+import { jwtClientId } from "@/lib/supabase/bearer";
 
 /**
  * The pure pieces of the Ask MCP connector (docs/ask-mcp-connector.md): the
@@ -62,6 +65,57 @@ test.describe("readBearerToken", () => {
 });
 
 // ── The discovery documents ────────────────────────────────────────────────
+
+test.describe("isJwtShaped", () => {
+  test("three non-empty base64url segments, within the length cap", () => {
+    expect(isJwtShaped("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln-_")).toBe(
+      true,
+    );
+    for (const token of [
+      "",
+      "junk",
+      "a.b",
+      "a.b.c.d",
+      "a..c",
+      "a.b.",
+      "a+b.c.d",
+      "a/b.c.d",
+      "a.b.c=",
+    ]) {
+      expect(isJwtShaped(token)).toBe(false);
+    }
+    const third = MAX_BEARER_TOKEN_LENGTH - 4;
+    expect(isJwtShaped(`a.b.${"c".repeat(third)}`)).toBe(true);
+    expect(isJwtShaped(`a.b.${"c".repeat(third + 1)}`)).toBe(false);
+  });
+});
+
+function jwt(payload: unknown): string {
+  const part = (value: unknown) =>
+    Buffer.from(
+      typeof value === "string" ? value : JSON.stringify(value),
+    ).toString("base64url");
+  return `${part({ alg: "HS256" })}.${part(payload)}.sig`;
+}
+
+test.describe("jwtClientId", () => {
+  test("reads a non-empty client_id claim from an OAuth-issued token", () => {
+    expect(jwtClientId(jwt({ sub: USER_ID, client_id: "claude-ai" }))).toBe(
+      "claude-ai",
+    );
+  });
+
+  test("answers null for a session token, a blank or non-string claim, or an undecodable payload", () => {
+    expect(jwtClientId(jwt({ sub: USER_ID, aud: "authenticated" }))).toBeNull();
+    expect(jwtClientId(jwt({ client_id: "" }))).toBeNull();
+    expect(jwtClientId(jwt({ client_id: "  " }))).toBeNull();
+    expect(jwtClientId(jwt({ client_id: 42 }))).toBeNull();
+    expect(jwtClientId(jwt(null))).toBeNull();
+    expect(jwtClientId(jwt("not json"))).toBeNull();
+    expect(jwtClientId("junk")).toBeNull();
+    expect(jwtClientId("")).toBeNull();
+  });
+});
 
 test.describe("the OAuth discovery documents", () => {
   test("the issuer and its metadata URL follow Supabase's layout", () => {

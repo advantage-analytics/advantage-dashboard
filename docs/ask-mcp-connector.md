@@ -83,9 +83,11 @@ reserve a question for.
 6. The client exchanges the code for an access token and a refresh token at
    Supabase's token endpoint, and sends `Authorization: Bearer <access token>`
    on every call to `/api/mcp`.
-7. `/api/mcp` verifies the token on every request by asking Supabase Auth who
-   it is (`auth.getUser(token)` — signature, expiry, a live user; never a claim
-   decoded locally), and runs the call as that user.
+7. `/api/mcp` refuses a token not shaped like a JWT before any network call,
+   then verifies the rest on every request by asking Supabase Auth who it is
+   (`auth.getUser(token)` — signature, expiry, a live user). Only then is the
+   payload decoded, to require the `client_id` claim the OAuth server adds: an
+   ordinary session token is refused. The call runs as that user.
 
 The installed `@supabase/supabase-js` (2.57) predates
 `auth.oauth.getAuthorizationDetails()` / `approveAuthorization()` /
@@ -115,8 +117,9 @@ The OAuth server is a project setting the API does not expose. For project
      `https://claude.com/api/mcp/auth_callback` for claude.ai and Desktop;
      Claude Code uses a `http://localhost:<port>/callback` it chooses per run)
      and paste the client id into the connector's advanced settings. Dynamic
-     registration lets any client register; what each one can do is still
-     only what the signed-in person approves, over their own rows.
+     registration lets any client register, and an approved client holds a
+     sign-in token for the person's account (see §4's last bullet) — restrict
+     it before switching the server on (§8).
 3. Optional, recommended by Supabase for OAuth: **Authentication → JWT Keys**,
    move signing to an asymmetric key (ES256/RS256). Nothing here verifies a
    token locally, so it is not required for the connector to work.
@@ -170,6 +173,12 @@ email"):
   `ask.exec_query()` sets `transaction_read_only`, and the tools are annotated
   `readOnlyHint`. The only thing a call changes is what the page's own
   question would: a saved answer, a run row, a cache entry, a question spent.
+- **The token is wider than the tools.** It is a full user JWT: only
+  `/api/mcp` limits its holder to these read tools, and it could call
+  PostgREST directly within the user's RLS. The consent page says so — it
+  describes what the connector's tools do and that Allow hands the app a
+  sign-in token, and asks the person to approve only apps they trust; it
+  does not promise read-only access to the platform.
 
 ## 5. Connecting
 
@@ -195,22 +204,22 @@ all talk to the live Supabase project, the consent page is production's (Site
 URL), and the token that comes back works against a local server because it is
 a project-wide user token. claude.ai cannot reach a local server.
 
-A script or a curl can call the server with any Supabase access token for the
-user — the one a `signInWithPassword` returns works — which is how the specs'
-fixtures and the eval harness can drive it without a browser.
+A script or a curl needs an access token the OAuth server issued (one with a
+`client_id` claim); the session token a `signInWithPassword` returns is
+refused. The specs fake `verifyBearerUser()` rather than mint one.
 
 ## 6. Limits
 
-| Limit                   | Value                        | Where it lives                                                                            |
-| ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------- |
-| Calls per window (soft) | 60 per user per 5 minutes    | In memory, per server instance (`sharedRateLimiter()`); `rate_limited`, with a retry time |
-| Calls per day (hard)    | 500 per user per UTC day     | `ask_mcp_usage`, counted by `ask_mcp_count_call()` as the user; `daily_cap_reached`       |
-| Questions per month     | The account's Ask allowance  | `ask_reserve_question()`, as on the page; `ask_limit_reached`                             |
-| Rows per query          | 200                          | `ask.exec_query()`; `truncated: true` when hit                                            |
-| SQL length              | 20,000 characters per string | `run_query`'s schema                                                                      |
-| Question length         | 1,000 characters             | `MAX_ASK_QUESTION_LENGTH`                                                                 |
-| Request body            | 64 KiB                       | The transport                                                                             |
-| Time                    | 60 s per request             | `maxDuration`; the client going away aborts the model call                                |
+| Limit                   | Value                        | Where it lives                                                                                                                                                    |
+| ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Calls per window (soft) | 60 per user per 5 minutes    | In memory, per server instance (`sharedRateLimiter()`); `rate_limited`, with a retry time                                                                         |
+| Calls per day (hard)    | 500 per user per UTC day     | `ask_mcp_usage`, counted by `ask_mcp_count_call()` as the user; `daily_cap_reached`. Fails closed: a count that cannot be taken is `rate_limited` (retry in 30 s) |
+| Questions per month     | The account's Ask allowance  | `ask_reserve_question()`, as on the page; `ask_limit_reached`                                                                                                     |
+| Rows per query          | 200                          | `ask.exec_query()`; `truncated: true` when hit                                                                                                                    |
+| SQL length              | 20,000 characters per string | `run_query`'s schema                                                                                                                                              |
+| Question length         | 1,000 characters             | `MAX_ASK_QUESTION_LENGTH`                                                                                                                                         |
+| Request body            | 64 KiB                       | The transport                                                                                                                                                     |
+| Time                    | 60 s per request             | `maxDuration`; the client going away aborts the model call                                                                                                        |
 
 The counter table is readable by its owner only and written by the function
 alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
@@ -227,6 +236,17 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
   (`askAdapterModel`).
 
 ## 8. Not done, and open
+
+**Known limits**
+
+- **Write policies are not gated on the `client_id` claim.** A connector's
+  token can do through PostgREST whatever the person's own session can.
+  Gating writes on `auth.jwt() ->> 'client_id' is null`, and restricting
+  dynamic client registration (or turning it off and registering clients by
+  hand), should both land before the OAuth server is switched on (§2).
+- The 401's metadata URL and the resource document name `mcpOrigin()`
+  (`NEXT_PUBLIC_SITE_URL`, then Vercel's variables) on a production build;
+  the request's own origin stands in only outside one.
 
 - **Personal access tokens** (the fallback path): a `Settings › Connectors`
   page, an `ask_api_tokens` table (hash + prefix, owner RLS, last-used,

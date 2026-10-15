@@ -99,8 +99,8 @@ export interface AskMcpContext {
   model: AskModel;
   stageModels: { plan: string | null; answer: string | null };
   limiter: RateLimiter;
-  /** Count one call for today and answer the day's count; 0 when it could not be counted. */
-  countCall: () => Promise<number>;
+  /** Count one call for today and answer the day's count; null when it could not be counted, which refuses the call. */
+  countCall: () => Promise<number | null>;
   dailyCap?: number;
   /** A product event: `mcp_tool_call` per call, `ask_run` per question. Never the SQL or the question's text. */
   capture?: (
@@ -109,6 +109,9 @@ export interface AskMcpContext {
   ) => void;
   now?: () => Date;
 }
+
+/** The retry `rate_limited` names when the daily counter could not be read. */
+export const COUNT_UNAVAILABLE_RETRY_SECONDS = 30;
 
 /** JSON-RPC codes in the server-defined range, beside the SDK's own. */
 export const MCP_ERROR_CODES = {
@@ -263,6 +266,15 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           );
         }
         const count = await context.countCall();
+        // A count that could not be taken refuses the call: the daily cap
+        // fails closed (`usage.ts`).
+        if (count === null) {
+          throw refusal(
+            MCP_ERROR_CODES.rateLimited,
+            "rate_limited",
+            `Too many calls. Try again in ${COUNT_UNAVAILABLE_RETRY_SECONDS} seconds.`,
+          );
+        }
         if (count > dailyCap) {
           throw refusal(
             MCP_ERROR_CODES.dailyCapReached,

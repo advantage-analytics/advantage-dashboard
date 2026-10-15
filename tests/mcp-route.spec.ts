@@ -486,6 +486,55 @@ test.describe("POST /api/mcp · the auth ladder", () => {
     expect(calls.rpc).toEqual([]);
   });
 
+  test("a token not shaped like a JWT: 401 invalid_token, and Supabase Auth is never asked", async () => {
+    for (const authorization of [
+      "Bearer junk",
+      "Bearer a.b",
+      "Bearer a.b.c.d",
+      "Bearer a+b.c/d.e",
+      `Bearer ${"a".repeat(4000)}.${"b".repeat(4000)}.${"c".repeat(200)}`,
+    ]) {
+      const { route, calls } = loadRoute(world());
+      const response = await route.POST(
+        post(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { authorization },
+        ),
+      );
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toContain(
+        'error="invalid_token"',
+      );
+      expect((await refused(response)).detail).toBe("invalid_token");
+      expect(calls.verify).toEqual([]);
+      expect(calls.adminBuilt).toBe(0);
+    }
+  });
+
+  test("the 401 names the configured site, not a Host header the caller set", async () => {
+    await withEnv(
+      ["NEXT_PUBLIC_SITE_URL"],
+      { NEXT_PUBLIC_SITE_URL: "https://app.example.com/" },
+      async () => {
+        const { route } = loadRoute(world());
+        const response = await route.POST(
+          post(
+            { jsonrpc: "2.0", id: 1, method: "tools/list" },
+            {
+              authorization: null,
+              host: "evil.example",
+              "x-forwarded-host": "evil.example",
+            },
+          ),
+        );
+        expect(response.status).toBe(401);
+        expect(response.headers.get("www-authenticate")).toContain(
+          'resource_metadata="https://app.example.com/.well-known/oauth-protected-resource/api/mcp"',
+        );
+      },
+    );
+  });
+
   test("a good token with no service key: 500 before any tool runs", async () => {
     const { route, calls } = loadRoute(world({ serviceKey: false }));
     const response = await route.POST(
@@ -753,8 +802,8 @@ test.describe("POST /api/mcp · the limits", () => {
     expect(textOf(result)).toContain("daily_cap_reached");
   });
 
-  test("a counter that cannot be read does not refuse the call", async () => {
-    const { route } = loadRoute(
+  test("a counter that cannot be read refuses the call as rate_limited, with a short retry", async () => {
+    const { route, calls } = loadRoute(
       world({
         rpc: {
           ...world().rpc,
@@ -765,7 +814,25 @@ test.describe("POST /api/mcp · the limits", () => {
         },
       }),
     );
-    expect((await callTool(route, "describe_views")).isError).toBeUndefined();
+    const result = await callTool(route, "describe_views");
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("rate_limited");
+    expect(textOf(result)).toContain("Try again in 30 seconds");
+    expect(serviceCalls(calls)).toEqual([]);
+  });
+
+  test("a counter that answers no number refuses the call too", async () => {
+    const { route } = loadRoute(
+      world({
+        rpc: {
+          ...world().rpc,
+          ask_mcp_count_call: () => ({ data: null, error: null }),
+        },
+      }),
+    );
+    const result = await callTool(route, "describe_views");
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("rate_limited");
   });
 });
 
@@ -962,7 +1029,7 @@ test.describe("createAskMcpServer · a token caller", () => {
 test.describe("GET /.well-known/oauth-protected-resource", () => {
   test("names this host as the resource and Supabase Auth as the authorization server", async () => {
     await withEnv(
-      ["NEXT_PUBLIC_SUPABASE_URL"],
+      ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SITE_URL", "NODE_ENV"],
       { NEXT_PUBLIC_SUPABASE_URL: "https://proj.supabase.co" },
       async () => {
         const { loader } = fakes(world());
@@ -988,6 +1055,43 @@ test.describe("GET /.well-known/oauth-protected-resource", () => {
           resource_documentation: "http://localhost/dashboard/help",
         });
         expect((await route.OPTIONS()).status).toBe(204);
+      },
+    );
+  });
+
+  test("a production build ignores the request's host and names the configured site", async () => {
+    await withEnv(
+      [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SITE_URL",
+        "NODE_ENV",
+        "VERCEL_ENV",
+        "VERCEL_PROJECT_PRODUCTION_URL",
+      ],
+      {
+        NEXT_PUBLIC_SUPABASE_URL: "https://proj.supabase.co",
+        NODE_ENV: "production",
+        VERCEL_ENV: "production",
+        VERCEL_PROJECT_PRODUCTION_URL: "app.example.com",
+      },
+      async () => {
+        const { loader } = fakes(world());
+        const route = loader.load(
+          "src/app/.well-known/oauth-protected-resource/route.ts",
+        ) as { GET: (request: Request) => Promise<Response> };
+        const response = await route.GET(
+          new Request(
+            "http://evil.example/.well-known/oauth-protected-resource",
+            {
+              headers: {
+                host: "evil.example",
+                "x-forwarded-host": "evil.example",
+              },
+            },
+          ),
+        );
+        const body = (await response.json()) as { resource: string };
+        expect(body.resource).toBe("https://app.example.com/api/mcp");
       },
     );
   });
