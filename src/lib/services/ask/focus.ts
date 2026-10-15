@@ -233,20 +233,40 @@ export function focusTokens(question: string): string[] {
   return [...tokens];
 }
 
+interface ColumnWords {
+  nameParts: string[];
+  meaningWords: Set<string>;
+}
+
+/** Each column's stemmed name parts and meaning words, worked out once. */
+const COLUMN_WORDS = new Map<string, ColumnWords>();
+
+function columnWords(name: string, meaning: string): ColumnWords {
+  // Views share column names with different meanings, so the key has both.
+  const key = `${name}\u0000${meaning}`;
+  const known = COLUMN_WORDS.get(key);
+  if (known) return known;
+  const words: ColumnWords = {
+    nameParts: name.split("_").map(stem),
+    meaningWords: new Set(
+      meaning
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((word) => word.length >= 4)
+        .map(stem),
+    ),
+  };
+  COLUMN_WORDS.set(key, words);
+  return words;
+}
+
 /** How many of the question's tokens a column's name or meaning carries. */
 function columnScore(
   tokens: readonly string[],
   name: string,
   meaning: string,
 ): number {
-  const nameParts = name.split("_").map(stem);
-  const meaningWords = new Set(
-    meaning
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((word) => word.length >= 4)
-      .map(stem),
-  );
+  const { nameParts, meaningWords } = columnWords(name, meaning);
   let score = 0;
   for (const token of tokens) {
     if (

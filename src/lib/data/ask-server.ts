@@ -21,6 +21,7 @@
  */
 
 import { cache } from "react";
+import { ilikeLiteral } from "@/lib/data/ilike";
 import { isUuid } from "@/lib/admin/validation";
 import {
   buildAskTagOptions,
@@ -181,11 +182,6 @@ export interface AskConversationSummary {
   updatedAt: string;
   /** ISO timestamp of the owner's pin, or null: pinned rows lead the rail. */
   pinnedAt: string | null;
-}
-
-/** `%`, `_` and `\` as literal characters in an `ilike` pattern. */
-function ilikeLiteral(text: string): string {
-  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**

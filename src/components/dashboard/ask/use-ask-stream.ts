@@ -40,6 +40,7 @@ import {
   type AskVisual,
   isRecord,
   readAskSourceMatch,
+  stringOrNull,
   readAskVisual,
 } from "@/lib/services/ask/events";
 
@@ -390,10 +391,6 @@ export function askThreadReducer(
 }
 
 // ── Reading the wire ────────────────────────────────────────────────────────
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
 
 function readSourceMatches(value: unknown): AskSourceMatch[] | null {
   if (!Array.isArray(value)) return null;

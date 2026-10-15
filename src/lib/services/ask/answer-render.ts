@@ -55,6 +55,11 @@ import {
   treeBranchWatch,
 } from "@/lib/services/ask/tree";
 
+/** The text with its first letter in capitals. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /**
  * The streaming transform between the model's answer text and the events the
  * Ask route sends (design "Route → Answer step", plan step 5).
@@ -1040,8 +1045,7 @@ function parseBlock(
           const measure = askMeasure(baselineColumn);
           baselineLabel =
             measure && measure.qualifier !== ""
-              ? measure.qualifier.charAt(0).toUpperCase() +
-                measure.qualifier.slice(1)
+              ? capitalise(measure.qualifier)
               : columnLabel(baselineColumn);
         }
       }
@@ -1857,7 +1861,7 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
                 label:
                   qualifier === ""
                     ? columnLabel(baseline)
-                    : qualifier.charAt(0).toUpperCase() + qualifier.slice(1),
+                    : capitalise(qualifier),
                 values,
               },
             }
@@ -1876,7 +1880,7 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
     rows.length <= MAX_ASK_FORM_RESULTS &&
     rows.every((row) => typeof row.i_won === "boolean" || row.i_won === null)
   ) {
-    const ordered = date !== undefined ? [...rows].sort(byDate(date)) : rows;
+    const ordered = [...rows].sort(byDate(date));
     const decided = ordered.filter((row) => typeof row.i_won === "boolean");
     if (decided.length >= 2) {
       const ticks = decided.map(formTick);
@@ -1903,9 +1907,7 @@ export function visualFromRows(rows: readonly AskRow[]): AskVisual | null {
         ? ["You", "Opponent"]
         : [
             "Selected matches",
-            qualifier === ""
-              ? "Baseline"
-              : qualifier.charAt(0).toUpperCase() + qualifier.slice(1),
+            qualifier === "" ? "Baseline" : capitalise(qualifier),
           ];
     const label = (measure: string) =>
       askMeasure(measure)?.label ?? columnLabel(measure);
@@ -2982,9 +2984,7 @@ export function columnLabel(column: string): string {
     .replace(/\d+/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return words === ""
-    ? "Figure"
-    : words.charAt(0).toUpperCase() + words.slice(1);
+  return words === "" ? "Figure" : capitalise(words);
 }
 
 /**

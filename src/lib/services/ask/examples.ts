@@ -1,7 +1,7 @@
 import { isUuid } from "@/lib/admin/validation";
 import { compareKindOfSql } from "@/lib/services/ask/compare";
 import type { AskRpcClient } from "@/lib/services/ask/database";
-import { ASK_PLAN_EXAMPLE_NAMES } from "@/lib/services/ask/prompts";
+import { ASK_PLAN_EXAMPLE_NAMES, oneLine } from "@/lib/services/ask/prompts";
 import { ASK_REVIEW_SQL } from "@/lib/services/ask/review";
 import type { AskScope } from "@/lib/services/ask/scope";
 
@@ -79,8 +79,8 @@ export function examplePlanReply(plan: {
   return JSON.stringify({ scope_sql: scopeSql, sql: oneLine(plan.sql) });
 }
 
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const NAME_FILTER =
@@ -120,7 +120,7 @@ export function anonymiseAskExample(example: AskExample): AskExample {
     replacements.push({ core, placeholder });
   }
   for (const { core, placeholder } of replacements) {
-    const escaped = core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = escapeRegExp(core);
     sql = sql.replace(
       new RegExp(`'%${escaped}%'`, "gi"),
       `'%${placeholder.toLowerCase()}%'`,
@@ -134,7 +134,7 @@ export function anonymiseAskExample(example: AskExample): AskExample {
       .map((char) =>
         /[a-z]/i.test(char)
           ? `[${char.toLowerCase()}${char.toUpperCase()}]`
-          : char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          : escapeRegExp(char),
       )
       .join("");
     question = question.replace(
@@ -209,6 +209,7 @@ export async function retrieveAskExamples(input: {
       "retrieveAskExamples: viewerId must be the session user id.",
     );
   }
+  const limit = input.limit ?? MAX_ASK_RETRIEVED_EXAMPLES;
   let embedding: number[] | null;
   try {
     embedding = await input.embedding;
@@ -220,7 +221,7 @@ export async function retrieveAskExamples(input: {
     const result = await input.service.rpc("ask_similar_examples", {
       p_embedding: embedding,
       p_scope: input.scope.kind,
-      p_limit: input.limit ?? MAX_ASK_RETRIEVED_EXAMPLES,
+      p_limit: limit,
       p_viewer: input.viewerId,
     });
     if (result.error) {
@@ -229,10 +230,7 @@ export async function retrieveAskExamples(input: {
       });
       return [];
     }
-    return readAskExampleRows(result.data).slice(
-      0,
-      input.limit ?? MAX_ASK_RETRIEVED_EXAMPLES,
-    );
+    return readAskExampleRows(result.data).slice(0, limit);
   } catch (error) {
     console.warn("[ask] could not retrieve examples", {
       error: error instanceof Error ? error.message : String(error),

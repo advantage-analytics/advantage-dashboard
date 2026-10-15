@@ -42,7 +42,6 @@ export function clipWindows(
       (point): point is AskShowPoint & { videoTime: number } =>
         point.videoTime !== null,
     )
-    .slice()
     .sort((a, b) => a.videoTime - b.videoTime)
     .map((point) => {
       const serve = toFilmTime(point.videoTime, clock);

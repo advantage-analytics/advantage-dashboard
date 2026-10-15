@@ -2378,6 +2378,22 @@ test.describe("a review question", () => {
       });
     });
 
+    test("a review in coach mode is server-written: it keeps the no-advice notice and is not saved as coached", async () => {
+      const { db, saves } = teamDb(
+        reviewRows({ players: 3, recent5_avg: 40, earlier_avg: 55 }),
+      );
+      const { model } = fakeModel([REVIEW_REPLY]);
+
+      const events = await collect(
+        askQuestion(input({ db, model, scope: TEAM, coach: true })),
+      );
+
+      expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
+      const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+      expect(saved.noAdvice).toBe(true);
+      expect(saved).not.toHaveProperty("coach");
+    });
+
     test("an unnarrowed scope stays a team review even when one player has every match", async () => {
       const { db } = teamDb(reviewRows({ players: 1 }));
       const { model } = fakeModel([REVIEW_REPLY]);

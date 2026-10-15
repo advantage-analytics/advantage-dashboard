@@ -3,6 +3,7 @@
 import {
   memo,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -72,7 +73,7 @@ import {
   ASK_RAIL_OPEN,
   ASK_SCROLL,
 } from "./ask-frame";
-import { isMacPlatform, newQuestionKeys } from "./ask-shortcut";
+import { newQuestionKeys, readIsMac } from "./ask-shortcut";
 
 export interface AskRailProps {
   /** Null when the count could not be read — never a made-up `0 / 20`. */
@@ -193,7 +194,7 @@ const RAIL_COPY = {
  */
 export const AskRail = memo(function AskRail(props: AskRailProps) {
   const narrow = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
-  const mac = useSyncExternalStore(subscribeNever, readMac, () => true);
+  const mac = useSyncExternalStore(subscribeNever, readIsMac, () => true);
   return narrow ? (
     <AskRailBar {...props} mac={mac} />
   ) : (
@@ -214,10 +215,6 @@ function readNarrow() {
 /** The platform does not change under a page: nothing to listen for. */
 function subscribeNever() {
   return () => {};
-}
-
-function readMac() {
-  return isMacPlatform(navigator.platform || navigator.userAgent);
 }
 
 // ── Open or closed, per device ──────────────────────────────────────────────
@@ -528,7 +525,10 @@ function AskRailBody({
   | "onPinConversation"
 > & { basePath: string; deleteDisabled: boolean }) {
   const [query, setQuery] = useState("");
-  const matching = askConversationsMatching(conversations, query);
+  const matching = useMemo(
+    () => askConversationsMatching(conversations, query),
+    [conversations, query],
+  );
   const filterable = conversations.length >= ASK_RAIL_FILTER_MIN;
 
   return (
@@ -826,13 +826,15 @@ function AskEarlier({
     }
   }
 
-  const { pinned, rest } = askPinnedFirst(conversations);
-  const sections = [
-    ...(pinned.length > 0
-      ? [{ key: "pinned", label: RAIL_COPY.pinned, rows: pinned }]
-      : []),
-    ...askMonthGroups(rest, timeZone),
-  ];
+  const sections = useMemo(() => {
+    const { pinned, rest } = askPinnedFirst(conversations);
+    return [
+      ...(pinned.length > 0
+        ? [{ key: "pinned", label: RAIL_COPY.pinned, rows: pinned }]
+        : []),
+      ...askMonthGroups(rest, timeZone),
+    ];
+  }, [conversations, timeZone]);
 
   // A month's heading already says when; only a pinned row draws its date.
   const row = (conversation: AskConversationSummary, dated: boolean) => (

@@ -90,6 +90,34 @@ export async function deleteAskConversation(
   return { ok: true };
 }
 
+/** Update one of the viewer's own conversation rows; `forbidden` when it is not theirs. */
+async function updateOwnConversation(
+  conversationId: string,
+  patch: { title: string } | { pinned_at: string | null },
+  what: "rename" | "pin",
+): Promise<AskActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "forbidden" };
+
+  const { data, error } = await supabase
+    .from("ask_conversations")
+    .update(patch)
+    .eq("id", conversationId)
+    .eq("user_id", user.id)
+    .select("id");
+  if (error) {
+    console.error(`[ask] could not ${what} a conversation`, {
+      error: error.message,
+    });
+    return { ok: false, error: "failed" };
+  }
+  if (!data || data.length === 0) return { ok: false, error: "forbidden" };
+  return { ok: true };
+}
+
 /**
  * Rename one of the viewer's conversations. The title is normalised here
  * (`normalizeAskTitle`: one line, 1–120 characters) and refused as `invalid`
@@ -111,25 +139,12 @@ export async function renameAskConversation(
   const normalized = normalizeAskTitle(title);
   if (!normalized) return { ok: false, error: "invalid" };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "forbidden" };
-
-  const { data, error } = await supabase
-    .from("ask_conversations")
-    .update({ title: normalized })
-    .eq("id", conversationId)
-    .eq("user_id", user.id)
-    .select("id");
-  if (error) {
-    console.error("[ask] could not rename a conversation", {
-      error: error.message,
-    });
-    return { ok: false, error: "failed" };
-  }
-  if (!data || data.length === 0) return { ok: false, error: "forbidden" };
+  const result = await updateOwnConversation(
+    conversationId,
+    { title: normalized },
+    "rename",
+  );
+  if (!result.ok) return result;
 
   if (options.revalidate !== false) revalidatePath(askPath(scopeKind));
   return { ok: true };
@@ -147,25 +162,12 @@ export async function setAskConversationPinned(
 ): Promise<AskActionResult> {
   if (!isUuid(conversationId)) return { ok: false, error: "invalid" };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "forbidden" };
-
-  const { data, error } = await supabase
-    .from("ask_conversations")
-    .update({ pinned_at: pinned ? new Date().toISOString() : null })
-    .eq("id", conversationId)
-    .eq("user_id", user.id)
-    .select("id");
-  if (error) {
-    console.error("[ask] could not pin a conversation", {
-      error: error.message,
-    });
-    return { ok: false, error: "failed" };
-  }
-  if (!data || data.length === 0) return { ok: false, error: "forbidden" };
+  const result = await updateOwnConversation(
+    conversationId,
+    { pinned_at: pinned ? new Date().toISOString() : null },
+    "pin",
+  );
+  if (!result.ok) return result;
 
   revalidatePath(askPath(scopeKind));
   return { ok: true };

@@ -31,7 +31,11 @@ import {
   createAskDatabase,
   type AskRpcClient,
 } from "@/lib/services/ask/database";
-import { isRecord } from "@/lib/services/ask/events";
+import {
+  isRecord,
+  numberOrNull,
+  stringOrNull,
+} from "@/lib/services/ask/events";
 import {
   askShowPlanOf,
   readAskShowRequest,
@@ -77,14 +81,6 @@ function programIdOf(embedded: unknown): string | null {
   return isRecord(row) && typeof row.program_id === "string"
     ? row.program_id
     : null;
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
 }
 
 export async function POST(request: Request): Promise<Response> {

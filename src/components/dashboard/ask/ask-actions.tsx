@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -131,6 +138,21 @@ const ACTION_ICON: Record<AskAction["kind"], LucideIcon> = {
   open_opponent: Users,
 };
 
+/** The CSV download; the data URL is built once per file, not on every render. */
+function ExportLink({
+  action,
+}: {
+  action: Extract<AskAction, { kind: "export" }>;
+}) {
+  const href = useMemo(() => askCsvDataUrl(action.file), [action.file]);
+  return (
+    <a href={href} download={action.file.filename} className={ACTION}>
+      <Glyph icon={ACTION_ICON.export} />
+      {action.label}
+    </a>
+  );
+}
+
 function Glyph({ icon: Icon }: { icon: LucideIcon }) {
   return (
     <Icon className="size-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
@@ -209,14 +231,7 @@ export function AskActionCards({
           ) : action.kind === "save_view" ? (
             <SaveViewControl action={action} onSaveView={onSaveView} />
           ) : action.kind === "export" ? (
-            <a
-              href={askCsvDataUrl(action.file)}
-              download={action.file.filename}
-              className={ACTION}
-            >
-              <Glyph icon={ACTION_ICON.export} />
-              {action.label}
-            </a>
+            <ExportLink action={action} />
           ) : (
             <Link href={action.href} className={ACTION}>
               <Glyph icon={ACTION_ICON[action.kind]} />

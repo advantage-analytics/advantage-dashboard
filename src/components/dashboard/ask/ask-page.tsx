@@ -53,7 +53,7 @@ import {
 } from "./ask-frame";
 import { AskPrompt } from "./ask-prompt";
 import { AskRail } from "./ask-rail";
-import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
+import { isNewQuestionShortcut, readIsMac } from "./ask-shortcut";
 import { AskStarters } from "./ask-starters";
 import { useAskStream, type AskExchange, type AskTag } from "./use-ask-stream";
 
@@ -231,6 +231,8 @@ function AskDayZero({
   );
 }
 
+const NO_ACTIONS: ReturnType<typeof askActionsFor> = [];
+
 function AskThread({
   scope,
   timeZone,
@@ -284,12 +286,16 @@ function AskThread({
   const hasThread = state.exchanges.length > 0;
 
   // Which saved answers already have a pin on Home, by the answer's id.
-  const pinByAnswer = new Map<string, string>();
-  for (const message of conversation?.messages ?? []) {
-    if (message.role === "assistant" && message.pinId) {
-      pinByAnswer.set(message.id, message.pinId);
+  const messages = conversation?.messages;
+  const pinByAnswer = useMemo(() => {
+    const pins = new Map<string, string>();
+    for (const message of messages ?? []) {
+      if (message.role === "assistant" && message.pinId) {
+        pins.set(message.id, message.pinId);
+      }
     }
-  }
+    return pins;
+  }, [messages]);
 
   // A question that was just sent should be on screen, not below the fold of
   // a long thread. Only on growth: a saved conversation opens at its top.
@@ -435,7 +441,7 @@ function AskThread({
     shortcut.current = { run: newQuestion, inFlight: state.inFlight };
   });
   useEffect(() => {
-    const mac = isMacPlatform(navigator.platform || navigator.userAgent);
+    const mac = readIsMac();
     function onKeyDown(event: KeyboardEvent) {
       if (event.repeat || !isNewQuestionShortcut(event, mac)) return;
       // Ours either way: the browser's own use of the chord must not fire
@@ -633,16 +639,20 @@ const AskExchangeView = memo(function AskExchangeView({
   const { question, answer } = exchange;
   const { answerId } = answer;
   const [pinId, setPinId] = useState(initialPinId);
-  const actions =
-    answer.status === "done"
-      ? askActionsFor({
-          sources: answer.sources,
-          figures: answer.figures,
-          visual: answer.visual,
-          scope,
-          tags: question.tags,
-        })
-      : [];
+  const done = answer.status === "done";
+  const actions = useMemo(
+    () =>
+      done
+        ? askActionsFor({
+            sources: answer.sources,
+            figures: answer.figures,
+            visual: answer.visual,
+            scope,
+            tags: question.tags,
+          })
+        : NO_ACTIONS,
+    [done, answer.sources, answer.figures, answer.visual, scope, question.tags],
+  );
   return (
     <article className="flex flex-col gap-6">
       <AskPrompt text={question.text} tags={question.tags} />

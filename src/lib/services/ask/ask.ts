@@ -6,11 +6,12 @@ import {
   type AskRow,
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
-import type {
-  AskErrorCode,
-  AskEvent,
-  AskSourceMatch,
-  AskVisual,
+import {
+  stringOrNull,
+  type AskErrorCode,
+  type AskEvent,
+  type AskSourceMatch,
+  type AskVisual,
 } from "@/lib/services/ask/events";
 import {
   equalBaselineColumns,
@@ -2019,6 +2020,10 @@ export async function* askQuestion(
     yield { type: "sources", matches: result.matches };
     yield { type: "status", stage: "writing" };
 
+    // The variant that may recommend: coach mode, advice asked, and the
+    // model writing it. A review is server-written, so it keeps the notice.
+    const coached = coach && plan.asks_for_advice && reviewText === null;
+
     let chunks: AsyncIterable<string>;
     if (reviewText !== null) {
       // Written by the server, not the model: the same syntax, through the
@@ -2033,8 +2038,7 @@ export async function* askQuestion(
           // So a follow-up reads as one (`thread-state.ts`).
           previousHeadline: previousHeadlineFromTurns(input.conversation),
           ...(team ? { scope } : {}),
-          // The variant that may recommend: coach mode, and advice asked.
-          ...(coach && plan.asks_for_advice ? { coach: true } : {}),
+          ...(coached ? { coach: true } : {}),
         });
         chunks = await model.stream(
           answerPrompt,
@@ -2115,7 +2119,7 @@ export async function* askQuestion(
     // with what the matches show, whatever the planner flagged.
     const noAdvice = plan.asks_for_advice || reviewed;
     if (noAdvice) {
-      yield { type: "notice", notice: coach ? "coach" : "no_advice" };
+      yield { type: "notice", notice: coached ? "coach" : "no_advice" };
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -2126,7 +2130,7 @@ export async function* askQuestion(
       p_question: savedQuestion(input.question, input.tags),
       p_answer: savedAnswer(answer, result, plan, noAdvice, model.configured, {
         state: planState.value,
-        coach,
+        coach: coached,
       }),
       // Named only for a team question: a personal save is the three
       // arguments it always was.
@@ -2813,7 +2817,7 @@ function savedAnswer(
     coach: false,
   },
 ): AskSavedAnswer {
-  const coached = thread.coach && noAdvice;
+  const coached = thread.coach;
   return {
     headline: answer.headline,
     figures: answer.figures,
@@ -2930,10 +2934,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
 }
 
 function oneSentence(text: string): string {

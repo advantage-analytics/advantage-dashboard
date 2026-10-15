@@ -12,8 +12,13 @@ import {
   MAX_POINT_SET,
 } from "@/lib/match-video/point-set";
 import type { AskDatabase } from "@/lib/services/ask/ask";
-import { isRecord, type AskSourceMatch } from "@/lib/services/ask/events";
-import { figureMatchFilters } from "@/lib/services/ask/figure-video";
+import {
+  isRecord,
+  numberOrNull,
+  stringOrNull,
+  type AskSourceMatch,
+} from "@/lib/services/ask/events";
+import { figureMatchFilters, watchHref } from "@/lib/services/ask/figure-video";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type {
@@ -266,22 +271,16 @@ export interface AskShowDeps {
   readFilm(matchId: string): Promise<AskShowFilm>;
 }
 
+const POINTS_UNREADABLE = "The points could not be read. Try again.";
+
 /** The sentences the route sends with each refusal. */
 export const ASK_SHOW_MESSAGES: Record<AskShowRefusal, string> = {
   not_found: "That answer was not found.",
   no_plan: "This answer can't be shown on film.",
   no_points: "No points match this answer.",
-  query_failed: "The points could not be read. Try again.",
-  read_failed: "The points could not be read. Try again.",
+  query_failed: POINTS_UNREADABLE,
+  read_failed: POINTS_UNREADABLE,
 };
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
 
 /** One `ask.matches` row as the client's `AskSourceMatch` (as `ask.ts` reads it). */
 function sourceMatchOf(value: unknown, team: boolean): AskSourceMatch | null {
@@ -413,12 +412,10 @@ export async function showAnswerPoints(
       value: {
         kind: "matches",
         matches: counts.map(({ matchId, points }) => {
-          const query = new URLSearchParams({ tab: "film" });
-          if (serialized) query.set("f", serialized);
           return {
             match: byMatch.get(matchId) ?? bareMatch(matchId),
             points,
-            href: `/dashboard/matches/${encodeURIComponent(matchId)}?${query.toString()}`,
+            href: watchHref(matchId, serialized ?? ""),
           };
         }),
       },

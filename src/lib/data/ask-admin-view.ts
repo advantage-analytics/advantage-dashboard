@@ -10,6 +10,8 @@
  */
 
 import { squadMark, toSquad } from "@/lib/data/squad";
+import { matchDay } from "@/lib/data/match-day";
+import { isRecord } from "@/lib/services/ask/events";
 import {
   readAskFeedbackRow,
   type AskFeedback,
@@ -140,19 +142,13 @@ export function posthogAppOrigin(ingestHost: string | undefined): string {
   return host.replace(/\.i\.posthog\.com$/, ".posthog.com");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
 /** The UTC day of an instant, `YYYY-MM-DD`; null when it cannot be read. */
 export function utcDay(iso: string): string | null {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
+  return matchDay(iso);
 }
 
 function nextDay(day: string): string {

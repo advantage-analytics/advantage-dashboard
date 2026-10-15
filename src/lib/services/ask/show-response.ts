@@ -5,15 +5,12 @@
  * Pure: imports nothing that runs on the server.
  */
 
-import { isRecord, type AskSourceMatch } from "@/lib/services/ask/events";
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
+import {
+  isRecord,
+  numberOrNull,
+  stringOrNull,
+  type AskSourceMatch,
+} from "@/lib/services/ask/events";
 
 /** One point the film can show, from `ask.points` (sides) and `public.points` (the rest). */
 export interface AskShowPoint {

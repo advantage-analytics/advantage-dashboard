@@ -3,8 +3,9 @@ import {
   ASK_VISUAL_LINE_PREFIX,
   type AskRow,
 } from "@/lib/services/ask/answer-render";
-import { ASK_TABLE_ROWS } from "@/lib/services/ask/events";
+import { ASK_TABLE_ROWS, numberOrNull } from "@/lib/services/ask/events";
 import { askMeasureLabel } from "@/lib/services/ask/measures";
+import { sentenceCase } from "@/lib/services/ask/plays";
 
 /**
  * The review: what "How can I improve for my next match?" gets.
@@ -280,10 +281,6 @@ export interface AskReview {
   players: number;
 }
 
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function textOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
@@ -526,10 +523,6 @@ function joined(parts: readonly string[]): string {
   return parts.length <= 1
     ? (parts[0] ?? "")
     : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-}
-
-function sentenceCase(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function lower(label: string): string {

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, AtSign, X } from "lucide-react";
+import { formatMatchDayShort, matchDay } from "@/lib/data/match-day";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
@@ -58,14 +59,8 @@ export const ASK_PLACEHOLDER = PERSONAL_ASK_COPY.placeholder;
 
 /** `2026-11-01` → `Nov 1`; null for a date that cannot be read. */
 function resetDateLabel(resetsOn: string | null): string | null {
-  if (!resetsOn) return null;
-  const date = new Date(`${resetsOn}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  const day = matchDay(resetsOn);
+  return day ? formatMatchDayShort(day) : null;
 }
 
 /**
