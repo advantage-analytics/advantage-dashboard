@@ -124,6 +124,7 @@ export async function POST() {
       buildTeamInsightSystemPrompt(data, active.name),
       [{ role: "user", content: "Generate the program's insight." }],
       createLLMObservabilityContext(workspace.viewer.id),
+      { span: "team.insight" },
     );
   } catch (err) {
     console.error("LLM adapter error:", err);

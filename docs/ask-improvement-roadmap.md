@@ -7,6 +7,11 @@ against the live database and PostHog. Nothing here is built. The "Where the
 time goes" section is the baseline to re-measure against; everything after it
 is a menu, ranked at the end.
 
+**Status, 2026-10-15:** 2.1 (the `mine` CTE), 5.1 (usage on the Gemini path)
+and 5.2 (span names, one trace per question) landed together; see migration
+`20261015014557_ask_my_matches` and `docs/llm-setup.md` §7. Everything else
+below is still unbuilt.
+
 Shipped so far: PR #436 (the feature), #442 (plays, patterns, Video links,
 clarifying questions), #443 (feedback), #446 (admin unlimited), #447 (exact +1).
 Design record: `work/personal-ask-page/02_design/output/design.md`.

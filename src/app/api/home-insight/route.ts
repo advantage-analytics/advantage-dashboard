@@ -117,6 +117,7 @@ export async function POST() {
       systemPrompt,
       [{ role: "user", content: "Generate my performance insight." }],
       createLLMObservabilityContext(user.id),
+      { span: "home.insight" },
     );
   } catch (err) {
     console.error("LLM adapter error:", err);
