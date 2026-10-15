@@ -40,6 +40,10 @@ import {
  *    never keeps the shared half while silently dropping the extras.
  * 3. `savedOnly` — the viewer's bookmarks, a Film-only local toggle: it is
  *    about the viewer, not about the tennis, so it is not a match filter.
+ * 4. `pointSet` — a list of point numbers (`?pn=`,
+ *    `lib/match-video/point-set.ts`): the Ask "Show me" action's queue, or a
+ *    shared link's preset. Film only and held by the tab like `savedOnly`;
+ *    mirrored to the URL while applied, so a reload keeps the same points.
  *
  * Pure logic, no React and no `next/navigation`, so specs import it directly
  * and the film subtree stays loadable offline.
@@ -52,6 +56,8 @@ import {
 export interface FilmLocalFilters {
   remainder: FilmCutRemainder | null;
   savedOnly: boolean;
+  /** Point numbers to narrow to; null or empty is no fourth layer at all. */
+  pointSet?: readonly number[] | null;
 }
 
 export const NO_FILM_LOCAL_FILTERS: FilmLocalFilters = Object.freeze({
@@ -72,7 +78,13 @@ export interface FilmListFilters {
   remainder: LandedFilmCut | null;
   savedOnly: boolean;
   setSavedOnly: (next: boolean) => void;
-  /** All three layers at once — the strip's, the header's and the zero state's "Clear all". */
+  /**
+   * The point set (layer 4) and its writer. Optional: a list mounted without
+   * a Film tab (a fixture, the labelling console) has neither.
+   */
+  pointSet?: readonly number[] | null;
+  setPointSet?: (next: readonly number[] | null) => void;
+  /** Every layer at once — the strip's, the header's and the zero state's "Clear all". */
   clearAll: () => void;
 }
 
@@ -101,12 +113,26 @@ export function filmListPoints(
   local: FilmLocalFilters,
 ): MatchPoint[] {
   const extras = local.remainder?.extras ?? null;
-  if (!extras && !local.savedOnly) return sharedPoints;
+  const set = hasPointSet(local) ? new Set(local.pointSet) : null;
+  if (!extras && !local.savedOnly && !set) return sharedPoints;
   return sharedPoints.filter(
     (point) =>
       (!extras || matchesFilmCutExtras(point, extras)) &&
-      (!local.savedOnly || point.saved),
+      (!local.savedOnly || point.saved) &&
+      (!set || set.has(point.pointNumber)),
   );
+}
+
+/** Whether a point set is in force: present and naming at least one point. */
+export function hasPointSet(f: {
+  pointSet?: readonly number[] | null;
+}): boolean {
+  return (f.pointSet?.length ?? 0) > 0;
+}
+
+/** "12 chosen points" — how the strip and the zero state name layer 4. */
+export function pointSetPhrase(count: number): string {
+  return `${count} chosen ${count === 1 ? "point" : "points"}`;
 }
 
 /**
@@ -136,13 +162,19 @@ export function landFilmCut(
   };
 }
 
-/** Whether any of the three layers is on. */
+/** Whether any of the layers is on. */
 export function filmListActive(f: {
   shared: MatchFilters;
   remainder: FilmCutRemainder | null;
   savedOnly: boolean;
+  pointSet?: readonly number[] | null;
 }): boolean {
-  return activeFilterCount(f.shared) > 0 || f.remainder !== null || f.savedOnly;
+  return (
+    activeFilterCount(f.shared) > 0 ||
+    f.remainder !== null ||
+    f.savedOnly ||
+    hasPointSet(f)
+  );
 }
 
 /* ── The quick menu's vocabulary ─────────────────────────────────────────── */
@@ -206,10 +238,13 @@ export function filmListName(
     shared: MatchFilters;
     remainder: FilmCutRemainder | null;
     savedOnly: boolean;
+    pointSet?: readonly number[] | null;
   },
   names: PhraseNames,
 ): string {
-  if (f.remainder !== null || !quickOnly(f.shared)) return "Filtered";
+  if (f.remainder !== null || hasPointSet(f) || !quickOnly(f.shared)) {
+    return "Filtered";
+  }
   const show = quickShow(f);
   const showName =
     show === "saved" ? "Saved only" : show === "break" ? "Break points" : null;
@@ -252,6 +287,7 @@ export function filmListSentence(
     shared: MatchFilters;
     remainder: FilmCutRemainder | null;
     savedOnly: boolean;
+    pointSet?: readonly number[] | null;
   },
   names: PhraseNames,
 ): string {
@@ -263,6 +299,8 @@ export function filmListSentence(
         : midSentence(f.remainder.label, names);
     parts.push(`${label}, from Statistics`);
   }
+  // Layer 4 after the cut it narrows: "Second serve · 12 chosen points".
+  if (hasPointSet(f)) parts.push(pointSetPhrase(f.pointSet!.length));
   if (f.savedOnly) parts.push("saved");
   return parts.length === 0
     ? "All points"
@@ -281,9 +319,11 @@ export function filmStripAction(f: {
   shared: MatchFilters;
   remainder: LandedFilmCut | null;
   savedOnly: boolean;
+  pointSet?: readonly number[] | null;
 }): "Clear filter" | "Back to all points" {
   return f.remainder !== null &&
     !f.savedOnly &&
+    !hasPointSet(f) &&
     filtersEqual(f.shared, f.remainder.landed)
     ? "Back to all points"
     : "Clear filter";
