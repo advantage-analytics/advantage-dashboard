@@ -321,8 +321,8 @@ async function main() {
   const { PERSONAL_ASK_SCOPE } = await import("@/lib/services/ask/scope");
   type AskScope = import("@/lib/services/ask/scope").AskScope;
   type AskTagOptions = import("@/lib/data/ask-tags").AskTagOptions;
-  const { getLLMStream, isLLMConfigured, createLLMObservabilityContext } =
-    await import("@/lib/llm/adapter");
+  const { isLLMConfigured } = await import("@/lib/llm/adapter");
+  const { askAdapterModel } = await import("@/lib/services/ask/model");
   const { createAskDatabase } = await import("@/lib/services/ask/database");
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { embedText } = await import("@/lib/llm/embeddings");
@@ -560,7 +560,10 @@ async function main() {
         return { data: result.data, error: result.error };
       },
     };
-    const context = createLLMObservabilityContext(`ask-eval:${viewerId}`);
+    // The route's own model (src/app/api/ask/route.ts), so an eval plans under
+    // the schema, settings and per-stage models production uses; only the
+    // replies are tapped.
+    const adapter = askAdapterModel({ userId: `ask-eval:${viewerId}` });
     const model = {
       configured: true,
       async stream(
@@ -568,15 +571,7 @@ async function main() {
         messages: { role: "user" | "assistant"; content: string }[],
         call?: AskModelCall,
       ) {
-        // The same options the route sends (src/app/api/ask/route.ts), so an
-        // eval plans under the schema and settings production uses.
-        const source = await getLLMStream(system, messages, context, {
-          span: call ? `ask.${call.stage}` : "ask",
-          temperature: call?.temperature,
-          maxTokens: call?.maxTokens,
-          jsonSchema: call?.jsonSchema,
-          staticPrefixLength: call?.staticPrefixLength,
-        });
+        const source = await adapter.stream(system, messages, call);
         const slot = modelReplies.push("") - 1;
         return (async function* () {
           for await (const chunk of source) {

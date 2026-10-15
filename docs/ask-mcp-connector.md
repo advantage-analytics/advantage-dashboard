@@ -147,7 +147,7 @@ skips the cache entirely, as `/api/ask` does. Refusals come back as an
 `isError` tool result whose text starts with a stable slug and a colon —
 `sql_refused: …` — returned by the tool itself rather than thrown, so no
 JSON-RPC error code is involved: `sql_refused`, `query_failed`,
-`not_a_member`, `invalid_program_id`, `no_matches`, `tag_not_resolved`,
+`not_a_member`, `invalid_program_id`, `question_empty`, `no_matches`, `tag_not_resolved`,
 `conversation_not_found`, `rate_limited`, `daily_cap_reached`,
 `ask_limit_reached`, `needs_session`, `cannot_answer`, `no_data`,
 `needs_clarification`, `llm_unavailable`, `answer_failed`, `internal_error`.
