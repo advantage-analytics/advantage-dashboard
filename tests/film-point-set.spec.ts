@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-import { filmWatchTargetOf } from "@/components/dashboard/ask/ask-film-seek";
 import {
   filmListActive,
   filmListName,
@@ -208,73 +207,6 @@ test.describe("the sequence", () => {
   test("finds a stop by its point's number", () => {
     expect(stopForPointNumber(stops, 7)).toBe(stops[1]);
     expect(stopForPointNumber(stops, 8)).toBeNull();
-  });
-});
-
-test.describe("the drawer's href reader", () => {
-  const f = serializeMatchFilters({
-    ...EMPTY_MATCH_FILTERS,
-    server: "you",
-    serveType: ["second"],
-  });
-
-  test("reads this match's film links as targets, in all three forms", () => {
-    expect(
-      filmWatchTargetOf(`/dashboard/matches/${MATCH}?tab=film&f=${f}`, MATCH),
-    ).toEqual({
-      kind: "cut",
-      filters: { ...EMPTY_MATCH_FILTERS, server: "you", serveType: ["second"] },
-      pointNumbers: null,
-    });
-    expect(
-      filmWatchTargetOf(
-        `/dashboard/matches/${MATCH}?tab=film&f=${f}&pn=3%2C7`,
-        MATCH,
-      ),
-    ).toMatchObject({
-      kind: "cut",
-      pointNumbers: [3, 7],
-    });
-    expect(
-      filmWatchTargetOf(`/dashboard/matches/${MATCH}?tab=film&pn=7`, MATCH),
-    ).toEqual({
-      kind: "point",
-      pointNumber: 7,
-    });
-    expect(
-      filmWatchTargetOf(
-        `/dashboard/matches/${MATCH}?tab=film&point=abc`,
-        MATCH,
-      ),
-    ).toEqual({
-      kind: "pointId",
-      pointId: "abc",
-    });
-    // The whole film, no cut.
-    expect(
-      filmWatchTargetOf(`/dashboard/matches/${MATCH}?tab=film`, MATCH),
-    ).toEqual({
-      kind: "cut",
-      filters: null,
-      pointNumbers: null,
-    });
-  });
-
-  test("leaves every other link alone", () => {
-    expect(filmWatchTargetOf(`/dashboard/matches/${MATCH}`, MATCH)).toBeNull();
-    expect(
-      filmWatchTargetOf(`/dashboard/matches/${MATCH}?tab=shots`, MATCH),
-    ).toBeNull();
-    expect(
-      filmWatchTargetOf(`/dashboard/matches/other?tab=film`, MATCH),
-    ).toBeNull();
-    expect(
-      filmWatchTargetOf(
-        `https://evil.example/dashboard/matches/${MATCH}?tab=film`,
-        MATCH,
-      ),
-    ).toBeNull();
-    expect(filmWatchTargetOf("", MATCH)).toBeNull();
   });
 });
 

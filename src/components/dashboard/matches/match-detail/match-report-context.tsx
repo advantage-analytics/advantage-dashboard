@@ -180,24 +180,10 @@ export interface MatchReportMeta {
   views: readonly ReportView[];
 }
 
-/**
- * The film tab's Ask drawer, as the title row drives it: the drawer and its
- * three-phase state live in `FilmTab` (they share the pane's right edge with
- * the filters drawer), and while the tab is mounted it registers this pair
- * so the title row's chat glyph toggles it in place. Null on every other
- * view, where the glyph is a link into Ask instead.
- */
-export interface AskDrawerControl {
-  open: boolean;
-  toggle(): void;
-}
-
 export interface MatchReportContextValue {
   state: MatchReportState;
   actions: MatchReportActions;
   meta: MatchReportMeta;
-  askControl: AskDrawerControl | null;
-  setAskControl(control: AskDrawerControl | null): void;
 }
 
 const MatchReportContext = createContext<MatchReportContextValue | null>(null);
@@ -373,18 +359,9 @@ export function MatchReportProvider({
     ],
   );
 
-  // The film tab's Ask drawer control, registered while the tab is mounted.
-  const [askControl, setAskControl] = useState<AskDrawerControl | null>(null);
-
   const value = useMemo<MatchReportContextValue>(
-    () => ({
-      state: { view, insight },
-      actions,
-      meta,
-      askControl,
-      setAskControl,
-    }),
-    [view, insight, actions, meta, askControl],
+    () => ({ state: { view, insight }, actions, meta }),
+    [view, insight, actions, meta],
   );
 
   // The film head rides alongside, in its own context: it moves several times

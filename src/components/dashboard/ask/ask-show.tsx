@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
-import { parseMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { isRecord, type AskSourceMatch } from "@/lib/services/ask/events";
 import {
   readAskShowResponse,
@@ -12,7 +11,6 @@ import {
 } from "@/lib/services/ask/show";
 
 import { ASK_CLIP_STRIP_MAX, AskClipStrip } from "./ask-clip-strip";
-import { useAskFilmSeek } from "./ask-film-seek";
 import { AskPointList } from "./ask-point-list";
 import { askSourceDate } from "./ask-sources";
 import { askMatchPlayers } from "./ask-tag-menu";
@@ -27,10 +25,7 @@ import { askMatchPlayers } from "./ask-tag-menu";
  * (`ask-point-list.tsx`), the inline clip strip for a small set
  * (`ask-clip-strip.tsx`, `ASK_CLIP_STRIP_MAX`), and "Watch all" into the
  * film with the first point playing and the rest queued. Over several it is
- * one row per match with its count, each into that match's film. Inside the
- * film room's Ask drawer (`useAskFilmSeek`) the one-match answer seeks the
- * player in place the moment it arrives, and the list's rows seek too; no
- * strip is drawn beside a film that is already on screen.
+ * one row per match with its count, each into that match's film.
  *
  * `answerId` is the saved answer's (`done.answerId`); an answer that has no
  * id yet, or no sources, has nothing to show and draws nothing.
@@ -102,7 +97,6 @@ export function AskShowMe({
   sources,
   post = postAskShow,
 }: AskShowMeProps) {
-  const seek = useAskFilmSeek();
   const [state, setState] = useState<ShowState>({ status: "idle" });
   if (!sources || sources.length === 0) return null;
 
@@ -114,17 +108,6 @@ export function AskShowMe({
       return;
     }
     setState({ status: "shown", value: result.value });
-    // Beside the film, the points land on it at once; the list below is the
-    // way back to any one of them.
-    if (seek && result.value.kind === "match") {
-      seek.watch({
-        kind: "cut",
-        filters: result.value.filters
-          ? parseMatchFilters(result.value.filters)
-          : null,
-        pointNumbers: result.value.points.map((point) => point.pointNumber),
-      });
-    }
   }
 
   const loading = state.status === "loading";
@@ -155,7 +138,7 @@ export function AskShowMe({
       )}
       {state.status === "shown" && state.value.kind === "match" && (
         <>
-          {!seek && state.value.points.length <= ASK_CLIP_STRIP_MAX && (
+          {state.value.points.length <= ASK_CLIP_STRIP_MAX && (
             <AskClipStrip
               matchId={state.value.match.matchId}
               points={state.value.points}
@@ -168,7 +151,7 @@ export function AskShowMe({
             points={state.value.points}
             filters={state.value.filters}
             truncated={state.value.truncated}
-            href={seek ? undefined : state.value.href}
+            href={state.value.href}
           />
         </>
       )}

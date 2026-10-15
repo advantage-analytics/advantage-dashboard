@@ -58,8 +58,6 @@ const polls = new Map<string, number>();
  * the id names no row, so any of them, under any id, is a wrong turn.
  */
 const matchesApiHits: string[] = [];
-/** Every `POST /api/ask` body the Ask drawer sent, in order. */
-const asks: unknown[] = [];
 /** Credentials minted by the sample route (`SAMPLE_ENDPOINT`), 1-based. */
 let sampleMints = 0;
 /**
@@ -348,36 +346,6 @@ test.beforeAll(async () => {
       };
       if (released.has(matchId)) send();
       else held.set(matchId, [...(held.get(matchId) ?? []), send]);
-      return;
-    }
-
-    // The Ask drawer's question: recorded, then refused — this server has no
-    // model. The drawer must put the question back and read the refusal out.
-    if (path === "/api/ask" && request.method === "POST") {
-      let raw = "";
-      request.on("data", (chunk: Buffer | string) => {
-        raw += chunk.toString();
-      });
-      request.on("end", () => {
-        try {
-          asks.push(JSON.parse(raw));
-        } catch {
-          asks.push(raw);
-        }
-        response.statusCode = 503;
-        response.setHeader("content-type", "application/json");
-        response.end(
-          JSON.stringify({
-            error: "Ask is offline here.",
-            code: "llm_unavailable",
-          }),
-        );
-      });
-      return;
-    }
-    if (path === "/__asks") {
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ asks }));
       return;
     }
 
@@ -3859,71 +3827,4 @@ test("Advanced filters… opens the 340px drawer over the list, counting the dra
   await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close filters" }).click();
   await expect(drawer).toHaveCount(0);
-});
-
-/* ── Ask about this match (roadmap 6.1) ──────────────────────────────────── */
-
-/**
- * The film room's Ask drawer (`film/ask-film-drawer.tsx`): opened from the
- * tab's own control, pre-tagged with the match, posting to `/api/ask` with
- * the page's own body and the match's tag on it, and keeping its thread
- * across a close and a reopen. This server refuses the question (it has no
- * model), which is the drawer's refusal path: the question back in the
- * composer, the sentence read out.
- */
-test("Ask about this match: opens pre-tagged, posts the match tag, keeps its draft across a close", async ({
-  page,
-}) => {
-  await open(page, "ask-drawer", { ask: "1" });
-  await page.getByRole("button", { name: "Ask about this match" }).click();
-
-  const drawer = page.locator("#ask-film-drawer");
-  await expect(drawer).toBeVisible();
-  await expect(
-    drawer.getByRole("heading", { name: "Ask about this match" }),
-  ).toBeVisible();
-  // Pre-tagged: the match's chip, named as the Ask page's tag menu names it.
-  const tagged = drawer.getByRole("list", { name: "Tagged" });
-  await expect(tagged.getByRole("listitem")).toHaveCount(1);
-  await expect(tagged).toContainText("Jordan Alvarez");
-
-  await drawer.getByLabel("Your question").fill("How did I serve?");
-  await drawer.getByRole("button", { name: "Send question" }).click();
-
-  // The request is the Ask page's own: the question and `{ kind, id }` tags.
-  await expect
-    .poll(async () => {
-      const body = (await (
-        await page.request.get(`${origin}/__asks`)
-      ).json()) as {
-        asks: unknown[];
-      };
-      return body.asks.length;
-    })
-    .toBe(1);
-  const { asks } = (await (
-    await page.request.get(`${origin}/__asks`)
-  ).json()) as {
-    asks: unknown[];
-  };
-  expect(asks[0]).toEqual({
-    question: "How did I serve?",
-    tags: [{ kind: "match", id: "ask-drawer" }],
-  });
-  // Refused: the sentence is read out and the question is back.
-  await expect(drawer.getByRole("alert")).toContainText("Ask is offline here.");
-  await expect(drawer.getByLabel("Your question")).toHaveValue(
-    "How did I serve?",
-  );
-
-  // Esc closes the sheet; the control reopens it on the same draft.
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#ask-film-drawer")).toHaveCount(0);
-  await page.getByRole("button", { name: "Ask about this match" }).click();
-  await expect(
-    page.locator("#ask-film-drawer").getByLabel("Your question"),
-  ).toHaveValue("How did I serve?");
-  await expect(
-    page.locator("#ask-film-drawer").getByRole("list", { name: "Tagged" }),
-  ).toContainText("Jordan Alvarez");
 });

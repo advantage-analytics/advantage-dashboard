@@ -15,8 +15,6 @@ import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { AskShowPoint } from "@/lib/services/ask/show";
 import { cn } from "@/lib/utils";
 
-import { useAskFilmSeek } from "./ask-film-seek";
-
 /**
  * The points behind an answer over ONE match (roadmap 6.1): a row per point
  * — set and game in the header, the result, the score, who won — with a play
@@ -29,8 +27,7 @@ import { useAskFilmSeek } from "./ask-film-seek";
  * this answer does not have. What differs is deliberate: every row is a LINK
  * (a `next/link` into `?tab=film&pn=<n>`, so a middle-click opens the film
  * in a tab), and the trailing control is a play glyph rather than a
- * bookmark. Inside the film room's Ask drawer the link seeks the player in
- * place instead (`useAskFilmSeek`).
+ * bookmark.
  *
  * The mark is the point's WINNER as `ask.points.i_won` says it — the
  * workspace's own mark when the viewer (or, on a team, the program's player)
@@ -204,7 +201,6 @@ function AskPointRow({
     : null;
 }) {
   const r = ROW_TONE.light;
-  const seek = useAskFilmSeek();
   const n = point.pointNumber;
   const seekable = point.videoTime !== null;
   const title = point.resultType ?? `Point ${n}`;
@@ -284,14 +280,6 @@ function AskPointRow({
       href={matchFilmPointsHref(matchId, [n], filters)}
       data-ask-point={n}
       aria-label={`${title} — watch point ${n}`}
-      onClick={
-        seek
-          ? (event) => {
-              event.preventDefault();
-              seek.watch({ kind: "point", pointNumber: n });
-            }
-          : undefined
-      }
       className={cn(r.root, r.seekable, "no-underline")}
     >
       {content}

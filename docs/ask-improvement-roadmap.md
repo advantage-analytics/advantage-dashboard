@@ -50,11 +50,12 @@ or an opponent, and Ask in the palette; rail titles, rename, pin and a
 filter; the page below 768 px; Admin › Ask feedback reader, `/admin/ask`),
 6.4 (action cards from a fixed catalogue: watch, pin, visualize, save a view,
 export CSV, share, open), 3.11 (pins: `ask_pins` + `ask_pin_answer()`, the
-"Pinned from Ask" card on the personal Home), 6.1's drawer and strip ("Show
-me" through `POST /api/ask/show`, which re-runs the saved scope only; a point
-list and an inline clip strip under the answer; Ask as a 340-px drawer in
-the film room, where every film link seeks in place) and 6.3's playlist and
-preset (`?pn=` point sets, "Play in sequence", "Open on these points" on the
+"Pinned from Ask" card on the personal Home), 6.1's strip ("Show me" through
+`POST /api/ask/show`, which re-runs the saved scope only; a point list and an
+inline clip strip under the answer — a 340-px Ask drawer in the film room was
+built and taken out the same day: the match page's one chat glyph links into
+Ask on every view, and an answer's film links bring the reader back to the
+Video tab on the points they counted) and 6.3's playlist and preset (`?pn=` point sets, "Play in sequence", "Open on these points" on the
 share popover; no mp4 export). Still open from Tier 3: model-written titles,
 a pins slot on the team Home, thumbnails in the point list, and the live
 model has not been run against any of it. Everything else below is still

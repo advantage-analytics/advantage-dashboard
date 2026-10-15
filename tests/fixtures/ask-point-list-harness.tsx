@@ -1,9 +1,5 @@
 import { createRoot } from "react-dom/client";
 
-import {
-  AskFilmSeekContext,
-  type AskFilmWatchTarget,
-} from "@/components/dashboard/ask/ask-film-seek";
 import { AskPointList } from "@/components/dashboard/ask/ask-point-list";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { AskShowPoint } from "@/lib/services/ask/show";
@@ -15,14 +11,11 @@ import type { AskShowPoint } from "@/lib/services/ask/show";
  * Query string:
  * - `?case=page`   on the Ask page (the default): rows are links into the
  *                  film, "Watch all" opens it on every point
- * - `?case=seek`   inside the film room's drawer: a seek context is provided
- *                  and a row click lands on `window.__askWatched`
  * - `&scope=team`  the match names the program's player
  * - `&f=<filters>` the measure's cut, carried on every link
  * - `&truncated=1` the match held more points than the list carries
  */
 const params = new URLSearchParams(window.location.search);
-const seek = params.get("case") === "seek";
 
 const MATCH: AskSourceMatch = {
   matchId: "match-sep-28",
@@ -79,30 +72,9 @@ const list = (
     points={POINTS}
     filters={params.get("f")}
     truncated={params.get("truncated") === "1"}
-    href={
-      seek
-        ? undefined
-        : "/dashboard/matches/match-sep-28?tab=film&pn=3%2C7%2C40"
-    }
+    href="/dashboard/matches/match-sep-28?tab=film&pn=3%2C7%2C40"
   />
 );
 
-const w = window as unknown as { __askWatched?: AskFilmWatchTarget[] };
-
-createRoot(document.getElementById("root")!).render(
-  seek ? (
-    <AskFilmSeekContext
-      value={{
-        matchId: "match-sep-28",
-        watch: (target) => {
-          (w.__askWatched ??= []).push(target);
-        },
-      }}
-    >
-      {list}
-    </AskFilmSeekContext>
-  ) : (
-    list
-  ),
-);
+createRoot(document.getElementById("root")!).render(list);
 document.documentElement.dataset.hydrated = "true";

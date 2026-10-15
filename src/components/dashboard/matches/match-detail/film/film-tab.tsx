@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 
@@ -22,7 +15,6 @@ import {
   pointSetQuery,
   POINT_SET_PARAM,
 } from "@/lib/match-video/point-set";
-import type { AskFilmWatchTarget } from "@/components/dashboard/ask/ask-film-seek";
 
 import {
   filmEntryView,
@@ -30,9 +22,8 @@ import {
   type MatchFilmEntry,
 } from "@/lib/match-video/film-entry";
 
-import { AskFilmDrawer, ASK_FILM_DRAWER_ID } from "./ask-film-drawer";
 import { FilmEmptyState } from "./film-empty-state";
-import { sequenceStep, stopForPointNumber } from "./film-sequence";
+import { sequenceStep } from "./film-sequence";
 import { FilmEntryActions } from "./film-entry-actions";
 import { FilmExpiredState } from "./film-expired-state";
 import { FilmExpiryNotice } from "./film-expiry-notice";
@@ -63,7 +54,6 @@ import {
   FilterRailProvider,
   useFilterRailHost,
 } from "@/components/dashboard/matches/match-detail/match-filters/filter-rail";
-import { filterRailReducer } from "@/components/dashboard/matches/match-detail/match-filters/rail-state";
 import {
   EMPTY_MATCH_FILTERS,
   filtersEqual,
@@ -914,7 +904,7 @@ function FilmRoom({
       // behind it, the arrows would step points and S would save one.
       if (
         target?.closest(
-          `input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper], #${FILTER_RAIL_ID}, #${ASK_FILM_DRAWER_ID}`,
+          `input, textarea, select, [contenteditable], [role=dialog], [data-radix-popper-content-wrapper], #${FILTER_RAIL_ID}`,
         )
       ) {
         return;
@@ -1055,64 +1045,6 @@ function FilmRoom({
     setLanding({ ...latestLayers.current, sequence: true });
   }, [pointSetParam]);
 
-  /**
-   * The Ask drawer's seek (`ask-film-drawer.tsx`): an answer's "Watch" or
-   * "Show me" lands on this player instead of navigating. One point seeks
-   * and holds its row, as a Statistics click-through does; a cut replaces
-   * every layer — the shared filters, the remainder, the saved toggle, the
-   * point set — and lands on its first point, in sequence when it came with
-   * a point set. Sides are not decided here: a cut's you/opponent resolve
-   * through the filter context, as every other cut's do (guardrails §4).
-   */
-  const watchInPlace = useCallback(
-    (target: AskFilmWatchTarget) => {
-      if (target.kind === "pointId") {
-        const stop = stops.find((s) => s.point.id === target.pointId);
-        if (stop) landOnStop(stop);
-        return;
-      }
-      if (target.kind === "point") {
-        const stop = stopForPointNumber(stops, target.pointNumber);
-        if (stop) landOnStop(stop);
-        return;
-      }
-      const next = target.filters ?? EMPTY_MATCH_FILTERS;
-      const applied = filtersEqual(next, shared) ? shared : next;
-      setShared(applied);
-      setFilmRemainder(null);
-      setSavedOnly(false);
-      setPointSet(target.pointNumbers);
-      setLanding({
-        shared: applied,
-        remainder: null,
-        sequence: target.pointNumbers !== null,
-      });
-    },
-    [stops, landOnStop, shared, setShared, setFilmRemainder, setPointSet],
-  );
-
-  // The Ask drawer shares the pane's right edge with the filters drawer, on
-  // the same three-phase reducer; opening one closes the other.
-  const [askPhase, dispatchAsk] = useReducer(filterRailReducer, "closed");
-  const toggleAsk = useCallback(() => {
-    if (filterRail.open) filterRail.close();
-    dispatchAsk("toggle");
-  }, [filterRail]);
-  const closeAsk = useCallback(() => dispatchAsk("close"), []);
-  const exitAsk = useCallback(() => dispatchAsk("closed"), []);
-  // The title row's chat glyph toggles this drawer (`MatchReportAskLink`):
-  // the tab hands the report its state and its toggle while mounted, and
-  // takes them back on unmount, when the glyph goes back to being a link.
-  const setAskControl = useOptionalMatchReport()?.setAskControl;
-  useEffect(() => {
-    if (!setAskControl || readOnly) return;
-    setAskControl({ open: askPhase === "open", toggle: toggleAsk });
-  }, [setAskControl, readOnly, askPhase, toggleAsk]);
-  useEffect(() => {
-    if (!setAskControl) return;
-    return () => setAskControl(null);
-  }, [setAskControl]);
-
   /** Door one: the report player's maximize control, from wherever it is. */
   const enterRoom = useCallback(() => {
     const snapshot = playerRef.current?.snapshot() ?? {
@@ -1204,9 +1136,9 @@ function FilmRoom({
             owns the file, out of the way of the person watching. Renders
             nothing at all for everyone else — and is not mounted on a
             read-only report, whose links would lead into a wizard the
-            reader has no match in. Ask lives in the title row's chat glyph
-            (`report-title-row.tsx`, through `setAskControl` below) and the
-            sequence walk on the player's own transport. */}
+            reader has no match in. Ask is the title row's chat glyph
+            (`report-title-row.tsx`), a link into Ask with this match tagged;
+            the sequence walk is on the player's own transport. */}
           {!readOnly && <FilmEntryActions matchId={match.id} entry={entry} />}
 
           <FilmPlayer
@@ -1330,16 +1262,6 @@ function FilmRoom({
           report pane's right edge — its absolute box resolves to the pane
           (see filter-rail.tsx › Placement), so nothing here reflows. */}
       <FilterRail countFor={countForDraft} />
-      {/* Ask, beside the film: the same 340px shell on the same edge. Never
-          on a shared link, whose reader has no session to ask with. */}
-      {!readOnly && (
-        <AskFilmDrawer
-          phase={askPhase}
-          onClose={closeAsk}
-          onExited={exitAsk}
-          onWatch={watchInPlace}
-        />
-      )}
     </div>
   );
 }

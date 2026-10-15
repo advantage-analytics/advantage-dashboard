@@ -11,7 +11,6 @@ import * as nextWebpack from "next/dist/compiled/webpack/webpack";
  * and served from a throwaway port, the harness pattern of
  * `ask-answer-view.spec.ts`. The rows are links (a position, an href), the
  * mark is the point's winner, an untimed point is drawn and not linked, and
- * inside the film room's drawer a row seeks instead of navigating.
  */
 
 const webpack = (
@@ -152,21 +151,4 @@ test("the measure's cut rides every row's link, and the team's player serves", a
   await expect(page.locator("[data-ask-point-list-truncated]")).toHaveText(
     "Showing the first 3 points.",
   );
-});
-
-test("inside the film room's drawer a row seeks the player and never navigates", async ({
-  page,
-}) => {
-  await openFixture(page, "?case=seek");
-  // No "Watch all": the film is already on screen.
-  await expect(list(page).getByRole("link", { name: "Watch all" })).toHaveCount(
-    0,
-  );
-
-  await row(page, 7).click();
-  const watched = await page.evaluate(
-    () => (window as unknown as { __askWatched?: unknown[] }).__askWatched,
-  );
-  expect(watched).toEqual([{ kind: "point", pointNumber: 7 }]);
-  expect(new URL(page.url()).search).toBe("?case=seek");
 });

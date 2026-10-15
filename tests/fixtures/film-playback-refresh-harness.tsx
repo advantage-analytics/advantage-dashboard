@@ -6,11 +6,6 @@ import { MatchDataProvider } from "@/components/dashboard/matches/match-data-pro
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
 import { MatchReportProvider } from "@/components/dashboard/matches/match-detail/match-report-context";
-import {
-  MatchReportAskLink,
-  MatchReportTitleActions,
-  MatchReportTitleRow,
-} from "@/components/dashboard/matches/match-detail/report-title-row";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import type { Match } from "@/lib/data/types";
@@ -226,13 +221,6 @@ function FilmTabSlot({ video }: { video: MatchVideo }) {
  */
 const READ_ONLY = new URLSearchParams(location.search).get("readOnly") === "1";
 /**
- * `?ask=1`: the tab under a live report with the title row's chat glyph
- * above it — the control that opens the Ask drawer (`report-title-row.tsx`
- * reads the tab's `setAskControl` registration off the provider). The
- * drawer cases mount this way; the glyph is the page's, not a stand-in.
- */
-const WITH_ASK = new URLSearchParams(location.search).get("ask") === "1";
-/**
  * Where the read-only mount renews its credential. The spec's server answers
  * it with a fresh credential, as it does the match route — and the spec names
  * the same path by hand, so a drift between the two fails the case rather
@@ -247,32 +235,6 @@ function ReportSlot({
   matchId: string;
   children: ReactNode;
 }) {
-  if (WITH_ASK) {
-    return (
-      <MatchReportProvider
-        matchId={matchId}
-        summary={null}
-        isDerived={false}
-        statsPublished={false}
-        hasPlayableVideo
-        savedViews={[]}
-        workspaceRole="owner"
-        workspaceKind="personal"
-        workspaceName=""
-        bandSettings={DEFAULT_BANDS}
-        canEditBands={false}
-        unit="ft"
-      >
-        <MatchReportTitleRow>
-          <div className="min-w-0" />
-          <MatchReportTitleActions>
-            <MatchReportAskLink />
-          </MatchReportTitleActions>
-        </MatchReportTitleRow>
-        {children}
-      </MatchReportProvider>
-    );
-  }
   if (!READ_ONLY) return children;
   return (
     <MatchReportProvider
