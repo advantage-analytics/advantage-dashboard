@@ -174,7 +174,16 @@ what it searches; naming it does.
 elsewhere are 8px-radius squares) + 12px chevron rotating 180° on open, pill
 hover wash, 288px menu on the popover primitive's own 14px hairline surface
 (`MENU_ROW_CLASS`, 9px rhythm). The profile menu carries quiet role/plan capsules
-(grey — neither is an action) and the workspace list again.
+(grey — neither is an action) and the workspace list again, under a quiet
+sentence-case "Workspace" label (11px `--ink-400`), never an eyebrow.
+
+**The search palette's group labels follow the menu rule** (2026-10-15): "Jump
+to", "Recent", a workspace's name in a wide search — 11px `--ink-400`, sentence
+case, the same as `FloatMenuLabel`, never `.eyebrow`. A dialog, but it floats
+over the page like a menu and should read like one; and a workspace name in
+tracked capitals is the long proper noun eyebrows treat worst. The footer's
+legends ("> commands", "@ players") stay lowercase: they caption a keycap, the
+way `esc` does, and are not headings.
 
 **On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"
 12/500 + `text-micro` "Personal · Monday, Aug 24" — so the body can open on a

@@ -628,7 +628,9 @@ export function Header({
                     appears the moment a second workspace does. */}
                 {available.length > 1 && (
                   <>
-                    <p className="eyebrow px-3 pt-3 pb-1">Workspace</p>
+                    <p className="px-3 pt-3 pb-1 text-[11px] text-[var(--ink-400)]">
+                      Workspace
+                    </p>
                     {/* Scrolls at four rows rather than growing the menu — a
                         coach on five programs still gets a menu that fits. */}
                     <div className="max-h-[140px] overflow-y-auto">
