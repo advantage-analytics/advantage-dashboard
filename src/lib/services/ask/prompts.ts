@@ -458,6 +458,24 @@ export const ASK_PLAN_EXAMPLE_QUERY: AskPlanQuery = {
 };
 
 /**
+ * The worked example of two parts of the player's own game set against each
+ * other — shape A, one row, a column per part — so the planner does not
+ * reach for a comparison (shape D) when a question says "more X or Y".
+ * Passes `checkAskSql`.
+ */
+export const ASK_PLAN_EXAMPLE_PARTS: AskPlanQuery = {
+  scope_sql: "select match_id from ask.matches",
+  sql: "select round(100.0 * sum(s.first_serve_points_won) / nullif(sum(s.first_serves_in), 0), 1) as first_serve_won_pct, round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as second_serve_won_pct from ask.match_stats s where s.side = 'me' and s.match_id in (select match_id from scope)",
+  asks_for_advice: false,
+  state: {
+    scope: "all matches",
+    measure: "points won on the first serve and on the second",
+    period: "",
+    subject: "the first serve against the second",
+  },
+};
+
+/**
  * The worked example of a comparison with the opponent: the planner names
  * the kind and the matches, and writes no sql. Its match id is the
  * example's, not a real one. Its scope passes `checkAskSql`.
@@ -773,10 +791,10 @@ Shape D, a comparison the app computes itself (see "Comparisons" below):
 
 For these questions you write NO sql. The app runs its own fixed query over the matches scope_sql selects and writes the comparison itself. Choose "compare":
 
-- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened", "how did I do against this opponent", "how do I beat this opponent", "summarize this match", "what are my strengths", "where am I weakest", "how do I do under pressure", "how do I do on break points", "how did I do at the net", and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another.
-- "baseline": the figures over the matches in scope_sql beside the same figures over ALL the player's matches. For a part of the player's own game over a narrower set of matches: "how was my serve in August", "how do I return on clay", "how did I play this month". scope_sql must select fewer than all matches; over all matches choose "opponent".
+- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened" (in a match or against an opponent — a kind of match is shape A, below), "how did I do against this opponent", "how do I beat this opponent", "summarize this match", "what are my strengths", "where am I weakest", "how do I do under pressure", "how do I do on break points", "how did I do at the net", and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another, and it is not for a KIND of match: "what happened in my three-set matches", "my tiebreak matches", "the matches I lost" ask for a record of those matches and the figures that describe them, which is shape A.
+- "baseline": the figures over the matches in scope_sql beside the same figures over ALL the player's matches. For a part of the player's own game over a narrower set of matches: "how was my serve in August", "how do I return on clay", "how did I play this month". scope_sql must select fewer than all matches; over all matches choose "opponent". Never for two parts of the player's own game set against each other ("long rallies or short ones", "first serve or second"): that is shape A, one row with a column per part.
 - "measures" is optional and usually left out — the app reads what the question names. Add it only when the question names an area in words the app may not know: a list of any of ${ASK_COMPARE_GROUPS.map((group) => `"${group}"`).join(", ")}, or a column of ask.match_stats such as "double_faults".
-- Shape A stays for: a record or a list of matches; a trend over time; a ranking of matches or opponents ("which match", "which opponent"); two groups of matches set against EACH OTHER ("left-handers or right-handers", "hard courts or clay", "one match against another", "first set or later sets": one row per group); one named statistic with a filter of its own, as the first example; WHERE serves or returns were hit; and anything counted from ask.points or ask.shots (serve direction and speed, sets and games, big points, how points ended, forehands and backhands).
+- Shape A stays for: a record or a list of matches; a kind of match ("my three-set matches": their record and figures, one row); several matches set side by side ("compare my three matches against OpponentX": one row per match, played_on first); a trend over time; a ranking of matches or opponents ("which match", "which opponent"); two groups of matches set against EACH OTHER ("left-handers or right-handers", "hard courts or clay", "one match against another", "first set or later sets": one row per group); two parts of the player's OWN game set against each other ("long rallies or short ones", "first serve or second", "deuce court or ad court": one row, a column per part, each ending _pct); one named statistic with a filter of its own, as the first example; WHERE serves or returns were hit; and anything counted from ask.points or ask.shots (serve direction and speed, sets and games, big points, how points ended, forehands and backhands).
 - NEVER reply shape B to a question shape D covers.
 
 ### The review (shape C)
@@ -824,6 +842,9 @@ ${ASK_THREAD_STATE_RULE}
 
 Question: "How is my second serve against left-handers this year?" (asked on 2026-10-11)
 ${JSON.stringify(ASK_PLAN_EXAMPLE_QUERY)}
+
+Question: "Do I win more points on my first serve or my second?"
+${JSON.stringify(ASK_PLAN_EXAMPLE_PARTS)}
 
 Question: "Why did I lose to OpponentX?" (tagged match 9b1e5d2c-2f6a-4e0b-8a3c-5d7e9f1a2b3c against OpponentX)
 ${JSON.stringify(ASK_PLAN_EXAMPLE_COMPARE)}

@@ -2,7 +2,7 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples]
  *
  * A question may carry an `expect` block (`AskEvalExpect` in
  * `scripts/lib/ask-eval-grade.ts`): the error code or `none`, the planner's
@@ -45,7 +45,11 @@
  * calls `askQuestion()` — the same orchestration `/api/ask` runs — with the
  * configured model and the account's own Supabase session, so the plan, the
  * SQL guard, `ask_run_query`, the renderer and the chart blocks are all the
- * real ones.
+ * real ones. The retrieved examples are real too: as the route does, each
+ * question is embedded and the nearest rated pairs (`ask_examples`,
+ * roadmap 1.6) go into the plan prompt's tail, with the verifier's id pinned
+ * as the viewer; each block names what was retrieved. `--no-examples` skips
+ * that read, so a run can judge the prompt on its own.
  *
  * The query functions are executable by `service_role` only, so — exactly as
  * the route does — the database it hands `askQuestion()` comes from
@@ -272,7 +276,7 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade]',
+      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade] [--no-examples]',
     );
     process.exit(2);
   }
@@ -312,10 +316,13 @@ async function main() {
     await import("@/lib/llm/adapter");
   const { createAskDatabase } = await import("@/lib/services/ask/database");
   const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { embedText } = await import("@/lib/llm/embeddings");
+  const { retrieveAskExamples } = await import("@/lib/services/ask/examples");
   // The grader imports `parsePlanReply` from the same module as the pipeline.
   const { gradeTranscript, refusedGrade, gradeLabel, failedReasons, tally } =
     await import("./lib/ask-eval-grade");
   const grading = process.argv.includes("--grade");
+  const withExamples = !process.argv.includes("--no-examples");
 
   if (!isLLMConfigured()) {
     console.error(
@@ -572,6 +579,34 @@ async function main() {
       );
     }
 
+    // The nearest rated pairs, read as the route reads them: the question
+    // embedded, `ask_similar_examples` through the service client with the
+    // verifier pinned as the viewer. An embedding that fails is null and
+    // the prompt keeps its fixed examples — never a failed question.
+    let examples: import("@/lib/services/ask/examples").AskExample[] = [];
+    if (withExamples) {
+      const embedStarted = Date.now();
+      examples = await retrieveAskExamples({
+        service: { rpc: (fn, args) => serviceRole.rpc(fn, args) },
+        viewerId,
+        scope,
+        embedding: embedText(entry.q).catch(() => null),
+      });
+      lines.push(
+        examples.length === 0
+          ? `Examples: none retrieved (${((Date.now() - embedStarted) / 1000).toFixed(1)}s)`
+          : `Examples (${examples.length}, ${((Date.now() - embedStarted) / 1000).toFixed(1)}s): ${examples
+              .map(
+                (example) =>
+                  `“${example.question}”${example.source ? ` [${example.source}]` : ""}`,
+              )
+              .join(" · ")}`,
+        "",
+      );
+    } else {
+      lines.push("Examples: skipped (--no-examples)", "");
+    }
+
     const events: Record<string, unknown>[] = [];
     const started = Date.now();
     try {
@@ -590,6 +625,7 @@ async function main() {
         conversationId: null,
         reservation: null,
         scope,
+        examples,
       })) {
         events.push(event as unknown as Record<string, unknown>);
       }

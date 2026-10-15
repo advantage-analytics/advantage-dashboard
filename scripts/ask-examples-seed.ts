@@ -45,6 +45,7 @@ import {
   ASK_PLAN_EXAMPLE_BASELINE,
   ASK_PLAN_EXAMPLE_COMPARE,
   ASK_PLAN_EXAMPLE_NAMES,
+  ASK_PLAN_EXAMPLE_PARTS,
   ASK_PLAN_EXAMPLE_QUERY,
   ASK_PLAN_EXAMPLE_REFUSAL,
   ASK_PLAN_EXAMPLE_REVIEW,
@@ -101,6 +102,11 @@ const STATIC: { scope: Scope; question: string; reply: object }[] = [
     scope: "personal",
     question: "How is my second serve against left-handers this year?",
     reply: ASK_PLAN_EXAMPLE_QUERY,
+  },
+  {
+    scope: "personal",
+    question: "Do I win more points on my first serve or my second?",
+    reply: ASK_PLAN_EXAMPLE_PARTS,
   },
   {
     scope: "personal",

@@ -327,7 +327,7 @@ test.describe("buildPlanPrompt", () => {
     expect(prompt).toContain("### Comparisons the app computes (shape D)");
     expect(prompt).toContain("For these questions you write NO sql.");
     expect(prompt).toContain(
-      `- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened"`,
+      `- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened" (in a match or against an opponent — a kind of match is shape A, below)`,
     );
     expect(prompt).toContain(
       `- "baseline": the figures over the matches in scope_sql beside the same figures over ALL the player's matches.`,
@@ -355,7 +355,7 @@ test.describe("buildPlanPrompt", () => {
       "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
     );
     expect(prompt).toContain(
-      'and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another.',
+      'and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another, and it is not for a KIND of match: "what happened in my three-set matches", "my tiebreak matches", "the matches I lost" ask for a record of those matches and the figures that describe them, which is shape A.',
     );
     expect(prompt).toContain(
       "- Never for a question that is short, vague or misspelt: those get shape D over all matches.",
