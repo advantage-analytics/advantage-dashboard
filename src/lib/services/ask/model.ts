@@ -19,7 +19,7 @@ import {
 import type { AskModel } from "@/lib/services/ask/ask";
 
 /** The model ids the environment asks for per stage; undefined (an empty value too) for the provider's default. */
-export function requestedStageModels(): {
+function requestedStageModels(): {
   plan: string | undefined;
   answer: string | undefined;
 } {
