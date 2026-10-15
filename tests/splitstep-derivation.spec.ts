@@ -17,6 +17,7 @@ import {
   SERVICE_LINE_M,
   SINGLES_HALF_WIDTH_M,
   serveShotType,
+  uniqueRawStrokes,
 } from "@/lib/services/splitstep/derivation";
 
 /**
@@ -191,6 +192,42 @@ test.describe("parse layer", () => {
 
   test("rejects a payload that is not an array", () => {
     expect(() => parseStrokes({ strokes: [] })).toThrow(/must be a JSON array/);
+  });
+
+  // Job 4e0dac8e: two strokes on one frame, cross-joined by the vendor with
+  // the two rally slots they fill, so each event_id arrives twice.
+  test("keeps one row per event_id, one event per rally slot", () => {
+    const row = (eventId: number, strokeNumber: number, player: string) => ({
+      event_id: eventId,
+      pred_rally_id: 51,
+      pred_rally_stroke_number: strokeNumber,
+      pred_player_id: player,
+    });
+    const rows = [
+      row(409, 11, "B"),
+      row(410, 12, "A"),
+      row(410, 13, "B"),
+      row(411, 12, "A"),
+      row(411, 13, "B"),
+      row(412, 14, "A"),
+    ];
+    expect(uniqueRawStrokes(rows)).toEqual([
+      row(409, 11, "B"),
+      row(410, 12, "A"),
+      row(411, 13, "B"),
+      row(412, 14, "A"),
+    ]);
+
+    // Every copy colliding still leaves the event once, at its first copy.
+    const clash = [row(5, 1, "A"), row(6, 1, "B"), row(6, 1, "A")];
+    expect(uniqueRawStrokes(clash)).toEqual([row(5, 1, "A"), row(6, 1, "B")]);
+
+    // A file without repeats is returned as it came.
+    const { strokes } = parseStrokes(clean);
+    expect(uniqueRawStrokes(clean as unknown[])).toHaveLength(
+      (clean as unknown[]).length,
+    );
+    expect(strokes.length).toBeGreaterThan(1000);
   });
 });
 

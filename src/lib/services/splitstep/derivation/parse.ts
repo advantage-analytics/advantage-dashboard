@@ -201,6 +201,68 @@ export function normalizeStroke(
 }
 
 /**
+ * The results rows with one row per `event_id`.
+ *
+ * The vendor has been seen to cross-join two strokes it detected on the same
+ * frame with the two rally slots they fill: job 4e0dac8e carries event 410
+ * and event 411 twice each, once as stroke 12 by one player and once as
+ * stroke 13 by the other, every measured field identical between an event's
+ * copies. Kept as-is, the rally gains two phantom strokes and the label seed
+ * writes one `event_id` twice into a session.
+ *
+ * Each repeated event keeps the first copy whose rally slot
+ * (`pred_rally_id`, `pred_rally_stroke_number`) no kept row holds yet, so the
+ * pair is matched one slot each, in file order — on 4e0dac8e that is the
+ * pairing the player positions agree with. An event every copy of which
+ * collides keeps its first copy. A row with no numeric `event_id` passes
+ * through untouched; normalizeStroke judges it.
+ */
+export function uniqueRawStrokes(raw: readonly unknown[]): unknown[] {
+  const eventId = (row: unknown): number | null =>
+    row && typeof row === "object"
+      ? num((row as RawSplitStepStroke).event_id)
+      : null;
+  const slot = (row: unknown): string => {
+    const r = row as RawSplitStepStroke;
+    return `${String(r.pred_rally_id)}:${String(r.pred_rally_stroke_number)}`;
+  };
+
+  const copies = new Map<number, number>();
+  for (const row of raw) {
+    const id = eventId(row);
+    if (id !== null) copies.set(id, (copies.get(id) ?? 0) + 1);
+  }
+  if ([...copies.values()].every((n) => n === 1)) return [...raw];
+
+  const kept = new Set<number>();
+  const keptIds = new Set<number>();
+  const slots = new Set<string>();
+  raw.forEach((row, index) => {
+    const id = eventId(row);
+    if (id === null || copies.get(id) === 1) {
+      kept.add(index);
+      if (id !== null) slots.add(slot(row));
+    }
+  });
+  raw.forEach((row, index) => {
+    const id = eventId(row);
+    if (id === null || copies.get(id) === 1 || keptIds.has(id)) return;
+    if (slots.has(slot(row))) return;
+    kept.add(index);
+    keptIds.add(id);
+    slots.add(slot(row));
+  });
+  raw.forEach((row, index) => {
+    const id = eventId(row);
+    if (id === null || copies.get(id) === 1 || keptIds.has(id)) return;
+    kept.add(index);
+    keptIds.add(id);
+  });
+
+  return raw.filter((_, index) => kept.has(index));
+}
+
+/**
  * Parse a full results payload.
  *
  * Accepts the parsed JSON array. Callers reading from Supabase Storage should
@@ -219,7 +281,7 @@ export function parseStrokes(
   const strokes: SplitStepStroke[] = [];
   let droppedCount = 0;
 
-  for (const row of raw) {
+  for (const row of uniqueRawStrokes(raw)) {
     const stroke = normalizeStroke(row as RawSplitStepStroke, startTimeSeconds);
     if (stroke) strokes.push(stroke);
     else droppedCount += 1;

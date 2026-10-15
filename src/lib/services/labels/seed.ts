@@ -16,6 +16,7 @@
 import {
   metersToCourtFrame,
   parseStrokes,
+  uniqueRawStrokes,
   type DerivedShot,
   type RawSplitStepStroke,
   type SplitStepStroke,
@@ -375,8 +376,10 @@ export function buildLabelSeed(
   transcript: Transcript,
   rawStrokes: readonly RawSplitStepStroke[],
 ): LabelSeed {
+  // The copy of a repeated event the parse layer kept, so the frozen vendor
+  // row agrees with the stroke the transcript was built from.
   const rawById = new Map<number, RawSplitStepStroke>();
-  for (const raw of rawStrokes) {
+  for (const raw of uniqueRawStrokes(rawStrokes) as RawSplitStepStroke[]) {
     if (raw && typeof raw === "object") rawById.set(raw.event_id, raw);
   }
 
