@@ -17,6 +17,7 @@ import {
   askScopeProgramId,
   type AskScope,
 } from "@/lib/services/ask/scope";
+import { askFollowUps, type AskStarter } from "@/lib/services/ask/starters";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { AskAnswer } from "./ask-answer";
@@ -32,6 +33,7 @@ import {
 import { AskPrompt } from "./ask-prompt";
 import { AskRail } from "./ask-rail";
 import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
+import { AskStarters } from "./ask-starters";
 import { useAskStream, type AskExchange } from "./use-ask-stream";
 
 /**
@@ -103,6 +105,12 @@ export interface AskPageProps {
   timeZone?: string;
   /** What can be tagged. No matches here is the page's day zero. */
   tagOptions: AskTagOptions;
+  /**
+   * Questions to ask with one click, built by the route from the same tag
+   * options (`askStarters()`); shown under an empty composer. None when
+   * omitted.
+   */
+  starters?: AskStarter[];
   /** Null when the count could not be read. */
   quota: AskQuota | null;
   /** Saved conversations, most recently used first. */
@@ -172,6 +180,7 @@ function AskThread({
   scope,
   timeZone,
   tagOptions,
+  starters = [],
   quota,
   conversations,
   conversation,
@@ -234,6 +243,20 @@ function AskThread({
       against: conversations,
     });
   }
+
+  // A starter or a follow-up is a question with its tags, sent as typed.
+  function pick(starter: AskStarter) {
+    void send({ text: starter.text, tags: starter.tags });
+  }
+
+  // Under the newest answer, once it has settled: what to ask next, from the
+  // subject of what was just asked. Never under an error or a question still
+  // being answered.
+  const newest = state.exchanges[state.exchanges.length - 1];
+  const followUps =
+    newest && newest.answer.status === "done" && !state.inFlight
+      ? askFollowUps(newest.question.text, scope)
+      : [];
 
   async function deleteConversation(id: string) {
     const result = await deleteAskConversation(id, scope.kind);
@@ -345,6 +368,14 @@ function AskThread({
                   }
                 />
               ))}
+              {followUps.length > 0 && (
+                <AskStarters
+                  label={copy.followUps}
+                  starters={followUps}
+                  onPick={pick}
+                  className="-mt-4"
+                />
+              )}
               <div ref={end} aria-hidden="true" />
             </div>
           </div>
@@ -357,6 +388,12 @@ function AskThread({
       ) : (
         <AskIntro lead={<p className="text-body-sm">{copy.lead}</p>}>
           {composer}
+          <AskStarters
+            label={copy.starters}
+            starters={starters}
+            onPick={pick}
+            disabled={state.inFlight}
+          />
         </AskIntro>
       )}
     </AskFrame>

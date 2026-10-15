@@ -64,7 +64,9 @@
 
 import {
   createLLMObservabilityContext,
+  flushPostHogAfterResponse,
   getLLMStream,
+  getPostHogServerClient,
   isLLMConfigured,
 } from "@/lib/llm/adapter";
 import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
@@ -77,13 +79,17 @@ import {
   type AskTagOptions,
 } from "@/lib/data/ask-server";
 import {
-  askQuestion,
   conversationTurnsFromMessages,
   previousPlanFromMessages,
   reserveAskQuestion,
   type AskDatabase,
   type AskModel,
 } from "@/lib/services/ask/ask";
+import {
+  askRunProperties,
+  askRunRow,
+  recordAskRun,
+} from "@/lib/services/ask/runs";
 import {
   createAskDatabase,
   type AskRpcClient,
@@ -308,6 +314,7 @@ async function abandon(events: AsyncGenerator<AskEvent, void, undefined>) {
  * ---------------------------------------------------------------------- */
 
 export async function POST(request: Request): Promise<Response> {
+  const started = Date.now();
   const origin = checkSameOrigin(request, [siteUrl()]);
   if (origin) return errorResponse(origin);
 
@@ -475,6 +482,12 @@ export async function POST(request: Request): Promise<Response> {
     stream: (systemPrompt, messages, call) =>
       getLLMStream(systemPrompt, messages, observability, {
         span: call ? `ask.${call.stage}` : "ask",
+        // A model per stage: the planner needs SQL accuracy, the writer only
+        // prose. Unset, the provider's default serves both.
+        model:
+          call?.stage === "answer"
+            ? process.env.ASK_ANSWER_MODEL
+            : process.env.ASK_PLAN_MODEL,
         temperature: call?.temperature,
         maxTokens: call?.maxTokens,
         jsonSchema: call?.jsonSchema,
@@ -498,23 +511,54 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(transportError("internal_error", "reserve_failed"));
   }
 
-  const events = askQuestion({
-    db,
-    model,
-    now: () => new Date(),
-    question: body.question,
-    tags: resolved.tags,
-    conversation: conversation
-      ? conversationTurnsFromMessages(conversation.messages)
-      : [],
-    previousPlan: conversation
-      ? previousPlanFromMessages(conversation.messages)
-      : null,
-    conversationId: conversation?.id ?? null,
-    reservation: reserved.reservation,
-    scope,
-    pageSeats: getAskPageSeats,
-  });
+  const events = recordAskRun(
+    {
+      db,
+      model,
+      now: () => new Date(),
+      question: body.question,
+      tags: resolved.tags,
+      conversation: conversation
+        ? conversationTurnsFromMessages(conversation.messages)
+        : [],
+      previousPlan: conversation
+        ? previousPlanFromMessages(conversation.messages)
+        : null,
+      conversationId: conversation?.id ?? null,
+      reservation: reserved.reservation,
+      scope,
+      pageSeats: getAskPageSeats,
+    },
+    {
+      preStreamMs: Date.now() - started,
+      planModel: process.env.ASK_PLAN_MODEL ?? null,
+      answerModel: process.env.ASK_ANSWER_MODEL ?? null,
+      // Every question leaves a row in ask_runs (as the asker) and one
+      // `ask_run` event in PostHog (without the question's text), however it
+      // ended. Neither can fail the answer: a run that could not be recorded
+      // is logged and that is all.
+      onRun: async (run) => {
+        const recorded = await db.rpc("ask_record_run", {
+          p_run: askRunRow(run),
+        });
+        if (recorded.error) {
+          console.warn("[ask] could not record the run", {
+            sqlstate: recorded.error.code,
+            error: recorded.error.message,
+          });
+        }
+        const posthog = getPostHogServerClient();
+        if (posthog) {
+          posthog.capture({
+            distinctId: user.id,
+            event: "ask_run",
+            properties: askRunProperties(run, scope),
+          });
+          flushPostHogAfterResponse(posthog);
+        }
+      },
+    },
+  );
 
   try {
     const response = ndjsonStreamResponse(events);

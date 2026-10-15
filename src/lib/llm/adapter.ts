@@ -63,6 +63,51 @@ export interface LLMCallOptions {
   staticPrefixLength?: number;
   /** Aborts the provider request: the client went away, so stop paying for the reply. */
   signal?: AbortSignal;
+  /**
+   * The model to use instead of the provider's default — a different one per
+   * stage (Ask's planner needs SQL accuracy, its writer only prose), chosen
+   * by `ASK_PLAN_MODEL` / `ASK_ANSWER_MODEL` in the route. The id must belong
+   * to the provider in use; one from the other provider falls back to the
+   * default rather than failing the call.
+   */
+  model?: string;
+}
+
+/** Each provider's default model, and the prefix its ids carry. */
+const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-6";
+const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
+function modelFor(
+  provider: "anthropic" | "openai",
+  requested: string | undefined,
+): string {
+  const fallback =
+    provider === "anthropic" ? ANTHROPIC_DEFAULT_MODEL : GEMINI_DEFAULT_MODEL;
+  if (!requested) return fallback;
+  const theirs =
+    provider === "anthropic"
+      ? requested.startsWith("claude-")
+      : requested.startsWith("gemini-");
+  return theirs ? requested : fallback;
+}
+
+/**
+ * One SDK client per provider and key for the life of the server instance:
+ * each client holds a connection pool, and building one per call threw that
+ * away on every request. Keyed by the key itself so a rotated key gets a
+ * fresh client.
+ */
+const clients = new Map<string, unknown>();
+
+async function cachedClient<T>(
+  key: string,
+  build: () => Promise<T>,
+): Promise<T> {
+  const found = clients.get(key);
+  if (found) return found as T;
+  const built = await build();
+  clients.set(key, built);
+  return built;
 }
 
 /**
@@ -125,10 +170,23 @@ function getPostHogClient(): PostHog | null {
 }
 
 /**
+ * The server-side PostHog client, for a route that captures a product event
+ * of its own beside the adapter's LLM events (Ask's `ask_run`). Null when
+ * PostHog is not configured, and the caller then sends nothing.
+ */
+export function getPostHogServerClient(): PostHog | null {
+  return getPostHogClient();
+}
+
+/**
  * Flush after the response has finished, never inside the stream: awaiting
  * PostHog in the generator's `finally` held the text stream open until the
  * send completed — up to half a minute of retries if PostHog was slow.
  */
+export function flushPostHogAfterResponse(posthog: PostHog | null) {
+  flushAfterResponse(posthog);
+}
+
 function flushAfterResponse(posthog: PostHog | null) {
   if (!posthog) return;
   try {
@@ -189,29 +247,56 @@ export async function getLLMStream(
   options: LLMCallOptions = {},
 ): Promise<AsyncIterable<string>> {
   const provider = process.env.LLM_PROVIDER ?? "";
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
 
-  if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-    return anthropicStream(
-      systemPrompt,
-      messages,
-      context,
-      options,
-      process.env.ANTHROPIC_API_KEY,
-    );
+  const primary =
+    provider === "anthropic" && anthropicKey
+      ? () =>
+          anthropicStream(
+            systemPrompt,
+            messages,
+            context,
+            options,
+            anthropicKey,
+          )
+      : provider === "openai" && openaiKey
+        ? () =>
+            openaiStream(systemPrompt, messages, context, options, openaiKey)
+        : null;
+  if (!primary) {
+    // No provider configured — return a mock stream for local dev.
+    return mockStream();
   }
 
-  if (provider === "openai" && process.env.OPENAI_API_KEY) {
-    return openaiStream(
-      systemPrompt,
-      messages,
-      context,
-      options,
-      process.env.OPENAI_API_KEY,
-    );
-  }
+  // The other provider, when its key is also set: one vendor's outage is a
+  // retry on the other, not an `llm_unavailable` straight away. Only the
+  // request itself is retried — a stream that fails after its first chunk
+  // is the caller's to handle, as it was.
+  const secondary =
+    provider === "anthropic" && openaiKey
+      ? () => openaiStream(systemPrompt, messages, context, options, openaiKey)
+      : provider === "openai" && anthropicKey
+        ? () =>
+            anthropicStream(
+              systemPrompt,
+              messages,
+              context,
+              options,
+              anthropicKey,
+            )
+        : null;
 
-  // No provider configured — return a mock stream for local dev.
-  return mockStream();
+  try {
+    return await primary();
+  } catch (error) {
+    if (!secondary || options.signal?.aborted) throw error;
+    console.warn("[llm] primary provider failed; retrying on the other", {
+      provider,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return secondary();
+  }
 }
 
 /* ── Anthropic ────────────────────────────────────────────── */
@@ -225,7 +310,7 @@ async function anthropicStream(
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
   const request = {
-    model: "claude-opus-4-6",
+    model: modelFor("anthropic", options.model),
     max_tokens: options.maxTokens ?? 1024,
     stream: true as const,
     system: anthropicSystem(systemPrompt, options.staticPrefixLength),
@@ -258,19 +343,29 @@ async function anthropicStream(
   // unconditionally would double the SDK weight on every request regardless
   // of whether PostHog is configured.
   const stream = posthog
-    ? await new (await import("@posthog/ai/anthropic")).Anthropic({
-        apiKey,
-        posthog,
-      }).messages.create(
+    ? await (
+        await cachedClient(
+          `anthropic:posthog:${apiKey}`,
+          async () =>
+            new (await import("@posthog/ai/anthropic")).Anthropic({
+              apiKey,
+              posthog,
+            }),
+        )
+      ).messages.create(
         {
           ...request,
           ...posthogOptions(context, options),
         },
         requestOptions,
       )
-    : await new (await import("@anthropic-ai/sdk")).default({
-        apiKey,
-      }).messages.create(request, requestOptions);
+    : await (
+        await cachedClient(
+          `anthropic:${apiKey}`,
+          async () =>
+            new (await import("@anthropic-ai/sdk")).default({ apiKey }),
+        )
+      ).messages.create(request, requestOptions);
   flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {
@@ -289,6 +384,9 @@ async function anthropicStream(
 
 /* ── OpenAI ───────────────────────────────────────────────── */
 
+const GEMINI_OPENAI_BASE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/openai/";
+
 async function openaiStream(
   systemPrompt: string,
   messages: ChatMessage[],
@@ -300,7 +398,7 @@ async function openaiStream(
   const request = {
     // 2.5 models are closed to new Google Cloud projects, so a key from one
     // is refused with a 404 on 2.5-flash-lite. Same model as generate-insights.
-    model: "gemini-3.5-flash-lite",
+    model: modelFor("openai", options.model),
     stream: true as const,
     // A streamed completion reports its token usage only on request, in one
     // last chunk with no choices. Without it every event PostHog recorded
@@ -335,21 +433,33 @@ async function openaiStream(
   // unconditionally would double the SDK weight on every request regardless
   // of whether PostHog is configured.
   const stream = posthog
-    ? await new (await import("@posthog/ai/openai")).OpenAI({
-        apiKey,
-        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-        posthog,
-      }).chat.completions.create(
+    ? await (
+        await cachedClient(
+          `openai:posthog:${apiKey}`,
+          async () =>
+            new (await import("@posthog/ai/openai")).OpenAI({
+              apiKey,
+              baseURL: GEMINI_OPENAI_BASE_URL,
+              posthog,
+            }),
+        )
+      ).chat.completions.create(
         {
           ...request,
           ...posthogOptions(context, options, "google"),
         },
         requestOptions,
       )
-    : await new (await import("openai")).default({
-        apiKey,
-        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      }).chat.completions.create(request, requestOptions);
+    : await (
+        await cachedClient(
+          `openai:${apiKey}`,
+          async () =>
+            new (await import("openai")).default({
+              apiKey,
+              baseURL: GEMINI_OPENAI_BASE_URL,
+            }),
+        )
+      ).chat.completions.create(request, requestOptions);
   flushAfterResponse(posthog);
 
   async function* iterate(): AsyncIterable<string> {

@@ -45,6 +45,10 @@ export interface AskCopy {
   trendAverage: string;
   /** The footer's sentence when the question asked what to do. */
   noAdvice: string;
+  /** The accessible name of the starter questions under an empty composer. */
+  starters: string;
+  /** The accessible name of the follow-up questions under the newest answer. */
+  followUps: string;
 }
 
 const SHARED_ERRORS = {
@@ -92,6 +96,8 @@ export const PERSONAL_ASK_COPY: AskCopy = {
   },
   trendAverage: "Your average",
   noAdvice: ASK_NO_ADVICE_SENTENCE,
+  starters: "Questions to start with",
+  followUps: "Ask next",
 };
 
 /**
@@ -127,6 +133,8 @@ const TEAM_ASK_COPY: Omit<AskCopy, "lead"> = {
   // and the block's caption says which. The key only names the rule.
   trendAverage: "Average",
   noAdvice: ASK_TEAM_NO_ADVICE_SENTENCE,
+  starters: "Questions to start with",
+  followUps: "Ask next",
 };
 
 export function askCopy(scope: AskScope): AskCopy {

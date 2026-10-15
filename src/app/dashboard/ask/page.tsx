@@ -7,6 +7,7 @@ import {
   getAskTagOptions,
 } from "@/lib/data/ask-server";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
+import { askStarters } from "@/lib/services/ask/starters";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Ask" };
@@ -74,6 +75,7 @@ async function AskContent({ searchParams }: AskRouteProps) {
       scope={PERSONAL_ASK_SCOPE}
       timeZone={workspace?.active.timeZone}
       tagOptions={tagOptions}
+      starters={askStarters(tagOptions, PERSONAL_ASK_SCOPE)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}

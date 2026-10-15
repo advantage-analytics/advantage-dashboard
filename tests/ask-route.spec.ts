@@ -492,6 +492,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
       ["ask_run_query", "service"],
       ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -515,6 +516,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
       ["ask_run_team_query", "service"],
       ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -540,6 +542,14 @@ test.describe("POST /api/ask · the service-role boundary", () => {
         args: { usage_id: USAGE_ID, p_user_id: USER_ID },
         via: "service",
       },
+      // The run is recorded last, as the asker, with its outcome.
+      expect.objectContaining({
+        fn: "ask_record_run",
+        via: "user",
+        args: expect.objectContaining({
+          p_run: expect.objectContaining({ outcome: "llm_unavailable" }),
+        }),
+      }),
     ]);
   });
 
@@ -972,6 +982,7 @@ test.describe("POST /api/ask · the answer", () => {
       "ask_run_query",
       "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.llm).toBe(0);
   });
@@ -1018,6 +1029,7 @@ test.describe("POST /api/ask · the answer", () => {
     expect(rpcNames(calls)).toEqual([
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
     expect(calls.rpc[1].args).toEqual({
       usage_id: USAGE_ID,
@@ -1041,6 +1053,7 @@ test.describe("POST /api/ask · the answer", () => {
     expect(rpcNames(calls)).toEqual([
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
     expect(calls.rpc[1].args).toEqual({
       usage_id: USAGE_ID,
@@ -1163,6 +1176,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
       "ask_run_team_query",
       "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });
     expect(calls.rpc[1].args).toMatchObject({
