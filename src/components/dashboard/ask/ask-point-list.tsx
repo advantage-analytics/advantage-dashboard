@@ -4,41 +4,30 @@ import type { Ref } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
-import {
-  LIST_TONE,
-  ROW_TONE,
-} from "@/components/dashboard/matches/match-detail/film/point-list-tone";
-import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
-import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
-import { surname } from "@/lib/data/match-utils";
-import { matchFilmPointsHref } from "@/lib/match-video/point-set";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { AskShowPoint } from "@/lib/services/ask/show-response";
-import { cn } from "@/lib/utils";
 
 /**
- * The points behind an answer over ONE match (roadmap 6.1): a row per point
- * — set and game in the header, the result, the score, who won — with a play
- * glyph that opens the film on that point.
+ * The points behind an answer over ONE match (roadmap 6.1), as one line: a
+ * play glyph and "Watch the 12 points", which opens the Video tab on them as
+ * a playlist, and beside it in grey where they fall and how long they run.
  *
- * The rows are the Video tab's point list rows (`film/point-list.tsx`) in
- * their light paint — the same 52px row, the same 30px mark, the same score
- * face, the same game header — taken from `point-list-tone.ts` rather than
- * by mounting `PointList`, which needs a match's providers and a playhead
- * this answer does not have. What differs is deliberate: every row is a LINK
- * (a `next/link` into `?tab=film&pn=<n>`, so a middle-click opens the film
- * in a tab), and the trailing control is a play glyph rather than a
- * bookmark.
+ * ── Why a link and not a list ───────────────────────────────────────────────
+ * It used to be the Video tab's point list in a card — a 52px row per point
+ * with its mark, its result and its score. In a chat answer that ran to a
+ * screen or more for a long cut, and repeated what the Video tab, one click
+ * away, already lays out with the film beside it. The answer's own words say
+ * what the points are; this line only takes the player to them. Picked on
+ * `/design/ask/polish` (variant I) over a quieter list, a strip and a
+ * disclosure.
  *
- * The mark is the point's WINNER as `ask.points.i_won` says it — the
- * workspace's own mark when the viewer (or, on a team, the program's player)
- * won it, the opponent's initials when they did — the rule the Video tab's
- * rows follow. A point the source never timed has nowhere to seek to and is
- * drawn muted with no link, as the tab draws it.
- *
- * No thumbnail: the seek-lane preview (`use-seek-preview.ts`) draws frames
- * from a second `<video>` seeking the playback credential, which is a video
- * element, a credential fetch and a seek per row — not cheap, so not here.
+ * ── What the line says ──────────────────────────────────────────────────────
+ * The link's words keep the list's old honesty about whose points these are:
+ * "Watch the 12 points" when they are the ones the headline figure counts,
+ * "Watch all 54 points" for a whole match nothing cut, and "Watch 54 points"
+ * otherwise. The grey part names the stretch — "Set 1 · games 2–4", or
+ * "Sets 1–2" across sets — and the running time when the source timed them,
+ * then "first 54" when the match held more points than the server sent.
  *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it
  * is rendered by an offline component harness (`tests/ask-point-list.spec.ts`).
@@ -50,70 +39,78 @@ export interface AskPointListProps {
   /** In match order, as `/api/ask/show` answered them. */
   points: readonly AskShowPoint[];
   /**
-   * The measure's cut, serialized for `?f=`, carried on every row's link.
-   * Null when the answer named no cut: the list is then the whole match, and
-   * its heading says so instead of passing them off as the answer's points.
+   * The measure's cut, serialized for `?f=`. Null when the answer named no
+   * cut: the points are then the whole match, and the line says so instead
+   * of passing them off as the answer's.
    */
   filters?: string | null;
-  /** The match held more points than the list could carry. */
+  /** The match held more points than the server sent. */
   truncated?: boolean;
   /**
-   * The rows are the points the answer's headline figure counts, so the
-   * heading may call them the answer's. Otherwise it says only what they
-   * are: the match's points, all of them when nothing cut them.
+   * The points are the ones the answer's headline figure counts, so the line
+   * may call them the answer's.
    */
   counted?: boolean;
-  /** The film on the first point with the rest queued: the header's link. Omitted inside the film room. */
-  href?: string;
+  /** The film on the first point with the rest queued: what the line opens. */
+  href: string;
   /**
-   * The heading, made focusable (`tabIndex={-1}`), for "Show me" to move
-   * focus onto once its button has unmounted.
+   * The line, made focusable (`tabIndex={-1}`), for "Show me" to move focus
+   * onto once its button has unmounted.
    */
   headingRef?: Ref<HTMLHeadingElement>;
 }
 
-interface Group {
-  key: string;
-  setNumber: number | null;
-  gameNumber: number | null;
-  gameScore: string | null;
-  points: AskShowPoint[];
-}
-
-/** "Marcus Reid" → "MR"; one letter for a one-word name. */
-function initialsOf(name: string | null): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "—";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
-  return `${first}${last}`.toUpperCase();
-}
-
-function groupsOf(points: readonly AskShowPoint[]): Group[] {
-  const out: Group[] = [];
-  let current: Group | undefined;
-  for (const point of points) {
-    if (
-      !current ||
-      current.setNumber !== point.setNumber ||
-      current.gameNumber !== point.gameNumber
-    ) {
-      current = {
-        key: `${point.setNumber ?? "x"}-${point.gameNumber ?? "x"}-${point.pointNumber}`,
-        setNumber: point.setNumber,
-        gameNumber: point.gameNumber,
-        gameScore: point.gameScore,
-        points: [],
-      };
-      out.push(current);
-    }
-    current.points.push(point);
+/** "Watch the 12 points" / "Watch all 54 points" / "Watch 54 points". */
+export function askPointListLabel({
+  count,
+  filters,
+  truncated,
+  counted,
+}: {
+  count: number;
+  filters: string | null;
+  truncated: boolean;
+  counted: boolean;
+}): string {
+  const noun = count === 1 ? "point" : "points";
+  if (counted && filters !== null) return `Watch the ${count} ${noun}`;
+  if (filters === null && !truncated) {
+    return count === 1 ? "Watch the 1 point" : `Watch all ${count} ${noun}`;
   }
-  return out;
+  return `Watch ${count} ${noun}`;
+}
+
+/** "Set 1 · games 2–4", "Set 2 · game 7", "Sets 1–2"; null when unrecorded. */
+export function askPointSpan(points: readonly AskShowPoint[]): string | null {
+  const placed = points.filter(
+    (point) => point.setNumber !== null && point.gameNumber !== null,
+  );
+  if (placed.length === 0) return null;
+  const first = placed[0];
+  const last = placed[placed.length - 1];
+  if (first.setNumber !== last.setNumber) {
+    return `Sets ${first.setNumber}–${last.setNumber}`;
+  }
+  return first.gameNumber === last.gameNumber
+    ? `Set ${first.setNumber} · game ${first.gameNumber}`
+    : `Set ${first.setNumber} · games ${first.gameNumber}–${last.gameNumber}`;
+}
+
+/** "about 3 min" / "under a minute"; null when no point was timed. */
+export function askPointRunningTime(
+  points: readonly AskShowPoint[],
+): string | null {
+  const seconds = points.reduce(
+    (sum, point) =>
+      sum + (point.videoTime !== null ? (point.duration ?? 0) : 0),
+    0,
+  );
+  if (seconds <= 0) return null;
+  if (seconds < 60) return "under a minute";
+  return `about ${Math.round(seconds / 60)} min`;
 }
 
 export function AskPointList({
-  match,
   points,
   filters = null,
   truncated = false,
@@ -121,25 +118,17 @@ export function AskPointList({
   href,
   headingRef,
 }: AskPointListProps) {
-  const workspace = useOptionalWorkspace()?.active ?? null;
-  const t = LIST_TONE.light;
-  const groups = groupsOf(points);
   const count = points.length;
-  const noun = count === 1 ? "point" : "points";
-  const heading =
-    counted && filters !== null
-      ? `${count} ${noun} behind this answer`
-      : filters === null && !truncated
-        ? `All ${count} ${noun} in this match`
-        : `${count} ${noun} in this match`;
-  // Who the sides are, by name: the program's player on a team answer, the
-  // viewer (unnamed to themselves) on a personal one.
-  const you = match.playerName ? surname(match.playerName) : "You";
-  const opponent = surname(match.opponentName ?? "Opponent");
-  const youInitials = initialsOf(match.playerName);
-  const opponentInitials = initialsOf(match.opponentName);
-
   if (count === 0) return null;
+
+  const label = askPointListLabel({ count, filters, truncated, counted });
+  const whose =
+    counted && filters !== null ? "behind this answer" : "in this match";
+  const meta = [
+    askPointSpan(points),
+    askPointRunningTime(points),
+    truncated ? `first ${count}` : null,
+  ].filter(Boolean);
 
   return (
     <section
@@ -149,173 +138,27 @@ export function AskPointList({
           ? "Points behind this answer"
           : "Points in this match"
       }
-      className="flex max-w-[420px] flex-col gap-0.5"
     >
-      <div className="flex items-center gap-3 pb-2">
-        <h3
-          ref={headingRef}
-          tabIndex={headingRef ? -1 : undefined}
-          className="eyebrow-sm min-w-0 flex-1 outline-none"
-        >
-          {heading}
-        </h3>
-        {href && (
-          <Link
-            href={href}
-            data-ask-point-list-watch=""
-            className="rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
-          >
-            Watch all
-          </Link>
-        )}
-      </div>
-
-      <div className="surface-card flex flex-col" style={t.rootStyle}>
-        {groups.map((group) => (
-          <div key={group.key} className="flex flex-col">
-            <div className={t.gameHeader}>
-              <span className={t.gameLabel}>
-                {group.setNumber !== null && group.gameNumber !== null
-                  ? `Set ${group.setNumber} · Game ${group.gameNumber}`
-                  : "Points"}
-              </span>
-              <div className="flex-1" />
-              {group.gameScore && (
-                <span className={t.gameMeta}>{group.gameScore}</span>
-              )}
-            </div>
-            {group.points.map((point) => (
-              <AskPointRow
-                key={point.pointNumber}
-                matchId={match.matchId}
-                point={point}
-                filters={filters}
-                you={you}
-                opponent={opponent}
-                youInitials={youInitials}
-                opponentInitials={opponentInitials}
-                workspace={workspace}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {truncated && (
-        <p data-ask-point-list-truncated="" className="text-micro pt-1.5">
-          Showing the first {count} points.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function AskPointRow({
-  matchId,
-  point,
-  filters,
-  you,
-  opponent,
-  youInitials,
-  opponentInitials,
-  workspace,
-}: {
-  matchId: string;
-  point: AskShowPoint;
-  filters: string | null;
-  you: string;
-  opponent: string;
-  youInitials: string;
-  opponentInitials: string;
-  workspace: ReturnType<typeof useOptionalWorkspace> extends infer V
-    ? V extends { active: infer A }
-      ? A | null
-      : null
-    : null;
-}) {
-  const r = ROW_TONE.light;
-  const n = point.pointNumber;
-  const seekable = point.videoTime !== null;
-  const title = point.resultType ?? `Point ${n}`;
-  const served =
-    point.iServed === true
-      ? `${you} served`
-      : point.iServed === false
-        ? `${opponent} served`
-        : null;
-  const detail = [`Point ${n}`, served].filter(Boolean).join(" · ");
-  const isYou = point.iWon === true;
-
-  const content = (
-    <>
-      <span
-        className="inline-flex shrink-0 basis-[34px] items-center justify-center"
-        data-mark={point.iWon === null ? "none" : point.iWon ? "you" : "opp"}
+      <h3
+        ref={headingRef}
+        tabIndex={headingRef ? -1 : undefined}
+        className="text-body-sm flex flex-wrap items-center gap-x-2 gap-y-0.5 outline-none"
       >
-        {isYou && workspace ? (
-          <WorkspaceMark
-            workspace={workspace}
-            className="size-[30px] rounded-[var(--radius-button)] text-[11px] tracking-[0.3px]"
-          />
-        ) : (
-          <span aria-hidden="true" className={r.mark}>
-            {point.iWon === null
-              ? "—"
-              : point.iWon
-                ? youInitials
-                : opponentInitials}
+        <Link
+          href={href}
+          data-ask-point-list-watch=""
+          aria-label={`${label} ${whose}`}
+          className="inline-flex items-center gap-1.5 rounded-sm font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
+        >
+          <Play className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+          {label}
+        </Link>
+        {meta.length > 0 && (
+          <span data-ask-point-list-meta="" className="text-micro font-normal">
+            {meta.join(" · ")}
           </span>
         )}
-      </span>
-
-      <span className="flex min-w-0 flex-col gap-px">
-        <span className={r.title}>{title}</span>
-        <span className={r.detail} style={r.detailStyle}>
-          {detail}
-        </span>
-      </span>
-
-      <div className="flex-1" />
-
-      {point.pointScore && (
-        <span className={r.score} style={r.scoreStyle}>
-          {point.pointScore}
-        </span>
-      )}
-
-      <Play
-        className={cn(
-          "size-3.5 shrink-0 transition-colors duration-[var(--duration-hover)]",
-          seekable
-            ? "text-[var(--ink-400)] group-hover/row:text-[var(--ink-900)]"
-            : "text-[var(--ink-300)]",
-        )}
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-    </>
-  );
-
-  if (!seekable) {
-    return (
-      <div
-        data-ask-point={n}
-        data-seekable="false"
-        className={cn(r.root, "cursor-default opacity-45")}
-      >
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={matchFilmPointsHref(matchId, [n], filters)}
-      data-ask-point={n}
-      aria-label={`${title} — watch point ${n}`}
-      className={cn(r.root, r.seekable, "no-underline")}
-    >
-      {content}
-    </Link>
+      </h3>
+    </section>
   );
 }

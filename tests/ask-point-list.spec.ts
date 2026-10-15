@@ -6,11 +6,12 @@ import { join, resolve } from "node:path";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
 /**
- * The Ask answer's point list (`ask-point-list.tsx`), rendered in a real
+ * The Ask answer's points line (`ask-point-list.tsx`), rendered in a real
  * browser — `tests/fixtures/ask-point-list-harness.tsx` bundled with webpack
  * and served from a throwaway port, the harness pattern of
- * `ask-answer-view.spec.ts`. The rows are links (a position, an href), the
- * mark is the point's winner, an untimed point is drawn and not linked, and
+ * `ask-answer-view.spec.ts`. One link into the film on every point, words
+ * that say whose points they are, and the stretch and running time in grey;
+ * no row per point.
  */
 
 const webpack = (
@@ -93,71 +94,49 @@ async function openFixture(page: Page, query = "") {
     .toBe("true");
 }
 
-const list = (page: Page) => page.locator("[data-ask-point-list]");
-const row = (page: Page, n: number) => page.locator(`[data-ask-point="${n}"]`);
+const line = (page: Page) => page.locator("[data-ask-point-list]");
+const watch = (page: Page) => page.locator("[data-ask-point-list-watch]");
+const meta = (page: Page) => page.locator("[data-ask-point-list-meta]");
 
-test("a row per point under its game, linked into the film on that point", async ({
+test("one line: a link into the film on every point, the stretch and time beside it", async ({
   page,
 }) => {
   await openFixture(page, "?case=page");
 
-  // No cut: the whole match, and the heading says so.
-  await expect(list(page).getByRole("heading")).toHaveText(
-    "All 3 points in this match",
-  );
-  await expect(
-    list(page).getByRole("link", { name: "Watch all" }),
-  ).toHaveAttribute(
+  // No cut: the whole match, and the words say so.
+  await expect(watch(page)).toHaveText("Watch all 3 points");
+  await expect(watch(page)).toHaveAttribute(
     "href",
     "/dashboard/matches/match-sep-28?tab=film&pn=3%2C7%2C40",
   );
-  // Grouped by set and game, the game score beside the header.
-  await expect(list(page).locator("text=Set 1 · Game 1")).toBeVisible();
-  await expect(list(page).locator("text=Set 1 · Game 2")).toBeVisible();
-  await expect(list(page).locator("text=Set 2 · Game 3")).toBeVisible();
-
-  const ace = row(page, 3);
-  await expect(ace).toHaveAttribute(
-    "href",
-    "/dashboard/matches/match-sep-28?tab=film&pn=3",
+  await expect(watch(page)).toHaveAttribute(
+    "aria-label",
+    "Watch all 3 points in this match",
   );
-  await expect(ace).toContainText("Ace");
-  await expect(ace).toContainText("Point 3 · You served");
-  await expect(ace).toContainText("30-15");
-  await expect(ace.locator("[data-mark]")).toHaveAttribute("data-mark", "you");
+  // Across two sets; 3s + 9s of timed film, the untimed point adds nothing.
+  await expect(meta(page)).toHaveText("Sets 1–2 · under a minute");
 
-  const error = row(page, 7);
-  await expect(error).toContainText("Lindqvist served");
-  await expect(error.locator("[data-mark]")).toHaveAttribute(
-    "data-mark",
-    "opp",
-  );
-
-  // The untimed point reads but is no link, and is drawn muted.
-  const untimed = row(page, 40);
-  await expect(untimed).toHaveAttribute("data-seekable", "false");
-  await expect(untimed).not.toHaveAttribute("href", /.*/);
-  await expect(untimed).toContainText("Forehand Winner");
+  // A link, not a list: no row per point, and the one link is the line's.
+  await expect(page.locator("[data-ask-point]")).toHaveCount(0);
+  await expect(line(page).getByRole("link")).toHaveCount(1);
 });
 
-test("the measure's cut rides every row's link, and the team's player serves", async ({
+test("a counted cut is the answer's points, and a capped one says it is the first of more", async ({
   page,
 }) => {
   await openFixture(
     page,
     "?case=page&scope=team&f=sp.y_st.2&truncated=1&counted=1",
   );
-  await expect(row(page, 3)).toHaveAttribute(
-    "href",
-    "/dashboard/matches/match-sep-28?tab=film&f=sp.y_st.2&pn=3",
+  await expect(watch(page)).toHaveText("Watch the 3 points");
+  await expect(watch(page)).toHaveAttribute(
+    "aria-label",
+    "Watch the 3 points behind this answer",
   );
-  await expect(row(page, 3)).toContainText("Sokolov served");
-  await expect(page.locator("[data-ask-point-list-truncated]")).toHaveText(
-    "Showing the first 3 points.",
-  );
-  // A cut: these are the answer's points, not the match's.
-  await expect(list(page).getByRole("heading")).toHaveText(
-    "3 points behind this answer",
+  await expect(meta(page)).toHaveText("Sets 1–2 · under a minute · first 3");
+  await expect(line(page)).toHaveAttribute(
+    "aria-label",
+    "Points behind this answer",
   );
 });
 
@@ -165,16 +144,17 @@ test("a cut broader than the figure (every serve for an ace count): the match's 
   page,
 }) => {
   await openFixture(page, "?case=page&f=sv.y");
-  await expect(list(page).getByRole("heading")).toHaveText(
-    "3 points in this match",
+  await expect(watch(page)).toHaveText("Watch 3 points");
+  await expect(watch(page)).toHaveAttribute(
+    "aria-label",
+    "Watch 3 points in this match",
   );
 });
 
-test('no cut and a capped list: the match\'s points, never "All"', async ({
+test('no cut and a capped list: the match\'s points, never "all"', async ({
   page,
 }) => {
   await openFixture(page, "?case=page&truncated=1");
-  await expect(list(page).getByRole("heading")).toHaveText(
-    "3 points in this match",
-  );
+  await expect(watch(page)).toHaveText("Watch 3 points");
+  await expect(meta(page)).toContainText("first 3");
 });

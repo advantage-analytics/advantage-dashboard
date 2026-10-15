@@ -34,6 +34,13 @@ export const ASK_FEEDBACK_KEPT =
 /**
  * Thumbs up or down on one saved answer, beside its signature.
  *
+ * The signature comes in as `lead` and shares the thumbs' row, so the footer
+ * is one line — name, thumbs, then what the thumb said — rather than a name
+ * with a toolbar stacked under it. The icons are 12px, the size of the micro
+ * type beside them, inside 28px hit areas that pull back by their padding,
+ * so the row keeps the text's height and the icons sit a word-gap from the
+ * name.
+ *
  * A thumb is saved the moment it is pressed; pressing it again takes it back.
  * A thumbs down then opens one optional step — reasons from a fixed list and
  * a short note — which updates the same row when sent. Nothing about it is
@@ -45,8 +52,11 @@ export const ASK_FEEDBACK_KEPT =
 export function AskFeedbackControl({
   feedback,
   onRate,
+  lead,
 }: {
   feedback: AskFeedback | null;
+  /** The answer's signature, drawn first on the thumbs' row. */
+  lead?: React.ReactNode;
   /** Saves (or with null, takes back) the thumb; resolves true when it was saved. */
   onRate: (feedback: AskFeedback | null) => Promise<boolean>;
 }) {
@@ -82,22 +92,25 @@ export function AskFeedbackControl({
 
   return (
     <div data-ask-feedback="" className="flex flex-col gap-3">
-      <div className="flex items-center gap-1">
-        <Thumb
-          label={ASK_FEEDBACK_COPY.up}
-          pressed={feedback?.rating === "up"}
-          onClick={() => press("up")}
-        >
-          <ThumbsUp className="size-3.5" aria-hidden="true" />
-        </Thumb>
-        <Thumb
-          label={ASK_FEEDBACK_COPY.down}
-          pressed={feedback?.rating === "down"}
-          onClick={() => press("down")}
-        >
-          <ThumbsDown className="size-3.5" aria-hidden="true" />
-        </Thumb>
-        <p role="status" className="text-micro ml-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {lead}
+        <div className="-my-1.5 -ml-2 flex items-center gap-0.5">
+          <Thumb
+            label={ASK_FEEDBACK_COPY.up}
+            pressed={feedback?.rating === "up"}
+            onClick={() => press("up")}
+          >
+            <ThumbsUp className="size-3" aria-hidden="true" />
+          </Thumb>
+          <Thumb
+            label={ASK_FEEDBACK_COPY.down}
+            pressed={feedback?.rating === "down"}
+            onClick={() => press("down")}
+          >
+            <ThumbsDown className="size-3" aria-hidden="true" />
+          </Thumb>
+        </div>
+        <p role="status" className="text-micro">
           {said && (
             <span
               style={{

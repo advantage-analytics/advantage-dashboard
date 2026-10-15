@@ -252,6 +252,14 @@ function AnswerBody({
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const figures = answer.figures.slice(0, ASK_FIGURE_TILES);
+  const signature = (
+    <p data-ask-signature="" className="text-micro max-w-[60ch]">
+      {/* `text-micro` is unlayered and would beat a colour utility. */}
+      <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
+      {answer.noAdvice && ` · ${copy.noAdvice}`}
+      {answer.coach && ` · ${copy.coach}`}
+    </p>
+  );
   // The block leads when the question asked for a chart: it comes right
   // after the claim, and the prose folds away.
   const lead = answer.visual !== null && answer.visualLead === true;
@@ -377,18 +385,15 @@ function AnswerBody({
               so the signature reads as the rating's caption rather than a
               stray line between the sources and the thumbs. */}
           {answer.status === "done" && (
-            <div data-ask-provenance="" className="flex flex-col gap-1.5">
-              <p data-ask-signature="" className="text-micro max-w-[60ch]">
-                {/* `text-micro` is unlayered and would beat a colour utility. */}
-                <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
-                {answer.noAdvice && ` · ${copy.noAdvice}`}
-                {answer.coach && ` · ${copy.coach}`}
-              </p>
-              {onRate && (
+            <div data-ask-provenance="">
+              {onRate ? (
                 <AskFeedbackControl
                   feedback={answer.feedback}
                   onRate={onRate}
+                  lead={signature}
                 />
+              ) : (
+                signature
               )}
             </div>
           )}

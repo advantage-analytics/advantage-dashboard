@@ -6,9 +6,8 @@ import {
 /**
  * The point list's paint, per tone — the class tables `point-list.tsx` draws
  * its card, its game headers and its rows with, kept in a leaf of their own
- * so a surface that borrows the row's geometry (the Ask answer's point list,
- * `ask/ask-point-list.tsx`) can take the same strings without pulling in the
- * list's menus, drawer and scroll hooks. Values are byte for byte the ones
+ * so a surface that borrows the row's geometry can take the same strings
+ * without pulling in the list's menus, drawer and scroll hooks. Values are byte for byte the ones
  * the list has always had; `point-list.tsx` imports them from here and
  * re-exports nothing else about them.
  */

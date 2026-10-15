@@ -5,12 +5,12 @@ import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { AskShowPoint } from "@/lib/services/ask/show";
 
 /**
- * The Ask answer's point list in a real browser; `tests/ask-point-list.spec.ts`
+ * The Ask answer's points line in a real browser; `tests/ask-point-list.spec.ts`
  * bundles this and reads the markup.
  *
  * Query string:
- * - `?case=page`   on the Ask page (the default): rows are links into the
- *                  film, "Watch all" opens it on every point
+ * - `?case=page`   on the Ask page (the default): one link opens the film
+ *                  on every point
  * - `&scope=team`  the match names the program's player
  * - `&f=<filters>` the measure's cut, carried on every link
  * - `&truncated=1` the match held more points than the list carries

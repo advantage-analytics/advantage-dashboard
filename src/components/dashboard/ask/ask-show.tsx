@@ -21,10 +21,10 @@ import { askMatchPlayers } from "./ask-tag-menu";
  * mechanism in reverse — the asker presses it, the server re-runs the
  * answer's own scope (`POST /api/ask/show`), and the model writes nothing.
  *
- * Over one match the answer is the points themselves: the point list
- * (`ask-point-list.tsx`), the inline clip strip for a small set
- * (`ask-clip-strip.tsx`, `ASK_CLIP_STRIP_MAX`), and "Watch all" into the
- * film with the first point playing and the rest queued. Over several it is
+ * Over one match the answer is the points themselves: the inline clip strip
+ * for a small set (`ask-clip-strip.tsx`, `ASK_CLIP_STRIP_MAX`), and one line
+ * (`ask-point-list.tsx`) that opens the film with the first point playing
+ * and the rest queued. Over several it is
  * one row per match with its count, each into that match's film.
  *
  * `answerId` is the saved answer's (`done.answerId`); an answer that has no
