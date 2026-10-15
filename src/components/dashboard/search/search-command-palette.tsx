@@ -28,6 +28,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
+import { FloatMenuLabel } from "@/components/ui/float-menu";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
@@ -182,7 +183,7 @@ interface MatchResult {
    */
   outcome: boolean | null;
   hasScore: boolean;
-  /** Which workspace the match belongs to — the eyebrow when scope is wide. */
+  /** Which workspace the match belongs to — the group label when scope is wide. */
   workspaceName: string;
 }
 
@@ -227,7 +228,7 @@ interface PageLink {
 
 type FlatItem =
   | { type: "action"; data: Action }
-  /** `hint` is null in `/`, where the eyebrow already says the area. */
+  /** `hint` is null in `/`, where the group label already says the area. */
   | { type: "page"; data: PageLink; hint: string | null }
   | { type: "match"; data: MatchResult }
   | { type: "opponent"; data: GroupedResult }
@@ -432,8 +433,9 @@ function pageMatches(page: PageLink, q: string): boolean {
 
 // --- Small pieces ---
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="eyebrow px-2 pt-2.5 pb-1">{children}</p>;
+/** Sentence case, not an eyebrow — `FloatMenuLabel` at the palette's inset. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return <FloatMenuLabel className="px-2 pt-2.5">{children}</FloatMenuLabel>;
 }
 
 const ROW_CLASS =
@@ -480,7 +482,7 @@ export function SearchCommandPalette({
     [active, available],
   );
 
-  // `program_id` → the workspace's name, for the eyebrows a wide search
+  // `program_id` → the workspace's name, for the group labels a wide search
   // groups under. A null program is the viewer's own play.
   const workspaceNames = useMemo(() => {
     const personal =
@@ -821,7 +823,7 @@ export function SearchCommandPalette({
     const matchingPages = pages.filter((page) => pageMatches(page, q));
 
     if (mode === "/") {
-      // The eyebrow names the area, so the row's right side is free to say
+      // The group label names the area, so the row's right side is free to say
       // the one thing it cannot: that you are already there.
       const pageItems = (group: PageLink["group"]): FlatItem[] =>
         matchingPages
@@ -1200,7 +1202,7 @@ export function SearchCommandPalette({
               >
                 {sections.map((section) => (
                   <div key={section.title}>
-                    <Eyebrow>{section.title}</Eyebrow>
+                    <GroupLabel>{section.title}</GroupLabel>
                     {section.items.map((item, i) => {
                       const idx = section.start + i;
                       const isActiveRow = activeIndex === idx;

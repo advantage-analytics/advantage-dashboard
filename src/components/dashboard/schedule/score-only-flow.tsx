@@ -370,7 +370,7 @@ export function ScoreOnlyFlow({
 
       <div className={`${CONTENT_CLS} pt-16 pb-10`}>
         <div className="flex flex-col gap-3">
-          <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+          <span className="eyebrow">
             {tournament ? "Entry" : "Line"} {lineNumber} of {lineup.length}
           </span>
           <h1

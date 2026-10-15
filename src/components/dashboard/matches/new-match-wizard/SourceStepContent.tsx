@@ -67,6 +67,7 @@ import {
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
 import { errorStripCls, noteIconCls, noteStripCls } from "./styles";
 import { PendingTeamNote } from "./PendingTeamNote";
+import { FieldCaption } from "./FieldCaption";
 import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
@@ -209,7 +210,7 @@ function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
 }
 
 /**
- * One underline field: eyebrow, then the 40px row on a hairline that turns 2px
+ * One underline field: its `FieldCaption`, then the 40px row on a hairline that turns 2px
  * Signal Blue while the field is the one being worked. The rule is an inset
  * shadow rather than a border so the 1px→2px change moves nothing.
  */
@@ -227,7 +228,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-[14px]">
-      <span className="eyebrow">{label}</span>
+      <FieldCaption label={label} />
       <div
         className={cn(
           "flex items-center gap-4 pb-4 transition-shadow duration-200 ease-[var(--ease-primary)]",

@@ -40,6 +40,7 @@ import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 import { BetaHeaderMeter } from "@/components/dashboard/beta-header-meter";
 import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
+import { FloatMenuLabel } from "@/components/ui/float-menu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { RolePill } from "@/components/ui/role-pill";
 import { StatePill } from "@/components/ui/state-pill";
@@ -628,7 +629,9 @@ export function Header({
                     appears the moment a second workspace does. */}
                 {available.length > 1 && (
                   <>
-                    <p className="eyebrow px-3 pt-3 pb-1">Workspace</p>
+                    <FloatMenuLabel className="px-3 pt-3">
+                      Workspace
+                    </FloatMenuLabel>
                     {/* Scrolls at four rows rather than growing the menu — a
                         coach on five programs still gets a menu that fits. */}
                     <div className="max-h-[140px] overflow-y-auto">

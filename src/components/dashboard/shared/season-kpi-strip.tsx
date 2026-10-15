@@ -323,7 +323,9 @@ export function SeasonKpiStrip({
             {grouped.map((group, gi) => (
               <div key={group.category} className={gi > 0 ? "mt-1" : ""}>
                 <div className="px-2.5 pt-2 pb-1.5">
-                  <p className="eyebrow">{group.category}</p>
+                  <p className="text-[11px] text-[var(--ink-400)]">
+                    {group.category}
+                  </p>
                 </div>
                 {group.items.map((spec) => {
                   const checked = visibleKeys.includes(spec.key);
