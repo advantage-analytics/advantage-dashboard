@@ -19,6 +19,7 @@ markers is hand-written — edit it as things move.
 | `/error` | [`src/app/(auth)/error/page.tsx`](src/app/(auth)/error/page.tsx) |
 | `/forgot-password` | [`src/app/(auth)/forgot-password/page.tsx`](src/app/(auth)/forgot-password/page.tsx) |
 | `/login` | [`src/app/(auth)/login/page.tsx`](src/app/(auth)/login/page.tsx) |
+| `/oauth/consent` | [`src/app/(auth)/oauth/consent/page.tsx`](src/app/(auth)/oauth/consent/page.tsx) |
 | `/sign-up-success` | [`src/app/(auth)/sign-up-success/page.tsx`](src/app/(auth)/sign-up-success/page.tsx) |
 | `/sign-up` | [`src/app/(auth)/sign-up/page.tsx`](src/app/(auth)/sign-up/page.tsx) |
 | `/update-password` | [`src/app/(auth)/update-password/page.tsx`](src/app/(auth)/update-password/page.tsx) |
@@ -117,10 +118,10 @@ which exists four separate times.
 |---|---|
 | `src/app/(auth)/` | Auth route group — dual-panel layout, login/sign-up/password flows |
 | `src/app/dashboard/` | Protected area: sidebar + header shell |
-| `src/app/api/` | Route handlers, one directory per group: `upload`, `validate-file`, `matches/[matchId]`, `matches/[matchId]/video/uploads` plus `.../uploads/[attachmentId]` (DELETE, cancel), `.../uploads/[attachmentId]/renew` and `.../uploads/[attachmentId]/complete`, `matches/[matchId]/video/alignment` (PATCH, offset correction with no upload), `matches/[matchId]/video` (GET, playback metadata + read-only URL for anyone who can see the match; DELETE `{ attachmentId }`, removes the active video — its uploader, or an owner/coach of the match's program), `matches/[matchId]/video/viewed` (POST, counts a view on first play — restarts the retention clock; anyone who can see the match) (SwingVision video attachment — decision modules in `lib/services/match-video/`), `sample-match/video` (GET, a fresh read-only URL for the sample match's bundled clip in the same playback envelope — the blob name is a server constant and nothing in the request is read; anyone signed in — decision module `lib/services/sample-match/video.ts`), `matches/[matchId]/ball-paths` (GET, derived ball paths for anyone who can see the match — decision module `lib/services/splitstep/ball-paths-access.ts`), `home-insight`, `team-insight`, `ask` (POST, streamed answer about the viewer's own matches), `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` (plus `jobs/[jobId]/resubmit` and `jobs/[jobId]/rederive`, POST, rebuilds a `DERIVATION_ERROR` job's statistics from stored results — no vendor call; and `jobs/[jobId]/cancel`, POST, removes a still-queued job at the vendor, then flips it to `cancelled` and releases its allowance) + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/cleanup-match-videos` (daily 05:00 UTC attachment cleanup sweep, `CRON_SECRET` bearer; scheduled in `vercel.json`) |
+| `src/app/api/` | Route handlers, one directory per group: `upload`, `validate-file`, `matches/[matchId]`, `matches/[matchId]/video/uploads` plus `.../uploads/[attachmentId]` (DELETE, cancel), `.../uploads/[attachmentId]/renew` and `.../uploads/[attachmentId]/complete`, `matches/[matchId]/video/alignment` (PATCH, offset correction with no upload), `matches/[matchId]/video` (GET, playback metadata + read-only URL for anyone who can see the match; DELETE `{ attachmentId }`, removes the active video — its uploader, or an owner/coach of the match's program), `matches/[matchId]/video/viewed` (POST, counts a view on first play — restarts the retention clock; anyone who can see the match) (SwingVision video attachment — decision modules in `lib/services/match-video/`), `sample-match/video` (GET, a fresh read-only URL for the sample match's bundled clip in the same playback envelope — the blob name is a server constant and nothing in the request is read; anyone signed in — decision module `lib/services/sample-match/video.ts`), `matches/[matchId]/ball-paths` (GET, derived ball paths for anyone who can see the match — decision module `lib/services/splitstep/ball-paths-access.ts`), `home-insight`, `team-insight`, `ask` (POST, streamed answer about the viewer's own matches), `mcp` (POST, the Ask MCP server — Streamable HTTP, stateless, a Supabase OAuth access token as bearer; `.well-known/oauth-protected-resource` and `.well-known/oauth-authorization-server` under `src/app/` are its discovery documents — [`docs/ask-mcp-connector.md`](docs/ask-mcp-connector.md)), `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` (plus `jobs/[jobId]/resubmit` and `jobs/[jobId]/rederive`, POST, rebuilds a `DERIVATION_ERROR` job's statistics from stored results — no vendor call; and `jobs/[jobId]/cancel`, POST, removes a still-queued job at the vendor, then flips it to `cancelled` and releases its allowance) + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/cleanup-match-videos` (daily 05:00 UTC attachment cleanup sweep, `CRON_SECRET` bearer; scheduled in `vercel.json`) |
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/components/dashboard/` | Feature components, mirroring the dashboard routes |
-| `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |
+| `src/lib/supabase/` | Four client factories: `server`, `client`, `admin` (service role), `bearer` (an access token in the header — `/api/mcp` only) |
 | `src/lib/data/` | Server-side data layer, one file per domain (matches, activity, roster, team, schedule, opponents, ...). A `*-client.ts` twin exists only where a page recomputes in the browser; today none do |
 | `src/lib/services/upload/` | Provider-strategy upload pipeline: parsers, providers, validators |
 | `src/lib/services/email/` | Transactional email: one sender, one HTML shell, templates grouped by family. Auth mail is Supabase's own, in `supabase/email-templates/` — see [`docs/email-system.md`](docs/email-system.md) |
@@ -132,9 +133,10 @@ which exists four separate times.
 
 ## Data layer
 
-- **Three Supabase clients.** `server.ts` (cookie auth, Server Components and
+- **Four Supabase clients.** `server.ts` (cookie auth, Server Components and
   route handlers), `client.ts` (localStorage auth, browser), `admin.ts`
-  (**service role — bypasses RLS entirely**).
+  (**service role — bypasses RLS entirely**), `bearer.ts` (a user's access
+  token from the `Authorization` header, RLS as that user — `/api/mcp` only).
 - **Schema:** verify against the live database via the Supabase MCP, not
   `supabase/migrations/` — the folder runs well behind.
 
