@@ -180,7 +180,6 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
             <MatchReportProvider
               matchId={SAMPLE_MATCH_ID}
               summary={summary}
-              // No other match of "yours" to compare against.
               isDerived={isDerived}
               statsPublished={statsPublished}
               foldUnreconciled={data.foldUnreconciled}

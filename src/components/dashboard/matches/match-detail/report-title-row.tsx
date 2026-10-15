@@ -6,6 +6,7 @@ import { MessageSquare } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { REPORT_VIEWS } from "@/components/dashboard/matches/match-detail/report-view";
+import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
@@ -70,7 +71,14 @@ export function MatchReportTitle() {
  */
 export function MatchReportAskLink() {
   const { meta } = useMatchReport();
+  const { match } = useMatchData();
   if (meta.readOnly) return null;
+  // Ask's scope is the active workspace's, and it silently drops a tag its
+  // menu does not offer: a team match read from the personal workspace (or
+  // the reverse) would land untagged and answer about the wrong matches.
+  // No link then — switching workspace is the way to ask about it.
+  const matchIsTeam = Boolean(match.programId);
+  if (matchIsTeam !== (meta.workspaceKind === "team")) return null;
   const href = askEntryHref(
     meta.workspaceKind === "team"
       ? { kind: "team", programId: "", programName: "" }

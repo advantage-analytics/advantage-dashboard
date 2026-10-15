@@ -335,13 +335,20 @@ export function SharePopoverPanel({
   // an answer's "Watch" link, forwarded (roadmap 6.3). Read once, when the
   // popover opens, and written nowhere: the link row itself is untouched,
   // so nothing is published beyond what the ladder above turned on.
-  const [preset] = useState<FilmSharePreset | null>(() =>
-    filmPreset !== undefined
-      ? filmPreset
-      : typeof window === "undefined"
-        ? null
-        : filmSharePresetOf(window.location.search),
-  );
+  // Only the point set travels. A filter (`f`) names players as "you" and
+  // "opponent" from the viewer's seat, but the public page reads "you" from
+  // the link maker's: forwarded by someone sitting the other seat, the same
+  // `f` would filter to the other player's points under a "You" chip. Point
+  // numbers are the same for everyone.
+  const [preset] = useState<FilmSharePreset | null>(() => {
+    const read =
+      filmPreset !== undefined
+        ? filmPreset
+        : typeof window === "undefined"
+          ? null
+          : filmSharePresetOf(window.location.search);
+    return read?.points ? { filters: null, points: read.points } : null;
+  });
   const [withPoints, setWithPoints] = useState(false);
 
   // A fresh server render (the toggle's `revalidatePath`, a `router.refresh`)
