@@ -132,7 +132,9 @@ export function MatchOfferActions({
   query?: string;
 } = {}) {
   const send = `/dashboard/matches/new${query ? `?${query}` : ""}`;
-  const importHref = `/dashboard/matches/new?source=swing-vision${query ? `&${query}` : ""}`;
+  // An import does not come back to Ask: it is no video, so nothing is
+  // analysed and no first answer is asked on its arrival.
+  const importHref = "/dashboard/matches/new?source=swing-vision";
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex items-center gap-3">

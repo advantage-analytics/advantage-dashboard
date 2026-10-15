@@ -517,15 +517,18 @@ export async function POST(request: Request): Promise<Response> {
   // for it last time: no reservation, no model, no query (`cache.ts`). The
   // version is a hash over the viewer's matches in scope and their
   // statistics' update times, so any change to the data is a miss. Mock mode
-  // is never cached, and a cache that cannot be read is a miss too.
+  // is never cached, and a cache that cannot be read is a miss too. Nor is a
+  // follow-up: its meaning rests on the conversation, which the key does not
+  // carry, so "and on second serves?" must never replay a standalone answer.
   const cacheKey = askCacheKey({
     question: body.question,
     tags: resolved.tags,
     scope,
   });
-  const dataVersion = model.configured
-    ? await readAskDataVersion(db, scope)
-    : null;
+  const dataVersion =
+    model.configured && !body.conversationId
+      ? await readAskDataVersion(db, scope)
+      : null;
   const cached = dataVersion
     ? await readAskCache(db, { key: cacheKey, version: dataVersion, scope })
     : null;

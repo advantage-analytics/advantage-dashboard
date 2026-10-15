@@ -55,6 +55,8 @@ interface FakeOptions {
   /** Somebody already asked for this match: the claim's insert is a no-op. */
   alreadyClaimed?: boolean;
   dataVersion?: string | null;
+  /** The job's creator; the match's creator when omitted. */
+  jobOwner?: string | null;
 }
 
 /** The parts of the service-role client the module touches, as a fake that records. */
@@ -74,6 +76,24 @@ function fakeAdmin(opts: FakeOptions = {}) {
                       data: opts.match === undefined ? matchRow() : opts.match,
                       error: null,
                     },
+            }),
+          }),
+        };
+      }
+      if (table === "processing_jobs") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  created_by:
+                    opts.jobOwner === undefined
+                      ? ((opts.match === undefined ? matchRow() : opts.match)
+                          ?.created_by ?? null)
+                      : opts.jobOwner,
+                },
+                error: null,
+              }),
             }),
           }),
         };
@@ -341,7 +361,7 @@ test.describe("askOnArrival", () => {
     expect(result?.question).toBe("How did my match against Alex Rivera go?");
   });
 
-  test("no question for a program's match, a match the uploader is not in, a match already asked about, mock mode, a match that cannot be read, or no time left", async () => {
+  test("no question for a program's match, a job someone else sent, a match the uploader is not in, a match already asked about, mock mode, a match that cannot be read, or no time left", async () => {
     let asked = 0;
     const counting: Ask = async function* () {
       asked += 1;
@@ -358,6 +378,8 @@ test.describe("askOnArrival", () => {
           }),
         },
       },
+      // The job was sent by someone else: the mail would go to them.
+      { opts: { jobOwner: "99999999-0000-4000-8000-000000000009" } },
       {
         opts: {
           match: matchRow({ player1_id: "stranger", player2_id: "other" }),
