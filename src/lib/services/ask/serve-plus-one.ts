@@ -4,10 +4,7 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import { MAX_ASK_TABLE_ROWS } from "@/lib/services/ask/events";
-import {
-  ASK_SHOT_ROLE_CTES,
-  type AskPatternCourt,
-} from "@/lib/services/ask/pattern";
+import type { AskPatternCourt } from "@/lib/services/ask/pattern";
 import {
   count,
   losingPlaysSubject,
@@ -31,7 +28,8 @@ import type { AskPromptTag } from "@/lib/services/ask/prompts";
  * player's serves with the subject's.
  *
  * The server's own query and answer, like the losing plays: the planner only
- * picks the scope. The return is `pattern.ts`'s (`ASK_SHOT_ROLE_CTES`), so a
+ * picks the scope. The serve played, the return and the +1 are read from
+ * ask.point_plays, the rows the pattern form (`pattern.ts`) reads too, so a
  * +1 here is the same shot the Video filter's "Then" would select.
  *
  * It states what happened. It never says which pattern to play more.
@@ -166,14 +164,6 @@ export function servePlusOneRequest(
   };
 }
 
-/** The stroke a shot counts as, in the Video filter's order (`strokeOf()`). */
-const STROKE_CASE = (label: string) => `case
-      when ${label} like '%overhead%' or ${label} like '%smash%' then 'Overhead'
-      when ${label} like '%volley%' then 'Volley'
-      when ${label} like '%forehand%' then 'Forehand'
-      when ${label} like '%backhand%' then 'Backhand'
-    end`;
-
 /**
  * The query, over `scope`. Every row has `section`, `zone`, `stroke`,
  * `direction`, `points`, `won`, `won_pct`:
@@ -184,65 +174,51 @@ const STROKE_CASE = (label: string) => `case
  *   - then one `pattern` row per opening zone (the serve's, or the
  *     return's), +1 stroke and +1 direction, most played first.
  *
- * The +1 is `ASK_SHOT_ROLE_CTES`'s, the Video filter's own: the server's
- * shot 3, the returner's shot 4, hit by the subject.
+ * Read from ask.point_plays, one row per point with the serve played, the
+ * return and the two +1s already picked out (migration 20261015090038). The
+ * +1 is the Video filter's own: the server's shot 3 (`p1s_*`), the
+ * returner's shot 4 (`p1r_*`), hit by the subject. Whose serve a point was
+ * is `i_served` — the point's server, as the Video filter and the pattern
+ * form read it.
  */
 export function servePlusOneSql(request: AskServePlusOne): string {
   const side = request.subject === "mine" ? "true" : "false";
   // `i_won` is the viewer's side.
-  const won = request.subject === "mine" ? "pt.i_won" : "not pt.i_won";
+  const won = request.subject === "mine" ? "p.i_won" : "not p.i_won";
   const serveType =
     request.serveType === null
       ? ""
-      : `\n      and v.shot_type = '${request.serveType === "first" ? "First Serve" : "Second Serve"}'`;
-  const onCourt = request.court
-    ? `\n    and pc.court = '${request.court}'`
-    : "";
+      : `\n    and p.serve_type = '${request.serveType === "first" ? "First Serve" : "Second Serve"}'`;
+  const onCourt = request.court ? `\n    and p.court = '${request.court}'` : "";
   const opening =
     request.phase === "serve"
-      ? `select v.match_id, v.point_number, v.zone, pc.court
-  from sh v
-  join ask.points pc on pc.match_id = v.match_id and pc.point_number = v.point_number
-  where v.is_played_serve and v.mine = ${side}${serveType}${onCourt}`
-      : `select r.match_id, r.point_number, r.zone, pc.court
-  from sh r
-  join ask.points pc on pc.match_id = r.match_id and pc.point_number = r.point_number
-  where r.is_return and r.mine = ${side}${onCourt}${
-    serveType === ""
-      ? ""
-      : `
-    and exists (select 1 from sh v where v.match_id = r.match_id and v.point_number = r.point_number
-      and v.is_played_serve${serveType})`
-  }`;
-  const plus =
-    request.phase === "serve" ? "q.is_serve_plus_one" : "q.is_return_plus_one";
-  return `with ${ASK_SHOT_ROLE_CTES},
-opening as (
-  ${opening}
+      ? `p.serve_type is not null and p.i_served = ${side}`
+      : `p.return_mine = ${side}`;
+  const zone = request.phase === "serve" ? "p.serve_zone" : "p.return_zone";
+  const plus = request.phase === "serve" ? "p1s" : "p1r";
+  return `with opening as (
+  select p.match_id, p.point_number, ${request.bySide ? "p.court" : "null::text as court"}, ${zone} as zone,
+    p.${plus}_mine as plus_mine, p.${plus}_stroke as stroke, p.${plus}_direction as direction,
+    (${won}) as won
+  from ask.point_plays p
+  where p.match_id in (select match_id from scope)
+    and ${opening}${serveType}${onCourt}
 ),
 played as (
-  select ${request.bySide ? "o.court" : "null::text as court"}, o.zone,
-    ${STROKE_CASE("lower(coalesce(q.shot_type, ''))")} as stroke,
-    q.direction,
-    (${won}) as won
-  from opening o
-  join sh q on q.match_id = o.match_id and q.point_number = o.point_number
-    and ${plus} and q.mine = ${side}
-  join ask.points pt on pt.match_id = o.match_id and pt.point_number = o.point_number
-  where o.zone is not null and q.direction is not null
+  select court, zone, stroke, direction, won
+  from opening
+  where plus_mine = ${side} and zone is not null and stroke is not null and direction is not null
 ),
 grouped as (
   select 'pattern' as section, court, zone, stroke, direction, count(*) as points,
     count(*) filter (where won) as won,
     round(100.0 * count(*) filter (where won) / count(*), 1) as won_pct
   from played
-  where stroke is not null
   group by court, zone, stroke, direction
   union all
   select 'total', null, null, null, null, count(*), count(*) filter (where won),
     round(100.0 * count(*) filter (where won) / nullif(count(*), 0), 1)
   from played
-  where stroke is not null
   union all
   select 'opening', null, null, null, null, count(*), count(distinct match_id), null
   from opening

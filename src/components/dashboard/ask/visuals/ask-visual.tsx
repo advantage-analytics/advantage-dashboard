@@ -1,6 +1,7 @@
 import type { AskVisual } from "@/lib/services/ask/events";
 import { BarsVisual } from "./bars-visual";
 import { FormVisual } from "./form-visual";
+import { MomentumVisual } from "./momentum-visual";
 import { ServeVisual } from "./serve-visual";
 import { SplitVisual } from "./split-visual";
 import { TableVisual } from "./table-visual";
@@ -43,6 +44,8 @@ export function AskVisualBlock({
       return <ServeVisual visual={visual} />;
     case "form":
       return <FormVisual visual={visual} />;
+    case "momentum":
+      return <MomentumVisual visual={visual} />;
     default:
       // A kind this build does not know: `readAskVisual` refuses it before
       // it gets here, and a block that cannot be drawn is not drawn.

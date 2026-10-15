@@ -1,138 +1,365 @@
 [
   {
     "q": "What is our record this season?",
-    "want": "the team's wins and losses since August 1; third person, never 'you'"
+    "want": "the team's wins and losses since August 1; third person, never 'you'",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "What is each player's record?",
-    "want": "one row per player with wins and losses; a table labelled with player names"
+    "want": "one row per player with wins and losses; a table labelled with player names",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "How is our number one player doing this season?",
-    "want": "the planner cannot know the lineup: either a per-player breakdown or a plain refusal about lineup order, never an invented name"
+    "want": "the planner cannot know the lineup: either a per-player breakdown or a plain refusal about lineup order, never an invented name",
+    "expect": {
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Either a per-player breakdown or a refusal about lineup order is right, so neither the shape nor the error is pinned; an invented name cannot be checked offline."
+    }
   },
   {
     "q": "How is Sokolov serving?",
-    "want": "player_name ilike filter; her serve figures beside the team's; named, not 'you'"
+    "want": "player_name ilike filter; her serve figures beside the team's; named, not 'you'",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "The player beside the team is the baseline comparison. Run with --sub, or the placeholder name finds no matches."
+    }
   },
   {
     "q": "Why did she lose her last match?",
     "after": 3,
-    "want": "follow-up keeps the player; me_ vs opp_ table headed with her name and the opponent's"
+    "want": "follow-up keeps the player; me_ vs opp_ table headed with her name and the opponent's",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "A follow-up that keeps the player from question 4."
+    }
   },
   {
     "q": "Who has the best first serve percentage on the team?",
-    "want": "per-player breakdown ordered best first, summed numerators and denominators"
+    "want": "per-player breakdown ordered best first, summed numerators and denominators",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Compare our players on return points won",
-    "want": "per-player table of return_won_pct across both serves"
+    "want": "per-player table of return_won_pct across both serves",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Who double faults the most?",
-    "want": "per-player double faults, with matches played beside the count"
+    "want": "per-player double faults, with matches played beside the count",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "What is our doubles record?",
-    "want": "match_type Doubles only; a record, no statistics; says statistics are not recorded if asked"
+    "want": "match_type Doubles only; a record, no statistics; says statistics are not recorded if asked",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "A record only: doubles carry no statistics."
+    }
   },
   {
     "q": "How do we do in dual matches compared with tournaments?",
-    "want": "record by match_type"
+    "want": "record by match_type",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Are we better on hard courts or clay?",
-    "want": "record by court_type"
+    "want": "record by court_type",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "How has the team's first serve percentage changed over the season?",
-    "want": "trend block, one row per match, oldest first"
+    "want": "trend block, one row per match, oldest first",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "visual": "trend",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "How did our last five matches go?",
-    "want": "form strip of the five most recent, each with the player's name"
+    "want": "form strip of the five most recent, each with the player's name",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "What are our strengths as a team?",
-    "want": "me_ vs opp_ diagnostic across all matches; columns Team and Opponents"
+    "want": "me_ vs opp_ diagnostic across all matches; columns Team and Opponents",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "What should we practice this week?",
-    "want": "the factual diagnostic and the no-advice notice; no drill, no recommendation"
+    "want": "the factual diagnostic and the no-advice notice; no drill, no recommendation",
+    "expect": {
+      "error": "none",
+      "shape": "C",
+      "visual": "table",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ]
+    }
   },
   {
     "q": "How did Stanford do against UCLA last weekend?",
-    "want": "cannot answer: another team's matches"
+    "want": "cannot answer: another team's matches",
+    "expect": {
+      "error": "cannot_answer",
+      "shape": "B"
+    }
   },
   {
     "q": "How can we improve for our next match?",
-    "want": "the team review: the last five matches against the earlier ones, third person, a table, no advice, the notice"
+    "want": "the team review: the last five matches against the earlier ones, third person, a table, no advice, the notice",
+    "expect": {
+      "error": "none",
+      "shape": "C",
+      "visual": "table",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ]
+    }
   },
   {
     "q": "How can Sokolov improve for the next match?",
-    "want": "the review of one player: her last match against her own previous-five and overall averages, third person, no advice"
+    "want": "the review of one player: her last match against her own previous-five and overall averages, third person, no advice",
+    "expect": {
+      "error": "none",
+      "shape": "C",
+      "visual": "table",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ],
+      "note": "Run with --sub, or the placeholder name finds no matches."
+    }
   },
   {
     "q": "How is Sokolov playing versus Reyes",
     "players": ["Sokolov", "Reyes"],
-    "want": "the players comparison: each player's own figures side by side, both named; never one player's figures under the other's name"
+    "want": "the players comparison: each player's own figures side by side, both named; never one player's figures under the other's name",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Compare Sokolov and Reyes on serve",
-    "want": "the players comparison on the serve measures; never refused"
+    "want": "the players comparison on the serve measures; never refused",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "How should Sokolov play against Okafor?",
-    "want": "no advice; the opponent comparison when Sokolov has played Okafor; otherwise a first sentence saying the two never met, then the program's matches against Okafor; the notice"
+    "want": "no advice; the opponent comparison when Sokolov has played Okafor; otherwise a first sentence saying the two never met, then the program's matches against Okafor; the notice",
+    "expect": {
+      "error": "none",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ],
+      "note": "The opponent comparison when they met, otherwise the program's matches against the opponent: the shape is not pinned."
+    }
   },
   {
     "q": "How do we beat Lindqvist?",
-    "want": "no advice; the opponent comparison over the matches against Lindqvist; the notice"
+    "want": "no advice; the opponent comparison over the matches against Lindqvist; the notice",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ]
+    }
   },
   {
     "q": "What should Sokolov practice?",
     "players": ["Sokolov"],
-    "want": "the review of that player's last match against their own averages; never refused; no advice; the notice"
+    "want": "the review of that player's last match against their own averages; never refused; no advice; the notice",
+    "expect": {
+      "error": "none",
+      "shape": "C",
+      "visual": "table",
+      "notice": true,
+      "absent": [
+        "\\b(you should|try|focus on|work on)\\b",
+        "\\byou\\b|\\byour\\b"
+      ]
+    }
   },
   {
     "q": "How is Reyes doing?",
     "players": ["Reyes"],
-    "want": "Reyes's figures beside the team's, named, with the record of those matches"
+    "want": "Reyes's figures beside the team's, named, with the record of those matches",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "And how about his return?",
     "after": 23,
-    "want": "keeps Reyes: the return figures, never another player's and never an example's placeholder name"
+    "want": "keeps Reyes: the return figures, never another player's and never an example's placeholder name",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b", "\\bPlayer[AB]\\b"],
+      "note": "A follow-up that keeps the player from question 24; an example's placeholder name must not appear."
+    }
   },
   {
     "q": "How did we do in the last two weeks?",
-    "want": "the matches in the window, or a plain 'no data' that says a period was looked for"
+    "want": "the matches in the window, or a plain 'no data' that says a period was looked for",
+    "expect": {
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "The window may be empty, so no_data is acceptable and the error is not pinned."
+    }
   },
   {
     "q": "How did we do on September 25?",
-    "want": "the matches of that day: the team beside its opponents, and the record"
+    "want": "the matches of that day: the team beside its opponents, and the record",
+    "expect": {
+      "shape": "D",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "A day is the opponent comparison over that day's matches; the day may hold none, so the error is not pinned."
+    }
   },
   {
     "q": "Who has the best footwork on the team?",
-    "want": "refused: footwork is not recorded"
+    "want": "refused: footwork is not recorded",
+    "expect": {
+      "error": "cannot_answer",
+      "shape": "B"
+    }
   },
   {
     "q": "How did Sokolov do against Lindqvist?",
     "players": ["Sokolov"],
     "opponents": ["Lindqvist"],
-    "want": "that matchup from the app's own query; the same figures as 'How do we beat Lindqvist?' when it is the same match"
+    "want": "that matchup from the app's own query; the same figures as 'How do we beat Lindqvist?' when it is the same match",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Who is our most consistent player?",
-    "want": "the players comparison; the headline names the measure it used (unforced errors per match) and the body says what 'consistent' was read as; nobody crowned by opinion"
+    "want": "the players comparison; the headline names the measure it used (unforced errors per match) and the body says what 'consistent' was read as; nobody crowned by opinion",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "headline": ["unforced error"],
+      "note": "The headline names the measure 'consistent' was read as."
+    }
   },
   {
     "q": "Does Sokolov play better in the first set or later sets?",
     "players": ["Sokolov"],
-    "want": "points won by set from ask.points, with the figures stated: never a bare claim"
+    "want": "points won by set from ask.points, with the figures stated: never a bare claim",
+    "expect": {
+      "error": "none",
+      "shape": "A",
+      "notice": false,
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   },
   {
     "q": "Which of our players wins the most long rallies?",
-    "want": "the players comparison on long rallies won, with each player's matches"
+    "want": "the players comparison on long rallies won, with each player's matches",
+    "expect": {
+      "error": "none",
+      "shape": "D",
+      "visual": "table",
+      "absent": ["\\byou\\b|\\byour\\b"]
+    }
   }
 ]

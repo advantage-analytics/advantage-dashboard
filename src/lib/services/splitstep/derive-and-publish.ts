@@ -21,9 +21,17 @@ import {
   waitForInsights,
 } from "./request-insights";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import type { AskArrivalAnswer } from "@/lib/services/ask/arrival";
 import type { Transcript } from "./derivation";
 
 const LOG = "[splitstep:derive]";
+
+/**
+ * Taken off `deadline` for Ask's first answer only. The ready mail waits on
+ * that answer, and the caller's ball paths come after the mail; the webhook's
+ * deadline is already 8s short of maxDuration, so this leaves them ~20s.
+ */
+const ARRIVAL_RESERVE_MS = 12_000;
 
 /**
  * `processing_jobs.error_code` for a failed derivation. The recovery
@@ -88,6 +96,18 @@ export async function deriveAndPublish(params: {
    * (see `persistTranscript`); the CLI's `--force-over-labels`.
    */
   allowOverwriteLabels?: boolean;
+  /**
+   * Ask's first question about the match, asked for its uploader while the
+   * review is awaited (`src/lib/services/ask/arrival.ts`). Passed by the
+   * webhook and the results sweep; omitted by the CLI, and ignored on a
+   * rebuild, which must not put a second first answer in the rail. Its
+   * answer's headline rides on the "analysis ready" mail. Never throws; a
+   * null is "no answer".
+   */
+  onArrival?: (ctx: {
+    matchId: string;
+    deadline?: number;
+  }) => Promise<AskArrivalAnswer | null>;
 }): Promise<DeriveOutcome> {
   const {
     supabase,
@@ -95,6 +115,7 @@ export async function deriveAndPublish(params: {
     deadline,
     rebuild = false,
     allowOverwriteLabels = false,
+    onArrival,
   } = params;
 
   try {
@@ -224,6 +245,29 @@ export async function deriveAndPublish(params: {
     // step: a model outage must delay the statistics by seconds, never withhold
     // them. `requestMatchInsights` never throws; a review that misses the cap
     // is not cancelled.
+    // Ask's first answer about the match, started here so it runs beside
+    // the review rather than after it, and awaited only once `completed` is
+    // written: it is bounded by the same deadline, but the job's status must
+    // never wait on a model. Not on a rebuild — the rail already holds this
+    // match's first answer.
+    const arrival: Promise<AskArrivalAnswer | null> =
+      onArrival && !rebuild
+        ? onArrival({
+            matchId,
+            deadline:
+              deadline === undefined
+                ? undefined
+                : deadline - ARRIVAL_RESERVE_MS,
+          }).catch((error: unknown) => {
+            console.error(`${LOG} first question threw`, {
+              jobId,
+              matchId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
+        : Promise.resolve(null);
+
     const reviewSettled = await waitForInsights(
       requestMatchInsights({ supabase, matchId }),
       insightsWaitMs(deadline),
@@ -244,7 +288,9 @@ export async function deriveAndPublish(params: {
     // webhook's completed branch, because this write is what makes the report
     // page readable — and here rather than in each caller so a re-run from the
     // CLI announces itself the same way. Deduped per job; never throws.
-    await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready" });
+    // With the first answer's headline when Ask wrote one in time.
+    const ask = await arrival;
+    await notifyAnalysisOutcome({ supabase, jobId, outcome: "ready", ask });
 
     // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
     // not reproduce the entered score and the rows were written anyway, with

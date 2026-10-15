@@ -121,17 +121,27 @@ export function DayZeroOffer({
  * those two are the callers this component was written for, and making them
  * restate it is exactly how the two personal day zeros stop being identical.
  */
-export function MatchOfferActions() {
+export function MatchOfferActions({
+  query = "",
+}: {
+  /**
+   * Search parameters both entrances carry, without the `?` — Ask's
+   * `return=ask`, so the wizard comes back to it. Home and Matches pass
+   * nothing, and their pair stays the same to the byte.
+   */
+  query?: string;
+} = {}) {
+  const send = `/dashboard/matches/new${query ? `?${query}` : ""}`;
+  // An import does not come back to Ask: it is no video, so nothing is
+  // analysed and no first answer is asked on its arrival.
+  const importHref = "/dashboard/matches/new?source=swing-vision";
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard/matches/new" className={advButton("primary")}>
+        <Link href={send} className={advButton("primary")}>
           Send match video
         </Link>
-        <Link
-          href="/dashboard/matches/new?source=swing-vision"
-          className={advButton("ghost")}
-        >
+        <Link href={importHref} className={advButton("ghost")}>
           Import instead
         </Link>
       </div>

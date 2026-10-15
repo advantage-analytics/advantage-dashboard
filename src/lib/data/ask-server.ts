@@ -341,6 +341,25 @@ export const getAskConversation = cache(async function getAskConversation(
   };
 });
 
+/**
+ * Whether a match has statistics yet — for the page the wizard sent back
+ * with `?sent=`, which says "being analysed" only while that is so. Read
+ * through the signed-in client, so a match the viewer cannot read answers
+ * false like any other with no row; the page then shows nothing for it.
+ * A failed read answers true: better no notice than a false one.
+ */
+export async function askMatchHasStats(matchId: string): Promise<boolean> {
+  if (!isUuid(matchId)) return true;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("match_stats")
+    .select("match_id")
+    .eq("match_id", matchId)
+    .limit(1);
+  if (error) return true;
+  return (data?.length ?? 0) > 0;
+}
+
 /** How the match page seats the viewer in one match, with a point to check Ask's seat against. */
 export interface AskPageSeat {
   /** `youSeat()`'s answer — the seat the match page, and its Video filter, call "you". */

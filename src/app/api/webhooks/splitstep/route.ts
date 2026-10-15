@@ -76,6 +76,7 @@ import {
   archiveVendorJson,
 } from "@/lib/services/splitstep/vendor-archive";
 import { notifyAnalysisOutcome } from "@/lib/services/notifications/analysis-mail";
+import { askOnArrival } from "@/lib/services/ask/arrival";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -451,7 +452,17 @@ export async function POST(request: NextRequest) {
           // unmeasured workload; the workload turned out not to need it.
           // The one slow part is the review it waits on before announcing
           // `completed` (~15–25s), bounded by `deadline`.
-          await deriveAndPublish({ supabase, jobId, deadline });
+          //
+          // Ask's first question about the match rides along: asked for the
+          // uploader beside the review wait, once per match, and its
+          // headline goes on the "analysis ready" mail (`ask/arrival.ts`).
+          await deriveAndPublish({
+            supabase,
+            jobId,
+            deadline,
+            onArrival: ({ matchId, deadline: by }) =>
+              askOnArrival({ supabase, jobId, matchId, deadline: by }),
+          });
         }
 
         // The players file, started at the top of this block. Nothing in

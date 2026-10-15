@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteAskConversation } from "@/app/dashboard/ask/actions";
-import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
+import {
+  DayZeroOffer,
+  MatchOfferActions,
+} from "@/components/dashboard/home/day-zero-offer";
+import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
 import type {
   AskConversation,
   AskConversationSummary,
@@ -17,6 +21,7 @@ import {
   askScopeProgramId,
   type AskScope,
 } from "@/lib/services/ask/scope";
+import { askFollowUps, type AskStarter } from "@/lib/services/ask/starters";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 import { AskAnswer } from "./ask-answer";
@@ -32,6 +37,7 @@ import {
 import { AskPrompt } from "./ask-prompt";
 import { AskRail } from "./ask-rail";
 import { isMacPlatform, isNewQuestionShortcut } from "./ask-shortcut";
+import { AskStarters } from "./ask-starters";
 import { useAskStream, type AskExchange } from "./use-ask-stream";
 
 /**
@@ -103,12 +109,24 @@ export interface AskPageProps {
   timeZone?: string;
   /** What can be tagged. No matches here is the page's day zero. */
   tagOptions: AskTagOptions;
+  /**
+   * Questions to ask with one click, built by the route from the same tag
+   * options (`askStarters()`); shown under an empty composer. None when
+   * omitted.
+   */
+  starters?: AskStarter[];
   /** Null when the count could not be read. */
   quota: AskQuota | null;
   /** Saved conversations, most recently used first. */
   conversations: AskConversationSummary[];
   /** The conversation `?c=` names, or null when it names none of the viewer's. */
   conversation: AskConversation | null;
+  /**
+   * The match the wizard just sent (`?sent=`, from `askReturnHref()`) while
+   * it still has no statistics: the intro says it is on its way. Null or
+   * omitted otherwise, including once its first answer is in the rail.
+   */
+  sentMatchId?: string | null;
 }
 
 export function AskPage(props: AskPageProps) {
@@ -126,7 +144,9 @@ export function AskPage(props: AskPageProps) {
  * no rail: there is nothing to ask about, nothing tagged and no count worth
  * showing, and a dimmed mock-up of a thread would be an invented answer.
  *
- * Personal: the offer's own pair, both to `/dashboard/matches/new`.
+ * Personal: the offer's own pair, both to `/dashboard/matches/new` with
+ * `?return=ask`, so the wizard's exits come back here and Ask can say the
+ * match is on its way (`new-match-visit.ts`).
  *
  * Team: one primary to `/dashboard/team/upload`, for a member who may send
  * video there. No "Import instead" beside it — that route has no source
@@ -152,7 +172,9 @@ function AskDayZero({
           // The team's sentence is longer; both break once.
           headlineMeasure={isTeam ? "30ch" : "24ch"}
           actions={
-            !isTeam ? undefined : canUpload ? (
+            !isTeam ? (
+              <MatchOfferActions query="return=ask" />
+            ) : canUpload ? (
               <Link
                 href="/dashboard/team/upload"
                 className={advButton("primary")}
@@ -172,13 +194,21 @@ function AskThread({
   scope,
   timeZone,
   tagOptions,
+  starters = [],
   quota,
   conversations,
   conversation,
+  sentMatchId = null,
 }: AskPageProps) {
   const router = useRouter();
   const basePath = askBasePath(scope);
   const copy = askCopy(scope);
+  // The match the wizard sent, by the same rows the tag menu holds: a
+  // `?sent=` that names none of the viewer's matches says nothing.
+  const sent = sentMatchId
+    ? (tagOptions.matches.find((match) => match.matchId === sentMatchId) ??
+      null)
+    : null;
   const { state, setDraft, ask, reset, rate } = useAskStream({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
@@ -234,6 +264,20 @@ function AskThread({
       against: conversations,
     });
   }
+
+  // A starter or a follow-up is a question with its tags, sent as typed.
+  function pick(starter: AskStarter) {
+    void send({ text: starter.text, tags: starter.tags });
+  }
+
+  // Under the newest answer, once it has settled: what to ask next, from the
+  // subject of what was just asked. Never under an error or a question still
+  // being answered.
+  const newest = state.exchanges[state.exchanges.length - 1];
+  const followUps =
+    newest && newest.answer.status === "done" && !state.inFlight
+      ? askFollowUps(newest.question.text, scope)
+      : [];
 
   async function deleteConversation(id: string) {
     const result = await deleteAskConversation(id, scope.kind);
@@ -326,7 +370,9 @@ function AskThread({
         <>
           <h1 className="sr-only">Ask</h1>
           <div className={cn(ASK_SCROLL, ASK_GUTTER, "pt-7 pb-4")}>
-            <div className={cn(ASK_COLUMN, "flex flex-col gap-8")}>
+            {/* Exchanges sit further apart (48px) than a question from its
+                own answer (24px), so where one ends reads at a glance. */}
+            <div className={cn(ASK_COLUMN, "flex flex-col gap-12")}>
               {state.exchanges.map((exchange, index) => (
                 <AskExchangeView
                   key={exchange.id}
@@ -345,6 +391,14 @@ function AskThread({
                   }
                 />
               ))}
+              {followUps.length > 0 && (
+                <AskStarters
+                  label={copy.followUps}
+                  starters={followUps}
+                  onPick={pick}
+                  className="-mt-4"
+                />
+              )}
               <div ref={end} aria-hidden="true" />
             </div>
           </div>
@@ -356,7 +410,30 @@ function AskThread({
         </>
       ) : (
         <AskIntro lead={<p className="text-body-sm">{copy.lead}</p>}>
+          {sent && (
+            <p role="status" className="text-body-sm text-[var(--ink-700)]">
+              {copy.sentNotice(sent.opponentName)}
+            </p>
+          )}
           {composer}
+          <AskStarters
+            label={copy.starters}
+            starters={starters}
+            onPick={pick}
+            disabled={state.inFlight}
+          />
+          {/* The hand-off (roadmap 6.2): the wizard, with a way back here.
+              Personal only — the team wizard has no return path yet. The
+              quietest link on the page, as the day-zero offer's sample
+              link is: ink that darkens, never blue, never underlined. */}
+          {scope.kind === "personal" && (
+            <Link
+              href={WIZARD_FROM_ASK_HREF}
+              className="text-micro self-start transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+            >
+              {copy.sendVideo}
+            </Link>
+          )}
         </AskIntro>
       )}
     </AskFrame>
@@ -382,7 +459,7 @@ function AskExchangeView({
   const { question, answer } = exchange;
   const { answerId } = answer;
   return (
-    <article className="flex flex-col gap-8">
+    <article className="flex flex-col gap-6">
       <AskPrompt text={question.text} tags={question.tags} />
       <AskAnswer
         answer={answer}

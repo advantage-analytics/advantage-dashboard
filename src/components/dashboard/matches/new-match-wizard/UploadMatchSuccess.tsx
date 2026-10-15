@@ -32,6 +32,10 @@ import type { EventPreset } from "./types";
 import type { CreatedMatch, UploadState } from "./upload-progress";
 import { formatFileSize } from "./utils";
 import { addVideoHref } from "@/lib/matches/add-video-href";
+import {
+  askReturnHref,
+  type WizardReturnTarget,
+} from "@/lib/matches/new-match-visit";
 import { createClient } from "@/lib/supabase/client";
 import { useLeaveGuard } from "@/components/dashboard/leave-guard-context";
 
@@ -61,6 +65,7 @@ export function UploadMatchSuccess({
   onResubmitted,
   exitHref,
   preset,
+  returnTo = null,
 }: {
   match: CreatedMatch;
   /** Null until the transfer's `"started"` event lands, and for imports. */
@@ -72,6 +77,8 @@ export function UploadMatchSuccess({
   onResubmitted: () => void;
   exitHref: string;
   preset: EventPreset | null;
+  /** Ask handed this visit off: the quiet exit goes back there, naming this match. */
+  returnTo?: WizardReturnTarget | null;
 }) {
   // Only an import waits on its stats here; a video's analysis is reported
   // by its job, on the match page, long after this screen.
@@ -158,11 +165,18 @@ export function UploadMatchSuccess({
           ) : (
             // Only once this tab has nothing left to do: mid-transfer the one
             // action is waiting, and the sidebar already reaches Matches.
-            !view.busy && (
+            // A visit Ask handed off goes back to Ask, naming the match it
+            // sent, so that page can say it is on its way.
+            !view.busy &&
+            (returnTo === "ask" ? (
+              <Link href={askReturnHref(match.matchId)} className={QUIET_LINK}>
+                Back to Ask
+              </Link>
+            ) : (
               <Link href={MATCHES_HREF} className={QUIET_LINK}>
                 Back to matches
               </Link>
-            )
+            ))
           )}
         </div>
       </div>

@@ -406,7 +406,7 @@ export const ASK_PLAN_EXAMPLE_REFUSAL: AskPlanRefusal = {
 };
 
 /**
- * The four views as the plan prompt lists them: a header line per view, then
+ * The five views as the plan prompt lists them: a header line per view, then
  * one line per column — `  name (type): meaning`. Columns marked `hidden` in
  * the schema are left out. The spec parses this block back and holds it
  * against `ASK_SCHEMA`.
@@ -590,7 +590,7 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 ### Rules for both
 
 - PostgreSQL. A single SELECT each; WITH and UNION are allowed. No semicolon, no comments, no parameters.
-- Read only ask.matches, ask.match_stats, ask.points and ask.shots, always written with the ask. prefix, plus ${SCOPE_NAME} in sql. Use only the columns listed above.
+- Read only ask.matches, ask.match_stats, ask.points, ask.shots and ask.point_plays, always written with the ask. prefix, plus ${SCOPE_NAME} in sql. Use only the columns listed above.
 - Call only these functions: ${functions}. Also allowed: current_date, case, cast, extract, in, between, like, ilike. To count rows that meet a condition, write sum(case when ... then 1 else 0 end).
 - ask.match_stats has two rows per match: side = 'me' (the viewer) and side = 'opponent'. Every sum over it MUST name side — filter side = 'me' for the player's own numbers, side = 'opponent' for the other player's, or sum with case when side = … — otherwise the two rows are added together and the query is refused.
 - ask.match_stats has no date and no opponent. For a period or an opponent, join ask.matches on match_id.
@@ -600,8 +600,8 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - How many sets a match went to is read from ask.matches.score_text, one entry per set: length(score_text) - length(replace(score_text, ',', '')) + 1. A three-set match is one where that is 3. Never count sets from ask.points: not every match has points recorded.
 - ask.points.result_type names the stroke that ended the point by whoever hit it: a point the viewer lost (i_won = false) ending in a Winner is the opponent's winner, one ending in an Unforced Error is the viewer's error.
 - Text values are capitalised exactly as the column descriptions list them: spin_type = 'Topspin', shot_type = 'First Serve', result = 'Out'. Compare opponent names with ilike.
-- Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero.
-- Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court: join ask.shots to ask.points on match_id and point_number to split serves by court.
+- Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero. ask.point_plays.has_shots is false for a point recorded without shots.
+- Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point, so a serve split by court, by first or second serve, or by who served needs no join.
 - Serve speed is ask.shots.speed_mph for shot_type 'First Serve' or 'Second Serve' where mine; name its columns with _mph, never _pct.
 
 ### When to use shape B
@@ -738,7 +738,13 @@ export interface AskVisualExample {
   block: string;
 }
 
-export const ASK_VISUAL_EXAMPLES: Record<AskVisualKind, AskVisualExample> = {
+/**
+ * The catalogue's kinds: every kind but `momentum`, which the server alone
+ * writes (`momentum.ts`) and the model is never offered.
+ */
+type AskCatalogueKind = Exclude<AskVisualKind, "momentum">;
+
+export const ASK_VISUAL_EXAMPLES: Record<AskCatalogueKind, AskVisualExample> = {
   bars: {
     when: `the same percentages for the subject and a baseline — this opponent against all matches, this year against last. Up to ${MAX_ASK_BARS_ROWS} rows, each two _pct cells. ONLY _pct cells: a count, a speed or a rating in a bars row drops the block; put those in a table.`,
     rows: [
@@ -774,7 +780,7 @@ ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.all_first_serve_pct}}
 ROW: Double faults ${S} {{r1.double_faults}} ${S} {{r1.all_double_faults}} ${S} {{r1.double_faults_diff}}`,
   },
   trend: {
-    when: `one value over time, when the result has one row per match in date order. ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS} rows; name the date column and the value column, and the app reads every row.`,
+    when: `one value over time, when the result has one row per match in date order. ${MIN_ASK_TREND_POINTS} to ${MAX_ASK_TREND_POINTS} rows; name the date column and the value column, and the app reads every row. When the result also holds the same measure across all matches in every row (an all_ or avg_ column), name it third: the app draws it as a dashed line beside the points. A match_id column in the result links each point to its match.`,
     rows: [
       { played_on: "2026-06-04", first_serve_pct: 61 },
       { played_on: "2026-07-09", first_serve_pct: 63 },
@@ -799,17 +805,26 @@ ROW: Opponent forced errors ${S} {{r1.opponent_forced_errors}}
 ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
   },
   serve: {
-    when: `serve direction: the T, body and wide counts, in that order. One row for the serves it counts; a second row only when the result holds a second group: first serves and second serves, or the Deuce and Ad courts when the result has a court column — label those rows Deuce and Ad, and only then. Never more than ${MAX_ASK_SERVE_COURTS}. Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.`,
+    when: `serve direction: the T, body and wide counts, in that order. One row for the serves it counts; two rows when the result holds two groups — one row per court when it has a court column (ask.points.court, Deuce or Ad), or first serves and second serves. Label a court row exactly Deuce or Ad, copied from that row's court cell: the app then draws the two service boxes as a court. Never more than ${MAX_ASK_SERVE_COURTS}. Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.`,
     rows: [
       {
         [ASK_SCOPE_COUNT_COLUMN]: 22,
+        court: "Deuce",
         serve_t: 13,
         serve_body: 8,
         serve_wide: 18,
       },
+      {
+        [ASK_SCOPE_COUNT_COLUMN]: 22,
+        court: "Ad",
+        serve_t: 9,
+        serve_body: 11,
+        serve_wide: 15,
+      },
     ],
-    block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where your serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches.
-ROW: Serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
+    block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where your serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches, by court.
+ROW: Deuce ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}
+ROW: Ad ${S} {{r2.serve_t}} ${S} {{r2.serve_body}} ${S} {{r2.serve_wide}}`,
   },
   form: {
     when: `a record or a run of results, when the result has one row per match in date order with i_won. Up to ${MAX_ASK_FORM_RESULTS} rows; name the true-or-false column and the app reads every row, skipping an unknown result.`,
@@ -825,9 +840,9 @@ ${ASK_VISUAL_PLOT_PREFIX} i_won`,
 
 /** The catalogue as the answer prompt prints it: when each kind fits, its syntax, its example. */
 function renderVisualCatalogue(
-  examples: Record<AskVisualKind, AskVisualExample> = ASK_VISUAL_EXAMPLES,
+  examples: Record<AskCatalogueKind, AskVisualExample> = ASK_VISUAL_EXAMPLES,
 ): string {
-  return (Object.keys(examples) as AskVisualKind[])
+  return (Object.keys(examples) as AskCatalogueKind[])
     .map((kind) => {
       const example = examples[kind];
       return `### ${kind} — ${example.when}
@@ -1027,7 +1042,7 @@ export const ASK_TEAM_PLAN_EXAMPLE_REFUSAL: AskPlanRefusal = {
 };
 
 /**
- * The team plan step's system prompt: the same four views, read for a
+ * The team plan step's system prompt: the same five views, read for a
  * program. Reached through {@link buildPlanPrompt} with a team scope.
  */
 function buildTeamPlanPrompt(
@@ -1125,10 +1140,10 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 ### Rules for both
 
 - PostgreSQL. A single SELECT each; WITH and UNION are allowed. No semicolon, no comments, no parameters.
-- Read only ask.matches, ask.match_stats, ask.points and ask.shots, always written with the ask. prefix, plus ${SCOPE_NAME} in sql. Use only the columns listed above.
+- Read only ask.matches, ask.match_stats, ask.points, ask.shots and ask.point_plays, always written with the ask. prefix, plus ${SCOPE_NAME} in sql. Use only the columns listed above.
 - Call only these functions: ${functions}. Also allowed: current_date, case, cast, extract, in, between, like, ilike. To count rows that meet a condition, write sum(case when ... then 1 else 0 end).
 - ask.match_stats has two rows per match: side = 'me' (the program's player) and side = 'opponent'. Every sum over it MUST name side — filter side = 'me' for the program's own numbers, side = 'opponent' for the opponents', or sum with case when side = … — otherwise the two rows are added together and the query is refused.
-- ask.match_stats, ask.points and ask.shots have no date, no opponent and no player name. For a period, an opponent or a player, join ask.matches on match_id.
+- ask.match_stats, ask.points, ask.shots and ask.point_plays have no date, no opponent and no player name. For a period, an opponent or a player, join ask.matches on match_id.
 - ask.matches.i_won is null when the result is unknown. Null is not a loss: count wins with i_won and losses with i_won = false.
 - Doubles matches are in ask.matches too: match_type is 'Doubles' and player_name names both partners. They have a score and a result but NO statistics (has_stats is false, and no rows in the other three views). A record may count them; a statistic cannot. For a singles-only record filter match_type is distinct from 'Doubles'; for a doubles question filter match_type ilike '%doubles%'.
 - A match with has_stats false has a result but no statistics. It did not have zero of anything: leave it out of a statistic rather than counting it as zero.
@@ -1137,8 +1152,8 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 - How many sets a match went to is read from ask.matches.score_text, one entry per set: length(score_text) - length(replace(score_text, ',', '')) + 1. A three-set match is one where that is 3. Never count sets from ask.points: not every match has points recorded.
 - ask.points.result_type names the stroke that ended the point by whoever hit it: a point the program's player lost (i_won = false) ending in a Winner is the opponent's winner, one ending in an Unforced Error is the program player's error.
 - Text values are capitalised exactly as the column descriptions list them: spin_type = 'Topspin', shot_type = 'First Serve', result = 'Out'. Compare player and opponent names with ilike.
-- Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero.
-- Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court: join ask.shots to ask.points on match_id and point_number to split serves by court.
+- Points and shots are recorded for some matches only. A match with no rows in ask.points or ask.shots has no point or shot data; it did not have zero. ask.point_plays.has_shots is false for a point recorded without shots.
+- Serve direction is serve_t, serve_body and serve_wide in ask.match_stats, summed across matches — or counted from ask.shots where zone is 'T', 'Body' or 'Wide' and shot_type is 'First Serve' or 'Second Serve', which is how to split first serves from second serves. Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point, so a serve split by court, by first or second serve, or by who served needs no join.
 - Serve speed is ask.shots.speed_mph for shot_type 'First Serve' or 'Second Serve' where mine; name its columns with _mph, never _pct.
 
 ### When to use shape B
@@ -1247,88 +1262,91 @@ Sokolov also hit the most second serves of the three, and Brooks the fewest.`;
  * examples' rows, with the wording turned to the third person. Each block
  * renders through the real renderer in the spec, as the personal ones do.
  */
-export const ASK_TEAM_VISUAL_EXAMPLES: Record<AskVisualKind, AskVisualExample> =
-  {
-    bars: {
-      when: `the same percentages for the subject and a baseline — one player against the team, this opponent against all matches, this season against last. Up to ${MAX_ASK_BARS_ROWS} rows, each two _pct cells. ONLY _pct cells: a count, a speed or a rating in a bars row drops the block; put those in a table.`,
-      rows: [
-        {
-          [ASK_SCOPE_COUNT_COLUMN]: 4,
-          first_serve_pct: 58.2,
-          team_first_serve_pct: 61.4,
-          second_serve_won_pct: 41.2,
-          team_second_serve_won_pct: 52.8,
-        },
-      ],
-      block: `${ASK_VISUAL_LINE_PREFIX} bars ${S} Share of points, from {{r1.${ASK_SCOPE_COUNT_COLUMN}}} of Sokolov's matches.
+export const ASK_TEAM_VISUAL_EXAMPLES: Record<
+  AskCatalogueKind,
+  AskVisualExample
+> = {
+  bars: {
+    when: `the same percentages for the subject and a baseline — one player against the team, this opponent against all matches, this season against last. Up to ${MAX_ASK_BARS_ROWS} rows, each two _pct cells. ONLY _pct cells: a count, a speed or a rating in a bars row drops the block; put those in a table.`,
+    rows: [
+      {
+        [ASK_SCOPE_COUNT_COLUMN]: 4,
+        first_serve_pct: 58.2,
+        team_first_serve_pct: 61.4,
+        second_serve_won_pct: 41.2,
+        team_second_serve_won_pct: 52.8,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} bars ${S} Share of points, from {{r1.${ASK_SCOPE_COUNT_COLUMN}}} of Sokolov's matches.
 SERIES: Sokolov ${S} Team
 ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.team_first_serve_pct}}
 ROW: Second-serve points won ${S} {{r1.second_serve_won_pct}} ${S} {{r1.team_second_serve_won_pct}}`,
-    },
-    table: {
-      when: `players side by side (one ROW per player, labelled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
-      rows: [
-        {
-          [ASK_SCOPE_COUNT_COLUMN]: 1,
-          first_serve_pct: 37.5,
-          team_first_serve_pct: 58.2,
-          first_serve_diff_pct: -20.7,
-          double_faults: 4,
-          team_double_faults: 2.3,
-          double_faults_diff: 1.7,
-        },
-      ],
-      block: `${ASK_VISUAL_LINE_PREFIX} table ${S} From {{r1.${ASK_SCOPE_COUNT_COLUMN}}} match, against the team's.
+  },
+  table: {
+    when: `players side by side (one ROW per player, labelled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
+    rows: [
+      {
+        [ASK_SCOPE_COUNT_COLUMN]: 1,
+        first_serve_pct: 37.5,
+        team_first_serve_pct: 58.2,
+        first_serve_diff_pct: -20.7,
+        double_faults: 4,
+        team_double_faults: 2.3,
+        double_faults_diff: 1.7,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} table ${S} From {{r1.${ASK_SCOPE_COUNT_COLUMN}}} match, against the team's.
 COLUMNS: Sokolov ${S} Team ${S} Difference
 ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.team_first_serve_pct}} ${S} {{r1.first_serve_diff_pct}}
 ROW: Double faults ${S} {{r1.double_faults}} ${S} {{r1.team_double_faults}} ${S} {{r1.double_faults_diff}}`,
-    },
-    trend: {
-      when: ASK_VISUAL_EXAMPLES.trend.when,
-      rows: ASK_VISUAL_EXAMPLES.trend.rows,
-      block: `${ASK_VISUAL_LINE_PREFIX} trend ${S} The team's first serves in, one point per match since August.
+  },
+  trend: {
+    when: ASK_VISUAL_EXAMPLES.trend.when,
+    rows: ASK_VISUAL_EXAMPLES.trend.rows,
+    block: `${ASK_VISUAL_LINE_PREFIX} trend ${S} The team's first serves in, one point per match since August.
 ${ASK_VISUAL_PLOT_PREFIX} played_on ${S} first_serve_pct`,
-    },
-    split: {
-      when: `ONLY counts that are parts of ONE whole: they add up to a total the caption names, such as how the points the team won ended. ${MIN_ASK_SPLIT_PARTS} to ${MAX_ASK_SPLIT_PARTS} rows, each one count cell; never a percentage. An average is never a part: a column named avg_… or …_per_match does not go in a split. Two unlike numbers — two averages, or winners beside unforced errors — compare two measures and add up to nothing: leave them as figure lines or draw a table, never a split.`,
-      rows: ASK_VISUAL_EXAMPLES.split.rows,
-      block: `${ASK_VISUAL_LINE_PREFIX} split ${S} The {{r1.points_won}} points the team won, by how they ended.
+  },
+  split: {
+    when: `ONLY counts that are parts of ONE whole: they add up to a total the caption names, such as how the points the team won ended. ${MIN_ASK_SPLIT_PARTS} to ${MAX_ASK_SPLIT_PARTS} rows, each one count cell; never a percentage. An average is never a part: a column named avg_… or …_per_match does not go in a split. Two unlike numbers — two averages, or winners beside unforced errors — compare two measures and add up to nothing: leave them as figure lines or draw a table, never a split.`,
+    rows: ASK_VISUAL_EXAMPLES.split.rows,
+    block: `${ASK_VISUAL_LINE_PREFIX} split ${S} The {{r1.points_won}} points the team won, by how they ended.
 ROW: Winners ${S} {{r1.winners}}
 ROW: Opponent forced errors ${S} {{r1.opponent_forced_errors}}
 ROW: Opponent unforced errors ${S} {{r1.opponent_unforced_errors}}`,
-    },
-    serve: {
-      when: ASK_VISUAL_EXAMPLES.serve.when,
-      rows: ASK_VISUAL_EXAMPLES.serve.rows,
-      block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where the team's serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches.
-ROW: Serves ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}`,
-    },
-    form: {
-      when: ASK_VISUAL_EXAMPLES.form.when,
-      rows: [
-        {
-          played_on: "2026-09-04",
-          player_name: "Mara Sokolov",
-          opponent_name: "Sam Ortiz",
-          i_won: true,
-        },
-        {
-          played_on: "2026-09-19",
-          player_name: "Mara Sokolov",
-          opponent_name: "Alex Rivera",
-          i_won: false,
-        },
-        {
-          played_on: "2026-09-28",
-          player_name: "Mara Sokolov",
-          opponent_name: "Sam Ortiz",
-          i_won: true,
-        },
-      ],
-      block: `${ASK_VISUAL_LINE_PREFIX} form ${S} Sokolov's matches this season, oldest first.
+  },
+  serve: {
+    when: ASK_VISUAL_EXAMPLES.serve.when,
+    rows: ASK_VISUAL_EXAMPLES.serve.rows,
+    block: `${ASK_VISUAL_LINE_PREFIX} serve ${S} Where the team's serves went across {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches, by court.
+ROW: Deuce ${S} {{r1.serve_t}} ${S} {{r1.serve_body}} ${S} {{r1.serve_wide}}
+ROW: Ad ${S} {{r2.serve_t}} ${S} {{r2.serve_body}} ${S} {{r2.serve_wide}}`,
+  },
+  form: {
+    when: ASK_VISUAL_EXAMPLES.form.when,
+    rows: [
+      {
+        played_on: "2026-09-04",
+        player_name: "Mara Sokolov",
+        opponent_name: "Sam Ortiz",
+        i_won: true,
+      },
+      {
+        played_on: "2026-09-19",
+        player_name: "Mara Sokolov",
+        opponent_name: "Alex Rivera",
+        i_won: false,
+      },
+      {
+        played_on: "2026-09-28",
+        player_name: "Mara Sokolov",
+        opponent_name: "Sam Ortiz",
+        i_won: true,
+      },
+    ],
+    block: `${ASK_VISUAL_LINE_PREFIX} form ${S} Sokolov's matches this season, oldest first.
 ${ASK_VISUAL_PLOT_PREFIX} i_won`,
-    },
-  };
+  },
+};
 
 function renderTeamScope(matchCount: number): string {
   const count = `${matchCount} ${matchCount === 1 ? "match" : "matches"}`;

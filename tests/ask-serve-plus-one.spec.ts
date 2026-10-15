@@ -141,30 +141,36 @@ test.describe("the query", () => {
     }
   }
 
-  test("the +1 is the Video filter's: the server's shot 3, the returner's shot 4", () => {
+  test("the +1 is the Video filter's: the server's shot 3, the returner's shot 4, read per point from ask.point_plays", () => {
     const serve = servePlusOneSql({
       phase: "serve",
       subject: "mine",
       serveType: null,
     });
-    expect(serve).toContain("v.is_played_serve and v.mine = true");
-    expect(serve).toContain("q.is_serve_plus_one and q.mine = true");
+    expect(serve).toContain("from ask.point_plays p");
+    expect(serve).not.toContain("ask.shots");
+    expect(serve).toContain("p.serve_type is not null and p.i_served = true");
+    expect(serve).toContain("p.serve_zone as zone");
+    expect(serve).toContain("p.p1s_mine as plus_mine");
+    expect(serve).toContain("where plus_mine = true");
     const ret = servePlusOneSql({
       phase: "return",
       subject: "mine",
       serveType: "second",
     });
-    expect(ret).toContain("r.is_return and r.mine = true");
-    expect(ret).toContain("q.is_return_plus_one and q.mine = true");
-    expect(ret).toContain("v.shot_type = 'Second Serve'");
-    // The opponent's: their shots, and their points won.
+    expect(ret).toContain("p.return_mine = true");
+    expect(ret).toContain("p.return_zone as zone");
+    expect(ret).toContain("p.p1r_mine as plus_mine");
+    expect(ret).toContain("p.serve_type = 'Second Serve'");
+    // The opponent's: their serves, and their points won.
     const theirs = servePlusOneSql({
       phase: "serve",
       subject: "opponent",
       serveType: null,
     });
-    expect(theirs).toContain("v.mine = false");
-    expect(theirs).toContain("(not pt.i_won) as won");
+    expect(theirs).toContain("p.i_served = false");
+    expect(theirs).toContain("where plus_mine = false");
+    expect(theirs).toContain("(not p.i_won) as won");
   });
 });
 
@@ -545,14 +551,14 @@ test.describe("by side", () => {
       bySide: true,
     });
     expect(split).toContain("group by court, zone, stroke, direction");
-    expect(split).toContain("select o.court, o.zone");
+    expect(split).toContain("p.court, p.serve_zone as zone");
     const ad = servePlusOneSql({
       phase: "return",
       subject: "mine",
       serveType: null,
       court: "Ad",
     });
-    expect(ad).toContain("and pc.court = 'Ad'");
+    expect(ad).toContain("and p.court = 'Ad'");
     for (const sql of [split, ad]) {
       expect(
         checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),

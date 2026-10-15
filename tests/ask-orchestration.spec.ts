@@ -304,6 +304,8 @@ test.describe("a completed answer", () => {
       type: "figure",
       label: "Second-serve points won",
       value: "41.2%",
+      // One cell, so the tile can link to the film (`figure-video.ts`).
+      column: "second_serve_won_pct",
     });
     expect(text(events)).toBe(ANSWER_RENDERED);
     // The sources come before the answer is written: the matches are settled
@@ -389,7 +391,13 @@ test.describe("a completed answer", () => {
     } satisfies AskSavedQuestion);
     expect(save.args?.p_answer).toEqual({
       headline: "Your second serve has held up across these matches.",
-      figures: [{ label: "Second-serve points won", value: "41.2%" }],
+      figures: [
+        {
+          label: "Second-serve points won",
+          value: "41.2%",
+          column: "second_serve_won_pct",
+        },
+      ],
       visual: null,
       body: ANSWER_RENDERED,
       noAdvice: false,

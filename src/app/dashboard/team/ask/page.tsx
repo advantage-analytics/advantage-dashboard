@@ -8,6 +8,7 @@ import {
   getAskTagOptions,
 } from "@/lib/data/ask-server";
 import type { AskScope } from "@/lib/services/ask/scope";
+import { askStarters } from "@/lib/services/ask/starters";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { explainVideoRefusal } from "@/lib/workspace/types";
 
@@ -87,6 +88,7 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
       canUpload={explainVideoRefusal(active) === null}
       timeZone={active.timeZone}
       tagOptions={tagOptions}
+      starters={askStarters(tagOptions, scope)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}

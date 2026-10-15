@@ -63,9 +63,8 @@
  */
 
 import {
-  createLLMObservabilityContext,
-  getLLMStream,
-  isLLMConfigured,
+  flushPostHogAfterResponse,
+  getPostHogServerClient,
 } from "@/lib/llm/adapter";
 import { ndjsonStreamResponse } from "@/lib/llm/stream-response";
 import { isUuid } from "@/lib/admin/validation";
@@ -77,13 +76,27 @@ import {
   type AskTagOptions,
 } from "@/lib/data/ask-server";
 import {
-  askQuestion,
   conversationTurnsFromMessages,
   previousPlanFromMessages,
   reserveAskQuestion,
   type AskDatabase,
   type AskModel,
+  type AskQuestionInput,
 } from "@/lib/services/ask/ask";
+import {
+  askCacheKey,
+  captureAskAnswer,
+  readAskCache,
+  readAskDataVersion,
+  replayCachedAnswer,
+} from "@/lib/services/ask/cache";
+import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
+import {
+  askRunProperties,
+  askRunRow,
+  recordAskRun,
+  type AskRunRecord,
+} from "@/lib/services/ask/runs";
 import {
   createAskDatabase,
   type AskRpcClient,
@@ -308,6 +321,7 @@ async function abandon(events: AsyncGenerator<AskEvent, void, undefined>) {
  * ---------------------------------------------------------------------- */
 
 export async function POST(request: Request): Promise<Response> {
+  const started = Date.now();
   const origin = checkSameOrigin(request, [siteUrl()]);
   if (origin) return errorResponse(origin);
 
@@ -465,56 +479,117 @@ export async function POST(request: Request): Promise<Response> {
     service,
     viewerId: user.id,
   });
-  // One context for the whole question, so every model call it makes (plan,
-  // pattern, answer, and any retry) lands under one PostHog trace, each call
-  // named by its stage. A context per call, as this once was, split a
-  // question across traces and made its calls look like the insight cards'.
-  const observability = createLLMObservabilityContext(user.id);
-  const model: AskModel = {
-    configured: isLLMConfigured(),
-    stream: (systemPrompt, messages, call) =>
-      getLLMStream(systemPrompt, messages, observability, {
-        span: call ? `ask.${call.stage}` : "ask",
-        temperature: call?.temperature,
-        maxTokens: call?.maxTokens,
-        jsonSchema: call?.jsonSchema,
-        staticPrefixLength: call?.staticPrefixLength,
-        // The browser closing the tab aborts the provider request too.
-        signal: request.signal,
-      }),
+  // One trace per question, a model per stage, and the browser closing the
+  // tab aborting the provider request too (`model.ts`).
+  const model: AskModel = askAdapterModel({
+    userId: user.id,
+    signal: request.signal,
+  });
+  const stageModels = askStageModels();
+
+  // Every question leaves a row in ask_runs (as the asker) and one `ask_run`
+  // event in PostHog (without the question's text), however it ended.
+  // Neither can fail the answer: a run that could not be recorded is logged
+  // and that is all.
+  const onRun = async (run: AskRunRecord) => {
+    const recorded = await db.rpc("ask_record_run", {
+      p_run: askRunRow(run),
+    });
+    if (recorded.error) {
+      console.warn("[ask] could not record the run", {
+        sqlstate: recorded.error.code,
+        error: recorded.error.message,
+      });
+    }
+    const posthog = getPostHogServerClient();
+    if (posthog) {
+      posthog.capture({
+        distinctId: user.id,
+        event: "ask_run",
+        properties: askRunProperties(run, scope),
+      });
+      flushPostHogAfterResponse(posthog);
+    }
   };
 
-  // Everything that could refuse has. From here a question is spent (unless
-  // this is mock mode, which spends nothing), so the only statements left
-  // are the two that hand the reservation to the generator that owns it.
-  const reserved = await reserveAskQuestion(db, model);
-  if (!reserved.ok) {
-    if (reserved.code === "ask_limit_reached") {
-      return limitReached(reserved.detail);
-    }
-    console.error("[ask] could not reserve a question", {
-      error: reserved.message,
-    });
-    return errorResponse(transportError("internal_error", "reserve_failed"));
-  }
-
-  const events = askQuestion({
-    db,
-    model,
-    now: () => new Date(),
+  // ── The answer cache ───────────────────────────────────────────────────
+  // The same question over unchanged data is answered from what was streamed
+  // for it last time: no reservation, no model, no query (`cache.ts`). The
+  // version is a hash over the viewer's matches in scope and their
+  // statistics' update times, so any change to the data is a miss. Mock mode
+  // is never cached, and a cache that cannot be read is a miss too. Nor is a
+  // follow-up: its meaning rests on the conversation, which the key does not
+  // carry, so "and on second serves?" must never replay a standalone answer.
+  const cacheKey = askCacheKey({
     question: body.question,
     tags: resolved.tags,
-    conversation: conversation
-      ? conversationTurnsFromMessages(conversation.messages)
-      : [],
-    previousPlan: conversation
-      ? previousPlanFromMessages(conversation.messages)
-      : null,
-    conversationId: conversation?.id ?? null,
-    reservation: reserved.reservation,
     scope,
-    pageSeats: getAskPageSeats,
   });
+  const dataVersion =
+    model.configured && !body.conversationId
+      ? await readAskDataVersion(db, scope)
+      : null;
+  const cached = dataVersion
+    ? await readAskCache(db, { key: cacheKey, version: dataVersion, scope })
+    : null;
+
+  let events: AsyncGenerator<AskEvent, void, undefined>;
+  if (cached) {
+    events = replayCachedAnswer({
+      db,
+      cached,
+      question: body.question,
+      tags: resolved.tags,
+      conversationId: conversation?.id ?? null,
+      scope,
+      onRun,
+    });
+  } else {
+    // Everything that could refuse has. From here a question is spent (unless
+    // this is mock mode, which spends nothing), so the only statements left
+    // are the two that hand the reservation to the generator that owns it.
+    const reserved = await reserveAskQuestion(db, model);
+    if (!reserved.ok) {
+      if (reserved.code === "ask_limit_reached") {
+        return limitReached(reserved.detail);
+      }
+      console.error("[ask] could not reserve a question", {
+        error: reserved.message,
+      });
+      return errorResponse(transportError("internal_error", "reserve_failed"));
+    }
+
+    const input: AskQuestionInput = {
+      db,
+      model,
+      now: () => new Date(),
+      question: body.question,
+      tags: resolved.tags,
+      conversation: conversation
+        ? conversationTurnsFromMessages(conversation.messages)
+        : [],
+      previousPlan: conversation
+        ? previousPlanFromMessages(conversation.messages)
+        : null,
+      conversationId: conversation?.id ?? null,
+      reservation: reserved.reservation,
+      scope,
+      pageSeats: getAskPageSeats,
+    };
+    const recorded = (run: AskQuestionInput) =>
+      recordAskRun(run, {
+        preStreamMs: Date.now() - started,
+        planModel: stageModels.plan,
+        answerModel: stageModels.answer,
+        onRun,
+      });
+    events = dataVersion
+      ? captureAskAnswer(input, recorded, {
+          key: cacheKey,
+          version: dataVersion,
+        })
+      : recorded(input);
+  }
 
   try {
     const response = ndjsonStreamResponse(events);

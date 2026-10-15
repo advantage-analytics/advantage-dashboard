@@ -126,6 +126,8 @@ function transcript(reconciled: boolean, segmentation?: unknown) {
 
 function load(persist: () => Promise<unknown>) {
   const mail: string[] = [];
+  /** The `ask` each mail was sent with, in order (undefined when the call carried none). */
+  const asks: unknown[] = [];
   const loader = createLoader({
     // The module's `err instanceof Error` must see the realm the stubs throw in.
     globals: { Error },
@@ -137,8 +139,15 @@ function load(persist: () => Promise<unknown>) {
         waitForInsights: async () => true,
       },
       "@/lib/services/notifications/analysis-mail": {
-        notifyAnalysisOutcome: async ({ outcome }: { outcome: string }) => {
+        notifyAnalysisOutcome: async ({
+          outcome,
+          ask,
+        }: {
+          outcome: string;
+          ask?: unknown;
+        }) => {
           mail.push(outcome);
+          asks.push(ask);
         },
       },
     },
@@ -148,8 +157,15 @@ function load(persist: () => Promise<unknown>) {
     deriveAndPublish: mod.deriveAndPublish as (p: {
       supabase: unknown;
       jobId: string;
+      deadline?: number;
+      rebuild?: boolean;
+      onArrival?: (ctx: {
+        matchId: string;
+        deadline?: number;
+      }) => Promise<unknown>;
     }) => Promise<{ ok: boolean; reason?: string }>,
     mail,
+    asks,
   };
 }
 
@@ -533,5 +549,64 @@ test.describe("deriveAndPublish over hand labels", () => {
     });
 
     expect(seen).toEqual([false, true]);
+  });
+});
+
+test.describe("deriveAndPublish and Ask's first question", () => {
+  quietConsole();
+
+  test("the hook runs with the match and a deadline 12s early, and its answer rides on the ready mail", async () => {
+    const { client } = fakeSupabase();
+    const { deriveAndPublish, mail, asks } = load(written());
+    const seen: unknown[] = [];
+    const answer = {
+      conversationId: "c-1",
+      answerId: null,
+      headline: "h",
+      question: "q",
+    };
+    const out = await deriveAndPublish({
+      supabase: client,
+      jobId: JOB,
+      deadline: 123_456,
+      onArrival: async (ctx) => {
+        seen.push(ctx);
+        return answer;
+      },
+    });
+    expect(out.ok).toBe(true);
+    // Short of the job's deadline, so the mail and the ball paths after it
+    // are never left the last seconds of the invocation.
+    expect(seen).toEqual([{ matchId: MATCH, deadline: 123_456 - 12_000 }]);
+    expect(mail).toEqual(["ready"]);
+    expect(asks).toEqual([answer]);
+  });
+
+  test("a hook that throws or answers null leaves the mail as before, and the derivation succeeds", async () => {
+    for (const onArrival of [
+      async () => {
+        throw new Error("provider down");
+      },
+      async () => null,
+    ]) {
+      const { client } = fakeSupabase();
+      const { deriveAndPublish, mail, asks } = load(written());
+      const out = await deriveAndPublish({
+        supabase: client,
+        jobId: JOB,
+        onArrival,
+      });
+      expect(out.ok).toBe(true);
+      expect(mail).toEqual(["ready"]);
+      expect(asks).toEqual([null]);
+    }
+  });
+
+  test("without a hook the mail carries no answer", async () => {
+    const { client } = fakeSupabase();
+    const { deriveAndPublish, mail, asks } = load(written());
+    await deriveAndPublish({ supabase: client, jobId: JOB });
+    expect(mail).toEqual(["ready"]);
+    expect(asks).toEqual([null]);
   });
 });

@@ -50,6 +50,10 @@ import {
 } from "./upload-progress";
 import { WizardShell } from "./WizardShell";
 import { sweepPreparedVideos } from "@/lib/video/trim";
+import {
+  askReturnHref,
+  type WizardReturnTarget,
+} from "@/lib/matches/new-match-visit";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 
@@ -64,6 +68,7 @@ export function UploadMatchFlow({
   preferredProvider,
   initialSubject,
   firstUpload = false,
+  returnTo = null,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
@@ -86,6 +91,12 @@ export function UploadMatchFlow({
    * trim step reads it, to explain "{who} at the start" once.
    */
   firstUpload?: boolean;
+  /**
+   * The page that handed this visit off and wants it back (`?return=ask`,
+   * `wizardReturnTarget()`): the exits lead there instead of the matches
+   * list, and the success screen's quiet link names the match it sent.
+   */
+  returnTo?: WizardReturnTarget | null;
 } = {}) {
   const admin = useAdminWizardMode();
   // The line this flow is filling. State rather than the prop because the
@@ -106,8 +117,12 @@ export function UploadMatchFlow({
     if (followed) setPreset(followed);
   }
   // A team upload came from a line and goes back to it. A personal one has the
-  // matches list, which is where its match will appear.
-  const EXIT_HREF = admin?.exitHref ?? preset?.eventHref ?? PERSONAL_EXIT_HREF;
+  // matches list, which is where its match will appear — unless Ask handed
+  // the visit off, in which case it goes back to Ask.
+  const EXIT_HREF =
+    admin?.exitHref ??
+    preset?.eventHref ??
+    (returnTo === "ask" ? askReturnHref(null) : PERSONAL_EXIT_HREF);
   const [created, setCreated] = useState<CreatedMatch | null>(null);
   // Read by the failure listener below, which is registered once. Set where
   // `created` is, rather than mirrored from it by an effect.
@@ -212,6 +227,7 @@ export function UploadMatchFlow({
         removedError={removedError}
         exitHref={EXIT_HREF}
         preset={preset}
+        returnTo={returnTo}
         onResubmitted={() =>
           setUploads((prev) =>
             applyVideoUploadEvent(prev, {

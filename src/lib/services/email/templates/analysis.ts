@@ -30,6 +30,11 @@ function matchUrl(matchId: string): string {
   return `${emailOrigin()}/dashboard/matches/${matchId}`;
 }
 
+/** The Ask conversation a first answer was saved in (`ask-page.tsx` reads `?c=`). */
+function askUrl(conversationId: string): string {
+  return `${emailOrigin()}/dashboard/ask?c=${encodeURIComponent(conversationId)}`;
+}
+
 export interface AnalysisReadyInput {
   to: string;
   matchId: string;
@@ -48,10 +53,19 @@ export interface AnalysisReadyInput {
    * broken promise as a page of zeroes, one step earlier.
    */
   statsPending?: boolean;
+  /**
+   * Ask's first answer about this match, when it was ready in time
+   * (`src/lib/services/ask/arrival.ts`): the answer's headline, and the
+   * conversation it is saved in. The mail then carries the one sentence Ask
+   * leads with and a second button into it. Ignored while stats are
+   * pending: there is no answer to lead with yet.
+   */
+  ask?: { headline: string; conversationId: string } | null;
 }
 
 export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
   const { to, matchId, matchTitle, matchContext, score, statsPending } = input;
+  const firstAnswer = statsPending ? null : (input.ask ?? null);
 
   const content: EmailContent = {
     preheader: statsPending
@@ -68,6 +82,11 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
         ]
       : [
           "Every serve, return, hold and break from this match is now on the report — where the serve went, how the return came back, and which points actually turned it.",
+          // The first answer's own sentence, as Ask wrote it; the button
+          // beside the report's opens the conversation it is saved in.
+          ...(firstAnswer
+            ? [`Ask has a first answer waiting: “${firstAnswer.headline}”`]
+            : []),
         ],
     facts: [
       { label: "Match", value: matchTitle },
@@ -78,6 +97,14 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
       label: statsPending ? "Open the match" : "Open the report",
       url: matchUrl(matchId),
     },
+    ...(firstAnswer
+      ? {
+          secondaryCta: {
+            label: "Open in Ask",
+            url: askUrl(firstAnswer.conversationId),
+          },
+        }
+      : {}),
     note: preferenceNote("Email me when analysis is ready"),
   };
 
@@ -88,7 +115,11 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
       : `Your report for ${matchTitle} is ready`,
     html: renderEmail(content),
     text: renderText(content),
-    tags: { type: "analysis_ready", pending: statsPending ? "yes" : "no" },
+    tags: {
+      type: "analysis_ready",
+      pending: statsPending ? "yes" : "no",
+      ask: firstAnswer ? "yes" : "no",
+    },
   };
 }
 

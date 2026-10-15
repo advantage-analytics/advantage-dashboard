@@ -215,6 +215,10 @@ function world(overrides: Partial<World> = {}): World {
         data: { used: 0, cap: 20, resets_on: "2026-11-01" },
         error: null,
       }),
+      // The answer cache: a version, a miss, and a put that succeeds.
+      ask_data_version: () => ({ data: "v1", error: null }),
+      ask_cache_get: () => ({ data: null, error: null }),
+      ask_cache_put: () => ({ data: null, error: null }),
     },
     llm: async () => {
       throw new Error("provider down");
@@ -284,6 +288,7 @@ function loadRoute(state: World) {
     },
     "@/lib/llm/adapter": {
       isLLMConfigured: () => state.configured,
+      resolvedLLMModel: () => null,
       createLLMObservabilityContext: () => ({}),
       getLLMStream: async () => {
         calls.llm += 1;
@@ -492,6 +497,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
       ["ask_run_query", "service"],
       ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -515,6 +521,7 @@ test.describe("POST /api/ask · the service-role boundary", () => {
       ["ask_run_team_query", "service"],
       ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -534,12 +541,23 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     await response.text();
 
     expect(calls.rpc).toEqual([
+      // The cache is consulted first, as the user; a miss here.
+      { fn: "ask_data_version", args: { p_program_id: null }, via: "user" },
+      expect.objectContaining({ fn: "ask_cache_get", via: "user" }),
       { fn: "ask_reserve_question", args: undefined, via: "user" },
       {
         fn: "ask_release_question",
         args: { usage_id: USAGE_ID, p_user_id: USER_ID },
         via: "service",
       },
+      // The run is recorded last, as the asker, with its outcome.
+      expect.objectContaining({
+        fn: "ask_record_run",
+        via: "user",
+        args: expect.objectContaining({
+          p_run: expect.objectContaining({ outcome: "llm_unavailable" }),
+        }),
+      }),
     ]);
   });
 
@@ -855,7 +873,11 @@ test.describe("POST /api/ask · the question limit", () => {
       detail: { used: 20, cap: 20, resets_on: "2026-11-01" },
     });
     // The function refused; nothing else was asked, counted or released.
-    expect(rpcNames(calls)).toEqual(["ask_reserve_question"]);
+    expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
     expect(calls.loaders).not.toContain("getAskQuota");
     expect(calls.llm).toBe(0);
   });
@@ -921,7 +943,11 @@ test.describe("POST /api/ask · the question limit", () => {
     expect(response.status).toBe(200);
     await response.text();
     expect(calls.loaders).not.toContain("getAskQuota");
-    expect(rpcNames(calls)[0]).toBe("ask_reserve_question");
+    expect(rpcNames(calls).slice(0, 3)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
   });
 
   test("500 internal_error — the reservation failed for another reason", async () => {
@@ -936,7 +962,11 @@ test.describe("POST /api/ask · the question limit", () => {
     const body = await refused(response);
     expect(body.code).toBe("internal_error");
     expect(body.detail).toBe("reserve_failed");
-    expect(rpcNames(calls)).toEqual(["ask_reserve_question"]);
+    expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
   });
 });
 
@@ -972,6 +1002,7 @@ test.describe("POST /api/ask · the answer", () => {
       "ask_run_query",
       "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.llm).toBe(0);
   });
@@ -1016,10 +1047,13 @@ test.describe("POST /api/ask · the answer", () => {
     });
 
     expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
-    expect(calls.rpc[1].args).toEqual({
+    expect(calls.rpc[3].args).toEqual({
       usage_id: USAGE_ID,
       p_user_id: USER_ID,
     });
@@ -1039,10 +1073,13 @@ test.describe("POST /api/ask · the answer", () => {
     expect(response.status).toBe(500);
     expect((await refused(response)).code).toBe("internal_error");
     expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
-    expect(calls.rpc[1].args).toEqual({
+    expect(calls.rpc[3].args).toEqual({
       usage_id: USAGE_ID,
       p_user_id: USER_ID,
     });
@@ -1163,6 +1200,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
       "ask_run_team_query",
       "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });
     expect(calls.rpc[1].args).toMatchObject({
@@ -1245,6 +1283,12 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect((await refused(response)).code).toBe("ask_limit_reached");
     // No argument: the count is per user, whatever the workspace.
     expect(spent.calls.rpc).toEqual([
+      {
+        fn: "ask_data_version",
+        args: { p_program_id: PROGRAM_ID },
+        via: "user",
+      },
+      expect.objectContaining({ fn: "ask_cache_get", via: "user" }),
       { fn: "ask_reserve_question", args: undefined, via: "user" },
     ]);
   });

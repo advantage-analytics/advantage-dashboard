@@ -4,6 +4,7 @@ import {
   type AskRow,
 } from "@/lib/services/ask/answer-render";
 import {
+  MAX_ASK_BARS_ROWS,
   MAX_ASK_TABLE_COLUMNS,
   ASK_TABLE_ROWS,
   MAX_ASK_TREND_POINTS,
@@ -246,6 +247,14 @@ const S = ASK_VISUAL_FIELD_SEPARATOR;
 
 /** At most this many pairs are stated in the headline. */
 export const MAX_PAIRED_HEADLINE = 3;
+/**
+ * The fewest percentage pairs a comparison needs to be drawn as bars — the
+ * subject's share over the other side's, one row per measure — instead of
+ * the table. Fewer, and the result is mostly counts, which bars cannot
+ * hold: the table keeps them all. The bars take the widest gaps, at most
+ * `MAX_ASK_BARS_ROWS`.
+ */
+export const MIN_MATCHUP_BARS = 4;
 /** At most this many more are spelt out in the body. */
 const MAX_PAIRED_BODY = 6;
 const MAX_UNPAIRED = 4;
@@ -471,18 +480,33 @@ export function buildPairedAnswer(
         ? `${subject.name} and ${other.lower} were level on every measure compared.`
         : `Every measure compared was level with ${other.lower}.`;
 
-  // ── Table: subject | other, widest gap first, within the table's limits ──
+  // ── The block: bars when the comparison is mostly shares, else a table ──
+  // Bars: subject over other, one row per percentage measure, widest gap
+  // first. Table: subject | other, every measure, widest gap first.
+  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
+  const shares = shape.pairs.filter((pair) => pair.percentage);
   const tabled = shape.pairs.slice(0, ASK_TABLE_ROWS);
   const labels = rowLabels(tabled);
-  const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
-  const table = [
-    `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first, from ${count}.`,
-    `COLUMNS: ${subject.heading} ${S} ${other.heading}`,
-    ...tabled.map(
-      (pair, index) =>
-        `ROW: ${labels[index]} ${S} ${cell(pair.subject)} ${S} ${cell(pair.other)}`,
-    ),
-  ];
+  const block =
+    shares.length >= MIN_MATCHUP_BARS
+      ? [
+          `${ASK_VISUAL_LINE_PREFIX} bars ${S} The shares compared, widest gap first, from ${count}.`,
+          `SERIES: ${subject.heading} ${S} ${other.heading}`,
+          ...shares
+            .slice(0, MAX_ASK_BARS_ROWS)
+            .map(
+              (pair) =>
+                `ROW: ${pair.label} ${S} ${cell(pair.subject)} ${S} ${cell(pair.other)}`,
+            ),
+        ]
+      : [
+          `${ASK_VISUAL_LINE_PREFIX} table ${S} The measures compared, widest gap first, from ${count}.`,
+          `COLUMNS: ${subject.heading} ${S} ${other.heading}`,
+          ...tabled.map(
+            (pair, index) =>
+              `ROW: ${labels[index]} ${S} ${cell(pair.subject)} ${S} ${cell(pair.other)}`,
+          ),
+        ];
 
   // ── Body: the rest, what was level, what stands alone, how many matches ──
   const body: string[] = [];
@@ -519,7 +543,7 @@ export function buildPairedAnswer(
     opening.length > 0 ? [...opening.slice(1), headline, ...body] : body;
 
   return {
-    text: `${first}\n${table.join("\n")}\n\n${paragraphs.join(" ")}`,
+    text: `${first}\n${block.join("\n")}\n\n${paragraphs.join(" ")}`,
     rows: [
       {
         ...rows[0],
@@ -1084,7 +1108,11 @@ export const MIN_TREND_ROWS = 3;
  *
  * Null unless every row has the same date-like text column and the result
  * carries exactly one measure, with a figure in at least
- * {@link MIN_TREND_ROWS} rows.
+ * {@link MIN_TREND_ROWS} rows. One more column is allowed when it is the
+ * same measure under a qualifier (`all_first_serve_pct` beside
+ * `first_serve_pct`): it is drawn as the chart's dashed second line, the
+ * measure against its own average. A `match_id` column, when the query
+ * selected one, links each point to its match (`answer-render.ts`).
  */
 export function buildTrendAnswer(
   rows: readonly AskRow[],
@@ -1107,8 +1135,26 @@ export function buildTrendAnswer(
       rows.some((row) => isNumber(row[column])) &&
       rows.every((row) => row[column] === null || isNumber(row[column])),
   );
-  if (measures.length !== 1) return null;
-  const measure = measures[0];
+  let measure: string;
+  let baseline: string | null = null;
+  if (measures.length === 1) {
+    measure = measures[0];
+  } else if (measures.length === 2) {
+    // The measure and the same measure under a qualifier, either order.
+    const [a, b] = measures.map((column) => askMeasure(column));
+    if (
+      !a ||
+      !b ||
+      a.key !== b.key ||
+      (a.qualifier === "") === (b.qualifier === "")
+    ) {
+      return null;
+    }
+    measure = a.qualifier === "" ? measures[0] : measures[1];
+    baseline = a.qualifier === "" ? measures[1] : measures[0];
+  } else {
+    return null;
+  }
 
   const ordered = [...rows].sort((a, b) =>
     String(a[date]).localeCompare(String(b[date])),
@@ -1142,7 +1188,7 @@ export function buildTrendAnswer(
         : `${name} was the same at the start and at the end: ${at(first)} and ${at(last)}.`;
   const chart =
     points.length <= MAX_ASK_TREND_POINTS
-      ? `\n${ASK_VISUAL_LINE_PREFIX} trend ${S} ${name} over time, oldest first.\nPLOT: ${date} ${S} ${measure}`
+      ? `\n${ASK_VISUAL_LINE_PREFIX} trend ${S} ${name} over time, oldest first.\nPLOT: ${date} ${S} ${measure}${baseline ? ` ${S} ${baseline}` : ""}`
       : "";
   const count = `{{r1.${ASK_SCOPE_COUNT_COLUMN}}} ${context.matchCount === 1 ? "match" : "matches"}`;
   const body = [

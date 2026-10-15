@@ -1,0 +1,70 @@
+# Nightly Ask evaluation: `scripts/ask-eval.ts --grade` over the season
+# question list, against the live database and the real model, failing when
+# any scored question fails. The report is uploaded as an artifact either way.
+#
+# OFF BY DEFAULT. The job is skipped unless the repository variable
+# ASK_EVAL_ENABLED is the string "true" (Settings › Secrets and variables ›
+# Actions › Variables). It is opt-in, unlike ci.yml, which deliberately needs
+# no secrets, for three reasons:
+#   - it needs secrets: the verifier account's password and a model key;
+#   - one of them is SUPABASE_SERVICE_ROLE_KEY, which bypasses RLS — the Ask
+#     query functions are executable by the service role alone (AGENTS.md),
+#     so the script cannot run without it;
+#   - every run spends real model calls on the configured provider.
+#
+# To turn it on: set ASK_EVAL_ENABLED to "true" and add the seven secrets
+# named under `env` below (Settings › Secrets and variables › Actions ›
+# Secrets). Point the three Supabase values at the project the verifier
+# account and the seed (`scripts/seed-ask-season.ts --apply`) live in: the
+# graded values in scripts/ask-eval-season.json are the seed's. To turn it
+# off again, delete the variable or set it to anything but "true".
+name: Ask eval
+
+on:
+  schedule:
+    # 09:00 UTC daily.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+# One run at a time: the script signs in as one account against one
+# database, and two runs would race each other's answers and the auth rate
+# limit (AGENTS.md, live-DB specs).
+concurrency:
+  group: ask-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    if: vars.ASK_EVAL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Exits 1 when a scored question fails, which fails this step and the
+      # job; the report below is uploaded regardless.
+      - name: Run the graded season list
+        run: npx tsx scripts/ask-eval.ts --grade --out ask-eval-report.md --questions scripts/ask-eval-season.json
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EYES_ON_EMAIL: ${{ secrets.EYES_ON_EMAIL }}
+          EYES_ON_PASSWORD: ${{ secrets.EYES_ON_PASSWORD }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ask-eval-report
+          path: ask-eval-report.md
+          if-no-files-found: warn

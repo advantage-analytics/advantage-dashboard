@@ -2,7 +2,20 @@
  * Run a list of realistic questions through the real Ask pipeline and write
  * what came back, so prompt changes are judged on output and not on hope.
  *
- *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...]
+ *   npx tsx scripts/ask-eval.ts --out <file.md> [--only 3,7] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade]
+ *
+ * A question may carry an `expect` block (`AskEvalExpect` in
+ * `scripts/lib/ask-eval-grade.ts`): the error code or `none`, the planner's
+ * shape, the visual's kind, the notice, ceilings on model calls, queries and
+ * seconds, patterns the answer must and must not match, patterns the final
+ * query must match. Each question's progress line ends `PASS`, `FAIL` with
+ * the reasons, or `unscored` when it has no block; the report opens with a
+ * `## Score` section. `--grade` exits 1 when any scored question failed —
+ * the nightly workflow (`.github/workflows/ask-eval.yml`) runs the season
+ * list that way. `scripts/ask-eval-season.json` is graded against the values
+ * `scripts/seed-ask-season.ts` derives; the verifier also has matches the
+ * seed did not write, so its blocks pin exact figures only where the question
+ * is scoped to seeded opponents, and each says so in a `note`.
  *
  * `--program` runs every question in TEAM scope for that program: the tag
  * options are the program's matches and roster, the plan and answer prompts
@@ -54,6 +67,7 @@
  */
 import { writeFileSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import type { AskEvalExpect, AskEvalGrade } from "./lib/ask-eval-grade";
 import { parseSubs, subArgs, substituteQuestion } from "./lib/ask-eval-subs";
 import { loadEnvLocal } from "./lib/env";
 import type { AskModelCall } from "@/lib/services/ask/ask";
@@ -76,6 +90,8 @@ interface EvalQuestion {
   after?: number;
   /** What a good answer does; printed beside the output for the reader. */
   want?: string;
+  /** What the run must satisfy to pass; graded by `scripts/lib/ask-eval-grade.ts`. Absent: unscored. */
+  expect?: AskEvalExpect;
 }
 
 const DEFAULT_QUESTIONS: EvalQuestion[] = [
@@ -257,7 +273,7 @@ async function main() {
   const out = arg("out");
   if (!out) {
     console.error(
-      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...]',
+      'Usage: npx tsx scripts/ask-eval.ts --out <file.md> [--only 1,4] [--questions <file.json>] [--program <uuid>] [--sub "Placeholder=Real Name" ...] [--grade]',
     );
     process.exit(2);
   }
@@ -297,6 +313,10 @@ async function main() {
     await import("@/lib/llm/adapter");
   const { createAskDatabase } = await import("@/lib/services/ask/database");
   const { createAdminClient } = await import("@/lib/supabase/admin");
+  // The grader imports `parsePlanReply` from the same module as the pipeline.
+  const { gradeTranscript, refusedGrade, gradeLabel, failedReasons, tally } =
+    await import("./lib/ask-eval-grade");
+  const grading = process.argv.includes("--grade");
 
   if (!isLLMConfigured()) {
     console.error(
@@ -413,6 +433,10 @@ async function main() {
       : `Account: verifier · ${options.matches.length} personal matches · ${options.opponents.length} opponents`,
     "",
   ];
+  // The `## Score` section goes in here, once every question has run.
+  const headerLines = report.length;
+  /** Every question that ran (or whose tags were refused), with its grade. */
+  const grades: { index: number; q: string; grade: AskEvalGrade }[] = [];
   /**
    * Each earlier exchange in the shape `ask_save_exchange()` stores it — the
    * question with its saved tags, the answer with its headline and body — so
@@ -458,9 +482,17 @@ async function main() {
       );
     if (entry.want) lines.push(`Want: ${entry.want}`, "");
     if (!resolved.ok) {
+      // Never ran, so a graded question fails here rather than vanishing
+      // from the score.
+      const grade = refusedGrade(entry.expect, resolved.reason);
+      grades.push({ index, q: entry.q, grade });
       lines.push(`TAG REFUSED: ${resolved.reason}`, "");
+      if (grade.scored) lines.push(`**Score:** ${gradeLabel(grade)}`, "");
       report.push(...lines);
       transcripts.push(null);
+      process.stdout.write(
+        `${index + 1}/${questions.length} TAG REFUSED ${entry.q} · ${gradeLabel(grade)}\n`,
+      );
       continue;
     }
 
@@ -577,7 +609,8 @@ async function main() {
       console.warn = warn;
       console.error = error;
     }
-    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    const elapsed = (Date.now() - started) / 1000;
+    const seconds = elapsed.toFixed(1);
 
     const headline = events.find((e) => e.type === "headline")?.text as
       string | undefined;
@@ -595,10 +628,36 @@ async function main() {
     const sources = events.find((e) => e.type === "sources")?.matches as
       unknown[] | undefined;
 
+    // What the grader reads: the same events and queries the report prints.
+    const grade = gradeTranscript(entry.expect, {
+      seconds: elapsed,
+      modelReplies,
+      queries: queries.map((query) => ({
+        scope: typeof query.scope === "string" ? query.scope : null,
+        sql: typeof query.sql === "string" ? query.sql : null,
+        error: query.error === null ? null : String(query.error),
+      })),
+      headline: headline ?? null,
+      figures: figures.map((figure) => ({
+        label: String(figure.label),
+        value: String(figure.value),
+      })),
+      visual:
+        visual && typeof visual.kind === "string"
+          ? { kind: visual.kind }
+          : null,
+      body: body.trim(),
+      error: failure ? String(failure.code ?? failure.type) : null,
+      notice,
+    });
+    grades.push({ index, q: entry.q, grade });
+
     lines.push(
       `_${seconds}s · ${queries.length} quer${queries.length === 1 ? "y" : "ies"} · ${modelReplies.length} model calls_`,
       "",
     );
+    if (grade.scored) lines.push(`**Score:** ${gradeLabel(grade)}`, "");
+    if (entry.expect?.note) lines.push(`Note: ${entry.expect.note}`, "");
     lines.push("**Answer as the player sees it**", "");
     if (failure)
       lines.push(
@@ -659,13 +718,41 @@ async function main() {
         : null,
     );
     process.stdout.write(
-      `${index + 1}/${questions.length} ${failure ? "ERR " + String(failure.code ?? "") : visual ? "ok +" + String(visual.kind) : "ok"} (${seconds}s) ${entry.q}\n`,
+      `${index + 1}/${questions.length} ${failure ? "ERR " + String(failure.code ?? "") : visual ? "ok +" + String(visual.kind) : "ok"} (${seconds}s) ${entry.q} · ${gradeLabel(grade)}\n`,
     );
   }
 
+  // ── Score ──────────────────────────────────────────────────────────────
+  const score = tally(grades.map((entry) => entry.grade));
+  const scoreLine = `${score.passed} passed · ${score.failed} failed · ${score.unscored} unscored`;
+  const failing = grades.filter(
+    (entry) => entry.grade.scored && !entry.grade.pass,
+  );
+  report.splice(
+    headerLines,
+    0,
+    "## Score",
+    "",
+    `**${scoreLine}** of ${grades.length} run.`,
+    "",
+    ...(grades.length === 0
+      ? ["No question ran."]
+      : score.passed + score.failed === 0
+        ? ["No question that ran carries an `expect` block."]
+        : failing.length === 0
+          ? ["Every scored question passed."]
+          : failing.map(
+              (entry) =>
+                `- ${entry.index + 1}. ${entry.q} — ${failedReasons(entry.grade).join("; ")}`,
+            )),
+    "",
+  );
+
   writeFileSync(out, report.join("\n"));
   await supabase.auth.signOut();
-  process.stdout.write(`\nReport: ${out}\n`);
+  process.stdout.write(`\nScore: ${scoreLine}\nReport: ${out}\n`);
+  // `--grade`: the exit code is the verdict, for a workflow to fail on.
+  if (grading && score.failed > 0) process.exit(1);
 }
 
 main().catch((thrown) => {

@@ -150,7 +150,21 @@ limit.
 
 ---
 
-## 9. Limits and rate limiting
+## 9. Evaluation
+
+`scripts/ask-eval.ts` grades each question against an optional `expect`
+block (error code, planner shape A–D, visual kind, no-advice notice,
+call/query/time ceilings, regexes over the answer and the final query —
+`scripts/lib/ask-eval-grade.ts`), prints PASS/FAIL per question and a
+`## Score` section, and `--grade` exits 1 on any failure.
+`.github/workflows/ask-eval.yml` runs the season list that way nightly once
+the repository variable `ASK_EVAL_ENABLED` is `"true"` and the seven secrets
+it names are set; until then it is off, because it needs a service-role key
+and spends real model calls.
+
+---
+
+## 10. Limits and rate limiting
 
 - **Ask** reserves one of the user's monthly questions before any model call
   (`ask_reserve_question()`, 20 a month, unlimited for platform admins) and

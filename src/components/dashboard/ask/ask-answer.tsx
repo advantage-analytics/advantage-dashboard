@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import Link from "next/link";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
+import { figureVideoHref } from "@/lib/services/ask/figure-video";
 import { advButton } from "@/lib/ui/adv-button";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
 import { AskFeedbackControl } from "./ask-feedback";
 import { AskSources } from "./ask-sources";
-import type { AskAnswerState } from "./use-ask-stream";
+import type { AskAnswerState, AskFigure } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
 
 export interface AskAnswerProps {
@@ -92,6 +94,14 @@ export const ASK_ERROR_COPY = PERSONAL_ASK_COPY.errors;
  * or bad, and a failed answer is not a loss. The visual block's blue and
  * slate are roles (`visuals/ask-visual.tsx`).
  *
+ * ── Watchable figures ───────────────────────────────────────────────────────
+ * Over a scope of one match, a figure whose measure maps to a Video-tab
+ * filter (`figure-video.ts`) is a link to that match's film on exactly
+ * those points, with a quiet "Watch" after its label — the sources' own
+ * affordance. The figure's `column` says which measure; a figure without
+ * one (saved before it existed, or cited from words around a cell) is a
+ * tile and nothing more.
+ *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it is
  * rendered by an offline component harness (`tests/ask-answer-view.spec.ts`).
  */
@@ -108,20 +118,40 @@ export function AskAnswer({
   // motion must not replay when the stream ends or the page re-renders.
   const [live] = useState(answer.status === "streaming");
   return (
-    <div
-      data-ask-answer=""
-      data-ask-live={live ? "" : undefined}
-      className="flex min-w-0 flex-col gap-5"
-    >
-      {answer.status === "error" &&
-      answer.error?.code === "needs_clarification" ? (
-        <AnswerQuestion error={answer.error} copy={copy} onChoose={onChoose} />
-      ) : answer.status === "error" ? (
-        <AnswerError error={answer.error} copy={copy} />
-      ) : (
-        <AnswerBody answer={answer} copy={copy} onRate={onRate} />
-      )}
-    </div>
+    <>
+      {/* One live region for the answer's whole life, mounted from the
+          start: a region that mounts already holding its text is often not
+          read out. Its text follows the route's step and ends on "Answer
+          ready" for an answer that arrived here (not one reopened). */}
+      <p role="status" className="sr-only">
+        {answer.status === "streaming"
+          ? answer.stage
+            ? copy.stage[answer.stage]
+            : "Sending your question"
+          : live && answer.status === "done"
+            ? "Answer ready"
+            : ""}
+      </p>
+      <div
+        data-ask-answer=""
+        data-ask-live={live ? "" : undefined}
+        aria-busy={answer.status === "streaming" || undefined}
+        className="flex min-w-0 flex-col gap-5"
+      >
+        {answer.status === "error" &&
+        answer.error?.code === "needs_clarification" ? (
+          <AnswerQuestion
+            error={answer.error}
+            copy={copy}
+            onChoose={onChoose}
+          />
+        ) : answer.status === "error" ? (
+          <AnswerError error={answer.error} copy={copy} />
+        ) : (
+          <AnswerBody answer={answer} copy={copy} onRate={onRate} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -220,21 +250,47 @@ function AnswerBody({
           style={part(1)}
           className="flex flex-wrap gap-x-8 gap-y-2.5"
         >
-          {figures.map((figure, index) => (
+          {figures.map((figure, index) => {
+            const watch = figureVideoHref(figureColumn(figure), answer.sources);
             // Value over label, in the markup as on screen.
-            <li
-              key={index}
-              data-ask-figure=""
-              className="flex flex-col gap-0.5"
-            >
-              <div data-ask-figure-value="" className="text-scoreboard">
-                {figure.value}
-              </div>
-              <div data-ask-figure-label="" className="text-micro">
-                {figure.label}
-              </div>
-            </li>
-          ))}
+            const tile = (
+              <>
+                <div data-ask-figure-value="" className="text-scoreboard">
+                  {figure.value}
+                </div>
+                <div data-ask-figure-label="" className="text-micro">
+                  {figure.label}
+                  {watch && (
+                    <span
+                      data-ask-figure-watch=""
+                      className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--blue-hover)]"
+                    >
+                      {" "}
+                      · Watch
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+            return (
+              <li
+                key={index}
+                data-ask-figure=""
+                className="flex flex-col gap-0.5"
+              >
+                {watch ? (
+                  <Link
+                    href={watch}
+                    className="group flex flex-col gap-0.5 rounded-[var(--radius-element)] outline-none focus-visible:shadow-[var(--focus-ring)]"
+                  >
+                    {tile}
+                  </Link>
+                ) : (
+                  tile
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -271,7 +327,7 @@ function AnswerBody({
 
       {answer.status === "streaming" && (
         <p
-          role="status"
+          aria-hidden="true"
           key={answer.stage ?? "sending"}
           data-ask-stage=""
           className="text-body-sm"
@@ -302,4 +358,15 @@ function AnswerBody({
 /** A part's place in the order the answer is read, for parts that land together. */
 function part(index: number): CSSProperties {
   return { "--ask-i": index } as CSSProperties;
+}
+
+/**
+ * The result column a figure was cited from, when the stream or the saved
+ * answer carried it. Read through a widened type: `AskFigure` is the
+ * stream reader's, and a reader that has not learnt the field yet simply
+ * hands over none.
+ */
+function figureColumn(figure: AskFigure): string | undefined {
+  const column = (figure as AskFigure & { column?: unknown }).column;
+  return typeof column === "string" && column !== "" ? column : undefined;
 }
