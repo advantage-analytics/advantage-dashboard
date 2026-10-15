@@ -172,3 +172,77 @@ and spends real model calls.
 - **The insight routes** have no rate limiting beyond authentication. If that
   changes, Upstash Ratelimit or a token bucket in `src/proxy.ts` are the usual
   places.
+
+---
+
+## 11. Ask: examples from rated answers (embeddings)
+
+Roadmap 1.6. Beside its fixed worked examples, the plan prompt is shown the
+three stored (question → planner reply) pairs nearest to the question being
+asked (`src/lib/services/ask/examples.ts`; the section "Similar questions and
+how they were planned" in the prompt's dynamic tail, so the cached prefix is
+untouched — the measurement is in `prompts.ts`).
+
+- **Embeddings** come from the same Gemini OpenAI-compatible endpoint as the
+  chat calls (`src/lib/llm/embeddings.ts`: `gemini-embedding-001`, 768
+  dimensions, unit length). There is no new variable: `LLM_PROVIDER=openai`
+  and `OPENAI_API_KEY` are what it needs. On the Anthropic path or in mock
+  mode no embedding is made and the prompt keeps its fixed examples; a
+  failed embedding is the same, never a failed question. Embeddings are not
+  recorded in LLM analytics.
+- **The store** is `public.ask_examples` (migration
+  `20261015094614_ask_examples.sql`, pgvector 0.8.2, an HNSW cosine index).
+  RLS on, no policy, no grant: it is reached only through its functions.
+  `ask_similar_examples` and `ask_example_upsert` are service_role-only; the
+  route calls the first with the session user pinned as `p_viewer` — a
+  fourth service-role call beside `database.ts`'s three, made in the route
+  before the orchestrator, for the reason `examples.ts` gives.
+- **Who sees what.** A row with no owner is shared: the prompts' worked
+  examples and the eval lists' pairs, whose names are placeholders
+  (`anonymiseAskExample`). A thumbs-up is stored under the rater's id and is
+  retrieved for that account alone, so a question naming somebody's opponent
+  never reaches another account's prompt.
+- **A thumbs-up is learnt as it happens**: `POST /api/ask/feedback` reads the
+  pair back (`ask_feedback_pair`), embeds the question and writes it
+  (`ask_example_from_feedback`) after the 204, as the user, best effort. A
+  thumb taken back or turned down removes the example (a trigger).
+- **Seeding and backfill:**
+
+  ```bash
+  npx tsx scripts/ask-examples-seed.ts --from-static --from-eval --from-feedback
+  npx tsx scripts/ask-examples-seed.ts --from-static --dry-run   # print, write nothing
+  ```
+
+  `--from-static` writes the prompts' worked examples (always safe);
+  `--from-eval` the eval lists' known-good pairs (a question-level `plan`
+  object, or a review question); `--from-feedback` every thumbs-up stored
+  before the route learnt them. Needs `SUPABASE_SERVICE_ROLE_KEY` besides the
+  two above. Re-running updates rows in place.
+
+## 12. Ask: thread memory as a state object
+
+Roadmap 4.5. Every planner reply carries `state` — four short strings:
+`scope`, `measure`, `period`, `subject` — saying what the conversation is
+about once the question is answered (`src/lib/services/ask/thread-state.ts`,
+the `state` field of `ASK_PLAN_REPLY_SCHEMA`). It is saved inside the
+answer's jsonb and read back for the next turn, whose plan prompt shows it
+ahead of the raw turns; with a state present the turns shrink from six of
+600 characters to the last two of 240. The answer prompt is given the
+previous answer's headline so a follow-up reads as one. Conversations saved
+before this carry no state and are prompted as before.
+
+## 13. Ask: coach mode (`ASK_COACH_MODE`)
+
+Roadmap 4.3, a product decision not yet taken, so the flag is **off** and
+production leaves it unset. Set `ASK_COACH_MODE=1` (or `true`, `on`) and a
+TEAM question from the program's **owner or coach** that asks for advice is
+answered by the prompt variant that may recommend what to work on
+(`src/lib/services/ask/coach.ts`, `ASK_COACH_RULE` in `prompts.ts`): at most
+two recommendations, each tied to a cited figure cell — the renderer still
+substitutes every number and the model still never types one — and the
+`notice` event is `coach` instead of `no_advice`. The role comes from the
+server's own workspace read in the route, never from the request. Players
+on the roster, staff, personal questions and the flag off are unchanged. A
+coached answer is never cached (the cache is keyed by question, tags and
+scope, and would replay a recommendation to a player of the same program),
+and is saved with `noAdvice: false` and `coach: true`.

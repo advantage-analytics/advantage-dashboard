@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { randomUUID } from "node:crypto";
 import { getPostHogServerConfig } from "@/lib/posthog-logs";
+import type OpenAI from "openai";
 
 /**
  * LLM Adapter — provider-switching stream module.
@@ -470,6 +471,32 @@ async function openaiStream(
   }
 
   return iterate();
+}
+
+/* ── Embeddings ───────────────────────────────────────────── */
+
+/**
+ * The Gemini-through-OpenAI-SDK client, for the one embeddings call
+ * (`embeddings.ts`, Ask's dynamic few-shot). It is the same plain client
+ * the chat calls use without PostHog — same base URL, same key, same cache
+ * entry — so an embedding costs no second connection pool. Null unless the
+ * `openai` provider and its key are configured: the Anthropic path has no
+ * embeddings endpoint, and the caller then keeps its fixed examples. Nothing
+ * is recorded in LLM analytics for it.
+ */
+export async function getGeminiOpenAIClient(): Promise<InstanceType<
+  typeof OpenAI
+> | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if ((process.env.LLM_PROVIDER ?? "") !== "openai" || !apiKey) return null;
+  return cachedClient(
+    `openai:${apiKey}`,
+    async () =>
+      new (await import("openai")).default({
+        apiKey,
+        baseURL: GEMINI_OPENAI_BASE_URL,
+      }),
+  );
 }
 
 /* ── Mock (no credentials) ────────────────────────────────── */

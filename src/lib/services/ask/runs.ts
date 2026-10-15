@@ -189,7 +189,11 @@ export async function* recordAskRun(
           matchCount = event.matches.length;
           break;
         case "notice":
-          if (event.notice === "no_advice") asksForAdvice = true;
+          // Both notices mean the question asked what to do: the second is
+          // coach mode's answer to it (`coach.ts`).
+          if (event.notice === "no_advice" || event.notice === "coach") {
+            asksForAdvice = true;
+          }
           break;
         case "error":
           outcome = event.code;

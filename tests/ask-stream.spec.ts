@@ -465,6 +465,37 @@ test.describe("a streamed answer", () => {
     expect(
       parseAskEvent(JSON.stringify({ type: "notice", notice: "no_advice" })),
     ).toEqual({ type: "notice", notice: "no_advice" });
+    expect(
+      parseAskEvent(JSON.stringify({ type: "notice", notice: "coach" })),
+    ).toEqual({ type: "notice", notice: "coach" });
+    // A notice kind the client does not know is dropped, not a failure.
+    expect(
+      parseAskEvent(JSON.stringify({ type: "notice", notice: "later" })),
+    ).toBeNull();
+  });
+
+  test("a `coach` notice marks the answer, not the no-advice flag", () => {
+    let state = askThreadReducer(emptyAskThread(), {
+      type: "asked",
+      id: "asked-1",
+      question: QUESTION,
+    });
+    state = askThreadReducer(state, {
+      type: "event",
+      event: { type: "notice", notice: "coach" },
+    });
+    expect(state.exchanges[0].answer).toMatchObject({
+      coach: true,
+      noAdvice: false,
+    });
+    state = askThreadReducer(state, {
+      type: "event",
+      event: { type: "notice", notice: "no_advice" },
+    });
+    expect(state.exchanges[0].answer).toMatchObject({
+      coach: true,
+      noAdvice: true,
+    });
   });
 
   test("the status line follows the route's real step", () => {

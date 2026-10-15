@@ -1,3 +1,4 @@
+import { ASK_COACH_SENTENCE } from "@/lib/services/ask/coach";
 import {
   ASK_NO_ADVICE_SENTENCE,
   ASK_TEAM_NO_ADVICE_SENTENCE,
@@ -45,6 +46,8 @@ export interface AskCopy {
   trendAverage: string;
   /** The footer's sentence when the question asked what to do. */
   noAdvice: string;
+  /** The footer's sentence when coach mode answered that question instead. */
+  coach: string;
   /** The accessible name of the starter questions under an empty composer. */
   starters: string;
   /** The accessible name of the follow-up questions under the newest answer. */
@@ -104,6 +107,8 @@ export const PERSONAL_ASK_COPY: AskCopy = {
   },
   trendAverage: "Your average",
   noAdvice: ASK_NO_ADVICE_SENTENCE,
+  // Coach mode is a team scope's; a personal answer never carries the notice.
+  coach: ASK_COACH_SENTENCE,
   starters: "Questions to start with",
   followUps: "Ask next",
   sentNotice: (opponentName) =>
@@ -144,6 +149,7 @@ const TEAM_ASK_COPY: Omit<AskCopy, "lead"> = {
   // and the block's caption says which. The key only names the rule.
   trendAverage: "Average",
   noAdvice: ASK_TEAM_NO_ADVICE_SENTENCE,
+  coach: ASK_COACH_SENTENCE,
   starters: "Questions to start with",
   followUps: "Ask next",
   // No first answer is promised: Ask asks on arrival for personal matches
