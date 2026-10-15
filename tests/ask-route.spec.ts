@@ -371,6 +371,8 @@ function loadRoute(state: World) {
       ReadableStream,
       TextEncoder,
       TextDecoder,
+      AbortController,
+      AbortSignal,
     },
   }).load(ROUTE) as {
     POST: (request: Request) => Promise<Response>;

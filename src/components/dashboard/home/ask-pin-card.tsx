@@ -52,21 +52,35 @@ export function AskPinCard({
 }) {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<string | null>(null);
-  const [pending, startUnpin] = useTransition();
+  // The one pin being taken off, so only its row says so.
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [, startUnpin] = useTransition();
   const shown = pins.filter((pin) => !gone.has(pin.id));
+
+  function restore(id: string) {
+    setGone((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    setFailed(id);
+  }
 
   function unpin(pin: AskPin) {
     setFailed(null);
+    setPendingId(pin.id);
     setGone((current) => new Set(current).add(pin.id));
     startUnpin(async () => {
-      const result = await unpinAskAnswer(pin.id, scopeKind);
-      if (result.ok) return;
-      setGone((current) => {
-        const next = new Set(current);
-        next.delete(pin.id);
-        return next;
-      });
-      setFailed(pin.id);
+      // A refusal and a failed request settle the same way: the pin back,
+      // with its one line saying so.
+      try {
+        const result = await unpinAskAnswer(pin.id, scopeKind);
+        if (!result.ok) restore(pin.id);
+      } catch {
+        restore(pin.id);
+      } finally {
+        setPendingId(null);
+      }
     });
   }
 
@@ -117,10 +131,12 @@ export function AskPinCard({
                 <button
                   type="button"
                   onClick={() => unpin(pin)}
-                  disabled={pending}
+                  disabled={pendingId === pin.id}
                   className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] disabled:cursor-default disabled:text-[var(--text-disabled)]"
                 >
-                  {pending ? PIN_CARD_COPY.unpinning : PIN_CARD_COPY.unpin}
+                  {pendingId === pin.id
+                    ? PIN_CARD_COPY.unpinning
+                    : PIN_CARD_COPY.unpin}
                 </button>
                 {failed === pin.id && (
                   <p

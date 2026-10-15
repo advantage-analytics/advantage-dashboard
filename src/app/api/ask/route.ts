@@ -419,8 +419,13 @@ export async function POST(request: Request): Promise<Response> {
   // The question's embedding, for the nearest rated examples (`examples.ts`).
   // Started here, beside the reads, since it needs nothing but the question;
   // null at once when no provider is configured, and null on any failure.
+  // Its own controller beside the request's, so a cache hit below can stop it:
+  // a replayed answer has no use for the vector.
+  const embeddingAbort = new AbortController();
   const embedding: Promise<number[] | null> = isLLMConfigured()
-    ? embedText(body.question, { signal: request.signal }).catch(() => null)
+    ? embedText(body.question, {
+        signal: AbortSignal.any([request.signal, embeddingAbort.signal]),
+      }).catch(() => null)
     : Promise.resolve(null);
 
   // The two reads that need nothing from each other go out together, both
@@ -515,16 +520,6 @@ export async function POST(request: Request): Promise<Response> {
     signal: request.signal,
   });
   const stageModels = askStageModels();
-  // The nearest examples, through the service client with this request's
-  // viewer pinned — the fourth service-role call, explained in `examples.ts`.
-  // Not awaited until the plan prompt needs them: the cache reads run beside.
-  const examplesRead = retrieveAskExamples({
-    service,
-    viewerId: user.id,
-    scope,
-    embedding,
-  });
-
   // Every question leaves a row in ask_runs (as the asker) and one `ask_run`
   // event in PostHog (without the question's text), however it ended.
   // Neither can fail the answer: a run that could not be recorded is logged
@@ -570,6 +565,8 @@ export async function POST(request: Request): Promise<Response> {
 
   let events: AsyncGenerator<AskEvent, void, undefined>;
   if (cached) {
+    // A replay needs no examples: stop the embedding, skip the vector search.
+    embeddingAbort.abort();
     events = replayCachedAnswer({
       db,
       cached,
@@ -583,6 +580,15 @@ export async function POST(request: Request): Promise<Response> {
     // Everything that could refuse has. From here a question is spent (unless
     // this is mock mode, which spends nothing), so the only statements left
     // are the two that hand the reservation to the generator that owns it.
+    // The nearest examples, through the service client with this request's
+    // viewer pinned — the fourth service-role call, explained in
+    // `examples.ts`. Only on a miss, and beside the reservation.
+    const examplesRead = retrieveAskExamples({
+      service,
+      viewerId: user.id,
+      scope,
+      embedding,
+    });
     const reserved = await reserveAskQuestion(db, model);
     if (!reserved.ok) {
       if (reserved.code === "ask_limit_reached") {

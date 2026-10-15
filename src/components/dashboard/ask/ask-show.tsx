@@ -8,7 +8,7 @@ import { isRecord, type AskSourceMatch } from "@/lib/services/ask/events";
 import {
   readAskShowResponse,
   type AskShowResponse,
-} from "@/lib/services/ask/show";
+} from "@/lib/services/ask/show-response";
 
 import { ASK_CLIP_STRIP_MAX, AskClipStrip } from "./ask-clip-strip";
 import { AskPointList } from "./ask-point-list";

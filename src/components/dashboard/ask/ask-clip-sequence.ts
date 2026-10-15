@@ -4,7 +4,7 @@ import {
   toFilmTime,
   type FilmClock,
 } from "@/components/dashboard/matches/match-detail/film/film-timeline";
-import type { AskShowPoint } from "@/lib/services/ask/show";
+import type { AskShowPoint } from "@/lib/services/ask/show-response";
 
 /**
  * The inline clip strip's timeline (roadmap 6.1): the answer's points as

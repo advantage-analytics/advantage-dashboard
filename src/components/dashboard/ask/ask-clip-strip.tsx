@@ -12,7 +12,10 @@ import {
   fetchPlaybackSource,
 } from "@/components/dashboard/matches/match-detail/film/use-attachment-playback";
 import { expiredBodyCopy } from "@/lib/match-video/film-entry";
-import type { AskShowFilm, AskShowPoint } from "@/lib/services/ask/show";
+import type {
+  AskShowFilm,
+  AskShowPoint,
+} from "@/lib/services/ask/show-response";
 import { cn } from "@/lib/utils";
 
 import {

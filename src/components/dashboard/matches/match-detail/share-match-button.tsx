@@ -10,6 +10,7 @@ import {
   type ComponentType,
 } from "react";
 import { ArrowUpRight, Filter, Lock, Mail, Share2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -127,14 +128,11 @@ function SharePopover({
   hasVideo = false,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
-  const [open, setOpen] = useState(false);
-  // An Ask action card links here with `?share=1` (`ask/actions.ts`): the
-  // popover opens on arrival, and sharing still takes the same click.
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("share") === "1") {
-      setOpen(true);
-    }
-  }, []);
+  // An Ask action links here with `?share=1` (`ask/actions.ts`): the
+  // popover opens on arrival — read on the first render, so it does not
+  // open a frame late — and sharing still takes the same click.
+  const searchParams = useSearchParams();
+  const [open, setOpen] = useState(() => searchParams.get("share") === "1");
 
   // Keyboard shortcut: Cmd+Shift+L / Ctrl+Shift+L — opens popover
   useEffect(() => {

@@ -72,7 +72,6 @@ export interface MatchReportMeta {
   matchId: string;
   /** The viewer's insight, already `sides.pick`ed in `page.tsx`. */
   summary: string | null;
-  /** `hasComparisonBaseline(kpiHistory)` — computed on the server. */
   /** `sourceProvider === "splitstep"`. */
   isDerived: boolean;
   /** Both `match_stats` rows present. */

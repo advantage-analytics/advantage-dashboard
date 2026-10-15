@@ -184,7 +184,7 @@ function startHomeResources(
     countViewerWins(matches as DbRecentMatch[], ids, userId),
   );
   const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
-  const pins = getAskPins(null);
+  const pins = getAskPins(null, userId);
   return {
     matches,
     userId,

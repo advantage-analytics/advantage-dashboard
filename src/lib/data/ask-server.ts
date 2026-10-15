@@ -399,8 +399,10 @@ export const MAX_HOME_ASK_PINS = 3;
  */
 export const getAskPins = cache(async function getAskPins(
   programId: string | null = null,
+  /** The viewer's id when the caller already authenticated (Home does). */
+  knownViewerId?: string,
 ): Promise<AskPin[]> {
-  const viewerId = await getViewerId();
+  const viewerId = knownViewerId ?? (await getViewerId());
   if (!viewerId) return [];
   if (programId !== null && !isUuid(programId)) return [];
 

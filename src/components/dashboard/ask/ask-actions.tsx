@@ -96,6 +96,7 @@ const ASK_ACTIONS_COPY = {
     invalid: "Give the view a name of up to 60 characters.",
     unsupported_cut_chart: "That court can't be saved as a view yet.",
   },
+  saveError: "Could not save that. Try again.",
 } as const;
 
 /** The Home a pin lands on, by the scope the answer was asked in. */
@@ -344,7 +345,8 @@ function SaveViewControl({
         setProblem(ASK_ACTIONS_COPY.saveFailed[outcome.error]);
       }
     } catch {
-      setProblem(ASK_ACTIONS_COPY.saveFailed.forbidden);
+      // A request that never answered is not a refusal: say try again.
+      setProblem(ASK_ACTIONS_COPY.saveError);
     }
     setPending(false);
   }

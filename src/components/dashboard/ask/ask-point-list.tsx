@@ -12,7 +12,7 @@ import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider"
 import { surname } from "@/lib/data/match-utils";
 import { matchFilmPointsHref } from "@/lib/match-video/point-set";
 import type { AskSourceMatch } from "@/lib/services/ask/events";
-import type { AskShowPoint } from "@/lib/services/ask/show";
+import type { AskShowPoint } from "@/lib/services/ask/show-response";
 import { cn } from "@/lib/utils";
 
 /**
