@@ -130,7 +130,10 @@ const figures = (page: Page) => page.locator("[data-ask-figure]");
 const answer = (page: Page) => page.locator("[data-ask-answer]");
 const signature = (page: Page) => page.locator("[data-ask-signature]");
 const visual = (page: Page) => page.locator("figure[data-ask-visual]");
-const sourceLinks = (page: Page) => page.getByRole("list").getByRole("link");
+// The sources' rows: the one list inside a section. The figures are a list
+// too, and over one match a figure may be a link of its own.
+const sourceLinks = (page: Page) =>
+  page.locator("section").getByRole("list").getByRole("link");
 const allControl = (page: Page) => page.getByRole("button", { name: /^All / });
 
 async function expectNoProgress(page: Page) {
@@ -243,6 +246,30 @@ test.describe("a full answer", () => {
     // Not said twice, and nothing stripped: the footer is the name alone.
     await expect(signature(page)).toHaveText("Advantage Intelligence");
     await expect(visual(page)).toHaveCount(0);
+  });
+
+  test("over one match, a figure whose measure is a Video filter is a link to the film", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=one");
+    const links = figures(page).locator("a");
+    await expect(links).toHaveCount(1);
+    const href = await links.first().getAttribute("href");
+    expect(href).toMatch(/^\/dashboard\/matches\/match-sep-28\?tab=film&f=/);
+    await expect(links.first().locator("[data-ask-figure-value]")).toHaveText(
+      "55%",
+    );
+    await expect(links.first()).toContainText("· Watch");
+    // The baseline figure and the one with no column are plain tiles.
+    await expect(figures(page).nth(1).locator("a")).toHaveCount(0);
+    await expect(figures(page).nth(2).locator("a")).toHaveCount(0);
+    await expect(page.locator("[data-ask-figure-watch]")).toHaveCount(1);
+  });
+
+  test("over several matches, no figure is a link", async ({ page }) => {
+    await openFixture(page, "?case=full");
+    await expect(figures(page).locator("a")).toHaveCount(0);
+    await expect(page.locator("[data-ask-figure-watch]")).toHaveCount(0);
   });
 
   test("figure tiles are ink, never an outcome colour", async ({ page }) => {
@@ -576,7 +603,9 @@ test.describe("the visual block", () => {
       "Sep 28: 37,5 %",
     ]);
     // The drawing is not what a screen reader is given.
-    await expect(block.locator("[aria-hidden] svg")).toHaveCount(1);
+    await expect(block.locator("svg[aria-hidden]")).toHaveCount(1);
+    // One series: no point is a match, so there are no links.
+    await expect(block.locator("a")).toHaveCount(0);
     await expect(block.locator("svg circle")).toHaveCount(3);
     await expect(block.locator("[data-ask-trend-last]")).toHaveText("37,5 %");
     // The key names the dashed rule; nothing prints its value (53.83…).
@@ -600,6 +629,49 @@ test.describe("the visual block", () => {
     await expect(wiped.locator("> svg")).toHaveCount(1);
     await expect(wiped.locator("> [data-ask-trend-last]")).toHaveCount(1);
     await expect(wiped.locator("[data-ask-after]")).toHaveCount(1);
+  });
+
+  test("trend: a point that is a match links to it, and a second series replaces the mean", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=linked-trend");
+    const block = visual(page);
+
+    const links = block.locator("a[data-ask-trend-point]");
+    await expect(links).toHaveCount(3);
+    await expect(links.nth(0)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-jun-4",
+    );
+    await expect(links.nth(2)).toHaveAttribute(
+      "href",
+      "/dashboard/matches/match-sep-28",
+    );
+    // The links carry the words; there is no second list of them.
+    await expect(links.nth(0)).toHaveText(
+      "Jun 4: 61,0 %; All matches 58,2 %, open match",
+    );
+    await expect(block.locator("ol")).toHaveCount(0);
+    // Each link sits on its point: the dot's own place in the box, as a
+    // share of the plot's width and height (the harness loads no stylesheet,
+    // so the inline position is what can be read).
+    const lefts = await links.evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLElement).style.left),
+    );
+    expect(lefts).toEqual(["0.9375%", "45.7812%", "90.625%"]);
+    const tops = await links.evaluateAll((nodes) =>
+      nodes.map((node) => parseFloat((node as HTMLElement).style.top)),
+    );
+    // 63 is the highest value, so its point is the highest on the plot;
+    // 37.5 the lowest, and 61 between them.
+    expect(tops[1]).toBeLessThan(tops[0]);
+    expect(tops[0]).toBeLessThan(tops[2]);
+    // The key names the second series, drawn dashed; the mean rule is gone.
+    await expect(block.locator("ul").first()).toContainText("All matches");
+    await expect(block).not.toContainText("Your average");
+    await expect(block.locator("svg line")).toHaveCount(0);
+    await expect(block.locator("svg path[stroke-dasharray]")).toHaveCount(1);
+    await expect(block.locator("[data-ask-trend-last]")).toHaveText("37,5 %");
   });
 
   test("split: each part's count as sent, and no share of the whole", async ({
@@ -649,6 +721,52 @@ test.describe("the visual block", () => {
     await expect(block).not.toContainText("21");
   });
 
+  test("serve: Deuce and Ad courts are drawn as the court, each zone's share in its box", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=court-serve");
+    const block = visual(page);
+
+    const court = block.locator("svg[data-ask-serve-court]");
+    await expect(court).toHaveCount(1);
+    await expect(court).toHaveAttribute("aria-hidden", "true");
+    // Six zones, each with serves, each its own column; no bar track.
+    await expect(court.locator("rect[data-ask-zone]")).toHaveCount(6);
+    await expect(block.locator("[data-ask-grow]")).toHaveCount(0);
+    const heights = await court
+      .locator("rect[data-ask-side='deuce']")
+      .evaluateAll((rects) =>
+        rects.map((rect) => Number(rect.getAttribute("height"))),
+      );
+    // 9, 3 and 6 of 18: T is half the box deep, wide a third, body a sixth.
+    expect(heights[0]).toBeCloseTo(heights[2] * 1.5, 0);
+    expect(heights[0]).toBeCloseTo(heights[1] * 3, 0);
+    // The court names its boxes in the model's words, and the counts are
+    // still under it, as sent.
+    await expect(court.locator("text")).toHaveText(["Deuce", "Ad"]);
+    const courts = block.locator("ul").nth(1).locator("> li");
+    await expect(courts).toHaveCount(2);
+    await expect(courts.nth(0)).toContainText("T 9 srv");
+    await expect(courts.nth(1)).toContainText("Wide 12 srv");
+    await expect(block).not.toContainText("%");
+    await expect(block).not.toContainText("18");
+    // Its colours are the three blue steps, never an outcome colour.
+    const fills = await court
+      .locator("rect[data-ask-zone]")
+      .evaluateAll((rects) => rects.map((rect) => rect.getAttribute("fill")));
+    expect(new Set(fills)).toEqual(
+      new Set(["var(--viz-you)", "var(--viz-you-mid)", "var(--viz-you-light)"]),
+    );
+  });
+
+  test("serve: any other two courts stay bars", async ({ page }) => {
+    await openFixture(page, "?case=full&visual=serve");
+    await expect(visual(page).locator("svg[data-ask-serve-court]")).toHaveCount(
+      0,
+    );
+    await expect(visual(page).locator("[data-ask-grow]")).toHaveCount(6);
+  });
+
   test("form: the strip in words, and the record counted from it", async ({
     page,
   }) => {
@@ -671,8 +789,66 @@ test.describe("the visual block", () => {
     expect(colours[1]).toContain("--viz-bad");
   });
 
+  test("momentum: the running difference as a line, sets as segments, marks as links to the film", async ({
+    page,
+  }) => {
+    await openFixture(page, "?case=full&visual=momentum");
+    const block = visual(page);
+    await expect(block).toHaveAttribute("data-ask-visual", "momentum");
+
+    // One line from level through twelve points; one divider between the
+    // two sets; the level rule.
+    const svg = block.locator("svg");
+    await expect(svg).toHaveAttribute("aria-hidden", "true");
+    await expect(svg.locator("path")).toHaveCount(1);
+    await expect(svg.locator("line")).toHaveCount(2);
+    await expect(svg.locator("circle[data-ask-mark]")).toHaveCount(4);
+    // The marks wear the key-moment colour and nothing else does.
+    const fills = await svg
+      .locator("circle[data-ask-mark]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("fill")));
+    expect(new Set(fills)).toEqual(new Set(["var(--viz-key)"]));
+    const markup = await block.evaluate((node) => node.outerHTML);
+    expect(markup).not.toMatch(/viz-good|viz-bad/);
+    // Each mark is a link to the match's film on that pressure.
+    const links = block.locator("a[data-ask-momentum-mark]");
+    await expect(links).toHaveCount(4);
+    const hrefs = await links.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("href")),
+    );
+    for (const href of hrefs) {
+      expect(href).toMatch(/^\/dashboard\/matches\/match-sep-28\?tab=film&f=/);
+    }
+    expect(new Set(hrefs).size).toBe(3);
+    await expect(links.first()).toHaveText(
+      "Break point, point 3 of 12, open the film",
+    );
+    // The axis names the sets; the key names the line and the marks present.
+    await expect(block.getByText("Set 1")).toHaveCount(1);
+    await expect(block.getByText("Set 2")).toHaveCount(1);
+    const key = block.locator("ul").first();
+    await expect(key.locator("li")).toHaveText([
+      "Ahead or behind, point by point",
+      "Match point",
+      "Set point",
+      "Break point",
+    ]);
+    // No figure on the plot; the words count what is drawn.
+    await expect(block.locator("p.sr-only")).toHaveText(
+      "12 points, 7 won and 5 lost; 1 match point, 1 set point, 2 break points.",
+    );
+    expect(markup).not.toMatch(/NaN|Infinity|undefined/);
+  });
+
   test("only the form strip names an outcome colour", async ({ page }) => {
-    for (const kind of ["bars", "table", "trend", "split", "serve"]) {
+    for (const kind of [
+      "bars",
+      "table",
+      "trend",
+      "split",
+      "serve",
+      "momentum",
+    ]) {
       await openFixture(page, `?case=full&visual=${kind}`);
       const markup = await visual(page).evaluate((node) => node.outerHTML);
       expect(markup, kind).not.toMatch(/viz-good|viz-bad|success|danger/);

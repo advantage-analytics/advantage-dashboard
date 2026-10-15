@@ -16,12 +16,14 @@ import {
   type AskAnswerEvent,
   type AskErrorEvent,
   type AskFigureEvent,
+  type AskMomentumVisual,
   type AskVisual,
   type AskTrendVisual,
   type AskVisualKind,
   type AskVisualNumber,
   MAX_ASK_BARS_ROWS,
   MAX_ASK_FORM_RESULTS,
+  MAX_ASK_MOMENTUM_POINTS,
   MAX_ASK_SERVE_COURTS,
   MAX_ASK_SPLIT_PARTS,
   MAX_ASK_TABLE_COLUMNS,
@@ -29,6 +31,7 @@ import {
   MAX_ASK_TREND_POINTS,
   MAX_ASK_VISUALS,
   MIN_ASK_FORM_RESULTS,
+  MIN_ASK_MOMENTUM_POINTS,
   MIN_ASK_SERVE_COURTS,
   MIN_ASK_SPLIT_PARTS,
   MIN_ASK_TABLE_COLUMNS,
@@ -142,6 +145,11 @@ export const ASK_VISUAL_SYNTAX: Record<AskVisualKind, string> = {
   form: [
     `${ASK_VISUAL_LINE_PREFIX} form ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
     `${ASK_VISUAL_PLOT_PREFIX} <true-or-false column>`,
+  ].join("\n"),
+  // Server-written only (`momentum.ts`); never in the model's catalogue.
+  momentum: [
+    `${ASK_VISUAL_LINE_PREFIX} momentum ${ASK_VISUAL_FIELD_SEPARATOR} <caption>`,
+    `${ASK_VISUAL_PLOT_PREFIX} <point column> ${ASK_VISUAL_FIELD_SEPARATOR} <won column> ${ASK_VISUAL_FIELD_SEPARATOR} <set column> ${ASK_VISUAL_FIELD_SEPARATOR} <break-point column> ${ASK_VISUAL_FIELD_SEPARATOR} <set-point column> ${ASK_VISUAL_FIELD_SEPARATOR} <match-point column>`,
   ].join("\n"),
 };
 
@@ -338,7 +346,7 @@ export interface AskDroppedVisual {
  */
 export interface AskAnswerResult {
   headline: string;
-  figures: Pick<AskFigureEvent, "label" | "value">[];
+  figures: Pick<AskFigureEvent, "label" | "value" | "column">[];
   /** The visual block, resolved; null when the answer had none or it was dropped. */
   visual: AskVisual | null;
   text: string;
@@ -683,6 +691,7 @@ function parseBlock(
     split: [ASK_VISUAL_ROW_PREFIX],
     serve: [ASK_VISUAL_ROW_PREFIX],
     form: [ASK_VISUAL_PLOT_PREFIX],
+    momentum: [ASK_VISUAL_PLOT_PREFIX],
   };
   for (const line of body) {
     const keyword = VISUAL_LINE_PREFIXES.find((prefix) =>
@@ -912,11 +921,18 @@ function parseBlock(
       if (plots.length !== 1) {
         return drop("malformed", kind, "exactly one PLOT line is needed");
       }
-      const [x, y] = plots[0];
+      // PLOT: <date column> | <value column>, then optionally a baseline
+      // column — the same measure over all matches, or a per-match average,
+      // drawn as a dashed second line — and a label for it. Without the
+      // label the baseline is named by what its column says (all matches,
+      // average, team), else by the column's own words.
+      const [x, y, baselineColumn, baselineName] = plots[0];
       if (
-        plots[0].length !== 2 ||
+        plots[0].length < 2 ||
+        plots[0].length > 4 ||
         !COLUMN_NAME.test(x) ||
-        !COLUMN_NAME.test(y)
+        !COLUMN_NAME.test(y) ||
+        (baselineColumn !== undefined && !COLUMN_NAME.test(baselineColumn))
       ) {
         return drop(
           "malformed",
@@ -924,11 +940,34 @@ function parseBlock(
           "PLOT needs a date column and a value column",
         );
       }
-      const raw: { x: unknown; y: number; text: string }[] = [];
+      let baselineLabel: string | null = null;
+      if (baselineColumn !== undefined) {
+        if (baselineName !== undefined) {
+          const named = labels([baselineName]);
+          if (!named.ok) return drop(named.reason, kind, "a baseline label");
+          baselineLabel = named.labels[0];
+        } else {
+          const measure = askMeasure(baselineColumn);
+          baselineLabel =
+            measure && measure.qualifier !== ""
+              ? measure.qualifier.charAt(0).toUpperCase() +
+                measure.qualifier.slice(1)
+              : columnLabel(baselineColumn);
+        }
+      }
+      const raw: {
+        x: unknown;
+        y: number;
+        text: string;
+        baseline: AskVisualNumber | null;
+        matchId: string | undefined;
+      }[] = [];
       for (const row of rows) {
         if (
           !Object.prototype.hasOwnProperty.call(row, x) ||
-          !Object.prototype.hasOwnProperty.call(row, y)
+          !Object.prototype.hasOwnProperty.call(row, y) ||
+          (baselineColumn !== undefined &&
+            !Object.prototype.hasOwnProperty.call(row, baselineColumn))
         ) {
           return drop(
             "bad_reference",
@@ -944,7 +983,33 @@ function parseBlock(
         const text = formatAskCell(y, value);
         if (text === null)
           return drop("bad_value", kind, "a value with no reading");
-        raw.push({ x: row[x], y: value, text });
+        let baseline: AskVisualNumber | null = null;
+        if (baselineColumn !== undefined) {
+          const other = row[baselineColumn];
+          if (other !== null && other !== undefined) {
+            if (typeof other !== "number" || !Number.isFinite(other)) {
+              return drop("bad_value", kind, "a baseline that is not a number");
+            }
+            const otherText = formatAskCell(baselineColumn, other);
+            if (otherText === null) {
+              return drop("bad_value", kind, "a baseline with no reading");
+            }
+            baseline = { value: other, text: otherText };
+          }
+        }
+        // A point is a match when the row says which: the block then links
+        // it to the match's page. The column is the views' own name.
+        const matchId = row.match_id;
+        raw.push({
+          x: row[x],
+          y: value,
+          text,
+          baseline,
+          matchId:
+            typeof matchId === "string" && matchId.trim() !== ""
+              ? matchId
+              : undefined,
+        });
       }
       if (
         raw.length < MIN_ASK_TREND_POINTS ||
@@ -973,9 +1038,28 @@ function parseBlock(
         points.push({
           label: pointLabel,
           value: { value: point.y, text: point.text },
+          ...(point.matchId !== undefined ? { matchId: point.matchId } : {}),
         });
       }
-      return { ok: true, visual: { kind, caption, points }, droppedRows: 0 };
+      // The second series is drawn only when every drawn point has it: a
+      // baseline missing from a row is left out, never a gap in a line.
+      const baseline =
+        baselineLabel !== null && raw.every((point) => point.baseline !== null)
+          ? {
+              label: baselineLabel,
+              values: raw.map((point) => point.baseline as AskVisualNumber),
+            }
+          : null;
+      return {
+        ok: true,
+        visual: {
+          kind,
+          caption,
+          points,
+          ...(baseline ? { baseline } : {}),
+        },
+        droppedRows: 0,
+      };
     }
 
     case "split": {
@@ -1078,6 +1162,154 @@ function parseBlock(
       }
       return { ok: true, visual: { kind, caption, results }, droppedRows: 0 };
     }
+
+    case "momentum": {
+      if (plots.length !== 1) {
+        return drop("malformed", kind, "exactly one PLOT line is needed");
+      }
+      // PLOT: <point> | <won>, then optionally <set>, <break point>, <set
+      // point> and <match point> columns, by position. A row whose winner
+      // is unknown is skipped; a flag that is null is simply not set.
+      const named = plots[0];
+      if (
+        named.length < 2 ||
+        named.length > 6 ||
+        named.some((column) => !COLUMN_NAME.test(column))
+      ) {
+        return drop(
+          "malformed",
+          kind,
+          "PLOT needs a point column and a won column",
+        );
+      }
+      const [
+        pointColumn,
+        wonColumn,
+        setColumn,
+        breakColumn,
+        setPointColumn,
+        matchPointColumn,
+      ] = named;
+      for (const row of rows) {
+        if (
+          named.some(
+            (column) => !Object.prototype.hasOwnProperty.call(row, column),
+          )
+        ) {
+          return drop(
+            "bad_reference",
+            kind,
+            "a PLOT column the result does not have",
+          );
+        }
+      }
+      const flag = (
+        row: AskRow,
+        column: string | undefined,
+      ): boolean | null => {
+        if (column === undefined) return false;
+        const value = row[column];
+        if (value === null || value === undefined) return false;
+        return typeof value === "boolean" ? value : null;
+      };
+      const raw: {
+        point: number;
+        won: boolean;
+        set: number | undefined;
+        mark: AskMomentumVisual["points"][number]["mark"];
+        matchId: string | null;
+      }[] = [];
+      for (const row of rows) {
+        const point = row[pointColumn];
+        if (typeof point !== "number" || !Number.isFinite(point)) {
+          return drop("bad_value", kind, "a point number that is not a number");
+        }
+        const won = row[wonColumn];
+        if (won === null || won === undefined) continue;
+        if (typeof won !== "boolean") {
+          return drop(
+            "bad_value",
+            kind,
+            "a won cell that is not true or false",
+          );
+        }
+        let set: number | undefined;
+        if (setColumn !== undefined) {
+          const value = row[setColumn];
+          if (value !== null && value !== undefined) {
+            if (
+              typeof value !== "number" ||
+              !Number.isInteger(value) ||
+              value < 1
+            ) {
+              return drop(
+                "bad_value",
+                kind,
+                "a set that is not a whole number",
+              );
+            }
+            set = value;
+          }
+        }
+        const isBreak = flag(row, breakColumn);
+        const isSetPoint = flag(row, setPointColumn);
+        const isMatchPoint = flag(row, matchPointColumn);
+        if (isBreak === null || isSetPoint === null || isMatchPoint === null) {
+          return drop(
+            "bad_value",
+            kind,
+            "a pressure flag that is not true or false",
+          );
+        }
+        const matchId = row.match_id;
+        raw.push({
+          point,
+          won,
+          set,
+          mark: isMatchPoint
+            ? "match"
+            : isSetPoint
+              ? "set"
+              : isBreak
+                ? "break"
+                : undefined,
+          matchId:
+            typeof matchId === "string" && matchId.trim() !== ""
+              ? matchId
+              : null,
+        });
+      }
+      if (
+        raw.length < MIN_ASK_MOMENTUM_POINTS ||
+        raw.length > MAX_ASK_MOMENTUM_POINTS
+      ) {
+        return drop(
+          "limit",
+          kind,
+          `points must be ${MIN_ASK_MOMENTUM_POINTS} to ${MAX_ASK_MOMENTUM_POINTS}`,
+        );
+      }
+      // Play order, whatever order the query returned.
+      raw.sort((a, b) => a.point - b.point);
+      // The marks link to the match's Video tab only when every point is
+      // that one match's.
+      const matchId =
+        raw[0].matchId !== null &&
+        raw.every((point) => point.matchId === raw[0].matchId)
+          ? raw[0].matchId
+          : null;
+      const visual: AskMomentumVisual = {
+        kind,
+        caption,
+        ...(matchId ? { matchId } : {}),
+        points: raw.map((point) => ({
+          won: point.won,
+          ...(point.set !== undefined ? { set: point.set } : {}),
+          ...(point.mark ? { mark: point.mark } : {}),
+        })),
+      };
+      return { ok: true, visual, droppedRows: 0 };
+    }
   }
 }
 
@@ -1111,7 +1343,13 @@ function createLineStage(
    * that repeats one of its cells can be left out: the page would otherwise
    * print the same number twice, once large and once in the table.
    */
-  let heldFigures: { label: string; value: string; line: string }[] = [];
+  let heldFigures: {
+    label: string;
+    value: string;
+    /** The one column the value was cited from, when it was exactly one cell. */
+    column?: string;
+    line: string;
+  }[] = [];
 
   function figure(line: string): void {
     const body = line.slice(ASK_FIGURE_LINE_PREFIX.length);
@@ -1142,7 +1380,17 @@ function createLineStage(
       result.droppedFigures.push(expand(line, tokens).text);
       return;
     }
-    heldFigures.push({ label, value, line });
+    // The column the value was cited from, when the value is exactly one
+    // cell: what lets the figure open the Video tab on the points it counts
+    // (`figure-video.ts`). A value made of words around a cell names none.
+    const lone = LONE_TOKEN.exec(
+      cut === -1
+        ? ""
+        : body.slice(cut + ASK_FIGURE_LINE_SEPARATOR.length).trim(),
+    );
+    const cited = lone ? tokens[Number(lone[1])] : undefined;
+    const column = cited?.ok ? cited.column : undefined;
+    heldFigures.push({ label, value, line, ...(column ? { column } : {}) });
   }
 
   /** The held figures as events, minus any that repeat a cell of `visual` under the same label. */
@@ -1157,8 +1405,14 @@ function createLineStage(
         result.droppedFigures.push(expand(held.line, tokens).text);
         continue;
       }
-      result.figures.push({ label: held.label, value: held.value });
-      events.push({ type: "figure", label: held.label, value: held.value });
+      const column = held.column ? { column: held.column } : {};
+      result.figures.push({ label: held.label, value: held.value, ...column });
+      events.push({
+        type: "figure",
+        label: held.label,
+        value: held.value,
+        ...column,
+      });
     }
     heldFigures = [];
     return events;

@@ -1,41 +1,64 @@
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
 import { VisualFrame, VisualKey } from "./visual-frame";
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
+/** A point's match page, when the point is a match. */
+export function trendPointHref(matchId: string): string {
+  return `/dashboard/matches/${encodeURIComponent(matchId)}`;
+}
+
 /**
- * Trend line: one value per match in date order, with the mean of the drawn
- * values as a dashed rule so a point reads as above or below the player's own
- * level.
+ * Trend line: one value per match in date order, with a dashed second line
+ * so a point reads as above or below something — the block's own `baseline`
+ * series when it carries one (the same measure across all matches, or a
+ * per-match average), else the mean of the drawn values.
  *
- * The rule is geometry and is never printed as a number: the average is not a
- * cell of the query result, so the key names it and stops there. The one
- * figure on the plot is the last point's, in the server's own text.
+ * The mean is geometry and is never printed as a number: it is not a cell
+ * of the query result, so the key names it and stops there. A baseline
+ * series IS cells of the result, and still prints nothing on the plot: the
+ * one figure there is the last point's, in the server's own text.
  *
- * The drawing is hidden from assistive technology; the list under it carries
- * every point in words.
+ * A point that is a match (`matchId`) is a link to that match's page: an
+ * anchor laid over the point, under the drawing so its hover wash sits
+ * behind the dot. The drawing itself is hidden from assistive technology;
+ * the words are the anchors' when the points link, else a list under it.
  */
 export function TrendVisual({
   visual,
   averageLabel = "Your average",
 }: {
   visual: AskTrendVisual;
-  /** The key's name for the dashed rule. The team page says "Average". */
+  /** The key's name for the dashed mean. The team page says "Average". */
   averageLabel?: string;
 }) {
-  const { points } = visual;
-  const geometry = trendGeometry(points.map((point) => point.value.value));
+  const { points, baseline } = visual;
+  const geometry = trendGeometry(
+    points.map((point) => point.value.value),
+    TREND_BOX,
+    baseline?.values.map((value) => value.value),
+  );
   const last = points.length - 1;
   const lastAt = geometry.points[last];
+  const linked = points.some((point) => point.matchId !== undefined);
+  const words = (index: number) =>
+    `${points[index].label}: ${points[index].value.text}${
+      baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
+    }`;
 
   return (
     <VisualFrame kind="trend" caption={visual.caption}>
       <VisualKey
         items={[
           { label: "Each match", color: "var(--viz-you)" },
-          { label: averageLabel, color: "var(--viz-opp-mid)", dashed: true },
+          {
+            label: baseline?.label ?? averageLabel,
+            color: "var(--viz-opp-mid)",
+            dashed: true,
+          },
         ]}
       />
       <div className="flex flex-col gap-1">
@@ -43,21 +66,55 @@ export function TrendVisual({
             clipped, and the drawing inside it is never itself the animated
             element. The last value's label is inside the same box, so the
             wipe's end state has to clear it (`ask-wipe` in `globals.css`). */}
-        <div aria-hidden="true" data-ask-wipe="" className="relative">
+        <div data-ask-wipe="" className="relative">
+          {linked &&
+            points.map((point, index) =>
+              point.matchId !== undefined && geometry.points[index] ? (
+                <Link
+                  key={index}
+                  href={trendPointHref(point.matchId)}
+                  data-ask-trend-point=""
+                  className="absolute z-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors duration-[var(--duration-hover)] outline-none hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]"
+                  style={{
+                    left: percent(geometry.points[index].x, TREND_BOX.width),
+                    top: percent(geometry.points[index].y, TREND_BOX.height),
+                  }}
+                >
+                  <span className="sr-only">{words(index)}, open match</span>
+                </Link>
+              ) : (
+                <span key={index} className="sr-only">
+                  {words(index)}
+                </span>
+              ),
+            )}
           <svg
+            aria-hidden="true"
             viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
-            className="block w-full overflow-visible"
+            className="pointer-events-none relative block w-full overflow-visible"
           >
-            <line
-              x1={TREND_BOX.left}
-              x2={TREND_BOX.width - TREND_BOX.right}
-              y1={geometry.averageY}
-              y2={geometry.averageY}
-              stroke="var(--viz-opp-mid)"
-              strokeWidth={1}
-              strokeDasharray="3 4"
-              vectorEffect="non-scaling-stroke"
-            />
+            {geometry.baseline ? (
+              <path
+                d={geometry.baseline.path}
+                fill="none"
+                stroke="var(--viz-opp-mid)"
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : (
+              <line
+                x1={TREND_BOX.left}
+                x2={TREND_BOX.width - TREND_BOX.right}
+                y1={geometry.averageY}
+                y2={geometry.averageY}
+                stroke="var(--viz-opp-mid)"
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
             <path
               d={geometry.path}
               fill="none"
@@ -82,9 +139,10 @@ export function TrendVisual({
           </svg>
           {lastAt && (
             <span
+              aria-hidden="true"
               data-ask-trend-last=""
               data-ask-after=""
-              className="absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
+              className="pointer-events-none absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
               style={
                 {
                   left: percent(lastAt.x, TREND_BOX.width),
@@ -112,13 +170,13 @@ export function TrendVisual({
           <span>{points[last].label}</span>
         </div>
       </div>
-      <ol className="sr-only">
-        {points.map((point, index) => (
-          <li key={index}>
-            {point.label}: {point.value.text}
-          </li>
-        ))}
-      </ol>
+      {!linked && (
+        <ol className="sr-only">
+          {points.map((_, index) => (
+            <li key={index}>{words(index)}</li>
+          ))}
+        </ol>
+      )}
     </VisualFrame>
   );
 }

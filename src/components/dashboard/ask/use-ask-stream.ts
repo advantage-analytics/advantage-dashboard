@@ -76,6 +76,12 @@ export const EMPTY_ASK_QUESTION: AskQuestion = { text: "", tags: [] };
 export interface AskFigure {
   label: string;
   value: string;
+  /**
+   * The measure column the value is one cell of, when it is exactly one
+   * (`answer-render.ts`): what makes a tile watchable (`figure-video.ts`).
+   * Absent for a value that is words, or more than one cell.
+   */
+  column?: string;
 }
 
 /**
@@ -207,7 +213,11 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
         ...answer,
         figures: [
           ...answer.figures,
-          { label: event.label, value: event.value },
+          {
+            label: event.label,
+            value: event.value,
+            ...(event.column ? { column: event.column } : {}),
+          },
         ],
       };
     case "text":
@@ -396,7 +406,14 @@ export function parseAskEvent(line: string): AskEvent | null {
         : null;
     case "figure":
       return typeof value.label === "string" && typeof value.value === "string"
-        ? { type: "figure", label: value.label, value: value.value }
+        ? {
+            type: "figure",
+            label: value.label,
+            value: value.value,
+            ...(typeof value.column === "string"
+              ? { column: value.column }
+              : {}),
+          }
         : null;
     case "text":
       return typeof value.delta === "string"
@@ -649,7 +666,15 @@ function readFigures(value: unknown): AskFigure[] {
     isRecord(figure) &&
     typeof figure.label === "string" &&
     typeof figure.value === "string"
-      ? [{ label: figure.label, value: figure.value }]
+      ? [
+          {
+            label: figure.label,
+            value: figure.value,
+            ...(typeof figure.column === "string"
+              ? { column: figure.column }
+              : {}),
+          },
+        ]
       : [],
   );
 }

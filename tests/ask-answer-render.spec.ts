@@ -252,9 +252,20 @@ test.describe("renderAskAnswer — shape", () => {
         type: "headline",
         text: "Your second serve holds up better this season.",
       },
-      { type: "figure", label: "Second-serve points won", value: "54.6%" },
-      { type: "figure", label: "Matches", value: "9" },
-      { type: "figure", label: "Last played", value: "Sep 14, 2026" },
+      // Each figure names the column it was cited from, for the Video link.
+      {
+        type: "figure",
+        label: "Second-serve points won",
+        value: "54.6%",
+        column: "second_serve_won_pct",
+      },
+      { type: "figure", label: "Matches", value: "9", column: "matches" },
+      {
+        type: "figure",
+        label: "Last played",
+        value: "Sep 14, 2026",
+        column: "last_played_on",
+      },
     ]);
     expect(events.slice(4).every((event) => event.type === "text")).toBe(true);
     expect(body(events)).toBe(
@@ -265,9 +276,17 @@ test.describe("renderAskAnswer — shape", () => {
     expect(result).toEqual({
       headline: "Your second serve holds up better this season.",
       figures: [
-        { label: "Second-serve points won", value: "54.6%" },
-        { label: "Matches", value: "9" },
-        { label: "Last played", value: "Sep 14, 2026" },
+        {
+          label: "Second-serve points won",
+          value: "54.6%",
+          column: "second_serve_won_pct",
+        },
+        { label: "Matches", value: "9", column: "matches" },
+        {
+          label: "Last played",
+          value: "Sep 14, 2026",
+          column: "last_played_on",
+        },
       ],
       text:
         "Across 9 matches you won 54.6% of second-serve points.\n\n" +
@@ -283,6 +302,27 @@ test.describe("renderAskAnswer — shape", () => {
     });
   });
 
+  test("a figure names its column only when its value is exactly one cell", async () => {
+    const { events } = await render([
+      "Headline.\n" +
+        "FIGURE: Share = {{r1.second_serve_won_pct}}\n" +
+        "FIGURE: Played = {{r1.matches}} of {{r2.matches}}\n" +
+        "FIGURE: Set = {{r1.matches}} matches\n",
+    ]);
+    expect(events.filter((event) => event.type === "figure")).toEqual([
+      {
+        type: "figure",
+        label: "Second-serve points won",
+        value: "54.6%",
+        column: "second_serve_won_pct",
+      },
+      // Two cells, or words around one, name no column: the figure is not
+      // the count of any one measure's points.
+      { type: "figure", label: "Played", value: "9 of 4" },
+      { type: "figure", label: "Set", value: "9 matches" },
+    ]);
+  });
+
   test("a fourth figure line is dropped and reported, not shown", async () => {
     const { events, result } = await render([
       "Headline.\n" +
@@ -294,9 +334,14 @@ test.describe("renderAskAnswer — shape", () => {
     ]);
 
     expect(events.filter((event) => event.type === "figure")).toEqual([
-      { type: "figure", label: "One", value: "9" },
-      { type: "figure", label: "Two", value: "4" },
-      { type: "figure", label: "Total points", value: "1,204" },
+      { type: "figure", label: "One", value: "9", column: "matches" },
+      { type: "figure", label: "Two", value: "4", column: "matches" },
+      {
+        type: "figure",
+        label: "Total points",
+        value: "1,204",
+        column: "total_points",
+      },
     ]);
     expect(body(events)).toBe("Body.");
     expect(result.droppedFigures).toEqual(["FIGURE: Four = 512"]);
@@ -348,6 +393,7 @@ test.describe("renderAskAnswer — shape", () => {
       type: "figure",
       label: "First serves in",
       value: "—",
+      column: "first_serve_pct",
     });
     expect(body(events)).toBe("First serves in: —.");
     expect(result.failure).toBeNull();
@@ -444,7 +490,7 @@ test.describe("renderAskAnswer — typed numbers", () => {
 
     expect(events).toEqual([
       { type: "headline", text: "You won of them." },
-      { type: "figure", label: "Last matches", value: "9" },
+      { type: "figure", label: "Last matches", value: "9", column: "matches" },
     ]);
     expect(result.droppedDigits).toEqual(["9", "5"]);
   });
@@ -622,7 +668,7 @@ test.describe("ndjsonStreamResponse", () => {
 
     expect(text).toBe(
       '{"type":"headline","text":"Headline."}\n' +
-        '{"type":"figure","label":"Matches","value":"9"}\n' +
+        '{"type":"figure","label":"Matches","value":"9","column":"matches"}\n' +
         '{"type":"text","delta":"Body."}\n',
     );
   });
@@ -765,6 +811,173 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     });
   });
 
+  test("trend: a third PLOT column is the dashed second series, and match ids link the points", async () => {
+    const rows: AskRow[] = [
+      {
+        match_id: "m-jun",
+        played_on: "2026-06-04",
+        first_serve_pct: 61,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        match_id: "m-jul",
+        played_on: "2026-07-09",
+        first_serve_pct: 63,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        // A null value is skipped, as before, baseline and all.
+        match_id: "m-aug",
+        played_on: "2026-08-01",
+        first_serve_pct: null,
+        all_first_serve_pct: 58.2,
+      },
+      {
+        match_id: "m-sep",
+        played_on: "2026-09-28",
+        first_serve_pct: 37.5,
+        all_first_serve_pct: 58.2,
+      },
+    ];
+    const { events, result } = await render(
+      [
+        "Headline.\nCHART: trend | First serves in against your average.\nPLOT: played_on | first_serve_pct | all_first_serve_pct\n\nBody.",
+      ],
+      rows,
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(visualOf(events)).toEqual({
+      kind: "trend",
+      caption: "First serves in against your average.",
+      points: [
+        { label: "Jun 4", value: { value: 61, text: "61%" }, matchId: "m-jun" },
+        { label: "Jul 9", value: { value: 63, text: "63%" }, matchId: "m-jul" },
+        {
+          label: "Sep 28",
+          value: { value: 37.5, text: "37.5%" },
+          matchId: "m-sep",
+        },
+      ],
+      // Named by what the column says; a fourth field names it instead.
+      baseline: {
+        label: "All matches",
+        values: [
+          { value: 58.2, text: "58.2%" },
+          { value: 58.2, text: "58.2%" },
+          { value: 58.2, text: "58.2%" },
+        ],
+      },
+    });
+    // The saved block reads back whole, and still reads without the new fields.
+    expect(readAskVisual(visualOf(events))).toEqual(visualOf(events));
+
+    const named = await render(
+      [
+        "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | all_first_serve_pct | Season so far\n",
+      ],
+      rows,
+    );
+    expect(visualOf(named.events)).toMatchObject({
+      baseline: { label: "Season so far" },
+    });
+
+    // No match_id column: no links. A baseline missing from one drawn row:
+    // the line is left out, the trend stands.
+    const plain = await render(
+      [
+        "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | all_first_serve_pct\n",
+      ],
+      rows.map(({ match_id: _id, ...row }, index) => ({
+        ...row,
+        all_first_serve_pct: index === 0 ? null : row.all_first_serve_pct,
+      })),
+    );
+    const plainVisual = visualOf(plain.events);
+    expect(plainVisual?.kind).toBe("trend");
+    expect(plainVisual).not.toHaveProperty("baseline");
+    expect(
+      plainVisual?.kind === "trend" &&
+        plainVisual.points.every((point) => !("matchId" in point)),
+    ).toBe(true);
+
+    // A baseline column the result does not have drops the block; one that
+    // is not a number too.
+    const missing = await render(
+      [
+        "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | nope\n",
+      ],
+      rows,
+    );
+    expect(missing.result.visual).toBeNull();
+    expect(missing.result.droppedVisuals[0]?.reason).toBe("bad_reference");
+    const words = await render(
+      [
+        "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | played_on\n",
+      ],
+      rows,
+    );
+    expect(words.result.droppedVisuals[0]?.reason).toBe("bad_value");
+  });
+
+  test("readAskVisual: a trend's match ids and baseline must be whole, and may be absent", () => {
+    const point = (label: string, value: number) => ({
+      label,
+      value: { value, text: String(value) },
+    });
+    const saved = {
+      kind: "trend",
+      caption: "Caption.",
+      points: [point("A", 1), point("B", 2)],
+    };
+    // Saved before the fields existed: unchanged.
+    expect(readAskVisual(saved)).toEqual(saved);
+    expect(
+      readAskVisual({
+        ...saved,
+        points: [{ ...point("A", 1), matchId: "m1" }, point("B", 2)],
+      }),
+    ).toMatchObject({ points: [{ matchId: "m1" }, { label: "B" }] });
+    // A match id that is not a non-empty string is not one.
+    for (const matchId of ["", 7, null, {}]) {
+      expect(
+        readAskVisual({
+          ...saved,
+          points: [{ ...point("A", 1), matchId }, point("B", 2)],
+        }),
+      ).toBeNull();
+    }
+    const baseline = {
+      label: "All matches",
+      values: [
+        { value: 1.5, text: "1.5" },
+        { value: 1.5, text: "1.5" },
+      ],
+    };
+    expect(readAskVisual({ ...saved, baseline })).toEqual({
+      ...saved,
+      baseline,
+    });
+    // Wrong length, no label, a value that is not a number: refused whole.
+    expect(
+      readAskVisual({
+        ...saved,
+        baseline: { ...baseline, values: baseline.values.slice(0, 1) },
+      }),
+    ).toBeNull();
+    expect(
+      readAskVisual({ ...saved, baseline: { ...baseline, label: " " } }),
+    ).toBeNull();
+    expect(
+      readAskVisual({
+        ...saved,
+        baseline: {
+          ...baseline,
+          values: [{ value: "1", text: "1" }, baseline.values[1]],
+        },
+      }),
+    ).toBeNull();
+  });
+
   test("trend: the year is added when the points span more than one", async () => {
     const { events } = await render(
       ["Headline.\nCHART: trend | Across two seasons.\nPLOT: played_on | aces"],
@@ -827,6 +1040,142 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
         },
       ],
     });
+  });
+
+  test("momentum: one point per row with a known winner, in point order, marked by the heaviest pressure", async () => {
+    const rows: AskRow[] = [
+      // Out of order, one undecided, one row with no flags set.
+      {
+        match_id: "m",
+        point_number: 3,
+        i_won: false,
+        set_number: 1,
+        is_break_point: true,
+        is_set_point: true,
+        is_match_point: false,
+      },
+      {
+        match_id: "m",
+        point_number: 1,
+        i_won: true,
+        set_number: 1,
+        is_break_point: false,
+        is_set_point: false,
+        is_match_point: false,
+      },
+      {
+        match_id: "m",
+        point_number: 2,
+        i_won: null,
+        set_number: 1,
+        is_break_point: true,
+        is_set_point: false,
+        is_match_point: false,
+      },
+      {
+        match_id: "m",
+        point_number: 4,
+        i_won: true,
+        set_number: 2,
+        is_break_point: null,
+        is_set_point: null,
+        is_match_point: true,
+      },
+      {
+        match_id: "m",
+        point_number: 5,
+        i_won: true,
+        set_number: null,
+        is_break_point: true,
+        is_set_point: null,
+        is_match_point: null,
+      },
+    ];
+    const { events, result } = await render(
+      [
+        "Headline.\nCHART: momentum | Point by point.\nPLOT: point_number | i_won | set_number | is_break_point | is_set_point | is_match_point\n\nBody.",
+      ],
+      rows,
+    );
+    expect(result.droppedVisuals).toEqual([]);
+    expect(visualOf(events)).toEqual({
+      kind: "momentum",
+      caption: "Point by point.",
+      matchId: "m",
+      points: [
+        { won: true, set: 1 },
+        { won: false, set: 1, mark: "set" },
+        { won: true, set: 2, mark: "match" },
+        { won: true, mark: "break" },
+      ],
+    });
+    expect(readAskVisual(visualOf(events))).toEqual(visualOf(events));
+
+    // Two columns are enough; rows of two matches carry no match id.
+    const bare = await render(
+      ["Headline.\nCHART: momentum | Caption.\nPLOT: point_number | i_won\n"],
+      rows.map((row, index) => ({
+        ...row,
+        match_id: index === 0 ? "other" : "m",
+      })),
+    );
+    expect(visualOf(bare.events)).toEqual({
+      kind: "momentum",
+      caption: "Caption.",
+      points: [{ won: true }, { won: false }, { won: true }, { won: true }],
+    });
+
+    // A column the result lacks, a winner that is not a boolean, a flag
+    // that is not one, a set that is not a whole number: the block drops.
+    for (const [plot, reason, data] of [
+      ["PLOT: point_number | i_won | nope", "bad_reference", rows],
+      ["PLOT: point_number | set_number", "bad_value", rows],
+      ["PLOT: point_number | i_won | i_won", "bad_value", rows],
+      [
+        "PLOT: point_number | i_won | set_number | point_number",
+        "bad_value",
+        rows,
+      ],
+      ["PLOT: point_number", "malformed", rows],
+      ["PLOT: point_number | i_won", "limit", rows.slice(1, 2)],
+    ] as const) {
+      const dropped = await render(
+        [`Headline.\nCHART: momentum | Caption.\n${plot}\n`],
+        [...data],
+      );
+      expect(dropped.result.visual, plot).toBeNull();
+      expect(dropped.result.droppedVisuals[0]?.reason, plot).toBe(reason);
+    }
+  });
+
+  test("readAskVisual: a momentum block's points must be whole", () => {
+    const saved = {
+      kind: "momentum",
+      caption: "Caption.",
+      points: [{ won: true }, { won: false, set: 2, mark: "break" }],
+    };
+    expect(readAskVisual(saved)).toEqual(saved);
+    expect(readAskVisual({ ...saved, matchId: "m" })).toEqual({
+      ...saved,
+      matchId: "m",
+    });
+    expect(readAskVisual({ ...saved, matchId: "" })).toBeNull();
+    expect(
+      readAskVisual({ ...saved, points: [{ won: "yes" }, { won: true }] }),
+    ).toBeNull();
+    expect(
+      readAskVisual({
+        ...saved,
+        points: [{ won: true, set: 0 }, { won: true }],
+      }),
+    ).toBeNull();
+    expect(
+      readAskVisual({
+        ...saved,
+        points: [{ won: true, mark: "ace" }, { won: true }],
+      }),
+    ).toBeNull();
+    expect(readAskVisual({ ...saved, points: [{ won: true }] })).toBeNull();
   });
 
   test("form: one result per row, an unknown result skipped, oldest first", async () => {
@@ -1354,7 +1703,7 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
     );
     expect(result.failure).toBeNull();
     expect(result.figures).toEqual([
-      { label: "First serves in", value: "58.2%" },
+      { label: "First serves in", value: "58.2%", column: "first_serve_pct" },
     ]);
     expect(result.droppedFigures).toEqual([
       "FIGURE: Winners = 8",
@@ -1373,7 +1722,9 @@ test.describe("renderAskAnswer — a block that cannot be drawn is dropped alone
       ],
       COMPARISON,
     );
-    expect(kept.result.figures).toEqual([{ label: "Aces", value: "11" }]);
+    expect(kept.result.figures).toEqual([
+      { label: "Aces", value: "11", column: "forced" },
+    ]);
   });
 
   test("a '=' in a ROW label that is not followed by a cell is left alone, and a cell with words beside it is still malformed", async () => {
@@ -1901,7 +2252,7 @@ test.describe("a sentence that cites one cell as both ends of a range", () => {
       "\nThe body.",
     ]);
     expect(result.figures).toEqual([
-      { label: "First serves in", value: "68%" },
+      { label: "First serves in", value: "68%", column: "first_serve_pct" },
     ]);
     expect(result.visual?.kind).toBe("table");
     expect(text).toBe("The body.");
@@ -2210,6 +2561,7 @@ test.describe("a label that names one row and cites another", () => {
       {
         label: "Second-serve points won, right",
         value: "54.6%",
+        column: "second_serve_won_pct",
       },
     ]);
     expect(result.droppedFigures).toEqual([
@@ -2313,9 +2665,17 @@ test.describe("a label for a known measure is the server's, not the model's", ()
       "\nThe body.",
     ]);
     expect(result.figures).toEqual([
-      { label: "Total points won, Hard Court", value: "53.8%" },
-      { label: "Total points won, Clay Court", value: "49.5%" },
-      { label: "Matches won, Hard Court", value: "75%" },
+      {
+        label: "Total points won, Hard Court",
+        value: "53.8%",
+        column: "total_points_won_pct",
+      },
+      {
+        label: "Total points won, Clay Court",
+        value: "49.5%",
+        column: "total_points_won_pct",
+      },
+      { label: "Matches won, Hard Court", value: "75%", column: "win_pct" },
     ]);
     expect(result.renamedLabels).toBe(3);
     expect(result.droppedDigits).toEqual([]);
@@ -2495,7 +2855,9 @@ test.describe("labels and plots the server can only read one way", () => {
     });
     // The first figure repeats the block's first row and is dropped; the
     // second keeps the model's label.
-    expect(result.figures).toEqual([{ label: "Save rate", value: "58.8%" }]);
+    expect(result.figures).toEqual([
+      { label: "Save rate", value: "58.8%", column: "break_points_saved_pct" },
+    ]);
   });
 
   test("a form block's mistyped PLOT column is read as the result's one true-or-false column", async () => {

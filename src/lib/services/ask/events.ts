@@ -106,11 +106,18 @@ export interface AskHeadlineEvent {
   text: string;
 }
 
-/** One figure tile. `value` is already formatted for display. */
+/**
+ * One figure tile. `value` is already formatted for display. `column` is the
+ * result column the value was cited from, when the figure line named exactly
+ * one cell — what `figure-video.ts` reads to decide whether the figure can
+ * open the Video tab on the points it counts. Absent for a figure whose
+ * value was more than one reference, and for figures saved before it existed.
+ */
 export interface AskFigureEvent {
   type: "figure";
   label: string;
   value: string;
+  column?: string;
 }
 
 /** The next piece of the evidence paragraphs; append `delta` to what came before. */
@@ -122,10 +129,12 @@ export interface AskTextEvent {
 // ── The visual block ─────────────────────────────────────────────────────────
 
 /**
- * The six kinds of visual block an answer may carry, at most one per answer
+ * The kinds of visual block an answer may carry, at most one per answer
  * (`MAX_ASK_VISUALS`). The model chooses the kind, its caption and its
  * labels; every number is a cell of the query result, resolved by the server
- * (`answer-render.ts`) — never text the model typed.
+ * (`answer-render.ts`) — never text the model typed. `momentum` is the one
+ * kind the model is never offered (`ASK_MODEL_VISUAL_KINDS`): the server
+ * writes it, for one match, from one row per point.
  */
 export const ASK_VISUAL_KINDS = [
   "bars",
@@ -134,9 +143,22 @@ export const ASK_VISUAL_KINDS = [
   "split",
   "serve",
   "form",
+  "momentum",
 ] as const;
 
 export type AskVisualKind = (typeof ASK_VISUAL_KINDS)[number];
+
+/** The six kinds the answer prompt's catalogue offers the model. */
+export const ASK_MODEL_VISUAL_KINDS = [
+  "bars",
+  "table",
+  "trend",
+  "split",
+  "serve",
+  "form",
+] as const satisfies readonly AskVisualKind[];
+
+export type AskModelVisualKind = (typeof ASK_MODEL_VISUAL_KINDS)[number];
 
 /** An answer carries at most this many visual blocks; a second is dropped. */
 export const MAX_ASK_VISUALS = 1;
@@ -167,6 +189,9 @@ export const MAX_ASK_SERVE_COURTS = 2;
 /** `form`: results (one per result row with a known outcome), inclusive. */
 export const MIN_ASK_FORM_RESULTS = 1;
 export const MAX_ASK_FORM_RESULTS = 30;
+/** `momentum`: points of one match with a known winner, inclusive. */
+export const MIN_ASK_MOMENTUM_POINTS = 2;
+export const MAX_ASK_MOMENTUM_POINTS = 400;
 
 /**
  * One resolved number: `value` is the cell as the database returned it, for
@@ -225,8 +250,18 @@ export interface AskTrendVisual {
    * `MIN_ASK_TREND_POINTS`–`MAX_ASK_TREND_POINTS` points. `label` is the x
    * value as the axis shows it: a date as `Sep 14` (with the year added when
    * the points span more than one), anything else by `formatAskCell`.
+   * `matchId` is the match the point is, when the result row carried one
+   * (`match_id`): the block then links the point to that match's page.
    */
-  points: { label: string; value: AskVisualNumber }[];
+  points: { label: string; value: AskVisualNumber; matchId?: string }[];
+  /**
+   * A second series under the same points, drawn dashed — the same measure
+   * across all matches as a flat line, or a per-match average. `values` has
+   * exactly one number per point, in the same order. Absent for a block with
+   * one series, which draws the mean of its own points instead (geometry
+   * only; the mean is never printed, since it is not a cell of the result).
+   */
+  baseline?: { label: string; values: AskVisualNumber[] };
 }
 
 /** Parts of a whole: counts that sum to the total. Each count is ≥ 0. */
@@ -262,6 +297,24 @@ export interface AskFormVisual {
   results: boolean[];
 }
 
+/** The pressure a point was played under, the heaviest named. */
+export type AskMomentumMark = "break" | "set" | "match";
+
+/**
+ * How one match flowed: its points in play order, each won or lost by the
+ * subject, the component drawing the running difference as a line with the
+ * sets as segments and the pressure points marked. Server-written only
+ * (`momentum.ts`), from `ask.points`.
+ */
+export interface AskMomentumVisual {
+  kind: "momentum";
+  caption: string;
+  /** The match the points are, when every row named the same one: the marks then link to its Video tab. */
+  matchId?: string;
+  /** `MIN_ASK_MOMENTUM_POINTS`–`MAX_ASK_MOMENTUM_POINTS` points, in play order. */
+  points: { won: boolean; set?: number; mark?: AskMomentumMark }[];
+}
+
 /**
  * The one visual block an answer may carry, told apart by `kind`. Resolved
  * data, ready to draw, and plain JSON: it is what the `visual` event carries
@@ -273,7 +326,8 @@ export type AskVisual =
   | AskTrendVisual
   | AskSplitVisual
   | AskServeVisual
-  | AskFormVisual;
+  | AskFormVisual
+  | AskMomentumVisual;
 
 /** The answer's visual block. Sent once, whole, after the figures and before the text. */
 export interface AskVisualEvent {
@@ -460,10 +514,38 @@ export function readAskVisual(value: unknown): AskVisual | null {
         (point) => {
           if (!isRecord(point) || typeof point.label !== "string") return null;
           const number = readNumber(point.value, anyNumber);
-          return number ? { label: point.label, value: number } : null;
+          if (!number) return null;
+          // A point saved before match links existed has no `matchId`; one
+          // that carries the key must carry an id, not something else.
+          if (point.matchId === undefined) {
+            return { label: point.label, value: number };
+          }
+          return isLabel(point.matchId)
+            ? { label: point.label, value: number, matchId: point.matchId }
+            : null;
         },
       );
-      return points ? { kind: "trend", caption, points } : null;
+      if (!points) return null;
+      if (value.baseline === undefined)
+        return { kind: "trend", caption, points };
+      // A second series must be whole: a label and one number per point.
+      if (!isRecord(value.baseline) || !isLabel(value.baseline.label)) {
+        return null;
+      }
+      const values = readList(
+        value.baseline.values,
+        points.length,
+        points.length,
+        (item) => readNumber(item, anyNumber),
+      );
+      return values
+        ? {
+            kind: "trend",
+            caption,
+            points,
+            baseline: { label: value.baseline.label, values },
+          }
+        : null;
     }
     case "split": {
       const parts = readList(
@@ -503,6 +585,45 @@ export function readAskVisual(value: unknown): AskVisual | null {
         (result) => (typeof result === "boolean" ? result : null),
       );
       return results ? { kind: "form", caption, results } : null;
+    }
+    case "momentum": {
+      const points = readList(
+        value.points,
+        MIN_ASK_MOMENTUM_POINTS,
+        MAX_ASK_MOMENTUM_POINTS,
+        (point) => {
+          if (!isRecord(point) || typeof point.won !== "boolean") return null;
+          const out: AskMomentumVisual["points"][number] = { won: point.won };
+          if (point.set !== undefined) {
+            if (
+              typeof point.set !== "number" ||
+              !Number.isInteger(point.set) ||
+              point.set < 1
+            ) {
+              return null;
+            }
+            out.set = point.set;
+          }
+          if (point.mark !== undefined) {
+            if (
+              point.mark !== "break" &&
+              point.mark !== "set" &&
+              point.mark !== "match"
+            ) {
+              return null;
+            }
+            out.mark = point.mark;
+          }
+          return out;
+        },
+      );
+      if (!points) return null;
+      if (value.matchId === undefined) {
+        return { kind: "momentum", caption, points };
+      }
+      return isLabel(value.matchId)
+        ? { kind: "momentum", caption, points, matchId: value.matchId }
+        : null;
     }
     default:
       return null;

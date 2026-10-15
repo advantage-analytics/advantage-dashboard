@@ -118,6 +118,10 @@ import {
   onlyName,
   pairLabel,
 } from "@/lib/services/ask/paired";
+import {
+  asksAboutMomentum,
+  buildMomentumAnswer,
+} from "@/lib/services/ask/momentum";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
 import type { AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -1950,7 +1954,19 @@ export async function* askQuestion(
         // Or one measure over time.
         buildTrendAnswer(result.rows, {
           matchCount: result.matches.length,
-        });
+        }) ??
+        // Or one match point by point, when the question asked how it
+        // turned (`momentum.ts`): the shape alone — one row per point of
+        // one match — is also what a plain point listing looks like.
+        (asksAboutMomentum(input.question)
+          ? buildMomentumAnswer(result.rows, {
+              team,
+              playerName: team
+                ? onlyName(result.matches.map((match) => match.playerName))
+                : null,
+              matchCount: result.matches.length,
+            })
+          : null);
       if (written !== null) {
         reviewText = written.text;
         result = { matches: result.matches, rows: written.rows };
