@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteAskConversation } from "@/app/dashboard/ask/actions";
-import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
+import {
+  DayZeroOffer,
+  MatchOfferActions,
+} from "@/components/dashboard/home/day-zero-offer";
+import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
 import type {
   AskConversation,
   AskConversationSummary,
@@ -117,6 +121,12 @@ export interface AskPageProps {
   conversations: AskConversationSummary[];
   /** The conversation `?c=` names, or null when it names none of the viewer's. */
   conversation: AskConversation | null;
+  /**
+   * The match the wizard just sent (`?sent=`, from `askReturnHref()`) while
+   * it still has no statistics: the intro says it is on its way. Null or
+   * omitted otherwise, including once its first answer is in the rail.
+   */
+  sentMatchId?: string | null;
 }
 
 export function AskPage(props: AskPageProps) {
@@ -134,7 +144,9 @@ export function AskPage(props: AskPageProps) {
  * no rail: there is nothing to ask about, nothing tagged and no count worth
  * showing, and a dimmed mock-up of a thread would be an invented answer.
  *
- * Personal: the offer's own pair, both to `/dashboard/matches/new`.
+ * Personal: the offer's own pair, both to `/dashboard/matches/new` with
+ * `?return=ask`, so the wizard's exits come back here and Ask can say the
+ * match is on its way (`new-match-visit.ts`).
  *
  * Team: one primary to `/dashboard/team/upload`, for a member who may send
  * video there. No "Import instead" beside it — that route has no source
@@ -160,7 +172,9 @@ function AskDayZero({
           // The team's sentence is longer; both break once.
           headlineMeasure={isTeam ? "30ch" : "24ch"}
           actions={
-            !isTeam ? undefined : canUpload ? (
+            !isTeam ? (
+              <MatchOfferActions query="return=ask" />
+            ) : canUpload ? (
               <Link
                 href="/dashboard/team/upload"
                 className={advButton("primary")}
@@ -184,10 +198,17 @@ function AskThread({
   quota,
   conversations,
   conversation,
+  sentMatchId = null,
 }: AskPageProps) {
   const router = useRouter();
   const basePath = askBasePath(scope);
   const copy = askCopy(scope);
+  // The match the wizard sent, by the same rows the tag menu holds: a
+  // `?sent=` that names none of the viewer's matches says nothing.
+  const sent = sentMatchId
+    ? (tagOptions.matches.find((match) => match.matchId === sentMatchId) ??
+      null)
+    : null;
   const { state, setDraft, ask, reset, rate } = useAskStream({
     conversationId: conversation?.id ?? null,
     messages: conversation?.messages ?? [],
@@ -387,6 +408,11 @@ function AskThread({
         </>
       ) : (
         <AskIntro lead={<p className="text-body-sm">{copy.lead}</p>}>
+          {sent && (
+            <p role="status" className="text-body-sm text-[var(--ink-700)]">
+              {copy.sentNotice(sent.opponentName)}
+            </p>
+          )}
           {composer}
           <AskStarters
             label={copy.starters}
@@ -394,6 +420,18 @@ function AskThread({
             onPick={pick}
             disabled={state.inFlight}
           />
+          {/* The hand-off (roadmap 6.2): the wizard, with a way back here.
+              Personal only — the team wizard has no return path yet. The
+              quietest link on the page, as the day-zero offer's sample
+              link is: ink that darkens, never blue, never underlined. */}
+          {scope.kind === "personal" && (
+            <Link
+              href={WIZARD_FROM_ASK_HREF}
+              className="text-micro self-start transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+            >
+              {copy.sendVideo}
+            </Link>
+          )}
         </AskIntro>
       )}
     </AskFrame>

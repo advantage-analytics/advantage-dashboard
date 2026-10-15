@@ -58,8 +58,15 @@ export async function notifyAnalysisOutcome(params: {
   supabase: SupabaseClient;
   jobId: string;
   outcome: AnalysisOutcome;
+  /**
+   * Ask's first answer about the match (`src/lib/services/ask/arrival.ts`),
+   * when the outcome is `ready` and it was written in time: its headline
+   * goes on the mail with a second button into the conversation. Absent or
+   * null, the mail reads as it always has.
+   */
+  ask?: { headline: string; conversationId: string } | null;
 }): Promise<void> {
-  const { supabase, jobId, outcome } = params;
+  const { supabase, jobId, outcome, ask = null } = params;
   try {
     const { data: job, error: jobError } = await supabase
       .from("processing_jobs")
@@ -184,6 +191,7 @@ export async function notifyAnalysisOutcome(params: {
               formatScoreText(
                 playedSets(scoreSetsFrom(match.score as RawMatchScore | null)),
               ) || "Score not entered",
+            ask,
           })
         : analysisFailedEmail({
             to,

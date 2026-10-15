@@ -146,6 +146,11 @@ function loadRoute(rpcRecord: Row, opts: { completedPath?: boolean } = {}) {
       "@/lib/services/splitstep/derive-and-publish": {
         deriveAndPublish: seam("deriveAndPublish", { ok: true }),
       },
+      // Ask's first question rides inside deriveAndPublish's hook; stubbed
+      // so the route's load never reaches the LLM adapter.
+      "@/lib/services/ask/arrival": {
+        askOnArrival: async () => null,
+      },
       "@/lib/services/splitstep/ball-paths-store": {
         deriveAndStoreBallPaths: seam("deriveAndStoreBallPaths", {
           status: "skipped",

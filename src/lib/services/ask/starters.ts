@@ -42,6 +42,23 @@ function matchTagLabel(match: AskTagOptions["matches"][number]): string {
 }
 
 /**
+ * The question about one match: the first personal starter, and the one Ask
+ * asks on a player's behalf when their match finishes processing
+ * (`arrival.ts`). One wording, so the arrival answer sits in the answer
+ * cache under the key the starter's click computes.
+ */
+export function askMatchStarter(
+  match: AskTagOptions["matches"][number],
+): AskStarter {
+  return {
+    text: match.opponentName
+      ? `How did my match against ${match.opponentName} go?`
+      : "How did my last match go?",
+    tags: [{ kind: "match", id: match.matchId, label: matchTagLabel(match) }],
+  };
+}
+
+/**
  * Up to `MAX_ASK_STARTERS` questions for a scope with at least one match.
  * Ordered so the one every viewer can use comes first.
  */
@@ -76,12 +93,7 @@ export function askStarters(
     return starters.slice(0, MAX_ASK_STARTERS);
   }
 
-  starters.push({
-    text: last.opponentName
-      ? `How did my match against ${last.opponentName} go?`
-      : "How did my last match go?",
-    tags: [{ kind: "match", id: last.matchId, label: matchTagLabel(last) }],
-  });
+  starters.push(askMatchStarter(last));
 
   // The opponent played most, with the record against them deciding the
   // question's angle. A single match is a match, not a pattern.

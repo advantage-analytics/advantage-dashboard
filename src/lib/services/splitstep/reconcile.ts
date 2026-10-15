@@ -519,21 +519,29 @@ export interface ResultsSweepIo {
   }) => string;
   releaseQuota: typeof releaseQuota;
   notifyAnalysisOutcome: typeof notifyAnalysisOutcome;
+  /**
+   * Ask's first question about a recovered match, as the webhook asks it
+   * (`ask/arrival.ts`). Optional so a test's io need not name it; without
+   * it a recovered job is derived and mailed without a first answer.
+   */
+  askOnArrival?: typeof import("@/lib/services/ask/arrival").askOnArrival;
 }
 
 async function defaultResultsSweepIo(): Promise<ResultsSweepIo> {
   // Imported on use: the render path loads this module on every list read,
   // and only a sweep that actually claimed a row needs the derivation engine.
-  const [secure, grade, derive, keys] = await Promise.all([
+  const [secure, grade, derive, keys, arrival] = await Promise.all([
     import("./secure-results"),
     import("./grade-results"),
     import("./derive-and-publish"),
     import("./delivery-storage-keys"),
+    import("@/lib/services/ask/arrival"),
   ]);
   return {
     secureResults: secure.secureResults,
     gradeResults: grade.gradeResults,
     deriveAndPublish: derive.deriveAndPublish,
+    askOnArrival: arrival.askOnArrival,
     // The webhook's own key builder, so a recovered file lands exactly where
     // a normal delivery would have put it. With a job id the delivery id only
     // names the orphan fallback, which this path can never take.
@@ -772,10 +780,23 @@ async function sweepOneJob(params: {
     objectKey: secured.objectKey,
     body: secured.body,
   });
+  const askOnArrival = io.askOnArrival;
   const derived = await io.deriveAndPublish({
     supabase,
     jobId: job.id,
     deadline,
+    // The first question a webhook delivery would have asked (`arrival.ts`).
+    ...(askOnArrival
+      ? {
+          onArrival: (ctx: { matchId: string; deadline?: number }) =>
+            askOnArrival({
+              supabase,
+              jobId: job.id,
+              matchId: ctx.matchId,
+              deadline: ctx.deadline,
+            }),
+        }
+      : {}),
   });
   console.log(`${LOG} recovered undelivered results`, {
     jobId: job.id,

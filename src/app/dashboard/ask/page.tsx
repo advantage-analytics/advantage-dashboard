@@ -1,6 +1,8 @@
 import { AskPage } from "@/components/dashboard/ask/ask-page";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import { isUuid } from "@/lib/admin/validation";
 import {
+  askMatchHasStats,
   getAskConversation,
   getAskConversations,
   getAskQuota,
@@ -57,16 +59,21 @@ export default function AskRoute(props: AskRouteProps) {
 }
 
 async function AskContent({ searchParams }: AskRouteProps) {
-  const { c } = await searchParams;
+  const { c, sent } = await searchParams;
   const conversationId = typeof c === "string" ? c : null;
+  // `?sent=`: the wizard came back here after sending a match
+  // (`askReturnHref()`). Shown as "being analysed" only while the match has
+  // no statistics; once it does, the first answer is in the rail already.
+  const sentId = typeof sent === "string" && isUuid(sent) ? sent : null;
 
-  const [workspace, tagOptions, quota, conversations, conversation] =
+  const [workspace, tagOptions, quota, conversations, conversation, hasStats] =
     await Promise.all([
       getWorkspaceContext(),
       getAskTagOptions(),
       getAskQuota(),
       getAskConversations(),
       conversationId ? getAskConversation(conversationId) : null,
+      sentId ? askMatchHasStats(sentId) : true,
     ]);
 
   return (
@@ -79,6 +86,7 @@ async function AskContent({ searchParams }: AskRouteProps) {
       quota={quota}
       conversations={conversations}
       conversation={conversation}
+      sentMatchId={hasStats ? null : sentId}
     />
   );
 }

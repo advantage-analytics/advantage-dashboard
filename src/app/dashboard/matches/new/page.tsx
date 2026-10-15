@@ -16,6 +16,7 @@ import { isMatchVideoMode } from "@/lib/match-video/types";
 import { providerForRecordingSource } from "@/app/onboarding/answers";
 import {
   classifyNewMatchVisit,
+  wizardReturnTarget,
   type NewMatchSearchParams,
 } from "@/lib/matches/new-match-visit";
 import {
@@ -254,6 +255,8 @@ export default async function NewMatchPage({
       preferredProvider={preferredProvider}
       initialSubject={initialSubject}
       firstUpload={firstUpload}
+      // `?return=ask`: Ask handed this visit off and wants it back.
+      returnTo={wizardReturnTarget(params)}
     />
   );
 }

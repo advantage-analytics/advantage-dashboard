@@ -37,6 +37,37 @@ export interface NewMatchSearchParams {
   videoFor?: string;
   /** `add` | `replace` | `align`. Only meaningful beside `videoFor`. */
   mode?: string;
+  /**
+   * Where the wizard goes back to when it is done: `ask` for a visit Ask
+   * handed off (`wizardReturnTarget()`). Anything else reads as absent.
+   */
+  return?: string;
+}
+
+/** The pages that hand a visit to the wizard and want it back. */
+export type WizardReturnTarget = "ask";
+
+/**
+ * The hand-off Ask makes (docs/ask-improvement-roadmap.md, 6.2): the wizard
+ * runs as it does today, and its exits — Cancel, the draft's "Save and
+ * leave", the success screen's quiet link — lead back to Ask instead of the
+ * matches list. The success link names the match it sent (`askReturnHref`),
+ * so Ask can say the match is on its way.
+ */
+export const WIZARD_FROM_ASK_HREF = "/dashboard/matches/new?return=ask";
+
+/** `?return=` as the page reads it: `ask`, or nothing. Never trusted further than that. */
+export function wizardReturnTarget(
+  params: Pick<NewMatchSearchParams, "return">,
+): WizardReturnTarget | null {
+  return params.return === "ask" ? "ask" : null;
+}
+
+/** Where a visit Ask handed off goes back to, naming the match it sent when there is one. */
+export function askReturnHref(matchId: string | null): string {
+  return matchId
+    ? `/dashboard/ask?sent=${encodeURIComponent(matchId)}`
+    : "/dashboard/ask";
 }
 
 export type NewMatchVisit =
