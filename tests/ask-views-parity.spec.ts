@@ -39,6 +39,14 @@ import { poolLogin } from "./fixtures/live-db-pool";
  * the same side. `ask.shots` has no seed here: its `mine` is the one-line
  * rule the points case already pins, on `shots.is_player1`.
  *
+ * `20261015090038_ask_point_facts.sql` precomputes one row per point
+ * (`public.ask_point_facts`, written by statement triggers on `points` and
+ * `shots`) and turns it to the viewer in `ask.point_plays`. The seeded
+ * points reach that table through the trigger alone, so the last case holds
+ * `ask.point_plays` to `ask.points` row for row — same `i_served`, `i_won`,
+ * `court` and per-set `game_number` — and expects `has_shots` false, since
+ * nothing seeds a shot.
+ *
  * Schema `ask` is deliberately NOT exposed through PostgREST, so supabase-js
  * cannot read the view. The read goes over a direct Postgres connection
  * (`pg`, already a dev dependency) to the same project, as the connection's
@@ -226,6 +234,21 @@ interface AskPointRow {
   point_number: number;
   i_served: boolean;
   i_won: boolean;
+}
+
+/** `ask.point_plays` beside the same point's `ask.points` row. */
+interface AskPointPlaysRow {
+  match_id: string;
+  point_number: number;
+  i_served: boolean;
+  i_won: boolean;
+  court: string;
+  game_number: number;
+  has_shots: boolean;
+  points_i_served: boolean;
+  points_i_won: boolean;
+  points_court: string;
+  points_game_number: number;
 }
 
 test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", () => {
@@ -476,14 +499,36 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
     }
   });
 
-  test("the three views expose no coordinate, video, flag or id column but match_id", async () => {
+  test("ask.point_plays is ask.points row for row on the server, the winner, the court and the game, written by the triggers alone", async () => {
+    const rows = await readAsPlayer<AskPointPlaysRow>(
+      `select p.match_id, p.point_number, p.i_served, p.i_won, p.court, p.game_number, p.has_shots,
+              q.i_served as points_i_served, q.i_won as points_i_won,
+              q.court as points_court, q.game_number as points_game_number
+         from ask.point_plays p
+         join ask.points q on q.match_id = p.match_id and q.point_number = p.point_number
+        where p.match_id = any($1)`,
+      [STATS_SEEDS.map((index) => seededIds[index])],
+    );
+    // Six points per sided match: every seeded point has its facts row.
+    expect(rows).toHaveLength(STATS_SEEDS.length * 6);
+    for (const row of rows) {
+      const at = `${row.match_id}: point ${row.point_number}`;
+      expect(row.i_served, `${at} i_served`).toBe(row.points_i_served);
+      expect(row.i_won, `${at} i_won`).toBe(row.points_i_won);
+      expect(row.court, `${at} court`).toBe(row.points_court);
+      expect(row.game_number, `${at} game_number`).toBe(row.points_game_number);
+      expect(row.has_shots, `${at} has_shots`).toBe(false);
+    }
+  });
+
+  test("the four views expose no coordinate, video, flag or id column but match_id", async () => {
     const { rows } = await db.query<{
       table_name: string;
       column_name: string;
     }>(
       `select table_name, column_name from information_schema.columns
         where table_schema = 'ask'
-          and table_name in ('match_stats', 'points', 'shots')`,
+          and table_name in ('match_stats', 'points', 'shots', 'point_plays')`,
     );
     expect(rows.length).toBeGreaterThan(0);
     const banned = rows.filter(
@@ -495,7 +540,13 @@ test.describe("ask.matches parity with playerSide() / matchOutcome() (live)", ()
   });
 
   test("authenticated holds nothing in schema ask", async () => {
-    for (const view of ["matches", "match_stats", "points", "shots"]) {
+    for (const view of [
+      "matches",
+      "match_stats",
+      "points",
+      "shots",
+      "point_plays",
+    ]) {
       await db.query("begin");
       try {
         await db.query("set local role authenticated");

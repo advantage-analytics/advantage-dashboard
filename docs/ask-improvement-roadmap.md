@@ -14,7 +14,28 @@ laid out fixed text first), 1.3 (the plan reply as a JSON schema at
 temperature 0), 1.10 (the court line), 2.6 (sources before the answer, one
 save call: `ask_save_exchange_ids`), 2.7 (the pre-stream reads in parallel,
 one auth read) and 2.8 (`maxDuration`, the abort signal) landed as Tier 1b.
-Everything else below is still unbuilt.
+Tier 2 followed on `claude/ask-tier-2`: 5.3 (`ask_runs` and the `ask_run`
+product event), 1.1 and 1.5 (a model per stage, provider fallback, cached SDK
+clients), 4.1 (starter questions and follow-ups), 2.9 (the answer cache,
+`ask_answer_cache` + `ask_data_version`), 2.3 (`ask_point_facts` kept by
+statement triggers and the fifth view `ask.point_plays`; the serve +1, plays
+and pattern templates read it — serve +1 146 → 97 ms, losing plays 109 → 97
+ms, double faults no longer counted twice), 3.1–3.4 and 6.1's figures (serve
+placement drawn on the court, matchup bars, a two-series trend with match
+links, point-by-point momentum, and a one-cell figure tile that opens the
+film filtered to its measure), 6.2 (the wizard hand-off with `?return=ask`,
+and Ask on arrival: the first question asked for the uploader when a
+personal match finishes processing, its headline on the "analysis ready"
+mail), and 1.8 in part (the harness scores itself — `scripts/ask-eval-season.json`
+carries an `expect` block per question pinning the seed's deterministic
+values where the scope is seeded-only (Dvorsky 0-3) and
+shape/visual/notice/SQL checks elsewhere; the team file carries structural
+checks; the nightly workflow is written but off by default; still open are
+p50/p95 per stage and the PostHog rubric). 2.2 (a participation table) was
+deferred: after 2.1 `ask.my_matches()` runs in 4 ms, and keeping a table
+current from the roster's claim and merge paths is the only risk left in
+it. Everything else below is still unbuilt unless its section says
+otherwise.
 
 Shipped so far: PR #436 (the feature), #442 (plays, patterns, Video links,
 clarifying questions), #443 (feedback), #446 (admin unlimited), #447 (exact +1).

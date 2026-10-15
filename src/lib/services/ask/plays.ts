@@ -104,17 +104,36 @@ export function losingPlaysSubject(
  * `missed` how many matches in scope have any shot recorded. `lost_error`
  * and `lost_winner` count points: the subject's own miss that ended a point
  * they lost, and the other side's ball that landed in to end one.
+ *
+ * The rally and serve sections are per shot, read from ask.shots. The
+ * lost_* sections and the total are per point, read from ask.point_plays,
+ * where the last shot of every point is already picked out (migration
+ * 20261015090038) — one row per point, so a SwingVision double fault, whose
+ * two serves share a shot number, is one lost point and not two. Its
+ * direction is taken from the same pass over ask.shots as the miss rates
+ * (by last_shot_number), not from the view's last_direction, so ask.shots
+ * is built once per query rather than twice.
  */
 export function losingPlaysSql(subject: AskPlaysSubject): string {
   // `mine` is the viewer's side; `i_won` is too.
   const theirs = subject === "mine" ? "true" : "false";
   const lost = subject === "mine" ? "false" : "true";
   return `with sh as (
-  select s.match_id, s.shot_number, s.mine, s.shot_type, s.direction, s.result, p.i_won,
-    s.shot_number = max(s.shot_number) over (partition by s.match_id, s.point_number) as last_shot
+  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction, s.result
   from ask.shots s
-  join ask.points p on p.match_id = s.match_id and p.point_number = s.point_number
   where s.match_id in (select match_id from scope)
+),
+ended as (
+  select p.match_id, p.has_shots, p.i_won, p.last_mine,
+    p.last_shot_type as shot_type, l.direction, p.last_result as result
+  from ask.point_plays p
+  left join (
+    select match_id, point_number, shot_number, coalesce(shot_type, '') as label, mine, min(direction) as direction
+    from sh
+    group by match_id, point_number, shot_number, coalesce(shot_type, ''), mine
+  ) l on l.match_id = p.match_id and l.point_number = p.point_number
+    and l.shot_number = p.last_shot_number and l.label = coalesce(p.last_shot_type, '') and l.mine = p.last_mine
+  where p.match_id in (select match_id from scope)
 ),
 grouped as (
   select case when shot_type in ('First Serve', 'Second Serve') then 'serve' else 'rally' end as section,
@@ -127,17 +146,17 @@ grouped as (
   group by shot_type, direction
   having count(*) >= ${MIN_ASK_PLAYS_SHOTS}
   union all
-  select case when mine = ${theirs} then 'lost_error' else 'lost_winner' end,
+  select case when last_mine = ${theirs} then 'lost_error' else 'lost_winner' end,
     shot_type, direction, count(*), null, null
-  from sh
-  where last_shot and i_won = ${lost} and shot_type is not null and direction is not null
-    and ((mine = ${theirs} and result in ('Out', 'Net')) or (mine <> ${theirs} and result = 'In'))
+  from ended
+  where has_shots and i_won = ${lost} and shot_type is not null and direction is not null
+    and ((last_mine = ${theirs} and result in ('Out', 'Net')) or (last_mine <> ${theirs} and result = 'In'))
   group by 1, shot_type, direction
   union all
   select 'total', null, null,
-    count(*) filter (where last_shot and i_won = ${lost}),
-    count(distinct match_id), null
-  from sh
+    count(*) filter (where has_shots and i_won = ${lost}),
+    count(distinct match_id) filter (where has_shots), null
+  from ended
 ),
 ranked as (
   select section, stroke, direction, shots, missed, miss_pct,
@@ -394,34 +413,35 @@ export function winningPlaysSubject(
  * direction: the points it won (`points`), as the subject's own winner
  * (`winners`) or as the shot before the other side's miss (`errors_drawn`).
  * Most points first.
+ *
+ * Per point, from ask.point_plays: the last shot of every point and the
+ * one before it are already picked out there (migration 20261015090038),
+ * so a point is counted once however the vendor numbered its shots.
  */
 export function winningPlaysSql(subject: AskPlaysSubject): string {
   const theirs = subject === "mine" ? "true" : "false";
-  return `with sh as (
-  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction, s.result, p.i_won,
-    s.shot_number = max(s.shot_number) over (partition by s.match_id, s.point_number) as last_shot,
-    lag(s.shot_type) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_type,
-    lag(s.direction) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_direction,
-    lag(s.mine) over (partition by s.match_id, s.point_number order by s.shot_number) as prev_mine
-  from ask.shots s
-  join ask.points p on p.match_id = s.match_id and p.point_number = s.point_number
-  where s.match_id in (select match_id from scope)
+  return `with ended as (
+  select p.match_id, p.has_shots, p.i_won,
+    p.last_mine, p.last_shot_type, p.last_direction, p.last_result,
+    p.prev_mine, p.prev_shot_type, p.prev_direction
+  from ask.point_plays p
+  where p.match_id in (select match_id from scope)
 ),
-ended as (
-  select shot_type as stroke, direction, 'winner' as kind
-  from sh
-  where last_shot and i_won = ${theirs} and mine = ${theirs} and result = 'In'
+credited as (
+  select last_shot_type as stroke, last_direction as direction, 'winner' as kind
+  from ended
+  where has_shots and i_won = ${theirs} and last_mine = ${theirs} and last_result = 'In'
   union all
-  select prev_type, prev_direction, 'drew'
-  from sh
-  where last_shot and i_won = ${theirs} and mine <> ${theirs} and result in ('Out', 'Net')
+  select prev_shot_type, prev_direction, 'drew'
+  from ended
+  where has_shots and i_won = ${theirs} and last_mine <> ${theirs} and last_result in ('Out', 'Net')
     and prev_mine = ${theirs}
 ),
 plays as (
   select stroke, direction, count(*) as points,
     count(*) filter (where kind = 'winner') as winners,
     count(*) filter (where kind = 'drew') as errors_drawn
-  from ended
+  from credited
   where stroke is not null and direction is not null
     and stroke in ('Forehand', 'Backhand', 'Volley', 'Overhead', 'First Serve', 'Second Serve')
   group by stroke, direction
@@ -432,9 +452,9 @@ ranked as (
   from plays
 )
 select 'total' as section, null as stroke, null as direction,
-  (select count(*) from sh where last_shot and i_won = ${theirs}) as points,
+  (select count(*) from ended where has_shots and i_won = ${theirs}) as points,
   (select coalesce(sum(points), 0) from plays) as winners,
-  (select count(distinct match_id) from sh) as errors_drawn
+  (select count(distinct match_id) from ended where has_shots) as errors_drawn
 union all
 select section, stroke, direction, points, winners, errors_drawn
 from ranked

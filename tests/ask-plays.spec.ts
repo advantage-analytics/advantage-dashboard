@@ -240,6 +240,24 @@ test.describe("the query", () => {
     expect(losingPlaysSql("mine")).toContain("where mine = true and direction");
     expect(losingPlaysSql("mine")).toContain("i_won = false");
   });
+  test("misses are counted per shot from ask.shots, lost points per point from ask.point_plays", () => {
+    const sql = losingPlaysSql("mine");
+    expect(sql.match(/from ask\.shots/g)).toHaveLength(1);
+    expect(sql.match(/from ask\.point_plays/g)).toHaveLength(1);
+    // The last shot's direction comes from the query's own pass over the
+    // shots, by last_shot_number, never from the view's last_direction.
+    expect(sql).toContain(
+      "p.last_shot_type as shot_type, l.direction, p.last_result as result",
+    );
+    expect(sql).toContain("l.shot_number = p.last_shot_number");
+    expect(sql).not.toContain("last_direction");
+    expect(sql).toContain(
+      "where has_shots and i_won = false and shot_type is not null",
+    );
+    expect(sql).toContain(
+      "count(*) filter (where has_shots and i_won = false)",
+    );
+  });
   test("is recognised as the server's own", () => {
     expect(isLosingPlaysSql(losingPlaysSql("mine"))).toBe(true);
     expect(isLosingPlaysSql("select 1")).toBe(false);
@@ -360,6 +378,15 @@ test.describe("winning plays", () => {
       ).toEqual({ ok: true });
     }
     expect(winningPlaysSql("mine")).toContain("prev_mine = true");
+    // Per point: the last shot and the one before it come from the view,
+    // never from a window over ask.shots.
+    expect(winningPlaysSql("mine")).not.toContain("ask.shots");
+    expect(winningPlaysSql("mine")).toContain(
+      "where has_shots and i_won = true and last_mine = true and last_result = 'In'",
+    );
+    expect(winningPlaysSql("opponent")).toContain(
+      "where has_shots and i_won = false and last_mine <> false and last_result in ('Out', 'Net')",
+    );
   });
 
   test("renders with every figure from a cell", async () => {

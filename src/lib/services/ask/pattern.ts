@@ -28,15 +28,24 @@ import { count } from "@/lib/services/ask/plays";
  * cannot show. Each rule restates its twin in
  * src/components/dashboard/matches/match-detail/match-filters/model.ts:
  *
+ *   - who served is the point's server (`i_served`), as the filter's Serve
+ *     › Hit by reads it;
  *   - the serve is the serve PLAYED: the second serve when there is one,
  *     else the first (`pickServeShotBy`, serve-return-shots.ts);
  *   - the return is the first shot that is neither a serve nor a feed
  *     (`pickReturnShot`); its stroke is read from the label containing
  *     forehand or backhand, its zone is the stored zone;
+ *   - the +1s are the filter's Hit 3 (the server's) and Hit 4 (the
+ *     returner's), their stroke by `strokeOf()`'s priority;
  *   - a Custom/Then shot has shot_number >= 1, and its direction is
  *     ask.shots.direction — the Video filter's own (inside out and inside
  *     in apart, migration 20261014164825);
  *   - "within N shots" is shot_number <= N, where 1 is the serve.
+ *
+ * The serve, the return and the +1s are not derived per query: migration
+ * 20261015090038 picks them out once per point into public.ask_point_facts,
+ * and ask.point_plays turns them to the viewer. The query here is plain
+ * filters over that view; only a Custom/Then shot still reads ask.shots.
  */
 
 export type AskPatternPlayer = "mine" | "opponent";
@@ -349,8 +358,7 @@ const SAME_POINT = (alias: string) =>
  * zeros; a match with no shots is no row.
  */
 export function patternSql(pattern: AskPattern): string {
-  return `${patternCtes(pattern)},
-covered as (select distinct match_id from sh)
+  return `${patternCtes(pattern)}
 select c.match_id,
   count(h.match_id) as points,
   count(h.match_id) filter (where h.i_won) as won,
@@ -371,57 +379,25 @@ export function patternPointsSql(pattern: AskPattern): string {
 select match_id, point_number from hit order by match_id, point_number`;
 }
 
-/** The query's shared head: the shots read once, the points, and the points the pattern holds on (`hit`). */
 /**
- * `raw` … `sh`: every shot in scope, with which serve was the one played
- * (`is_played_serve`: the second serve when there was one, else the first),
- * whether it is a stroke (`is_stroke`: not a serve or a feed), which stroke
- * was the return (`is_return`), and the two +1s as the Video filter numbers
- * them — the server's shot 3 (`is_serve_plus_one`) and the returner's shot 4
- * (`is_return_plus_one`). Shared by the pattern query
- * and the serve +1 breakdown (`serve-plus-one.ts`), so the two can never
- * disagree on what a return is.
+ * The query's shared head: the matches in scope with any shot recorded
+ * (`covered`) and the points the pattern holds on (`hit`), both read from
+ * ask.point_plays — one row per point with the serve played, the return and
+ * the two +1s already picked out (migration 20261015090038): the second
+ * serve when there was one, else the first; the first stroke, when one
+ * stroke alone holds that shot number; the server's shot 3 (`p1s_*`) and
+ * the returner's shot 4 (`p1r_*`), as the Video filter numbers them, each
+ * with its stroke by `strokeOf()`'s priority and its direction ask.shots's
+ * own. The serve +1 breakdown (`serve-plus-one.ts`) reads the same rows,
+ * so the two can never disagree on what a return is.
  *
- * ask.shots is read once: the serve played and the return are picked with
- * window functions over each point, not with subqueries that would read the
- * view again per row.
+ * ask.shots itself is read only when the pattern names a Custom or Then
+ * shot (`sh`): a shot anywhere in the point is the one thing a per-point
+ * row cannot answer. The +1 is never "that player's next ball after the
+ * return": on a point the vendor numbered wrong (the same player twice in a
+ * row, strokes before the serve) the two part, and a Watch link must open
+ * exactly the points the answer counted.
  */
-export const ASK_SHOT_ROLE_CTES = `raw as (
-  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.zone, s.direction,
-    coalesce(s.shot_type, '') not in ('First Serve', 'Second Serve', 'Feed') as is_stroke,
-    bool_or(s.shot_type = 'Second Serve') over (partition by s.match_id, s.point_number) as had_second
-  from ask.shots s
-  where s.match_id in (select match_id from scope)
-),
-numbered as (
-  select raw.*,
-    min(case when raw.is_stroke then raw.shot_number end)
-      over (partition by raw.match_id, raw.point_number) as first_stroke,
-    count(*) filter (where raw.is_stroke)
-      over (partition by raw.match_id, raw.point_number, raw.shot_number) as strokes_here
-  from raw
-),
-sh as (
-  -- The return is the first stroke, and only when one stroke alone holds
-  -- that shot number: a point with several strokes stored at the same
-  -- number (rally rows before the serve at 0) has no return that can be
-  -- told apart, and is never read as having one.
-  --
-  -- The +1s are the Video filter's: the server's is shot 3, the returner's
-  -- shot 4 (its "Hit 3" / "Hit 4"). Not "that player's next ball after the
-  -- return": on a point the vendor numbered wrong (the same player twice in
-  -- a row, strokes before the serve) the two part, and a Watch link must
-  -- open exactly the points the answer counted.
-  select numbered.*,
-    numbered.shot_type = 'Second Serve'
-      or (numbered.shot_type = 'First Serve' and not numbered.had_second) as is_played_serve,
-    numbered.is_stroke and numbered.shot_number = numbered.first_stroke
-      and numbered.strokes_here = 1 as is_return,
-    numbered.is_stroke and numbered.shot_number = 3 as is_serve_plus_one,
-    numbered.is_stroke and numbered.shot_number = 4 as is_return_plus_one
-  from numbered
-)`;
-
 function patternCtes(pattern: AskPattern): string {
   const where: string[] = [];
   const { serve, returnShot } = pattern;
@@ -430,52 +406,39 @@ function patternCtes(pattern: AskPattern): string {
   if (serve?.server) {
     where.push(`pt.i_served = ${serve.server === "mine" ? "true" : "false"}`);
   }
-  if (serve && (serve.zones.length > 0 || serve.type !== null)) {
-    const tests = [SAME_POINT("v"), "v.is_played_serve"];
-    if (serve.zones.length > 0)
-      tests.push(`v.zone in (${quoted(serve.zones)})`);
-    if (serve.type !== null) {
-      tests.push(
-        `v.shot_type = '${serve.type === "first" ? "First Serve" : "Second Serve"}'`,
-      );
-    }
-    where.push(`exists (select 1 from sh v where ${tests.join(" and ")})`);
+  if (serve && serve.zones.length > 0) {
+    where.push(`pt.serve_zone in (${quoted(serve.zones)})`);
+  }
+  if (serve && serve.type !== null) {
+    where.push(
+      `pt.serve_type = '${serve.type === "first" ? "First Serve" : "Second Serve"}'`,
+    );
   }
   if (returnShot) {
-    const tests = [SAME_POINT("r"), "r.is_return"];
+    where.push("pt.return_mine is not null");
     if (returnShot.strokes.length > 0) {
-      tests.push(
-        `(${returnShot.strokes
-          .map(
-            (stroke) =>
-              `lower(coalesce(r.shot_type, '')) like '%${stroke.toLowerCase()}%'`,
-          )
-          .join(" or ")})`,
-      );
+      where.push(`pt.return_stroke in (${quoted(returnShot.strokes)})`);
     }
     if (returnShot.zones.length > 0) {
-      tests.push(`r.zone in (${quoted(returnShot.zones)})`);
+      where.push(`pt.return_zone in (${quoted(returnShot.zones)})`);
     }
-    where.push(`exists (select 1 from sh r where ${tests.join(" and ")})`);
   }
   if (pattern.plusOne) {
     const { after, strokes, directions } = pattern.plusOne;
-    const tests = [
-      SAME_POINT("q"),
-      after === "serve" ? "q.is_serve_plus_one" : "q.is_return_plus_one",
-    ];
+    const plus = after === "serve" ? "pt.p1s" : "pt.p1r";
+    where.push(`${plus}_mine is not null`);
     // Hit by: the server's +1 is the server's ball, the return's the other
     // side's — the Video filter's Custom › Hit by, set the same way.
     const server = pattern.serve?.server ?? null;
     if (server !== null) {
       const mine = after === "serve" ? server === "mine" : server !== "mine";
-      tests.push(`q.mine = ${mine ? "true" : "false"}`);
+      where.push(`${plus}_mine = ${mine ? "true" : "false"}`);
     }
-    if (strokes.length > 0) tests.push(strokeTest("q", strokes));
+    if (strokes.length > 0)
+      where.push(`${plus}_stroke in (${quoted(strokes)})`);
     if (directions.length > 0) {
-      tests.push(`q.direction in (${quoted(directions)})`);
+      where.push(`${plus}_direction in (${quoted(directions)})`);
     }
-    where.push(`exists (select 1 from sh q where ${tests.join(" and ")})`);
   }
   const [first, second] = pattern.shots;
   if (first && second) {
@@ -498,15 +461,26 @@ function patternCtes(pattern: AskPattern): string {
     );
   }
 
-  return `with ${ASK_SHOT_ROLE_CTES},
-pt as (
-  select p.match_id, p.point_number, p.i_served, p.i_won, p.court
-  from ask.points p
-  where p.match_id in (select match_id from sh)
+  const shots =
+    pattern.shots.length > 0
+      ? `sh as (
+  select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction
+  from ask.shots s
+  where s.match_id in (select match_id from scope)
+),
+`
+      : "";
+  return `with ${shots}covered as (
+  select distinct p.match_id
+  from ask.point_plays p
+  where p.match_id in (select match_id from scope) and p.has_shots
 ),
 hit as (
-  select pt.match_id, pt.point_number, pt.i_won from pt
-  where ${where.length > 0 ? where.join("\n    and ") : "true"}
+  select pt.match_id, pt.point_number, pt.i_won
+  from ask.point_plays pt
+  where pt.match_id in (select match_id from covered)${where
+    .map((test) => `\n    and ${test}`)
+    .join("")}
 )`;
 }
 

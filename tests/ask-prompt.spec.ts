@@ -16,10 +16,11 @@ import {
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
 import {
+  ASK_MODEL_VISUAL_KINDS,
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
   type AskVisual,
-  type AskVisualKind,
+  type AskModelVisualKind,
   readAskVisual,
 } from "@/lib/services/ask/events";
 import {
@@ -168,7 +169,7 @@ function migrationColumnComments(): Map<string, string> {
 }
 
 test.describe("ASK_SCHEMA", () => {
-  test("describes exactly the four ask views, in the guard's order", () => {
+  test("describes exactly the five ask views, in the guard's order", () => {
     expect(ASK_SCHEMA.map((view) => view.view)).toEqual([...ASK_VIEWS]);
     for (const view of ASK_SCHEMA) {
       const names = view.columns.map((column) => column.name);
@@ -445,16 +446,20 @@ test.describe("buildPlanPrompt", () => {
     );
   });
 
-  test("says where serve direction comes from and that no view records the court", () => {
+  test("says where serve direction and the court come from, naming the per-point view", () => {
     expect(prompt).toContain(
       "Serve direction is serve_t, serve_body and serve_wide in ask.match_stats",
     );
     expect(prompt).toContain(
-      "Which court a point was played from, Deuce or Ad, is ask.points.court: join ask.shots to ask.points on match_id and point_number to split serves by court.",
+      "Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point",
+    );
+    expect(prompt).toContain(
+      "Read only ask.matches, ask.match_stats, ask.points, ask.shots and ask.point_plays",
     );
     // The columns it names exist.
     const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
     const shots = ASK_SCHEMA.find((view) => view.view === "shots");
+    const plays = ASK_SCHEMA.find((view) => view.view === "point_plays");
     for (const column of ["serve_t", "serve_body", "serve_wide"]) {
       expect(
         stats?.columns.some((c) => c.name === column),
@@ -464,6 +469,18 @@ test.describe("buildPlanPrompt", () => {
     for (const column of ["zone", "shot_type"]) {
       expect(
         shots?.columns.some((c) => c.name === column),
+        column,
+      ).toBe(true);
+    }
+    for (const column of [
+      "serve_zone",
+      "serve_type",
+      "court",
+      "i_served",
+      "has_shots",
+    ]) {
+      expect(
+        plays?.columns.some((c) => c.name === column),
         column,
       ).toBe(true);
     }
@@ -650,8 +667,12 @@ test.describe("buildAnswerPrompt", () => {
       "Second serves and returns decided it: Beau won most of the points behind his second serve and more than half of his return points, while you won well under half of each.",
     );
     expect(result.figures).toEqual([
-      { label: "Total points won", value: "45.6%" },
-      { label: "Unforced errors", value: "38" },
+      {
+        label: "Total points won",
+        value: "45.6%",
+        column: "me_total_points_won_pct",
+      },
+      { label: "Unforced errors", value: "38", column: "me_unforced_errors" },
     ]);
     expect(result.droppedVisuals).toEqual([]);
     expect(result.visual).toEqual({
@@ -699,16 +720,30 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
 
   test("lists exactly the six kinds, each with when it fits, its syntax and its example", () => {
     const headings = [...prompt.matchAll(/^### (\w+) — /gm)].map((m) => m[1]);
-    expect(headings).toEqual([...ASK_VISUAL_KINDS]);
+    expect(headings).toEqual([...ASK_MODEL_VISUAL_KINDS]);
     expect(Object.keys(ASK_VISUAL_EXAMPLES).sort()).toEqual(
-      [...ASK_VISUAL_KINDS].sort(),
+      [...ASK_MODEL_VISUAL_KINDS].sort(),
     );
-    for (const kind of ASK_VISUAL_KINDS) {
+    for (const kind of ASK_MODEL_VISUAL_KINDS) {
       expect(prompt).toContain(
         `### ${kind} — ${ASK_VISUAL_EXAMPLES[kind].when}\n${ASK_VISUAL_SYNTAX[kind]}\nExample:\n${ASK_VISUAL_EXAMPLES[kind].block}`,
       );
     }
     expect(prompt).toContain(ASK_VISUAL_LINE_SYNTAX);
+  });
+
+  test("momentum is the server's alone: a kind the renderer knows and the catalogue never offers", () => {
+    expect(ASK_VISUAL_KINDS).toContain("momentum");
+    expect(ASK_MODEL_VISUAL_KINDS).not.toContain("momentum");
+    expect(ASK_VISUAL_KINDS).toHaveLength(ASK_MODEL_VISUAL_KINDS.length + 1);
+    for (const text of [
+      prompt,
+      buildAnswerPrompt({ ...ANSWER_INPUT, matchCount: 1 }),
+    ]) {
+      expect(text).not.toContain("### momentum");
+      expect(text).not.toContain("CHART: momentum");
+      expect(text).toContain("There are exactly six kinds.");
+    }
   });
 
   test("pins the block rules: at most one, none is fine, result cells only, one paragraph beneath, figures still allowed", () => {
@@ -748,13 +783,36 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
-  test("says the serve block has no deuce/ad court to draw", () => {
+  test("says the serve block draws the deuce and ad courts, from ask.points.court", () => {
     expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
-      "The result does not record the deuce or ad court, so do not label a row with one.",
+      "one row per court when it has a court column (ask.points.court, Deuce or Ad)",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Label a court row exactly Deuce or Ad, copied from that row's court cell: the app then draws the two service boxes as a court.",
+    );
+    expect(ASK_TEAM_VISUAL_EXAMPLES.serve.when).toBe(
+      ASK_VISUAL_EXAMPLES.serve.when,
+    );
+    // Both catalogues' examples label the courts so, in either order.
+    for (const example of [
+      ASK_VISUAL_EXAMPLES.serve,
+      ASK_TEAM_VISUAL_EXAMPLES.serve,
+    ]) {
+      expect(example.block).toContain("\nROW: Deuce |");
+      expect(example.block).toContain("\nROW: Ad |");
+    }
+  });
+
+  test("says a trend may name a baseline column third, and that match_id links the points", () => {
+    expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
+      "name it third: the app draws it as a dashed line beside the points.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
+      "A match_id column in the result links each point to its match.",
     );
   });
 
-  const expected: Record<AskVisualKind, AskVisual> = {
+  const expected: Record<AskModelVisualKind, AskVisual> = {
     bars: {
       kind: "bars",
       caption: "Share of points, from 4 matches against left-handers.",
@@ -802,13 +860,19 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     },
     serve: {
       kind: "serve",
-      caption: "Where your serves went across 22 matches.",
+      caption: "Where your serves went across 22 matches, by court.",
       courts: [
         {
-          label: "Serves",
+          label: "Deuce",
           t: { value: 13, text: "13" },
           body: { value: 8, text: "8" },
           wide: { value: 18, text: "18" },
+        },
+        {
+          label: "Ad",
+          t: { value: 9, text: "9" },
+          body: { value: 11, text: "11" },
+          wide: { value: 15, text: "15" },
         },
       ],
     },
@@ -819,7 +883,7 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     },
   };
 
-  for (const kind of ASK_VISUAL_KINDS) {
+  for (const kind of ASK_MODEL_VISUAL_KINDS) {
     test(`the ${kind} example renders through the real renderer to the expected visual`, async () => {
       const example = ASK_VISUAL_EXAMPLES[kind];
       const { events, result } = await render(
@@ -910,9 +974,13 @@ test.describe("mock mode", () => {
     expect(result.droppedFigures).toEqual([]);
     expect(result.headline).not.toMatch(/\d/);
     expect(result.figures).toEqual([
-      { label: "Wins", value: "7" },
-      { label: "Losses", value: "4" },
-      { label: "Second-serve points won", value: "48.3%" },
+      { label: "Wins", value: "7", column: "wins" },
+      { label: "Losses", value: "4", column: "losses" },
+      {
+        label: "Second-serve points won",
+        value: "48.3%",
+        column: "second_serve_won_pct",
+      },
     ]);
     expect(result.text).toContain(
       "Across 12 recorded matches you have won 7 and lost 4. You won 48.3% of the points played on your second serve.",
@@ -953,6 +1021,7 @@ test.describe("mock mode", () => {
     expect(result.figures[2]).toEqual({
       label: "Second-serve points won",
       value: "—",
+      column: "second_serve_won_pct",
     });
   });
 });
@@ -1420,9 +1489,9 @@ test.describe("buildAnswerPrompt — team scope", () => {
 
   test("the catalogue is the team's: every kind, none of them addressing the player", () => {
     expect(Object.keys(ASK_TEAM_VISUAL_EXAMPLES)).toEqual([
-      ...ASK_VISUAL_KINDS,
+      ...ASK_MODEL_VISUAL_KINDS,
     ]);
-    for (const kind of ASK_VISUAL_KINDS) {
+    for (const kind of ASK_MODEL_VISUAL_KINDS) {
       const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
       expect(prompt).toContain(`### ${kind} — ${example.when}`);
       expect(prompt).toContain(ASK_VISUAL_SYNTAX[kind]);
@@ -1432,7 +1501,7 @@ test.describe("buildAnswerPrompt — team scope", () => {
     }
   });
 
-  for (const kind of ASK_VISUAL_KINDS) {
+  for (const kind of ASK_MODEL_VISUAL_KINDS) {
     test(`the team ${kind} example renders through the real renderer, nothing dropped`, async () => {
       const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
       const { events, result } = await render(

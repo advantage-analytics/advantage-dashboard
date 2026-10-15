@@ -1,7 +1,7 @@
 import type { ASK_VIEWS } from "@/lib/services/ask/sql-guard";
 
 /**
- * The four `ask` views as the plan prompt describes them to the model: every
+ * The five `ask` views as the plan prompt describes them to the model: every
  * column, its type, and one line on what it means (design "Database" and
  * "Route → Plan step", plan step 6).
  *
@@ -17,7 +17,8 @@ import type { ASK_VIEWS } from "@/lib/services/ask/sql-guard";
  * Checked against `information_schema.columns` on the live project on
  * 2026-10-11: 14 + 86 + 12 + 9 columns, in this order. `ask.matches.player_name`
  * (the fifteenth, `20261012170339_ask_team_scope.sql`) was added after that
- * check.
+ * check, and `ask.point_plays` (37 columns, `20261015090038_ask_point_facts.sql`)
+ * on 2026-10-15, checked the same way.
  *
  * Pure data: imports a type only.
  */
@@ -922,6 +923,236 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         type: "text",
         meaning:
           "Whether the shot landed: In, Out or Net; null when not recorded.",
+      },
+    ],
+  },
+  {
+    view: "point_plays",
+    meaning:
+      "Every point of the viewer's own personal matches, one row each, with the shots that matter already picked out — the serve, the return, each side's plus one (the third and fourth shots) and the last two shots — and every hitter turned to the viewer (i_served, i_won, return_mine, p1s_mine, p1r_mine, last_mine, prev_mine). Join to ask.points on match_id and point_number for the pressure flags.",
+    teamMeaning:
+      "Every point of the program's matches, one row each, with the shots that matter already picked out — the serve, the return, each side's plus one (the third and fourth shots) and the last two shots — and every hitter turned to the program's player in that match (i_served, i_won, return_mine, p1s_mine, p1r_mine, last_mine, prev_mine). Join to ask.points on match_id and point_number for the pressure flags.",
+    columns: [
+      {
+        name: "match_id",
+        type: "uuid",
+        meaning:
+          "The match this point belongs to; join to ask.matches.match_id.",
+      },
+      {
+        name: "set_number",
+        type: "integer",
+        meaning: "Which set the point was played in, counting from 1.",
+      },
+      {
+        name: "game_number",
+        type: "integer",
+        meaning:
+          "Which game of that set the point was played in, counting from 1 within each set.",
+      },
+      {
+        name: "point_number",
+        type: "integer",
+        meaning:
+          "The point's position in the whole match, counting from 1; joins to ask.points.point_number and ask.shots.point_number within the same match_id.",
+      },
+      {
+        name: "i_served",
+        type: "boolean",
+        meaning:
+          "True when the viewer served this point, false when the opponent did.",
+      },
+      {
+        name: "i_won",
+        type: "boolean",
+        meaning:
+          "True when the viewer won this point, false when the opponent did.",
+      },
+      {
+        name: "court",
+        type: "text",
+        meaning:
+          "The service court the point was played from: Deuce or Ad, the same as ask.points.court.",
+      },
+      {
+        name: "rally_length",
+        type: "integer",
+        meaning:
+          "Number of shots in the point, the serve included; null when not recorded.",
+      },
+      {
+        name: "rally_band",
+        type: "text",
+        meaning:
+          "The rally's length band, as ask.match_stats counts them: short (1–4 shots), medium (5–9) or long (10 or more); null when the length is not recorded.",
+      },
+      {
+        name: "result_type",
+        type: "text",
+        meaning:
+          "How the point ended, as ask.points.result_type: Ace, Double Fault, Forehand Winner, Backhand Unforced Error and the like, naming the stroke that ended the point by whoever hit it; null when unknown.",
+      },
+      {
+        name: "has_shots",
+        type: "boolean",
+        meaning:
+          "True when the point has shot-by-shot data (rows in ask.shots). When false, every serve, return, plus-one and last-shot column of this row is null: the point was not recorded shot by shot, it did not have no shots.",
+      },
+      {
+        name: "serve_type",
+        type: "text",
+        meaning:
+          "Which serve started the rally: First Serve, or Second Serve after a fault; null when no serve is recorded.",
+      },
+      {
+        name: "serve_zone",
+        type: "text",
+        meaning:
+          "Where that serve was aimed: Wide, Body or T; null when not recorded.",
+      },
+      {
+        name: "serve_result",
+        type: "text",
+        meaning:
+          "Whether that serve landed: In, Out or Net. A Second Serve that is Out or Net is a double fault; null when not recorded.",
+      },
+      {
+        name: "had_second_serve",
+        type: "boolean",
+        meaning:
+          "True when the point needed a second serve (the first serve was a fault), false otherwise.",
+      },
+      {
+        name: "return_mine",
+        type: "boolean",
+        meaning:
+          "True when the viewer hit the return (the first stroke after the serve, in or out), false when the opponent did; null when the point ended on the serve — an ace, a service winner, a double fault — or no return can be told apart.",
+      },
+      {
+        name: "return_stroke",
+        type: "text",
+        meaning:
+          "The return's stroke: Forehand or Backhand; null when there was no return or its stroke is not one of those.",
+      },
+      {
+        name: "return_zone",
+        type: "text",
+        meaning:
+          "Where the return was aimed, as stored: Crosscourt, Down the Line or Middle; null when not recorded.",
+      },
+      {
+        name: "return_direction",
+        type: "text",
+        meaning:
+          "Where the return went, as ask.shots.direction names it: Crosscourt, Down the Line, Inside Out, Inside In or Middle; null when not recorded.",
+      },
+      {
+        name: "return_result",
+        type: "text",
+        meaning:
+          "Whether the return landed: In, Out or Net; null when not recorded.",
+      },
+      {
+        name: "p1s_mine",
+        type: "boolean",
+        meaning:
+          "The serve plus one is the third shot of the point, the server's first ball after the return. True when the viewer hit it, false when the opponent did; null when the point ended before it.",
+      },
+      {
+        name: "p1s_stroke",
+        type: "text",
+        meaning:
+          "The serve plus one's stroke: Forehand, Backhand, Volley or Overhead; null when the point ended before it or the stroke is unknown.",
+      },
+      {
+        name: "p1s_direction",
+        type: "text",
+        meaning:
+          "Where the serve plus one went, as ask.shots.direction names it: Crosscourt, Down the Line, Inside Out, Inside In or Middle; null when not recorded.",
+      },
+      {
+        name: "p1s_result",
+        type: "text",
+        meaning:
+          "Whether the serve plus one landed: In, Out or Net; null when not recorded.",
+      },
+      {
+        name: "p1r_mine",
+        type: "boolean",
+        meaning:
+          "The return plus one is the fourth shot of the point, the returner's first ball after the serve plus one. True when the viewer hit it, false when the opponent did; null when the point ended before it.",
+      },
+      {
+        name: "p1r_stroke",
+        type: "text",
+        meaning:
+          "The return plus one's stroke: Forehand, Backhand, Volley or Overhead; null when the point ended before it or the stroke is unknown.",
+      },
+      {
+        name: "p1r_direction",
+        type: "text",
+        meaning:
+          "Where the return plus one went, as ask.shots.direction names it: Crosscourt, Down the Line, Inside Out, Inside In or Middle; null when not recorded.",
+      },
+      {
+        name: "p1r_result",
+        type: "text",
+        meaning:
+          "Whether the return plus one landed: In, Out or Net; null when not recorded.",
+      },
+      {
+        name: "last_mine",
+        type: "boolean",
+        meaning:
+          "True when the viewer hit the last shot of the point, false when the opponent did; null when the point has no shots.",
+      },
+      {
+        name: "last_shot_type",
+        type: "text",
+        meaning:
+          "The last shot's stroke as stored, as ask.shots.shot_type: First Serve, Second Serve, Forehand, Backhand, Volley, Overhead or a rarer label; null when unknown.",
+      },
+      {
+        name: "last_stroke",
+        type: "text",
+        meaning:
+          "The last shot's stroke, grouped: Forehand, Backhand, Volley or Overhead; null when it was a serve or its label is unknown.",
+      },
+      {
+        name: "last_direction",
+        type: "text",
+        meaning:
+          "Where the last shot went, as ask.shots.direction names it: for a serve Wide, Body or T; otherwise Crosscourt, Down the Line, Inside Out, Inside In or Middle; null when not recorded.",
+      },
+      {
+        name: "last_result",
+        type: "text",
+        meaning:
+          "Whether the last shot landed: In (a winner, or a ball the other side could not return) or Out or Net (an error by whoever hit it); null when not recorded.",
+      },
+      {
+        name: "prev_mine",
+        type: "boolean",
+        meaning:
+          "True when the viewer hit the shot before the last, false when the opponent did; null when the point had fewer than two shots.",
+      },
+      {
+        name: "prev_shot_type",
+        type: "text",
+        meaning:
+          "The stroke of the shot before the last, as stored (ask.shots.shot_type); null when there was none or it is unknown.",
+      },
+      {
+        name: "prev_direction",
+        type: "text",
+        meaning:
+          "Where the shot before the last went, as ask.shots.direction names it; null when not recorded. When last_mine is false and last_result is Out or Net, this is the viewer's ball that drew the opponent's error.",
+      },
+      {
+        name: "last_shot_number",
+        type: "integer",
+        meaning:
+          "The last shot's number within the point, as ask.shots.shot_number: join ask.shots on match_id, point_number and shot_number for anything else about that shot, such as its speed or spin; null when the point has no shots.",
       },
     ],
   },

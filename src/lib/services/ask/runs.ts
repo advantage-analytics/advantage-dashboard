@@ -41,7 +41,9 @@ export type AskRunRoute =
   | "plays"
   | "serve_plus_one"
   | "pattern"
-  | "mock";
+  | "mock"
+  /** A hit in the answer cache: nothing was computed. */
+  | "cache";
 
 export interface AskRunRecord {
   question: string;

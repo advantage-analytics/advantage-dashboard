@@ -182,10 +182,27 @@ test.describe("the query", () => {
     expect(sql).toContain("b.direction in ('Down the Line')");
   });
 
-  test("the serve and the return are picked by role, the shots view read once", () => {
+  test("the serve, the return and the +1s are read per point from ask.point_plays; ask.shots only for a Custom or Then shot, once", () => {
     const sql = patternSql(SERVE_PLUS_ONE);
     expect(sql.match(/from ask\.shots/g)).toHaveLength(1);
-    expect(sql).toContain("v.is_played_serve");
+    expect(sql).toContain("pt.i_served = true");
+    expect(sql).toContain("pt.serve_zone in ('Wide')");
+    expect(sql).toContain("exists (select 1 from sh a where");
+    expect(sql).toContain(
+      "select distinct p.match_id\n  from ask.point_plays p\n  where p.match_id in (select match_id from scope) and p.has_shots",
+    );
+    const returnOnly = patternSql({
+      serve: { server: "opponent", zones: [], type: "second" },
+      returnShot: { strokes: ["Backhand"], zones: ["Down the Line"] },
+      plusOne: null,
+      shots: [],
+    });
+    expect(returnOnly).not.toContain("ask.shots");
+    expect(returnOnly).toContain("pt.i_served = false");
+    expect(returnOnly).toContain("pt.serve_type = 'Second Serve'");
+    expect(returnOnly).toContain("pt.return_mine is not null");
+    expect(returnOnly).toContain("pt.return_stroke in ('Backhand')");
+    expect(returnOnly).toContain("pt.return_zone in ('Down the Line')");
   });
 });
 
@@ -373,10 +390,10 @@ test.describe("the +1, exactly", () => {
 
   test("is the returner's shot four, hit by the returner", () => {
     const sql = patternSql(RETURN_PLUS_ONE);
-    expect(sql).toContain("q.is_return_plus_one");
-    expect(sql).toContain("q.mine = true");
-    expect(sql).toContain("q.direction in ('Crosscourt')");
-    expect(sql).toContain("numbered.shot_number = 4 as is_return_plus_one");
+    expect(sql).toContain("pt.p1r_mine is not null");
+    expect(sql).toContain("pt.p1r_mine = true");
+    expect(sql).toContain("pt.p1r_direction in ('Crosscourt')");
+    expect(sql).not.toContain("ask.shots");
     expect(
       checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
     ).toEqual({ ok: true });
