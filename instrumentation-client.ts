@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { isPostHogOffInDev } from "@/lib/posthog-client";
+import { dropUnfixableNoise } from "@/lib/posthog-noise";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -19,6 +20,8 @@ if (isPostHogOffInDev) {
     api_host: apiHost,
     defaults: "2026-01-30",
     capture_exceptions: true,
+    // Link-scanner rejections and other errors no code of ours can fix.
+    before_send: dropUnfixableNoise,
     debug: process.env.NODE_ENV === "development",
 
     // Privacy. The dashboard shows athletes' names, photos and performance

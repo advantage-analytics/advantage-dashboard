@@ -113,3 +113,14 @@ export function readAskFeedbackRow(row: unknown): AskFeedback | null {
     note: typeof note === "string" && note !== "" ? note : null,
   };
 }
+
+/**
+ * PostgREST's PGRST200: a `select` asked to embed a related table the schema
+ * cache has no relationship for ("Could not find a relationship between …").
+ * A conversation read checks it to fall back to reading without the thumbs.
+ */
+export function isMissingEmbed(
+  error: { code?: string | null } | null | undefined,
+): boolean {
+  return error?.code === "PGRST200";
+}
