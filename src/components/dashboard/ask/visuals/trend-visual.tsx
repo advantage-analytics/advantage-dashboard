@@ -61,7 +61,9 @@ export function TrendVisual({
           },
         ]}
       />
-      <div className="flex flex-col gap-1">
+      {/* `pr-12`: a fixed gutter for the last value's label (about 46px at
+          11px), whatever the column's width. */}
+      <div className="flex flex-col gap-1 pr-12">
         {/* The wipe is the wrapper's, not the SVG's: an HTML box is what gets
             clipped, and the drawing inside it is never itself the animated
             element. The last value's label is inside the same box, so the
