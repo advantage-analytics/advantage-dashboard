@@ -99,7 +99,7 @@ test.describe("askActionsFor", () => {
     });
   });
 
-  test("a team answer never offers the pin — only the personal Home draws them — and opens the tagged player", () => {
+  test("a team answer offers the pin (the team Home draws them) and opens the tagged player", () => {
     const actions = askActionsFor({
       sources: [ONE],
       figures: [],
@@ -107,14 +107,18 @@ test.describe("askActionsFor", () => {
       scope: TEAM,
       tags: [{ kind: "player", id: "p1", label: "Ana Sokolov" }],
     });
+    // Five at most: the pin now takes the opponent's slot.
     expect(actions.map((action) => action.kind)).toEqual([
+      "pin",
       "export",
       "share",
       "open_match",
       "open_player",
-      "open_opponent",
     ]);
-    expect(actions[3]).toMatchObject({
+    expect(actions[0]).toMatchObject({
+      detail: "Keep this chart on the team Home",
+    });
+    expect(actions[4]).toMatchObject({
       label: "Open Ana Sokolov",
       href: "/dashboard/team/roster/p1",
     });

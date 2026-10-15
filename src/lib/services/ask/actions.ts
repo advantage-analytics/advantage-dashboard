@@ -14,8 +14,8 @@
  *
  *   watch         the Video tab of the one source match on the first
  *                 figure's points (`figure-video.ts`)
- *   pin           keep the visual block on Home (`ask_pins`); personal
- *                 scope only, because only the personal Home draws pins
+ *   pin           keep the visual block on Home (`ask_pins`): the personal
+ *                 Home's, or the team Home's for a team answer
  *   visualize     the Visualizations tab of that match, cut to the figure's
  *                 measure, with the same filters
  *   save_view     the same cut and filters as a saved view (`saved_views`)
@@ -257,11 +257,14 @@ export function askActionsFor(input: AskActionsInput): AskAction[] {
     });
   }
 
-  if (visual && scope.kind === "personal") {
+  if (visual) {
     out.push({
       kind: "pin",
       label: "Pin to Home",
-      detail: "Keep this chart on your Home page",
+      detail:
+        scope.kind === "team"
+          ? "Keep this chart on the team Home"
+          : "Keep this chart on your Home page",
     });
   }
 
@@ -304,7 +307,7 @@ export function askActionsFor(input: AskActionsInput): AskAction[] {
   if (visual) {
     out.push({
       kind: "export",
-      label: "Export as CSV",
+      label: "Download CSV",
       detail: "The chart's rows, as a file",
       file: askVisualCsv(visual),
     });

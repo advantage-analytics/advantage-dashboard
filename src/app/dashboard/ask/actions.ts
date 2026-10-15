@@ -35,12 +35,17 @@ const ASK_PATH: Record<AskScope["kind"], ReturnType<typeof askBasePath>> = {
 
 /** Where the personal Home draws pins. */
 const HOME_PATH = "/dashboard";
+const TEAM_HOME_PATH = "/dashboard/team";
 
 export type AskActionResult =
   { ok: true } | { ok: false; error: "invalid" | "forbidden" | "failed" };
 
 function askPath(scopeKind: AskScope["kind"]) {
   return scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal;
+}
+/** The Home a pin lands on: the team's for a team answer, else the player's. */
+function homePath(scopeKind: AskScope["kind"]) {
+  return scopeKind === "team" ? TEAM_HOME_PATH : HOME_PATH;
 }
 
 /**
@@ -205,7 +210,7 @@ export async function pinAskAnswer(
     return { ok: false, error: "failed" };
   }
 
-  revalidatePath(HOME_PATH);
+  revalidatePath(homePath(scopeKind));
   revalidatePath(askPath(scopeKind));
   return { ok: true, pinId: data };
 }
@@ -237,7 +242,7 @@ export async function unpinAskAnswer(
     return { ok: false, error: "failed" };
   }
 
-  revalidatePath(HOME_PATH);
+  revalidatePath(homePath(scopeKind));
   revalidatePath(askPath(scopeKind));
   return { ok: true };
 }

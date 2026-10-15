@@ -584,6 +584,7 @@ function AskExchangeView({
       {actions.length > 0 && (
         <AskActionCards
           actions={actions}
+          scope={scope}
           pinId={pinId}
           onPin={
             answerId

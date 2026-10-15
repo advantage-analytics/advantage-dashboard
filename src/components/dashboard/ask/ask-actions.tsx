@@ -8,8 +8,8 @@ import {
   type AskAction,
   type AskSavedViewDraft,
 } from "@/lib/services/ask/actions";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,11 @@ export interface AskActionCardsProps {
   /** The catalogue's answer for this exchange (`askActionsFor`). */
   actions: readonly AskAction[];
   /**
+   * Whose Home a pin lands on and which words say so: the personal page
+   * when omitted (the harness), the team page's scope on the team page.
+   */
+  scope?: AskScope;
+  /**
    * The pin this answer already has on Home, or null. Set by the page from
    * the saved conversation and updated by `onPin` / `onUnpin`.
    */
@@ -50,7 +55,10 @@ const ASK_ACTIONS_COPY = {
   label: "Next steps",
   pin: "Pin to Home",
   pinning: "Pinning…",
-  pinned: "On your Home page",
+  pinned: {
+    personal: "On your Home page",
+    team: "On the team Home",
+  },
   openHome: "Open Home",
   unpin: "Unpin",
   unpinning: "Unpinning…",
@@ -76,25 +84,52 @@ const ASK_ACTIONS_COPY = {
     invalid: "Give the view a name of up to 60 characters.",
     unsupported_cut_chart: "That court can't be saved as a view yet.",
   },
-  open: "Open",
-  watch: "Watch",
-  download: "Download",
 } as const;
 
+/** The Home a pin lands on, by the scope the answer was asked in. */
+const HOME_HREF: Record<AskScope["kind"], string> = {
+  personal: "/dashboard",
+  team: "/dashboard/team",
+};
+
 /**
- * The cards under an answer: what it offers to do next, one button each.
- * Nothing executes on render — a link action is a link, a pin or a save
- * runs only on a click and only through the page's server action with the
- * app's own confirmation, and an export is a `data:` link the browser
- * downloads. Compact cards in a wrapping row, white on the white thread,
- * told from it by the hairline and the card shadow (cards never nest; the
- * answer is not a card).
+ * The row's one voice: 12px ink that darkens on hover, as the title row's
+ * quiet link and the point list's Clear all — never a button, never blue.
+ * The answer above is the content; what it offers next is a footnote the
+ * reader can act on, not a second surface competing with it.
+ */
+const ACTION =
+  "cursor-pointer text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:text-[var(--text-disabled)]";
+/** A line that reports a state ("On your Home page") beside the actions. */
+const STATUS = "text-[12px] whitespace-nowrap text-[var(--ink-700)]";
+const PROBLEM = "text-[11px] text-[var(--danger-text)]";
+
+/** The filter strip's separator, between one action and the next. */
+function Dot() {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-[3px] shrink-0 rounded-full bg-[var(--ink-300)]"
+    />
+  );
+}
+
+/**
+ * What the answer offers to do next, as one quiet line under its footer:
+ * each action a text control in reading order, the filter strip's dot
+ * between them. Nothing executes on render — a link action is a link, a
+ * pin or a save runs only on a click and only through the page's server
+ * action with the app's own confirmation, and an export is a `data:` link
+ * the browser downloads. No cards: the answer is the content, and the
+ * thread is one white surface (cards never nest, and the answer is not a
+ * card).
  *
  * Keep this file's imports clear of `next/navigation` and server actions:
  * the page hands in callbacks, and an offline harness renders this.
  */
 export function AskActionCards({
   actions,
+  scope = PERSONAL_ASK_SCOPE,
   pinId,
   onPin,
   onUnpin,
@@ -105,46 +140,37 @@ export function AskActionCards({
     <ul
       aria-label={ASK_ACTIONS_COPY.label}
       data-ask-actions=""
-      className="m-0 flex list-none flex-wrap items-start gap-2.5 p-0"
+      className="-mt-4 flex list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0"
     >
-      {actions.map((action) => (
+      {actions.map((action, index) => (
         <li
           key={action.kind}
           data-ask-action={action.kind}
-          className="flex w-[200px] max-w-full flex-col gap-2.5 rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] p-3 shadow-[var(--shadow-card)] max-md:w-[calc(50%-5px)]"
+          className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1"
         >
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <p className="truncate text-[12px] font-medium text-[var(--ink-900)]">
+          {index > 0 && <Dot />}
+          {action.kind === "pin" ? (
+            <PinControl
+              scopeKind={scope.kind}
+              pinId={pinId}
+              onPin={onPin}
+              onUnpin={onUnpin}
+            />
+          ) : action.kind === "save_view" ? (
+            <SaveViewControl action={action} onSaveView={onSaveView} />
+          ) : action.kind === "export" ? (
+            <a
+              href={askCsvDataUrl(action.file)}
+              download={action.file.filename}
+              className={ACTION}
+            >
               {action.label}
-            </p>
-            <p className="line-clamp-2 text-[11px] leading-[1.45] text-[var(--ink-500)]">
-              {action.detail}
-            </p>
-          </div>
-          <div className="mt-auto flex min-w-0 flex-col gap-1.5">
-            {action.kind === "pin" ? (
-              <PinControl pinId={pinId} onPin={onPin} onUnpin={onUnpin} />
-            ) : action.kind === "save_view" ? (
-              <SaveViewControl action={action} onSaveView={onSaveView} />
-            ) : action.kind === "export" ? (
-              <a
-                href={askCsvDataUrl(action.file)}
-                download={action.file.filename}
-                className={cn(advButton("outline", "sm"), "self-start")}
-              >
-                {ASK_ACTIONS_COPY.download}
-              </a>
-            ) : (
-              <Link
-                href={action.href}
-                className={cn(advButton("outline", "sm"), "self-start")}
-              >
-                {action.kind === "watch"
-                  ? ASK_ACTIONS_COPY.watch
-                  : ASK_ACTIONS_COPY.open}
-              </Link>
-            )}
-          </div>
+            </a>
+          ) : (
+            <Link href={action.href} className={ACTION}>
+              {action.label}
+            </Link>
+          )}
         </li>
       ))}
     </ul>
@@ -152,15 +178,18 @@ export function AskActionCards({
 }
 
 /**
- * Pin, then "On your Home page · Open Home · Unpin". The button is disabled
- * while the answer has no saved id, with a line saying why: a button that
- * refuses on click is worse than one that waits.
+ * Pin, then "On your Home page · Open Home · Unpin" in its place. The
+ * control is disabled while the answer has no saved id, with a line saying
+ * why: a control that refuses on click is worse than one that waits.
  */
 function PinControl({
+  scopeKind,
   pinId,
   onPin,
   onUnpin,
-}: Pick<AskActionCardsProps, "pinId" | "onPin" | "onUnpin">) {
+}: Pick<AskActionCardsProps, "pinId" | "onPin" | "onUnpin"> & {
+  scopeKind: AskScope["kind"];
+}) {
   const [pending, setPending] = useState<"pin" | "unpin" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -194,31 +223,26 @@ function PinControl({
   if (pinId) {
     return (
       <>
-        <p role="status" className="text-[11px] text-[var(--ink-700)]">
-          {ASK_ACTIONS_COPY.pinned}
-        </p>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="text-[12px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          >
-            {ASK_ACTIONS_COPY.openHome}
-          </Link>
-          <button
-            type="button"
-            onClick={() => void unpin()}
-            disabled={pending !== null || !onUnpin}
-            className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] disabled:cursor-default disabled:text-[var(--text-disabled)]"
-          >
-            {pending === "unpin"
-              ? ASK_ACTIONS_COPY.unpinning
-              : ASK_ACTIONS_COPY.unpin}
-          </button>
-        </div>
+        <span role="status" className={STATUS}>
+          {ASK_ACTIONS_COPY.pinned[scopeKind]}
+        </span>
+        <Link href={HOME_HREF[scopeKind]} className={ACTION}>
+          {ASK_ACTIONS_COPY.openHome}
+        </Link>
+        <button
+          type="button"
+          onClick={() => void unpin()}
+          disabled={pending !== null || !onUnpin}
+          className={ACTION}
+        >
+          {pending === "unpin"
+            ? ASK_ACTIONS_COPY.unpinning
+            : ASK_ACTIONS_COPY.unpin}
+        </button>
         {problem && (
-          <p role="alert" className="text-[11px] text-[var(--danger-text)]">
+          <span role="alert" className={PROBLEM}>
             {problem}
-          </p>
+          </span>
         )}
       </>
     );
@@ -230,19 +254,19 @@ function PinControl({
         type="button"
         onClick={() => void pin()}
         disabled={!onPin || pending !== null}
-        className={cn(advButton("outline", "sm"), "self-start")}
+        className={ACTION}
       >
         {pending === "pin" ? ASK_ACTIONS_COPY.pinning : ASK_ACTIONS_COPY.pin}
       </button>
       {!onPin && (
-        <p className="text-[11px] text-[var(--ink-500)]">
+        <span className="text-[11px] text-[var(--ink-500)]">
           {ASK_ACTIONS_COPY.pinWaits}
-        </p>
+        </span>
       )}
       {problem && (
-        <p role="alert" className="text-[11px] text-[var(--danger-text)]">
+        <span role="alert" className={PROBLEM}>
           {problem}
-        </p>
+        </span>
       )}
     </>
   );
@@ -250,7 +274,7 @@ function PinControl({
 
 /**
  * "Save view" opens the one confirm shell with a name field; the save runs
- * on its action, never on the card's button. Once saved, the card links to
+ * on its action, never on the row's control. Once saved, the row links to
  * the view.
  */
 function SaveViewControl({
@@ -289,13 +313,10 @@ function SaveViewControl({
     const href = `${action.href}&view=${encodeURIComponent(saved.id)}`;
     return (
       <>
-        <p role="status" className="text-[11px] text-[var(--ink-700)]">
+        <span role="status" className={STATUS}>
           {ASK_ACTIONS_COPY.saved} · {saved.name}
-        </p>
-        <Link
-          href={href}
-          className="self-start text-[12px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
+        </span>
+        <Link href={href} className={ACTION}>
           {ASK_ACTIONS_COPY.openView}
         </Link>
       </>
@@ -313,7 +334,7 @@ function SaveViewControl({
           setProblem(null);
           setOpen(true);
         }}
-        className={cn(advButton("outline", "sm"), "self-start")}
+        className={ACTION}
       >
         {ASK_ACTIONS_COPY.save}
       </button>

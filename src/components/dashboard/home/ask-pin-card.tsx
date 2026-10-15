@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import type { AskScope } from "@/lib/services/ask/scope";
 import { unpinAskAnswer } from "@/app/dashboard/ask/actions";
 import { AskVisualBlock } from "@/components/dashboard/ask/visuals/ask-visual";
 import type { AskPin } from "@/lib/data/ask-server";
@@ -39,7 +40,16 @@ const PIN_CARD_COPY = {
  * screen until the next render reads none — a card vanishing under the
  * pointer would read as a mistake.
  */
-export function AskPinCard({ pins }: { pins: AskPin[] }) {
+export function AskPinCard({
+  pins,
+  askHref = "/dashboard/ask",
+  scopeKind = "personal",
+}: {
+  pins: AskPin[];
+  /** The Ask page these pins came from: the team page's on the team Home. */
+  askHref?: string;
+  scopeKind?: AskScope["kind"];
+}) {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<string | null>(null);
   const [pending, startUnpin] = useTransition();
@@ -49,7 +59,7 @@ export function AskPinCard({ pins }: { pins: AskPin[] }) {
     setFailed(null);
     setGone((current) => new Set(current).add(pin.id));
     startUnpin(async () => {
-      const result = await unpinAskAnswer(pin.id);
+      const result = await unpinAskAnswer(pin.id, scopeKind);
       if (result.ok) return;
       setGone((current) => {
         const next = new Set(current);
@@ -70,7 +80,7 @@ export function AskPinCard({ pins }: { pins: AskPin[] }) {
         <h2 className="eyebrow">{PIN_CARD_COPY.title}</h2>
         <div className="flex-1" />
         <Link
-          href="/dashboard/ask"
+          href={askHref}
           className="text-[11px] whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           {PIN_CARD_COPY.openAsk}
@@ -98,7 +108,7 @@ export function AskPinCard({ pins }: { pins: AskPin[] }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 {pin.conversationId && (
                   <Link
-                    href={`/dashboard/ask?c=${encodeURIComponent(pin.conversationId)}`}
+                    href={`${askHref}?c=${encodeURIComponent(pin.conversationId)}`}
                     className="text-[12px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
                   >
                     {PIN_CARD_COPY.openAnswer}

@@ -290,10 +290,18 @@ test.describe("the cards under an answer", () => {
     await expect(dialog).toContainText("A view with that name already exists.");
   });
 
-  test("on the team page the pin is not offered", async ({ page }) => {
+  test("on the team page the pin is offered and lands on the team Home", async ({
+    page,
+  }) => {
     await openFixture(page, "?c=1&scope=team");
-    await expect(card(page, "pin")).toHaveCount(0);
     await expect(card(page, "watch")).toHaveCount(1);
+    await card(page, "pin")
+      .getByRole("button", { name: "Pin to Home" })
+      .click();
+    await expect(card(page, "pin")).toContainText("On the team Home");
+    await expect(
+      card(page, "pin").getByRole("link", { name: "Open Home" }),
+    ).toHaveAttribute("href", "/dashboard/team");
   });
 });
 
@@ -352,10 +360,9 @@ test.describe("under 768px", () => {
     expect((await prompt.getAttribute("class"))?.split(/\s+/)).toEqual(
       expect.arrayContaining(["max-md:max-w-[92%]"]),
     );
-    // The cards wrap two to a row on a phone.
-    const first = cards(page).getByRole("listitem").first();
-    expect((await first.getAttribute("class"))?.split(/\s+/)).toEqual(
-      expect.arrayContaining(["max-md:w-[calc(50%-5px)]"]),
+    // The line of next steps wraps on a phone; no action takes a width.
+    expect((await cards(page).getAttribute("class"))?.split(/\s+/)).toEqual(
+      expect.arrayContaining(["flex-wrap"]),
     );
   });
 });
