@@ -671,6 +671,52 @@ export default function HelpCenterPage() {
               </div>
             </section>
 
+            {/* ══════════ Using Advantage in Claude ══════════ */}
+            <section
+              id="claude"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Using Advantage in Claude</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                Connect your own Claude — claude.ai, Claude Desktop or Claude
+                Code — and ask about your matches there. It reads the same
+                statistics Ask does, as you, and can&apos;t change anything.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <span className={blockLabelClass}>Connecting</span>
+                <p className={proseClass}>
+                  The address and the steps are in{" "}
+                  <Link
+                    href="/dashboard/settings/connections"
+                    className={linkClass}
+                  >
+                    Settings › Connections
+                  </Link>
+                  . You sign in to Advantage and choose Allow once; Claude then
+                  lists Advantage among its tools.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>What it uses</span>
+                <p className={proseClass}>
+                  Questions Claude asks through Advantage count toward your
+                  monthly Ask questions and appear in your Ask history. Claude
+                  sees your matches and, for a team you belong to, that
+                  team&apos;s — nothing another account could not already see.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Disconnecting</span>
+                <p className={proseClass}>
+                  Press Disconnect beside the app in Settings › Connections, or
+                  remove the connector in Claude. Either ends its access.
+                </p>
+              </div>
+            </section>
+
             {/* ══════════ Keyboard shortcuts ══════════ */}
             <section
               id="shortcuts"

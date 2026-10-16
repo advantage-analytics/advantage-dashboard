@@ -7,7 +7,7 @@ import { Kbd } from "@/components/ui/kbd";
 type TocItem = { id: string; label: string };
 
 /**
- * The seven topics, in reading order.
+ * The eight topics, in reading order.
  *
  * Getting started leads because the question it answers — "there are two ways
  * in, which one is mine?" — is the one a new account has before it has any
@@ -18,6 +18,7 @@ const ITEMS: TocItem[] = [
   { id: "advantage-intelligence", label: "Advantage Intelligence" },
   { id: "swingvision", label: "Importing from SwingVision" },
   { id: "teams", label: "Teams" },
+  { id: "claude", label: "Using Advantage in Claude" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "glossary", label: "Glossary" },
   { id: "support", label: "Contact support" },

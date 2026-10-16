@@ -262,6 +262,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     subtitle: "What your account is entitled to.",
   },
   {
+    id: "connections",
+    label: "Connections",
+    href: "/dashboard/settings/connections",
+    subtitle:
+      "Ask about your matches from your own Claude, and the apps you've let in.",
+  },
+  {
     id: "teams",
     label: "Teams",
     href: "/dashboard/settings/teams",
