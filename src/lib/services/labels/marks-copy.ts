@@ -192,21 +192,15 @@ export function removeAfterLabel(count: number): string {
 
 // ── The rail header's total ─────────────────────────────────────────────────
 
-/** "41 flags to check" — the header's open-flag count, as a sentence. */
+/** "41 points to review" — the header's count of flagged points, as a sentence. */
 export function toCheckLabel(count: number): string {
   if (count === 0) return "Nothing left to check";
-  return `${count} ${count === 1 ? "flag" : "flags"} to check`;
+  return `${count} ${count === 1 ? "point" : "points"} to review`;
 }
 
-/** "12 data flags" — the header's grey count, beside the amber one. */
+/** "12 data points" — the header's grey count, beside the amber one. */
 export function dataFlagsLabel(count: number): string {
-  return `${count} data ${count === 1 ? "flag" : "flags"}: wrong data that rarely moves the score`;
-}
-
-/** "On 30 points" — how many points the header's count is spread over. */
-export function onPointsDetail(count: number): string | undefined {
-  if (count === 0) return undefined;
-  return `On ${count} ${count === 1 ? "point" : "points"}`;
+  return `${count} data ${count === 1 ? "point" : "points"}: wrong data that rarely moves the score`;
 }
 
 // ── The score chip ──────────────────────────────────────────────────────────

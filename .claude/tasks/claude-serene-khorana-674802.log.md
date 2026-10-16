@@ -13,3 +13,15 @@ is the runner's. Newest entries at the bottom.
 
 1. Item 4 tone reads any count member, open or not; T3's chip may want tone over open members only, as `rollupMarks` does.
 2. `same_player_consecutive` members carry no `dismissKey` (dismissal lives on its slots); T4's per-item Dismiss should fall back to the slot's own Dismiss for item 1.
+
+## T2 · Header, flag list and jumps count points, grouped by item — done
+
+**gate:** mechanical pass (first run failed on `claim-eyebrow-width` live-DB read, unrelated and passing alone; full re-run GATE PASS) · completion pass
+
+**changed:** `openFlags` returns one flag per open, non-demoted point with its open items; `flagGroups` groups by the six review items (no "Other"); `flagStopLabel` names the first open item's question. Header copy is "N points to review" / "N data points"; `onPointsDetail` removed. Flag summary menu reads "Point N · <question>"; dashboard lists count distinct points. Specs updated: flag-nav, marks-copy, session-fields, score-marks, serve-order.
+
+**follow-ups:**
+
+1. Labels list "Open flags" column: sessions now record points, but jobs without a session fall back to `classifyFlags` (job-groups.ts), which still counts marks — make it count points, then rename the column. Stored `open_counts` stay mark-based until each console is reopened.
+2. Item 4's question is static; a shared item-words helper could let the header and menu say "Was the last ball out?" via `lastCallQuestion`.
+3. `data` follows the whole flag's tone, so a point whose only amber item is settled still counts amber while a grey item is open.

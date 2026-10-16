@@ -500,7 +500,8 @@ test.describe("the console reads them live", () => {
     expect(p2).toMatch(
       /aria-label="[^"]*At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
     );
-    expect(html).toContain('aria-label="2 flags to check"');
+    // Two flags on one point: one point to review.
+    expect(html).toContain('aria-label="1 point to review"');
     expect(
       markSummary(
         unchecked.points,

@@ -439,8 +439,9 @@ export function LabelConsole({
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
   }, [marks, points]);
-  // The open counts the overview shows, saved on the session whenever they
-  // change, so the Labels list reads the work left without building marks.
+  // The open counts the overview shows — flagged points, amber and grey —
+  // saved on the session whenever they change, so the Labels list reads the
+  // work left without building marks.
   const openCounts = useMemo(() => {
     if (!liveMarks) return null;
     const open = openFlags(points, liveMarks);
@@ -2166,8 +2167,8 @@ export function LabelConsole({
     [operable, points, session.adScoring],
   );
   // The two lists the rail's header steps: what can move the score — the
-  // amber marks, the set that doesn't add up and every amber slot between
-  // the rows — and the grey marks, which are wrong data.
+  // amber flagged points, the set that doesn't add up and every amber slot
+  // between the rows — and the grey flagged points, which are wrong data.
   const flagStops = useMemo(() => {
     const slots: readonly FlagStop[] = slotJumpStops;
     if (!liveMarks) return { score: slots, data: [] as FlagStop[] };

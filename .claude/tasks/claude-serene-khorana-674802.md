@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Header, flag list and jumps count points, grouped by item
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/lib/services/labels/flag-nav.ts, src/lib/services/labels/marks-copy.ts (`toCheckLabel`, `dataFlagsLabel`), src/components/admin/labels/label-flag-summary.tsx, src/components/admin/labels/label-dashboard.tsx, src/components/admin/labels/label-black-rail.tsx, src/components/admin/labels/label-console.tsx (`openCounts`, `flagStops` — minimal), tests/label-flag-nav.spec.ts, tests/label-marks-copy.spec.ts, tests/label-console.spec.ts

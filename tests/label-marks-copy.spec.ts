@@ -8,12 +8,12 @@ import {
   type LabelSuggestion,
 } from "@/lib/services/labels/marks";
 import {
+  dataFlagsLabel,
   HINT_ACTION_LABEL,
   staleEndingAction,
   hintLabel,
   MARK_LABEL,
   markHover,
-  onPointsDetail,
   removeAfterLabel,
   toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
@@ -147,11 +147,14 @@ test.describe("mark copy", () => {
 
   test("the header has one total's words", () => {
     expect(toCheckLabel(0)).toBe("Nothing left to check");
-    expect(toCheckLabel(1)).toBe("1 flag to check");
-    expect(toCheckLabel(41)).toBe("41 flags to check");
-    expect(onPointsDetail(0)).toBeUndefined();
-    expect(onPointsDetail(1)).toBe("On 1 point");
-    expect(onPointsDetail(30)).toBe("On 30 points");
+    expect(toCheckLabel(1)).toBe("1 point to review");
+    expect(toCheckLabel(332)).toBe("332 points to review");
+    expect(dataFlagsLabel(1)).toBe(
+      "1 data point: wrong data that rarely moves the score",
+    );
+    expect(dataFlagsLabel(39)).toBe(
+      "39 data points: wrong data that rarely moves the score",
+    );
   });
 
   test("hover lines are the board's, with the players' names", () => {

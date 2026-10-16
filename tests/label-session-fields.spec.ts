@@ -650,7 +650,7 @@ test.describe("the header's total", () => {
     expect(toCheck).toContain('aria-label="Nothing left to check"');
     // The grey list beside it is a control of its own.
     expect(tag(head, 'data-label-rail-data-count=""')).toMatch(
-      /aria-label="\d+ data flags?: /,
+      /aria-label="\d+ data points?: /,
     );
   });
 
@@ -659,7 +659,7 @@ test.describe("the header's total", () => {
     const session = labelSessionFixture();
     const head = header(black(session, EMPTY_MARKS));
     expect(tag(head, 'data-label-rail-to-check=""')).toContain(
-      'aria-label="1 flag to check"',
+      'aria-label="1 point to review"',
     );
     const chip = tag(head, 'data-label-score-stop=""');
     expect(chip).toContain(
@@ -683,7 +683,7 @@ test.describe("the header's total", () => {
     expect(early).not.toContain('data-row="set-score"');
   });
 
-  test("counts open marks that can change the score — not hints, not hidden marks, not points", () => {
+  test("counts points open on what can change the score — not hints, not hidden marks, not marks", () => {
     const session = { ...labelSessionFixture(), matchScore: null };
     const [p1, p2, , p4] = session.points;
     const m = (code: string, tier: string, scope = "point") =>
@@ -696,7 +696,8 @@ test.describe("the header's total", () => {
         // The checked-as-is point: its counted mark is not open; a hint
         // beside it was never counted.
         [p2.id]: [m("serve_fault", "hint"), m("pick_winner", "count")],
-        // Point 4, untouched: two counted marks open, a hint and a hidden one.
+        // Point 4, untouched: two counted marks open — one point — a hint
+        // and a hidden one.
         [p4.id]: [
           m("pick_winner", "count"),
           m("reserve_after_in", "count"),
@@ -711,7 +712,7 @@ test.describe("the header's total", () => {
     };
     const head = header(black(session, marks));
     const toCheck = tag(head, 'data-label-rail-to-check=""');
-    expect(toCheck).toContain('aria-label="2 flags to check"');
+    expect(toCheck).toContain('aria-label="1 point to review"');
 
     // Hints and hidden marks alone: nothing amber. The hints are the grey
     // count, and the control is named for them.
@@ -725,11 +726,11 @@ test.describe("the header's total", () => {
       header(black(session, quiet)),
       'data-label-rail-to-check=""',
     );
-    expect(quietCheck).not.toContain("flags to check");
+    expect(quietCheck).not.toContain("to review");
     expect(quietCheck).not.toContain("rail-amber");
     expect(quietCheck).toContain('aria-label="Nothing left to check"');
     expect(
       tag(header(black(session, quiet)), 'data-label-rail-data-count=""'),
-    ).toMatch(/aria-label="\d+ data flags?: /);
+    ).toMatch(/aria-label="\d+ data points?: /);
   });
 });
