@@ -42,8 +42,8 @@ export const MISSING_AUTHORIZATION_ERROR =
  * connects to. Supabase's dynamic client registration lets any client
  * register, and an approved client holds a sign-in token for the person's
  * account, so the consent step only offers Allow to a client whose callback
- * is one of these: claude.ai and Claude Desktop's two callbacks, and a
- * loopback address on any port and path for Claude Code, which listens
+ * is one of these: the claude.ai and claude.com callbacks (claude.ai and
+ * Claude Desktop share custom connectors), and a loopback address on any port and path for Claude Code, which listens
  * locally (RFC 8252 §7.3 — a code sent there never leaves the person's
  * machine). Connecting another app means adding its callback here.
  */
@@ -70,6 +70,24 @@ export function isConnectorRedirectUri(uri: string | null): boolean {
     url.username === "" &&
     url.password === ""
   );
+}
+
+/**
+ * Whether a read authorization goes back to an app Advantage connects to: a
+ * consent request by its registered callback, an already-consented one by
+ * where Supabase would send the code (its origin and path, without the
+ * query that carries the code).
+ */
+export function goesToConnector(details: OAuthAuthorizationDetails): boolean {
+  if (details.kind === "consent") {
+    return isConnectorRedirectUri(details.redirectUri);
+  }
+  try {
+    const url = new URL(details.redirectUrl);
+    return isConnectorRedirectUri(`${url.origin}${url.pathname}`);
+  } catch {
+    return false;
+  }
 }
 
 /** The sentence a client outside the allow-list is turned away with. */

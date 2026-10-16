@@ -6,7 +6,7 @@ import {
   consentPath,
   decideOAuthAuthorization,
   getOAuthAuthorizationDetails,
-  isConnectorRedirectUri,
+  goesToConnector,
   MISSING_AUTHORIZATION_ERROR,
   readAuthorizationId,
   UNKNOWN_CLIENT_ERROR,
@@ -54,12 +54,7 @@ export async function decideOAuthConsent(formData: FormData): Promise<void> {
   if (action === "approve") {
     const read = await getOAuthAuthorizationDetails(call);
     if (!read.ok) redirect(errorHref(read.message));
-    if (
-      read.value.kind === "consent" &&
-      !isConnectorRedirectUri(read.value.redirectUri)
-    ) {
-      redirect(errorHref(UNKNOWN_CLIENT_ERROR));
-    }
+    if (!goesToConnector(read.value)) redirect(errorHref(UNKNOWN_CLIENT_ERROR));
   }
 
   const decided = await decideOAuthAuthorization({ ...call, action });

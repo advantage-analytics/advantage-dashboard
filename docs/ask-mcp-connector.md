@@ -181,16 +181,43 @@ email"):
   `ask.exec_query()` sets `transaction_read_only`, and the tools are annotated
   `readOnlyHint`. The only thing a call changes is what the page's own
   question would: a saved answer, a run row, a question spent.
-- **The token is wider than the tools, but cannot write.** It is a full
-  user JWT and could call PostgREST directly within the user's RLS. A
-  PostgREST pre-request hook (`public.oauth_client_request_guard()`,
-  migration `20261016050115_oauth_client_read_only`) refuses every non-read
-  request from a token carrying `client_id`, except the eight `ask_*`
-  functions this route calls as the user; restrictive Storage policies refuse
-  its object writes. A user-side RPC added to the MCP path must be added to
-  that function's list, or the connector's own call is refused. Supabase
-  Auth's own endpoints (`/auth/v1/user`) are outside both — the consent
-  page still says Allow hands the app a sign-in token.
+- **The token is wider than the tools.** It is a full user JWT, so its
+  holder can do more than the four tools offer. What it can and cannot do:
+  - **Reads**: anything the person's own session can read through
+    PostgREST and Storage, within RLS — every table they can see, not only
+    the `ask` views.
+  - **PostgREST writes are refused.** A pre-request hook
+    (`public.oauth_client_request_guard()`, migration
+    `20261016050115_oauth_client_read_only`) refuses every non-read request
+    from a token carrying `client_id`, except the eight `ask_*` functions
+    this route calls as the user. `tests/mcp-auth.spec.ts` holds that list
+    equal to the calls in `src/lib/services/mcp/` and the Ask modules it
+    runs, so a new user-side RPC there fails CI until the migration lists
+    it. Those eight write only the person's own Ask data, but some take
+    free-form content: a client calling them directly could plant a cached
+    answer (`ask_cache_put`) or a conversation turn the Ask page later shows
+    as its own, or spend the monthly question allowance
+    (`ask_reserve_question`; the daily MCP cap is only in this route).
+  - **Storage writes are refused** by three restrictive policies on
+    `storage.objects`.
+  - **Edge Functions refuse it.** `process-match`, `generate-insights` and
+    `generate-key-moments` answer a `client_id` token 403 in
+    `authorizeCaller()`. They run from what is deployed, so this holds only
+    once they are redeployed from this branch.
+  - **Supabase Auth's own endpoints accept it** as the person's session:
+    `PUT /auth/v1/user` (email, password, metadata), MFA enrolment, identity
+    linking, and `POST /auth/v1/oauth/authorizations/{id}/consent`, which
+    could approve another client for the same person. Nothing in this repo
+    can gate them. Before switching the OAuth server on, confirm **Secure
+    email change** and **Secure password change** (reauthentication) are on
+    in Authentication → Providers → Email, and keep access tokens
+    short-lived.
+  - **Realtime broadcast** is not gated; nothing here uses it.
+- **The consent page cannot tell whose Claude is asking.** Someone can start
+  the connector flow in their own claude.ai and send the authorize link to
+  someone else; that person sees "Claude", and an Allow gives the sender's
+  session a token for their account. The page names the account being
+  connected and asks the person to approve only connections they started.
 
 ## 5. Connecting
 
@@ -251,10 +278,11 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
 
 **Known limits**
 
-- **Writes are gated on `client_id`** (§4) and **consent on the callback**
-  (§2). Left outside both: Supabase Auth's own endpoints, which accept the
-  token as the person's session (keep **Secure email change** and **Secure
-  password change** on), and Realtime broadcast.
+- **Writes are gated on `client_id`** in PostgREST, Storage and the Edge
+  Functions (§4), and **consent on the callback** (§2). Before switching the
+  OAuth server on: redeploy the three Edge Functions from this branch, and
+  check the Auth settings §4 names — Supabase Auth's own endpoints accept
+  the token as the person's session. Realtime broadcast is not gated.
 - The 401's metadata URL and the resource document name `mcpOrigin()`
   (`NEXT_PUBLIC_SITE_URL`, then Vercel's variables) on a production build;
   the request's own origin stands in only outside one.

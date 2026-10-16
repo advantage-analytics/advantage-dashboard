@@ -34,15 +34,18 @@ type Caller = { kind: "service" } | { kind: "user"; userId: string };
  * bearer equals SUPABASE_SERVICE_ROLE_KEY) and a signed-in user, whose access
  * token is what `supabase.functions.invoke` sends from `/api/upload`. A user
  * token is verified with `auth.getUser` on an anon client; anything else is
- * answered 401. Whether that user may touch the match is decided afterwards,
- * against `matches.created_by`.
+ * answered 401. A token an app was given through Supabase Auth's OAuth
+ * server (it carries a `client_id` claim — the Ask MCP connector,
+ * docs/ask-mcp-connector.md) is answered 403: those apps are read-only, and
+ * everything here writes. Whether that user may touch the match is decided
+ * afterwards, against `matches.created_by`.
  *
  * Meant to be the same helper in every edge function here — copy it verbatim
  * rather than adapting it.
  */
 async function authorizeCaller(
   req: Request,
-): Promise<{ caller: Caller } | { status: 401; error: string }> {
+): Promise<{ caller: Caller } | { status: 401 | 403; error: string }> {
   const header = req.headers.get("authorization") ?? "";
   const token = header.replace(/^bearer\s+/i, "").trim();
   if (!token) {
@@ -61,7 +64,28 @@ async function authorizeCaller(
   if (error || !data?.user) {
     return { status: 401, error: "Invalid or expired token" };
   }
+  if (jwtClientId(token) !== null) {
+    return {
+      status: 403,
+      error: "Apps connected to Advantage have read-only access",
+    };
+  }
   return { caller: { kind: "user", userId: data.user.id } };
+}
+
+/** The `client_id` claim of a JWT already verified by `auth.getUser`, or null. */
+function jwtClientId(token: string): string | null {
+  try {
+    const part = token.split(".")[1] ?? "";
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded)) as { client_id?: unknown };
+    return typeof claims.client_id === "string" && claims.client_id !== ""
+      ? claims.client_id
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
