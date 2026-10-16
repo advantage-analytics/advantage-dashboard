@@ -62,6 +62,24 @@ function configuredPriceId(pack: CreditPackId): string | null {
   return value && value.startsWith("price_") ? value : null;
 }
 
+/**
+ * How Stripe draws the embedded form, set per session so it matches the
+ * dialog around it whatever the Dashboard says: Inter, Signal Blue
+ * (`--blue`, the `advButton()` primary), a white card, rounded fields, and
+ * the brand name players see everywhere else ("Advantage", never the LLC).
+ * The iframe is Stripe's, so our CSS cannot reach it — these are the levers.
+ *
+ * Accepted by the API version this SDK pins (verified in test mode,
+ * 2026-10-16) though the SDK's types predate them, hence the widened params.
+ */
+const CHECKOUT_BRANDING = {
+  display_name: "Advantage",
+  font_family: "inter",
+  border_style: "rounded",
+  button_color: "#3B82F6",
+  background_color: "#FFFFFF",
+} as const;
+
 /** "General — electronically supplied services". */
 const CREDIT_TAX_CODE = "txcd_10000000";
 
@@ -97,11 +115,20 @@ export async function createCreditCheckoutSession(params: {
     user_id: userId,
   };
 
-  const session = await stripe.checkout.sessions.create({
+  const sessionParams: Stripe.Checkout.SessionCreateParams & {
+    branding_settings: typeof CHECKOUT_BRANDING;
+    wallet_options: { link: { display: "never" } };
+  } = {
     mode: "payment",
     ui_mode: "embedded",
     redirect_on_completion: "never",
     line_items: [lineItem],
+    // Cards only (Apple Pay and Google Pay are cards and still show), and no
+    // Link sign-up: one short form inside a 520px dialog, and no bank method
+    // whose redirect `redirect_on_completion: "never"` could not return from.
+    payment_method_types: ["card"],
+    wallet_options: { link: { display: "never" } },
+    branding_settings: CHECKOUT_BRANDING,
     automatic_tax: { enabled: true },
     client_reference_id: userId,
     ...(email ? { customer_email: email } : {}),
@@ -114,7 +141,8 @@ export async function createCreditCheckoutSession(params: {
     custom_text: {
       submit: { message: "All sales final." },
     },
-  });
+  };
+  const session = await stripe.checkout.sessions.create(sessionParams);
 
   if (!session.client_secret) {
     throw new Error("Stripe returned no client secret for the session");
