@@ -210,7 +210,6 @@ export default async function SharedMatchPage({
           <MatchReportProvider
             matchId={match.id}
             summary={summary}
-            canCompare={false}
             isDerived={isDerived}
             statsPublished={statsPublished}
             hasPlayableVideo={video !== null}

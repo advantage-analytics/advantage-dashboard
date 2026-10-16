@@ -10,7 +10,7 @@ import { parse } from "pgsql-ast-parser";
  * the database's own guards were all there was. They are server-only now
  * (20261013055928), which makes this check the one thing that decides WHICH
  * functions a query may call: the database still limits what can be read (a
- * pinned viewer, a role with `SELECT` on four views, a read-only
+ * pinned viewer, a role with `SELECT` on five views, a read-only
  * transaction), but it cannot stop a call to set_config, an advisory lock or
  * pg_notify, and this can. `runQuery()` in `ask.ts` runs it on every string
  * before it reaches the database. Every decision below falls on the side of
@@ -26,8 +26,26 @@ import { parse } from "pgsql-ast-parser";
 
 export type AskSqlCheck = { ok: true } | { ok: false; reason: string };
 
-/** The four `ask` views (design "Database"), the only relations `scope_sql` may read. */
-export const ASK_VIEWS = ["matches", "match_stats", "points", "shots"] as const;
+/**
+ * The `ask` views (design "Database"; `point_plays` since migration
+ * 20261015090038), the only relations `scope_sql` may read.
+ */
+export const ASK_VIEWS = [
+  "matches",
+  "match_stats",
+  "points",
+  "shots",
+  "point_plays",
+] as const;
+
+/** "ask.matches, ask.match_stats, … and ask.point_plays", for a refusal. */
+const QUALIFIED_VIEW_LIST = (() => {
+  const names = ASK_VIEWS.map((view) => `ask.${view}`);
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+})();
+
+/** "(matches, match_stats, …, point_plays)", for a refusal. */
+const BARE_VIEW_LIST = `(${ASK_VIEWS.join(", ")})`;
 
 /**
  * The name `ask_run_query` binds `scope_sql` to — `sql` must read it and
@@ -288,7 +306,7 @@ function checkRelation(name: Node, state: WalkState): void {
 
   if (schema !== undefined && schema !== "ask") {
     refuse(
-      `"${schema}.${relation}" is not an ask view; only ask.matches, ask.match_stats, ask.points and ask.shots may be read.`,
+      `"${schema}.${relation}" is not an ask view; only ${QUALIFIED_VIEW_LIST} may be read.`,
     );
   }
   if ((ASK_VIEWS as readonly string[]).includes(relation)) {
@@ -296,9 +314,7 @@ function checkRelation(name: Node, state: WalkState): void {
     return;
   }
   if (schema === "ask") {
-    refuse(
-      `"ask.${relation}" is not one of the ask views (matches, match_stats, points, shots).`,
-    );
+    refuse(`"ask.${relation}" is not one of the ask views ${BARE_VIEW_LIST}.`);
   }
   if (relation === SCOPE_NAME) {
     if (state.mode === "scope_sql") {
@@ -309,7 +325,7 @@ function checkRelation(name: Node, state: WalkState): void {
   }
   if (state.cteNames.has(relation)) return;
   refuse(
-    `"${relation}" is not one of the ask views (matches, match_stats, points, shots)${
+    `"${relation}" is not one of the ask views ${BARE_VIEW_LIST}${
       state.mode === "sql" ? ", scope" : ""
     } or a CTE of the query.`,
   );
@@ -440,7 +456,7 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *
  * - each string is exactly one `SELECT` (CTEs and unions allowed; nothing
  *   data-modifying anywhere, including inside a CTE);
- * - every relation is one of the four `ask` views, a CTE the query itself
+ * - every relation is one of the five `ask` views, a CTE the query itself
  *   defines, or — in `sql` only — `scope`;
  * - `sql` reads `scope`, so the answer is computed over the matches the
  *   scope step chose;

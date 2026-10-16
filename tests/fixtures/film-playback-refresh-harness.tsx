@@ -240,7 +240,6 @@ function ReportSlot({
     <MatchReportProvider
       matchId={matchId}
       summary={null}
-      canCompare={false}
       isDerived={false}
       statsPublished={false}
       hasPlayableVideo

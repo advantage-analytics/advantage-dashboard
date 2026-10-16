@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, AtSign, X } from "lucide-react";
+import { formatMatchDayShort, matchDay } from "@/lib/data/match-day";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useListboxNav } from "@/hooks/use-listbox-nav";
@@ -58,14 +59,8 @@ export const ASK_PLACEHOLDER = PERSONAL_ASK_COPY.placeholder;
 
 /** `2026-11-01` → `Nov 1`; null for a date that cannot be read. */
 function resetDateLabel(resetsOn: string | null): string | null {
-  if (!resetsOn) return null;
-  const date = new Date(`${resetsOn}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  const day = matchDay(resetsOn);
+  return day ? formatMatchDayShort(day) : null;
 }
 
 /**
@@ -309,7 +304,7 @@ export function AskComposer({
         }}
         // The box is what reads as the field, so the ring is the box's — keyed
         // on the textarea, because the chips' buttons ring themselves.
-        className="flex flex-col gap-2.5 rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 pt-3 pb-2.5 has-[textarea:focus-visible]:shadow-[var(--focus-ring-field)]"
+        className="flex flex-col gap-2.5 rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 pt-3 pb-2.5 has-[textarea:focus-visible]:shadow-[var(--focus-ring-field)] [@media(max-height:560px)]:gap-1.5 [@media(max-height:560px)]:pt-2 [@media(max-height:560px)]:pb-1.5"
       >
         {value.tags.length > 0 && (
           <ul aria-label="Tagged" className="flex flex-wrap gap-1.5">
@@ -365,7 +360,7 @@ export function AskComposer({
             open && flat.length > 0 ? optionId(activeIndex) : undefined
           }
           data-focus-ring="none"
-          className="[field-sizing:content] max-h-40 min-h-[39px] w-full resize-none border-0 bg-transparent px-0.5 text-[13px] leading-[1.5] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+          className="[field-sizing:content] max-h-40 min-h-[39px] w-full resize-none border-0 bg-transparent px-0.5 text-[13px] leading-[1.5] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] [@media(max-height:560px)]:min-h-[20px]"
         />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -390,7 +385,8 @@ export function AskComposer({
                 aria-expanded={open}
                 onClick={onTagButton}
                 className={cn(
-                  "-ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]",
+                  // 28px tall; 32px on a phone, where a finger is the pointer.
+                  "-ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] max-md:h-8",
                   open
                     ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
                     : "text-[var(--ink-600)]",
@@ -406,13 +402,16 @@ export function AskComposer({
             }
           />
 
-          {/* A label. Not a button, no chevron: there is one engine. */}
+          {/* A label. Not a button, no chevron: there is one engine. Under
+              768px the whole label is read, not drawn — a mark standing
+              alone there is an unexplained black square, and the row is
+              330px wide, so the Send button must not wrap under it. */}
           <span
             data-ask-engine=""
-            className="flex items-center gap-2 text-[12px] text-[var(--ink-700)]"
+            className="flex items-center gap-2 text-[12px] text-[var(--ink-700)] max-md:sr-only"
           >
             <AskEngineMark />
-            Advantage Intelligence
+            <span>Advantage Intelligence</span>
           </span>
 
           <div className="flex-1" />

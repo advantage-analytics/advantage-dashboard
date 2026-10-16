@@ -3,9 +3,13 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { parsePlanReply } from "@/lib/services/ask/ask";
-import { compareSql } from "@/lib/services/ask/compare";
+import { ASK_COMPARE_KINDS, compareSql } from "@/lib/services/ask/compare";
 
-import { getLLMStream, isLLMConfigured } from "@/lib/llm/adapter";
+import {
+  getLLMStream,
+  isLLMConfigured,
+  resolvedLLMModel,
+} from "@/lib/llm/adapter";
 import {
   ASK_CELL_REFERENCE_SYNTAX,
   ASK_FIGURE_LINE_SYNTAX,
@@ -16,10 +20,11 @@ import {
   renderAskAnswer,
 } from "@/lib/services/ask/answer-render";
 import {
+  ASK_MODEL_VISUAL_KINDS,
   ASK_VISUAL_KINDS,
   type AskAnswerEvent,
   type AskVisual,
-  type AskVisualKind,
+  type AskModelVisualKind,
   readAskVisual,
 } from "@/lib/services/ask/events";
 import {
@@ -30,6 +35,10 @@ import {
 } from "@/lib/services/ask/mock";
 import {
   ASK_ANSWER_EXAMPLE_REPLY,
+  ASK_ANSWER_PROMPT_DYNAMIC_HEADING,
+  ASK_PLAN_PROMPT_DYNAMIC_HEADING,
+  ASK_PLAN_REPLY_SCHEMA,
+  askPromptStaticPrefixLength,
   ASK_FOLLOW_UP_KEEPS_COLUMNS,
   ASK_FOLLOW_UP_KEEPS_SHAPE,
   ASK_ANSWER_EXAMPLE_ROWS,
@@ -61,7 +70,22 @@ import {
   buildPlanPrompt,
   renderAskPercentageBlock,
   renderAskSchemaBlock,
+  ASK_ANSWER_PROMPT_PREVIOUS_HEADING,
+  ASK_COACH_RULE,
+  ASK_COACH_SHAPE_LINE,
+  ASK_PLAN_PROMPT_EXAMPLES_HEADING,
+  ASK_PLAN_PROMPT_FOCUS_HEADING,
+  ASK_PLAN_PROMPT_STATE_LEAD,
+  ASK_TEAM_NO_ADVICE_RULE,
+  ASK_THREAD_STATE_RULE,
+  MAX_ASK_STATE_PROMPT_TURNS,
+  MAX_ASK_STATE_PROMPT_TURN_LENGTH,
 } from "@/lib/services/ask/prompts";
+import { ASK_COACH_SENTENCE } from "@/lib/services/ask/coach";
+import {
+  askSchemaFocus,
+  MAX_ASK_FOCUS_COLUMNS,
+} from "@/lib/services/ask/focus";
 import {
   ASK_COMPARED_PREFIXES,
   ASK_FACTS_HEADING,
@@ -73,6 +97,10 @@ import {
   ASK_SCHEMA,
 } from "@/lib/services/ask/schema";
 import type { AskScope } from "@/lib/services/ask/scope";
+import {
+  ASK_THREAD_STATE_FIELDS,
+  readAskThreadState,
+} from "@/lib/services/ask/thread-state";
 import {
   ASK_SQL_FUNCTION_ALLOWLIST,
   ASK_VIEWS,
@@ -164,7 +192,7 @@ function migrationColumnComments(): Map<string, string> {
 }
 
 test.describe("ASK_SCHEMA", () => {
-  test("describes exactly the four ask views, in the guard's order", () => {
+  test("describes exactly the five ask views, in the guard's order", () => {
     expect(ASK_SCHEMA.map((view) => view.view)).toEqual([...ASK_VIEWS]);
     for (const view of ASK_SCHEMA) {
       const names = view.columns.map((column) => column.name);
@@ -303,7 +331,7 @@ test.describe("buildPlanPrompt", () => {
     expect(prompt).toContain("### Comparisons the app computes (shape D)");
     expect(prompt).toContain("For these questions you write NO sql.");
     expect(prompt).toContain(
-      `- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened"`,
+      `- "opponent": the player's figures beside the opponents' in the same matches. For "why did I lose/win", "what did I do to win", "what happened" (in a match, against an opponent, or across a kind of match: "what happened in my three-set matches")`,
     );
     expect(prompt).toContain(
       `- "baseline": the figures over the matches in scope_sql beside the same figures over ALL the player's matches.`,
@@ -441,16 +469,20 @@ test.describe("buildPlanPrompt", () => {
     );
   });
 
-  test("says where serve direction comes from and that no view records the court", () => {
+  test("says where serve direction and the court come from, naming the per-point view", () => {
     expect(prompt).toContain(
       "Serve direction is serve_t, serve_body and serve_wide in ask.match_stats",
     );
     expect(prompt).toContain(
-      "No view records which court (deuce or ad) a serve was hit from; do not invent a column for it.",
+      "Which court a point was played from, Deuce or Ad, is ask.points.court. ask.point_plays has serve_zone, serve_type, court and i_served in one row per point",
+    );
+    expect(prompt).toContain(
+      "Read only ask.matches, ask.match_stats, ask.points, ask.shots and ask.point_plays",
     );
     // The columns it names exist.
     const stats = ASK_SCHEMA.find((view) => view.view === "match_stats");
     const shots = ASK_SCHEMA.find((view) => view.view === "shots");
+    const plays = ASK_SCHEMA.find((view) => view.view === "point_plays");
     for (const column of ["serve_t", "serve_body", "serve_wide"]) {
       expect(
         stats?.columns.some((c) => c.name === column),
@@ -460,6 +492,18 @@ test.describe("buildPlanPrompt", () => {
     for (const column of ["zone", "shot_type"]) {
       expect(
         shots?.columns.some((c) => c.name === column),
+        column,
+      ).toBe(true);
+    }
+    for (const column of [
+      "serve_zone",
+      "serve_type",
+      "court",
+      "i_served",
+      "has_shots",
+    ]) {
+      expect(
+        plays?.columns.some((c) => c.name === column),
         column,
       ).toBe(true);
     }
@@ -646,8 +690,12 @@ test.describe("buildAnswerPrompt", () => {
       "Second serves and returns decided it: Beau won most of the points behind his second serve and more than half of his return points, while you won well under half of each.",
     );
     expect(result.figures).toEqual([
-      { label: "Total points won", value: "45.6%" },
-      { label: "Unforced errors", value: "38" },
+      {
+        label: "Total points won",
+        value: "45.6%",
+        column: "me_total_points_won_pct",
+      },
+      { label: "Unforced errors", value: "38", column: "me_unforced_errors" },
     ]);
     expect(result.droppedVisuals).toEqual([]);
     expect(result.visual).toEqual({
@@ -695,16 +743,34 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
 
   test("lists exactly the six kinds, each with when it fits, its syntax and its example", () => {
     const headings = [...prompt.matchAll(/^### (\w+) — /gm)].map((m) => m[1]);
-    expect(headings).toEqual([...ASK_VISUAL_KINDS]);
+    expect(headings).toEqual([...ASK_MODEL_VISUAL_KINDS]);
     expect(Object.keys(ASK_VISUAL_EXAMPLES).sort()).toEqual(
-      [...ASK_VISUAL_KINDS].sort(),
+      [...ASK_MODEL_VISUAL_KINDS].sort(),
     );
-    for (const kind of ASK_VISUAL_KINDS) {
+    for (const kind of ASK_MODEL_VISUAL_KINDS) {
       expect(prompt).toContain(
         `### ${kind} — ${ASK_VISUAL_EXAMPLES[kind].when}\n${ASK_VISUAL_SYNTAX[kind]}\nExample:\n${ASK_VISUAL_EXAMPLES[kind].block}`,
       );
     }
     expect(prompt).toContain(ASK_VISUAL_LINE_SYNTAX);
+  });
+
+  test("momentum and tree are the server's alone: kinds the renderer knows and the catalogue never offers", () => {
+    for (const kind of ["momentum", "tree"]) {
+      expect(ASK_VISUAL_KINDS).toContain(kind);
+      expect(ASK_MODEL_VISUAL_KINDS).not.toContain(kind);
+    }
+    expect(ASK_VISUAL_KINDS).toHaveLength(ASK_MODEL_VISUAL_KINDS.length + 2);
+    for (const text of [
+      prompt,
+      buildAnswerPrompt({ ...ANSWER_INPUT, matchCount: 1 }),
+    ]) {
+      expect(text).not.toContain("### momentum");
+      expect(text).not.toContain("CHART: momentum");
+      expect(text).not.toContain("### tree");
+      expect(text).not.toContain("CHART: tree");
+      expect(text).toContain("There are exactly six kinds.");
+    }
   });
 
   test("pins the block rules: at most one, none is fine, result cells only, one paragraph beneath, figures still allowed", () => {
@@ -744,13 +810,45 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     );
   });
 
-  test("says the serve block has no deuce/ad court to draw", () => {
+  test("says the serve block draws the deuce and ad courts, from ask.points.court", () => {
     expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
-      "The result does not record the deuce or ad court, so do not label a row with one.",
+      "one row per court when it has a court column (ask.points.court, Deuce or Ad)",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Label a court row exactly Deuce or Ad, copied from that row's court cell: the app then draws the two service boxes as a court.",
+    );
+    expect(ASK_TEAM_VISUAL_EXAMPLES.serve.when).toBe(
+      ASK_VISUAL_EXAMPLES.serve.when,
+    );
+    // Both catalogues' examples label the courts so, in either order.
+    for (const example of [
+      ASK_VISUAL_EXAMPLES.serve,
+      ASK_TEAM_VISUAL_EXAMPLES.serve,
+    ]) {
+      expect(example.block).toContain("\nROW: Deuce |");
+      expect(example.block).toContain("\nROW: Ad |");
+    }
+  });
+
+  test("says a trend may name a baseline column third, and that match_id links the points", () => {
+    expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
+      "name it third: the app draws it as a dashed line beside the points.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.trend.when).toContain(
+      "A match_id column in the result links each point to its match.",
     );
   });
 
-  const expected: Record<AskVisualKind, AskVisual> = {
+  test("says every serve cell is a count: a court is one row, never a count row and a percentage row", () => {
+    expect(ASK_VISUAL_EXAMPLES.serve.when).toContain(
+      "Every cell is a count; a percentage never gets a row of its own, so a court is one row, not a count row and a percentage row.",
+    );
+    expect(ASK_VISUAL_EXAMPLES.serve.when).not.toContain(
+      "does not record the deuce or ad court",
+    );
+  });
+
+  const expected: Record<AskModelVisualKind, AskVisual> = {
     bars: {
       kind: "bars",
       caption: "Share of points, from 4 matches against left-handers.",
@@ -798,13 +896,21 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     },
     serve: {
       kind: "serve",
-      caption: "Where your serves went across 22 matches.",
+      caption: "Where your serves went across 22 matches, by court.",
+      // Every cited cell is one of the viewer's own serve counts.
+      server: "you",
       courts: [
         {
-          label: "Serves",
+          label: "Deuce",
           t: { value: 13, text: "13" },
           body: { value: 8, text: "8" },
           wide: { value: 18, text: "18" },
+        },
+        {
+          label: "Ad",
+          t: { value: 9, text: "9" },
+          body: { value: 11, text: "11" },
+          wide: { value: 15, text: "15" },
         },
       ],
     },
@@ -812,10 +918,16 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
       kind: "form",
       caption: "Your matches against left-handers, oldest first.",
       results: [true, false, true],
+      // The renderer reads each match's date and opponent off the row.
+      ticks: [
+        { date: "Jun 4, 2026", opponent: "Sam Ortiz" },
+        { date: "Jul 9, 2026", opponent: "Alex Rivera" },
+        { date: "Sep 28, 2026", opponent: "Sam Ortiz" },
+      ],
     },
   };
 
-  for (const kind of ASK_VISUAL_KINDS) {
+  for (const kind of ASK_MODEL_VISUAL_KINDS) {
     test(`the ${kind} example renders through the real renderer to the expected visual`, async () => {
       const example = ASK_VISUAL_EXAMPLES[kind];
       const { events, result } = await render(
@@ -906,9 +1018,13 @@ test.describe("mock mode", () => {
     expect(result.droppedFigures).toEqual([]);
     expect(result.headline).not.toMatch(/\d/);
     expect(result.figures).toEqual([
-      { label: "Wins", value: "7" },
-      { label: "Losses", value: "4" },
-      { label: "Second-serve points won", value: "48.3%" },
+      { label: "Wins", value: "7", column: "wins" },
+      { label: "Losses", value: "4", column: "losses" },
+      {
+        label: "Second-serve points won",
+        value: "48.3%",
+        column: "second_serve_won_pct",
+      },
     ]);
     expect(result.text).toContain(
       "Across 12 recorded matches you have won 7 and lost 4. You won 48.3% of the points played on your second serve.",
@@ -949,6 +1065,7 @@ test.describe("mock mode", () => {
     expect(result.figures[2]).toEqual({
       label: "Second-serve points won",
       value: "—",
+      column: "second_serve_won_pct",
     });
   });
 });
@@ -1008,6 +1125,21 @@ test.describe("isLLMConfigured", () => {
       Object.assign(process.env, env);
       expect(isLLMConfigured(), JSON.stringify(env)).toBe(configured);
     }
+  });
+
+  test("the model recorded for a run is the one the adapter resolves, null in mock mode", () => {
+    expect(resolvedLLMModel("gemini-x")).toBeNull();
+    Object.assign(process.env, { LLM_PROVIDER: "openai", OPENAI_API_KEY: "k" });
+    expect(resolvedLLMModel("gemini-x")).toBe("gemini-x");
+    // Another provider's id, or none at all, runs the provider's default.
+    expect(resolvedLLMModel("claude-x")).toBe("gemini-3.5-flash-lite");
+    expect(resolvedLLMModel(undefined)).toBe("gemini-3.5-flash-lite");
+    Object.assign(process.env, {
+      LLM_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "k",
+    });
+    expect(resolvedLLMModel("claude-x")).toBe("claude-x");
+    expect(resolvedLLMModel("gemini-x")).toBe("claude-opus-4-6");
   });
 
   test("whenever it is false, getLLMStream answers with the mock stream", async () => {
@@ -1416,9 +1548,9 @@ test.describe("buildAnswerPrompt — team scope", () => {
 
   test("the catalogue is the team's: every kind, none of them addressing the player", () => {
     expect(Object.keys(ASK_TEAM_VISUAL_EXAMPLES)).toEqual([
-      ...ASK_VISUAL_KINDS,
+      ...ASK_MODEL_VISUAL_KINDS,
     ]);
-    for (const kind of ASK_VISUAL_KINDS) {
+    for (const kind of ASK_MODEL_VISUAL_KINDS) {
       const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
       expect(prompt).toContain(`### ${kind} — ${example.when}`);
       expect(prompt).toContain(ASK_VISUAL_SYNTAX[kind]);
@@ -1428,7 +1560,7 @@ test.describe("buildAnswerPrompt — team scope", () => {
     }
   });
 
-  for (const kind of ASK_VISUAL_KINDS) {
+  for (const kind of ASK_MODEL_VISUAL_KINDS) {
     test(`the team ${kind} example renders through the real renderer, nothing dropped`, async () => {
       const example = ASK_TEAM_VISUAL_EXAMPLES[kind];
       const { events, result } = await render(
@@ -1945,5 +2077,522 @@ test.describe("the plan prompts — a follow-up keeps the previous query's colum
     });
     expect(long).toContain(`${"x".repeat(200)}…\n\nA follow-up`);
     expect(long).not.toContain("x".repeat(MAX_ASK_PREVIOUS_SQL_LENGTH + 1));
+  });
+});
+
+// ── A fixed prefix, then this question ───────────────────────────────────────
+
+test.describe("the prompts — everything fixed first, this question last", () => {
+  /** Where two prompts stop being the same text. */
+  const sharedPrefix = (a: string, b: string): number => {
+    let index = 0;
+    while (index < a.length && index < b.length && a[index] === b[index]) {
+      index += 1;
+    }
+    return index;
+  };
+
+  for (const [name, scope] of [
+    ["personal", undefined],
+    ["team", TEAM_SCOPE],
+  ] as const) {
+    test(`${name} plan prompts built on different days, with different tags and turns, share one prefix up to the dynamic heading`, () => {
+      const one = buildPlanPrompt({ ...PLAN_INPUT, scope });
+      const other = buildPlanPrompt({
+        today: "2027-03-02",
+        tags: [],
+        conversation: [],
+        previousPlan: {
+          scope_sql: "select match_id from ask.matches",
+          sql: null,
+        },
+        scope,
+      });
+      const prefix = askPromptStaticPrefixLength(one);
+      expect(prefix).toBe(askPromptStaticPrefixLength(other));
+      expect(sharedPrefix(one, other)).toBeGreaterThanOrEqual(prefix);
+      // The fixed text is the bulk of the prompt — what a cache can skip.
+      expect(prefix).toBeGreaterThan(one.length * 0.75);
+      // Exactly one dynamic heading, and the per-question parts are all after it.
+      expect(
+        one.match(new RegExp(`^${ASK_PLAN_PROMPT_DYNAMIC_HEADING}$`, "gm")),
+      ).toHaveLength(1);
+      for (const dynamic of [
+        "Today's date: 2026-10-11",
+        "### Tags on this question",
+        "### The conversation so far",
+        `${scope ? "Coach" : "Player"}: How did my first serve hold up on clay?`,
+        ASK_FOLLOW_UP_KEEPS_COLUMNS,
+      ]) {
+        expect(one.indexOf(dynamic)).toBeGreaterThan(prefix);
+      }
+      // And the rules the model reads first are all before it.
+      for (const fixed of [
+        "## The data",
+        "## Percentages",
+        "## What to reply",
+        "## Examples",
+      ]) {
+        expect(one.indexOf(fixed)).toBeLessThan(prefix);
+      }
+    });
+
+    test(`${name} answer prompts for different questions and results share one prefix up to the dynamic heading`, () => {
+      const one = buildAnswerPrompt({ ...ANSWER_INPUT, scope });
+      const other = buildAnswerPrompt({
+        question: "Who did I lose to most?",
+        rows: [{ opponent_name: "Sam Ortiz", losses: 3 }],
+        matchCount: 1,
+        scope,
+      });
+      const prefix = askPromptStaticPrefixLength(one);
+      expect(prefix).toBe(askPromptStaticPrefixLength(other));
+      expect(sharedPrefix(one, other)).toBeGreaterThanOrEqual(prefix);
+      expect(prefix).toBeGreaterThan(one.length * 0.5);
+      expect(
+        one.match(new RegExp(`^${ASK_ANSWER_PROMPT_DYNAMIC_HEADING}$`, "gm")),
+      ).toHaveLength(1);
+      for (const dynamic of [
+        JSON.stringify(ANSWER_INPUT.question),
+        "## The result",
+        "## What the numbers show",
+        "## The scope",
+        "Write the answer now:",
+      ]) {
+        expect(one.indexOf(dynamic)).toBeGreaterThan(prefix);
+      }
+      for (const fixed of [
+        "## The shape of your answer",
+        "## The visual block",
+        "## Rules",
+        "## Example",
+      ]) {
+        expect(one.indexOf(fixed)).toBeLessThan(prefix);
+      }
+    });
+  }
+
+  test("a prompt with no dynamic heading is all prefix", () => {
+    expect(askPromptStaticPrefixLength("You are a model.")).toBe(16);
+  });
+});
+
+// ── The planner's reply as a schema ──────────────────────────────────────────
+
+test.describe("ASK_PLAN_REPLY_SCHEMA", () => {
+  const properties = Object.keys(ASK_PLAN_REPLY_SCHEMA.schema.properties);
+
+  test("names every field of the four reply shapes and the state, and requires all but compare and measures", () => {
+    const exampleKeys = new Set(
+      [
+        ASK_PLAN_EXAMPLE_QUERY,
+        ASK_PLAN_EXAMPLE_COMPARE,
+        ASK_PLAN_EXAMPLE_BASELINE,
+        ASK_PLAN_EXAMPLE_REVIEW,
+        ASK_PLAN_EXAMPLE_REFUSAL,
+        ASK_TEAM_PLAN_EXAMPLE_PLAYERS,
+      ].flatMap((example) => Object.keys(example)),
+    );
+    for (const key of exampleKeys) expect(properties).toContain(key);
+    expect(properties.sort()).toEqual(
+      [
+        "asks_for_advice",
+        "cannot_answer",
+        "compare",
+        "measures",
+        "review",
+        "scope_sql",
+        "sql",
+        "state",
+      ].sort(),
+    );
+    // Required, and written empty where a shape has no use for them: left
+    // optional, the model dropped fields the prose rules demand. The state
+    // too, its four fields required and written "" when they do not apply.
+    expect([...ASK_PLAN_REPLY_SCHEMA.schema.required].sort()).toEqual(
+      [
+        "asks_for_advice",
+        "cannot_answer",
+        "review",
+        "scope_sql",
+        "sql",
+        "state",
+      ].sort(),
+    );
+    const state = ASK_PLAN_REPLY_SCHEMA.schema.properties.state;
+    expect(state.type).toBe("object");
+    expect(Object.keys(state.properties).sort()).toEqual(
+      [...ASK_THREAD_STATE_FIELDS].sort(),
+    );
+    expect([...state.required].sort()).toEqual(
+      [...ASK_THREAD_STATE_FIELDS].sort(),
+    );
+    expect(ASK_PLAN_REPLY_SCHEMA.schema.properties.compare.enum).toEqual([
+      ...ASK_COMPARE_KINDS,
+    ]);
+    // Flat: no anyOf, so every provider's structured output accepts it.
+    expect(JSON.stringify(ASK_PLAN_REPLY_SCHEMA)).not.toMatch(/anyOf|oneOf/);
+  });
+
+  test("a structured reply that carries every field, the unused ones empty, still reads as its shape", () => {
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "select match_id from ask.matches",
+          sql: "select count(*) as n from scope",
+          cannot_answer: "",
+          review: false,
+          compare: "",
+          measures: [],
+          asks_for_advice: false,
+        }),
+      ),
+    ).toEqual({
+      scope_sql: "select match_id from ask.matches",
+      sql: "select count(*) as n from scope",
+      asks_for_advice: false,
+    });
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "",
+          sql: "",
+          cannot_answer: "Your matches do not record footwork.",
+          review: false,
+          measures: [],
+          asks_for_advice: true,
+        }),
+      ),
+    ).toEqual({
+      cannot_answer: "Your matches do not record footwork.",
+      asks_for_advice: true,
+    });
+    expect(
+      parsePlanReply(
+        JSON.stringify({
+          scope_sql: "select match_id from ask.matches",
+          sql: "",
+          cannot_answer: "   ",
+          review: true,
+          compare: "",
+          asks_for_advice: true,
+        }),
+      ),
+    ).toEqual({
+      review: true,
+      scope_sql: "select match_id from ask.matches",
+      asks_for_advice: true,
+    });
+  });
+});
+
+// ── Tier 3: the state, the shortlist, retrieved examples, coach mode ────────
+
+test.describe("the plan prompts — the state rule and the worked examples' states (roadmap 4.5)", () => {
+  const EXAMPLES = [
+    ASK_PLAN_EXAMPLE_QUERY,
+    ASK_PLAN_EXAMPLE_COMPARE,
+    ASK_PLAN_EXAMPLE_BASELINE,
+    ASK_PLAN_EXAMPLE_REVIEW,
+    ASK_PLAN_EXAMPLE_REFUSAL,
+    ASK_TEAM_PLAN_EXAMPLE_BREAKDOWN,
+    ASK_TEAM_PLAN_EXAMPLE_PLAYERS,
+    ASK_TEAM_PLAN_EXAMPLE_PLAYER,
+    ASK_TEAM_PLAN_EXAMPLE_OPPONENT,
+    ASK_TEAM_PLAN_EXAMPLE_REVIEW,
+    ASK_TEAM_PLAN_EXAMPLE_LINEUP_REFUSAL,
+    ASK_TEAM_PLAN_EXAMPLE_REFUSAL,
+  ];
+
+  test("both prompts state the rule once, in the fixed prefix, before the examples", () => {
+    for (const scope of [undefined, TEAM_SCOPE]) {
+      const prompt = buildPlanPrompt({ ...PLAN_INPUT, scope });
+      expect(prompt.split(ASK_THREAD_STATE_RULE)).toHaveLength(2);
+      const at = prompt.indexOf(ASK_THREAD_STATE_RULE);
+      expect(at).toBeLessThan(prompt.indexOf("## Examples"));
+      expect(at).toBeLessThan(askPromptStaticPrefixLength(prompt));
+    }
+    expect(ASK_THREAD_STATE_RULE).toContain('"state"');
+    for (const field of ASK_THREAD_STATE_FIELDS) {
+      expect(ASK_THREAD_STATE_RULE).toContain(`${field}:`);
+    }
+    expect(ASK_THREAD_STATE_RULE).toContain(
+      "A follow-up copies every field it does not change",
+    );
+  });
+
+  test("every worked example carries a state the reader accepts, naming only placeholders, and parses back whole", () => {
+    for (const example of EXAMPLES) {
+      expect(example.state).toBeDefined();
+      expect(readAskThreadState(example.state)).toEqual(example.state);
+      const names =
+        Object.values(example.state!)
+          .join(" ")
+          .match(/\b[A-Z][a-z]+[A-Z]\w*/g) ?? [];
+      for (const name of names) expect(ASK_PLAN_EXAMPLE_NAMES).toContain(name);
+      expect(parsePlanReply(JSON.stringify(example))).toEqual(example);
+    }
+  });
+});
+
+test.describe("the plan prompts — the schema shortlist (roadmap 1.7)", () => {
+  test("with the question, the tail names the views its words point to and lists their relevant columns; the full schema stays in the prefix", () => {
+    const prompt = buildPlanPrompt({
+      ...PLAN_INPUT,
+      question: "How is my second serve against left-handers this year?",
+    });
+    const prefix = askPromptStaticPrefixLength(prompt);
+    expect(prompt.indexOf(ASK_PLAN_PROMPT_FOCUS_HEADING)).toBeGreaterThan(
+      prefix,
+    );
+    expect(prompt).toContain("- ask.match_stats: match_id, side, ");
+    expect(prompt).toContain("second_serve_points_won");
+    expect(prompt).toContain(
+      "- ask.matches: match_id, played_on, opponent_name, opponent_hand, i_won",
+    );
+    expect(prompt).toContain("Not shortlisted: ask.points (");
+    expect(prompt).toContain(
+      'Every column of every view is listed under "The data" above.',
+    );
+    expect(prompt.indexOf(renderAskSchemaBlock())).toBeLessThan(prefix);
+  });
+
+  test("without the question there is no shortlist, and the prefix is the same with or without it", () => {
+    const without = buildPlanPrompt(PLAN_INPUT);
+    expect(without).not.toContain(ASK_PLAN_PROMPT_FOCUS_HEADING);
+    const withQuestion = buildPlanPrompt({ ...PLAN_INPUT, question: "serve?" });
+    expect(withQuestion).toContain(ASK_PLAN_PROMPT_FOCUS_HEADING);
+    expect(
+      withQuestion.slice(0, askPromptStaticPrefixLength(withQuestion)),
+    ).toBe(without.slice(0, askPromptStaticPrefixLength(without)));
+  });
+
+  test("askSchemaFocus: the keyword rules, the previous query and the examples' replies pick the views", () => {
+    const personal = (question: string, over = {}) =>
+      askSchemaFocus({ question, team: false, ...over }).views;
+    expect(personal("What are my losing plays?")).toEqual(["point_plays"]);
+    expect(personal("Where do my serves go on the ad side?")).toEqual([
+      "match_stats",
+      "point_plays",
+    ]);
+    expect(personal("How fast is my first serve in mph?")).toEqual([
+      "match_stats",
+      "shots",
+    ]);
+    expect(personal("Do I win more long rallies or short ones?")).toEqual([
+      "matches",
+      "match_stats",
+    ]);
+    // Nothing recognised: the two views most questions read.
+    expect(personal("Hello")).toEqual(["matches", "match_stats"]);
+    expect(
+      personal("and on clay?", {
+        previousSql:
+          "select count(*) as n from ask.points p where p.match_id in (select match_id from scope)",
+      }),
+    ).toContain("points");
+    expect(
+      personal("x", { exampleReplies: ['{"sql": "select 1 from ask.shots"}'] }),
+    ).toEqual(["shots"]);
+  });
+
+  test("askSchemaFocus: a view's key columns come first, the question's words pick the rest within the cap, hidden columns never; player_name for a team only", () => {
+    const stats = askSchemaFocus({ question: "second serve", team: false })
+      .columns.match_stats!;
+    expect(stats.slice(0, 2)).toEqual(["match_id", "side"]);
+    expect(stats).toContain("second_serve_won_pct");
+    expect(stats).toContain("second_serves_in");
+    expect(stats).not.toContain("serve_rating");
+    expect(stats.length).toBeLessThanOrEqual(MAX_ASK_FOCUS_COLUMNS);
+    expect(
+      askSchemaFocus({
+        question: "What is PlayerA's record this season?",
+        team: true,
+      }).columns.matches,
+    ).toContain("player_name");
+    expect(
+      askSchemaFocus({
+        question: "What is my record this season?",
+        team: false,
+      }).columns.matches,
+    ).not.toContain("player_name");
+  });
+});
+
+test.describe("the plan prompts — retrieved examples (roadmap 1.6)", () => {
+  const examples = [
+    {
+      question: "How is my\nsecond serve this season?",
+      sql: '{"compare": "baseline", "scope_sql": "select match_id from ask.matches where played_on >= date \'2026-08-01\'"}',
+    },
+  ];
+
+  test("are printed in the tail after the tags, each as the question and its reply, under a lead that says to follow them; the worked examples stay in the prefix", () => {
+    for (const scope of [undefined, TEAM_SCOPE]) {
+      const prompt = buildPlanPrompt({ ...PLAN_INPUT, scope, examples });
+      const prefix = askPromptStaticPrefixLength(prompt);
+      const at = prompt.indexOf(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+      expect(at).toBeGreaterThan(prefix);
+      expect(at).toBeGreaterThan(prompt.indexOf("### Tags on this question"));
+      expect(at).toBeLessThan(prompt.indexOf("### The conversation so far"));
+      expect(prompt).toContain(
+        `Question: "How is my second serve this season?"\n${examples[0].sql}`,
+      );
+      expect(prompt).toContain(
+        "follow its reply's shape and columns ahead of the worked examples above",
+      );
+      expect(prompt.indexOf("## Examples")).toBeLessThan(prefix);
+      expect(prompt).toContain(
+        JSON.stringify(
+          scope ? ASK_TEAM_PLAN_EXAMPLE_REFUSAL : ASK_PLAN_EXAMPLE_REFUSAL,
+        ),
+      );
+    }
+  });
+
+  test("none, or an empty list, prints nothing", () => {
+    const none = buildPlanPrompt(PLAN_INPUT);
+    expect(none).not.toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+    expect(buildPlanPrompt({ ...PLAN_INPUT, examples: [] })).toBe(none);
+  });
+});
+
+test.describe("the plan prompts — the previous state ahead of the turns (roadmap 4.5)", () => {
+  const long = {
+    role: "assistant" as const,
+    content: `${"A".repeat(500)}\n\n${"B".repeat(500)}`,
+  };
+  const conversation = [
+    { role: "user" as const, content: "First?" },
+    { role: "assistant" as const, content: "Unforced errors decided it." },
+    { role: "user" as const, content: "Second?" },
+    long,
+  ];
+  const state = {
+    scope: "matches against Marek",
+    measure: "unforced errors",
+    period: "",
+    subject: "why the matches were lost",
+  };
+  const plan = {
+    scope_sql:
+      "select match_id from ask.matches where opponent_name ilike '%marek%'",
+    sql: "select sum(s.unforced_errors) as unforced_errors from ask.match_stats s where s.side = 'me' and s.match_id in (select match_id from scope)",
+  };
+
+  test("with a state: the state first, then only the last two turns each cut short; without one, the turns as before", () => {
+    expect(MAX_ASK_STATE_PROMPT_TURNS).toBe(2);
+    expect(MAX_ASK_STATE_PROMPT_TURN_LENGTH).toBe(240);
+    for (const [scope, asker] of [
+      [undefined, "Player"],
+      [TEAM_SCOPE, "Coach"],
+    ] as const) {
+      const prompt = buildPlanPrompt({
+        ...PLAN_INPUT,
+        scope,
+        conversation,
+        previousPlan: { ...plan, state },
+      });
+      expect(prompt).toContain(
+        `${ASK_PLAN_PROMPT_STATE_LEAD}\nscope: matches against Marek\nmeasure: unforced errors\nperiod: (none)\nsubject: why the matches were lost\n\nThe last turns, shortened:\n${asker}: Second?\nAsk: ${"A".repeat(240)}…\n\nHow the previous question was planned`,
+      );
+      expect(prompt).not.toContain(`${asker}: First?`);
+      expect(prompt.indexOf(ASK_PLAN_PROMPT_STATE_LEAD)).toBeGreaterThan(
+        askPromptStaticPrefixLength(prompt),
+      );
+
+      const without = buildPlanPrompt({
+        ...PLAN_INPUT,
+        scope,
+        conversation,
+        previousPlan: plan,
+      });
+      expect(without).not.toContain(ASK_PLAN_PROMPT_STATE_LEAD);
+      expect(without).toContain(`${asker}: First?`);
+      expect(without).toContain("A".repeat(500));
+      // The prefix is the same text either way.
+      expect(prompt.slice(0, askPromptStaticPrefixLength(prompt))).toBe(
+        without.slice(0, askPromptStaticPrefixLength(without)),
+      );
+    }
+  });
+});
+
+test.describe("the answer prompts — the previous answer's headline (roadmap 4.5)", () => {
+  test("is printed after the question, in the tail, as data; absent or empty prints nothing", () => {
+    for (const scope of [undefined, TEAM_SCOPE]) {
+      const prompt = buildAnswerPrompt({
+        ...ANSWER_INPUT,
+        scope,
+        previousHeadline: "Unforced errors\n decided it.",
+      });
+      const at = prompt.indexOf(ASK_ANSWER_PROMPT_PREVIOUS_HEADING);
+      expect(at).toBeGreaterThan(askPromptStaticPrefixLength(prompt));
+      expect(at).toBeGreaterThan(
+        prompt.indexOf(JSON.stringify(ANSWER_INPUT.question)),
+      );
+      expect(at).toBeLessThan(prompt.indexOf("## The result"));
+      expect(prompt).toContain('"Unforced errors decided it."');
+      expect(prompt).toContain("do not repeat it");
+
+      const none = buildAnswerPrompt({ ...ANSWER_INPUT, scope });
+      expect(none).not.toContain(ASK_ANSWER_PROMPT_PREVIOUS_HEADING);
+      expect(
+        buildAnswerPrompt({ ...ANSWER_INPUT, scope, previousHeadline: null }),
+      ).toBe(none);
+      expect(
+        buildAnswerPrompt({ ...ANSWER_INPUT, scope, previousHeadline: "  " }),
+      ).toBe(none);
+    }
+  });
+});
+
+test.describe("the team answer prompt — coach mode (roadmap 4.3)", () => {
+  test("swaps the no-advice rule for the recommendations rule and adds the shape line; every other rule stays", () => {
+    const plain = buildAnswerPrompt({ ...ANSWER_INPUT, scope: TEAM_SCOPE });
+    const coach = buildAnswerPrompt({
+      ...ANSWER_INPUT,
+      scope: TEAM_SCOPE,
+      coach: true,
+    });
+    expect(plain).toContain(ASK_TEAM_NO_ADVICE_RULE);
+    expect(plain).not.toContain(ASK_COACH_RULE);
+    expect(plain).not.toContain(ASK_COACH_SHAPE_LINE);
+    expect(coach).toContain(ASK_COACH_RULE);
+    expect(coach).toContain(ASK_COACH_SHAPE_LINE);
+    expect(coach).not.toContain(ASK_TEAM_NO_ADVICE_RULE);
+    expect(coach).not.toContain("- NO ADVICE.");
+    for (const rule of [
+      "- HEADLINE FIRST.",
+      "- NEVER TYPE A NUMBER.",
+      "- COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE.",
+      "- COMPARATIVE WORDS FOLLOW THE STATEMENTS.",
+      `- THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}.`,
+      "- THIRD PERSON.",
+    ]) {
+      expect(coach).toContain(rule);
+    }
+    // The recommendation rests on a cited cell, and the rule names the cap.
+    expect(ASK_COACH_RULE).toContain("{{rN.column}}");
+    expect(ASK_COACH_RULE).toContain("at most two recommendations");
+    expect(ASK_COACH_RULE).toContain("no encouragement or praise");
+    // The notices are the server's: in neither variant.
+    for (const sentence of [ASK_COACH_SENTENCE, ASK_NO_ADVICE_SENTENCE]) {
+      expect(coach).not.toContain(sentence);
+      expect(plain).not.toContain(sentence);
+    }
+    // The variant is a fixed prefix of its own: cacheable like the other.
+    expect(askPromptStaticPrefixLength(coach)).toBeGreaterThan(
+      coach.length * 0.5,
+    );
+    expect(coach.indexOf(ASK_COACH_RULE)).toBeLessThan(
+      askPromptStaticPrefixLength(coach),
+    );
+  });
+
+  test("the personal prompt has no variant: coach is ignored there", () => {
+    expect(buildAnswerPrompt({ ...ANSWER_INPUT, coach: true })).toBe(
+      buildAnswerPrompt(ANSWER_INPUT),
+    );
   });
 });

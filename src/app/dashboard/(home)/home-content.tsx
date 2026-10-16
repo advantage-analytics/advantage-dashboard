@@ -18,6 +18,8 @@ interface HomeContentProps {
   activity: ReactNode;
   insight: ReactNode;
   serves: ReactNode;
+  /** "Pinned from Ask", after the serves; absent until something is pinned. */
+  pins?: ReactNode;
   footer: ReactNode;
 }
 
@@ -29,6 +31,7 @@ export default function HomeContent({
   activity,
   insight,
   serves,
+  pins,
   footer,
 }: HomeContentProps) {
   const router = useRouter();
@@ -73,6 +76,7 @@ export default function HomeContent({
       >
         {insight}
         {serves}
+        {pins}
       </motion.div>
     </div>
   );

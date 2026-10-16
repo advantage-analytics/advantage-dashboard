@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AskAnswer } from "@/components/dashboard/ask/ask-answer";
-import type { AskAnswerState } from "@/components/dashboard/ask/use-ask-stream";
+import type {
+  AskAnswerState,
+  AskFigure,
+} from "@/components/dashboard/ask/use-ask-stream";
 import {
   ASK_NO_ADVICE_SENTENCE,
   type AskErrorCode,
@@ -32,9 +35,15 @@ import type { AskScope } from "@/lib/services/ask/scope";
  *                      "Watch N points" link into its Video view
  *
  * On any case:
- * - `&visual=bars|table|trend|split|serve|form`  the answer carries that
- *   block; `&visual=empty-split|empty-serve|flat-trend` are the degenerate
- *   ones (every count zero, every value equal)
+ * - `&visual=bars|table|trend|split|serve|form|momentum|tree`  the answer
+ *   carries that block; `&visual=empty-split|empty-serve|flat-trend` are the
+ *   degenerate ones (every count zero, every value equal); `&visual=court-serve`
+ *   is a serve block whose two courts are Deuce and Ad and whose serves are
+ *   the viewer's, `&visual=linked-trend` a trend whose points are matches,
+ *   with a second series, `&visual=labelled-form` a form strip whose ticks
+ *   carry their matches, and `&visual=linked-table` a table with a row that
+ *   is one match and a row that is one measure
+ * - `&lead=1`          the question asked for a chart: the block leads
  * - `&advice=1`        the question asked for advice (`noAdvice`)
  * - `&scope=team`      the team page: the answer is about a program's
  *                      matches, and each source names the program's player
@@ -165,6 +174,58 @@ const VISUALS: Record<AskVisualKind, AskVisual> = {
     caption: "8 matches against left-handed opponents, oldest first.",
     results: [true, false, false, true, false, true, true, true],
   },
+  momentum: {
+    kind: "momentum",
+    caption: "Points won minus points lost, point by point.",
+    matchId: "match-sep-28",
+    // Two sets of six points: a lead built, lost, and a break point held.
+    points: [
+      { won: true, set: 1 },
+      { won: true, set: 1 },
+      { won: false, set: 1, mark: "break" },
+      { won: true, set: 1 },
+      { won: false, set: 1 },
+      { won: true, set: 1, mark: "set" },
+      { won: false, set: 2 },
+      { won: false, set: 2, mark: "break" },
+      { won: false, set: 2 },
+      { won: true, set: 2 },
+      { won: true, set: 2 },
+      { won: true, set: 2, mark: "match" },
+    ],
+  },
+  tree: {
+    kind: "tree",
+    caption:
+      "Your serve-plus-one patterns: where the serve went, then your next shot. Most played first.",
+    levels: ["Serve", "Plus one"],
+    countLabel: "Points",
+    partLabel: "Won",
+    shareLabel: "Won %",
+    // Three patterns under two serves; two carry the filter for their points.
+    branches: [
+      {
+        steps: ["T serve", "Forehand crosscourt"],
+        count: n(29, "29"),
+        part: n(14, "14"),
+        share: n(48.3, "48,3 %"),
+        watch: "sv.y_sz.t_cp.y_cs.f_cd.cc_cr.3",
+      },
+      {
+        steps: ["T serve", "Backhand crosscourt"],
+        count: n(20, "20"),
+        part: n(14, "14"),
+        share: n(70, "70 %"),
+      },
+      {
+        steps: ["Wide serve", "Forehand inside out"],
+        count: n(8, "8"),
+        part: n(3, "3"),
+        share: n(37.5, "37,5 %"),
+        watch: "sv.y_sz.w_cp.y_cs.f_cd.io_cr.3",
+      },
+    ],
+  },
 };
 
 const DEGENERATE: Record<string, AskVisual> = {
@@ -193,11 +254,99 @@ const DEGENERATE: Record<string, AskVisual> = {
   },
 };
 
+const VARIANTS: Record<string, AskVisual> = {
+  "court-serve": {
+    kind: "serve",
+    caption: "39 serves on break points, by court.",
+    // The viewer's own serves: over one match the zones open the film.
+    server: "you",
+    courts: [
+      {
+        label: "Deuce",
+        t: n(9, "9 srv"),
+        body: n(3, "3 srv"),
+        wide: n(6, "6 srv"),
+      },
+      {
+        label: "Ad",
+        t: n(4, "4 srv"),
+        body: n(5, "5 srv"),
+        wide: n(12, "12 srv"),
+      },
+    ],
+  },
+  "linked-trend": {
+    kind: "trend",
+    caption: "First serves in against all your matches.",
+    points: [
+      { label: "Jun 4", value: n(61, "61,0 %"), matchId: "match-jun-4" },
+      { label: "Jul 9", value: n(63, "63,0 %"), matchId: "match-jul-9" },
+      { label: "Sep 28", value: n(37.5, "37,5 %"), matchId: "match-sep-28" },
+    ],
+    baseline: {
+      label: "All matches",
+      values: [n(58.2, "58,2 %"), n(58.2, "58,2 %"), n(58.2, "58,2 %")],
+    },
+  },
+  "labelled-form": {
+    kind: "form",
+    caption: "8 matches against left-handed opponents, oldest first.",
+    results: [true, false, false, true, false, true, true, true],
+    // Every tick names its match; the first and the last open theirs.
+    ticks: [
+      {
+        opponent: "Theo Lindqvist",
+        score: "6-4, 6-3",
+        date: "Sep 28, 2026",
+        matchId: "match-sep-28",
+      },
+      { opponent: "Marcus Hale", score: "4-6, 3-6", date: "Sep 14, 2026" },
+      { opponent: "Daniel Okafor", score: "3-6, 4-6" },
+      { opponent: "Priya Nair" },
+      { score: "2-6, 6-7" },
+      {},
+      { opponent: "Luca Moretti", date: "Jun 4, 2026" },
+      {
+        opponent: "Jonah Reyes",
+        score: "7-5, 6-4",
+        date: "May 20, 2026",
+        matchId: "match-may-20",
+      },
+    ],
+  },
+  "linked-table": {
+    kind: "table",
+    caption: "The points the pattern came up on, by match.",
+    columns: ["Points", "Won"],
+    rows: [
+      // One match: opens its film, on the pattern's own points when the
+      // source carries them.
+      { label: "Theo Lindqvist", cells: ["4", "3"], matchId: "match-sep-28" },
+      // One measure: over one source match, its points.
+      { label: "First serves in", cells: ["37.5%", "58.2%"] },
+      // Neither.
+      { label: "Something else", cells: ["1", "2"] },
+    ],
+  },
+};
+
 function visualFor(name: string | null): AskVisual | null {
   if (!name) return null;
   return (
-    (VISUALS as Record<string, AskVisual>)[name] ?? DEGENERATE[name] ?? null
+    (VISUALS as Record<string, AskVisual>)[name] ??
+    DEGENERATE[name] ??
+    VARIANTS[name] ??
+    null
   );
+}
+
+/**
+ * A figure with the column it was cited from. `AskFigure` is the stream
+ * reader's shape and does not carry it yet; the answer reads it through a
+ * widened type, so the harness hands it over the same way.
+ */
+function figure(label: string, value: string, column?: string): AskFigure {
+  return { label, value, ...(column ? { column } : {}) } as AskFigure;
 }
 
 const FULL: AskAnswerState = {
@@ -207,13 +356,18 @@ const FULL: AskAnswerState = {
     "Your second serve held against Marcus. It breaks down against left-handers.",
   // One more than an answer may carry, so the spec can see the cap.
   figures: [
-    { label: "Sep 14 vs. Marcus", value: "55%" },
-    { label: "All 22 matches", value: "48%" },
-    { label: "8 matches vs. left-handers", value: "41%" },
-    { label: "A fourth figure", value: "19%" },
+    // Over one match (`?case=one`) the first is watchable: its measure is a
+    // Video-tab filter. The second is a baseline over every match, and the
+    // third names no column — neither ever links.
+    figure("Sep 14 vs. Marcus", "55%", "second_serve_won_pct"),
+    figure("All 22 matches", "48%", "all_second_serve_won_pct"),
+    figure("8 matches vs. left-handers", "41%"),
+    figure("A fourth figure", "19%", "aces"),
   ],
   visual: visualFor(params.get("visual")),
+  visualLead: params.get("lead") === "1",
   body: "On Sep 14 you won 55% of second-serve points, 7 above your average.\n\nThe gap is on the ad court.",
+
   noAdvice: params.get("advice") === "1",
   sources: SOURCES,
   error: null,

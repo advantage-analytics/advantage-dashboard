@@ -110,7 +110,11 @@ function point(overrides: Partial<MatchPoint> & { id: string }): MatchPoint {
 
 const POINTS: MatchPoint[] = [point({ id: "only-point" })];
 
-function mount(containerId: string, filmFilters: FilmListFilters): void {
+function mount(
+  containerId: string,
+  filmFilters: FilmListFilters,
+  tone: "light" | "dark" = "dark",
+): void {
   const container = document.getElementById(containerId)!;
   const root = createRoot(container);
   root.render(
@@ -125,7 +129,7 @@ function mount(containerId: string, filmFilters: FilmListFilters): void {
               container.dataset.cleared = "true";
             },
           }}
-          tone="dark"
+          tone={tone}
           activePointId={null}
           activeStart={0}
           activeEnd={0}
@@ -138,9 +142,14 @@ function mount(containerId: string, filmFilters: FilmListFilters): void {
 }
 
 mount("no-filters-root", INERT_FILM_LIST_FILTERS);
-mount("with-filters-root", {
+const BREAK_POINTS: FilmListFilters = {
   ...INERT_FILM_LIST_FILTERS,
   shared: { ...EMPTY_MATCH_FILTERS, scoreType: ["breakpoint"] },
-});
+};
+mount("with-filters-root", BREAK_POINTS);
+// The report column (`tone="light"`), whose cut the filter strip above it
+// states with its own "N of M points".
+mount("light-no-filters-root", INERT_FILM_LIST_FILTERS, "light");
+mount("light-with-filters-root", BREAK_POINTS, "light");
 
 document.documentElement.dataset.hydrated = "true";

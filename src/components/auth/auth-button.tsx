@@ -7,6 +7,9 @@ interface AuthButtonProps {
   type?: "button" | "submit";
   disabled?: boolean;
   onClick?: () => void;
+  /** For a form with two submits (the OAuth consent page): which one this is. */
+  name?: string;
+  value?: string;
 }
 
 /**
@@ -24,12 +27,16 @@ export default function AuthButton({
   type = "button",
   disabled = false,
   onClick,
+  name,
+  value,
 }: AuthButtonProps) {
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
+      name={name}
+      value={value}
       style={{
         transition:
           "background-color var(--duration-hover), color var(--duration-hover), border-color var(--duration-hover), box-shadow var(--duration-hover), transform 80ms ease-out",

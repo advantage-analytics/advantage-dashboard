@@ -7,8 +7,10 @@ import {
   type AskQuestionInput,
   type AskRpcResult,
 } from "@/lib/services/ask/ask";
+import { parseMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { type AskRow, renderAskAnswer } from "@/lib/services/ask/answer-render";
 import type { AskAnswerEvent, AskEvent } from "@/lib/services/ask/events";
+
 import { losingPlaysVoice } from "@/lib/services/ask/plays";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import {
@@ -141,30 +143,36 @@ test.describe("the query", () => {
     }
   }
 
-  test("the +1 is the Video filter's: the server's shot 3, the returner's shot 4", () => {
+  test("the +1 is the Video filter's: the server's shot 3, the returner's shot 4, read per point from ask.point_plays", () => {
     const serve = servePlusOneSql({
       phase: "serve",
       subject: "mine",
       serveType: null,
     });
-    expect(serve).toContain("v.is_played_serve and v.mine = true");
-    expect(serve).toContain("q.is_serve_plus_one and q.mine = true");
+    expect(serve).toContain("from ask.point_plays p");
+    expect(serve).not.toContain("ask.shots");
+    expect(serve).toContain("p.serve_type is not null and p.i_served = true");
+    expect(serve).toContain("p.serve_zone as zone");
+    expect(serve).toContain("p.p1s_mine as plus_mine");
+    expect(serve).toContain("where plus_mine = true");
     const ret = servePlusOneSql({
       phase: "return",
       subject: "mine",
       serveType: "second",
     });
-    expect(ret).toContain("r.is_return and r.mine = true");
-    expect(ret).toContain("q.is_return_plus_one and q.mine = true");
-    expect(ret).toContain("v.shot_type = 'Second Serve'");
-    // The opponent's: their shots, and their points won.
+    expect(ret).toContain("p.return_mine = true");
+    expect(ret).toContain("p.return_zone as zone");
+    expect(ret).toContain("p.p1r_mine as plus_mine");
+    expect(ret).toContain("p.serve_type = 'Second Serve'");
+    // The opponent's: their serves, and their points won.
     const theirs = servePlusOneSql({
       phase: "serve",
       subject: "opponent",
       serveType: null,
     });
-    expect(theirs).toContain("v.mine = false");
-    expect(theirs).toContain("(not pt.i_won) as won");
+    expect(theirs).toContain("p.i_served = false");
+    expect(theirs).toContain("where plus_mine = false");
+    expect(theirs).toContain("(not p.i_won) as won");
   });
 });
 
@@ -279,20 +287,37 @@ test.describe("the answer", () => {
   const voice = losingPlaysVoice("mine", "Rudy Quan");
   const request = { phase: "serve", subject: "mine", serveType: null } as const;
 
-  test("every pattern in a table, winning and losing named, every figure a cell", async () => {
+  test("every pattern a branch of the tree, winning and losing named, every figure a cell", async () => {
     const text = buildServePlusOneAnswer(RUDY, voice, request) ?? "";
+    expect(text).toContain("WATCH: plus-one | serve | mine | any");
     const { events, result } = await rendered(text, RUDY);
     expect(events.some((event) => event.type === "error")).toBe(false);
     expect(result.droppedDigits).toEqual([]);
+    expect(result.droppedVisuals).toEqual([]);
     expect(result.headline).toBe(
       "Rudy Quan's most-played serve plus one was a serve to the T then a backhand crosscourt: 29 points, 48.3% of them won.",
     );
-    if (result.visual?.kind !== "table") throw new Error("no table");
-    expect(result.visual.columns).toEqual(["Points", "Won", "Won %"]);
-    expect(result.visual.rows).toHaveLength(8);
-    expect(result.visual.rows[1]).toEqual({
-      label: "T serve → forehand inside out",
-      cells: ["20", "14", "70%"],
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(result.visual.levels).toEqual(["Serve", "Plus one"]);
+    expect(result.visual.countLabel).toBe("Points");
+    expect(result.visual.partLabel).toBe("Won");
+    expect(result.visual.shareLabel).toBe("Won %");
+    expect(result.visual.branches).toHaveLength(8);
+    expect(result.visual.branches[1]).toMatchObject({
+      steps: ["T serve", "Forehand inside out"],
+      count: { value: 20, text: "20" },
+      part: { value: 14, text: "14" },
+      share: { value: 70, text: "70%" },
+    });
+    // Each branch carries the Video filter for exactly its points: Rudy's
+    // serve to the T, then his forehand inside out as the server's shot 3.
+    expect(parseMatchFilters(result.visual.branches[1].watch)).toMatchObject({
+      server: "you",
+      serveZone: ["T"],
+      customPlayer: "you",
+      customStroke: ["Forehand"],
+      customDirection: ["Inside Out"],
+      customRallyShot: [3],
     });
     expect(result.text).toContain(
       "Across 244 serve-plus-one points, Rudy Quan won 135 (55.3%).",
@@ -349,10 +374,14 @@ function fakeDb() {
             },
             error: null,
           };
-        case "ask_save_exchange":
-          return { data: "bbbbbbbb-0000-4000-8000-000000000002", error: null };
-        case "ask_last_answer_id":
-          return { data: "00000000-0000-4000-8000-0000000000a1", error: null };
+        case "ask_save_exchange_ids":
+          return {
+            data: {
+              conversation_id: "bbbbbbbb-0000-4000-8000-000000000002",
+              answer_id: "00000000-0000-4000-8000-0000000000a1",
+            },
+            error: null,
+          };
         case "ask_quota":
           return {
             data: { used: 1, cap: 20, resets_on: "2026-11-01" },
@@ -541,14 +570,14 @@ test.describe("by side", () => {
       bySide: true,
     });
     expect(split).toContain("group by court, zone, stroke, direction");
-    expect(split).toContain("select o.court, o.zone");
+    expect(split).toContain("p.court, p.serve_zone as zone");
     const ad = servePlusOneSql({
       phase: "return",
       subject: "mine",
       serveType: null,
       court: "Ad",
     });
-    expect(ad).toContain("and pc.court = 'Ad'");
+    expect(ad).toContain("and p.court = 'Ad'");
     for (const sql of [split, ad]) {
       expect(
         checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
@@ -636,12 +665,17 @@ test.describe("by side", () => {
       }) ?? "";
     const { result } = await rendered(text, rows);
     expect(result.droppedDigits).toEqual([]);
-    if (result.visual?.kind !== "table") throw new Error("no table");
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
     expect(result.visual.caption).toContain("deuce and ad sides apart");
-    expect(result.visual.rows.map((row) => row.label)).toEqual([
-      "Ad · Wide serve → forehand inside out",
-      "Deuce · T serve → backhand crosscourt",
+    expect(result.visual.levels).toEqual(["Side", "Serve", "Plus one"]);
+    expect(result.visual.branches.map((branch) => branch.steps)).toEqual([
+      ["Ad", "Wide serve", "Forehand inside out"],
+      ["Deuce", "T serve", "Backhand crosscourt"],
     ]);
+    expect(parseMatchFilters(result.visual.branches[0].watch)).toMatchObject({
+      court: "ad",
+      serveZone: ["Wide"],
+    });
     expect(result.headline).toContain("on the ad side, a serve out wide");
   });
 });

@@ -1,12 +1,16 @@
 import { AskPage } from "@/components/dashboard/ask/ask-page";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import { isUuid } from "@/lib/admin/validation";
 import {
+  askMatchHasStats,
   getAskConversation,
   getAskConversations,
   getAskQuota,
   getAskTagOptions,
 } from "@/lib/data/ask-server";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
+import { askStarters } from "@/lib/services/ask/starters";
+import { askTagsFromQuery } from "@/lib/services/ask/entry";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const metadata = { title: "Ask" };
@@ -56,16 +60,22 @@ export default function AskRoute(props: AskRouteProps) {
 }
 
 async function AskContent({ searchParams }: AskRouteProps) {
-  const { c } = await searchParams;
+  const params = await searchParams;
+  const { c, sent } = params;
   const conversationId = typeof c === "string" ? c : null;
+  // `?sent=`: the wizard came back here after sending a match
+  // (`askReturnHref()`). Shown as "being analysed" only while the match has
+  // no statistics; once it does, the first answer is in the rail already.
+  const sentId = typeof sent === "string" && isUuid(sent) ? sent : null;
 
-  const [workspace, tagOptions, quota, conversations, conversation] =
+  const [workspace, tagOptions, quota, conversations, conversation, hasStats] =
     await Promise.all([
       getWorkspaceContext(),
       getAskTagOptions(),
       getAskQuota(),
       getAskConversations(),
       conversationId ? getAskConversation(conversationId) : null,
+      sentId ? askMatchHasStats(sentId) : true,
     ]);
 
   return (
@@ -74,9 +84,15 @@ async function AskContent({ searchParams }: AskRouteProps) {
       scope={PERSONAL_ASK_SCOPE}
       timeZone={workspace?.active.timeZone}
       tagOptions={tagOptions}
+      starters={askStarters(tagOptions, PERSONAL_ASK_SCOPE)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}
+      sentMatchId={hasStats ? null : sentId}
+      // `?match=` / `?opponent=`: "Ask about this match" from a match page
+      // or an opponent's drawer. Checked against the menu's own options, so
+      // an id that names nothing taggable is simply not a tag.
+      initialTags={askTagsFromQuery(params, tagOptions, PERSONAL_ASK_SCOPE)}
     />
   );
 }

@@ -81,7 +81,6 @@ createRoot(document.getElementById("root")!).render(
     <MatchReportProvider
       matchId="fixture"
       summary={null}
-      canCompare={false}
       isDerived={false}
       statsPublished={false}
       hasPlayableVideo={window.location.search.includes("fixture=watch")}

@@ -10,6 +10,12 @@
  *     or `.auth` on it; it is only ever asked to `.rpc()` one of those names.
  *   - Do not add to the list. A fourth function, or a table read, belongs on
  *     the signed-in user's client where RLS and `auth.uid()` decide.
+ *     (One more service-role call exists outside this module:
+ *     `ask_similar_examples`, made by the route itself before this database
+ *     is built — `examples.ts`, `retrieveAskExamples()` — with the same
+ *     viewer binding from the route's own `auth.getUser()`. It needs no plan
+ *     and runs beside the pre-stream reads, which is why it is not routed
+ *     here; it carries the identity argument the same way.)
  *
  * Why those three. They run SQL a language model wrote (or undo a question
  * reservation), and were once executable by any signed-in user straight from

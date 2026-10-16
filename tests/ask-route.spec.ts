@@ -7,6 +7,10 @@ import {
   MAX_ASK_QUESTION_LENGTH,
   type AskEvent,
 } from "@/lib/services/ask/events";
+import {
+  ASK_COACH_RULE,
+  ASK_PLAN_PROMPT_EXAMPLES_HEADING,
+} from "@/lib/services/ask/prompts";
 import { MAX_ASK_TAGS } from "@/lib/services/ask/tags";
 import { MUTATION_BODY_MAX_BYTES } from "@/lib/services/match-video/http";
 import { createLoader } from "./fixtures/vm-modules";
@@ -127,13 +131,23 @@ interface World {
    * it answers with no context at all, an Error when the read throws.
    */
   workspaces:
-    { id: string; kind: "personal" | "team"; name: string }[] | null | Error;
+    | {
+        id: string;
+        kind: "personal" | "team";
+        name: string;
+        /** The viewer's role in a team workspace, as the workspace read gives it. */
+        role?: "owner" | "coach" | "staff" | "player";
+      }[]
+    | null
+    | Error;
   /** What `getAskConversation()` answers for any id. */
   conversation: unknown;
   quota: { used: number; cap: number; resetsOn: string } | null;
   rpc: Record<string, () => RpcResult>;
   /** What `getLLMStream()` does; the default is a provider that is down. */
   llm: () => Promise<AsyncIterable<string>>;
+  /** What `embedText()` answers; the default is none, as on the Anthropic path. */
+  embedding?: number[] | null;
   /** Replaces `ndjsonStreamResponse()` when set. */
   openStream?: () => Response;
 }
@@ -146,6 +160,8 @@ interface Calls {
   getUser: number;
   loaders: string[];
   llm: number;
+  /** Every system prompt the provider was sent, in order. */
+  prompts: string[];
 }
 
 function world(overrides: Partial<World> = {}): World {
@@ -207,12 +223,18 @@ function world(overrides: Partial<World> = {}): World {
         },
         error: null,
       }),
-      ask_save_exchange: () => ({ data: SAVED_ID, error: null }),
-      ask_last_answer_id: () => ({ data: ANSWER_ID, error: null }),
+      ask_save_exchange_ids: () => ({
+        data: { conversation_id: SAVED_ID, answer_id: ANSWER_ID },
+        error: null,
+      }),
       ask_quota: () => ({
         data: { used: 0, cap: 20, resets_on: "2026-11-01" },
         error: null,
       }),
+      // The answer cache: a version, a miss, and a put that succeeds.
+      ask_data_version: () => ({ data: "v1", error: null }),
+      ask_cache_get: () => ({ data: null, error: null }),
+      ask_cache_put: () => ({ data: null, error: null }),
     },
     llm: async () => {
       throw new Error("provider down");
@@ -228,6 +250,7 @@ function loadRoute(state: World) {
     getUser: 0,
     loaders: [],
     llm: 0,
+    prompts: [],
   };
   const rpcVia =
     (via: "user" | "service") => async (fn: string, args: unknown) => {
@@ -282,11 +305,16 @@ function loadRoute(state: World) {
     },
     "@/lib/llm/adapter": {
       isLLMConfigured: () => state.configured,
+      resolvedLLMModel: () => null,
       createLLMObservabilityContext: () => ({}),
-      getLLMStream: async () => {
+      getLLMStream: async (system: string) => {
         calls.llm += 1;
+        calls.prompts.push(system);
         return state.llm();
       },
+    },
+    "@/lib/llm/embeddings": {
+      embedText: async () => state.embedding ?? null,
     },
     "@/lib/data/ask-server": {
       getAskTagOptions: async (programId: string | null = null) => {
@@ -344,6 +372,8 @@ function loadRoute(state: World) {
       ReadableStream,
       TextEncoder,
       TextDecoder,
+      AbortController,
+      AbortSignal,
     },
   }).load(ROUTE) as {
     POST: (request: Request) => Promise<Response>;
@@ -404,7 +434,12 @@ test.describe("POST /api/ask · the route file", () => {
     const { route } = loadRoute(world());
     expect(route.runtime).toBe("nodejs");
     expect(route.dynamic).toBe("force-dynamic");
-    expect(Object.keys(route).sort()).toEqual(["POST", "dynamic", "runtime"]);
+    expect(Object.keys(route).sort()).toEqual([
+      "POST",
+      "dynamic",
+      "maxDuration",
+      "runtime",
+    ]);
   });
 
   test("reaches the service-role client only through createAskDatabase()", () => {
@@ -417,9 +452,13 @@ test.describe("POST /api/ask · the route file", () => {
     expect(source.match(/createAdminClient\(\)/g)).toHaveLength(1);
     expect(source).not.toMatch(/\badmin\.(?!rpc\b)\w+/);
     expect(source).not.toMatch(/lazyAdminClient/);
-    // The viewer is the session's id, written once.
-    expect(source).toMatch(/viewerId: user\.id,/);
-    expect(source.match(/viewerId/g)).toHaveLength(1);
+    // The viewer is the session's id, written twice and nowhere else: once
+    // into `createAskDatabase()`, once into `retrieveAskExamples()` — the
+    // fourth service-role call, made here before the orchestrator runs
+    // (`examples.ts` says why it is not on `database.ts`'s list).
+    expect(source.match(/viewerId: user\.id,/g)).toHaveLength(2);
+    expect(source.match(/viewerId/g)).toHaveLength(2);
+    expect(source).toMatch(/from "@\/lib\/services\/ask\/examples"/);
   });
 });
 
@@ -430,6 +469,8 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     "ask_run_query",
     "ask_run_team_query",
     "ask_release_question",
+    // The fourth, read by the route itself before the orchestrator runs.
+    "ask_similar_examples",
   ];
 
   test("500 internal_error — no service key: refused before anything is reserved, in mock mode too", async () => {
@@ -445,8 +486,12 @@ test.describe("POST /api/ask · the service-role boundary", () => {
         const body = await refused(response);
         expect(body.code).toBe("internal_error");
         expect(body.detail).toBe("service_role_unavailable");
-        // Nothing reserved, nothing run, the provider never called.
-        expect(calls.rpc).toEqual([]);
+        // Nothing reserved, nothing run, the provider never called. The
+        // cache's data version is a read started beside the tag reads (in
+        // configured mode only) and is the one call allowed here.
+        expect(
+          calls.rpc.filter((call) => call.fn !== "ask_data_version"),
+        ).toEqual([]);
         expect(calls.llm).toBe(0);
       }
     } finally {
@@ -483,9 +528,9 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     expect(calls.adminBuilt).toBe(1);
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_query", "service"],
-      ["ask_save_exchange", "user"],
-      ["ask_last_answer_id", "user"],
+      ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -507,9 +552,9 @@ test.describe("POST /api/ask · the service-role boundary", () => {
 
     expect(calls.rpc.map((call) => [call.fn, call.via])).toEqual([
       ["ask_run_team_query", "service"],
-      ["ask_save_exchange", "user"],
-      ["ask_last_answer_id", "user"],
+      ["ask_save_exchange_ids", "user"],
       ["ask_quota", "user"],
+      ["ask_record_run", "user"],
     ]);
     const ran = calls.rpc[0].args as Record<string, unknown>;
     expect(ran.p_viewer).toBe(USER_ID);
@@ -529,12 +574,23 @@ test.describe("POST /api/ask · the service-role boundary", () => {
     await response.text();
 
     expect(calls.rpc).toEqual([
+      // The cache is consulted first, as the user; a miss here.
+      { fn: "ask_data_version", args: { p_program_id: null }, via: "user" },
+      expect.objectContaining({ fn: "ask_cache_get", via: "user" }),
       { fn: "ask_reserve_question", args: undefined, via: "user" },
       {
         fn: "ask_release_question",
         args: { usage_id: USAGE_ID, p_user_id: USER_ID },
         via: "service",
       },
+      // The run is recorded last, as the asker, with its outcome.
+      expect.objectContaining({
+        fn: "ask_record_run",
+        via: "user",
+        args: expect.objectContaining({
+          p_run: expect.objectContaining({ outcome: "llm_unavailable" }),
+        }),
+      }),
     ]);
   });
 
@@ -757,7 +813,7 @@ test.describe("POST /api/ask · refusals before the stream", () => {
     );
     expect(response.status).toBe(200);
     await response.text();
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange")
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids")
       ?.args as { p_question: { tags: { label: string }[] } };
     expect(saved.p_question.tags.map((tag) => tag.label)).toEqual([
       "Sep 14, 2026 · Anna Lee",
@@ -850,7 +906,11 @@ test.describe("POST /api/ask · the question limit", () => {
       detail: { used: 20, cap: 20, resets_on: "2026-11-01" },
     });
     // The function refused; nothing else was asked, counted or released.
-    expect(rpcNames(calls)).toEqual(["ask_reserve_question"]);
+    expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
     expect(calls.loaders).not.toContain("getAskQuota");
     expect(calls.llm).toBe(0);
   });
@@ -916,7 +976,11 @@ test.describe("POST /api/ask · the question limit", () => {
     expect(response.status).toBe(200);
     await response.text();
     expect(calls.loaders).not.toContain("getAskQuota");
-    expect(rpcNames(calls)[0]).toBe("ask_reserve_question");
+    expect(rpcNames(calls).slice(0, 3)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
   });
 
   test("500 internal_error — the reservation failed for another reason", async () => {
@@ -931,7 +995,11 @@ test.describe("POST /api/ask · the question limit", () => {
     const body = await refused(response);
     expect(body.code).toBe("internal_error");
     expect(body.detail).toBe("reserve_failed");
-    expect(rpcNames(calls)).toEqual(["ask_reserve_question"]);
+    expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
+      "ask_reserve_question",
+    ]);
   });
 });
 
@@ -951,7 +1019,9 @@ test.describe("POST /api/ask · the answer", () => {
       expect.arrayContaining(["status", "headline", "figure", "text"]),
     );
     expect(stream.slice(0, 1)).toEqual([{ type: "status", stage: "planning" }]);
-    expect(stream.at(-2)).toMatchObject({ type: "sources" });
+    expect(stream.find((event) => event.type === "sources")).toMatchObject({
+      type: "sources",
+    });
     expect(stream.at(-1)).toEqual({
       type: "done",
       conversationId: SAVED_ID,
@@ -963,9 +1033,9 @@ test.describe("POST /api/ask · the answer", () => {
     // A sample answer is not a question: no reservation, no provider.
     expect(rpcNames(calls)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.llm).toBe(0);
   });
@@ -989,7 +1059,7 @@ test.describe("POST /api/ask · the answer", () => {
     );
     expect(response.status).toBe(200);
     await response.text();
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange");
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids");
     expect(saved?.args).toMatchObject({
       p_conversation_id: CONVERSATION_ID,
       p_question: { text: QUESTION.question, tags: [] },
@@ -1010,10 +1080,13 @@ test.describe("POST /api/ask · the answer", () => {
     });
 
     expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
-    expect(calls.rpc[1].args).toEqual({
+    expect(calls.rpc[3].args).toEqual({
       usage_id: USAGE_ID,
       p_user_id: USER_ID,
     });
@@ -1033,10 +1106,13 @@ test.describe("POST /api/ask · the answer", () => {
     expect(response.status).toBe(500);
     expect((await refused(response)).code).toBe("internal_error");
     expect(rpcNames(calls)).toEqual([
+      "ask_data_version",
+      "ask_cache_get",
       "ask_reserve_question",
       "ask_release_question",
+      "ask_record_run",
     ]);
-    expect(calls.rpc[1].args).toEqual({
+    expect(calls.rpc[3].args).toEqual({
       usage_id: USAGE_ID,
       p_user_id: USER_ID,
     });
@@ -1084,7 +1160,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect(calls.loaders).toEqual(["getAskTagOptions"]);
     expect(rpcNames(calls)).toContain("ask_run_query");
     expect(rpcNames(calls)).not.toContain("ask_run_team_query");
-    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange");
+    const saved = calls.rpc.find((call) => call.fn === "ask_save_exchange_ids");
     expect(Object.keys(saved?.args as object)).not.toContain("p_program_id");
   });
 
@@ -1155,9 +1231,9 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     ]);
     expect(rpcNames(calls)).toEqual([
       "ask_run_team_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
+      "ask_record_run",
     ]);
     expect(calls.rpc[0].args).toMatchObject({ p_program_id: PROGRAM_ID });
     expect(calls.rpc[1].args).toMatchObject({
@@ -1167,7 +1243,7 @@ test.describe("POST /api/ask · a team question (programId)", () => {
         tags: [{ kind: "player", id: PLAYER_ID, label: "Mara Sokolov" }],
       },
     });
-    expect(stream.at(-2)).toMatchObject({
+    expect(stream.find((event) => event.type === "sources")).toMatchObject({
       type: "sources",
       matches: [{ matchId: MATCH_A, playerName: "Mara Sokolov" }],
     });
@@ -1240,7 +1316,199 @@ test.describe("POST /api/ask · a team question (programId)", () => {
     expect((await refused(response)).code).toBe("ask_limit_reached");
     // No argument: the count is per user, whatever the workspace.
     expect(spent.calls.rpc).toEqual([
+      {
+        fn: "ask_data_version",
+        args: { p_program_id: PROGRAM_ID },
+        via: "user",
+      },
+      expect.objectContaining({ fn: "ask_cache_get", via: "user" }),
       { fn: "ask_reserve_question", args: undefined, via: "user" },
     ]);
+  });
+});
+
+// ── Tier 3: retrieved examples and coach mode ───────────────────────────────
+
+test.describe("POST /api/ask · retrieved examples and coach mode", () => {
+  const PLAN = {
+    scope_sql: "select match_id from ask.matches",
+    sql: "select round(100.0 * sum(s.second_serve_points_won) / nullif(sum(s.second_serves_in), 0), 1) as second_serve_won_pct from ask.match_stats s join scope on scope.match_id = s.match_id where s.side = 'me'",
+    asks_for_advice: false,
+  };
+  const TEXT = `Second serves held up.
+FIGURE: Second-serve points won = {{r1.second_serve_won_pct}}
+
+The second serve won {{r1.second_serve_won_pct}} of its points.`;
+  const VECTOR = Array.from({ length: 768 }, () => 1 / Math.sqrt(768));
+  const TEAM_QUESTION = { ...QUESTION, programId: PROGRAM_ID };
+
+  /** A provider answering each call with the next reply, as one chunk. */
+  function scripted(replies: string[]) {
+    const queue = [...replies];
+    return async () => {
+      const reply = queue.shift();
+      if (reply === undefined) throw new Error("no scripted reply left");
+      return (async function* chunks() {
+        yield reply;
+      })();
+    };
+  }
+
+  const EXAMPLE_ROWS = [
+    {
+      question: "How is my second serve this season?",
+      sql: '{"review": true, "scope_sql": "select match_id from ask.matches"}',
+      source: "seed",
+      similarity: 0.91,
+    },
+  ];
+
+  test("with an embedding, the nearest examples are read on the service client with the session viewer pinned, and reach the plan prompt", async () => {
+    const state = world({
+      configured: true,
+      embedding: VECTOR,
+      llm: scripted([JSON.stringify(PLAN), TEXT]),
+    });
+    state.rpc.ask_similar_examples = () => ({
+      data: EXAMPLE_ROWS,
+      error: null,
+    });
+    const { route, calls } = loadRoute(state);
+    const response = await route.POST(post(QUESTION));
+    expect(response.status).toBe(200);
+    const stream = await events(response);
+    expect(stream.at(-1)).toMatchObject({ type: "done" });
+
+    const read = calls.rpc.find((call) => call.fn === "ask_similar_examples");
+    expect(read).toEqual({
+      fn: "ask_similar_examples",
+      via: "service",
+      args: {
+        p_embedding: VECTOR,
+        p_scope: "personal",
+        p_limit: 3,
+        p_viewer: USER_ID,
+      },
+    });
+    expect(calls.prompts[0]).toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+    expect(calls.prompts[0]).toContain(
+      'Question: "How is my second serve this season?"',
+    );
+  });
+
+  test("no embedding — the Anthropic path, a failed call — reads nothing and the prompt keeps its fixed examples", async () => {
+    const { route, calls } = loadRoute(
+      world({ configured: true, llm: scripted([JSON.stringify(PLAN), TEXT]) }),
+    );
+    const response = await route.POST(post(QUESTION));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(rpcNames(calls)).not.toContain("ask_similar_examples");
+    expect(calls.prompts[0]).not.toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+  });
+
+  test("a refused examples read is an empty list, never a failed question", async () => {
+    const warned = console.warn;
+    console.warn = () => {};
+    try {
+      const state = world({
+        configured: true,
+        embedding: VECTOR,
+        llm: scripted([JSON.stringify(PLAN), TEXT]),
+      });
+      state.rpc.ask_similar_examples = () => ({
+        data: null,
+        error: { code: "42501", message: "permission denied" },
+      });
+      const { route, calls } = loadRoute(state);
+      const response = await route.POST(post(QUESTION));
+      expect(response.status).toBe(200);
+      const stream = await events(response);
+      expect(stream.at(-1)).toMatchObject({ type: "done" });
+      expect(calls.prompts[0]).not.toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+    } finally {
+      console.warn = warned;
+    }
+  });
+
+  test("mock mode embeds nothing", async () => {
+    const { route, calls } = loadRoute(
+      world({ configured: false, embedding: VECTOR }),
+    );
+    const response = await route.POST(post(QUESTION));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(rpcNames(calls)).not.toContain("ask_similar_examples");
+  });
+
+  /** A team advice question from a member with `role`, under the flag's `value`. */
+  async function coachRun(
+    role: "owner" | "coach" | "staff" | "player",
+    value: string | undefined,
+  ) {
+    return withEnv(["ASK_COACH_MODE"], { ASK_COACH_MODE: value }, async () => {
+      const state = world({
+        configured: true,
+        workspaces: [
+          { id: USER_ID, kind: "personal", name: "Personal" },
+          { id: PROGRAM_ID, kind: "team", name: "Westbrook College", role },
+        ],
+        llm: scripted([
+          JSON.stringify({ ...PLAN, asks_for_advice: true }),
+          TEXT,
+        ]),
+      });
+      const { route, calls } = loadRoute(state);
+      const response = await route.POST(post(TEAM_QUESTION));
+      expect(response.status).toBe(200);
+      const stream = await events(response);
+      expect(stream.at(-1)).toMatchObject({ type: "done" });
+      return {
+        notice: stream.find((event) => event.type === "notice"),
+        answerPrompt: calls.prompts[1] ?? "",
+        rpc: rpcNames(calls),
+      };
+    });
+  }
+
+  test("a player on the roster, with the flag on: no coach mode", async () => {
+    const run = await coachRun("player", "1");
+    expect(run.notice).toEqual({ type: "notice", notice: "no_advice" });
+    expect(run.answerPrompt).toContain("- NO ADVICE.");
+    expect(run.answerPrompt).not.toContain(ASK_COACH_RULE);
+    // The cache is consulted as always.
+    expect(run.rpc).toContain("ask_data_version");
+  });
+
+  test("a coach, with the flag off (unset, 0, false): no coach mode", async () => {
+    for (const value of [undefined, "0", "false"]) {
+      const run = await coachRun("coach", value);
+      expect(run.notice).toEqual({ type: "notice", notice: "no_advice" });
+      expect(run.answerPrompt).not.toContain(ASK_COACH_RULE);
+      expect(run.rpc).toContain("ask_data_version");
+    }
+  });
+
+  test("a coach or the owner, with the flag on: the coach variant, a coach notice, and no cache", async () => {
+    for (const [role, value] of [
+      ["coach", "1"],
+      ["owner", "true"],
+    ] as const) {
+      const run = await coachRun(role, value);
+      expect(run.notice).toEqual({ type: "notice", notice: "coach" });
+      expect(run.answerPrompt).toContain(ASK_COACH_RULE);
+      expect(run.answerPrompt).not.toContain("- NO ADVICE.");
+      expect(run.rpc).toContain("ask_run_team_query");
+      // Never cached: neither read nor written.
+      expect(run.rpc).not.toContain("ask_data_version");
+      expect(run.rpc).not.toContain("ask_cache_get");
+      expect(run.rpc).not.toContain("ask_cache_put");
+    }
+  });
+
+  test("staff, with the flag on: no coach mode", async () => {
+    const run = await coachRun("staff", "1");
+    expect(run.notice).toEqual({ type: "notice", notice: "no_advice" });
+    expect(run.answerPrompt).not.toContain(ASK_COACH_RULE);
   });
 });

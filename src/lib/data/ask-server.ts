@@ -21,6 +21,7 @@
  */
 
 import { cache } from "react";
+import { ilikeLiteral } from "@/lib/data/ilike";
 import { isUuid } from "@/lib/admin/validation";
 import {
   buildAskTagOptions,
@@ -31,11 +32,12 @@ import {
   type DbAskTeamMatch,
 } from "@/lib/data/ask-tags";
 import { getPersonalMatches } from "@/lib/data/personal-matches-server";
-import { resolveRosterSeatIds } from "@/lib/data/match-detail-server";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import { getMyPlayerIds, playerSide } from "@/lib/data/player-identity-server";
 import { youSeat } from "@/lib/data/viewer-side";
+import { readAskVisual, type AskVisual } from "@/lib/services/ask/events";
 import {
+  isMissingEmbed,
   readAskFeedbackRow,
   type AskFeedback,
 } from "@/lib/services/ask/feedback";
@@ -108,8 +110,10 @@ async function getTeamAskTagOptions(programId: string): Promise<AskTagOptions> {
  */
 export const getAskTagOptions = cache(async function getAskTagOptions(
   programId: string | null = null,
+  /** The signed-in user's id when the caller already has it (`POST /api/ask`): one auth read, not two. */
+  knownViewerId?: string,
 ): Promise<AskTagOptions> {
-  const viewerId = await getViewerId();
+  const viewerId = knownViewerId ?? (await getViewerId());
   if (!viewerId) return NO_ASK_TAG_OPTIONS;
 
   if (programId !== null) {
@@ -177,33 +181,45 @@ export interface AskConversationSummary {
   title: string;
   /** ISO timestamp of the last exchange. */
   updatedAt: string;
+  /** ISO timestamp of the owner's pin, or null: pinned rows lead the rail. */
+  pinnedAt: string | null;
 }
 
 /**
- * The viewer's saved conversations in one workspace, most recently used
- * first: `program_id is null` for the personal page, the program's for a
- * team one, so each lists only its own. Still the viewer's alone — a team
- * conversation is private to the member who asked. Empty on a read failure:
- * the list is the rail's "Earlier questions", and losing it should not take
- * the composer down with it.
+ * The viewer's saved conversations in one workspace, pinned ones first
+ * (newest pin first) and then most recently used first: `program_id is
+ * null` for the personal page, the program's for a team one, so each lists
+ * only its own. Still the viewer's alone — a team conversation is private to
+ * the member who asked. Empty on a read failure: the list is the rail's
+ * "Earlier questions", and losing it should not take the composer down with
+ * it.
+ *
+ * `q` narrows the list to titles holding that text, case aside — the rail
+ * filters what it was handed on its own, so this is for a caller that wants
+ * fewer rows over the wire. Blank is no filter.
  */
 export const getAskConversations = cache(async function getAskConversations(
   programId: string | null = null,
+  q: string = "",
 ): Promise<AskConversationSummary[]> {
   const viewerId = await getViewerId();
   if (!viewerId) return [];
   if (programId !== null && !isUuid(programId)) return [];
 
   const supabase = await createClient();
-  const mine = supabase
+  let mine = supabase
     .from("ask_conversations")
-    .select("id, title, updated_at")
+    .select("id, title, updated_at, pinned_at")
     .eq("user_id", viewerId);
+  const needle = q.trim();
+  if (needle !== "") mine = mine.ilike("title", `%${ilikeLiteral(needle)}%`);
   const { data, error } = await (
     programId === null
       ? mine.is("program_id", null)
       : mine.eq("program_id", programId)
-  ).order("updated_at", { ascending: false });
+  )
+    .order("pinned_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false });
 
   if (error) {
     console.error("[ask] could not load conversations", {
@@ -213,11 +229,17 @@ export const getAskConversations = cache(async function getAskConversations(
   }
 
   return (
-    (data ?? []) as { id: string; title: string; updated_at: string }[]
+    (data ?? []) as {
+      id: string;
+      title: string;
+      updated_at: string;
+      pinned_at: string | null;
+    }[]
   ).map((row) => ({
     id: row.id,
     title: row.title,
     updatedAt: row.updated_at,
+    pinnedAt: row.pinned_at ?? null,
   }));
 });
 
@@ -232,6 +254,8 @@ export interface AskConversationMessage {
   createdAt: string;
   /** An answer's thumb from its asker (`ask_feedback`); null when there is none. */
   feedback: AskFeedback | null;
+  /** The viewer's pin of this answer's visual (`ask_pins`); null when there is none. */
+  pinId: string | null;
 }
 
 export interface AskConversation extends AskConversationSummary {
@@ -255,40 +279,64 @@ export interface AskConversation extends AskConversationSummary {
 export const getAskConversation = cache(async function getAskConversation(
   id: string,
   programId: string | null = null,
+  /** The signed-in user's id when the caller already has it (`POST /api/ask`): one auth read, not two. */
+  knownViewerId?: string,
 ): Promise<AskConversation | null> {
   // A malformed `?c=` would otherwise reach Postgres and fail the uuid cast.
   if (!isUuid(id)) return null;
   if (programId !== null && !isUuid(programId)) return null;
 
-  const viewerId = await getViewerId();
+  const viewerId = knownViewerId ?? (await getViewerId());
   if (!viewerId) return null;
 
   const supabase = await createClient();
   const owned = supabase
     .from("ask_conversations")
-    .select("id, title, updated_at")
+    .select("id, title, updated_at, pinned_at")
     .eq("id", id)
     .eq("user_id", viewerId);
-  const [conversationRead, messagesRead] = await Promise.all([
-    (programId === null
-      ? owned.is("program_id", null)
-      : owned.eq("program_id", programId)
-    ).maybeSingle(),
+  const readMessages = (columns: string) =>
     supabase
       .from("ask_messages")
-      // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
-      // one object (or null) per message — the answer's thumb, in this read.
-      .select(
-        "id, role, content, created_at, ask_feedback(rating, reasons, note)",
-      )
+      .select(columns)
       .eq("conversation_id", id)
       .eq("user_id", viewerId)
       .order("created_at", { ascending: true })
       // `ask_save_exchange()` inserts a question and its answer in one
       // statement, so the pair shares a `created_at` to the microsecond.
       // "user" sorts after "assistant"; descending puts the question first.
-      .order("role", { ascending: false }),
+      .order("role", { ascending: false });
+  const [conversationRead, messagesWithFeedback] = await Promise.all([
+    (programId === null
+      ? owned.is("program_id", null)
+      : owned.eq("program_id", programId)
+    ).maybeSingle(),
+    // `ask_feedback` is keyed by the message id, so PostgREST embeds it as
+    // one object (or null) per message — the answer's thumb, in this read.
+    // `ask_pins` points at a message too, as a list (one pin per answer per
+    // owner, so at most one row): the answer's pin, for the card under it
+    // that says so.
+    readMessages(
+      "id, role, content, created_at, ask_feedback(rating, reasons, note), ask_pins(id)",
+    ),
   ]);
+  // The thumb and the pin are decoration on a thread the player owns. When
+  // PostgREST cannot embed them (a relationship missing from the schema
+  // cache, as while an ask_feedback migration is reloading), read the thread
+  // without thumbs or pins — every pinId null, "not pinned" — rather than
+  // tell the player their conversation could not load.
+  const embedMissing = isMissingEmbed(messagesWithFeedback.error);
+  if (embedMissing) {
+    // Logged so a lasting failure (a renamed embed, a dropped foreign key)
+    // is seen, not silently read as "no thumbs, no pins" for every thread.
+    console.warn("[ask] conversation read without thumbs and pins", {
+      code: messagesWithFeedback.error?.code,
+      message: messagesWithFeedback.error?.message,
+    });
+  }
+  const messagesRead = embedMissing
+    ? await readMessages("id, role, content, created_at")
+    : messagesWithFeedback;
 
   if (conversationRead.error || messagesRead.error) {
     throw new Error("Could not load the conversation", {
@@ -300,30 +348,136 @@ export const getAskConversation = cache(async function getAskConversation(
     id: string;
     title: string;
     updated_at: string;
+    pinned_at: string | null;
   } | null;
   if (!conversation) return null;
 
-  const messages = (messagesRead.data ?? []) as {
+  // `readMessages` takes its column list as a plain string, which supabase-js
+  // cannot type; the shape is the one both column lists above select.
+  const messages = (messagesRead.data ?? []) as unknown as {
     id: string;
     role: "user" | "assistant";
     content: unknown;
     created_at: string;
-    ask_feedback: unknown;
+    ask_feedback?: unknown;
+    ask_pins?: unknown;
   }[];
 
   return {
     id: conversation.id,
     title: conversation.title,
     updatedAt: conversation.updated_at,
+    pinnedAt: conversation.pinned_at ?? null,
     messages: messages.map((row) => ({
       id: row.id,
       role: row.role,
       content: row.content,
       createdAt: row.created_at,
       feedback: readAskFeedbackRow(row.ask_feedback),
+      pinId: readPinId(row.ask_pins),
     })),
   };
 });
+
+/** The first pin id in an embedded `ask_pins(id)` list, or null. */
+function readPinId(value: unknown): string | null {
+  const rows = Array.isArray(value) ? value : value ? [value] : [];
+  for (const row of rows) {
+    const id = (row as { id?: unknown } | null)?.id;
+    if (typeof id === "string" && isUuid(id)) return id;
+  }
+  return null;
+}
+
+// ── Pins ────────────────────────────────────────────────────────────────────
+
+/** One visual block a player kept from an answer (`ask_pins`), as Home draws it. */
+export interface AskPin {
+  id: string;
+  caption: string;
+  visual: AskVisual;
+  /** ISO timestamp of the pin. */
+  createdAt: string;
+  /** The conversation it came from, or null once that was deleted. */
+  conversationId: string | null;
+}
+
+/** Home shows at most this many pins, newest first. */
+export const MAX_HOME_ASK_PINS = 3;
+
+/**
+ * The viewer's pins in one workspace, newest first, at most
+ * `MAX_HOME_ASK_PINS`: `program_id is null` for the personal Home. A pin
+ * whose block no longer reads whole (`readAskVisual`) is left out rather
+ * than half drawn.
+ *
+ * Throws when the read fails: the Home region sits in a `WidgetBoundary`,
+ * and a failed read is a retry there, not an absent card.
+ */
+export const getAskPins = cache(async function getAskPins(
+  programId: string | null = null,
+  /** The viewer's id when the caller already authenticated (Home does). */
+  knownViewerId?: string,
+): Promise<AskPin[]> {
+  const viewerId = knownViewerId ?? (await getViewerId());
+  if (!viewerId) return [];
+  if (programId !== null && !isUuid(programId)) return [];
+
+  const supabase = await createClient();
+  const mine = supabase
+    .from("ask_pins")
+    .select("id, caption, visual, created_at, conversation_id")
+    .eq("user_id", viewerId);
+  const { data, error } = await (
+    programId === null
+      ? mine.is("program_id", null)
+      : mine.eq("program_id", programId)
+  )
+    .order("created_at", { ascending: false })
+    .limit(MAX_HOME_ASK_PINS);
+  if (error) {
+    throw new Error("Could not load the pinned charts", { cause: error });
+  }
+
+  const pins: AskPin[] = [];
+  for (const row of (data ?? []) as {
+    id: string;
+    caption: string;
+    visual: unknown;
+    created_at: string;
+    conversation_id: string | null;
+  }[]) {
+    const visual = readAskVisual(row.visual);
+    if (!visual) continue;
+    pins.push({
+      id: row.id,
+      caption: row.caption,
+      visual,
+      createdAt: row.created_at,
+      conversationId: row.conversation_id,
+    });
+  }
+  return pins;
+});
+
+/**
+ * Whether a match has statistics yet — for the page the wizard sent back
+ * with `?sent=`, which says "being analysed" only while that is so. Read
+ * through the signed-in client, so a match the viewer cannot read answers
+ * false like any other with no row; the page then shows nothing for it.
+ * A failed read answers true: better no notice than a false one.
+ */
+export async function askMatchHasStats(matchId: string): Promise<boolean> {
+  if (!isUuid(matchId)) return true;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("match_stats")
+    .select("match_id")
+    .eq("match_id", matchId)
+    .limit(1);
+  if (error) return true;
+  return (data?.length ?? 0) > 0;
+}
 
 /** How the match page seats the viewer in one match, with a point to check Ask's seat against. */
 export interface AskPageSeat {
@@ -355,46 +509,121 @@ export async function getAskPageSeats(
   matchIds: readonly string[],
 ): Promise<Map<string, AskPageSeat>> {
   const seats = new Map<string, AskPageSeat>();
-  const ids = matchIds.filter(isUuid);
+  const ids = [...new Set(matchIds.filter(isUuid))];
   if (ids.length === 0) return seats;
   const supabase = await createClient();
-  const [{ data: rows, error }, myPlayerIds] = await Promise.all([
+  const [{ data: rows, error }, myPlayerIds, firstPoints] = await Promise.all([
     supabase
       .from("matches")
       .select("id, program_id, player1_id, player2_id")
       .in("id", ids),
     getMyPlayerIds(),
+    readFirstPoints(supabase, ids),
   ]);
   if (error || !rows) return seats;
+
+  // Every match's roster seats in one read, not one per match. A seat id is
+  // a roster seat when it names a `program_players` row of the match's OWN
+  // program — `resolveRosterSeatIds()`'s rule, applied to the batch.
+  const seatIds = [
+    ...new Set(
+      rows.flatMap((row) =>
+        row.program_id
+          ? [row.player1_id, row.player2_id].filter(
+              (id): id is string => id != null,
+            )
+          : [],
+      ),
+    ),
+  ];
+  const rosterProgram = new Map<string, string>();
+  if (seatIds.length > 0) {
+    const { data: roster } = await supabase
+      .from("program_players")
+      .select("id, program_id")
+      .in("id", seatIds);
+    for (const player of (roster ?? []) as {
+      id: string;
+      program_id: string;
+    }[]) {
+      rosterProgram.set(player.id, player.program_id);
+    }
+  }
+
+  // No served-by on the first point: nothing to check Ask's seat against,
+  // so no link (fail closed) — and no video lookup either.
+  const linkable = rows.filter((row) => firstPoints.has(row.id));
+  const videos = await Promise.all(
+    linkable.map((row) => getMatchVideo(row.id).catch(() => null)),
+  );
+  linkable.forEach((row, index) => {
+    const first = firstPoints.get(row.id);
+    if (!videos[index] || !first) return;
+    const rosterIds = [row.player1_id, row.player2_id].filter(
+      (id): id is string =>
+        id != null &&
+        row.program_id != null &&
+        rosterProgram.get(id) === row.program_id,
+    );
+    seats.set(row.id, {
+      youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
+      pointNumber: first.pointNumber,
+      serverIsPlayer1: first.serverIsPlayer1,
+    });
+  });
+  return seats;
+}
+
+/**
+ * Each match's first point and who served it, for many matches in one read.
+ * Every match numbers its points from 1, so point 1 is asked for across the
+ * batch; a match that does not have one (none today) falls back to its own
+ * lowest-numbered point, so the answer is still the FIRST point. A point
+ * with no served-by is left out — the caller links nothing for it.
+ */
+async function readFirstPoints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: readonly string[],
+): Promise<Map<string, { pointNumber: number; serverIsPlayer1: boolean }>> {
+  type FirstPoint = {
+    match_id: string;
+    point_number: number;
+    server_is_player1: boolean | null;
+  };
+  const first = new Map<
+    string,
+    { pointNumber: number; serverIsPlayer1: boolean }
+  >();
+  const seen = new Set<string>();
+  const take = (point: FirstPoint) => {
+    seen.add(point.match_id);
+    if (typeof point.server_is_player1 !== "boolean") return;
+    first.set(point.match_id, {
+      pointNumber: point.point_number,
+      serverIsPlayer1: point.server_is_player1,
+    });
+  };
+
+  const { data, error } = await supabase
+    .from("points")
+    .select("match_id, point_number, server_is_player1")
+    .in("match_id", ids)
+    .eq("point_number", 1);
+  if (error) return first;
+  for (const point of (data ?? []) as FirstPoint[]) take(point);
+
+  const missing = ids.filter((id) => !seen.has(id));
   await Promise.all(
-    rows.map(async (row) => {
-      const [rosterIds, first, video] = await Promise.all([
-        resolveRosterSeatIds(supabase, row),
-        supabase
-          .from("points")
-          .select("point_number, server_is_player1")
-          .eq("match_id", row.id)
-          .order("point_number", { ascending: true })
-          .limit(1)
-          .maybeSingle(),
-        getMatchVideo(row.id).catch(() => null),
-      ]);
-      // No served-by on the first point: nothing to check Ask's seat against,
-      // so no link (fail closed).
-      if (
-        !video ||
-        first.error ||
-        !first.data ||
-        typeof first.data.server_is_player1 !== "boolean"
-      ) {
-        return;
-      }
-      seats.set(row.id, {
-        youIsPlayer1: youSeat(row, myPlayerIds, rosterIds) === "player1",
-        pointNumber: first.data.point_number,
-        serverIsPlayer1: first.data.server_is_player1,
-      });
+    missing.map(async (id) => {
+      const { data: point } = await supabase
+        .from("points")
+        .select("match_id, point_number, server_is_player1")
+        .eq("match_id", id)
+        .order("point_number", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (point) take(point as FirstPoint);
     }),
   );
-  return seats;
+  return first;
 }

@@ -384,8 +384,21 @@ const ROOM_LANE = '[data-film-chrome] [role="slider"][aria-label="Seek"]';
 const ROOM_PREVIEW = `${ROOM_LANE} [data-testid="film-seek-preview"]`;
 const ROOM_PREVIEW_VIDEO = `${ROOM_LANE} [data-testid="film-seek-preview-video"]`;
 
-/** Hover the room's lane at `fraction` of its width; returns the lane's box. */
+/**
+ * Hover the room's lane at `fraction` of its width; returns the lane's box.
+ *
+ * Measured only once the room's grow (`root.animate`, from the report
+ * frame's rect) has finished: mid-animation the lane's box is the
+ * transformed one, and a pointer sent there is nowhere near the lane once
+ * the frame settles — so the preview never opens. Which rect the room grows
+ * from depends on what the shell draws above the player, and a row of
+ * controls there is enough to move the mid-flight box off the pointer.
+ */
 async function hoverRoomLane(page: Page, fraction: number) {
+  await page.waitForFunction(() => {
+    const room = document.querySelector<HTMLElement>('[role="dialog"]');
+    return !!room && room.getAnimations({ subtree: false }).length === 0;
+  });
   const box = await page.locator(ROOM_LANE).boundingBox();
   if (!box) throw new Error("no room lane");
   await page.mouse.move(box.x + fraction * box.width, box.y + box.height / 2);

@@ -312,13 +312,44 @@ test.describe("checkAskSql — refuses", () => {
 });
 
 test.describe("checkAskSql — allowlists", () => {
-  test("the relation allowlist is the four ask views", () => {
+  test("the relation allowlist is the five ask views", () => {
     expect([...ASK_VIEWS]).toEqual([
       "matches",
       "match_stats",
       "points",
       "shots",
+      "point_plays",
     ]);
+  });
+
+  test("ask.point_plays is readable, qualified or bare, and named in a refusal", () => {
+    expect(
+      check(
+        `select serve_zone, count(*) filter (where i_won) as won, count(*) as points
+         from ask.point_plays p
+         where p.match_id in (select match_id from scope) and p.i_served
+         group by serve_zone`,
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      check(
+        "select count(*) as double_faults from point_plays where match_id in (select match_id from scope) and i_served and serve_result in ('Out', 'Net') and serve_type = 'Second Serve'",
+      ),
+    ).toEqual({ ok: true });
+    expectRefused(
+      check("select * from ask.point_facts, scope"),
+      /"ask\.point_facts" is not one of the ask views \(matches, match_stats, points, shots, point_plays\)/,
+    );
+    expectRefused(
+      check("select * from public.ask_point_facts, scope"),
+      /is not an ask view; only ask\.matches, ask\.match_stats, ask\.points, ask\.shots and ask\.point_plays may be read/,
+    );
+    expectRefused(
+      check(
+        "with point_plays as (select 1 as match_id) select * from point_plays join scope on true",
+      ),
+      /A CTE may not be named "point_plays"/,
+    );
   });
 
   test("the function allowlist is one exported constant with the helpers the accept cases use", () => {

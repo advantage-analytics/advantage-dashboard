@@ -7,7 +7,9 @@ import {
   getAskQuota,
   getAskTagOptions,
 } from "@/lib/data/ask-server";
+import { askTagsFromQuery } from "@/lib/services/ask/entry";
 import type { AskScope } from "@/lib/services/ask/scope";
+import { askStarters } from "@/lib/services/ask/starters";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { explainVideoRefusal } from "@/lib/workspace/types";
 
@@ -57,7 +59,8 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
   // line if this page is ever rendered without it.
   if (active.kind !== "team") redirect("/dashboard/ask");
 
-  const { c } = await searchParams;
+  const params = await searchParams;
+  const { c } = params;
   const conversationId = typeof c === "string" ? c : null;
   const programId = active.id;
   const scope: AskScope = {
@@ -87,9 +90,14 @@ async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
       canUpload={explainVideoRefusal(active) === null}
       timeZone={active.timeZone}
       tagOptions={tagOptions}
+      starters={askStarters(tagOptions, scope)}
       quota={quota}
       conversations={conversations}
       conversation={conversation}
+      // `?match=` / `?opponent=` / `?player=`: "Ask about …" from a match
+      // page, a profile or an opponent's drawer, checked against the menu's
+      // own options.
+      initialTags={askTagsFromQuery(params, tagOptions, scope)}
     />
   );
 }

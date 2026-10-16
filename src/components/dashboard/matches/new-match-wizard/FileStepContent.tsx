@@ -49,6 +49,7 @@ import {
   videoFileFacts,
 } from "./CheckedFileRow";
 import { NoticeText } from "./NoticeText";
+import { FieldCaption } from "./FieldCaption";
 import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 import { VideoRequirements } from "./VideoRequirements";
@@ -454,7 +455,7 @@ function FileStepContentImpl({
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
-          <span className="eyebrow">{isVideo ? "Video" : "Export"}</span>
+          <FieldCaption label={isVideo ? "Video" : "Export"} />
 
           {/* A checked file becomes a step-1 field: 40px lead, 14px name, mono
               facts in the subline. Replace is the quiet blue action; remove is

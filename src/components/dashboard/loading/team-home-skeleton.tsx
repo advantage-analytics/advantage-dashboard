@@ -23,6 +23,7 @@ export function TeamHomeFrame({
   insight,
   court,
   history,
+  pins,
   footer,
 }: Record<
   | "title"
@@ -34,7 +35,10 @@ export function TeamHomeFrame({
   | "history"
   | "footer",
   ReactNode
->) {
+> & {
+  /** "Pinned from Ask", last in the right column; absent until something is pinned. */
+  pins?: ReactNode;
+}) {
   return (
     <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
       <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-4 px-14 pt-5 pb-8">
@@ -46,6 +50,7 @@ export function TeamHomeFrame({
           insight={insight}
           court={court}
           history={history}
+          pins={pins}
         />
         {/* `mt-auto` eats the leftover column height, so on a short page the
             footer lands on the bottom edge instead of leaving a dead strip of
@@ -63,9 +68,10 @@ export function TeamHomeRegions({
   insight,
   court,
   history,
+  pins,
 }: Pick<
   Parameters<typeof TeamHomeFrame>[0],
-  "kpis" | "dual" | "movers" | "insight" | "court" | "history"
+  "kpis" | "dual" | "movers" | "insight" | "court" | "history" | "pins"
 >) {
   return (
     <>
@@ -79,6 +85,7 @@ export function TeamHomeRegions({
           {insight}
           {court}
           {history}
+          {pins}
         </div>
       </div>
     </>

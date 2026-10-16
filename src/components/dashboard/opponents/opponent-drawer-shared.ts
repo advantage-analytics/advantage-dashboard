@@ -1,4 +1,5 @@
 import type { NavLink } from "@/lib/dashboard/nav";
+import { askOpponentKey } from "@/lib/data/ask-tags";
 import { formatMatchDayCompact } from "@/lib/data/match-day";
 import { UNKNOWN_OPPONENT_NAME } from "@/lib/data/personal-opponents";
 
@@ -66,6 +67,20 @@ export function opponentMatchesHref(name: string): string {
 export interface OpponentDrawerLink {
   href: string;
   label: string;
+}
+
+/**
+ * The Ask page with this opponent already tagged: `askHref` plus
+ * `?opponent=<askOpponentKey(name)>`, the key the page's own opponent tags
+ * carry (`ask-tags.ts`). A group with no name keys nothing, so it opens the
+ * page bare rather than with a tag that names nobody.
+ */
+export function askAboutOpponentHref(askHref: string, name: string): string {
+  if (name === UNKNOWN_OPPONENT_NAME) return askHref;
+  const key = askOpponentKey(name);
+  return key === null
+    ? askHref
+    : `${askHref}?opponent=${encodeURIComponent(key)}`;
 }
 
 export interface OpponentDrawerFooter {

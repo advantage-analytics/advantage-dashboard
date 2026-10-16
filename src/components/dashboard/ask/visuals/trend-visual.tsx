@@ -1,103 +1,202 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
+import Link from "next/link";
 import type { AskTrendVisual } from "@/lib/services/ask/events";
 import { TREND_BOX, trendGeometry } from "./visual-geometry";
-import { VisualFrame, VisualKey } from "./visual-frame";
+import { VisualFrame, VisualKey, VisualReadout } from "./visual-frame";
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
+/** A point's match page, when the point is a match. */
+export function trendPointHref(matchId: string): string {
+  return `/dashboard/matches/${encodeURIComponent(matchId)}`;
+}
+
 /**
- * Trend line: one value per match in date order, with the mean of the drawn
- * values as a dashed rule so a point reads as above or below the player's own
- * level.
+ * Trend line: one value per match in date order, with a dashed second line
+ * so a point reads as above or below something — the block's own `baseline`
+ * series when it carries one (the same measure across all matches, or a
+ * per-match average), else the mean of the drawn values.
  *
- * The rule is geometry and is never printed as a number: the average is not a
- * cell of the query result, so the key names it and stops there. The one
- * figure on the plot is the last point's, in the server's own text.
+ * The mean is geometry and is never printed as a number: it is not a cell
+ * of the query result, so the key names it and stops there. A baseline
+ * series IS cells of the result, and still prints nothing on the plot: the
+ * one figure there is the last point's, in the server's own text.
  *
- * The drawing is hidden from assistive technology; the list under it carries
- * every point in words.
+ * Every point has a hit area laid over it, under the drawing: a hovered
+ * point names its date and figure in a dark readout — only the last value
+ * is printed on the plot — and a point that is a match (`matchId`) is a
+ * link to that match's page. The readout is drawn outside the wipe wrapper
+ * (`[data-ask-wipe]`), whose clip would cut it. The drawing itself is
+ * hidden from assistive technology; the words are the anchors' when the
+ * points link, else a list under it.
  */
 export function TrendVisual({
   visual,
   averageLabel = "Your average",
 }: {
   visual: AskTrendVisual;
-  /** The key's name for the dashed rule. The team page says "Average". */
+  /** The key's name for the dashed mean. The team page says "Average". */
   averageLabel?: string;
 }) {
-  const { points } = visual;
-  const geometry = trendGeometry(points.map((point) => point.value.value));
+  const { points, baseline } = visual;
+  const geometry = trendGeometry(
+    points.map((point) => point.value.value),
+    TREND_BOX,
+    baseline?.values.map((value) => value.value),
+  );
   const last = points.length - 1;
   const lastAt = geometry.points[last];
+  const linked = points.some((point) => point.matchId !== undefined);
+  const words = (index: number) =>
+    `${points[index].label}: ${points[index].value.text}${
+      baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
+    }`;
+  const [hovered, setHovered] = useState<number | null>(null);
+  const hoverAt = (index: number) => ({
+    onMouseEnter: () => setHovered(index),
+    onMouseLeave: () => setHovered(null),
+    onFocus: () => setHovered(index),
+    onBlur: () => setHovered(null),
+  });
+  const at = (index: number): CSSProperties => ({
+    left: percent(geometry.points[index].x, TREND_BOX.width),
+    top: percent(geometry.points[index].y, TREND_BOX.height),
+  });
 
   return (
     <VisualFrame kind="trend" caption={visual.caption}>
       <VisualKey
         items={[
           { label: "Each match", color: "var(--viz-you)" },
-          { label: averageLabel, color: "var(--viz-opp-mid)", dashed: true },
+          {
+            label: baseline?.label ?? averageLabel,
+            color: "var(--viz-opp-mid)",
+            dashed: true,
+          },
         ]}
       />
-      <div className="flex flex-col gap-1">
-        {/* The wipe is the wrapper's, not the SVG's: an HTML box is what gets
-            clipped, and the drawing inside it is never itself the animated
-            element. The last value's label is inside the same box, so the
-            wipe's end state has to clear it (`ask-wipe` in `globals.css`). */}
-        <div aria-hidden="true" data-ask-wipe="" className="relative">
-          <svg
-            viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
-            className="block w-full overflow-visible"
-          >
-            <line
-              x1={TREND_BOX.left}
-              x2={TREND_BOX.width - TREND_BOX.right}
-              y1={geometry.averageY}
-              y2={geometry.averageY}
-              stroke="var(--viz-opp-mid)"
-              strokeWidth={1}
-              strokeDasharray="3 4"
-              vectorEffect="non-scaling-stroke"
-            />
-            <path
-              d={geometry.path}
-              fill="none"
-              stroke="var(--viz-you)"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-            {geometry.points.map((point, index) => (
-              <circle
-                key={index}
-                cx={point.x}
-                cy={point.y}
-                r={index === last ? 3.5 : 2.5}
-                fill={index === last ? "var(--viz-you)" : "var(--surface-card)"}
+      {/* `pr-12`: a fixed gutter for the last value's label (about 46px at
+          11px), whatever the column's width. */}
+      <div className="flex flex-col gap-1 pr-12">
+        <div className="relative">
+          {/* The wipe is the wrapper's, not the SVG's: an HTML box is what gets
+              clipped, and the drawing inside it is never itself the animated
+              element. The last value's label is inside the same box, so the
+              wipe's end state has to clear it (`ask-wipe` in `globals.css`). */}
+          <div data-ask-wipe="" className="relative">
+            {points.map((point, index) =>
+              !geometry.points[index] ? null : point.matchId !== undefined ? (
+                <Link
+                  key={index}
+                  href={trendPointHref(point.matchId)}
+                  data-ask-trend-point=""
+                  className="absolute z-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors duration-[var(--duration-hover)] outline-none hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]"
+                  style={at(index)}
+                  {...hoverAt(index)}
+                >
+                  <span className="sr-only">{words(index)}, open match</span>
+                </Link>
+              ) : (
+                // Not a match: a hit area for the readout alone. Its words
+                // are in the list under the drawing — or, when other points
+                // link and there is no list, beside it.
+                <span key={index}>
+                  <span
+                    aria-hidden="true"
+                    data-ask-trend-hover=""
+                    className="absolute z-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={at(index)}
+                    {...hoverAt(index)}
+                  />
+                  {linked && <span className="sr-only">{words(index)}</span>}
+                </span>
+              ),
+            )}
+
+            <svg
+              aria-hidden="true"
+              viewBox={`0 0 ${TREND_BOX.width} ${TREND_BOX.height}`}
+              className="pointer-events-none relative block w-full overflow-visible"
+            >
+              {geometry.baseline ? (
+                <path
+                  d={geometry.baseline.path}
+                  fill="none"
+                  stroke="var(--viz-opp-mid)"
+                  strokeWidth={1}
+                  strokeDasharray="3 4"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : (
+                <line
+                  x1={TREND_BOX.left}
+                  x2={TREND_BOX.width - TREND_BOX.right}
+                  y1={geometry.averageY}
+                  y2={geometry.averageY}
+                  stroke="var(--viz-opp-mid)"
+                  strokeWidth={1}
+                  strokeDasharray="3 4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+              <path
+                d={geometry.path}
+                fill="none"
                 stroke="var(--viz-you)"
                 strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
-            ))}
-          </svg>
-          {lastAt && (
-            <span
-              data-ask-trend-last=""
-              data-ask-after=""
-              className="absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
-              style={
-                {
-                  left: percent(lastAt.x, TREND_BOX.width),
-                  top: percent(lastAt.y, TREND_BOX.height),
-                  // After the line has reached it: the wipe has passed
-                  // this far by the time the fade starts, so the label
-                  // fades whole and is never cut by the wipe's edge.
-                  "--ask-row": 8,
-                } as CSSProperties
-              }
+              {geometry.points.map((point, index) => (
+                <circle
+                  key={index}
+                  cx={point.x}
+                  cy={point.y}
+                  r={index === last ? 3.5 : 2.5}
+                  fill={
+                    index === last ? "var(--viz-you)" : "var(--surface-card)"
+                  }
+                  stroke="var(--viz-you)"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+            {lastAt && (
+              <span
+                aria-hidden="true"
+                data-ask-trend-last=""
+                data-ask-after=""
+                className="pointer-events-none absolute -translate-y-1/2 pl-2.5 text-[11px] whitespace-nowrap text-[var(--ink-900)] tabular-nums"
+                style={
+                  {
+                    left: percent(lastAt.x, TREND_BOX.width),
+                    top: percent(lastAt.y, TREND_BOX.height),
+                    // After the line has reached it: the wipe has passed
+                    // this far by the time the fade starts, so the label
+                    // fades whole and is never cut by the wipe's edge.
+                    "--ask-row": 8,
+                  } as CSSProperties
+                }
+              >
+                {points[last].value.text}
+              </span>
+            )}
+          </div>
+          {/* The readout for the hovered point, outside the wipe's clip. */}
+          {hovered !== null && geometry.points[hovered] && (
+            <VisualReadout
+              open
+              className="-translate-x-1/2 -translate-y-full"
+              style={{
+                left: at(hovered).left,
+                top: `calc(${at(hovered).top} - 12px)`,
+              }}
             >
-              {points[last].value.text}
-            </span>
+              {words(hovered)}
+            </VisualReadout>
           )}
         </div>
         <div
@@ -112,13 +211,13 @@ export function TrendVisual({
           <span>{points[last].label}</span>
         </div>
       </div>
-      <ol className="sr-only">
-        {points.map((point, index) => (
-          <li key={index}>
-            {point.label}: {point.value.text}
-          </li>
-        ))}
-      </ol>
+      {!linked && (
+        <ol className="sr-only">
+          {points.map((_, index) => (
+            <li key={index}>{words(index)}</li>
+          ))}
+        </ol>
+      )}
     </VisualFrame>
   );
 }

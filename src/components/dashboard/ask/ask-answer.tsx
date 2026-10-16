@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
+import { figureVideoHref } from "@/lib/services/ask/figure-video";
 import { advButton } from "@/lib/ui/adv-button";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
 import { AskFeedbackControl } from "./ask-feedback";
 import { AskSources } from "./ask-sources";
-import type { AskAnswerState } from "./use-ask-stream";
+import { AskShowMe } from "./ask-show";
+import type { AskAnswerState, AskFigure } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
 
 export interface AskAnswerProps {
@@ -37,6 +41,12 @@ export interface AskAnswerProps {
    * drawn) when the answer has no saved id to point at.
    */
   onRate?: (feedback: AskFeedback | null) => Promise<boolean>;
+  /**
+   * What the answer offers to do next (the page's `AskActionCards`), drawn
+   * between "Show me these points" and the sign-off once the answer is
+   * saved: what to do with the answer comes before who signed it.
+   */
+  actions?: ReactNode;
 }
 
 /** An answer carries at most this many figure tiles (design "Answer step"). */
@@ -44,6 +54,9 @@ export const ASK_FIGURE_TILES = 3;
 
 /** Who signs a finished answer, in its footer. */
 export const ASK_SIGNATURE = "Advantage Intelligence";
+
+/** The disclosure that holds the prose when the block leads the answer. */
+export const ASK_PROSE_DISCLOSURE = "The numbers in full";
 
 /**
  * What the player reads when an answer fails, by the stream's `code` — the
@@ -92,6 +105,27 @@ export const ASK_ERROR_COPY = PERSONAL_ASK_COPY.errors;
  * or bad, and a failed answer is not a loss. The visual block's blue and
  * slate are roles (`visuals/ask-visual.tsx`).
  *
+ * ── Watchable figures ───────────────────────────────────────────────────────
+ * Over a scope of one match, a figure whose measure maps to a Video-tab
+ * filter (`figure-video.ts`) is a link to that match's film on exactly
+ * those points, with a quiet "Watch" after its label — the sources' own
+ * affordance. The figure's `column` says which measure; a figure without
+ * one (saved before it existed, or cited from words around a cell) is a
+ * tile and nothing more. The block's own rows, zones and branches link the
+ * same way (`visuals/ask-visual.tsx`), so the sources go to it too.
+ *
+ * ── Visual first ────────────────────────────────────────────────────────────
+ * When the question asked for a chart (`visualLead`, from the `visual`
+ * event's `lead`), the block follows the claim and the figures follow it;
+ * the prose folds behind a native disclosure (design sheet "4 · Visual
+ * first", `src/app/design/ask/answers`), closed until opened, as the
+ * design has it. The status line, the sources and the footer stay where
+ * they are.
+ *
+ * Every figure, in the tiles and in the prose, sits in tabular numerals, so
+ * a column of them lines up and a sentence's figure does not shift its
+ * neighbours as it streams in.
+ *
  * Keep this file's imports clear of `next/navigation` and `next/image`: it is
  * rendered by an offline component harness (`tests/ask-answer-view.spec.ts`).
  */
@@ -100,6 +134,7 @@ export function AskAnswer({
   scope = PERSONAL_ASK_SCOPE,
   onChoose,
   onRate,
+  actions,
 }: AskAnswerProps) {
   const copy = askCopy(scope);
   // An answer that mounted mid-stream is arriving now, and its parts move as
@@ -108,20 +143,45 @@ export function AskAnswer({
   // motion must not replay when the stream ends or the page re-renders.
   const [live] = useState(answer.status === "streaming");
   return (
-    <div
-      data-ask-answer=""
-      data-ask-live={live ? "" : undefined}
-      className="flex min-w-0 flex-col gap-5"
-    >
-      {answer.status === "error" &&
-      answer.error?.code === "needs_clarification" ? (
-        <AnswerQuestion error={answer.error} copy={copy} onChoose={onChoose} />
-      ) : answer.status === "error" ? (
-        <AnswerError error={answer.error} copy={copy} />
-      ) : (
-        <AnswerBody answer={answer} copy={copy} onRate={onRate} />
-      )}
-    </div>
+    <>
+      {/* One live region for the answer's whole life, mounted from the
+          start: a region that mounts already holding its text is often not
+          read out. Its text follows the route's step and ends on "Answer
+          ready" for an answer that arrived here (not one reopened). */}
+      <p role="status" className="sr-only">
+        {answer.status === "streaming"
+          ? answer.stage
+            ? copy.stage[answer.stage]
+            : "Sending your question"
+          : live && answer.status === "done"
+            ? "Answer ready"
+            : ""}
+      </p>
+      <div
+        data-ask-answer=""
+        data-ask-live={live ? "" : undefined}
+        aria-busy={answer.status === "streaming" || undefined}
+        className="flex min-w-0 flex-col gap-5"
+      >
+        {answer.status === "error" &&
+        answer.error?.code === "needs_clarification" ? (
+          <AnswerQuestion
+            error={answer.error}
+            copy={copy}
+            onChoose={onChoose}
+          />
+        ) : answer.status === "error" ? (
+          <AnswerError error={answer.error} copy={copy} />
+        ) : (
+          <AnswerBody
+            answer={answer}
+            copy={copy}
+            onRate={onRate}
+            actions={actions}
+          />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -194,16 +254,61 @@ function AnswerBody({
   answer,
   copy,
   onRate,
+  actions,
 }: {
   answer: AskAnswerState;
   copy: AskCopy;
   onRate?: AskAnswerProps["onRate"];
+  actions?: ReactNode;
 }) {
   const paragraphs = answer.body
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const figures = answer.figures.slice(0, ASK_FIGURE_TILES);
+  const signature = (
+    <p data-ask-signature="" className="text-micro max-w-[60ch]">
+      {/* `text-micro` is unlayered and would beat a colour utility. */}
+      <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
+      {answer.noAdvice && ` · ${copy.noAdvice}`}
+      {answer.coach && ` · ${copy.coach}`}
+    </p>
+  );
+  // The block leads when the question asked for a chart: it comes right
+  // after the claim, and the prose folds away.
+  const lead = answer.visual !== null && answer.visualLead === true;
+
+  const block = answer.visual && (
+    <div data-ask-part="" style={part(lead ? 1 : 2)}>
+      <AskVisualBlock
+        visual={answer.visual}
+        sources={answer.sources}
+        trendAverageLabel={copy.trendAverage}
+      />
+    </div>
+  );
+
+  const prose = paragraphs.length > 0 && (
+    <div className="flex flex-col gap-3">
+      {paragraphs.map((paragraph, index) => (
+        // `text-body` is unlayered and would beat a `leading-*` utility,
+        // so the reading line height is set inline.
+        <p
+          key={index}
+          className="text-body max-w-[66ch] text-pretty tabular-nums"
+          style={{ lineHeight: 1.65 }}
+        >
+          {/* A sentence at a time, as the stream sends them: one that has
+              been read keeps its key and stays put; a new one fades in. */}
+          {sentences(paragraph).map((sentence, at) => (
+            <span key={at} data-ask-sentence="">
+              {sentence}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -213,65 +318,69 @@ function AnswerBody({
         </p>
       )}
 
+      {lead && block}
+
       {figures.length > 0 && (
         <ul
           aria-label="Figures"
           data-ask-part=""
-          style={part(1)}
+          style={part(lead ? 2 : 1)}
           className="flex flex-wrap gap-x-8 gap-y-2.5"
         >
-          {figures.map((figure, index) => (
+          {figures.map((figure, index) => {
+            const watch = figureVideoHref(figureColumn(figure), answer.sources);
             // Value over label, in the markup as on screen.
-            <li
-              key={index}
-              data-ask-figure=""
-              className="flex flex-col gap-0.5"
-            >
-              <div data-ask-figure-value="" className="text-scoreboard">
-                {figure.value}
-              </div>
-              <div data-ask-figure-label="" className="text-micro">
-                {figure.label}
-              </div>
-            </li>
-          ))}
+            const tile = (
+              <>
+                <div
+                  data-ask-figure-value=""
+                  className="text-scoreboard tabular-nums"
+                >
+                  {figure.value}
+                </div>
+                <div data-ask-figure-label="" className="text-micro">
+                  {figure.label}
+                  {watch && (
+                    <span
+                      data-ask-figure-watch=""
+                      className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--blue-hover)]"
+                    >
+                      {" "}
+                      · Watch
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+            return (
+              <li
+                key={index}
+                data-ask-figure=""
+                className="flex flex-col gap-0.5"
+              >
+                {watch ? (
+                  <Link
+                    href={watch}
+                    className="group flex flex-col gap-0.5 rounded-[var(--radius-element)] outline-none focus-visible:shadow-[var(--focus-ring)]"
+                  >
+                    {tile}
+                  </Link>
+                ) : (
+                  tile
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      {answer.visual && (
-        <div data-ask-part="" style={part(2)}>
-          <AskVisualBlock
-            visual={answer.visual}
-            trendAverageLabel={copy.trendAverage}
-          />
-        </div>
-      )}
+      {!lead && block}
 
-      {paragraphs.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {paragraphs.map((paragraph, index) => (
-            // `text-body` is unlayered and would beat a `leading-*` utility,
-            // so the reading line height is set inline.
-            <p
-              key={index}
-              className="text-body max-w-[66ch] text-pretty"
-              style={{ lineHeight: 1.65 }}
-            >
-              {/* A sentence at a time, as the stream sends them: one that has
-                  been read keeps its key and stays put; a new one fades in. */}
-              {sentences(paragraph).map((sentence, at) => (
-                <span key={at} data-ask-sentence="">
-                  {sentence}
-                </span>
-              ))}
-            </p>
-          ))}
-        </div>
-      )}
+      {lead && prose ? <ProseDisclosure>{prose}</ProseDisclosure> : prose}
 
       {answer.status === "streaming" && (
         <p
-          role="status"
+          aria-hidden="true"
           key={answer.stage ?? "sending"}
           data-ask-stage=""
           className="text-body-sm"
@@ -283,15 +392,27 @@ function AnswerBody({
       {(answer.sources || answer.status === "done") && (
         <div data-ask-part="" style={part(3)} className="flex flex-col gap-3">
           {answer.sources && <AskSources matches={answer.sources} />}
-          {answer.status === "done" && (
-            <p data-ask-signature="" className="text-micro max-w-[60ch]">
-              {/* `text-micro` is unlayered and would beat a colour utility. */}
-              <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
-              {answer.noAdvice && ` · ${copy.noAdvice}`}
-            </p>
+          {answer.status === "done" && answer.answerId && (
+            <AskShowMe answerId={answer.answerId} sources={answer.sources} />
           )}
-          {answer.status === "done" && onRate && (
-            <AskFeedbackControl feedback={answer.feedback} onRate={onRate} />
+          {/* What to do with the answer, before who signed it: the sign-off
+              closes the answer, so the next steps never float under it. */}
+          {answer.status === "done" && actions}
+          {/* Provenance: who signed it and how it landed, one tight pair,
+              so the signature reads as the rating's caption rather than a
+              stray line between the sources and the thumbs. */}
+          {answer.status === "done" && (
+            <div data-ask-provenance="">
+              {onRate ? (
+                <AskFeedbackControl
+                  feedback={answer.feedback}
+                  onRate={onRate}
+                  lead={signature}
+                />
+              ) : (
+                signature
+              )}
+            </div>
           )}
         </div>
       )}
@@ -302,4 +423,38 @@ function AnswerBody({
 /** A part's place in the order the answer is read, for parts that land together. */
 function part(index: number): CSSProperties {
   return { "--ask-i": index } as CSSProperties;
+}
+
+/**
+ * The prose behind a native `<details>` when the block leads: the summary
+ * is the design sheet's own — a quiet blue line with a chevron that turns
+ * when open — and the browser's marker is hidden in favour of it. Closed
+ * by default, as the design has it; a reader who wants the sentences opens
+ * them, and they are in the page for a screen reader either way.
+ */
+function ProseDisclosure({ children }: { children: ReactNode }) {
+  return (
+    <details data-ask-prose="" className="group">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-[var(--radius-button)] text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3 transition-transform duration-[var(--duration-hover)] group-open:rotate-90"
+          strokeWidth={1.5}
+        />
+        {ASK_PROSE_DISCLOSURE}
+      </summary>
+      <div className="pt-3">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * The result column a figure was cited from, when the stream or the saved
+ * answer carried it. Read through a widened type: `AskFigure` is the
+ * stream reader's, and a reader that has not learnt the field yet simply
+ * hands over none.
+ */
+function figureColumn(figure: AskFigure): string | undefined {
+  const column = (figure as AskFigure & { column?: unknown }).column;
+  return typeof column === "string" && column !== "" ? column : undefined;
 }

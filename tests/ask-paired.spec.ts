@@ -5,6 +5,7 @@ import type { AskAnswerEvent, AskVisual } from "@/lib/services/ask/events";
 import {
   type AskPairedContext,
   MAX_PAIRED_HEADLINE,
+  MIN_MATCHUP_BARS,
   buildMatchListAnswer,
   buildPairedAnswer,
   buildTrendAnswer,
@@ -65,6 +66,28 @@ function table(visual: AskVisual | null) {
   if (visual?.kind !== "table") throw new Error("no table");
   return visual;
 }
+
+function bars(visual: AskVisual | null) {
+  if (visual?.kind !== "bars") throw new Error("no bars");
+  return visual;
+}
+
+/** Who the two columns are: the table's headings, or the bars' two series. */
+function headings(visual: AskVisual | null): string[] {
+  if (visual?.kind === "table") return visual.columns;
+  if (visual?.kind === "bars")
+    return [visual.subjectLabel, visual.baselineLabel];
+  throw new Error("no block");
+}
+
+/**
+ * The diagnostic with one share fewer than bars need: mostly counts, so
+ * the block stays a table that holds every measure.
+ */
+const COUNTED: AskRow = (() => {
+  const { me_return_won_pct: _a, opp_return_won_pct: _b, ...rest } = DIAGNOSTIC;
+  return rest;
+})();
 
 test.describe("pairedShape — when a result is one row of pairs", () => {
   test("a me_/opp_ diagnostic: every pair, widest relative gap first", () => {
@@ -178,14 +201,59 @@ test.describe("buildPairedAnswer — me against the opponent", () => {
     expect(MAX_PAIRED_HEADLINE).toBe(3);
   });
 
-  test("one table, subject then other, widest gap first, inside the table's limits", async () => {
+  test("four or more shares: bars, subject over other, the widest gaps first; counts stay in the prose", async () => {
     const { result } = await rendered(DIAGNOSTIC, PERSONAL);
+    expect(result.droppedVisuals).toEqual([]);
+    const visual = bars(result.visual);
+    expect(MIN_MATCHUP_BARS).toBe(4);
+    expect(visual.caption).toBe(
+      "The shares compared, widest gap first, from 3 matches.",
+    );
+    expect(visual.subjectLabel).toBe("You");
+    expect(visual.baselineLabel).toBe("Marek Dvorsky");
+    expect(visual.rows.map((row) => row.label)).toEqual([
+      "First serves in",
+      "Second-serve points won",
+      "Total points won",
+      "Return points won",
+    ]);
+    expect(visual.rows[0]).toEqual({
+      label: "First serves in",
+      subject: { value: 60.2, text: "60.2%" },
+      baseline: { value: 65.8, text: "65.8%" },
+    });
+    // The counts the bars cannot hold are still in the words.
+    expect(result.headline).toContain("break points converted (13 to 6)");
+  });
+
+  test("more than six shares: the bars hold the six widest", async () => {
+    const wide: AskRow = {
+      ...DIAGNOSTIC,
+      me_break_points_saved_pct: 40,
+      opp_break_points_saved_pct: 75,
+      me_first_serve_won_pct: 70.1,
+      opp_first_serve_won_pct: 71.2,
+      me_service_games_won_pct: 80,
+      opp_service_games_won_pct: 85,
+    };
+    const { result } = await rendered(wide, PERSONAL);
+    expect(result.droppedVisuals).toEqual([]);
+    const visual = bars(result.visual);
+    expect(visual.rows).toHaveLength(6);
+    expect(visual.rows[0].label).toBe("Break points saved");
+    expect(visual.rows.map((row) => row.label)).not.toContain(
+      "First-serve points won",
+    );
+  });
+
+  test("fewer shares: one table, subject then other, widest gap first, inside the table's limits", async () => {
+    const { result } = await rendered(COUNTED, PERSONAL);
     const visual = table(result.visual);
     expect(visual.caption).toBe(
       "The measures compared, widest gap first, from 3 matches.",
     );
     expect(visual.columns).toEqual(["You", "Marek Dvorsky"]);
-    expect(visual.rows).toHaveLength(8);
+    expect(visual.rows).toHaveLength(7);
     expect(visual.rows[0]).toEqual({
       label: "Break points converted",
       cells: ["6", "13"],
@@ -209,7 +277,7 @@ test.describe("buildPairedAnswer — me against the opponent", () => {
 
   test("more than eight pairs: the table holds eight and is never dropped", async () => {
     const wide: AskRow = {
-      ...DIAGNOSTIC,
+      ...COUNTED,
       me_aces: 4,
       opp_aces: 9,
       me_double_faults: 3,
@@ -231,7 +299,7 @@ test.describe("buildPairedAnswer — me against the opponent", () => {
     expect(many.result.text).toContain(
       "Your opponents were higher on first serves in",
     );
-    expect(table(many.result.visual).columns).toEqual(["You", "Opponents"]);
+    expect(headings(many.result.visual)).toEqual(["You", "Opponents"]);
 
     const one = await rendered(
       { ...DIAGNOSTIC, matches_in_scope: 1 },
@@ -242,10 +310,10 @@ test.describe("buildPairedAnswer — me against the opponent", () => {
       "Your opponent was higher on first serves in",
     );
     expect(one.result.text.endsWith("This is one match.")).toBe(true);
-    expect(table(one.result.visual).caption).toBe(
-      "The measures compared, widest gap first, from 1 match.",
+    expect(bars(one.result.visual).caption).toBe(
+      "The shares compared, widest gap first, from 1 match.",
     );
-    expect(table(one.result.visual).columns).toEqual(["You", "Opponent"]);
+    expect(headings(one.result.visual)).toEqual(["You", "Opponent"]);
   });
 
   test("level pairs are said to be level, and a row that is level throughout says so", async () => {
@@ -300,7 +368,7 @@ test.describe("buildPairedAnswer — a team scope", () => {
     expect(result.headline).toBe(
       "Aidan Kim had more break points converted (13 to 6); Rudy Quan had more unforced errors (134 to 112) and had more winners (86 to 73).",
     );
-    expect(table(result.visual).columns).toEqual(["Rudy Quan", "Aidan Kim"]);
+    expect(headings(result.visual)).toEqual(["Rudy Quan", "Aidan Kim"]);
     expect(`${result.headline} ${result.text}`).not.toMatch(/\byou(r)?\b/i);
   });
 
@@ -315,7 +383,7 @@ test.describe("buildPairedAnswer — a team scope", () => {
       "Opponents had more break points converted (13 to 6); the team had more unforced errors (134 to 112) and had more winners (86 to 73).",
     );
     expect(result.text).toContain("Opponents were higher on first serves in");
-    expect(table(result.visual).columns).toEqual(["Team", "Opponents"]);
+    expect(headings(result.visual)).toEqual(["Team", "Opponents"]);
   });
 });
 
@@ -504,6 +572,57 @@ test.describe("buildMatchListAnswer — a short list of matches", () => {
     expect(result.text).toBe(
       "Aug 22, 2026: won against Ilya Brandt, 6-3, 3-6, 6-4. Sep 5, 2026: lost to Sam Okafor, 3-6, 6-7. Sep 28, 2026: won against Riley Marsh, 6-3, 6-4.",
     );
+    // Each tick carries its match's words, from the row it was drawn from.
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.results).toEqual([true, false, true]);
+    expect(result.visual.ticks).toEqual([
+      { opponent: "Ilya Brandt", score: "6-3, 3-6, 6-4", date: "Aug 22, 2026" },
+      { opponent: "Sam Okafor", score: "3-6, 6-7", date: "Sep 5, 2026" },
+      { opponent: "Riley Marsh", score: "6-3, 6-4", date: "Sep 28, 2026" },
+    ]);
+  });
+
+  test("a match id on the rows links each tick to its match; a team list names the player on it", async () => {
+    const result = await listed(
+      LIST.map((row, index) => ({
+        ...row,
+        match_id: `m-${index + 1}`,
+        player_name: "Rudy Quan",
+      })),
+      true,
+    );
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.ticks?.map((tick) => tick.matchId)).toEqual([
+      "m-2",
+      "m-1",
+      "m-3",
+    ]);
+    expect(result.visual.ticks?.[0].player).toBe("Rudy Quan");
+  });
+
+  test("a season of matches: up to twenty, the strip for all and sentences for the ends", async () => {
+    const season = Array.from({ length: 14 }, (_, index) => ({
+      played_on: `2026-03-${String(index + 1).padStart(2, "0")}`,
+      opponent_name: `Opponent ${String.fromCharCode(65 + index)}`,
+      i_won: index % 3 !== 0,
+      score_text: "6-4, 6-4",
+      matches_in_scope: 14,
+    }));
+    const result = await listed(season);
+    expect(result.headline).toBe("Won 9, lost 5.");
+    if (result.visual?.kind !== "form") throw new Error("no strip");
+    expect(result.visual.results).toHaveLength(14);
+    expect(result.visual.ticks).toHaveLength(14);
+    expect(result.visual.ticks?.[13]).toEqual({
+      opponent: "Opponent N",
+      score: "6-4, 6-4",
+      date: "Mar 14, 2026",
+    });
+    expect(result.text).toBe(
+      "Oldest — Mar 1, 2026: lost to Opponent A, 6-4, 6-4. Most recent — Mar 14, 2026: won against Opponent N, 6-4, 6-4. Each tick of the strip is one match, oldest first, with its opponent and score.",
+    );
+
+    expect(result.droppedDigits).toEqual([]);
   });
 
   test("a team list names each match's player", async () => {
@@ -527,10 +646,16 @@ test.describe("buildMatchListAnswer — a short list of matches", () => {
     ).toBeNull();
     expect(
       buildMatchListAnswer(
-        Array.from({ length: 11 }, () => LIST[0]),
+        Array.from({ length: 21 }, () => LIST[0]),
         { team: false },
       ),
     ).toBeNull();
+    expect(
+      buildMatchListAnswer(
+        Array.from({ length: 20 }, () => LIST[0]),
+        { team: false },
+      ),
+    ).not.toBeNull();
   });
 });
 
@@ -565,6 +690,48 @@ test.describe("buildTrendAnswer — one measure over time", () => {
     expect(result.text).toBe(
       "Lowest: 54.2% on Feb 7, 2026. Highest: 91.7% on Sep 5, 2026. From 4 matches.",
     );
+  });
+
+  test("the same measure under a qualifier is the chart's second line, and match ids ride along", async () => {
+    const rows = SERIES.map((row, index) => ({
+      ...row,
+      match_id: `m-${index}`,
+      all_first_serve_pct: 70.4,
+    }));
+    const answer = buildTrendAnswer(rows, { matchCount: 4 });
+    if (!answer) throw new Error("not a trend");
+    expect(answer.text).toContain(
+      "PLOT: played_on | first_serve_pct | all_first_serve_pct",
+    );
+    const result = await trended(rows);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual).toMatchObject({
+      kind: "trend",
+      baseline: {
+        label: "All matches",
+        values: [
+          { value: 70.4, text: "70.4%" },
+          { value: 70.4, text: "70.4%" },
+          { value: 70.4, text: "70.4%" },
+          { value: 70.4, text: "70.4%" },
+        ],
+      },
+    });
+    expect(
+      result.visual?.kind === "trend" &&
+        result.visual.points.map((point) => point.matchId),
+    ).toEqual(["m-1", "m-2", "m-3", "m-0"]);
+    // The headline and the body are the measure's own, unchanged.
+    expect(result.headline).toBe(
+      "First serves in rose from 54.2% on Feb 7, 2026 to 91.7% on Sep 28, 2026.",
+    );
+    // Two measures that are not one under a qualifier are still not a trend.
+    expect(
+      buildTrendAnswer(
+        SERIES.map((row) => ({ ...row, all_aces: 2 })),
+        { matchCount: 4 },
+      ),
+    ).toBeNull();
   });
 
   test("a count that went down fell", async () => {

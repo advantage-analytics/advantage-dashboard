@@ -7,16 +7,22 @@
  * client, and every call goes through the cookie-authenticated server client
  * — never `admin.ts`. `ask_conversations` has no delete policy on purpose:
  * `ask_delete_conversation` is the only way a row goes, and it removes only
- * a conversation `auth.uid()` owns.
+ * a conversation `auth.uid()` owns. Rename and pin go through the table's
+ * owner-only UPDATE policy (`20261015094801_ask_conversation_pins_rename`),
+ * which lets `authenticated` change `title` and `pinned_at` and nothing
+ * else. A pinned visual is copied by `ask_pin_answer()` from the caller's own
+ * answer row (`20261015094823_ask_pins`): nothing the browser sends becomes
+ * a block on Home.
  */
 
 import { revalidatePath } from "next/cache";
 import { isUuid } from "@/lib/admin/validation";
 import type { AskScope, askBasePath } from "@/lib/services/ask/scope";
+import { normalizeAskTitle } from "@/lib/services/ask/titles";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The two pages a delete can have been made from. Spelled out here rather
+ * The two pages a write can have been made from. Spelled out here rather
  * than taken from the caller: a server action's arguments are whatever the
  * client sent, and `revalidatePath` must never be handed one of them. The
  * type ties the two strings to `askBasePath()`, so a renamed route is a type
@@ -27,8 +33,20 @@ const ASK_PATH: Record<AskScope["kind"], ReturnType<typeof askBasePath>> = {
   team: "/dashboard/team/ask",
 };
 
+/** Where the personal Home draws pins. */
+const HOME_PATH = "/dashboard";
+const TEAM_HOME_PATH = "/dashboard/team";
+
 export type AskActionResult =
   { ok: true } | { ok: false; error: "invalid" | "forbidden" | "failed" };
+
+function askPath(scopeKind: AskScope["kind"]) {
+  return scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal;
+}
+/** The Home a pin lands on: the team's for a team answer, else the player's. */
+function homePath(scopeKind: AskScope["kind"]) {
+  return scopeKind === "team" ? TEAM_HOME_PATH : HOME_PATH;
+}
 
 /**
  * Delete one of the viewer's saved conversations, with its messages.
@@ -68,6 +86,165 @@ export async function deleteAskConversation(
     return { ok: false, error: "failed" };
   }
 
-  revalidatePath(scopeKind === "team" ? ASK_PATH.team : ASK_PATH.personal);
+  revalidatePath(askPath(scopeKind));
+  return { ok: true };
+}
+
+/** Update one of the viewer's own conversation rows; `forbidden` when it is not theirs. */
+async function updateOwnConversation(
+  conversationId: string,
+  patch: { title: string } | { pinned_at: string | null },
+  what: "rename" | "pin",
+): Promise<AskActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "forbidden" };
+
+  const { data, error } = await supabase
+    .from("ask_conversations")
+    .update(patch)
+    .eq("id", conversationId)
+    .eq("user_id", user.id)
+    .select("id");
+  if (error) {
+    console.error(`[ask] could not ${what} a conversation`, {
+      error: error.message,
+    });
+    return { ok: false, error: "failed" };
+  }
+  if (!data || data.length === 0) return { ok: false, error: "forbidden" };
+  return { ok: true };
+}
+
+/**
+ * Rename one of the viewer's conversations. The title is normalised here
+ * (`normalizeAskTitle`: one line, 1–120 characters) and refused as `invalid`
+ * otherwise; RLS answers an id that is not the caller's with zero rows,
+ * which reads back as `forbidden`.
+ *
+ * `revalidate: false` is for the page's own rename right after a first
+ * answer — the short title from `askTitle()` — where a re-render would
+ * rebuild the thread under the answer just shown; the list carries the new
+ * title on its next read anyway. A rename the player makes revalidates.
+ */
+export async function renameAskConversation(
+  conversationId: string,
+  title: string,
+  scopeKind: AskScope["kind"] = "personal",
+  options: { revalidate?: boolean } = {},
+): Promise<AskActionResult> {
+  if (!isUuid(conversationId)) return { ok: false, error: "invalid" };
+  const normalized = normalizeAskTitle(title);
+  if (!normalized) return { ok: false, error: "invalid" };
+
+  const result = await updateOwnConversation(
+    conversationId,
+    { title: normalized },
+    "rename",
+  );
+  if (!result.ok) return result;
+
+  if (options.revalidate !== false) revalidatePath(askPath(scopeKind));
+  return { ok: true };
+}
+
+/**
+ * Pin one of the viewer's conversations to the top of the rail, or take the
+ * pin off. `pinned_at` is set to now or to null; the row's `updated_at` —
+ * the last exchange — is untouched, so the months beneath keep their order.
+ */
+export async function setAskConversationPinned(
+  conversationId: string,
+  pinned: boolean,
+  scopeKind: AskScope["kind"] = "personal",
+): Promise<AskActionResult> {
+  if (!isUuid(conversationId)) return { ok: false, error: "invalid" };
+
+  const result = await updateOwnConversation(
+    conversationId,
+    { pinned_at: pinned ? new Date().toISOString() : null },
+    "pin",
+  );
+  if (!result.ok) return result;
+
+  revalidatePath(askPath(scopeKind));
+  return { ok: true };
+}
+
+export type AskPinResult =
+  | { ok: true; pinId: string }
+  | { ok: false; error: "invalid" | "forbidden" | "no_visual" | "failed" };
+
+/**
+ * Keep an answer's visual block on Home. `ask_pin_answer()` copies the block
+ * from the caller's own answer row and refuses anyone else's (42501), an
+ * answer with no block (22023), and a team answer once the caller has left
+ * the program. Pinning the same answer twice answers the existing pin.
+ *
+ * Revalidates Home, where the card is, and the Ask page, whose saved
+ * conversation now carries the pin id on that answer.
+ */
+export async function pinAskAnswer(
+  answerId: string,
+  scopeKind: AskScope["kind"] = "personal",
+): Promise<AskPinResult> {
+  if (!isUuid(answerId)) return { ok: false, error: "invalid" };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "forbidden" };
+
+  const { data, error } = await supabase.rpc("ask_pin_answer", {
+    p_answer_id: answerId,
+  });
+  if (error) {
+    if (error.code === "42501") return { ok: false, error: "forbidden" };
+    if (error.code === "22023") return { ok: false, error: "no_visual" };
+    console.error("[ask] could not pin an answer", { error: error.message });
+    return { ok: false, error: "failed" };
+  }
+  if (typeof data !== "string" || !isUuid(data)) {
+    console.error("[ask] ask_pin_answer() answered an unexpected shape");
+    return { ok: false, error: "failed" };
+  }
+
+  revalidatePath(homePath(scopeKind));
+  revalidatePath(askPath(scopeKind));
+  return { ok: true, pinId: data };
+}
+
+/**
+ * Take a pin off Home. Owner-only through `ask_pins`' delete policy: an id
+ * that is not the caller's deletes nothing, which — as with a delete — is
+ * still `ok`: the pin is not on the caller's Home, which is what was asked.
+ */
+export async function unpinAskAnswer(
+  pinId: string,
+  scopeKind: AskScope["kind"] = "personal",
+): Promise<AskActionResult> {
+  if (!isUuid(pinId)) return { ok: false, error: "invalid" };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "forbidden" };
+
+  const { error } = await supabase
+    .from("ask_pins")
+    .delete()
+    .eq("id", pinId)
+    .eq("user_id", user.id);
+  if (error) {
+    console.error("[ask] could not unpin an answer", { error: error.message });
+    return { ok: false, error: "failed" };
+  }
+
+  revalidatePath(homePath(scopeKind));
+  revalidatePath(askPath(scopeKind));
   return { ok: true };
 }

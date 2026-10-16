@@ -11,6 +11,7 @@ import {
   CircleHelp,
   CreditCard,
   KeyRound,
+  MessageSquare,
   SlidersHorizontal,
   Timer,
   Trophy,
@@ -28,6 +29,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
+import { FloatMenuLabel } from "@/components/ui/float-menu";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
@@ -57,6 +59,8 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import { youSeat } from "@/lib/data/viewer-side";
+import { askEntryHref } from "@/lib/services/ask/entry";
+import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { countEvents } from "@/components/dashboard/search/event-counts";
 import { cn } from "@/lib/utils";
 import {
@@ -91,12 +95,21 @@ import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
  * is scoped to one of them, advertising matches it then could not show.
  *
  * ── Commands ───────────────────────────────────────────────────────────────
- * Only real destinations. Statistics, Ask, Opponents and — while
- * `SCHEDULE_ENABLED` is off — Schedule are still `ComingSoonPage` stubs, and
- * a command that opens a placeholder is worse than no command. Program verbs
- * are ABSENT in a personal workspace, never disabled — a greyed-out "Invite a
- * player" is a promise the workspace cannot keep. Each command's hint is the route table's own label for its href, so a
- * rename in `nav.ts` reaches here without a second edit.
+ * Only real destinations. Statistics and — while `SCHEDULE_ENABLED` is off
+ * — Schedule are still `ComingSoonPage` stubs, and a command that opens a
+ * placeholder is worse than no command. Program verbs are ABSENT in a
+ * personal workspace, never disabled — a greyed-out "Invite a player" is a
+ * promise the workspace cannot keep. Each command's hint is the route
+ * table's own label for its href, so a rename in `nav.ts` reaches here
+ * without a second edit.
+ *
+ * ── Ask ────────────────────────────────────────────────────────────────────
+ * "Ask a question" is a command, and under a scoped search an "Ask" section
+ * offers "Ask about <opponent>" and "Ask about <match>" for the rows the
+ * search found — each a link into the workspace's Ask page with that
+ * opponent or match already tagged (`askEntryHref`). Not under a wide
+ * search: a match from another workspace would land on an Ask page that
+ * cannot tag it.
  *
  * ── Pages ──────────────────────────────────────────────────────────────────
  * Every live page by name, read from `nav.ts` — the rail's own lists and
@@ -182,7 +195,7 @@ interface MatchResult {
    */
   outcome: boolean | null;
   hasScore: boolean;
-  /** Which workspace the match belongs to — the eyebrow when scope is wide. */
+  /** Which workspace the match belongs to — the group label when scope is wide. */
   workspaceName: string;
 }
 
@@ -225,9 +238,17 @@ interface PageLink {
   area: string;
 }
 
+/** "Ask about …": a link into Ask with something already tagged. */
+interface AskLink {
+  id: string;
+  label: string;
+  href: string;
+}
+
 type FlatItem =
   | { type: "action"; data: Action }
-  /** `hint` is null in `/`, where the eyebrow already says the area. */
+  | { type: "ask"; data: AskLink }
+  /** `hint` is null in `/`, where the group label already says the area. */
   | { type: "page"; data: PageLink; hint: string | null }
   | { type: "match"; data: MatchResult }
   | { type: "opponent"; data: GroupedResult }
@@ -336,6 +357,12 @@ function actionsFor(active: Workspace): Action[] {
   }
   actions.push(
     {
+      id: "ask",
+      label: "Ask a question",
+      href: active.kind === "team" ? "/dashboard/team/ask" : "/dashboard/ask",
+      icon: MessageSquare,
+    },
+    {
       id: "usage",
       label: "Usage & quota",
       href: "/dashboard/settings/usage",
@@ -432,8 +459,9 @@ function pageMatches(page: PageLink, q: string): boolean {
 
 // --- Small pieces ---
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="eyebrow px-2 pt-2.5 pb-1">{children}</p>;
+/** Sentence case, not an eyebrow — `FloatMenuLabel` at the palette's inset. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return <FloatMenuLabel className="px-2 pt-2.5">{children}</FloatMenuLabel>;
 }
 
 const ROW_CLASS =
@@ -480,7 +508,7 @@ export function SearchCommandPalette({
     [active, available],
   );
 
-  // `program_id` → the workspace's name, for the eyebrows a wide search
+  // `program_id` → the workspace's name, for the group labels a wide search
   // groups under. A null program is the viewer's own play.
   const workspaceNames = useMemo(() => {
     const personal =
@@ -821,7 +849,7 @@ export function SearchCommandPalette({
     const matchingPages = pages.filter((page) => pageMatches(page, q));
 
     if (mode === "/") {
-      // The eyebrow names the area, so the row's right side is free to say
+      // The group label names the area, so the row's right side is free to say
       // the one thing it cannot: that you are already there.
       const pageItems = (group: PageLink["group"]): FlatItem[] =>
         matchingPages
@@ -896,6 +924,48 @@ export function SearchCommandPalette({
       "Events",
       results.events.map((data) => ({ type: "event", data })),
     );
+    // Ask about what the search found: the opponents first (a broader
+    // question), then the matches, capped like every other section.
+    const askScope: AskScope =
+      active.kind === "team"
+        ? { kind: "team", programId: active.id, programName: active.name }
+        : PERSONAL_ASK_SCOPE;
+    const askItems: FlatItem[] = [
+      ...results.opponents.flatMap((opponent) => {
+        const href = askEntryHref(askScope, {
+          kind: "opponent",
+          name: opponent.name,
+        });
+        return href
+          ? [
+              {
+                type: "ask" as const,
+                data: {
+                  id: `opponent:${opponent.name}`,
+                  label: `Ask about ${opponent.name}`,
+                  href,
+                },
+              },
+            ]
+          : [];
+      }),
+      ...results.matches.flatMap((match) => {
+        const href = askEntryHref(askScope, { kind: "match", id: match.id });
+        return href
+          ? [
+              {
+                type: "ask" as const,
+                data: {
+                  id: `match:${match.id}`,
+                  label: `Ask about ${match.playerName} vs. ${match.opponentName}`,
+                  href,
+                },
+              },
+            ]
+          : [];
+      }),
+    ].slice(0, MAX_PER_CATEGORY);
+    add("Ask", askItems);
     return out;
   }, [
     query,
@@ -907,6 +977,8 @@ export function SearchCommandPalette({
     results,
     recentSearches,
     allWorkspaces,
+    active.id,
+    active.kind,
   ]);
 
   const flatItems = useMemo(
@@ -938,6 +1010,7 @@ export function SearchCommandPalette({
       switch (item.type) {
         case "action":
         case "page":
+        case "ask":
           router.push(item.data.href);
           return;
         case "match":
@@ -1200,7 +1273,7 @@ export function SearchCommandPalette({
               >
                 {sections.map((section) => (
                   <div key={section.title}>
-                    <Eyebrow>{section.title}</Eyebrow>
+                    <GroupLabel>{section.title}</GroupLabel>
                     {section.items.map((item, i) => {
                       const idx = section.start + i;
                       const isActiveRow = activeIndex === idx;
@@ -1377,6 +1450,22 @@ export function ResultRow({ item }: { item: FlatItem }) {
               <span className="mx-1 text-[var(--ink-300)]">&middot;</span>
               {item.data.date}
             </span>
+          </span>
+        </>
+      );
+    case "ask":
+      return (
+        <>
+          <MessageSquare
+            className="size-3.5 shrink-0 text-[var(--ink-500)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
+            {item.data.label}
+          </span>
+          <span className="shrink-0 text-[11px] text-[var(--ink-400)]">
+            Ask
           </span>
         </>
       );

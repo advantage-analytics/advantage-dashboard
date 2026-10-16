@@ -1,3 +1,4 @@
+import { ilikeLiteral } from "@/lib/data/ilike";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
@@ -344,14 +345,6 @@ export async function loadJoinLinkPreview(
       : null,
     rosterMatchName: row.roster_match_name?.trim() || null,
   };
-}
-
-/**
- * Escape a literal for `ilike`: `%` and `_` are wildcards, and an address
- * containing one would otherwise match somebody else's row.
- */
-function ilikeLiteral(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**

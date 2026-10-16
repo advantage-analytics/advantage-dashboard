@@ -1,3 +1,4 @@
+import { ASK_COACH_SENTENCE } from "@/lib/services/ask/coach";
 import {
   ASK_NO_ADVICE_SENTENCE,
   ASK_TEAM_NO_ADVICE_SENTENCE,
@@ -45,6 +46,20 @@ export interface AskCopy {
   trendAverage: string;
   /** The footer's sentence when the question asked what to do. */
   noAdvice: string;
+  /** The footer's sentence when coach mode answered that question instead. */
+  coach: string;
+  /** The accessible name of the starter questions under an empty composer. */
+  starters: string;
+  /** The accessible name of the follow-up questions under the newest answer. */
+  followUps: string;
+  /**
+   * The line under the lead when the wizard sent the page back with
+   * `?sent=` and the match has no statistics yet: it is on its way, and —
+   * on the personal page — a first answer about it will be.
+   */
+  sentNotice: (opponentName: string | null) => string;
+  /** The quiet link under the starters into the wizard, with a way back here. */
+  sendVideo: string;
 }
 
 const SHARED_ERRORS = {
@@ -92,6 +107,13 @@ export const PERSONAL_ASK_COPY: AskCopy = {
   },
   trendAverage: "Your average",
   noAdvice: ASK_NO_ADVICE_SENTENCE,
+  // Coach mode is a team scope's; a personal answer never carries the notice.
+  coach: ASK_COACH_SENTENCE,
+  starters: "Questions to start with",
+  followUps: "Ask next",
+  sentNotice: (opponentName) =>
+    `${opponentName ? `Your match against ${opponentName}` : "Your match"} is being analysed. Once it is, you can ask about it here, and the email that says it is ready may carry a first answer.`,
+  sendVideo: "Send a match video",
 };
 
 /**
@@ -127,6 +149,14 @@ const TEAM_ASK_COPY: Omit<AskCopy, "lead"> = {
   // and the block's caption says which. The key only names the rule.
   trendAverage: "Average",
   noAdvice: ASK_TEAM_NO_ADVICE_SENTENCE,
+  coach: ASK_COACH_SENTENCE,
+  starters: "Questions to start with",
+  followUps: "Ask next",
+  // No first answer is promised: Ask asks on arrival for personal matches
+  // only (`arrival.ts`), and the team wizard does not hand off here today.
+  sentNotice: (opponentName) =>
+    `${opponentName ? `The match against ${opponentName}` : "The match"} is being analysed. Ask about it once the video is processed.`,
+  sendVideo: "Send match video",
 };
 
 export function askCopy(scope: AskScope): AskCopy {

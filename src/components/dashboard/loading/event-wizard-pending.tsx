@@ -85,7 +85,7 @@ function WizardChrome({
 
         <div className={`${CONTENT_CLS} pt-16 pb-24`}>
           <div className="flex flex-col gap-3">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+            <span className="eyebrow">
               Step {stepIndex + 1} of {stepCount}
             </span>
             {title ? (

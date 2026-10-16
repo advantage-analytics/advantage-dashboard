@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Monitor, Tablet } from "lucide-react";
 
@@ -20,6 +21,13 @@ import { Monitor, Tablet } from "lucide-react";
  */
 export function MobileGate() {
   const shouldReduceMotion = useReducedMotion();
+  const pathname = usePathname();
+  // Ask is built for a phone (its rail folds into a sheet and the composer
+  // sits at the foot below 768px — ask-frame.tsx), so it is the one
+  // dashboard page the gate lets through.
+  if (pathname === "/dashboard/ask" || pathname === "/dashboard/team/ask") {
+    return null;
+  }
 
   return (
     <div

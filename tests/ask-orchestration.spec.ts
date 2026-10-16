@@ -50,7 +50,12 @@ import {
   ASK_MOCK_PLAN,
 } from "@/lib/services/ask/mock";
 import {
+  ASK_ANSWER_PROMPT_PREVIOUS_HEADING,
+  ASK_COACH_RULE,
   ASK_NO_ADVICE_SENTENCE,
+  ASK_PLAN_PROMPT_EXAMPLES_HEADING,
+  ASK_PLAN_PROMPT_FOCUS_HEADING,
+  ASK_PLAN_PROMPT_STATE_LEAD,
   type AskPlanQuery,
 } from "@/lib/services/ask/prompts";
 import { ASK_REVIEW_MEASURES, ASK_REVIEW_SQL } from "@/lib/services/ask/review";
@@ -179,10 +184,13 @@ function fakeDb(script: DbScript = {}) {
           );
         case "ask_release_question":
           return script.release ?? { data: true, error: null };
-        case "ask_save_exchange":
-          return script.save ?? { data: CONVERSATION_ID, error: null };
-        case "ask_last_answer_id":
-          return { data: ANSWER_ID, error: null };
+        case "ask_save_exchange_ids":
+          return (
+            script.save ?? {
+              data: { conversation_id: CONVERSATION_ID, answer_id: ANSWER_ID },
+              error: null,
+            }
+          );
         case "ask_quota":
           return (
             script.quota ?? {
@@ -199,7 +207,7 @@ function fakeDb(script: DbScript = {}) {
     db,
     calls,
     releases: () => calls.filter((call) => call.fn === "ask_release_question"),
-    saves: () => calls.filter((call) => call.fn === "ask_save_exchange"),
+    saves: () => calls.filter((call) => call.fn === "ask_save_exchange_ids"),
   };
 }
 
@@ -283,27 +291,31 @@ test.describe("a completed answer", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
-      "sources",
       "done",
     ]);
     expect(
       events.flatMap((event) => (event.type === "status" ? [event.stage] : [])),
     ).toEqual(["planning", "querying", "writing"]);
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: "Your second serve has held up across these matches.",
     });
-    expect(events[4]).toEqual({
+    expect(events[5]).toEqual({
       type: "figure",
       label: "Second-serve points won",
       value: "41.2%",
+      // One cell, so the tile can link to the film (`figure-video.ts`).
+      column: "second_serve_won_pct",
     });
     expect(text(events)).toBe(ANSWER_RENDERED);
-    expect(events[6]).toEqual({
+    // The sources come before the answer is written: the matches are settled
+    // once the query ran, and the page shows them while the model writes.
+    expect(events[2]).toEqual({
       type: "sources",
       matches: [
         {
@@ -336,8 +348,7 @@ test.describe("a completed answer", () => {
     // reserve (that is the caller's step before the stream opens).
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
     ]);
     expect(calls[0].args).toEqual({
       scope_sql: PLAN.scope_sql,
@@ -385,7 +396,13 @@ test.describe("a completed answer", () => {
     } satisfies AskSavedQuestion);
     expect(save.args?.p_answer).toEqual({
       headline: "Your second serve has held up across these matches.",
-      figures: [{ label: "Second-serve points won", value: "41.2%" }],
+      figures: [
+        {
+          label: "Second-serve points won",
+          value: "41.2%",
+          column: "second_serve_won_pct",
+        },
+      ],
       visual: null,
       body: ANSWER_RENDERED,
       noAdvice: false,
@@ -920,6 +937,7 @@ test.describe("the other failures", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
@@ -976,7 +994,9 @@ test.describe("the other failures", () => {
       code: "answer_failed",
       error: ASK_SAVE_FAILED_MESSAGE,
     });
-    expect(events.some((event) => event.type === "sources")).toBe(false);
+    // The sources were sent before the answer was written, as they always
+    // are now; what an unsaved answer never gets is `done`.
+    expect(events.some((event) => event.type === "done")).toBe(false);
     expect(releases()).toHaveLength(1);
   });
 
@@ -1030,15 +1050,15 @@ test.describe("a question that asks for advice", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
-    expect(events[6]).toEqual({ type: "notice", notice: "no_advice" });
+    expect(events[7]).toEqual({ type: "notice", notice: "no_advice" });
     expect(text(events)).toBe(ANSWER_RENDERED);
     expect(text(events)).not.toContain(ASK_NO_ADVICE_SENTENCE);
 
@@ -1115,15 +1135,15 @@ test.describe("an answer with a visual block", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "visual",
       "text",
-      "sources",
       "done",
     ]);
-    expect(events[5]).toEqual({ type: "visual", visual: VISUAL });
+    expect(events[6]).toEqual({ type: "visual", visual: VISUAL });
     expect(text(events)).toBe("One paragraph.");
     expect(warned).toEqual([]);
     expect(releases()).toHaveLength(0);
@@ -1159,11 +1179,11 @@ test.describe("an answer with a visual block", () => {
     expect(events.map((event) => event.type)).toEqual([
       "status",
       "status",
+      "sources",
       "status",
       "headline",
       "figure",
       "text",
-      "sources",
       "done",
     ]);
     expect(warned).toEqual([
@@ -1228,13 +1248,12 @@ test.describe("an answer with a visual block", () => {
 
     const events = await collect(askQuestion(input({ db, model })));
 
-    expect(events.map((event) => event.type).slice(3)).toEqual([
+    expect(events.map((event) => event.type).slice(4)).toEqual([
       "headline",
       "figure",
       "visual",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
   });
@@ -1277,7 +1296,7 @@ test.describe("mock mode (no provider configured)", () => {
       fn: "ask_run_query",
       args: { scope_sql: ASK_MOCK_PLAN.scope_sql, sql: ASK_MOCK_PLAN.sql },
     });
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: ASK_MOCK_ANSWER_TEMPLATE.split("\n")[0],
     });
@@ -1313,8 +1332,7 @@ test.describe("mock mode (no provider configured)", () => {
     // The meter was read for the done event, since nothing was reserved.
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
   });
@@ -1418,6 +1436,14 @@ test.describe("parsePlanReply", () => {
       cannot_answer: "No.",
       asks_for_advice: false,
     });
+  });
+
+  test("reads a placeholder cannot_answer beside a plan as no refusal", () => {
+    for (const placeholder of ["", " ", "N/A", "n/a", "None", "null", "-"]) {
+      expect(
+        parsePlanReply(JSON.stringify({ ...PLAN, cannot_answer: placeholder })),
+      ).toEqual(PLAN);
+    }
   });
 
   test("refuses anything that is neither shape", () => {
@@ -1828,8 +1854,7 @@ The team's players won {{r1.second_serve_won_pct}} of second-serve points.`;
     expect(last(events).type).toBe("done");
     expect(calls.map((call) => call.fn)).toEqual([
       "ask_run_team_query",
-      "ask_save_exchange",
-      "ask_last_answer_id",
+      "ask_save_exchange_ids",
       "ask_quota",
     ]);
     const body = text(events);
@@ -2157,14 +2182,15 @@ test.describe("a review question", () => {
         .filter((type, index, types) => type !== types[index - 1]),
     ).toEqual([
       "status",
+      "sources",
+      "status",
       "headline",
       "visual",
       "text",
       "notice",
-      "sources",
       "done",
     ]);
-    expect(events[3]).toEqual({
+    expect(events[4]).toEqual({
       type: "headline",
       text: "Second-serve points won was worse than both of your own averages in your last match.",
     });
@@ -2358,6 +2384,22 @@ test.describe("a review question", () => {
       expect(events.find((event) => event.type === "visual")).toMatchObject({
         visual: { columns: ["Last match", "Previous five", "Overall"] },
       });
+    });
+
+    test("a review in coach mode is server-written: it keeps the no-advice notice and is not saved as coached", async () => {
+      const { db, saves } = teamDb(
+        reviewRows({ players: 3, recent5_avg: 40, earlier_avg: 55 }),
+      );
+      const { model } = fakeModel([REVIEW_REPLY]);
+
+      const events = await collect(
+        askQuestion(input({ db, model, scope: TEAM, coach: true })),
+      );
+
+      expect(events).toContainEqual({ type: "notice", notice: "no_advice" });
+      const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+      expect(saved.noAdvice).toBe(true);
+      expect(saved).not.toHaveProperty("coach");
     });
 
     test("an unnarrowed scope stays a team review even when one player has every match", async () => {
@@ -3237,7 +3279,15 @@ test.describe("a pair-shaped result", () => {
       events
         .map((event) => event.type)
         .filter((type, index, types) => type !== types[index - 1]),
-    ).toEqual(["status", "headline", "visual", "text", "sources", "done"]);
+    ).toEqual([
+      "status",
+      "sources",
+      "status",
+      "headline",
+      "visual",
+      "text",
+      "done",
+    ]);
     // "Marek made more unforced errors than you" is the sentence this ends.
     expect(events.find((event) => event.type === "headline")).toEqual({
       type: "headline",
@@ -3312,5 +3362,215 @@ test.describe("a pair-shaped result", () => {
     const events = await collect(askQuestion(input({ db, model })));
     expect(modelCalls).toHaveLength(2);
     expect(text(events)).toBe(ANSWER_RENDERED);
+  });
+});
+
+// ── Tier 3: examples, the state, the previous headline, coach mode ──────────
+
+test.describe("the plan prompt is built with the question and the retrieved examples", () => {
+  test("the shortlist and the examples are in the prompt the planner read", async () => {
+    const { db } = fakeDb();
+    const { model, calls } = fakeModel([JSON.stringify(PLAN), ANSWER]);
+    await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          examples: [
+            {
+              question: "How is my second serve this season?",
+              sql: '{"review": true, "scope_sql": "select match_id from ask.matches"}',
+            },
+          ],
+        }),
+      ),
+    );
+    expect(calls[0].system).toContain(ASK_PLAN_PROMPT_FOCUS_HEADING);
+    expect(calls[0].system).toContain("- ask.match_stats: match_id, side, ");
+    expect(calls[0].system).toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+    expect(calls[0].system).toContain(
+      'Question: "How is my second serve this season?"',
+    );
+  });
+
+  test("with no examples the prompt has the shortlist and no example section", async () => {
+    const { db } = fakeDb();
+    const { model, calls } = fakeModel([JSON.stringify(PLAN), ANSWER]);
+    await collect(askQuestion(input({ db, model })));
+    expect(calls[0].system).toContain(ASK_PLAN_PROMPT_FOCUS_HEADING);
+    expect(calls[0].system).not.toContain(ASK_PLAN_PROMPT_EXAMPLES_HEADING);
+  });
+});
+
+test.describe("thread memory as a state object", () => {
+  const STATE = {
+    scope: "all matches",
+    measure: "second-serve points won",
+    period: "",
+    subject: "the second serve",
+  };
+
+  test("the planner's state is saved with the answer and read back as the next turn's previous plan", async () => {
+    const { db, saves } = fakeDb();
+    const { model } = fakeModel([
+      JSON.stringify({ ...PLAN, state: STATE }),
+      ANSWER,
+    ]);
+    const events = await collect(askQuestion(input({ db, model })));
+    expect(last(events).type).toBe("done");
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.state).toEqual(STATE);
+    expect(saved).not.toHaveProperty("coach");
+    expect(saved.noAdvice).toBe(false);
+    expect(
+      previousPlanFromMessages([{ role: "assistant", content: saved }]),
+    ).toEqual({ scope_sql: PLAN.scope_sql, sql: PLAN.sql, state: STATE });
+  });
+
+  test("a reply without a state, or an all-empty one, saves none: the saved shape is as it was", async () => {
+    for (const reply of [
+      PLAN,
+      { ...PLAN, state: { scope: "", measure: "", period: "", subject: "" } },
+      { ...PLAN, state: "all matches" },
+    ]) {
+      const { db, saves } = fakeDb();
+      const { model } = fakeModel([JSON.stringify(reply), ANSWER]);
+      await collect(askQuestion(input({ db, model })));
+      const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+      expect(saved).not.toHaveProperty("state");
+    }
+  });
+
+  test("the previous state is shown to the planner ahead of the turns, and the previous headline to the writer", async () => {
+    const { db } = fakeDb();
+    const { model, calls } = fakeModel([JSON.stringify(PLAN), ANSWER]);
+    await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          conversation: [
+            { role: "user", content: "How is my serve?" },
+            {
+              role: "assistant",
+              content: "Your serve held up.\n\nYou won most points.",
+            },
+          ],
+          previousPlan: {
+            scope_sql: PLAN.scope_sql,
+            sql: PLAN.sql,
+            state: STATE,
+          },
+        }),
+      ),
+    );
+    expect(calls[0].system).toContain(
+      `${ASK_PLAN_PROMPT_STATE_LEAD}\nscope: all matches\nmeasure: second-serve points won`,
+    );
+    expect(calls[1].system).toContain(ASK_ANSWER_PROMPT_PREVIOUS_HEADING);
+    expect(calls[1].system).toContain('"Your serve held up."');
+  });
+
+  test("the last plan reply's state wins when the planner was sent back", async () => {
+    const { db, saves } = fakeDb();
+    const { model } = fakeModel([
+      JSON.stringify({
+        ...PLAN_REFUSED,
+        state: { ...STATE, subject: "first" },
+      }),
+      JSON.stringify({ ...PLAN, state: { ...STATE, subject: "second" } }),
+      ANSWER,
+    ]);
+    const events = await collect(askQuestion(input({ db, model })));
+    expect(last(events).type).toBe("done");
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.state?.subject).toBe("second");
+  });
+});
+
+test.describe("coach mode", () => {
+  const PROGRAM_ID = "eeeeeeee-0000-4000-8000-000000000005";
+  const TEAM = {
+    kind: "team",
+    programId: PROGRAM_ID,
+    programName: "Westbrook College",
+  } as const;
+  const TEAM_RUN: AskRpcResult = {
+    data: {
+      matches: [{ ...MATCH_ROWS[0], player_name: "Mara Sokolov" }],
+      rows: ROWS,
+    },
+    error: null,
+  };
+  const TEAM_ANSWER = `The team's second serves have held up.
+FIGURE: Second-serve points won = {{r1.second_serve_won_pct}}
+
+The team won {{r1.second_serve_won_pct}} of second-serve points.`;
+
+  function teamDb() {
+    const inner = fakeDb();
+    const db: AskDatabase = {
+      rpc: async (fn, args) => {
+        if (fn !== "ask_run_team_query") return inner.db.rpc(fn, args);
+        inner.calls.push({ fn, args });
+        return TEAM_RUN;
+      },
+    };
+    return { ...inner, db };
+  }
+
+  test("a team advice question in coach mode: the coach prompt variant, a coach notice, saved as coached", async () => {
+    const { db, saves } = teamDb();
+    const { model, calls } = fakeModel([
+      JSON.stringify({ ...PLAN, asks_for_advice: true }),
+      TEAM_ANSWER,
+    ]);
+    const events = await collect(
+      askQuestion(input({ db, model, scope: TEAM, coach: true })),
+    );
+    expect(last(events).type).toBe("done");
+    expect(events.find((event) => event.type === "notice")).toEqual({
+      type: "notice",
+      notice: "coach",
+    });
+    expect(calls[1].system).toContain(ASK_COACH_RULE);
+    expect(calls[1].system).not.toContain("- NO ADVICE.");
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.noAdvice).toBe(false);
+    expect(saved.coach).toBe(true);
+  });
+
+  test("coach mode without advice asked: the usual team prompt, no notice, nothing saved about it", async () => {
+    const { db, saves } = teamDb();
+    const { model, calls } = fakeModel([JSON.stringify(PLAN), TEAM_ANSWER]);
+    const events = await collect(
+      askQuestion(input({ db, model, scope: TEAM, coach: true })),
+    );
+    expect(events.some((event) => event.type === "notice")).toBe(false);
+    expect(calls[1].system).toContain("- NO ADVICE.");
+    expect(calls[1].system).not.toContain(ASK_COACH_RULE);
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.noAdvice).toBe(false);
+    expect(saved).not.toHaveProperty("coach");
+  });
+
+  test("coach mode is a team matter: a personal question with the flag set is answered as always", async () => {
+    const { db, saves } = fakeDb();
+    const { model, calls } = fakeModel([
+      JSON.stringify({ ...PLAN, asks_for_advice: true }),
+      ANSWER,
+    ]);
+    const events = await collect(
+      askQuestion(input({ db, model, coach: true })),
+    );
+    expect(events.find((event) => event.type === "notice")).toEqual({
+      type: "notice",
+      notice: "no_advice",
+    });
+    expect(calls[1].system).toContain("- NO ADVICE.");
+    expect(calls[1].system).not.toContain(ASK_COACH_RULE);
+    const saved = saves()[0].args?.p_answer as AskSavedAnswer;
+    expect(saved.noAdvice).toBe(true);
+    expect(saved).not.toHaveProperty("coach");
   });
 });

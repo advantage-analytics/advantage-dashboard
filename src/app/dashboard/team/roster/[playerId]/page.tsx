@@ -14,6 +14,7 @@ import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/mat
 import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
 import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { askEntryHref } from "@/lib/services/ask/entry";
 
 /**
  * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
@@ -110,6 +111,13 @@ export default async function PlayerProfilePage({
       roster={mode === "staff" ? roster.members : []}
       canUpload={canUpload}
       newMatchHref={newMatchHref}
+      // Ask with this player tagged (`profile.playerId`, the roster's own
+      // id, which the Ask page's player tags carry).
+      askHref={askEntryHref(
+        { kind: "team", programId: active.id, programName: active.name },
+        { kind: "player", id: profile.playerId },
+      )}
+      askSubject={profile.firstName}
     />
   );
 

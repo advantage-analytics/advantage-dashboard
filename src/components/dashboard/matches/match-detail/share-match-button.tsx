@@ -9,7 +9,8 @@ import {
   type ComponentProps,
   type ComponentType,
 } from "react";
-import { ArrowUpRight, Lock, Mail, Share2 } from "lucide-react";
+import { ArrowUpRight, Filter, Lock, Mail, Share2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
@@ -41,7 +42,12 @@ import type {
   MatchShareState,
   SharePerson,
 } from "@/lib/data/match-share-server";
-import { realTournamentName } from "@/lib/data/match-share-format";
+import {
+  filmSharePresetOf,
+  realTournamentName,
+  withFilmSharePreset,
+  type FilmSharePreset,
+} from "@/lib/data/match-share-format";
 import { VIEW_ICONS } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import type { ReportView } from "@/components/dashboard/matches/match-detail/report-view";
 
@@ -122,7 +128,11 @@ function SharePopover({
   hasVideo = false,
 }: ShareMatchButtonProps): React.JSX.Element {
   const { match } = useMatchData();
-  const [open, setOpen] = useState(false);
+  // An Ask action links here with `?share=1` (`ask/actions.ts`): the
+  // popover opens on arrival — read on the first render, so it does not
+  // open a frame late — and sharing still takes the same click.
+  const searchParams = useSearchParams();
+  const [open, setOpen] = useState(() => searchParams.get("share") === "1");
 
   // Keyboard shortcut: Cmd+Shift+L / Ctrl+Shift+L — opens popover
   useEffect(() => {
@@ -292,11 +302,19 @@ export function SharePopoverPanel({
   share,
   hasVideo = false,
   onClose,
+  filmPreset,
 }: {
   match: Match;
   share: MatchShareState;
   hasVideo?: boolean;
   onClose: () => void;
+  /**
+   * The Video tab's applied cut, when the popover was opened from it
+   * (`filmSharePresetOf`). Read off the address bar when omitted; a spec
+   * passes one in. Offered as "Open on these points" under "On the link"
+   * while the link carries the video.
+   */
+  filmPreset?: FilmSharePreset | null;
 }) {
   const {
     link: shareLink,
@@ -311,6 +329,27 @@ export function SharePopoverPanel({
   const [confirmingOff, setConfirmingOff] = useState(false);
   const [pending, startTransition] = useTransition();
   const [optimisticOn, setOptimisticOn] = useOptimistic(link !== null);
+  // The cut the Video tab had applied when this opened (`?tab=film` with
+  // `?f=` and/or `?pn=`), offered as a row under "On the link". Ticked, the
+  // URL copied, mailed or shared opens the film on exactly those points —
+  // an answer's "Watch" link, forwarded (roadmap 6.3). Read once, when the
+  // popover opens, and written nowhere: the link row itself is untouched,
+  // so nothing is published beyond what the ladder above turned on.
+  // Only the point set travels. A filter (`f`) names players as "you" and
+  // "opponent" from the viewer's seat, but the public page reads "you" from
+  // the link maker's: forwarded by someone sitting the other seat, the same
+  // `f` would filter to the other player's points under a "You" chip. Point
+  // numbers are the same for everyone.
+  const [preset] = useState<FilmSharePreset | null>(() => {
+    const read =
+      filmPreset !== undefined
+        ? filmPreset
+        : typeof window === "undefined"
+          ? null
+          : filmSharePresetOf(window.location.search);
+    return read?.points ? { filters: null, points: read.points } : null;
+  });
+  const [withPoints, setWithPoints] = useState(false);
 
   // A fresh server render (the toggle's `revalidatePath`, a `router.refresh`)
   // hands down the current row; follow it.
@@ -324,7 +363,14 @@ export function SharePopoverPanel({
     setCanNativeShare(typeof navigator.share === "function");
   }, []);
 
-  const url = link?.url ?? "";
+  const baseUrl = link?.url ?? "";
+  // Only a link that carries the video has a Video tab to open on.
+  const presetOffered =
+    hasVideo && preset !== null && link?.includesVideo === true;
+  const url =
+    presetOffered && withPoints
+      ? withFilmSharePreset(baseUrl, preset)
+      : baseUrl;
   const shareTitle =
     realTournamentName(match.tournamentName) ??
     `${match.player1.name} vs ${match.player2.name}`;
@@ -519,6 +565,20 @@ export function SharePopoverPanel({
                 </span>
               </div>
             ))}
+          {presetOffered && (
+            <label
+              className={cn(SCOPE_ROW, ROW_HOVER, "cursor-pointer")}
+              data-share-preset-row=""
+            >
+              <Filter
+                className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span className={SCOPE_NAME}>Open on these points</span>
+              <Checkbox checked={withPoints} onChange={setWithPoints} />
+            </label>
+          )}
         </div>
         <div className="px-2.5 pt-2 pb-2.5">
           <UrlRow url={url} />

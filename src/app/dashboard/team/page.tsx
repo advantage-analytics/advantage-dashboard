@@ -22,6 +22,7 @@ import { DualSheetEmpty } from "@/components/dashboard/team/dual-sheet-empty";
 import { TopMovers } from "@/components/dashboard/team/top-movers";
 import { DualHistory } from "@/components/dashboard/team/dual-history";
 import { CourtRecord } from "@/components/dashboard/team/court-record";
+import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
 import {
   FocusEmpty,
@@ -191,6 +192,14 @@ export default async function TeamHomePage() {
         insight={insight}
         court={court}
         history={history}
+        // The last card in the right column, and only while something is
+        // pinned: no skeleton and no empty state (see `AskPinCard`). A
+        // failed read is still the retry. When the right column is the
+        // taller one, the Team usage footer under the grid moves down as the
+        // card streams in — accepted: the footer is read last, and a
+        // placeholder for a card most programs never pin would cost every
+        // page a gap to save a few of them one shift.
+        pins={region("Pinned from Ask", null, <Pins resources={resources} />)}
         footer={region(
           "Team usage",
           <HomeFooterPending />,
@@ -198,6 +207,14 @@ export default async function TeamHomePage() {
         )}
       />
     </>
+  );
+}
+async function Pins({ resources }: { resources: Resources }) {
+  const pins = await resources.pins;
+  // Absent, not empty — the card's own rule (`AskPinCard`).
+  if (pins.length === 0) return null;
+  return (
+    <AskPinCard pins={pins} askHref="/dashboard/team/ask" scopeKind="team" />
   );
 }
 function awaiting(data: Awaited<Resources["analytics"]>) {

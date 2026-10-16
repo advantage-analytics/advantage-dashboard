@@ -122,7 +122,6 @@ function Harness() {
     <MatchReportProvider
       matchId="sample"
       summary="The second serve decided it."
-      canCompare={false}
       isDerived={false}
       statsPublished
       hasPlayableVideo={TABS}

@@ -1,71 +1,111 @@
 import type { CSSProperties } from "react";
-import type { AskServeVisual } from "@/lib/services/ask/events";
-import { shareWeights } from "./visual-geometry";
+import type { AskServeVisual, AskSourceMatch } from "@/lib/services/ask/events";
+import { serveZoneVideoHref } from "@/lib/services/ask/figure-video";
+import { ServeCourt, SERVE_ZONE_COLORS } from "./serve-court";
+import {
+  SERVE_ZONES,
+  type ServeCourtSide,
+  type ServeZoneKey,
+  serveCourtSides,
+  shareWeights,
+} from "./visual-geometry";
 import { VisualFrame, VisualKey } from "./visual-frame";
 
-const ZONES = [
-  { key: "t", label: "T", color: "var(--viz-you)" },
-  { key: "body", label: "Body", color: "var(--viz-you-mid)" },
-  { key: "wide", label: "Wide", color: "var(--viz-you-light)" },
-] as const;
+const ZONE_LABEL = { t: "T", body: "Body", wide: "Wide" } as const;
+
+/** The block's zone keys as the Video filter spells them. */
+const FILTER_ZONE: Record<ServeZoneKey, "T" | "Body" | "Wide"> = {
+  t: "T",
+  body: "Body",
+  wide: "Wide",
+};
 
 /**
- * Serve placement: one bar per court, the Home card's recipe — 14px tall, 2px
- * gaps, T, Body and Wide in the three blue steps. Under each bar, the three
- * counts as the query returned them; no total and no share, since neither is
- * a cell of the result.
+ * Serve placement. With exactly two courts labelled Deuce and Ad it is the
+ * court itself (`ServeCourt`): each zone's share of that court's serves
+ * standing in its own third of the service box. With any other labelling —
+ * "All serves", "First serves" and "Second serves" — it is one bar per
+ * court, the Home card's recipe: 14px tall, 2px gaps, T, Body and Wide in
+ * the three blue steps.
+ *
+ * Under each court either way, the three counts as the query returned them;
+ * no total and no share, since neither is a cell of the result.
+ *
+ * Over one source match, when the block says whose serves these are
+ * (`server`), each drawn zone opens that match's film on that side's
+ * serves into the zone from that court (`figure-video.ts`).
  */
-export function ServeVisual({ visual }: { visual: AskServeVisual }) {
+export function ServeVisual({
+  visual,
+  sources,
+}: {
+  visual: AskServeVisual;
+  sources?: readonly AskSourceMatch[] | null;
+}) {
+  const sides = serveCourtSides(visual.courts);
+  const server = visual.server;
+  const matchId = sources?.length === 1 ? sources[0].matchId : null;
+  const href =
+    server && matchId
+      ? (side: ServeCourtSide, zone: ServeZoneKey) =>
+          serveZoneVideoHref(matchId, server, side, FILTER_ZONE[zone])
+      : undefined;
   return (
     <VisualFrame kind="serve" caption={visual.caption}>
       <VisualKey
-        items={ZONES.map((zone) => ({ label: zone.label, color: zone.color }))}
+        items={SERVE_ZONES.map((zone) => ({
+          label: ZONE_LABEL[zone],
+          color: SERVE_ZONE_COLORS[zone],
+        }))}
       />
+      {sides && <ServeCourt courts={visual.courts} sides={sides} href={href} />}
       <ul className="m-0 flex max-w-[520px] list-none flex-col gap-3.5 p-0">
         {visual.courts.map((court, index) => {
           const weights = shareWeights(
-            ZONES.map((zone) => court[zone.key].value),
+            SERVE_ZONES.map((zone) => court[zone].value),
           );
           return (
             <li key={index} className="flex flex-col gap-1.5">
               <span className="text-[12px] text-[var(--ink-700)]">
                 {court.label}
               </span>
-              <span aria-hidden="true" className="flex h-3.5 gap-0.5">
-                {weights ? (
-                  ZONES.map(
-                    (zone, zoneIndex) =>
-                      weights[zoneIndex] > 0 && (
-                        <span
-                          key={zone.key}
-                          data-ask-grow=""
-                          className="h-full min-w-0 rounded-[var(--radius-cell)]"
-                          style={
-                            {
-                              flexGrow: weights[zoneIndex],
-                              flexBasis: 0,
-                              background: zone.color,
-                              "--ask-row": index + zoneIndex,
-                            } as CSSProperties
-                          }
-                        />
-                      ),
-                  )
-                ) : (
-                  // No serves in any zone: the track, holding none.
-                  <span className="h-full flex-1 rounded-[var(--radius-cell)] bg-[var(--ink-100)]" />
-                )}
-              </span>
+              {!sides && (
+                <span aria-hidden="true" className="flex h-3.5 gap-0.5">
+                  {weights ? (
+                    SERVE_ZONES.map(
+                      (zone, zoneIndex) =>
+                        weights[zoneIndex] > 0 && (
+                          <span
+                            key={zone}
+                            data-ask-grow=""
+                            className="h-full min-w-0 rounded-[var(--radius-cell)]"
+                            style={
+                              {
+                                flexGrow: weights[zoneIndex],
+                                flexBasis: 0,
+                                background: SERVE_ZONE_COLORS[zone],
+                                "--ask-row": index + zoneIndex,
+                              } as CSSProperties
+                            }
+                          />
+                        ),
+                    )
+                  ) : (
+                    // No serves in any zone: the track, holding none.
+                    <span className="h-full flex-1 rounded-[var(--radius-cell)] bg-[var(--ink-100)]" />
+                  )}
+                </span>
+              )}
               <span
                 data-ask-after=""
                 style={{ "--ask-row": index + 2 } as CSSProperties}
                 className="flex gap-4 text-[11px] text-[var(--ink-500)] tabular-nums"
               >
-                {ZONES.map((zone) => (
-                  <span key={zone.key}>
-                    {zone.label}{" "}
+                {SERVE_ZONES.map((zone) => (
+                  <span key={zone}>
+                    {ZONE_LABEL[zone]}{" "}
                     <span className="text-[var(--ink-900)]">
-                      {court[zone.key].text}
+                      {court[zone].text}
                     </span>
                   </span>
                 ))}

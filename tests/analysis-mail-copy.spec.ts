@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { emailOrigin } from "@/lib/site-url";
 import {
   analysisFailedEmail,
+  analysisReadyEmail,
   type AnalysisFailedInput,
 } from "@/lib/services/email";
 import { createLoader } from "./fixtures/vm-modules";
@@ -323,5 +324,57 @@ test.describe("notifyAnalysisOutcome — stats_unavailable", () => {
     expect(
       (failedEmailInputs[0] as { failureClass?: string }).failureClass,
     ).toBe("rederive");
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * analysisReadyEmail — Ask's first answer rides on the mail
+ * ---------------------------------------------------------------------- */
+
+test.describe("analysisReadyEmail with a first answer", () => {
+  const CONVERSATION = "dddddddd-0000-4000-8000-000000000004";
+  const ready = (
+    overrides: Partial<Parameters<typeof analysisReadyEmail>[0]> = {},
+  ) =>
+    analysisReadyEmail({
+      to: "alex@example.test",
+      matchId: MATCH_ID,
+      matchTitle: "Alex Rivera vs. Jordan Chen",
+      matchContext: "Oct 1, 2026",
+      score: "6-4, 6-3",
+      ...overrides,
+    });
+
+  test("carries the headline and a second button into the conversation", () => {
+    const msg = ready({
+      ask: {
+        headline: "You held serve all the way through.",
+        conversationId: CONVERSATION,
+      },
+    });
+    expect(msg.html).toContain("You held serve all the way through.");
+    expect(msg.html).toContain(`${SITE}/dashboard/ask?c=${CONVERSATION}`);
+    expect(msg.html).toContain("Open in Ask");
+    expect(msg.text).toContain("Open in Ask");
+    expect(msg.text).toContain(`${SITE}/dashboard/ask?c=${CONVERSATION}`);
+    // The report's own button stays first.
+    expect(msg.html.indexOf("Open the report")).toBeLessThan(
+      msg.html.indexOf("Open in Ask"),
+    );
+    expect(msg.tags).toMatchObject({ type: "analysis_ready", ask: "yes" });
+  });
+
+  test("reads as before without one, and while stats are pending", () => {
+    const plain = ready();
+    expect(plain.html).not.toContain("/dashboard/ask");
+    expect(plain.html).not.toContain("Open in Ask");
+    expect(plain.tags).toMatchObject({ ask: "no" });
+
+    const pending = ready({
+      statsPending: true,
+      ask: { headline: "h", conversationId: CONVERSATION },
+    });
+    expect(pending.html).not.toContain("/dashboard/ask");
+    expect(pending.tags).toMatchObject({ pending: "yes", ask: "no" });
   });
 });
