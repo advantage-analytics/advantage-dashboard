@@ -184,7 +184,7 @@ email"):
 - **The token is wider than the tools, but cannot write.** It is a full
   user JWT and could call PostgREST directly within the user's RLS. A
   PostgREST pre-request hook (`public.oauth_client_request_guard()`,
-  migration `20261016010000_oauth_client_read_only`) refuses every non-read
+  migration `20261016050115_oauth_client_read_only`) refuses every non-read
   request from a token carrying `client_id`, except the eight `ask_*`
   functions this route calls as the user; restrictive Storage policies refuse
   its object writes. A user-side RPC added to the MCP path must be added to
