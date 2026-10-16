@@ -533,13 +533,7 @@ export function ReviewBlock({
             </div>
           );
         }
-        const evidence = [
-          ...new Set(
-            item.members
-              .filter((member) => member.state === "open")
-              .map((member) => markHover(member.mark, names)),
-          ),
-        ];
+        const evidence = openEvidence(item, names);
         const answers = reviewItemAnswers(item, point, marks, writes);
         const then = reviewThen(item, point, names, writes);
         const dismiss = reviewItemDismiss(item, point, operations);
@@ -703,6 +697,14 @@ function chipHover(name: string, lines: readonly string[]): ChipHover {
 /** `lines` with each said once, in order. */
 const once = (lines: readonly string[]) => [...new Set(lines)];
 
+/** An item's open members' evidence lines (`markHover`), each said once. */
+const openEvidence = (item: ReviewItem, names: SideNames) =>
+  once(
+    item.members
+      .filter((member) => member.state === "open")
+      .map((member) => markHover(member.mark, names)),
+  );
+
 /**
  * What the point row draws of its review flag (`reviewFlag`, through
  * `reviewChip`), or null when the session has no marks. `point` is the row as
@@ -730,14 +732,7 @@ export function pointRowMarks(
   let hover: ChipHover;
   if (text !== null && open.length === 1) {
     const [item] = open;
-    hover = chipHover(
-      text,
-      once(
-        item.members
-          .filter((member) => member.state === "open")
-          .map((member) => markHover(member.mark, names)),
-      ),
-    );
+    hover = chipHover(text, openEvidence(item, names));
   } else if (text !== null) {
     hover = chipHover(
       text,
