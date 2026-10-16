@@ -1,15 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
+import { StatePill } from "@/components/ui/state-pill";
 import {
   SETTINGS_FACT_FIGURE,
   SettingsCard,
+  SettingsCardFootnote,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
+import {
+  HOURS_FILL,
+  HoursMeter,
+} from "@/components/dashboard/settings/teams/program-hours-summary";
+import {
+  formatHoursLong,
+  hoursSeverity,
+  usageFraction,
+} from "@/lib/data/usage-format";
 
-type Kind = "player" | "team";
+type Stage = "pilot" | "paid";
 type Billing = "monthly" | "yearly";
 
 type Plan = {
@@ -19,135 +31,96 @@ type Plan = {
   note: string;
   monthly: number;
   yearly: number;
-  yearlyUnit: "yr" | "season";
 };
 
-/** Draft January 2027 prices, the same as the landing site's preview. */
-const PLANS: Record<Kind, readonly Plan[]> = {
-  player: [
-    {
-      id: "free",
-      name: "Free",
-      hours: "1 match",
-      note: "Once, up to 2 hours",
-      monthly: 0,
-      yearly: 0,
-      yearlyUnit: "yr",
-    },
-    {
-      id: "player",
-      name: "Player",
-      hours: "3 h a month",
-      note: "About 2 matches",
-      monthly: 29,
-      yearly: 290,
-      yearlyUnit: "yr",
-    },
-    {
-      id: "player-pro",
-      name: "Player Pro",
-      hours: "5 h a month",
-      note: "About 4 matches",
-      monthly: 49,
-      yearly: 490,
-      yearlyUnit: "yr",
-    },
-  ],
-  team: [
-    {
-      id: "coach",
-      name: "Coach",
-      hours: "15 h a month",
-      note: "Shared by up to 10 players",
-      monthly: 149,
-      yearly: 1490,
-      yearlyUnit: "yr",
-    },
-    {
-      id: "program-lite",
-      name: "Program Lite",
-      hours: "25 h a month",
-      note: "The whole roster",
-      monthly: 299,
-      yearly: 1500,
-      yearlyUnit: "season",
-    },
-    {
-      id: "program",
-      name: "Program",
-      hours: "50 h a month",
-      note: "The whole roster",
-      monthly: 549,
-      yearly: 2750,
-      yearlyUnit: "season",
-    },
-  ],
-};
+/**
+ * Personal plans only until December: team plans stay off this page while the
+ * fall pilot runs. Draft January 2027 prices, the same as the landing site's
+ * /design/pricing.
+ */
+const PLANS: readonly Plan[] = [
+  {
+    id: "free",
+    name: "Free",
+    hours: "1 match",
+    note: "Once, up to 2 hours",
+    monthly: 0,
+    yearly: 0,
+  },
+  {
+    id: "player",
+    name: "Player",
+    hours: "3h a month",
+    note: "About 2 matches",
+    monthly: 29,
+    yearly: 290,
+  },
+  {
+    id: "player-pro",
+    name: "Player Pro",
+    hours: "5h a month",
+    note: "About 4 matches",
+    monthly: 49,
+    yearly: 490,
+  },
+];
 
 const CREDITS = [
   { hours: "1 hour", note: "About one match", price: 14 },
   { hours: "5 hours", note: "$12 an hour", price: 60 },
 ] as const;
 
-/** Fixed account states the mock can show. */
-const STATE: Record<
-  Kind,
-  {
-    current: string;
-    renews: string;
-    used: number;
-    cap: number;
-    credits: number;
-  }
-> = {
-  player: { current: "player", renews: "Feb 1", used: 1.8, cap: 3, credits: 2 },
-  team: {
-    current: "program-lite",
-    renews: "Jun 30",
-    used: 14.5,
-    cap: 25,
-    credits: 0,
-  },
-};
+/** Draft beta-player offer, mirroring the programs' 15% off a first season. */
+const BETA_OFF = 0.15;
+const BETA_MONTHS = 6;
 
-const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+const H = 3600;
+
+/** Fixed account states the mock can show. */
+const STATE = {
+  pilot: { used: 0.8 * H, cap: 2 * H, resets: "Nov 1", ends: "Dec 31" },
+  paid: {
+    current: "player",
+    used: 1.8 * H,
+    cap: 3 * H,
+    credits: 2,
+    renews: "Feb 1",
+  },
+} as const;
+
+const usd = (n: number) =>
+  `$${n.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+const beta = (n: number) => Math.round(n * (1 - BETA_OFF) * 100) / 100;
 
 const BTN_PRIMARY = advButton("primary", "sm");
 const BTN_SECONDARY = advButton("outline", "sm");
 
 export function PlansPreview() {
-  const [kind, setKind] = useState<Kind>("player");
+  const [stage, setStage] = useState<Stage>("pilot");
   const [out, setOut] = useState(false);
   const [billing, setBilling] = useState<Billing>("monthly");
-
-  const state = STATE[kind];
-  const used = kind === "player" && out ? state.cap : state.used;
-  const plans = PLANS[kind];
-  const currentIndex = Math.max(
-    0,
-    plans.findIndex((p) => p.id === state.current),
-  );
-  const current = plans[currentIndex];
-  const next = plans[currentIndex + 1];
 
   return (
     <main className="min-h-screen bg-[var(--surface-card)]">
       <div className="border-b border-[var(--border-hairline)] bg-[var(--surface-page)] px-8 py-3">
         <div className="mx-auto flex max-w-[968px] flex-wrap items-center gap-3">
           <span className="text-[12px] text-[var(--ink-600)]">
-            Design preview of Settings › Plan from January 2027. Fixed numbers,
-            nothing is charged.
+            Design preview of Settings › Plan. Fixed numbers, nothing is
+            charged.
           </span>
           <div className="ml-auto flex flex-wrap gap-2">
             <Segmented
-              value={kind}
-              onChange={setKind}
+              value={stage}
+              onChange={setStage}
               options={[
-                { v: "player", t: "Personal workspace" },
-                { v: "team", t: "Team workspace" },
+                { v: "pilot", t: "Now, during the beta" },
+                { v: "paid", t: "From January" },
               ]}
             />
-            {kind === "player" && (
+            {stage === "paid" && (
               <Segmented
                 value={out ? "out" : "left"}
                 onChange={(v) => setOut(v === "out")}
@@ -163,7 +136,6 @@ export function PlansPreview() {
 
       <div className="mx-auto flex w-full max-w-[1032px] flex-col gap-10 px-6 py-8 sm:px-8 sm:py-10">
         <header className="flex flex-col gap-3">
-          <p className="eyebrow">Settings</p>
           <h1 className="text-display">Plan</h1>
           <p className="text-body-sm max-w-[520px]">
             What you pay and how much match video it covers.
@@ -171,205 +143,361 @@ export function PlansPreview() {
         </header>
 
         <div className="flex max-w-[640px] flex-col gap-5">
-          {/* What you're on: the same facts strip the live page uses. */}
-          <SettingsCard className="overflow-hidden p-0">
-            <dl className="grid divide-y divide-[var(--border-hairline)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              {[
-                { label: "Plan", value: current.name },
-                {
-                  label: "Price",
-                  value: `${usd(kind === "team" ? current.yearly : current.monthly)}${kind === "team" ? " / season" : " / mo"}`,
-                },
-                {
-                  label: kind === "team" ? "Season ends" : "Renews",
-                  value: state.renews,
-                },
-              ].map((f) => (
-                <div
-                  key={f.label}
-                  className="flex min-w-0 flex-col gap-1.5 px-6 py-5"
-                >
-                  <dt className="eyebrow whitespace-nowrap">{f.label}</dt>
-                  <dd
-                    className={cn(
-                      SETTINGS_FACT_FIGURE,
-                      "tabular whitespace-nowrap text-[var(--ink-900)]",
-                    )}
-                  >
-                    {f.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </SettingsCard>
-
-          {/* This month's hours, with the way to get more right beside them. */}
-          <SettingsCard>
-            <SettingsCardTitle
-              className="pb-3"
-              trailing={
-                <span className="tabular text-[12px] text-[var(--ink-500)]">
-                  Resets {kind === "team" ? "Feb 1" : state.renews}
-                </span>
-              }
-            >
-              Video this month
-            </SettingsCardTitle>
-            <div className="flex items-baseline gap-2">
-              <span className="tabular text-title-lg leading-none">{used}</span>
-              <span className="text-[12px] text-[var(--ink-500)]">
-                of {state.cap} hours used
-              </span>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  used >= state.cap
-                    ? "bg-[var(--viz-amber)]"
-                    : "bg-[var(--blue)]",
-                )}
-                style={{ width: `${Math.min(100, (used / state.cap) * 100)}%` }}
-              />
-            </div>
-            <div className="mt-4 flex items-center gap-3 border-t border-[var(--border-hairline)] pt-3.5">
-              <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
-                {state.credits > 0
-                  ? `${state.credits} hours in credits`
-                  : "No credits"}
-                <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
-                  Used after your plan hours run out. Credits last 12 months.
-                </span>
-              </span>
-              <a href="#credits" className={BTN_SECONDARY}>
-                Buy credits
-              </a>
-            </div>
-          </SettingsCard>
-
-          {kind === "player" && out && next && (
-            <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-6 py-[18px] sm:flex-row sm:items-center">
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-[var(--ink-900)]">
-                  You&apos;ve used this month&apos;s 3 hours.
-                </span>
-                <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--ink-600)]">
-                  Your 2 hours of credits are being used now. Or move to{" "}
-                  {next.name} for {next.hours} at {usd(next.monthly)} a month.
-                </span>
-              </span>
-              <button type="button" className={BTN_PRIMARY}>
-                Upgrade to {next.name}
-              </button>
-            </div>
+          {stage === "pilot" ? (
+            <PilotView billing={billing} setBilling={setBilling} />
+          ) : (
+            <PaidView out={out} billing={billing} setBilling={setBilling} />
           )}
-
-          {/* Change plan: one row per plan, the current one marked. */}
-          <SettingsCard>
-            <SettingsCardTitle
-              className="pb-2"
-              trailing={
-                <Segmented
-                  value={billing}
-                  onChange={setBilling}
-                  options={[
-                    { v: "monthly", t: "Monthly" },
-                    { v: "yearly", t: kind === "team" ? "Season" : "Yearly" },
-                  ]}
-                />
-              }
-            >
-              Change plan
-            </SettingsCardTitle>
-            {plans.map((p, i) => {
-              const isCurrent = p.id === state.current;
-              const yearly = billing === "yearly" && p.monthly > 0;
-              const price =
-                p.monthly === 0
-                  ? "Free"
-                  : yearly
-                    ? `${usd(p.yearly)} / ${p.yearlyUnit}`
-                    : `${usd(p.monthly)} / mo`;
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-[12px] text-[var(--ink-900)]">
-                      {p.name}
-                      {isCurrent && (
-                        <span className="rounded-full bg-[var(--blue-tint-08)] px-2 py-0.5 text-[10px] font-medium text-[var(--blue-text)]">
-                          Current
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                      {p.hours} · {p.note}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
-                    {price}
-                  </span>
-                  <span className="w-[92px] shrink-0 text-right">
-                    {isCurrent ? (
-                      <span className="text-[11px] text-[var(--ink-500)]">
-                        Your plan
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        className={
-                          i > currentIndex ? BTN_PRIMARY : BTN_SECONDARY
-                        }
-                      >
-                        {i > currentIndex ? "Upgrade" : "Switch"}
-                      </button>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-            <span className="mt-1 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              {kind === "team"
-                ? "A season is 6 months and saves over 15%. Fall pilot programs get 15% off their first paid season."
-                : "Yearly is 10 months' price for 12. Changes start on your next billing date."}
-            </span>
-          </SettingsCard>
-
-          <div id="credits">
-            <SettingsCard>
-              <SettingsCardTitle className="pb-2">
-                Credit packs
-              </SettingsCardTitle>
-              {CREDITS.map((c) => (
-                <div
-                  key={c.hours}
-                  className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] text-[var(--ink-900)]">
-                      {c.hours}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
-                      {c.note}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
-                    {usd(c.price)}
-                  </span>
-                  <span className="w-[92px] shrink-0 text-right">
-                    <button type="button" className={BTN_SECONDARY}>
-                      Buy
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </SettingsCard>
-          </div>
         </div>
       </div>
     </main>
+  );
+}
+
+/** Today through Dec 31: free beta, with January's plans offered at beta price. */
+function PilotView({
+  billing,
+  setBilling,
+}: {
+  billing: Billing;
+  setBilling: (b: Billing) => void;
+}) {
+  const s = STATE.pilot;
+  return (
+    <>
+      <Facts
+        facts={[
+          { label: "Plan", value: "Free beta" },
+          { label: "Price", value: "Free" },
+          { label: "Free through", value: s.ends },
+        ]}
+      />
+
+      <HoursCard
+        used={s.used}
+        cap={s.cap}
+        resets={s.resets}
+        footnote="The beta covers 2 hours of film a month. Nothing is charged before January 2027."
+      />
+
+      <SettingsCard>
+        <SettingsCardTitle
+          className="pb-2"
+          trailing={<BillingSwitch value={billing} onChange={setBilling} />}
+        >
+          Plans from January
+        </SettingsCardTitle>
+        {PLANS.map((p) => (
+          <PlanRow
+            key={p.id}
+            plan={p}
+            billing={billing}
+            action={
+              <button
+                type="button"
+                className={p.monthly > 0 ? BTN_PRIMARY : BTN_SECONDARY}
+              >
+                {p.monthly > 0 ? "Choose" : "Stay free"}
+              </button>
+            }
+          />
+        ))}
+        <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
+          Beta players get 15% off any paid plan for their first {BETA_MONTHS}{" "}
+          months. Choose by Dec 31 and it starts on January 1, billed then. If
+          you don&apos;t choose, you move to Free and keep every match you have
+          uploaded.
+        </SettingsCardFootnote>
+      </SettingsCard>
+    </>
+  );
+}
+
+/** From January: on Player at the beta price, with credits and upgrades. */
+function PaidView({
+  out,
+  billing,
+  setBilling,
+}: {
+  out: boolean;
+  billing: Billing;
+  setBilling: (b: Billing) => void;
+}) {
+  const s = STATE.paid;
+  const used = out ? s.cap : s.used;
+  const currentIndex = PLANS.findIndex((p) => p.id === s.current);
+  const current = PLANS[currentIndex];
+  const next = PLANS[currentIndex + 1];
+
+  return (
+    <>
+      <Facts
+        facts={[
+          { label: "Plan", value: current.name },
+          { label: "Price", value: `${usd(beta(current.monthly))} / mo` },
+          { label: "Renews", value: s.renews },
+        ]}
+      />
+
+      <HoursCard
+        used={used}
+        cap={s.cap}
+        resets={s.renews}
+        credits={s.credits}
+      />
+
+      {out && next && (
+        <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-6 py-[18px] sm:flex-row sm:items-center">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-medium text-[var(--ink-900)]">
+              You&apos;ve used this month&apos;s 3 hours.
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--ink-600)]">
+              Your {s.credits} hours of credits are being used now. Or move to{" "}
+              {next.name} for {next.hours} at {usd(beta(next.monthly))} a month.
+            </span>
+          </span>
+          <button type="button" className={BTN_PRIMARY}>
+            Upgrade to {next.name}
+          </button>
+        </div>
+      )}
+
+      <SettingsCard>
+        <SettingsCardTitle
+          className="pb-2"
+          trailing={<BillingSwitch value={billing} onChange={setBilling} />}
+        >
+          Change plan
+        </SettingsCardTitle>
+        {PLANS.map((p, i) => (
+          <PlanRow
+            key={p.id}
+            plan={p}
+            billing={billing}
+            current={p.id === s.current}
+            action={
+              p.id === s.current ? null : (
+                <button
+                  type="button"
+                  className={i > currentIndex ? BTN_PRIMARY : BTN_SECONDARY}
+                >
+                  {i > currentIndex ? "Upgrade" : "Switch"}
+                </button>
+              )
+            }
+          />
+        ))}
+        <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
+          Your beta price, 15% off, runs until Jul 1. Yearly is 10 months&apos;
+          price for 12. Changes start on your next billing date.
+        </SettingsCardFootnote>
+      </SettingsCard>
+
+      <div id="credits">
+        <SettingsCard>
+          <SettingsCardTitle className="pb-2">Credit packs</SettingsCardTitle>
+          {CREDITS.map((c) => (
+            <div
+              key={c.hours}
+              className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-medium text-[var(--ink-900)]">
+                  {c.hours}
+                </span>
+                <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
+                  {c.note}
+                </span>
+              </span>
+              <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+                {usd(c.price)}
+              </span>
+              <span className="flex w-[96px] shrink-0 justify-end">
+                <button type="button" className={BTN_SECONDARY}>
+                  Buy
+                </button>
+              </span>
+            </div>
+          ))}
+        </SettingsCard>
+      </div>
+    </>
+  );
+}
+
+/** What you're on: the same facts strip the live page uses. */
+function Facts({ facts }: { facts: { label: string; value: string }[] }) {
+  return (
+    <SettingsCard className="overflow-hidden p-0">
+      <dl className="grid divide-y divide-[var(--border-hairline)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        {facts.map((f) => (
+          <div
+            key={f.label}
+            className="flex min-w-0 flex-col gap-1.5 px-6 py-5"
+          >
+            <dt className="eyebrow whitespace-nowrap">{f.label}</dt>
+            <dd
+              className={cn(
+                SETTINGS_FACT_FIGURE,
+                "tabular whitespace-nowrap text-[var(--ink-900)]",
+              )}
+            >
+              {f.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </SettingsCard>
+  );
+}
+
+/**
+ * This month's video, led by what is left (Settings › Teams' quota rule):
+ * blue, amber from 80%, red at the cap, always with a word beside the figure.
+ */
+function HoursCard({
+  used,
+  cap,
+  resets,
+  credits,
+  footnote,
+}: {
+  used: number;
+  cap: number;
+  resets: string;
+  credits?: number;
+  footnote?: string;
+}) {
+  const fraction = usageFraction(used, cap);
+  const severity = hoursSeverity(fraction);
+  const fill = HOURS_FILL[severity];
+  const figureColor = severity === "ok" ? "var(--ink-900)" : fill;
+
+  return (
+    <SettingsCard className="gap-3.5">
+      <SettingsCardTitle
+        trailing={
+          <span className="text-[11px] text-[var(--ink-500)]">
+            Resets {resets}
+          </span>
+        }
+      >
+        Video this month
+      </SettingsCardTitle>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-title-lg" style={{ color: figureColor }}>
+          {formatHoursLong(cap - used)}
+        </span>
+        <span className="text-[12px] text-[var(--ink-500)]">
+          left of {formatHoursLong(cap)}
+        </span>
+        {severity !== "ok" && (
+          <span
+            className="ml-1 flex items-center gap-1.5 text-[11px]"
+            style={{ color: fill }}
+          >
+            <AlertTriangle
+              className="size-3"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            {severity === "spent" ? "Plan hours spent" : "Running low"}
+          </span>
+        )}
+      </div>
+      <HoursMeter
+        usedSeconds={used}
+        capSeconds={cap}
+        fraction={fraction}
+        fill={fill}
+        label="Video used this month"
+      />
+      {credits !== undefined ? (
+        <div className="flex items-center gap-3 border-t border-[var(--border-hairline)] pt-3.5">
+          <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
+            {credits > 0 ? `${credits}h in credits` : "No credits"}
+            <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
+              Used after your plan hours run out. Credits last 12 months.
+            </span>
+          </span>
+          <a href="#credits" className={BTN_SECONDARY}>
+            Buy credits
+          </a>
+        </div>
+      ) : (
+        footnote && (
+          <SettingsCardFootnote className="mt-0">
+            {footnote}
+          </SettingsCardFootnote>
+        )
+      )}
+    </SettingsCard>
+  );
+}
+
+function PlanRow({
+  plan,
+  billing,
+  current = false,
+  action,
+}: {
+  plan: Plan;
+  billing: Billing;
+  current?: boolean;
+  action: React.ReactNode;
+}) {
+  const yearly = billing === "yearly";
+  const list = yearly ? plan.yearly : plan.monthly;
+  const unit = yearly ? "yr" : "mo";
+  const free = plan.monthly === 0;
+
+  return (
+    <div className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3.5">
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 text-[12px] font-medium text-[var(--ink-900)]">
+          {plan.name}
+          {current && <StatePill>Current</StatePill>}
+        </span>
+        <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+          {plan.hours} · {plan.note}
+        </span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end">
+        <span className="tabular text-[13px] text-[var(--ink-900)]">
+          {free ? "Free" : `${usd(beta(list))} / ${unit}`}
+        </span>
+        {!free && (
+          <span className="tabular text-[11px] text-[var(--ink-400)] line-through">
+            {usd(list)}
+          </span>
+        )}
+      </span>
+      <span className="flex w-[96px] shrink-0 justify-end">
+        {action ?? (
+          <span className="text-[11px] text-[var(--ink-500)]">Your plan</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function BillingSwitch({
+  value,
+  onChange,
+}: {
+  value: Billing;
+  onChange: (b: Billing) => void;
+}) {
+  return (
+    <Segmented
+      value={value}
+      onChange={onChange}
+      options={[
+        { v: "monthly", t: "Monthly" },
+        { v: "yearly", t: "Yearly" },
+      ]}
+    />
   );
 }
 
