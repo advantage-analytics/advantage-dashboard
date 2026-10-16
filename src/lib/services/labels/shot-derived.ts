@@ -98,6 +98,47 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
     : "out";
 }
 
+/** What the shank readers take of a stroke: its two ends, as the row holds them. */
+export type ShotEnds = Partial<
+  Pick<LabelShot, "contactX" | "contactY" | "landingX" | "landingY">
+>;
+
+/**
+ * Whether the ball came down on the hitter's own side of the net (or on the
+ * net line itself) — a shank, or a ball into the net: it never crossed. The
+ * same reading `deriveShotResult` makes `"net"` from, kept in one place so
+ * the court panel's "Didn’t clear the net" and the stored result cannot
+ * disagree. False while either end is missing.
+ *
+ * Such a landing is ALLOWED: nothing refuses a click on the hitter's half
+ * (court-placement.ts `nextPlacement` takes any point), and the result the
+ * write carries is `"net"`. That is the stored meaning of `result: "net"`
+ * today — a ball that did not clear — and this changes none of it.
+ */
+export function landedOnOwnSide(shot: ShotEnds): boolean {
+  const { contactX, contactY, landingX, landingY } = shot;
+  if (
+    contactX == null ||
+    contactY == null ||
+    landingX == null ||
+    landingY == null
+  ) {
+    return false;
+  }
+  const contactDepth = contactY - NET_Y;
+  const landingDepth = landingY - NET_Y;
+  return landingDepth === 0 || contactDepth * landingDepth > 0;
+}
+
+/**
+ * How far short of the net a ball that `landedOnOwnSide` came down, in
+ * metres to the centimetre; null for any other landing, or one not placed.
+ */
+export function shortOfNet(shot: ShotEnds): number | null {
+  if (!landedOnOwnSide(shot) || shot.landingY == null) return null;
+  return Math.round(Math.abs(shot.landingY - NET_Y) * 100) / 100;
+}
+
 /**
  * What the landing of a serve stored `in` reads as when it contradicts that:
  * `"out"` or `"net"`, else null — for a serve whose landing agrees or is not
