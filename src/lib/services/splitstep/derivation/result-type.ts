@@ -100,8 +100,10 @@ export function classifyPoint(
   // ending-derived.ts) and SwingVision records it — not an unforced error by
   // the returner. It stays findable as a miss by the return's own result
   // (Return › Result "Error").
+  const serveIndex = lastServeIndex(rally);
   if (
-    rally.strokes.length - 1 === lastServeIndex(rally) + 1 &&
+    serveIndex !== -1 &&
+    rally.strokes.length - 1 === serveIndex + 1 &&
     winner === rally.server &&
     last.playerLabel !== rally.server
   ) {

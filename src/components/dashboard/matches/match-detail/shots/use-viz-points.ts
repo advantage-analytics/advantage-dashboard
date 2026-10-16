@@ -15,9 +15,9 @@ import type { Match } from "@/lib/data/types";
  * `viz-model.ts` and `serve-zones.ts` find an ace by `resultType === "Ace"`
  * (the Result filter, the star glyph, the zone tiles' ace count). The
  * Advantage Intelligence derivation never writes "Ace" — every unreturned
- * serve is a "Service Winner", like a missed return — yet the head-to-head Aces row and Serve ›
- * Result "Ace" count exactly those (`isUnreturnedServe`, product decision
- * 2026-09-29). Relabelling them once here, rather than threading a flag
+ * serve is a "Service Winner", like a missed return — yet the head-to-head
+ * Aces row and Serve › Result "Ace" count exactly those
+ * (`isUnreturnedServe`, product decision 2026-09-29). Relabelling them once here, rather than threading a flag
  * through every model call, keeps this tab's aces the head-to-head's aces.
  * SwingVision points pass through untouched, and so does the array.
  */

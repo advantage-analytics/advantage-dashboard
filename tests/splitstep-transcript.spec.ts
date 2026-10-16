@@ -344,6 +344,23 @@ test.describe("result_type", () => {
     expect(classifyPoint(serverMiss, "B")).toBe("Backhand Unforced Error");
   });
 
+  test("the missed-return rule needs a serve and a receiver's return", () => {
+    // No serve recorded: a lone stroke is not a return, so no service winner.
+    const noServe = {
+      ...rally([stroke({ playerLabel: "B", strokeSide: "forehand" })]),
+      server: "A",
+    };
+    expect(classifyPoint(noServe, "A")).toBe("Forehand Unforced Error");
+    // The stroke after the serve credited to the server is not a return.
+    const serverAfterServe = rally([
+      served(),
+      stroke({ playerLabel: "A", strokeSide: "backhand" }),
+    ]);
+    expect(classifyPoint(serverAfterServe, "B")).toBe(
+      "Backhand Unforced Error",
+    );
+  });
+
   test("an unreturned serve is a Service Winner, never an Ace", () => {
     // Nothing records an attempted-and-missed swing, so the two cannot be
     // separated. Emitting Ace would be a guess; match_stats.aces is suppressed.
