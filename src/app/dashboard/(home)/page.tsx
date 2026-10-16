@@ -297,6 +297,7 @@ async function Footer({ resources }: { resources: HomeResources }) {
       usedSeconds={u.usedSeconds}
       capSeconds={u.capSeconds}
       billingMonth={u.billingMonth}
+      creditSeconds={u.creditSeconds}
     />
   );
 }

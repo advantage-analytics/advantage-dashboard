@@ -24,6 +24,7 @@ import type { RosterSubject, VideoUploadEvent } from "./useUploadMatchWizard";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
 import { StartOverDialog } from "./StartOverDialog";
+import { AddHoursDialog } from "@/components/dashboard/credits/add-hours-dialog";
 import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
 import {
@@ -310,6 +311,12 @@ function UploadWizardPage() {
       isProcessingProvider,
       startOver,
       resetImportPlayerAnswer,
+      paywall,
+      closeAddHours,
+      handleCreditsAdded,
+      quotaFreeSeconds,
+      quotaCreditSeconds,
+      freeHoursReturnOn,
     },
     view: {
       title,
@@ -400,6 +407,24 @@ function UploadWizardPage() {
       {step === "file" && <FileStep />}
       {step === "trim" && <TrimStep />}
       {step === "match" && <MatchStep />}
+      <AddHoursDialog
+        open={paywall !== null}
+        onOpenChange={(open) => {
+          if (!open) closeAddHours();
+        }}
+        neededSeconds={paywall?.neededSeconds}
+        freeRemainingSeconds={quotaFreeSeconds ?? 0}
+        creditSeconds={quotaCreditSeconds}
+        resetsOn={freeHoursReturnOn}
+        // Closing IS going back to the trim: the dialog sits over it.
+        onShortenTrim={
+          step === "trim" && paywall?.neededSeconds !== undefined
+            ? () => undefined
+            : undefined
+        }
+        sendsAfterPay={step === "trim"}
+        onCreditsAdded={handleCreditsAdded}
+      />
       {startOverStep && subjectName && (
         <StartOverDialog
           open={startOverOpen}

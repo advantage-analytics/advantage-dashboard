@@ -1,15 +1,23 @@
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getPersonalUsage, getProgramUsage } from "@/lib/data/usage-server";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import {
-  formatAnalysisTime,
+  formatHoursLong,
   formatResetDate,
-  usageFraction,
+  secondsLeft,
 } from "@/lib/data/usage-format";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import {
+  currentBillingMonth,
+  formatPilotEnd,
+} from "@/lib/services/splitstep/config";
+import { formatCreditDate } from "@/lib/services/credits/packs";
 import {
   SettingsCard,
+  SettingsCardFootnote,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
+import { TwoBucketMeter } from "@/components/dashboard/credits/two-bucket-meter";
 import { ProgramUsageCard } from "@/components/dashboard/settings/program-usage-card";
 import { MatchVideosUsageCard } from "@/components/dashboard/settings/match-videos-usage-card";
 import {
@@ -67,36 +75,55 @@ export default async function UsagePage() {
     videos.rows.flatMap((row) => (row.uploadedBy ? [row.uploadedBy] : [])),
   );
 
-  const personalFraction = usageFraction(
-    personal.usedSeconds,
-    personal.capSeconds,
-  );
+  // E1 in `/design/credits`: both buckets on one meter. Usage keeps the
+  // ledger; Plan owns buying, so the packs are not repeated here.
+  const personalBalance = {
+    freeCapSeconds: personal.capSeconds,
+    freeLeftSeconds: secondsLeft(personal.usedSeconds, personal.capSeconds),
+    creditSeconds: personal.creditSeconds,
+  };
 
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
       <SettingsCard className="gap-3 py-5">
         <SettingsCardTitle
           trailing={
-            <span className="mono text-[11px] text-[var(--ink-700)]">
-              {formatAnalysisTime(personal.usedSeconds)} /{" "}
-              {formatAnalysisTime(personal.capSeconds)}
+            <span className="mono text-[11px] text-[var(--ink-500)]">
+              {formatHoursLong(personal.usedSeconds)} /{" "}
+              {formatHoursLong(personal.capSeconds)} free
             </span>
           }
         >
           Your analysis time
         </SettingsCardTitle>
 
-        <div className="h-1.5 overflow-hidden rounded-[3px] bg-[var(--ink-100)]">
-          <div
-            className="h-1.5 rounded-[3px] bg-[var(--blue)]"
-            style={{ width: `${personalFraction * 100}%` }}
-          />
+        <TwoBucketMeter balance={personalBalance} />
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
+          <span>
+            {personal.creditSeconds > 0
+              ? `Credits: ${formatHoursLong(personal.creditSeconds)}${
+                  personal.nextCreditExpiresAt
+                    ? ` · next expire ${formatCreditDate(personal.nextCreditExpiresAt)}`
+                    : ""
+                }`
+              : "Credits: none"}
+          </span>
+          <span className="flex-1" />
+          <Link
+            href="/dashboard/settings/plan"
+            className="inline-flex items-center gap-1 text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+          >
+            Manage on Plan
+            <ArrowRight className="size-3" strokeWidth={1.75} aria-hidden />
+          </Link>
         </div>
 
-        <span className="text-[11px] text-[var(--ink-500)]">
-          Personal uploads only · Resets{" "}
-          {formatResetDate(personal.billingMonth)} · Free through Dec 31, 2026
-        </span>
+        <SettingsCardFootnote>
+          Personal uploads only · Free hours reset{" "}
+          {formatResetDate(personal.billingMonth)} · Free through{" "}
+          {formatPilotEnd()}
+        </SettingsCardFootnote>
       </SettingsCard>
 
       {teams.map((team, index) => (

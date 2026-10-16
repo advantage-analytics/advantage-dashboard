@@ -1,4 +1,4 @@
-import { usageFraction } from "@/lib/data/usage-format";
+import { formatHoursLong, usageFraction } from "@/lib/data/usage-format";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import {
   formatHoursCap,
@@ -91,6 +91,44 @@ export function FooterMeter({
                 Math.max(0, remainingSeconds - selectedSeconds),
               )} of ${cap} h left after`
             : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix} · Pilot ends ${formatPilotEnd()}`}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The footer once a video spills past the free hours into credits (frame B2
+ * in `/design/credits`): still a plain readout, saying the split. The bar is
+ * the video itself — the free part, then the credit part.
+ */
+export function SplitReadout({
+  freeSeconds,
+  creditSeconds,
+}: {
+  freeSeconds: number;
+  creditSeconds: number;
+}) {
+  const total = freeSeconds + creditSeconds;
+  const freeShare = total > 0 ? (freeSeconds / total) * 100 : 0;
+  return (
+    <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
+      <span
+        role="img"
+        aria-label={`Spends ${formatHoursLong(total)}: ${formatHoursLong(freeSeconds)} of free hours and ${formatHoursLong(creditSeconds)} of credits`}
+        className="inline-flex h-[3px] w-14 shrink-0 overflow-hidden rounded-[2px] bg-[var(--ink-100)]"
+      >
+        <span
+          className="h-full shrink-0 bg-[var(--viz-you-light)]"
+          style={{ width: `${freeShare}%` }}
+        />
+        <span
+          className="h-full shrink-0 bg-[var(--viz-you-mid)]"
+          style={{ width: `${100 - freeShare}%` }}
+        />
+      </span>
+      <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+        Spends {formatHoursLong(total)} · {formatHoursLong(freeSeconds)} free +{" "}
+        {formatHoursLong(creditSeconds)} credits
       </span>
     </span>
   );

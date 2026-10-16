@@ -40,12 +40,17 @@ import {
   uploadAndSubmitVideo,
   type VideoUploadEvent,
 } from "@/lib/services/splitstep/submit-match-video";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import {
+  currentBillingMonth,
+  freeHoursReturnOn,
+} from "@/lib/services/splitstep/config";
 import {
   accountTypeFor,
   monthlyCapSecondsFor,
+  readCreditBalance,
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
+import type { CreditsAdded } from "@/components/dashboard/credits/add-hours-dialog";
 import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
 import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
 import { adminUploadApproval } from "@/lib/admin/uploads/approval";
@@ -574,6 +579,28 @@ export interface UseUploadMatchWizardReturn {
   quotaCapSeconds: number;
   /** When the allowance comes back, already formatted — "Sep 1". */
   quotaResetsOn: string;
+  /**
+   * The two buckets behind `remainingQuotaSeconds` for a personal workspace:
+   * free hours left this month, then credits. `remainingQuotaSeconds` is
+   * their sum. A team's credits are always 0 — credits are personal.
+   */
+  quotaFreeSeconds?: number;
+  quotaCreditSeconds: number;
+  /**
+   * When free hours come back for the paywall and B4 — "Nov 1" — or null in
+   * December, when they end Dec 31 instead of resetting.
+   */
+  freeHoursReturnOn: string | null;
+  /**
+   * The paywall dialog (B3b.5), open when non-null. `neededSeconds` is the
+   * trimmed video's cost, absent when it was opened from the file step's
+   * "Add hours" (B4) with no video priced yet.
+   */
+  paywall: { neededSeconds?: number } | null;
+  openAddHours: (neededSeconds?: number) => void;
+  closeAddHours: () => void;
+  /** Checkout finished: count the new hours and carry on where it stopped. */
+  handleCreditsAdded: (added: CreditsAdded) => void;
   /**
    * Step 1's refusal sentence when this month's allowance is entirely spent,
    * for the provider step to render next to Advantage Intelligence. Null for
@@ -1256,9 +1283,17 @@ export function useUploadMatchWizard({
    * Usage reads (`getProgramUsage`). A personal workspace keeps the direct
    * read — there the caller's rows ARE the whole ledger.
    */
-  const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
-    number | undefined
-  >(admin?.context.videoAllowance.remainingSeconds);
+  const [quotaFreeSeconds, setQuotaFreeSeconds] = useState<number | undefined>(
+    admin?.context.videoAllowance.remainingSeconds,
+  );
+  // Credits are personal: the admin console and a team workspace spend none.
+  const [quotaCreditSeconds, setQuotaCreditSeconds] = useState(0);
+  const remainingQuotaSeconds =
+    quotaFreeSeconds === undefined
+      ? undefined
+      : quotaFreeSeconds + quotaCreditSeconds;
+  // Bumped after a purchase so the reading below re-runs.
+  const [quotaReadNonce, setQuotaReadNonce] = useState(0);
 
   // A teammate may have spent against the pool since the wizard opened, so the
   // reading is refreshed as the flow crosses the trim step — on the way in for
@@ -1274,6 +1309,7 @@ export function useUploadMatchWizard({
 
     (async () => {
       let used: number;
+      let credits = 0;
 
       if (eligibilityWorkspace.kind === "team") {
         const { data, error } = await supabase.rpc("program_usage_total", {
@@ -1295,9 +1331,16 @@ export function useUploadMatchWizard({
         if (error || cancelled) return;
 
         used = sumUsedSeconds(data ?? []);
+        // The personal workspace's id is the user's: their own credits, read
+        // under RLS. A failed read counts none — the server still decides.
+        credits = await readCreditBalance(supabase, eligibilityWorkspace.id)
+          .then((balance) => balance.seconds)
+          .catch(() => 0);
+        if (cancelled) return;
       }
 
-      setRemainingQuotaSeconds(secondsLeft(used, quotaCapSeconds));
+      setQuotaCreditSeconds(credits);
+      setQuotaFreeSeconds(secondsLeft(used, quotaCapSeconds));
     })();
 
     return () => {
@@ -1312,6 +1355,7 @@ export function useUploadMatchWizard({
     quotaAccountType,
     quotaCapSeconds,
     isTrimStep,
+    quotaReadNonce,
   ]);
 
   // Media rules, trim floor and billing all come from the provider rather than
@@ -1333,14 +1377,17 @@ export function useUploadMatchWizard({
    * loading — the server is the authority (`reserve_processing_quota()`), and
    * an unread advisory number must never refuse on its own.
    */
-  const providerQuotaRefusal = isProcessingProvider
-    ? quotaRefusal({
-        remainingSeconds: remainingQuotaSeconds,
-        neededSeconds: 0,
-        resetsOn: quotaResetsOn,
-        workspaceKind: eligibilityWorkspace.kind,
-      })
-    : null;
+  // A personal player is never refused here: they can add hours, and the file
+  // step says they are out (B4) with the way to do it.
+  const providerQuotaRefusal =
+    isProcessingProvider && eligibilityWorkspace.kind === "team"
+      ? quotaRefusal({
+          remainingSeconds: remainingQuotaSeconds,
+          neededSeconds: 0,
+          resetsOn: quotaResetsOn,
+          workspaceKind: eligibilityWorkspace.kind,
+        })
+      : null;
 
   /**
    * The same question asked of a real window, in the provider's own billing
@@ -1373,6 +1420,25 @@ export function useUploadMatchWizard({
       eligibilityWorkspace.kind,
     ],
   );
+
+  /**
+   * The paywall (B3b.5). Personal workspaces only: a team's hours are the
+   * team's budget, and credits never spend there. `resumeRef` remembers what
+   * a purchase should carry on into — the trim step's Continue goes on to the
+   * match step; a refusal at Save leaves the player to press Save again.
+   */
+  const [paywall, setPaywall] = useState<{ neededSeconds?: number } | null>(
+    null,
+  );
+  const paywallResumeRef = useRef<"match" | null>(null);
+  const canBuyCredits = !admin && eligibilityWorkspace.kind === "personal";
+  const freeHoursReturn = freeHoursReturnOn();
+
+  const openAddHours = useCallback((neededSeconds?: number) => {
+    paywallResumeRef.current = null;
+    setPaywall({ neededSeconds });
+  }, []);
+  const closeAddHours = useCallback(() => setPaywall(null), []);
 
   // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
   // at click time. Why: getUser() can take 100–300ms over the network and the
@@ -2379,12 +2445,44 @@ export function useUploadMatchWizard({
       formData.videoEndSeconds ?? 0,
     );
     if (refusal) {
+      // Continue stays enabled and opens the paywall instead of a dead end:
+      // the player can add hours here, or shorten the trim behind it.
+      if (canBuyCredits && processingStrategy) {
+        setError(null);
+        paywallResumeRef.current = "match";
+        setPaywall({
+          neededSeconds: processingStrategy.billableSeconds(
+            formData.videoStartSeconds ?? 0,
+            formData.videoEndSeconds ?? 0,
+          ),
+        });
+        return;
+      }
       setError(refusal);
       return;
     }
     setError(null);
     setStep("match");
-  }, [refusalForWindow, formData.videoStartSeconds, formData.videoEndSeconds]);
+  }, [
+    refusalForWindow,
+    formData.videoStartSeconds,
+    formData.videoEndSeconds,
+    canBuyCredits,
+    processingStrategy,
+  ]);
+
+  const handleCreditsAdded = useCallback(
+    (added: CreditsAdded) => {
+      // Counted at once so the step can move on; the re-read confirms it.
+      setQuotaCreditSeconds((current) => current + added.seconds);
+      setQuotaReadNonce((n) => n + 1);
+      setPaywall(null);
+      setError(null);
+      if (paywallResumeRef.current === "match") setStep("match");
+      paywallResumeRef.current = null;
+    },
+    [setQuotaCreditSeconds, setQuotaReadNonce, setPaywall, setError, setStep],
+  );
 
   /**
    * Pick and validate a video, entirely locally.
@@ -3186,6 +3284,17 @@ export function useUploadMatchWizard({
         formData.videoEndSeconds ?? 0,
       );
       if (windowRefusal) {
+        if (canBuyCredits && processingStrategy) {
+          setError(null);
+          paywallResumeRef.current = null;
+          setPaywall({
+            neededSeconds: processingStrategy.billableSeconds(
+              formData.videoStartSeconds ?? 0,
+              formData.videoEndSeconds ?? 0,
+            ),
+          });
+          return;
+        }
         setError(windowRefusal);
         return;
       }
@@ -3912,6 +4021,8 @@ export function useUploadMatchWizard({
     approvalReading,
     refreshApproval,
     refusalForWindow,
+    canBuyCredits,
+    processingStrategy,
     matchSubject,
     teamRoster,
     viewer.id,
@@ -3996,6 +4107,13 @@ export function useUploadMatchWizard({
     remainingQuotaSeconds,
     quotaCapSeconds,
     quotaResetsOn,
+    quotaFreeSeconds,
+    quotaCreditSeconds,
+    freeHoursReturnOn: freeHoursReturn,
+    paywall,
+    openAddHours,
+    closeAddHours,
+    handleCreditsAdded,
     providerQuotaRefusal,
     // Every strategy has one — the file picker on step 2 serves both kinds.
     acceptString: selectedProvider

@@ -2,12 +2,18 @@ import Link from "next/link";
 import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import {
   dualWeekendsLeft,
+  formatHoursLong,
   formatHoursShort,
   formatResetDate,
   hoursSeverity,
+  monthName,
   secondsLeft,
   usageFraction,
 } from "@/lib/data/usage-format";
+import { freeHoursReturnOn } from "@/lib/services/splitstep/config";
+
+/** Where "Add hours" goes — the page that sells credits. */
+const PLAN_HREF = "/dashboard/settings/plan";
 
 /**
  * The workspace's budget, as the last line on a Home page.
@@ -37,6 +43,7 @@ export function UsageFooter({
   billingMonth,
   note,
   dualWeekends = false,
+  creditSeconds,
 }: {
   usedSeconds: number;
   capSeconds: number;
@@ -58,12 +65,59 @@ export function UsageFooter({
    * Home, where a dual is not the unit anybody plans in.
    */
   dualWeekends?: boolean;
+  /**
+   * A personal player's credits. Passed only on the personal Home: once free
+   * hours are spent the line says what carries on (D1) or that nothing does
+   * (D2). Omitted for a team, whose hours are the team's budget.
+   */
+  creditSeconds?: number;
 }) {
   // Clamped: an over-spend is a quota bug, and "-2 of 75 hours left" would
   // report it to the viewer as if it were their problem. `secondsLeft` is that
   // clamp, shared with every other surface that prints what is left.
   const left = secondsLeft(usedSeconds, capSeconds);
   const weekends = dualWeekends ? dualWeekendsLeft(left) : 0;
+
+  // D1 / D2 in `/design/credits`: nothing new on the page until free hours
+  // are spent, then one line that says what is left and the one next step.
+  if (creditSeconds !== undefined && left <= 0) {
+    const back = freeHoursReturnOn();
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-hairline)] pt-3 text-[11px] text-[var(--ink-600)]">
+        <span
+          className="size-3.5 rounded-full border-2"
+          style={{
+            borderColor:
+              creditSeconds > 0 ? "var(--viz-you-mid)" : "var(--ink-200)",
+          }}
+          aria-hidden
+        />
+        {creditSeconds > 0 ? (
+          <span>
+            Free hours used for {monthName(billingMonth)} ·{" "}
+            <span className="tabular">{formatHoursLong(creditSeconds)}</span> in
+            credits
+          </span>
+        ) : (
+          <>
+            <span>
+              Out of video hours
+              {back ? ` · free hours come back ${back}` : ""}
+            </span>
+            <span className="text-[var(--border-medium)]" aria-hidden>
+              |
+            </span>
+            <Link
+              href={PLAN_HREF}
+              className="text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Add hours
+            </Link>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-[var(--border-hairline)] pt-3">

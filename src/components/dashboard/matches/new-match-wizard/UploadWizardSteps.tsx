@@ -16,6 +16,9 @@ import { TrimStepContent } from "./TrimStepContent";
 import { useAddSelfOffer } from "./useAddSelfOffer";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { WizardNotice } from "./WizardNotice";
+import { XCircle } from "lucide-react";
+import { advButton } from "@/lib/ui/adv-button";
+import { errorStripCls, noteIconCls } from "./styles";
 
 /**
  * The wizard's four step bodies and the notices that sit beside them. Each is
@@ -198,8 +201,64 @@ export function FileStep() {
         }
         onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
       />
+      <OutOfHoursNotice />
       <IdentityQuestion />
       <WizardEligibilityNotice />
+    </div>
+  );
+}
+
+/**
+ * B4 in `/design/credits`: a personal player with no free hours and no
+ * credits hears it on the file step, before anyone waits on an upload — with
+ * the one way forward. Never on the import path (SwingVision is free), never
+ * for a team, and not while the reading is still loading.
+ */
+function OutOfHoursNotice() {
+  const {
+    wizard: {
+      isProcessingProvider,
+      remainingQuotaSeconds,
+      freeHoursReturnOn,
+      openAddHours,
+    },
+    meta: { workspaceKind },
+  } = useUploadWizard();
+  const admin = useAdminWizardMode();
+
+  if (
+    admin ||
+    !isProcessingProvider ||
+    workspaceKind !== "personal" ||
+    remainingQuotaSeconds === undefined ||
+    remainingQuotaSeconds > 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={errorStripCls} role="alert">
+        <XCircle className={noteIconCls} strokeWidth={1.5} aria-hidden />
+        <span>
+          <span className="font-medium">You&rsquo;re out of video hours.</span>{" "}
+          {freeHoursReturnOn
+            ? `Free hours come back ${freeHoursReturnOn}, or add credits to send a match now.`
+            : "Add credits to send a match now."}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => openAddHours()}
+          className={advButton("outline", "sm")}
+        >
+          Add hours
+        </button>
+        <span className="text-[11px] text-[var(--ink-500)]">
+          From $14 · SwingVision imports are always free
+        </span>
+      </div>
     </div>
   );
 }
