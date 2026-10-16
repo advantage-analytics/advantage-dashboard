@@ -175,6 +175,9 @@ step, and never use red for a sales message. Amber is for the meter state only.
 
 ## Open questions for Cj
 
+- **Player Pro per hour:** Pro costs more per hour than Player ($9.80 vs
+  $9.67 monthly, $8.17 vs $8.06 yearly). Price Pro at $45 ($9.00/h, about 21%
+  margin at $7/h) so the bigger plan is the better deal?
 - **Stripe Tax:** turn it on? It adds about 0.5% per transaction.
 - **The legacy Lifetime Pro account:** grandfather it to Player Pro, free for
   12 months?
