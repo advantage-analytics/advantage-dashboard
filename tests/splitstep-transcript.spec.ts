@@ -318,7 +318,30 @@ test.describe("result_type", () => {
       stroke({ playerLabel: "B", strokeSide: "backhand" }),
     ]);
     expect(classifyPoint(r, "B")).toBe("Backhand Winner");
-    expect(classifyPoint(r, "A")).toBe("Backhand Unforced Error");
+    // The returner's lost return is the server's service winner, not an error.
+    expect(classifyPoint(r, "A")).toBe("Service Winner");
+  });
+
+  test("a return struck and missed is a Service Winner; a later miss is an error", () => {
+    const missedReturn = rally([
+      served(),
+      stroke({ playerLabel: "B", strokeSide: "forehand" }),
+    ]);
+    expect(classifyPoint(missedReturn, "A")).toBe("Service Winner");
+    // After a faulted first serve the deciding serve is the second.
+    const afterFault = rally([
+      served({ in: false }),
+      served(),
+      stroke({ playerLabel: "B", strokeSide: "backhand" }),
+    ]);
+    expect(classifyPoint(afterFault, "A")).toBe("Service Winner");
+    // The server's third ball missed: an error, the server's.
+    const serverMiss = rally([
+      served(),
+      stroke({ playerLabel: "B", strokeSide: "forehand" }),
+      stroke({ playerLabel: "A", strokeSide: "backhand" }),
+    ]);
+    expect(classifyPoint(serverMiss, "B")).toBe("Backhand Unforced Error");
   });
 
   test("an unreturned serve is a Service Winner, never an Ace", () => {

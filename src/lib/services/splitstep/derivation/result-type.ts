@@ -64,6 +64,11 @@ export function lastServeIndex(rally: SplitStepRally): number {
  * `match_stats.aces` must be suppressed rather than published as 0. (The Head
  * to head widget derives its own ace count from unreturned serves, not this
  * field.)
+ *
+ * A return that was struck but missed is a `Service Winner` too (since 0.8.3,
+ * 2026-10-16; until then it was the returner's Unforced Error). So on a
+ * derived match a Service Winner is either an unreturned serve (rally length
+ * 1) or a missed return (rally length 2).
  */
 export function classifyPoint(
   rally: SplitStepRally,
@@ -87,6 +92,20 @@ export function classifyPoint(
     // fault — there was no first fault. It is a fault whose second serve the
     // vendor did not emit, so no honest result_type exists for it.
     return null;
+  }
+
+  // A serve the returner touched and missed: the return is the rally's only
+  // stroke after the deciding serve and the server won. That is a service
+  // winner, the server's, as the label console derives it (labels/
+  // ending-derived.ts) and SwingVision records it — not an unforced error by
+  // the returner. It stays findable as a miss by the return's own result
+  // (Return › Result "Error").
+  if (
+    rally.strokes.length - 1 === lastServeIndex(rally) + 1 &&
+    winner === rally.server &&
+    last.playerLabel !== rally.server
+  ) {
+    return "Service Winner";
   }
 
   const side = last.strokeSide ? SIDE_LABEL[last.strokeSide] : null;

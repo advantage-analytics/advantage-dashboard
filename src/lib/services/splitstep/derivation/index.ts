@@ -122,8 +122,12 @@
  * twice each and rally 51 gained two phantom strokes; each event now keeps
  * one copy per slot. A file with no repeated `event_id` derives exactly as
  * 0.8.1.
+ * 0.8.3 (2026-10-16) calls a return struck and missed a `Service Winner`, the
+ * server's (result-type.ts `classifyPoint`), where it was the returner's
+ * Unforced Error — the label console's rule and SwingVision's. Only those
+ * points' result_type moves; games, servers, winners and scores do not.
  */
-export const DERIVATION_VERSION = "0.8.2-unreconciled";
+export const DERIVATION_VERSION = "0.8.3-unreconciled";
 
 export type {
   RawSplitStepStroke,
