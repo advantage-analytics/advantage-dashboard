@@ -92,7 +92,6 @@ markers is hand-written — edit it as things move.
 | `/design/ask/answers` | [`src/app/design/ask/answers/page.tsx`](src/app/design/ask/answers/page.tsx) |
 | `/design/ask` | [`src/app/design/ask/page.tsx`](src/app/design/ask/page.tsx) |
 | `/design/ask/polish` | [`src/app/design/ask/polish/page.tsx`](src/app/design/ask/polish/page.tsx) |
-| `/design/credits` | [`src/app/design/credits/page.tsx`](src/app/design/credits/page.tsx) |
 | `/design/file-step` | [`src/app/design/file-step/page.tsx`](src/app/design/file-step/page.tsx) |
 | `/design/labels` | [`src/app/design/labels/page.tsx`](src/app/design/labels/page.tsx) |
 | `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |

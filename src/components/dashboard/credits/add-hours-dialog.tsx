@@ -47,7 +47,7 @@ export interface CreditsAdded {
 const NUMBER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five"];
 
 /**
- * "Add video hours" — the paywall (frame B3b.5 in `/design/credits`).
+ * "Add video hours" — the paywall (frame B3b.5 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)).
  *
  * In the beta welcome dialog's style (`beta-welcome-dialog.tsx`): 520px, the
  * brand band with the live dot grid, white logo and Beta tag, a 40px light

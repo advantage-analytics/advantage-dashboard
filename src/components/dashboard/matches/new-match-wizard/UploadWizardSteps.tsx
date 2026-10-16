@@ -209,7 +209,7 @@ export function FileStep() {
 }
 
 /**
- * B4 in `/design/credits`: a personal player with no free hours and no
+ * B4 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md): a personal player with no free hours and no
  * credits hears it on the file step, before anyone waits on an upload — with
  * the one way forward. Never on the import path (SwingVision is free), never
  * for a team, and not while the reading is still loading.

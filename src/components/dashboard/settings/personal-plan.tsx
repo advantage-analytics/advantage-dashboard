@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Settings › Plan in a personal workspace — the page that owns hours and
- * credits (`/design/credits` A1–A5).
+ * credits (the Credit Packs Mockups (docs/plans/2027-player-pricing.md) A1–A5).
  *
  * One hours card with one meter, free hours then credits (A1, or A4 for a
  * pilot player); the packs as one quiet line while hours remain (A2b), which
@@ -256,7 +256,7 @@ function PacksCard({
         <SettingsCardRow
           key={p.id}
           label={packName(p)}
-          description={`${packPerHour(p)} · lasts 12 months`}
+          description={`${packPerHour(p)} · Lasts 12 months`}
           control={
             <div className="flex items-center gap-3">
               <span className="text-[13px] text-[var(--ink-900)]">

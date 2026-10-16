@@ -51,7 +51,7 @@ export function SeasonTitle({
   // problem, and "-2 h left" would report it as one.
   const leftSeconds = Math.max(0, usage.capSeconds - usage.usedSeconds);
   // Free hours first; once they are spent the credits carry the line, and
-  // with neither it says so with the one next step (D3 in `/design/credits`).
+  // with neither it says so with the one next step (D3 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)).
   const hoursLeft =
     leftSeconds > 0 ? (
       <>

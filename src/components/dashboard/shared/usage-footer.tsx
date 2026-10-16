@@ -78,7 +78,7 @@ export function UsageFooter({
   const left = secondsLeft(usedSeconds, capSeconds);
   const weekends = dualWeekends ? dualWeekendsLeft(left) : 0;
 
-  // D1 / D2 in `/design/credits`: nothing new on the page until free hours
+  // D1 / D2 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md): nothing new on the page until free hours
   // are spent, then one line that says what is left and the one next step.
   if (creditSeconds !== undefined && left <= 0) {
     const back = freeHoursReturnOn();
@@ -102,7 +102,7 @@ export function UsageFooter({
           <>
             <span>
               Out of video hours
-              {back ? ` · free hours come back ${back}` : ""}
+              {back ? ` · Free hours come back ${back}` : ""}
             </span>
             <span className="text-[var(--border-medium)]" aria-hidden>
               |

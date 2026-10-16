@@ -1,6 +1,6 @@
 /**
  * One bar, two buckets — free hours left, then credits left — for Settings ›
- * Plan (A1) and Settings › Usage (E1), drawn as `/design/credits` drew them.
+ * Plan (A1) and Settings › Usage (E1), drawn as the Credit Packs Mockups (docs/plans/2027-player-pricing.md) drew them.
  *
  * The width is the free allowance plus the credit balance, so a big credit
  * balance does not shrink the free segment to nothing: the free part sits at

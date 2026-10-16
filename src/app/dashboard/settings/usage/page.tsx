@@ -75,7 +75,7 @@ export default async function UsagePage() {
     videos.rows.flatMap((row) => (row.uploadedBy ? [row.uploadedBy] : [])),
   );
 
-  // E1 in `/design/credits`: both buckets on one meter. Usage keeps the
+  // E1 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md): both buckets on one meter. Usage keeps the
   // ledger; Plan owns buying, so the packs are not repeated here.
   const personalBalance = {
     freeCapSeconds: personal.capSeconds,
@@ -104,7 +104,7 @@ export default async function UsagePage() {
             {personal.creditSeconds > 0
               ? `Credits: ${formatHoursLong(personal.creditSeconds)}${
                   personal.nextCreditExpiresAt
-                    ? ` · next expire ${formatCreditDate(personal.nextCreditExpiresAt)}`
+                    ? ` · Next expire ${formatCreditDate(personal.nextCreditExpiresAt)}`
                     : ""
                 }`
               : "Credits: none"}

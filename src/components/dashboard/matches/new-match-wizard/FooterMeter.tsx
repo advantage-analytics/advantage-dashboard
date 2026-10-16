@@ -98,7 +98,7 @@ export function FooterMeter({
 
 /**
  * The footer once a video spills past the free hours into credits (frame B2
- * in `/design/credits`): still a plain readout, saying the split. The bar is
+ * in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)): still a plain readout, saying the split. The bar is
  * the video itself — the free part, then the credit part.
  */
 export function SplitReadout({

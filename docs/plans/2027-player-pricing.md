@@ -3,8 +3,9 @@
 Written 2026-10-16. A plan, not a spec. Personal workspaces only. Team plans
 come after the fall pilot and are out of scope.
 
-**The approved screens are `/design/credits`** (`src/app/design/credits/`),
-also published as the "Credit Packs Mockups" design canvas. Frames marked
+**The approved screens are the "Credit Packs Mockups" design canvas** (it was
+also the `/design/credits` preview route, deleted once stage 1 shipped it in
+PR #468; `git show 944e9a01` has it). Frames marked
 PICKED there are the build target; the rest are rejected alternatives. The
 older `/design/plans` mock (PR #467) is superseded for stage 1.
 
@@ -47,7 +48,7 @@ These override anything below that disagrees.
 - **Vercel:** Hobby forbids commercial use; the project moves to Pro before
   credits go on sale. Cj's action, not code.
 
-Picked screens (frame ids in `/design/credits`):
+Picked screens (frame ids in the mockups):
 
 - **Wizard paywall = dialog B3b.5.** Continue stays enabled on the trim step;
   when the trim is longer than free hours plus credits it opens a dialog in
@@ -196,7 +197,7 @@ step, and never use red for a sales message.
 
 ### 5. Settings › Plan
 
-- Rebuild `/dashboard/settings/plan` from `/design/credits` frames A1, A2b
+- Rebuild `/dashboard/settings/plan` from frames A1, A2b
   (→ A2a when low or spent), A3, A4 and A5. No "Plans from January" card until
   stage 2 is decided. Settings › Usage's personal card becomes E1.
 - Use the existing primitives: `SettingsCard`, `HoursMeter`, `StatePill`,

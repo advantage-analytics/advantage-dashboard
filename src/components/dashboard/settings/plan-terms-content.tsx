@@ -15,7 +15,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  * and the note that a program's plan is arranged with us directly.
  *
  * A personal workspace renders `PersonalPlan` instead (hours, credits and
- * packs — `/design/credits` A1–A5). Entitlement is read from `viewer.plan`,
+ * packs — the Credit Packs Mockups (docs/plans/2027-player-pricing.md) A1–A5). Entitlement is read from `viewer.plan`,
  * never from `users.role`. See `lib/user/plan.ts`.
  */
 export function TeamPlanContent() {

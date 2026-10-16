@@ -28,7 +28,7 @@ export const PLAN_HREF = "/dashboard/settings/plan";
  * The header's video-hours pill: the welcome dialog's brand band shrunk to a
  * pill, carrying the one number people come back for — video hours left. A
  * personal workspace's pill goes to Settings › Plan, where hours and credits
- * are bought (frames C1–C4 in `/design/credits`); a team workspace's says
+ * are bought (frames C1–C4 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)); a team workspace's says
  * Pilot, as Settings › Plan does (`workspaceTier`), and reopens the dialog.
  *
  * The figure comes from `/api/splitstep/hours-left`, the same peek the upload
