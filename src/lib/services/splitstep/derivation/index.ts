@@ -94,7 +94,9 @@
  * it shares most rallies with — renumbering alone never counts), gives it
  * another server or merges it, the point gets the hidden mark
  * `segment_proposal_differs` carrying the proposal. Ends follow the ITF
- * changeover rule, a tiebreak's six-point changes included. Tuned weights: end 5,
+ * changeover rule, a tiebreak's six-point changes included. Tuned weights
+ * (as shipped; recalibrated 2026-10-16 on eight sessions without a version
+ * bump, since no published row changes — see segmentation.ts): end 5,
  * side 2, flipHigh 2, flipLow 1, vendorBoundaryMoved 1, vendorBoundaryDropped
  * 1, changeoverShortGap 4, longGapNotChangeover 3, merge 1. Over three labelled
  * sessions: be930d79 fit at 6-2 and proposed the server on 54 of 56 points
@@ -109,7 +111,11 @@
  * inside the segmenter. Promotion past review-only needs at least 95% of
  * firings right on server and game over 30+ firings across 2+ matches,
  * re-scored with `scripts/splitstep-eval.ts --session`; so far 19 of 20
- * across 2 matches, short of 30. Re-deriving a job changes no published game,
+ * across 2 matches, short of 30. After the 2026-10-16 recalibration, 50 of
+ * 70 across 7 matches in-sample (50 of 55 with an open last game allowed)
+ * and about 39 of 64 held out one match at a time, so still short; it waits
+ * on about four more labelled matches.
+ * Re-deriving a job changes no published game,
  * server, winner or score: each gains only the flag, the `segmentation` key
  * and the new version stamp.
  * 0.8.1 (2026-10-10) narrows the serve side's dead zone from 0.3 m to 0.1 m
