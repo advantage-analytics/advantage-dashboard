@@ -15,7 +15,7 @@ import { smallestPackCovering } from "@/lib/services/credits/packs";
  * A player's hours without a database: free hours first, then credits, and
  * what the refusal says. There is no shared house band any more (Cj,
  * 2026-10-16). The atomic half is `reserve_personal_quota`
- * (20261016120000_video_credits.sql).
+ * (20261016123934_video_credits_ledger.sql).
  */
 
 const HOUR = 3600;

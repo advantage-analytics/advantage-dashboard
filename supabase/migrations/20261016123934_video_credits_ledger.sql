@@ -12,6 +12,9 @@
 -- the wizard meter, Settings › Usage, the admin pages — still sums free hours
 -- correctly without changing, and nothing a user can reach writes a credit.
 --
+-- A match deleted after its analysis started keeps its hours spent (see the
+-- trigger at the end); one deleted before that gets them back.
+--
 -- `reserve_individual_quota`, `individual_tier_usage` and
 -- `individual_pool_usage` stay until the app that stops calling them is
 -- deployed; a later migration drops them.
@@ -334,6 +337,46 @@ revoke insert, update, delete on public.processing_usage from authenticated;
 drop policy if exists "Users can insert own processing usage" on public.processing_usage;
 drop policy if exists "Users can update own processing usage" on public.processing_usage;
 drop policy if exists "Users can delete own processing usage" on public.processing_usage;
+
+-- ── Deleting a match after analysis started spends its hours ─────────────
+
+-- `processing_jobs` cascades away with its match, and `processing_usage`
+-- cascaded with the job — so deleting an analysed match handed its free
+-- hours back after the vendor was paid, and analyse → delete → re-upload was
+-- unlimited free analysis. Cj, 2026-10-16: once analysis has started
+-- (processing, deriving, completed, derivation_failed) the hours stay spent,
+-- free and credits alike. Before that — nothing reached the vendor — the
+-- delete hands both back, as a release would.
+--
+-- So the usage row and the spend rows outlive the job (`job_id` set null,
+-- which the admin readers already tolerate), and a BEFORE DELETE trigger on
+-- `processing_jobs` releases a job that never started first.
+alter table public.processing_usage alter column job_id drop not null;
+alter table public.processing_usage drop constraint processing_usage_job_id_fkey;
+alter table public.processing_usage
+  add constraint processing_usage_job_id_fkey
+  foreign key (job_id) references public.processing_jobs(id) on delete set null;
+
+create or replace function public.release_unstarted_job_quota()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  if old.status not in ('processing', 'deriving', 'completed', 'derivation_failed') then
+    perform public.release_processing_quota(old.id);
+  end if;
+  return old;
+end;
+$function$;
+
+revoke execute on function public.release_unstarted_job_quota()
+  from public, anon, authenticated;
+
+create trigger processing_jobs_release_unstarted_quota
+  before delete on public.processing_jobs
+  for each row execute function public.release_unstarted_job_quota();
 
 -- ── Grants: service role only, like every other quota function ─────────────
 

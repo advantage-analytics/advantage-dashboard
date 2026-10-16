@@ -782,7 +782,7 @@ to put a testable seam.
 > - `config.ts` — `INDIVIDUAL_POOL_MONTHLY_CAP_HOURS` and
 >   `OPEN_BETA_MONTHLY_CEILING_HOURS` are deleted; `freeHoursReturnOn()` says
 >   "Nov 1", or null in December when free hours end rather than reset.
-> - SQL (`20261016120000_video_credits.sql`): `video_credits`,
+> - SQL (`20261016123934_video_credits_ledger.sql`): `video_credits`,
 >   `video_credit_spends`, `reserve_personal_quota`, and release/reconcile
 >   returning seconds to the same credit lots. `processing_usage` still means
 >   "free hours this month" (a job paid fully by credits has a 0-second row),
