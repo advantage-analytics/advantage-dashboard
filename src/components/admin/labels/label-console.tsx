@@ -2494,6 +2494,7 @@ export function LabelConsole({
       points={points}
       adScoring={session.adScoring}
       playOnLets={session.playOnLets}
+      fileOffset={fileOffset}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}

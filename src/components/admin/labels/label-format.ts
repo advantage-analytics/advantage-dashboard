@@ -107,6 +107,31 @@ export function formatVideoTime(seconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${tail}` : `${m}:${tail}`;
 }
 
+/**
+ * A label's `videoTime` as the player reads it: on the playing FILE's clock.
+ * `offset` is `LabelVideo.startTimeSeconds` — the vendor's trimmed copy starts
+ * at the job's `start_time_seconds`, so a stroke stored at 853.8 on a job cut
+ * from 852.1 is "0:01.7" in the player, not "14:13.8". Seeks subtract the same
+ * offset (label-video.tsx), so a printed time is where a click lands.
+ */
+export function formatFileTime(videoTime: number, offset = 0): string {
+  return formatVideoTime(videoTime - offset);
+}
+
+/**
+ * The time cell's text, typed on the file's clock, → seconds on the analysis
+ * clock that `label_shots.video_time` stores: {@link parseVideoTime} plus
+ * `offset`, rounded to milliseconds so no float residue reaches the row.
+ */
+export function parseFileTime(
+  text: string,
+  offset = 0,
+): number | null | undefined {
+  const seconds = parseVideoTime(text);
+  if (seconds === null || seconds === undefined) return seconds;
+  return Math.round((seconds + offset) * 1000) / 1000;
+}
+
 /** A stored position → "-0.80, 17.79" (metres, two places), or null. */
 export function formatCourtPoint(
   x: number | null,
@@ -188,7 +213,11 @@ export function isFault(shot: Pick<LabelShot, "stroke" | "result">): boolean {
  *     groundstrokes is a rally of 3 too. A point with no serve labelled
  *     counts every live stroke.
  */
-export function pointSummary(point: Pick<LabelPoint, "shots">): {
+export function pointSummary(
+  point: Pick<LabelPoint, "shots">,
+  /** `LabelVideo.startTimeSeconds`: `time` is on the playing file's clock. */
+  fileOffset = 0,
+): {
   time: string | null;
   lastShot: string | null;
   rally: number;
@@ -201,7 +230,7 @@ export function pointSummary(point: Pick<LabelPoint, "shots">): {
   return {
     time:
       timed && timed.videoTime !== null
-        ? formatVideoTime(timed.videoTime)
+        ? formatFileTime(timed.videoTime, fileOffset)
         : null,
     lastShot: last?.stroke ? STROKE_LABEL[last.stroke] : null,
     rally: played.length - Math.max(serve, 0),

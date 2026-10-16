@@ -106,7 +106,11 @@ function titleCase(text: string): string {
  *   · live let serves close the line: "1 let", "2 lets"; none, nothing.
  * A part with nothing to say is left out, with its middot.
  */
-export function pointDetail(point: Pick<LabelPoint, "shots">): string {
+export function pointDetail(
+  point: Pick<LabelPoint, "shots">,
+  /** `LabelVideo.startTimeSeconds`: the time is on the playing file's clock. */
+  fileOffset = 0,
+): string {
   const live = liveShots(point);
   const last = live.at(-1);
   const parts: string[] = [];
@@ -124,7 +128,7 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
 
   const timed = live.find((shot) => shot.videoTime !== null);
   if (timed && timed.videoTime !== null) {
-    parts.push(formatClockTime(timed.videoTime));
+    parts.push(formatClockTime(timed.videoTime - fileOffset));
   }
 
   const { rally } = pointSummary(point);
