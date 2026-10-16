@@ -465,11 +465,12 @@ export function SettingsConnectionsPending() {
       </SettingsCard>
       <SettingsCard>
         <SettingsCardTitle className="pb-2">Connected apps</SettingsCardTitle>
-        <SessionRow
-          title="Claude"
-          detail="Approved Oct 16 · Reads your matches and asks questions"
-          action="Disconnect"
-        />
+        {/* Most people have nothing connected: trace the empty line. */}
+        <div className="border-t border-[var(--border-hairline)] py-3">
+          <Text className="text-[12px]">
+            No apps connected yet. Apps you approve appear here.
+          </Text>
+        </div>
       </SettingsCard>
     </Column>
   );

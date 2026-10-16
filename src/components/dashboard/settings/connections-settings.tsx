@@ -9,7 +9,10 @@ import {
   SettingsCard,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
-import type { OAuthGrant } from "@/lib/auth/oauth-grants";
+import {
+  GRANTS_UNAVAILABLE_ERROR,
+  type OAuthGrant,
+} from "@/lib/auth/oauth-grants";
 import { formatShortDate } from "@/lib/ui/date-format";
 
 import { disconnectApp } from "./connections-actions";
@@ -86,8 +89,7 @@ export function ConnectionsSettings({
             role="alert"
             className="border-t border-[var(--border-hairline)] py-3 text-[12px] text-[var(--ink-600)]"
           >
-            {error ??
-              "Connected apps could not be loaded. Refresh to try again."}
+            {error ?? GRANTS_UNAVAILABLE_ERROR}
           </p>
         ) : grants.length === 0 ? (
           <p className="border-t border-[var(--border-hairline)] py-3 text-[12px] text-[var(--ink-600)]">
@@ -113,6 +115,11 @@ export function ConnectionsSettings({
   );
 }
 
+/**
+ * One approved app. Disconnect asks once, in the row: it ends the app's
+ * sessions at once and the person has to approve it again in Claude, the
+ * same weight as Account's "Sign out everywhere", which also confirms.
+ */
 function GrantRow({
   grant,
   onDone,
@@ -120,7 +127,11 @@ function GrantRow({
   grant: OAuthGrant;
   onDone: (result: { ok: true } | { ok: false; error: string }) => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
+  const approved = grant.grantedAt
+    ? `Approved ${formatShortDate(grant.grantedAt)} · `
+    : "";
   return (
     <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3">
       <Plug
@@ -136,25 +147,47 @@ function GrantRow({
           className="mt-0.5 text-[11px] text-[var(--ink-500)]"
           suppressHydrationWarning
         >
-          {grant.grantedAt
-            ? `Approved ${formatShortDate(grant.grantedAt)} · `
-            : ""}
-          Reads your matches and asks questions
+          {confirming
+            ? `${grant.name} loses access now; you would approve it again in Claude.`
+            : `${approved}Reads your matches and asks questions`}
         </div>
       </div>
-      <SettingsButton
-        variant="outline"
-        size="sm"
-        className="ml-auto"
-        loading={pending}
-        onClick={() =>
-          startTransition(async () =>
-            onDone(await disconnectApp(grant.clientId)),
-          )
-        }
-      >
-        Disconnect
-      </SettingsButton>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {confirming ? (
+          <>
+            <SettingsButton
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </SettingsButton>
+            <SettingsButton
+              variant="danger"
+              size="sm"
+              loading={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await disconnectApp(grant.clientId);
+                  if (!result.ok) setConfirming(false);
+                  onDone(result);
+                })
+              }
+            >
+              Disconnect
+            </SettingsButton>
+          </>
+        ) : (
+          <SettingsButton
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirming(true)}
+          >
+            Disconnect
+          </SettingsButton>
+        )}
+      </div>
     </div>
   );
 }

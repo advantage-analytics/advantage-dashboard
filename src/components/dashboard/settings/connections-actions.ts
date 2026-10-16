@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { revokeOAuthGrant } from "@/lib/auth/oauth-grants";
+import { REVOKE_FAILED_ERROR, revokeOAuthGrant } from "@/lib/auth/oauth-grants";
 import { createClient } from "@/lib/supabase/server";
 
 import type { ActionResult } from "./actions";
@@ -16,10 +16,7 @@ import type { ActionResult } from "./actions";
  */
 export async function disconnectApp(clientId: string): Promise<ActionResult> {
   if (typeof clientId !== "string" || clientId.trim() === "") {
-    return {
-      ok: false,
-      error: "That app could not be disconnected. Try again.",
-    };
+    return { ok: false, error: REVOKE_FAILED_ERROR };
   }
   const supabase = await createClient();
   const {
