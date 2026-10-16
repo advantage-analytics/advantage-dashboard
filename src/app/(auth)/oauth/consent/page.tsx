@@ -5,8 +5,10 @@ import { errorHref } from "@/lib/auth/confirm-link";
 import {
   consentPath,
   getOAuthAuthorizationDetails,
+  isConnectorRedirectUri,
   MISSING_AUTHORIZATION_ERROR,
   readAuthorizationId,
+  UNKNOWN_CLIENT_ERROR,
 } from "@/lib/auth/oauth-consent";
 import { createClient } from "@/lib/supabase/server";
 import { decideOAuthConsent } from "./actions";
@@ -25,6 +27,10 @@ export const metadata = { title: "Connect an app" };
  * Signed-out visitors go to `/login` with this page as `next`, so the
  * request survives the sign-in. A request the person already approved
  * answers with a redirect URL instead of details, and is followed at once.
+ *
+ * A client whose callback is not an app Advantage connects to
+ * (`isConnectorRedirectUri`) is turned away before any button is drawn,
+ * and the action checks again before an approval.
  *
  * The GET does nothing but read: as on `/confirm`, nothing is decided until
  * a button is pressed, so a link fetched by a scanner changes nothing.
@@ -63,6 +69,10 @@ export default async function ConsentPage({
   if (!read.ok) redirect(errorHref(read.message));
   if (read.value.kind === "redirect") redirect(read.value.redirectUrl);
   const request = read.value;
+  // Only an app Advantage connects to is offered Allow (`oauth-consent.ts`).
+  if (!isConnectorRedirectUri(request.redirectUri)) {
+    redirect(errorHref(UNKNOWN_CLIENT_ERROR));
+  }
 
   let returnsTo: string | null = null;
   try {

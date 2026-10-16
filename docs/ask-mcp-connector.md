@@ -117,9 +117,12 @@ The OAuth server is a project setting the API does not expose. For project
      `https://claude.com/api/mcp/auth_callback` for claude.ai and Desktop;
      Claude Code uses a `http://localhost:<port>/callback` it chooses per run)
      and paste the client id into the connector's advanced settings. Dynamic
-     registration lets any client register, and an approved client holds a
-     sign-in token for the person's account (see §4's last bullet) — restrict
-     it before switching the server on (§8).
+     registration lets any client register, but only a client whose callback
+     is one of Claude's (or a loopback address, for Claude Code) is offered
+     Allow on the consent page — `isConnectorRedirectUri()` in
+     `src/lib/auth/oauth-consent.ts`, checked on the page and again in the
+     action. Connecting another app (ChatGPT, say) means adding its callback
+     to `CONNECTOR_REDIRECT_URIS`.
 3. Optional, recommended by Supabase for OAuth: **Authentication → JWT Keys**,
    move signing to an asymmetric key (ES256/RS256). Nothing here verifies a
    token locally, so it is not required for the connector to work.
@@ -178,12 +181,16 @@ email"):
   `ask.exec_query()` sets `transaction_read_only`, and the tools are annotated
   `readOnlyHint`. The only thing a call changes is what the page's own
   question would: a saved answer, a run row, a question spent.
-- **The token is wider than the tools.** It is a full user JWT: only
-  `/api/mcp` limits its holder to these read tools, and it could call
-  PostgREST directly within the user's RLS. The consent page says so — it
-  describes what the connector's tools do and that Allow hands the app a
-  sign-in token, and asks the person to approve only apps they trust; it
-  does not promise read-only access to the platform.
+- **The token is wider than the tools, but cannot write.** It is a full
+  user JWT and could call PostgREST directly within the user's RLS. A
+  PostgREST pre-request hook (`public.oauth_client_request_guard()`,
+  migration `20261016010000_oauth_client_read_only`) refuses every non-read
+  request from a token carrying `client_id`, except the eight `ask_*`
+  functions this route calls as the user; restrictive Storage policies refuse
+  its object writes. A user-side RPC added to the MCP path must be added to
+  that function's list, or the connector's own call is refused. Supabase
+  Auth's own endpoints (`/auth/v1/user`) are outside both — the consent
+  page still says Allow hands the app a sign-in token.
 
 ## 5. Connecting
 
@@ -244,11 +251,10 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
 
 **Known limits**
 
-- **Write policies are not gated on the `client_id` claim.** A connector's
-  token can do through PostgREST whatever the person's own session can.
-  Gating writes on `auth.jwt() ->> 'client_id' is null`, and restricting
-  dynamic client registration (or turning it off and registering clients by
-  hand), should both land before the OAuth server is switched on (§2).
+- **Writes are gated on `client_id`** (§4) and **consent on the callback**
+  (§2). Left outside both: Supabase Auth's own endpoints, which accept the
+  token as the person's session (keep **Secure email change** and **Secure
+  password change** on), and Realtime broadcast.
 - The 401's metadata URL and the resource document name `mcpOrigin()`
   (`NEXT_PUBLIC_SITE_URL`, then Vercel's variables) on a production build;
   the request's own origin stands in only outside one.

@@ -5,6 +5,7 @@ import {
   consentPath,
   EXPIRED_AUTHORIZATION_ERROR,
   getOAuthAuthorizationDetails,
+  isConnectorRedirectUri,
   OAUTH_UNAVAILABLE_ERROR,
   parseAuthorizationDetails,
   readAuthorizationId,
@@ -240,6 +241,34 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
+  test("offers Allow only to Claude's callbacks and a loopback one", () => {
+    expect(
+      isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri("https://claude.com/api/mcp/auth_callback"),
+    ).toBe(true);
+    expect(isConnectorRedirectUri("http://localhost:54321/callback")).toBe(
+      true,
+    );
+    expect(isConnectorRedirectUri("http://127.0.0.1:8080/callback")).toBe(true);
+    expect(isConnectorRedirectUri("http://[::1]:8080/callback")).toBe(true);
+
+    expect(isConnectorRedirectUri(null)).toBe(false);
+    expect(isConnectorRedirectUri("not a url")).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback/x"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://evil.example/api/mcp/auth_callback"),
+    ).toBe(false);
+    expect(isConnectorRedirectUri("https://localhost/callback")).toBe(false);
+    expect(isConnectorRedirectUri("http://localhost.evil.example/cb")).toBe(
+      false,
+    );
+    expect(isConnectorRedirectUri("http://user:pw@localhost:1/cb")).toBe(false);
+  });
+
   test("reads a URL-safe authorization id and nothing else", () => {
     expect(readAuthorizationId("abc123-XYZ_789")).toBe("abc123-XYZ_789");
     expect(readAuthorizationId("short")).toBeNull();
