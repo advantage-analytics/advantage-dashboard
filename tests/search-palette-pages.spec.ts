@@ -73,6 +73,7 @@ test("account pages are the settings sections, then Help Center", () => {
     "Preferences",
     "Usage",
     "Plan",
+    "Connections",
     "Teams",
     "Help center",
   ]);
@@ -91,6 +92,7 @@ test("Teams is only listed for someone on a team", () => {
     "Preferences",
     "Usage",
     "Plan",
+    "Connections",
     "Help center",
   ]);
 });
