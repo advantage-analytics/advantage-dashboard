@@ -112,12 +112,11 @@
  * firings right on server and game over 30+ firings across 2+ matches,
  * re-scored with `scripts/splitstep-eval.ts --session`; so far 19 of 20
  * across 2 matches, short of 30. After the 2026-10-16 recalibration, 50 of
- * 70 across 7 matches in-sample (50 of 55 with an open last game allowed)
+ * 70 across 8 matches in-sample (50 of 55 with an open last game allowed)
  * and about 39 of 64 held out one match at a time, so still short; it waits
- * on about four more labelled matches.
- * Re-deriving a job changes no published game,
- * server, winner or score: each gains only the flag, the `segmentation` key
- * and the new version stamp.
+ * on about four more labelled matches. Re-deriving a job changes no published
+ * game, server, winner or score: each gains only the flag, the `segmentation`
+ * key and the new version stamp.
  * 0.8.1 (2026-10-10) narrows the serve side's dead zone from 0.3 m to 0.1 m
  * (flags.ts `SIDE_DEAD_ZONE_M`), so `score_side_mismatch` reads the side of a
  * serve struck 0.1–0.3 m off the centre mark, where many deuce stances sit.

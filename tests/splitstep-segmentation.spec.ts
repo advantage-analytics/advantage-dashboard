@@ -645,10 +645,11 @@ test.describe("proposeSegmentation", () => {
       playerLabel: n % 2 === 1 ? B : A,
       videoTime: serve.videoTime + 2 * n,
     }));
+    const fragmentGapS = 3;
     const fragmentStroke = serveStroke(
       2,
       A,
-      serve.videoTime + 6 + 3,
+      serve.videoTime + 6 + fragmentGapS,
       "bottom",
       "ad",
     );
@@ -685,7 +686,7 @@ test.describe("proposeSegmentation", () => {
       ],
     });
 
-    expect(3).toBeLessThan(FRAGMENT_MAX_GAP_S);
+    expect(fragmentGapS).toBeLessThan(FRAGMENT_MAX_GAP_S);
     expect(proposal.status).toBe("fit");
     expect(proposal.merges).toEqual([[1, 2]]);
     expect(proposal.costBreakdown.merge).toBe(SEGMENT_COSTS.merge);

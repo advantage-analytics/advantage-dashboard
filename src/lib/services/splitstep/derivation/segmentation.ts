@@ -204,7 +204,7 @@ export interface SegmentationProposal {
  * Result over 667 checked label rows (published → before → after): server
  * 618 → 629 → 641; rows whose game holds the labeller's rallies 414 → 523 →
  * 573; game-boundary F1 .765 → .853 → .908; changeover F1 .642 → .781 →
- * .857; firings right 27/68 → 50/70. Fifteen of the twenty misses are one
+ * .857; firings right 27/68 → 50/70. Sixteen of the twenty misses are one
  * match whose entered score stops mid-game (5-2 with an eighth game begun):
  * `reachesScore` wants 0–0 points at the end, so the path squeezes eight
  * games into seven. Letting the last game stay open when the last set is
@@ -391,17 +391,20 @@ function readEvidence(input: SegmentationInput): RallyEvidence[] {
     const next = evidence[i + 1];
     const strokes = input.rallies[i].strokes;
     const endsOnServe = strokes.at(-1)?.strokeType === "serve";
-    here.mergeableWithNext =
+    const gap = next.gapBefore;
+    const sameSpot =
       here.end !== null &&
       here.end === next.end &&
       here.side !== null &&
-      here.side === next.side &&
-      next.gapBefore !== null &&
-      next.gapBefore < MERGE_MAX_GAP_S &&
+      here.side === next.side;
+    const splitServe =
+      gap !== null &&
+      sameSpot &&
+      gap < MERGE_MAX_GAP_S &&
       (endsOnServe || strokes.length <= MERGE_MAX_STROKES);
-    if (next.gapBefore !== null && next.gapBefore < FRAGMENT_MAX_GAP_S) {
-      here.mergeableWithNext = true;
-    }
+    // A negative gap is overlapping stroke times, not a fragment.
+    const fragment = gap !== null && gap >= 0 && gap < FRAGMENT_MAX_GAP_S;
+    here.mergeableWithNext = splitServe || fragment;
   }
   return evidence;
 }
@@ -575,9 +578,13 @@ interface StepTally {
 /**
  * What consuming `first` — or `first` and `second` as one merged point — as
  * `outcome` from state `s` costs. The end, side, gap and vendor boundary are
- * read off `first`; the outcome off `second` when merging, since the second
- * rally is the one that was played out; a vendor boundary on `second` is a
- * boundary the merge drops. With `breakdown` each row's share is also added
+ * read off `first`; the outcome off `second` when merging. After a split
+ * serve the second rally is the one played out; after a trailing fragment
+ * it is still the right witness, because the stream records a point's
+ * winner as the score change it sees at the NEXT rally, which for a cut
+ * point is the fragment's. (Judging a fragment on the first rally instead
+ * took one labelled match from 20/21 firings right to 5/24.) A vendor
+ * boundary on `second` is a boundary the merge drops. With `breakdown` each row's share is also added
  * to it — the replay's tally.
  */
 function stepCost(
