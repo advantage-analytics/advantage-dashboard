@@ -176,7 +176,7 @@ function PilotView({
         used={used}
         cap={s.cap}
         resets={s.resets}
-        footnote="The pilot gives you 2 free hours of film every month until January 1. Your plan isn't billed before then."
+        footnote="The pilot gives you 2 free hours of film every month until January 1. You only pay if you buy credits."
       />
 
       {out && (
@@ -213,16 +213,15 @@ function PilotView({
             plan={p}
             billing={billing}
             action={
-              <button type="button" className={BTN_PRIMARY}>
-                Choose
-              </button>
+              <span className="text-[11px] text-[var(--ink-500)]">
+                From Jan 1
+              </span>
             }
           />
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
-          Choose a plan now and it starts on January 1, when the free pilot
-          hours end. Your plan isn&apos;t billed before then. Your matches and
-          reports stay either way.
+          Draft prices. Plans open for sign-up in December and start on January
+          1, when the free pilot hours end.
         </SettingsCardFootnote>
       </SettingsCard>
     </>
