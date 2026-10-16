@@ -62,3 +62,13 @@ is the runner's. Newest entries at the bottom.
 1. Focus uses `preventScroll`; in a long rally the block can sit below the rail — scroll the focused element `block: "nearest"` once the smooth scroll settles.
 2. The overview's open-on-point jump (`jumpAfterOpen`) never focuses; pass `focusItem` through `openOnPointId` if it should.
 3. `reviewFocusTarget` depends on the inline rows' `data-row` / `data-point-hint` / `data-shot-suggestion` attributes in label-black-shot-row.tsx.
+
+## T6 · Scorecard: per-item table beside the per-code one — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `Scorecard.items` (`ScorecardItemRow`) tallies each point once per review item and tone against `pointChange`, plus a `demoted` row; `renderScorecard` adds "## Items, against what the labeller changed" after the per-code table. `reviewFlag`'s item-folding loop is extracted as exported `foldReviewItems` (marks-state.ts) so tone and demotion rules live in one place. Spec: label-scorecard ("the per-item table").
+
+**follow-ups:**
+
+1. Item 4's tone reads `pointWinnerContradicted` on the point as it stands now, not as seeded, so a winner the labeller flipped against the strokes can read amber in the scorecard though the opening marks were grey.

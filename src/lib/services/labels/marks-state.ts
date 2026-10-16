@@ -980,6 +980,20 @@ export function reviewFlag(
       dismissKey: memberDismissKey(mark),
     })),
   ];
+  return foldReviewItems(members, point, marks);
+}
+
+/**
+ * Fold `members` into a point's flag: each item with at least one member, in
+ * id order, its tone and state, then the flag's own. Null when no item has a
+ * member. What `reviewFlag` and the scorecard's opening reading share, so the
+ * tone and demotion rules live in one place.
+ */
+export function foldReviewItems(
+  members: readonly ReviewMember[],
+  point: LabelPoint,
+  marks: LabelMarks,
+): ReviewFlag | null {
   const items: ReviewItem[] = [];
   for (const def of REVIEW_ITEMS) {
     const mine = members.filter((member) =>

@@ -91,7 +91,7 @@ ready).
 
 ## T6 · Scorecard: per-item table beside the per-code one
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/lib/services/labels/scorecard.ts (`buildScorecard`, `renderScorecard`, `Scorecard` type), tests/label-scorecard.spec.ts, scripts/label-scorecard.ts (only if the renderer's call site needs it)
