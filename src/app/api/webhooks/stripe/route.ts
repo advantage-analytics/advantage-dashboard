@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  CREDITS_CHECKOUT_KIND,
+  expandableId,
   fulfilCreditCheckout,
   revokeCreditsForCharge,
 } from "@/lib/services/credits/checkout";
@@ -113,10 +115,7 @@ export async function POST(request: NextRequest) {
   ) {
     const disputed = event.type === "charge.dispute.created";
     const object = event.data.object as Stripe.Charge | Stripe.Dispute;
-    const paymentIntent =
-      typeof object.payment_intent === "string"
-        ? object.payment_intent
-        : (object.payment_intent?.id ?? null);
+    const paymentIntent = expandableId(object.payment_intent);
     if (!paymentIntent) return NextResponse.json({ received: true });
 
     const charge = disputed ? null : (object as Stripe.Charge);
@@ -128,6 +127,27 @@ export async function POST(request: NextRequest) {
         refundedCents: charge?.amount_refunded ?? 0,
         disputed,
       });
+      if (!revoked.found) {
+        // No lot for this payment. Either it is not a credit pack (the
+        // retired Pro, anything else) — acknowledge — or the purchase has not
+        // been recorded yet and the refund arrived first: answer 500 so Stripe
+        // retries after fulfilment, rather than lose the refund and later
+        // grant the full pack for money that went back.
+        const intent = await stripe.paymentIntents.retrieve(paymentIntent);
+        if (intent.metadata?.kind === CREDITS_CHECKOUT_KIND) {
+          console.error(
+            "[stripe webhook] refund before its credits were recorded",
+            {
+              eventId: event.id,
+              paymentIntent,
+            },
+          );
+          return NextResponse.json(
+            { error: "Credits not recorded yet" },
+            { status: 500 },
+          );
+        }
+      }
       if (revoked.found) {
         console.log("[stripe webhook] credits revoked", {
           eventId: event.id,

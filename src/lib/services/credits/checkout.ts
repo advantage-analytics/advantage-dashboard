@@ -23,6 +23,7 @@ import {
   creditExpiry,
   creditPack,
   isCreditPackId,
+  packName,
   packSeconds,
   type CreditPack,
   type CreditPackId,
@@ -43,7 +44,7 @@ export function creditProductName(pack: CreditPack): string {
 
 export function creditProductDescription(pack: CreditPack): string {
   return (
-    `${pack.hours} ${pack.hours === 1 ? "hour" : "hours"} of ${PROVIDER_DISPLAY_NAME} ` +
+    `${packName(pack)} of ${PROVIDER_DISPLAY_NAME} ` +
     `video analysis. Expires 12 months after purchase. All sales final.`
   );
 }
@@ -121,6 +122,13 @@ export async function createCreditCheckoutSession(params: {
   return { id: session.id, clientSecret: session.client_secret };
 }
 
+/** The id of a Stripe field that is either an id string or the expanded object. */
+export function expandableId(
+  value: string | { id: string } | null | undefined,
+): string | null {
+  return typeof value === "string" ? value : (value?.id ?? null);
+}
+
 export type FulfilResult =
   | {
       ok: true;
@@ -176,10 +184,7 @@ export async function fulfilCreditCheckout(params: {
   const expiresAt = creditExpiry(
     new Date(session.created * 1000),
   ).toISOString();
-  const paymentIntent =
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : (session.payment_intent?.id ?? null);
+  const paymentIntent = expandableId(session.payment_intent);
 
   const existing = await admin
     .from("video_credits")
@@ -189,9 +194,14 @@ export async function fulfilCreditCheckout(params: {
   if (existing.error) {
     throw new Error(`Could not read video credits: ${existing.error.message}`);
   }
-  if (existing.data) {
-    return { ok: true, created: false, pack: packId, seconds, expiresAt };
-  }
+  const recorded = (created: boolean): FulfilResult => ({
+    ok: true,
+    created,
+    pack: packId,
+    seconds,
+    expiresAt,
+  });
+  if (existing.data) return recorded(false);
 
   // A plain insert: every unique column (session, payment intent, event) names
   // this one purchase, so ANY unique conflict means a concurrent caller —
@@ -211,22 +221,14 @@ export async function fulfilCreditCheckout(params: {
     currency: session.currency,
   });
 
-  if (error?.code === "23505") {
-    return { ok: true, created: false, pack: packId, seconds, expiresAt };
-  }
+  if (error?.code === "23505") return recorded(false);
   if (error?.code === "23503") {
     return { ok: false, reason: "user_gone" };
   }
   if (error) {
     throw new Error(`Could not record video credits: ${error.message}`);
   }
-  return {
-    ok: true,
-    created: true,
-    pack: packId,
-    seconds,
-    expiresAt,
-  };
+  return recorded(true);
 }
 
 /**
@@ -237,7 +239,11 @@ export async function fulfilCreditCheckout(params: {
  *
  * `cap_video_credit` lowers `remaining_seconds` to at most `maxRemaining` in
  * one statement, so it never races a reservation, and a redelivered event
- * computes the same cap and changes nothing. A partial refund keeps the share
+ * computes the same cap and changes nothing. A cap of 0 also expires the lot,
+ * so a job holding its seconds that later fails cannot hand them back into
+ * something spendable. (A PARTIAL refund leaves the lot live: an in-flight
+ * job that fails afterwards can return up to its reservation above the cap.
+ * Partial refunds are a manual Dashboard action; accepted.) A partial refund keeps the share
  * of the pack still paid for; a full refund or any dispute keeps none.
  */
 export async function revokeCreditsForCharge(params: {
