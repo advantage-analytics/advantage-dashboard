@@ -16,14 +16,17 @@ import { createLoader, marker } from "./fixtures/vm-modules";
  */
 
 type Hours =
-  | { remainingSeconds: number; capSeconds: number; bandFull: boolean }
+  | { remainingSeconds: number; capSeconds: number; creditSeconds?: number }
   | "loading"
   | null;
 
 function render(props: { tier?: "beta" | "pilot"; hours: Hours }): string {
   const loader = createLoader({
     stubs: {
-      "next/navigation": { usePathname: () => "/dashboard" },
+      "next/navigation": {
+        usePathname: () => "/dashboard",
+        useRouter: () => ({ push: () => {} }),
+      },
       "@/components/dashboard/workspace-provider": {
         useWorkspace: () => ({ active: { id: "w1", kind: "personal" } }),
       },
@@ -103,12 +106,38 @@ test("loading draws the loaded shape: real tag, bare ring track, one inverse bar
   });
 });
 
-test("loaded shows the figure and no skeleton", () => {
-  const markup = render({ hours: { ...HOURS, bandFull: false } });
+test("C1: loaded shows free hours left and points at Plan", () => {
+  const markup = render({ hours: HOURS });
   expect(text(markup)).toBe("Beta 1.5h left");
   expect(markup).not.toContain("aria-busy");
   expect(bars(markup)).toHaveLength(0);
-  expect(tip(markup).detail).toBe("1.5 of 2 video hours left");
+  expect(tip(markup)).toEqual({
+    label: "Free during the beta",
+    detail: "1.5 of 2 free hours left this month. Click for Plan.",
+  });
+});
+
+test("C2: running low keeps the ring white and says it in the tooltip", () => {
+  const markup = render({
+    hours: { remainingSeconds: 0.4 * 3600, capSeconds: 2 * 3600 },
+  });
+  expect(text(markup)).toBe("Beta 0.4h left");
+  expect(tip(markup)).toEqual({
+    label: "Running low",
+    detail:
+      "0.4 of 2 free hours left. They reset Oct 1, or add credits on Plan.",
+  });
+  // White ring only: no amber or red stroke anywhere on the pill.
+  expect(markup).not.toMatch(/viz-key|--danger|--error|amber/);
+});
+
+test("C3: free hours spent with credits left — the figure is credits", () => {
+  const markup = render({
+    hours: { remainingSeconds: 0, capSeconds: 2 * 3600, creditSeconds: 13_200 },
+  });
+  expect(text(markup)).toBe("Beta 3.7h credits");
+  expect(tip(markup).label).toBe("Using your credits");
+  expect(tip(markup).detail).toContain("3h 40m in credits left.");
 });
 
 test("a team workspace's pill says Pilot", () => {
@@ -117,7 +146,6 @@ test("a team workspace's pill says Pilot", () => {
     hours: {
       remainingSeconds: 68.5 * 3600,
       capSeconds: 75 * 3600,
-      bandFull: false,
     },
   });
   expect(text(markup)).toBe("Pilot 68.5h left");
@@ -125,35 +153,28 @@ test("a team workspace's pill says Pilot", () => {
   expect(markup).toContain('aria-label="Pilot: 68.5 of 75 video hours left');
 });
 
-test("out of hours is one pill; the tooltip says which allowance ran out", () => {
+test("C4: out of everything, and a team's empty allowance", () => {
   const own = render({
-    hours: { remainingSeconds: 0, capSeconds: 2 * 3600, bandFull: false },
-  });
-  const band = render({
-    hours: { remainingSeconds: 0, capSeconds: 2 * 3600, bandFull: true },
+    hours: { remainingSeconds: 0, capSeconds: 2 * 3600, creditSeconds: 0 },
   });
   const team = render({
     tier: "pilot",
-    hours: { remainingSeconds: 0, capSeconds: 75 * 3600, bandFull: false },
+    hours: { remainingSeconds: 0, capSeconds: 75 * 3600 },
   });
 
-  for (const markup of [own, band]) {
-    expect(text(markup)).toBe("Beta Out of hours");
-    expect(markup).toContain(
-      'aria-label="Beta: out of video hours until Oct 1"',
-    );
-  }
-  expect(text(team)).toBe("Pilot Out of hours");
+  expect(text(own)).toBe("Beta Out of hours");
+  expect(own).toContain('aria-label="Beta: out of video hours until Oct 1"');
+  expect(tip(own)).toEqual({
+    label: "Out of video hours",
+    detail: "Free hours come back Oct 1. Click to add credits.",
+  });
 
-  expect(tip(own).detail).toBe(
-    "You've used your 2 video hours this month. They reset on Oct 1.",
-  );
-  expect(tip(band).detail).toBe(
-    "Free video hours are used up for everyone this month. Yours reset on Oct 1.",
-  );
+  expect(text(team)).toBe("Pilot Out of hours");
   expect(tip(team).detail).toBe(
     "Your team has used its 75 video hours this month. They reset on Oct 1.",
   );
+  // A team never hears about credits — they are personal.
+  expect(tip(team).detail).not.toContain("credits");
 });
 
 test("a failed read is the bare tag, never a skeleton or a full ring", () => {

@@ -110,6 +110,8 @@ export function uploadWizardHarness(
      * allowance — `0` is the spent-month case. Defaults to 2 hours.
      */
     quotaCapSeconds?: number;
+    /** A personal player's credits, from `readCreditBalance`. Defaults to 0. */
+    creditSeconds?: number;
   } = {},
 ) {
   const slots: any[] = [];
@@ -356,12 +358,19 @@ export function uploadWizardHarness(
       }) => linked || stored || preferred || "video",
     },
     "@/lib/services/splitstep/submit-match-video": {},
-    "@/lib/services/splitstep/config": { currentBillingMonth: () => "2026-09" },
+    "@/lib/services/splitstep/config": {
+      currentBillingMonth: () => "2026-09",
+      freeHoursReturnOn: () => "Oct 1",
+    },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
       monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
       // Pure, so the real one.
       sumUsedSeconds: quota.sumUsedSeconds,
+      readCreditBalance: async () => ({
+        seconds: options.creditSeconds ?? 0,
+        nextExpiresAt: null,
+      }),
     },
     // `formatResetDate` is stubbed for a fixed date; `secondsLeft` is pure,
     // so the real clamp — the meter's remaining figure is what several of

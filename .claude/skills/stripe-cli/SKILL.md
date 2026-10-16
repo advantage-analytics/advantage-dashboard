@@ -1,23 +1,24 @@
 ---
 name: stripe-cli
-description: Inspect Stripe payments and test the webhook using the `stripe` CLI. Use when a Pro upgrade did not apply, when checking whether a checkout session completed, or when changing /api/webhooks/stripe. Replaces the stripe MCP and adds local webhook forwarding, which the MCP cannot do.
+description: Inspect Stripe payments and test the webhook using the `stripe` CLI. Use when bought credit hours did not appear, when checking whether a checkout session completed, or when changing /api/webhooks/stripe. Replaces the stripe MCP and adds local webhook forwarding, which the MCP cannot do.
 ---
 
-# Stripe — one-time Pro upgrade
+# Stripe — credit packs
 
 This repo's Stripe surface is small and worth stating exactly:
 
-|          |                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------ |
-| Product  | **Pro**, a **one-time payment** (`mode: "payment"`), not a subscription                          |
-| Checkout | `src/app/api/create-checkout-session/route.ts`, price `STRIPE_CONFIG.PRO_PRICE_ID`               |
-| Webhook  | `src/app/api/webhooks/stripe/route.ts` — handles exactly one event, `checkout.session.completed` |
-| Env      | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`                                                     |
+|          |                                                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product  | **Credit packs** — "Advantage Intelligence — 1 video hour" ($14) and "— 5 video hours" ($60), **one-time** (`mode: "payment"`), Stripe Tax on, sales final   |
+| Checkout | `POST /api/create-checkout-session {kind:"credits", pack}` → **Embedded** Checkout (`ui_mode: "embedded"`, `redirect_on_completion: "never"`)                |
+| Fulfil   | `fulfilCreditCheckout()` in `src/lib/services/credits/checkout.ts`, called by the webhook and by `/api/credits/confirm`; one `video_credits` row per session |
+| Webhook  | `src/app/api/webhooks/stripe/route.ts` — `checkout.session.completed` and `async_payment_succeeded`, branching on `metadata.kind === "credits"`              |
+| Env      | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, optional `STRIPE_PRICE_CREDITS_1H` / `_5H`                               |
 
-Because it is `mode: "payment"`, there is **no subscription object**. Do not go
-looking for one, and do not reason about `customer.subscription.*` events — a
-Pro user is someone whose one-time session completed and whose `users.plan` the
-webhook then set. `users_plan_check` limits that column to `free|pro`.
+There is **no subscription object** in stage 1 — do not reason about
+`customer.subscription.*`. A purchase is a `video_credits` row keyed by
+`stripe_checkout_session`; the retired $4.99 Lifetime Pro is why one legacy
+account has `users.plan = 'pro'`, and nothing sets it any more.
 
 ## Auth
 
@@ -42,7 +43,9 @@ This is the main reason to prefer the CLI. To work on the webhook handler:
 # signing secret to use as STRIPE_WEBHOOK_SECRET for this session.
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 
-# Terminal 2 — fire the one event this app handles.
+# Terminal 2 — a triggered session has no credits metadata, so the webhook
+# acknowledges it and inserts nothing. To test fulfilment, buy a pack through
+# the app with a test card (4242 4242 4242 4242) instead.
 stripe trigger checkout.session.completed
 ```
 
@@ -58,16 +61,17 @@ stripe checkout sessions list --limit 10
 stripe checkout sessions retrieve "$SESSION_ID"
 ```
 
-**A payment succeeded but the plan never flipped** — the usual cause is the
-webhook, not the charge. Look at delivery attempts:
+**A payment succeeded but no hours appeared** — the usual cause is the
+webhook, not the charge (and `/api/credits/confirm` should have recorded it
+anyway). Look at delivery attempts:
 
 ```bash
 stripe events list --limit 20 --type checkout.session.completed
 stripe events retrieve "$EVENT_ID"
 ```
 
-Then confirm the database side; the webhook writes `users.plan`, so a delivered
-event with an unchanged row means the handler failed, not Stripe.
+Then confirm the database side: `video_credits` where `stripe_checkout_session`
+is the session id. A delivered event with no row means the handler failed.
 
 **Recent payments**
 

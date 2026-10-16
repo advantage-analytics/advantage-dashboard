@@ -12,4 +12,10 @@ export interface AdminPilotRow {
   avatarUrl: string | null;
   /** This month's personal-workspace video, in seconds (released rows excluded). */
   usedSeconds: number;
+  /**
+   * This month's video paid for with credits, in seconds. `processing_usage`
+   * holds only the free-hours part of a job; the credit part is in
+   * `video_credit_spends`. Vendor-billed time is the two together.
+   */
+  creditSeconds: number;
 }
