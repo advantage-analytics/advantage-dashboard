@@ -5,8 +5,11 @@ import { errorHref } from "@/lib/auth/confirm-link";
 import {
   consentPath,
   decideOAuthAuthorization,
+  getOAuthAuthorizationDetails,
+  goesToConnector,
   MISSING_AUTHORIZATION_ERROR,
   readAuthorizationId,
+  UNKNOWN_CLIENT_ERROR,
 } from "@/lib/auth/oauth-consent";
 import { createClient } from "@/lib/supabase/server";
 
@@ -40,13 +43,21 @@ export async function decideOAuthConsent(formData: FormData): Promise<void> {
     redirect(`/login?next=${encodeURIComponent(consentPath(authorizationId))}`);
   }
 
-  const decided = await decideOAuthAuthorization({
+  const call = {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     accessToken: session.access_token,
     authorizationId,
-    action,
-  });
+  };
+  // The page refused an unknown client, but the action is reachable on its
+  // own: an approval re-reads the request and checks its callback again.
+  if (action === "approve") {
+    const read = await getOAuthAuthorizationDetails(call);
+    if (!read.ok) redirect(errorHref(read.message));
+    if (!goesToConnector(read.value)) redirect(errorHref(UNKNOWN_CLIENT_ERROR));
+  }
+
+  const decided = await decideOAuthAuthorization({ ...call, action });
   if (!decided.ok) redirect(errorHref(decided.message));
   redirect(decided.value.redirectUrl);
 }
