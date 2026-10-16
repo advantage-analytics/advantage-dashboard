@@ -1,14 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import {
-  EmbeddedCheckout,
-  EmbeddedCheckoutProvider,
-} from "@stripe/react-stripe-js";
+import dynamic from "next/dynamic";
 import { ConfirmAside } from "@/components/ui/confirm-dialog";
 import { LiveDots } from "@/components/ui/live-dots";
 import { formatHoursLong } from "@/lib/data/usage-format";
@@ -26,17 +22,23 @@ import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
-/**
- * Stripe.js, loaded once and only when someone opens checkout. Null when the
- * publishable key is unset — the dialog then says checkout is unavailable.
- */
-let stripePromise: Promise<Stripe | null> | null = null;
-function getStripe(): Promise<Stripe | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  stripePromise ??= loadStripe(key);
-  return stripePromise;
-}
+/** Stripe's checkout, fetched only once Pay is pressed. */
+const EmbeddedCreditsCheckout = dynamic(
+  () => import("./embedded-credits-checkout"),
+  {
+    ssr: false,
+    loading: () => (
+      <p role="status" className="py-6 text-[13px] text-[var(--ink-600)]">
+        Opening checkout…
+      </p>
+    ),
+  },
+);
+
+/** Checkout cannot open without the publishable key. */
+const CHECKOUT_CONFIGURED = Boolean(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+);
 
 export interface CreditsAdded {
   pack: CreditPackId;
@@ -223,12 +225,6 @@ function AddHoursContent({
     setPhase({ kind: "pending" });
     onPaymentPending?.();
   }, [onCreditsAdded, onPaymentPending]);
-
-  const stripe = useMemo(() => getStripe(), []);
-  const checkoutOptions = useMemo(
-    () => ({ fetchClientSecret, onComplete }),
-    [fetchClientSecret, onComplete],
-  );
 
   const headline =
     hasVideo && !onePackCovers ? (
@@ -438,7 +434,7 @@ function AddHoursContent({
             <button
               ref={primaryRef}
               type="button"
-              disabled={!stripe}
+              disabled={!CHECKOUT_CONFIGURED}
               onClick={() => setPhase({ kind: "checkout", pack: chosen })}
               className={advButton("primary", "md")}
             >
@@ -461,13 +457,11 @@ function AddHoursContent({
                 {packName(pack)} · {formatPackPrice(pack)} — change
               </button>
               {/* Stripe's own frame. The key forces a new session when the pack changes. */}
-              <EmbeddedCheckoutProvider
+              <EmbeddedCreditsCheckout
                 key={phase.pack}
-                stripe={stripe}
-                options={checkoutOptions}
-              >
-                <EmbeddedCheckout className="min-h-[360px]" />
-              </EmbeddedCheckoutProvider>
+                fetchClientSecret={fetchClientSecret}
+                onComplete={onComplete}
+              />
               <ConfirmAside>
                 All sales final. Your trim and video stay put while you pay.
               </ConfirmAside>
