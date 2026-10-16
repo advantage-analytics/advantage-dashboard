@@ -72,6 +72,8 @@ export function AddHoursDialog({
   onCreditsAdded,
   sendsAfterPay = false,
   initialPack,
+  paymentPending = false,
+  onPaymentPending,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -88,6 +90,14 @@ export function AddHoursDialog({
   sendsAfterPay?: boolean;
   /** Pre-select this pack (Settings › Plan's per-pack Buy). */
   initialPack?: CreditPackId;
+  /**
+   * A payment went through but its hours have not shown up yet. The dialog
+   * opens on the "on its way" line with no Pay button, so nobody pays twice
+   * for hours the webhook is about to add.
+   */
+  paymentPending?: boolean;
+  /** Paid, but `/api/credits/confirm` never confirmed it — see above. */
+  onPaymentPending?: () => void;
 }) {
   const leftSeconds = freeRemainingSeconds + creditSeconds;
   const shortBySeconds =
@@ -102,8 +112,12 @@ export function AddHoursDialog({
           <AddHoursContent
             // A fresh body per opening, so a reopened dialog starts on the
             // tiles with the right pack chosen rather than mid-checkout.
-            key={`${neededSeconds ?? "none"}:${leftSeconds}:${firstPack}`}
+            // Not keyed on the balance: a background re-read must not throw
+            // away a checkout in progress.
+            key={`${neededSeconds ?? "none"}:${firstPack}:${paymentPending}`}
             initialPack={firstPack}
+            startPending={paymentPending}
+            onPaymentPending={onPaymentPending}
             neededSeconds={neededSeconds}
             freeRemainingSeconds={freeRemainingSeconds}
             shortBySeconds={shortBySeconds}
@@ -137,6 +151,8 @@ function AddHoursContent({
   onCreditsAdded,
   onOpenChange,
   sendsAfterPay,
+  startPending,
+  onPaymentPending,
 }: {
   initialPack: CreditPackId;
   neededSeconds?: number;
@@ -147,9 +163,13 @@ function AddHoursContent({
   onCreditsAdded: (added: CreditsAdded) => void;
   onOpenChange: (open: boolean) => void;
   sendsAfterPay: boolean;
+  startPending: boolean;
+  onPaymentPending?: () => void;
 }) {
   const [chosen, setChosen] = useState<CreditPackId>(initialPack);
-  const [phase, setPhase] = useState<Phase>({ kind: "choose" });
+  const [phase, setPhase] = useState<Phase>(
+    startPending ? { kind: "pending" } : { kind: "choose" },
+  );
   const primaryRef = useRef<HTMLButtonElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const pack = creditPack(chosen);
@@ -198,7 +218,8 @@ function AddHoursContent({
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     setPhase({ kind: "pending" });
-  }, [onCreditsAdded]);
+    onPaymentPending?.();
+  }, [onCreditsAdded, onPaymentPending]);
 
   const stripe = useMemo(() => getStripe(), []);
   const checkoutOptions = useMemo(
@@ -237,7 +258,12 @@ function AddHoursContent({
       }}
       // Checkout is a form a stray click must not throw away.
       onInteractOutside={(event) => {
-        if (phase.kind !== "choose") event.preventDefault();
+        if (phase.kind !== "choose" && phase.kind !== "error")
+          event.preventDefault();
+      }}
+      onEscapeKeyDown={(event) => {
+        if (phase.kind === "checkout" || phase.kind === "recording")
+          event.preventDefault();
       }}
       className="fixed top-10 left-1/2 z-50 max-h-[calc(100vh-80px)] -translate-x-1/2 overflow-y-auto bg-[var(--surface-card)] outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
       style={{
@@ -263,6 +289,8 @@ function AddHoursContent({
           <span className="flex-1" />
           <DialogPrimitive.Close
             aria-label="Close"
+            // Not while the purchase is being recorded: the hours are paid for.
+            hidden={phase.kind === "recording"}
             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-white/75 transition-colors hover:bg-white/15 hover:text-white focus-visible:shadow-[0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline-none"
           >
             <X className="size-3.5" strokeWidth={1.5} aria-hidden />

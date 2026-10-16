@@ -601,6 +601,9 @@ export interface UseUploadMatchWizardReturn {
   closeAddHours: () => void;
   /** Checkout finished: count the new hours and carry on where it stopped. */
   handleCreditsAdded: (added: CreditsAdded) => void;
+  /** Paid, but the hours have not been confirmed yet. */
+  paymentPending: boolean;
+  handlePaymentPending: () => void;
   /**
    * Step 1's refusal sentence when this month's allowance is entirely spent,
    * for the provider step to render next to Advantage Intelligence. Null for
@@ -1294,6 +1297,9 @@ export function useUploadMatchWizard({
       : quotaFreeSeconds + quotaCreditSeconds;
   // Bumped after a purchase so the reading below re-runs.
   const [quotaReadNonce, setQuotaReadNonce] = useState(0);
+  // Paid, not yet confirmed: until a re-read shows the hours, the paywall
+  // reopens on "on its way" with no Pay button.
+  const [paymentPending, setPaymentPending] = useState(false);
 
   // A teammate may have spent against the pool since the wizard opened, so the
   // reading is refreshed as the flow crosses the trim step — on the way in for
@@ -1339,7 +1345,11 @@ export function useUploadMatchWizard({
         if (cancelled) return;
       }
 
-      setQuotaCreditSeconds(credits);
+      setQuotaCreditSeconds((previous) => {
+        // The pending purchase has landed once the balance grows.
+        if (credits > previous) setPaymentPending(false);
+        return credits;
+      });
       setQuotaFreeSeconds(secondsLeft(used, quotaCapSeconds));
     })();
 
@@ -1438,7 +1448,17 @@ export function useUploadMatchWizard({
     paywallResumeRef.current = null;
     setPaywall({ neededSeconds });
   }, []);
-  const closeAddHours = useCallback(() => setPaywall(null), []);
+  const closeAddHours = useCallback(() => {
+    // Closed by hand: a purchase that lands afterwards counts its hours but
+    // no longer carries the wizard forward.
+    paywallResumeRef.current = null;
+    setPaywall(null);
+    if (paymentPending) setQuotaReadNonce((n) => n + 1);
+  }, [paymentPending, setQuotaReadNonce]);
+  const handlePaymentPending = useCallback(() => {
+    setPaymentPending(true);
+    setQuotaReadNonce((n) => n + 1);
+  }, [setPaymentPending, setQuotaReadNonce]);
 
   // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
   // at click time. Why: getUser() can take 100–300ms over the network and the
@@ -2476,12 +2496,26 @@ export function useUploadMatchWizard({
       // Counted at once so the step can move on; the re-read confirms it.
       setQuotaCreditSeconds((current) => current + added.seconds);
       setQuotaReadNonce((n) => n + 1);
+      setPaymentPending(false);
+      const needed = paywall?.neededSeconds;
+      const covered =
+        needed === undefined ||
+        (remainingQuotaSeconds ?? 0) + added.seconds >= needed;
       setPaywall(null);
       setError(null);
-      if (paywallResumeRef.current === "match") setStep("match");
+      // On to the match step only if the pack covered the video; otherwise
+      // Continue asks again with what is still short.
+      if (paywallResumeRef.current === "match" && covered) setStep("match");
       paywallResumeRef.current = null;
     },
-    [setQuotaCreditSeconds, setQuotaReadNonce, setPaywall, setError, setStep],
+    [
+      paywall,
+      remainingQuotaSeconds,
+      setStep,
+      setPaymentPending,
+      setQuotaCreditSeconds,
+      setQuotaReadNonce,
+    ],
   );
 
   /**
@@ -4114,6 +4148,8 @@ export function useUploadMatchWizard({
     openAddHours,
     closeAddHours,
     handleCreditsAdded,
+    paymentPending,
+    handlePaymentPending,
     providerQuotaRefusal,
     // Every strategy has one — the file picker on step 2 serves both kinds.
     acceptString: selectedProvider

@@ -56,6 +56,7 @@ export function PersonalPlan({
   freeLeftSeconds,
   creditSeconds,
   lots,
+  nextCreditExpiresAt,
   pilot,
   resetsOn,
   freeEnds,
@@ -65,6 +66,8 @@ export function PersonalPlan({
   freeLeftSeconds: number;
   creditSeconds: number;
   lots: CreditLot[];
+  /** When the oldest usable credits expire, from the balance read. */
+  nextCreditExpiresAt: string | null;
   pilot: boolean;
   /** "Nov 1", or null in December when free hours end rather than reset. */
   resetsOn: string | null;
@@ -92,14 +95,9 @@ export function PersonalPlan({
       (added && creditsAtPurchase === creditSeconds ? added.seconds : 0),
   };
   const severity = balanceSeverity(balance);
-  const now = Date.now();
-  // Spent oldest-expiring first, so the next to expire is the soonest live one.
-  const nextExpiry = lots
-    .filter(
-      (lot) =>
-        lot.remainingSeconds > 0 && new Date(lot.expiresAt).getTime() > now,
-    )
-    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))[0]?.expiresAt;
+  // Spent oldest-expiring first, so the next to expire is the soonest live
+  // one. `nextCreditExpiresAt` is the server's answer to exactly that.
+  const nextExpiry = nextCreditExpiresAt ?? undefined;
 
   return (
     <div className="flex max-w-[640px] flex-col gap-5">

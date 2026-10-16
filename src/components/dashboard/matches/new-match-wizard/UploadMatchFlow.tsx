@@ -314,6 +314,8 @@ function UploadWizardPage() {
       paywall,
       closeAddHours,
       handleCreditsAdded,
+      paymentPending,
+      handlePaymentPending,
       quotaFreeSeconds,
       quotaCreditSeconds,
       freeHoursReturnOn,
@@ -424,6 +426,8 @@ function UploadWizardPage() {
         }
         sendsAfterPay={step === "trim"}
         onCreditsAdded={handleCreditsAdded}
+        paymentPending={paymentPending}
+        onPaymentPending={handlePaymentPending}
       />
       {startOverStep && subjectName && (
         <StartOverDialog
