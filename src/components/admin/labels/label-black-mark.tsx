@@ -21,18 +21,16 @@ import {
   hoverLine,
   lastCallAnswer,
   lastLandingMissing,
-  markStates,
-  markTone,
   missingPointAdded,
-  pointWinnerContradicted,
   pointEndedEarly,
   pointRowMarkList,
+  reviewChip,
+  reviewFlag,
+  reviewItemQuestion,
   secondServeAsFirst,
   serveAfterServeIn,
   serveInLandingOut,
-  rollupMarks,
   stateHoverParts,
-  type MarkHoverParts,
   type MarkState,
   type MarkTone,
 } from "@/lib/services/labels/marks-state";
@@ -49,13 +47,12 @@ import { railInk } from "./label-rail-tone";
 import type { EditContext } from "./label-row-parts";
 
 /**
- * The rail's marks, drawn by tier (`LabelMarkTier`, marks.ts): a mark that can
- * change the score is the amber chip on the point's row (`MarkChip`), the only
- * thing the header counts; a mark about how the point ended is a word on one
- * quiet line in the open point (`PointHintLine`), some with the answers they
- * offer beside the word. These components only draw: `pointRowMarks` and
- * `pointHints` decide what, with words and states from marks-copy.ts and
- * marks-state.ts.
+ * The rail's marks: a point's review flag (`reviewFlag`, marks-state.ts) is
+ * the one chip on its row (`MarkChip`) — amber when it can move the score,
+ * grey when it is about the data — and the open point asks its hints on one
+ * quiet line (`PointHintLine`), some with the answers they offer beside the
+ * word. These components only draw: `pointRowMarks` and `pointHints` decide
+ * what, with words and states from marks-copy.ts and marks-state.ts.
  */
 
 export interface MarkChipProps {
@@ -67,18 +64,19 @@ export interface MarkChipProps {
   tone?: MarkTone;
   /** The accessible name: a Radix tooltip renders nothing until it opens. */
   hover: string;
-  /** The tooltip's first line: the mark's name and state, or "3 to check". */
+  /** The tooltip's first line: the chip's words, or a quiet mark's state. */
   name: string;
-  /** The tooltip's second line; a line each for several marks. */
+  /** The tooltip's second line; a line each for several items or marks. */
   detail?: string | readonly string[];
 }
 
 /**
- * One chip. Amber while a mark it stands for is open and can move the score;
- * grey, filled, while the open ones are only about the data (`tone`); a quiet
- * outline, and no words, once none is open. Under a 600px row (the nearest `@container`) the words
- * are not drawn and the chip is its icon, so the point's two lines keep their
- * room. Not a tab stop: a click on it is a click on its row.
+ * One chip. Amber while its flag is open and can move the score; grey,
+ * filled, while it is only about the data (`tone`); a quiet outline, and no
+ * words, once nothing on it is open. Under a 600px row (the nearest
+ * `@container`) the words are not drawn and the chip is its icon, so the
+ * point's two lines keep their room. Not a tab stop: a click on it is a click
+ * on its row.
  */
 export function MarkChip({
   text,
@@ -285,38 +283,31 @@ export interface PointRowMarks {
 /** What a chip's hover says: its accessible name and the tooltip's lines. */
 type ChipHover = Pick<MarkChipProps, "hover" | "name" | "detail">;
 
-/** A chip's hover: one mark's own lines, or `many` over a line each. */
-function chipHover(parts: readonly MarkHoverParts[], many: string): ChipHover {
-  const said = new Set<string>();
-  const unique = parts.filter((part) => {
-    const line = hoverLine(part);
-    if (said.has(line)) return false;
-    said.add(line);
-    return true;
-  });
-  if (unique.length === 1) {
-    const [only] = unique;
-    return {
-      hover: hoverLine(only),
-      name: only.name,
-      detail: only.detail ?? undefined,
-    };
-  }
+/** A hover's two parts, with the accessible name as `hoverLine` reads them. */
+function chipHover(name: string, lines: readonly string[]): ChipHover {
+  const detail =
+    lines.length === 0 ? undefined : lines.length === 1 ? lines[0] : lines;
   return {
-    hover: `${many}. ${unique.map(hoverLine).join(" ")}`,
-    name: many,
-    detail: unique.map((part) =>
-      part.detail ? `${part.name} — ${part.detail}` : part.name,
-    ),
+    hover: hoverLine({ name, detail: lines.length ? lines.join(" ") : null }),
+    name,
+    detail,
   };
 }
 
+/** `lines` with each said once, in order. */
+const once = (lines: readonly string[]) => [...new Set(lines)];
+
 /**
- * What the point row draws of its marks: `rollupMarks` over the point's `count`
- * marks (`pointRowMarkList`), or null when the session has no marks. `point` is
- * the row as stored, ghosts and all; `sentence` is the point as the row reads
- * it; `points` lets a "Same side twice" question read settled once a point was
+ * What the point row draws of its review flag (`reviewFlag`, through
+ * `reviewChip`), or null when the session has no marks. `point` is the row as
+ * stored, ghosts and all; `sentence` is the point as the row reads it;
+ * `points` lets a "Same side twice" question read settled once a point was
  * added between the two.
+ *
+ * The hover's name is the chip's words. One open item has its open members'
+ * evidence under it, a line each; several are "N · question", one line an
+ * item. With nothing open, the members say what became of them
+ * (`stateHoverParts`).
  */
 export function pointRowMarks(
   point: LabelPoint,
@@ -326,74 +317,51 @@ export function pointRowMarks(
   points: readonly LabelPoint[],
 ): PointRowMarks | null {
   if (!marks) return null;
-  const { count } = pointRowMarkList(point, marks);
-  const states = markStates(count, point, marks.suggestions, points);
-  const pointAdded = missingPointAdded(point, marks.suggestions, points);
-  const chip = rollupMarks(
-    count,
-    states,
-    count.map((mark) => markTone(mark, point, marks.suggestions)),
-  );
-  // Nothing counted is open: the row speaks for its hints instead, as a grey
-  // chip, until the point is checked. They were words on the open point's
-  // line alone, so a closed row with only data to fix looked finished.
-  if (!chip || chip.state !== "open") {
-    // A winner the strokes contradict is the score, not data: its chip is
-    // amber and outlasts the point being checked.
-    const contradicted = pointWinnerContradicted(point, marks);
-    const data =
-      point.checkedAt === null || contradicted
-        ? dataChip(point, marks, names, contradicted)
-        : null;
-    if (data) return { flag: data };
-  }
-  if (!chip) return { flag: null };
-
-  const members = count.map((mark, i) => ({ mark, state: states[i] }));
-  const open = members.filter((m) => m.state === "open");
-  return {
-    flag: {
-      ...chip,
-      ...chipHover(
-        (open.length > 0 ? open : members).map((m) =>
-          stateHoverParts(m.mark, m.state, names, sentence, pointAdded),
-        ),
-        // Several still open are the chip's own words, "3 to check".
-        chip.text ?? "Nothing left to check",
-      ),
-    },
-  };
-}
-
-/**
- * The grey chip of a closed row: the point's hints (`pointHints`, the marks'
- * own and the ones read off the rows), one by its own words, several as
- * "N data". Null with none.
- */
-function dataChip(
-  point: LabelPoint,
-  marks: LabelMarks,
-  names: SideNames,
-  contradicted = false,
-): MarkChipProps | null {
-  const every = pointHints(point, marks, names);
-  // Checked, only the contradicted winner is still a question.
-  const hints =
-    point.checkedAt === null
-      ? every
-      : every.filter((hint) => hint.code === "ending_stale");
-  if (hints.length === 0) return null;
-  const text = hints.length === 1 ? hints[0].label : `${hints.length} data`;
-  return {
-    text,
-    count: hints.length,
-    state: "open",
-    tone: contradicted ? "score" : "data",
-    ...chipHover(
-      hints.map((hint) => ({ name: hint.label, detail: hint.detail })),
+  const flag = reviewFlag(point, marks, points);
+  const chip = flag ? reviewChip(flag) : null;
+  if (!flag || !chip) return { flag: null };
+  const { open, text, ...drawn } = chip;
+  let hover: ChipHover;
+  if (text !== null && open.length === 1) {
+    const [item] = open;
+    hover = chipHover(
       text,
-    ),
-  };
+      once(
+        item.members
+          .filter((member) => member.state === "open")
+          .map((member) => markHover(member.mark, names)),
+      ),
+    );
+  } else if (text !== null) {
+    hover = chipHover(
+      text,
+      open.map((item) => `${item.id} · ${reviewItemQuestion(item)}`),
+    );
+  } else {
+    const pointAdded = missingPointAdded(point, marks.suggestions, points);
+    const parts = flag.items.flatMap((item) =>
+      item.members.map((member) =>
+        stateHoverParts(member.mark, member.state, names, sentence, pointAdded),
+      ),
+    );
+    const lines = once(parts.map(hoverLine));
+    hover =
+      lines.length === 1
+        ? {
+            hover: lines[0],
+            name: parts[0].name,
+            detail: parts[0].detail ?? undefined,
+          }
+        : chipHover(
+            "Nothing left to check",
+            once(
+              parts.map((part) =>
+                part.detail ? `${part.name} — ${part.detail}` : part.name,
+              ),
+            ),
+          );
+  }
+  return { flag: { ...drawn, text, ...hover } };
 }
 
 /**

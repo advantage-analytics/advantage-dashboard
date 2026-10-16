@@ -25,13 +25,15 @@ import {
   pointChanged,
   pointRowMarkList,
   markTone,
-  rollupMarks,
+  reviewChip,
+  reviewFlag,
   stateHoverParts,
   type MarkListPoint,
   type MarkStatePoint,
   type MarkStateShot,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint } from "@/lib/services/labels/session";
+import { labelPoint } from "./fixtures/label-session";
 
 const names = { p1: "Ace", p2: "Goodman" };
 
@@ -449,12 +451,7 @@ test.describe("a flag's life", () => {
         marks,
       ),
     ).toEqual({ open: 0, openPoints: 0 });
-    expect(rollupMarks([missing], markStates([missing], p, slots))).toEqual({
-      text: "Missing shot?",
-      count: 1,
-      state: "open",
-      tone: "data",
-    });
+    expect(markStates([missing], p, slots)).toEqual(["open"]);
   });
 
   const stateHover = (...args: Parameters<typeof stateHoverParts>) =>
@@ -508,71 +505,122 @@ test.describe("a flag's life", () => {
 });
 
 test.describe("the row roll-up", () => {
-  const rollup = (countMarks: LabelMark[], p: MarkStatePoint) =>
-    rollupMarks(countMarks, markStates(countMarks, p));
+  /** A point with no strokes, so nothing is read live off its rows. */
+  const row = (over: Partial<LabelPoint> = {}): LabelPoint =>
+    labelPoint("point-1", 0, over);
+  const chipOf = (pointMarks: LabelMark[], p: LabelPoint = row()) => {
+    const flag = reviewFlag(
+      p,
+      {
+        points: { [p.id]: pointMarks },
+        shots: {},
+        suggestions: [],
+        serveSides: {},
+      },
+      [p],
+    );
+    if (!flag) return null;
+    const chip = reviewChip(flag);
+    if (!chip) return "demoted";
+    const { open, ...drawn } = chip;
+    return { ...drawn, open: open.map((item) => item.id) };
+  };
 
   test("no marks, nothing to show", () => {
-    expect(rollup([], point())).toBeNull();
+    expect(chipOf([])).toBeNull();
   });
 
-  test("one mark keeps its words", () => {
-    expect(rollup([sample("winner_disputed")], point())).toEqual({
-      text: "Check the ending",
+  test("one open item is its question", () => {
+    expect(chipOf([sample("winner_disputed")])).toEqual({
+      text: "How did the last ball end?",
       count: 1,
       state: "open",
       tone: "score",
+      open: [4],
+    });
+    // Item 4 is put as the vendor called the last ball.
+    expect(chipOf([sample("last_call_overruled")])).toMatchObject({
+      text: "Was the last ball in the net?",
+    });
+    // An item-6-only point reads the item, not its member's label.
+    expect(chipOf([sample("tiebreak_score_off_six_all")])).toMatchObject({
+      text: "Game & serve order",
+      count: 1,
     });
   });
 
-  test("two marks read as a count", () => {
+  test("several marks on one question are that question, counted once", () => {
     expect(
-      rollup([sample("winner_disputed"), sample("pick_winner")], point()),
-    ).toEqual({ text: "2 to check", count: 2, state: "open", tone: "score" });
+      chipOf([
+        sample("winner_disputed"),
+        sample("ending_suspect_line"),
+        sample("result_type_unknown"),
+      ]),
+    ).toEqual({
+      text: "How did the last ball end?",
+      count: 1,
+      state: "open",
+      tone: "score",
+      open: [4],
+    });
   });
 
-  test("a settled mark loses its words and the pencil appears", () => {
+  test("two open items read as a count", () => {
+    expect(chipOf([sample("winner_disputed"), sample("pick_winner")])).toEqual({
+      text: "Review · 2",
+      count: 2,
+      state: "open",
+      tone: "score",
+      open: [4, 5],
+    });
+  });
+
+  test("a settled flag loses its words", () => {
     const marks = [sample("winner_disputed")];
-    expect(rollup(marks, point({ status: "edited" }))).toEqual({
+    expect(chipOf(marks, row({ status: "edited" }))).toMatchObject({
       text: null,
       count: 1,
       state: "settled",
       tone: "score",
     });
     expect(
-      rollup(marks, point({ status: "edited", checkedAt: CHECKED_AT })),
-    ).toEqual({ text: null, count: 1, state: "checked", tone: "score" });
-    expect(rollup(marks, point({ checkedAt: CHECKED_AT }))).toEqual({
+      chipOf(marks, row({ status: "edited", checkedAt: CHECKED_AT })),
+    ).toMatchObject({ text: null, state: "checked" });
+    expect(chipOf(marks, row({ checkedAt: CHECKED_AT }))).toMatchObject({
       text: null,
-      count: 1,
       state: "checked-as-is",
-      tone: "score",
     });
   });
 
-  test("the chip is as open as its most open member", () => {
-    // One dismissed, one still open: the open one keeps its words.
+  test("the chip is as open as its most open item", () => {
+    // Item 6 dismissed, item 4 still open: the open one keeps its words.
     expect(
-      rollup(
+      chipOf(
         [sample("service_court_repeat"), sample("winner_disputed")],
-        point({ dismissed: ["missing_point"] }),
+        row({ dismissed: ["missing_point"] }),
       ),
     ).toEqual({
-      text: "Check the ending",
+      text: "How did the last ball end?",
       count: 2,
       state: "open",
       tone: "score",
+      open: [4],
     });
     // Dismissed outranks checked as is.
     expect(
-      rollup(
+      chipOf(
         [sample("service_court_repeat"), sample("winner_disputed")],
-        point({ dismissed: ["missing_point"], checkedAt: CHECKED_AT }),
+        row({ dismissed: ["missing_point"], checkedAt: CHECKED_AT }),
       ),
-    ).toEqual({
-      text: null,
-      count: 2,
-      state: "dismissed",
-      tone: "score",
+    ).toMatchObject({ text: null, count: 2, state: "dismissed" });
+  });
+
+  test("a demoted flag draws no chip; a grey one that is not stays grey", () => {
+    expect(chipOf([sample("ending_suspect_line")])).toBe("demoted");
+    expect(chipOf([sample("last_landing_missing")])).toMatchObject({
+      text: "How did the last ball end?",
+      state: "open",
+      tone: "data",
     });
   });
 
@@ -601,15 +649,11 @@ test.describe("the row roll-up", () => {
     // Its place unknown: data. Every other counted mark: the score.
     expect(markTone(missing, p)).toBe("data");
     expect(markTone(sample("winner_disputed"), p)).toBe("score");
-    // One open data mark is a grey chip; beside an open score mark, amber.
-    expect(rollupMarks([missing], ["open"], ["data"])?.tone).toBe("data");
-    expect(
-      rollupMarks(
-        [missing, sample("winner_disputed")],
-        ["open", "open"],
-        ["data", "score"],
-      )?.tone,
-    ).toBe("score");
+    // One open data item is a grey chip; beside an open score item, amber.
+    expect(chipOf([missing])).toMatchObject({ tone: "data" });
+    expect(chipOf([missing, sample("winner_disputed")])).toMatchObject({
+      tone: "score",
+    });
   });
 });
 

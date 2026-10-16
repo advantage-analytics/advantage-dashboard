@@ -47,7 +47,7 @@ ready).
 
 ## T3 · Point-row chip reads the review flag
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/admin/labels/label-black-mark.tsx (`pointRowMarks`, `dataChip`, `chipHover`, `MarkChip`), src/lib/services/labels/marks-state.ts (`rollupMarks` removal or deprecation), tests/label-black-marks.spec.ts, tests/label-marks-copy.spec.ts ("the row roll-up")

@@ -211,9 +211,10 @@ test.describe("the chip on the point row", () => {
     const [chip, ...rest] = chips(tail(html));
     expect(rest).toHaveLength(0);
     expect(chip.state).toBe("open");
-    expect(chip.text).toBe("Check the ending");
+    // The chip asks the item the mark sits under, not the mark's own label.
+    expect(chip.text).toBe("How did the last ball end?");
     // The accessible name is the tooltip's two lines as one.
-    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+    expect(chip.label).toBe(`How did the last ball end? ${DISPUTED_HOVER}`);
     expect(chip.tag).toContain('role="img"');
     // Untouched and unchecked: no pencil.
     expect(pencils(html)).toBe(0);
@@ -240,64 +241,117 @@ test.describe("the chip on the point row", () => {
     expect(t.indexOf('data-pencil=""')).toBeGreaterThan(chip.at);
   });
 
-  test("three open marks are one chip that counts them", () => {
+  test("three open marks on one question are one chip with that question", () => {
     const point = fixturePoint();
     const html = renderRow(
       point,
       marksOf(point, [
         DISPUTED,
-        mark("pick_winner", {}),
-        mark("reserve_after_in", {}),
+        mark("last_call_overruled", { vendorCall: "out", eventId: 201 }),
+        mark("last_shot_unresolved", {}),
       ]),
     );
     const all = chips(tail(html));
     expect(all).toHaveLength(1);
     expect(all[0].state).toBe("open");
-    expect(all[0].text).toBe("3 to check");
-    expect(all[0].tag).toContain('data-mark-count="3"');
-    // The hover is every line the chip stands for.
+    // Item 4, asked as the vendor called the last ball.
+    expect(all[0].text).toBe("Was the last ball out?");
+    // One item: the chip counts items, not marks.
+    expect(all[0].tag).toContain('data-mark-count="1"');
+    // The hover is the question over every open mark's evidence.
+    expect(all[0].label.startsWith("Was the last ball out? ")).toBe(true);
     expect(all[0].label).toContain(DISPUTED_HOVER);
-    expect(all[0].label).toContain("Watch the clip and choose.");
-    expect(all[0].label).toContain("Could be a let.");
+  });
+
+  test("two open items are one chip: Review · 2, a line per item", () => {
+    const point = fixturePoint();
+    const html = renderRow(
+      point,
+      marksOf(point, [DISPUTED, mark("pick_winner", {})]),
+    );
+    const all = chips(tail(html));
+    expect(all).toHaveLength(1);
+    expect(all[0].state).toBe("open");
+    expect(all[0].text).toBe("Review · 2");
+    expect(all[0].tag).toContain('data-mark-count="2"');
+    expect(all[0].tag).toContain("rail-amber");
+    expect(all[0].label).toBe(
+      "Review · 2. 4 · How did the last ball end? 5 · Who won?",
+    );
   });
 });
 
 test.describe("a closed row draws only what can change the score", () => {
-  test("hints are one grey chip on the row, and take nothing from the count beside it", () => {
+  test("hints are the flag's too: a grey chip unless demoted, and one question beside a counted mark", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    // Hints alone: a grey chip, "N data" — wrong data, not the score.
-    const hintsOnly = renderRow(
-      point,
-      marksOf(point, EVERY_HINT, { [shot.id]: [NET_HIT] }),
-    );
-    const [grey, ...others] = chips(hintsOnly);
+    // "No landing on the last shot" alone: a grey, filled chip asking item 4.
+    const landing = mark("last_landing_missing", {});
+    const greyOnly = renderRow(point, marksOf(point, [landing]));
+    const [grey, ...others] = chips(greyOnly);
     expect(others).toHaveLength(0);
-    expect(grey.text).toBe("4 data");
+    expect(grey.state).toBe("open");
+    expect(grey.text).toBe("How did the last ball end?");
     expect(grey.tag).toContain('data-mark-tone="data"');
+    expect(grey.tag).toContain("bg-white/[0.10]");
     expect(grey.tag).not.toContain("rail-amber");
-    expect(hintsOnly).not.toContain("data-point-hint");
-    // Checked, the point is done with them: no chip at all.
-    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
-    expect(
-      chips(
-        renderRow(
-          checked,
-          marksOf(checked, EVERY_HINT, { [shot.id]: [NET_HIT] }),
-        ),
-      ),
-    ).toHaveLength(0);
+    expect(greyOnly).not.toContain("data-point-hint");
+    // "Net or out?" alone is a demoted flag: no chip on the closed row, while
+    // the open point still asks it.
+    const netOnly = marksOf(point, [], { [shot.id]: [NET_HIT] });
+    expect(renderRow(point, netOnly)).not.toContain("data-mark-chip");
+    expect(hintLine(renderWell(point, netOnly)).map((h) => h.code)).toEqual([
+      "net_hit_contradicts_height",
+    ]);
 
-    // Beside a counted mark, the chip is that mark's alone — not "N to check".
+    // Beside a counted mark on the same item, the hints are that one question.
     const withCount = renderRow(
       point,
       marksOf(point, [DISPUTED, ...EVERY_HINT], { [shot.id]: [NET_HIT] }),
     );
     const [chip, ...rest] = chips(withCount);
     expect(rest).toHaveLength(0);
-    expect(chip.text).toBe("Check the ending");
-    expect(chip.label).toBe(`Check the ending. ${DISPUTED_HOVER}`);
+    expect(chip.text).toBe("How did the last ball end?");
+    expect(chip.tag).toContain('data-mark-count="1"');
+    expect(
+      chip.label.startsWith(`How did the last ball end? ${DISPUTED_HOVER}`),
+    ).toBe(true);
     expect(withCount).not.toContain("data-point-hint");
+  });
+
+  test("once checked, the quiet outline is only for a counted mark", () => {
+    const point = fixturePoint();
+    const shot = point.shots[0];
+    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
+    // A hint alone, answered: no chip at all.
+    expect(
+      renderRow(checked, marksOf(checked, [mark("last_landing_missing", {})])),
+    ).not.toContain("data-mark-chip");
+    // A flag that would be demoted: none either.
+    expect(
+      renderRow(checked, marksOf(checked, [], { [shot.id]: [NET_HIT] })),
+    ).not.toContain("data-mark-chip");
+    // A counted mark settled by a change keeps the quiet outline, no words.
+    const settled = { ...checked, status: "edited" as const };
+    const [quiet, ...rest] = chips(
+      renderRow(settled, marksOf(settled, [DISPUTED])),
+    );
+    expect(rest).toHaveLength(0);
+    expect(quiet.state).toBe("checked");
+    expect(quiet.text).toBeNull();
+  });
+
+  test("a winner the strokes contradict keeps an amber chip once checked", () => {
+    // The ace is the server's; the point says the receiver won it.
+    const point = fixturePoint({
+      winner: "p2",
+      checkedAt: "2026-10-12T00:00:00Z",
+    });
+    const [chip, ...rest] = chips(renderRow(point, marksOf(point, [])));
+    expect(rest).toHaveLength(0);
+    expect(chip.state).toBe("open");
+    expect(chip.tag).toContain('data-mark-tone="score"');
+    expect(chip.tag).toContain("rail-amber");
   });
 
   test("a hidden mark is drawn nowhere: not on the row, not in the well, not on a stroke", () => {

@@ -23,6 +23,7 @@ import {
   type LabelSuggestion,
 } from "./marks";
 import {
+  lastCallQuestion,
   MARK_LABEL,
   markHover,
   REVIEW_ITEM_QUESTION,
@@ -632,7 +633,7 @@ export function markSummary(
   return summary;
 }
 
-/** The states `rollupMarks` reads: one per `count` mark, in order. */
+/** One state per `count` mark, in order: what `reviewFlag` folds into items. */
 export function markStates(
   countMarks: readonly LabelMark[],
   point: MarkStatePoint,
@@ -724,24 +725,7 @@ export function markTone(
   return nearEnd ? "score" : "data";
 }
 
-/**
- * The chip on the point row.
- *
- * `text` is the words, or null for the icon-only form. `count` is how many
- * marks the chip stands for.
- */
-export interface MarkRollupChip {
-  text: string | null;
-  count: number;
-  state: MarkState;
-  /**
-   * Amber or grey: `score` when a mark the chip speaks for can move the
-   * score, `data` when every one of them is about the data (`isDataMark`).
-   * It speaks for its open marks, or for all of them once none is open.
-   */
-  tone: MarkTone;
-}
-
+/** Amber (`score`) when a mark can move the score, grey (`data`) when it is about the data. */
 export type MarkTone = "score" | "data";
 
 /** Most open first: a chip is as open as its most open member. */
@@ -755,38 +739,6 @@ const OPENNESS: readonly MarkState[] = [
 
 export function mostOpen(states: readonly MarkState[]): MarkState {
   return OPENNESS.find((state) => states.includes(state)) ?? "checked";
-}
-
-/**
- * What the point row shows: at most one chip, for its `count` marks — null
- * when it has none.
- *
- * One mark still open is its own words; past one the words give way to
- * "N to check". A quiet chip (nothing open) has no words at all.
- */
-export function rollupMarks(
-  countMarks: readonly LabelMark[],
-  states: readonly MarkState[],
-  /** One per mark (`markTone`); by code alone when not given. */
-  tones: readonly MarkTone[] = countMarks.map((mark) =>
-    isDataMark(mark) ? "data" : "score",
-  ),
-): MarkRollupChip | null {
-  if (countMarks.length === 0) return null;
-  const open = countMarks.filter((_, i) => states[i] === "open");
-  const anyOpen = open.length > 0;
-  const spoken = tones.filter((_, i) => !anyOpen || states[i] === "open");
-  return {
-    tone: spoken.every((tone) => tone === "data") ? "data" : "score",
-    text:
-      open.length === 0
-        ? null
-        : open.length === 1
-          ? MARK_LABEL[open[0].code]
-          : `${open.length} to check`,
-    count: countMarks.length,
-    state: mostOpen(states),
-  };
 }
 
 // ── The review flag ─────────────────────────────────────────────────────────
@@ -1049,5 +1001,71 @@ export function reviewFlag(
     state: mostOpen(items.map((item) => item.state)),
     items,
     demoted: isDemoted(tone, items),
+  };
+}
+
+/**
+ * The words an item is asked in: its question, but item 4 as the vendor
+ * called the last ball ("Was the last ball out?") where `last_call_overruled`
+ * is one of its members.
+ */
+export function reviewItemQuestion(
+  item: Pick<ReviewItem, "id" | "question" | "members">,
+): string {
+  if (item.id === 4) {
+    for (const { mark } of item.members) {
+      if (mark.code === "last_call_overruled") {
+        return lastCallQuestion(mark.params.vendorCall);
+      }
+    }
+  }
+  return item.question;
+}
+
+/** The point row's one chip, as `reviewChip` reads it off the flag. */
+export interface ReviewChip {
+  /** The words, or null for the quiet outline that has none. */
+  text: string | null;
+  /** The flag's items, open or not. */
+  count: number;
+  state: MarkState;
+  tone: MarkTone;
+  /** The items still open, in id order: what the words and hover speak for. */
+  open: ReviewItem[];
+}
+
+/**
+ * What the point row draws of its flag: null for a demoted flag, which the
+ * row leaves off as the header leaves it out (the open point still asks it).
+ * One open item is its own question (`reviewItemQuestion`), two or more are
+ * "Review · N", and with none open the chip is the quiet outline, no words —
+ * but only where a `count` mark is among the members, as the row drew it
+ * before the flag: a flag of hints alone leaves no trace once answered, so a
+ * finished match is not strewn with outlines. Every demoted signature is
+ * hints alone, so a flag that would be demoted once checked draws nothing
+ * either. Tone and state are the flag's.
+ */
+export function reviewChip(flag: ReviewFlag): ReviewChip | null {
+  if (flag.demoted) return null;
+  const open = flag.items.filter((item) => item.state === "open");
+  if (
+    open.length === 0 &&
+    !flag.items.some((item) =>
+      item.members.some((member) => member.mark.tier === "count"),
+    )
+  ) {
+    return null;
+  }
+  return {
+    text:
+      open.length === 0
+        ? null
+        : open.length === 1
+          ? reviewItemQuestion(open[0])
+          : `Review · ${open.length}`,
+    count: flag.items.length,
+    state: flag.state,
+    tone: flag.tone,
+    open,
   };
 }
