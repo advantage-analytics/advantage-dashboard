@@ -783,17 +783,20 @@ export function scopeFromTags(tags: AskResolvedTags): string | null {
 
 /**
  * Whether a planned scope dropped the question's tags: the question carries
- * tags, and the scope names none of their match ids and filters by no
- * player or opponent name. "Show me all the aces" on a tagged match is still
- * about that match — "all" is every ace in it, not every match. A scope that
- * narrows by a tag's name (`opponent_name ilike …`) is the planner's to keep.
+ * tags, and the scope names none of their match ids and narrows by nothing
+ * but `has_stats`. "Show me all the aces" on a tagged match is still about
+ * that match — "all" is every ace in it, not every match. A scope that
+ * narrows by anything else — a tag's name (`opponent_name ilike …`), a
+ * surface, a period — is the planner's to keep.
  */
 export function ignoresTags(scopeSql: string, tags: AskResolvedTags): boolean {
   const ids = tags.matchIds.filter((id) => UUID_RE.test(id));
   if (ids.length === 0) return false;
   const lower = scopeSql.toLowerCase();
   if (ids.some((id) => lower.includes(id.toLowerCase()))) return false;
-  return scopeNameFilters(scopeSql).length === 0;
+  return !scopeIsNarrowed(
+    scopeSql.replace(/\bwhere\s+(?:\w+\.)?has_stats(?:\s*=\s*true)?\s*$/i, ""),
+  );
 }
 
 /** What the planner is told about a percentage with no documented definition and no counts beside it. */
@@ -1128,6 +1131,8 @@ export async function* askQuestion(
         // A side named ("on the ad side") is the planner's to answer: the
         // fixed plays answers count the whole match and would drop it.
         !namesASide(input.question) &&
+        // So is a rally length: the losing plays count every point.
+        rallyLengthOf(input.question) === null &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(

@@ -524,6 +524,8 @@ test.describe("winning plays in rallies of a length", () => {
     ["What are my best plays in long rallies?", { min: 10, max: null }],
     ["best plays in rallies of 7 shots or more", { min: 7, max: null }],
     ["his strengths in medium rallies", { min: 5, max: 9 }],
+    ["best plays in rallies of 5 to 9 shots", { min: 5, max: 9 }],
+    ["my best plays in 1-4 shots", { min: 1, max: 4 }],
   ] as const) {
     test(`reads: ${question}`, () => {
       expect(asksForWinningPlays(question)).toBe(true);
@@ -596,6 +598,13 @@ test("which patterns to keep going to is the winning plays", () => {
   );
   expect(asksForWinningPlays("which plays should she keep using?")).toBe(true);
   expect(asksForLosingPlays("So what patterns should I keep going")).toBe(
+    false,
+  );
+  // Shots that keep missing are a complaint, not the plays to keep.
+  expect(asksForWinningPlays("my backhand shots keep going out, why?")).toBe(
+    false,
+  );
+  expect(asksForWinningPlays("which shots keep going into the net")).toBe(
     false,
   );
 });

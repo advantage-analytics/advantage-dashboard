@@ -278,8 +278,8 @@ export interface AskTrendVisual {
   /**
    * A second series under the same points, drawn dashed — the same measure
    * across all matches as a flat line, a per-match average, or a second
-   * measure asked for beside the first. `values` has
-   * exactly one number per point, in the same order. Absent for a block with
+   * measure asked for beside the first. `values` has exactly one number per
+   * point, in the same order. Absent for a block with
    * one series, which draws the mean of its own points instead (geometry
    * only; the mean is never printed, since it is not a cell of the result).
    */

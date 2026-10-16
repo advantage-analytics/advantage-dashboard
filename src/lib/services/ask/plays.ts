@@ -429,13 +429,14 @@ export const ASK_NO_SHOTS_MESSAGE =
 // ── Winning plays ────────────────────────────────────────────────────────────
 
 const WINNING_PLAYS =
-  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b|\b(?:shots?|plays?|patterns?|strokes?)\b[^?.!]*\bkeep\s+(?:going|doing|using|hitting|playing|running|going to)\b/i;
+  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b|\b(?:shots?|plays?|patterns?|strokes?)\b[^?.!]*\b(?:should|to|can|could)\b[^?.!]*\bkeep\s+(?:going(?!\s+(?:out|long|wide|short|in|into)\b)|doing|using|hitting|playing|running)\b/i;
 
 /**
  * Whether the question asks for winning plays: which strokes, in which
  * direction, won the subject points — or which to keep going to ("what
- * patterns should I keep going", "which plays should she keep using"). Losing plays are asked for first, so
- * "winning and losing" is the losing plays' answer, which shows both ends.
+ * patterns should I keep going", "which plays should she keep using").
+ * Losing plays are asked for first, so "winning and losing" is the losing
+ * plays' answer, which shows both ends.
  */
 export function asksForWinningPlays(question: string): boolean {
   return WINNING_PLAYS.test(question);
@@ -558,7 +559,11 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 const N = String.raw`(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)`;
 const AT_MOST = new RegExp(
-  String.raw`\b(?:up to|at most|no more than|within(?: the first)?|under|fewer than|less than|max(?:imum)? of)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:less|fewer|under)\b|\b(?:first|opening)\s+${N}\s+shots?\b|\b(?:1|one)\s*(?:-|to)\s*${N}\s+shots?\b`,
+  String.raw`\b(?:up to|at most|no more than|within(?: the first)?|under|fewer than|less than|max(?:imum)? of)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:less|fewer|under)\b|\b(?:first|opening)\s+${N}\s+shots?\b`,
+  "i",
+);
+const BETWEEN = new RegExp(
+  String.raw`\b${N}\s*(?:-|to)\s*${N}\s+shots?\b`,
   "i",
 );
 const AT_LEAST = new RegExp(
@@ -582,6 +587,13 @@ function numberOf(word: string | undefined): number | null {
  * when it names none. "Under 5 shots" and "fewer than 5" are at most 4.
  */
 export function rallyLengthOf(question: string): AskRallyLength | null {
+  // "Rallies of 5 to 9 shots": both ends as said.
+  const between = BETWEEN.exec(question);
+  if (between) {
+    const min = numberOf(between[1]);
+    const max = numberOf(between[2]);
+    if (min !== null && max !== null && min <= max) return { min, max };
+  }
   const most = AT_MOST.exec(question);
   if (most) {
     const n = numberOf(most.slice(1).find((group) => group !== undefined));

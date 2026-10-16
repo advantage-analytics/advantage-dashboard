@@ -3614,6 +3614,13 @@ test.describe("a tagged question planned over every match", () => {
         TAGGED,
       ),
     ).toBe(false);
+    // Any other narrowing — a surface, a period — is the planner's too.
+    expect(
+      ignoresTags(
+        "select match_id from ask.matches where surface = 'clay' and played_on >= '2026-01-01'",
+        TAGGED,
+      ),
+    ).toBe(false);
     // No tags, nothing to keep.
     expect(ignoresTags("select match_id from ask.matches", NO_TAGS)).toBe(
       false,
