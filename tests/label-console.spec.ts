@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -9,10 +9,21 @@ import {
   fromCourt,
   fromCourtInHalf,
 } from "@/components/admin/labels/court-geometry";
-import type { LabelSession, LabelVideo } from "@/lib/services/labels/session";
+import {
+  LABEL_MARK_META,
+  type LabelMark,
+  type LabelMarkCode,
+  type LabelMarks,
+} from "@/lib/services/labels/marks";
+import type {
+  LabelPoint,
+  LabelSession,
+  LabelVideo,
+} from "@/lib/services/labels/session";
 import { count, tag as tagOf, text } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  editContext,
   labelSessionFixture,
 } from "./fixtures/label-session";
 import { createLoader } from "./fixtures/vm-modules";
@@ -870,5 +881,207 @@ test.describe("the rail's rows hold still while the film moves", () => {
     expect(Object.keys(seen[0])).toEqual(["a", "b"]);
     expect(seen[0].a(40)).toBe(40);
     expect(seen[0].b()).toBe("b0");
+  });
+});
+
+test.describe("a flag jump lands with the first open item focused (T5)", () => {
+  const MARK = "src/components/admin/labels/label-black-mark.tsx";
+  const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  function mark(code: LabelMarkCode, params: object): LabelMark {
+    const meta = LABEL_MARK_META[code];
+    return { code, tier: meta.tier, scope: meta.scope, params } as LabelMark;
+  }
+
+  /** The fixture's second point — one serve, an ace — unchecked. */
+  function flaggedPoint(fields: Partial<LabelPoint> = {}): LabelPoint {
+    const seeded = labelSessionFixture().points.find(
+      (p) => p.id === FIXTURE_POINT_IDS.P2,
+    )!;
+    return {
+      ...seeded,
+      checkedAt: null,
+      note: null,
+      shots: seeded.shots.map((s) => ({
+        ...s,
+        landingX: 0.6,
+        landingY: 17.79,
+      })),
+      ...fields,
+    };
+  }
+
+  /** A serve in, a return long, then a swing at the dead ball. */
+  function endedEarly(): LabelPoint {
+    const point = flaggedPoint();
+    const [ace] = point.shots;
+    return {
+      ...point,
+      shots: [
+        { ...ace, videoTime: 1 },
+        {
+          ...ace,
+          id: "s-long",
+          eventId: 202,
+          hitter: "p2",
+          stroke: "backhand",
+          result: "out",
+          videoTime: 2,
+        },
+        {
+          ...ace,
+          id: "s-dead-1",
+          eventId: 203,
+          hitter: "p2",
+          stroke: "forehand",
+          result: null,
+          landingX: null,
+          landingY: null,
+          videoTime: 3,
+        },
+      ],
+      winner: "p1",
+      ending: "error",
+      endedBy: "p2",
+    };
+  }
+
+  function marksOf(point: LabelPoint, pointMarks: LabelMark[]): LabelMarks {
+    return {
+      points: { [point.id]: pointMarks },
+      shots: {},
+      suggestions: [],
+      serveSides: {},
+    };
+  }
+
+  /** The point's row and its open well, as the rail draws them. */
+  function wellPage(point: LabelPoint, marks: LabelMarks | null): string {
+    const { BlackShotsWell } = createLoader().load(WELL) as {
+      BlackShotsWell: React.ComponentType<Record<string, unknown>>;
+    };
+    const well = renderToStaticMarkup(
+      React.createElement(BlackShotsWell, {
+        point,
+        edit: editContext(),
+        marks,
+        animate: false,
+      }),
+    );
+    return `<div data-row="point" data-point-id="${point.id}"><button type="button" data-point-go="">Point</button></div>${well}`;
+  }
+
+  /**
+   * What the console's jump effect does once the well is drawn: focus
+   * `reviewFocusTarget(well)`, without scrolling for it. Run in the page.
+   */
+  async function jumpFocus(page: Page, pointId: string) {
+    const { reviewFocusTarget } = createLoader().load(MARK) as {
+      reviewFocusTarget: (well: Element) => HTMLElement | null;
+    };
+    return page.evaluate(
+      ({ source, pointId }) => {
+        const target = new Function(`return (${source})`)() as (
+          well: Element,
+        ) => HTMLElement | null;
+        const well = document.querySelector(`[data-shots-well="${pointId}"]`);
+        if (well) target(well)?.focus({ preventScroll: true });
+        const active = document.activeElement;
+        const item = active?.closest("[data-review-item]");
+        return {
+          focused: active !== document.body && active !== null,
+          inBlock: Boolean(active?.closest("[data-review-block]")),
+          item: item?.getAttribute("data-review-item") ?? null,
+          suggestion:
+            active
+              ?.closest("[data-row^='suggested']")
+              ?.getAttribute("data-point-hint") ?? null,
+          text: active?.textContent ?? null,
+        };
+      },
+      { source: reviewFocusTarget.toString(), pointId },
+    );
+  }
+
+  test("`]` and the header's flag rows are the only jumps that ask for focus", () => {
+    // The keys go through `stepToFlag`, which asks; "Find the gap", the
+    // overview's open-on-point and a clicked row do not.
+    expect(consoleSource).toMatch(
+      /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
+    );
+    expect(consoleSource).toContain(
+      "if (flag) findGap(flag.pointId, { focusItem: true });",
+    );
+    expect(consoleSource).toContain(
+      "goToFlag: (pointId: string) => findGap(pointId, { focusItem: true }),",
+    );
+    expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
+    expect(consoleSource).toContain(
+      "onFindGap={operable ? railHandlers.findGap : undefined}",
+    );
+    expect(consoleSource).toContain(
+      "jumpAfterOpen.current = (pointId) => findGap(pointId);",
+    );
+    expect(consoleSource.match(/focusItem: true/g)).toHaveLength(2);
+    // The effect focuses after the scroll, and only on a flag jump.
+    const effect = consoleSource.slice(
+      consoleSource.indexOf("const pointId = jumpToPointId.current;"),
+    );
+    expect(effect.indexOf("scroller.scrollTo(")).toBeLessThan(
+      effect.indexOf("reviewFocusTarget(well)"),
+    );
+    expect(effect).toMatch(/if \(!focus\) return;/);
+  });
+
+  test("after `]`, focus is on the landing point's lowest-numbered open item, inside its review block", async ({
+    page,
+  }) => {
+    // Two open items, both asked in the block: the ending (4) and the
+    // winner (5), stored the other way round so the order is the block's.
+    const point = flaggedPoint();
+    const disputed = mark("winner_disputed", {
+      scoreWinner: "p2",
+      lastStrokeWinner: "p1",
+    });
+    const guessed = mark("winner_guessed", {});
+    const html = wellPage(point, marksOf(point, [guessed, disputed]));
+    const open = [
+      ...html.matchAll(
+        /data-review-item="(\d)"[^>]*data-review-item-state="open"/g,
+      ),
+    ].map((m) => Number(m[1]));
+    expect(open.length).toBeGreaterThan(1);
+    await page.setContent(html);
+    const landed = await jumpFocus(page, point.id);
+    expect(landed.inBlock).toBe(true);
+    expect(Number(landed.item)).toBe(Math.min(...open));
+  });
+
+  test("a first open item that asks on its stroke focuses that stroke's suggestion row instead", async ({
+    page,
+  }) => {
+    const point = endedEarly();
+    const html = wellPage(point, marksOf(point, []));
+    expect(html).toMatch(
+      /data-review-item="2"[^>]*data-review-state="pointer"[^>]*data-review-item-state="open"/,
+    );
+    await page.setContent(html);
+    const landed = await jumpFocus(page, point.id);
+    expect(landed.inBlock).toBe(false);
+    expect(landed.suggestion).toBe("shot_after_point_end");
+  });
+
+  test("a stop with no review block focuses nothing, and throws nothing", async ({
+    page,
+  }) => {
+    const point = flaggedPoint();
+    await page.setContent(wellPage(point, null));
+    const landed = await jumpFocus(page, point.id);
+    expect(landed.focused).toBe(false);
+    expect(landed.item).toBeNull();
   });
 });

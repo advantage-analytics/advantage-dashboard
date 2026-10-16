@@ -46,6 +46,7 @@ import {
   type ReviewItem,
 } from "@/lib/services/labels/marks-state";
 import {
+  memberShotId,
   reviewBlockRows,
   reviewItemPointer,
   wellShotNumbers,
@@ -313,6 +314,52 @@ export function reviewLooksRight(
 }
 
 /**
+ * Where a jump to a flagged point puts focus, read off its rendered shots
+ * well: the first `BlackTextAction` of the block's first open item, which is
+ * its lowest-numbered (the items are drawn in order). A pointer item asks on
+ * its stroke instead, so the target is the first action of the inline
+ * suggestion row under that stroke — the missing-shot slot for "Same side
+ * twice", otherwise the dashed row of the code it names — before the next
+ * stroke's row. Null with no block, no open item, or no action to take (a
+ * read-only well), and the caller then focuses nothing.
+ *
+ * DOM only and self-contained: it reads the rows' data attributes, so the
+ * console needs no hook in the shot rows, and a spec can run it in a page.
+ */
+export function reviewFocusTarget(well: Element): HTMLElement | null {
+  const item = well.querySelector(
+    '[data-review-block] [data-review-item-state="open"]',
+  );
+  if (!item) return null;
+  if (item.getAttribute("data-review-state") !== "pointer") {
+    return item.querySelector<HTMLElement>("button");
+  }
+  const shotId = item.getAttribute("data-review-shot");
+  const code = item.getAttribute("data-review-code");
+  const stroke = Array.from(well.querySelectorAll("[data-shot-id]")).find(
+    (row) => row.getAttribute("data-shot-id") === shotId,
+  );
+  if (!stroke) return null;
+  const strokeRows = ["shot", "deleted-shot", "ghost-shot"];
+  let fallback: Element | null = null;
+  for (
+    let row = stroke.nextElementSibling;
+    row && !strokeRows.includes(row.getAttribute("data-row") ?? "");
+    row = row.nextElementSibling
+  ) {
+    const kind = row.getAttribute("data-row");
+    if (kind !== "suggested-shot" && kind !== "suggested-end") continue;
+    const match =
+      code === "same_player_consecutive"
+        ? kind === "suggested-shot"
+        : row.getAttribute("data-point-hint") === code;
+    if (match) return row.querySelector<HTMLElement>("button");
+    fallback ??= row;
+  }
+  return fallback?.querySelector<HTMLElement>("button") ?? null;
+}
+
+/**
  * The open point's review block, the last row of the shots well: the
  * point's flag (`reviewFlag`) as its items in
  * the order they are answered, under a "Review · in this order" header whose
@@ -329,6 +376,12 @@ export function reviewLooksRight(
  * (`reviewBlockRows`), against the items as they stood when the well opened —
  * held from the first render, since the well mounts as the point opens.
  * Nothing at all when no item is open now and none was then.
+ *
+ * Every item row says what it is now in `data-review-item-state` — `open`
+ * for a pointer line too, `done` or `cleared` once answered — so a jump finds
+ * the first one still asking (`reviewFocusTarget`). A pointer line also names
+ * its stroke (`data-review-shot`) and the code asked there
+ * (`data-review-code`).
  */
 export function ReviewBlock({
   point,
@@ -434,6 +487,7 @@ export function ReviewBlock({
               key={row.id}
               data-review-item={row.id}
               data-review-state={row.display}
+              data-review-item-state={row.display}
               className={frame}
             >
               {number}
@@ -449,11 +503,25 @@ export function ReviewBlock({
         const shot = reviewItemPointer(item, point, marks, numbers);
         if (shot !== null) {
           const line = reviewPointerLine(row.id, question, shot);
+          // The open member at the stroke the line names, for the jump's focus
+          // (`reviewFocusTarget`): its inline row is under that stroke.
+          const at = item.members
+            .filter((member) => member.state === "open")
+            .map((member) => ({
+              code: member.mark.code,
+              shotId: memberShotId(member, point, marks),
+            }))
+            .find(
+              ({ shotId }) => shotId !== null && numbers.get(shotId) === shot,
+            );
           return (
             <div
               key={row.id}
               data-review-item={row.id}
               data-review-state="pointer"
+              data-review-item-state="open"
+              data-review-shot={at?.shotId ?? undefined}
+              data-review-code={at?.code}
               aria-label={line}
               className={frame}
             >
@@ -480,6 +548,7 @@ export function ReviewBlock({
             key={row.id}
             data-review-item={row.id}
             data-review-state="open"
+            data-review-item-state="open"
             className={frame}
           >
             {number}

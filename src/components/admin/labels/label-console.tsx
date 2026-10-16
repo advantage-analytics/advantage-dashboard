@@ -182,6 +182,7 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
+import { reviewFocusTarget } from "./label-black-mark";
 import { LabelBlackRail } from "./label-black-rail";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
@@ -1526,26 +1527,42 @@ export function LabelConsole({
    * with none, the last labelled point) is made current, the rail held and the
    * video seeks to it; the row is then brought to the rail's top
    * (`jumpToPointId`).
+   *
+   * `focusItem` is a flag jump's (`stepToFlag`, the header's flag rows): the
+   * point also opens unfolded, and once its well has rendered focus moves to
+   * what its review block asks first (`reviewFocusTarget`). Nothing else
+   * sets it — a row opened by a click, "Find the gap" or the overview's
+   * open-on-point leaves focus where it was.
    */
   const jumpToPointId = useRef<string | null>(null);
-  function findGap(pointId: string | null) {
+  const focusOnJump = useRef(false);
+  function findGap(
+    pointId: string | null,
+    { focusItem = false }: { focusItem?: boolean } = {},
+  ) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
     setPlacement(NO_PLACEMENT);
     setRestPointId(target);
     holdPoint(target);
+    if (focusItem) setFoldedPointId(null);
     seekToPointStart(live.find((p) => p.id === target));
     jumpToPointId.current = target;
+    focusOnJump.current = focusItem;
   }
   // The follow scroll moves nothing while held, so this jump is made here once
   // the hold has rendered the row: its top `REFOLLOW_JUMP_INSET_PX` under the
   // rail's. A ref, not state: the request is consumed by the commit after the
-  // hold and must not render anything itself.
+  // hold and must not render anything itself. A flag jump then focuses the
+  // review block's first open item without scrolling for it, so the smooth
+  // scroll is not cut short; a point with no block focuses nothing.
   useEffect(() => {
     const pointId = jumpToPointId.current;
     if (pointId === null) return;
     jumpToPointId.current = null;
+    const focus = focusOnJump.current;
+    focusOnJump.current = false;
     const scroller = scrollerRef.current;
     const row = scroller?.querySelector<HTMLElement>(
       `[data-point-id="${pointId}"]`,
@@ -1563,11 +1580,15 @@ export function LabelConsole({
       },
       REFOLLOW_JUMP_INSET_PX,
     );
-    if (top === null) return;
-    scroller.scrollTo({
-      top,
-      behavior: reducedMotionNow() ? "auto" : "smooth",
-    });
+    if (top !== null) {
+      scroller.scrollTo({
+        top,
+        behavior: reducedMotionNow() ? "auto" : "smooth",
+      });
+    }
+    if (!focus) return;
+    const well = scroller.querySelector(`[data-shots-well="${pointId}"]`);
+    if (well) reviewFocusTarget(well)?.focus({ preventScroll: true });
   });
 
   function deletePoint(pointId: string) {
@@ -2139,6 +2160,7 @@ export function LabelConsole({
     fixTiebreakServe,
     setGameType,
     findGap,
+    goToFlag: (pointId: string) => findGap(pointId, { focusItem: true }),
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
@@ -2207,7 +2229,7 @@ export function LabelConsole({
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
       const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
-      if (flag) findGap(flag.pointId);
+      if (flag) findGap(flag.pointId, { focusItem: true });
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
@@ -2527,7 +2549,7 @@ export function LabelConsole({
       matchScore={session.matchScore}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
-      onGoToPoint={railHandlers.findGap}
+      onGoToPoint={railHandlers.goToFlag}
     />
   );
 

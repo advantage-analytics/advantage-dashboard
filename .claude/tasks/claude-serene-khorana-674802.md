@@ -77,7 +77,7 @@ ready).
 
 ## T5 · `]` / `[` land on a point with its first open item focused
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T4
 - **files:** src/components/admin/labels/label-console.tsx (`findGap`, `stepToFlag`, the jump `useEffect`), src/components/admin/labels/label-black-mark.tsx (`ReviewBlock` focus target), tests/label-console.spec.ts

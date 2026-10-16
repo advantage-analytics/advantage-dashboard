@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Flag, Scale } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import {
@@ -138,7 +138,12 @@ export function LabelFlagSummary({
   const groups = flagGroups(openMarks);
   const ink = ROW_INK[tone];
 
+  // A jump from the list moves focus into the landing point's review block
+  // (the console's `goToFlag`): the closing menu must not then hand focus
+  // back to its trigger.
+  const jumped = useRef(false);
   const go = (pointId: string) => {
+    jumped.current = open;
     setOpen(false);
     onGoToPoint?.(pointId);
   };
@@ -261,6 +266,11 @@ export function LabelFlagSummary({
       <FloatMenu
         open={open}
         onOpenChange={setOpen}
+        onCloseAutoFocus={(event) => {
+          if (!jumped.current) return;
+          jumped.current = false;
+          event.preventDefault();
+        }}
         align="start"
         width={300}
         tone={tone}

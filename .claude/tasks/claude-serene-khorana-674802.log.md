@@ -50,3 +50,15 @@ is the runner's. Newest entries at the bottom.
 2. Item 3 `first_serve_fault_alone` could offer "Place the bounce" too.
 3. `ReviewBlock` recomputes `reviewFlag` each render; memoise if the rail feels slow.
 4. Item "no" is labelled "Dismiss" (mockup said "No"); answers are 11px, not the mockup's 11.5px.
+
+## T5 · `]` / `[` land on a point with its first open item focused — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `findGap(pointId, { focusItem })` unfolds the point and, after the existing scroll, focuses `reviewFocusTarget(well)` — the first `[data-review-item-state="open"]` item's first action, or the inline suggestion row's for a stroke-level pointer. Only `stepToFlag` and the summary's new `goToFlag` ask for focus; row clicks and score/slot stops do not. Review rows carry `data-review-item-state`; pointers carry `data-review-shot` / `data-review-code`. label-flag-summary.tsx cancels Radix's return-focus when a jump closed the menu. Spec: label-console (4 tests, incl. a real-page run of `reviewFocusTarget`).
+
+**follow-ups:**
+
+1. Focus uses `preventScroll`; in a long rally the block can sit below the rail — scroll the focused element `block: "nearest"` once the smooth scroll settles.
+2. The overview's open-on-point jump (`jumpAfterOpen`) never focuses; pass `focusItem` through `openOnPointId` if it should.
+3. `reviewFocusTarget` depends on the inline rows' `data-row` / `data-point-hint` / `data-shot-suggestion` attributes in label-black-shot-row.tsx.
