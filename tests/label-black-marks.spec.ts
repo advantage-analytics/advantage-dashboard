@@ -60,7 +60,7 @@ const DISPUTED = mark("winner_disputed", {
   lastStrokeWinner: "p1",
 });
 const DISPUTED_HOVER =
-  "The score says Vargas won, but the last shot says Lee did. The ending is wrong more often than the winner.";
+  "The score says Vargas won, but the vendor’s last shot says Lee did. The ending is wrong more often than the winner.";
 
 /**
  * The fixture's second point — Lee's ace, one kept serve — as it was seeded:
@@ -463,7 +463,7 @@ test.describe("the open point's review block", () => {
     expect(rows.map((row) => [row.id, row.state])).toEqual([[4, "open"]]);
     expect(rows[0].text.startsWith("4 How did the last ball end?")).toBe(true);
     expect(evidence(rows[0])).toEqual([
-      "The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
+      "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.",
       "Marked as hitting the net, but the ball’s height says it cleared it.",
     ]);
     // Both are hints with a key: the item's Dismiss, and no other answer.
@@ -708,7 +708,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(item.text.startsWith("4 Was the last ball out?")).toBe(true);
     expect(evidence(item)).toEqual([
       "The last ball is in by its landing, but the vendor called it out. Watch the bounce: if it was out, change the result.",
-      "The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.",
+      "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.",
       "The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
     ]);
     expect(item.html.match(/data-review-answers=""/g)).toHaveLength(1);

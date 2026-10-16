@@ -302,11 +302,11 @@ export function findGapDescription(
 export function markHover(mark: LabelMark, names: MarkNames): string {
   switch (mark.code) {
     case "winner_disputed":
-      return `The score says ${names[mark.params.scoreWinner]} won, but the last shot says ${names[mark.params.lastStrokeWinner]} did. The ending is wrong more often than the winner.`;
+      return `The score says ${names[mark.params.scoreWinner]} won, but the vendor’s last shot says ${names[mark.params.lastStrokeWinner]} did. The ending is wrong more often than the winner.`;
     case "winner_to_error_by_bounce":
-      return `The ball before this winner landed out. The point may be an error by ${names[mark.params.loser]} instead.`;
+      return `The vendor’s tracking had the ball before this winner landing out. The point may be an error by ${names[mark.params.loser]} instead.`;
     case "ending_suspect_line":
-      return "The ball before this winner landed within 1 m of a line. Most like this turn out to be errors.";
+      return "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.";
     case "second_serve_called_out":
       return "The second serve was called out, but one or two shots followed. Check whether it was a double fault.";
     case "same_player_consecutive":

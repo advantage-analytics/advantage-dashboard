@@ -161,7 +161,7 @@ test.describe("mark copy", () => {
 
   test("hover lines are the board's, with the players' names", () => {
     expect(markHover(sample("winner_disputed"), names)).toBe(
-      "The score says Goodman won, but the last shot says Ace did. The ending is wrong more often than the winner.",
+      "The score says Goodman won, but the vendor’s last shot says Ace did. The ending is wrong more often than the winner.",
     );
     expect(markHover(sample("same_player_consecutive"), names)).toBe(
       "Ace hit twice in a row. A shot in between was probably missed.",
@@ -176,7 +176,7 @@ test.describe("mark copy", () => {
       "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
     );
     expect(markHover(sample("winner_to_error_by_bounce"), names)).toBe(
-      "The ball before this winner landed out. The point may be an error by Ace instead.",
+      "The vendor’s tracking had the ball before this winner landing out. The point may be an error by Ace instead.",
     );
     expect(markHover(sample("service_court_repeat"), names)).toBe(
       "Served from the deuce side two points running. A point may be missing, or this one was replayed.",
