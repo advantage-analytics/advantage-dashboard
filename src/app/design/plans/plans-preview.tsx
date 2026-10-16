@@ -70,10 +70,6 @@ const CREDITS = [
   { hours: "5 hours", note: "$12 an hour", price: 60 },
 ] as const;
 
-/** Draft beta-player offer, mirroring the programs' 15% off a first season. */
-const BETA_OFF = 0.15;
-const BETA_MONTHS = 6;
-
 const H = 3600;
 
 /** Fixed account states the mock can show. */
@@ -93,7 +89,6 @@ const usd = (n: number) =>
     minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
-const beta = (n: number) => Math.round(n * (1 - BETA_OFF) * 100) / 100;
 
 const BTN_PRIMARY = advButton("primary", "sm");
 const BTN_SECONDARY = advButton("outline", "sm");
@@ -154,7 +149,10 @@ export function PlansPreview() {
   );
 }
 
-/** Today through Dec 31: free beta, with January's plans offered at beta price. */
+/**
+ * Today through Dec 31: the pilot's free 2 hours a month, with January's plans
+ * at list price. The pilot perk is 2 free hours on top, granted as credits.
+ */
 function PilotView({
   billing,
   setBilling,
@@ -203,9 +201,9 @@ function PilotView({
           />
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
-          Beta players get 15% off any paid plan for their first {BETA_MONTHS}{" "}
-          months. Choose by Dec 31 and it starts on January 1, billed then. If
-          you don&apos;t choose, you move to Free and keep every match you have
+          Pilot players get 2 free hours on top of any plan, added as credits
+          when it starts on January 1. Nothing is billed before then. If you
+          don&apos;t choose, you move to Free and keep every match you have
           uploaded.
         </SettingsCardFootnote>
       </SettingsCard>
@@ -213,7 +211,7 @@ function PilotView({
   );
 }
 
-/** From January: on Player at the beta price, with credits and upgrades. */
+/** From January: on Player, with credits and upgrades. */
 function PaidView({
   out,
   billing,
@@ -234,7 +232,7 @@ function PaidView({
       <Facts
         facts={[
           { label: "Plan", value: current.name },
-          { label: "Price", value: `${usd(beta(current.monthly))} / mo` },
+          { label: "Price", value: `${usd(current.monthly)} / mo` },
           { label: "Renews", value: s.renews },
         ]}
       />
@@ -254,7 +252,7 @@ function PaidView({
             </span>
             <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--ink-600)]">
               Your {s.credits} hours of credits are being used now. Or move to{" "}
-              {next.name} for {next.hours} at {usd(beta(next.monthly))} a month.
+              {next.name} for {next.hours} at {usd(next.monthly)} a month.
             </span>
           </span>
           <button type="button" className={BTN_PRIMARY}>
@@ -289,8 +287,8 @@ function PaidView({
           />
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
-          Your beta price, 15% off, runs until Jul 1. Yearly is 10 months&apos;
-          price for 12. Changes start on your next billing date.
+          Yearly is 10 months&apos; price for 12. Changes start on your next
+          billing date.
         </SettingsCardFootnote>
       </SettingsCard>
 
@@ -418,7 +416,9 @@ function HoursCard({
           <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
             {credits > 0 ? `${credits}h in credits` : "No credits"}
             <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
-              Used after your plan hours run out. Credits last 12 months.
+              {credits > 0
+                ? "Your 2 free pilot hours. Used after your plan hours run out."
+                : "Used after your plan hours run out. Credits last 12 months."}
             </span>
           </span>
           <a href="#credits" className={BTN_SECONDARY}>
@@ -463,15 +463,8 @@ function PlanRow({
           {plan.hours} · {plan.note}
         </span>
       </span>
-      <span className="flex shrink-0 flex-col items-end">
-        <span className="tabular text-[13px] text-[var(--ink-900)]">
-          {free ? "Free" : `${usd(beta(list))} / ${unit}`}
-        </span>
-        {!free && (
-          <span className="tabular text-[11px] text-[var(--ink-400)] line-through">
-            {usd(list)}
-          </span>
-        )}
+      <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+        {free ? "Free" : `${usd(list)} / ${unit}`}
       </span>
       <span className="flex w-[96px] shrink-0 justify-end">
         {action ?? (

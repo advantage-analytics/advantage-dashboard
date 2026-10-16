@@ -3,9 +3,9 @@ import { PlansPreview } from "./plans-preview";
 
 /**
  * Settings › Plan for a personal workspace, in two stages: now, during the
- * free beta, with January's plans offered at the beta price; and from January
- * 2027, on a paid plan with hours, credits and upgrades. Team plans stay off
- * the page until the fall pilot ends.
+ * free pilot, with January's plans at list price and 2 free hours on top as
+ * credits; and from January 2027, on a paid plan with hours, credits and
+ * upgrades. Team plans stay off the page until the fall pilot ends.
  *
  * A mock with fixed numbers, not the live page — nothing here reads a
  * workspace or charges anything. The prices are the draft ones on the landing
