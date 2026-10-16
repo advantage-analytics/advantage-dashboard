@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Review-flag model: one `reviewFlag` per point with ordered items
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/services/labels/marks-state.ts, src/lib/services/labels/marks-copy.ts (item questions), tests/label-review-flag.spec.ts (new), tests/label-marks-copy.spec.ts ("the row roll-up" block)
 - **done when:**

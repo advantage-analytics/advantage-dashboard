@@ -18,10 +18,16 @@ import { deriveEnding, winnerContradicted } from "./ending-derived";
 import {
   isDataMark,
   type LabelMark,
+  type LabelMarkCode,
   type LabelMarks,
   type LabelSuggestion,
 } from "./marks";
-import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
+import {
+  MARK_LABEL,
+  markHover,
+  REVIEW_ITEM_QUESTION,
+  type MarkNames,
+} from "./marks-copy";
 import {
   endsPointWhenMissed,
   isLiveShot,
@@ -780,5 +786,268 @@ export function rollupMarks(
           : `${open.length} to check`,
     count: countMarks.length,
     state: mostOpen(states),
+  };
+}
+
+// ── The review flag ─────────────────────────────────────────────────────────
+
+/** The six questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
+export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** One row of `REVIEW_ITEMS`: an item, its question and the codes it absorbs. */
+export interface ReviewItemDef {
+  id: ReviewItemId;
+  question: string;
+  codes: readonly LabelMarkCode[];
+}
+
+/**
+ * The flag's items in the order they are answered, each with the mark codes
+ * it absorbs. Strokes first, then the last ball, its ending, the winner, the
+ * game: each item reads what the ones above decide — a stroke change moves
+ * the last ball, the last ball's call derives the ending, the winner drives
+ * the labelled score, and `score_side_mismatch` / `service_court_repeat` are
+ * read live off it. Every `count` and `hint` code in `LABEL_MARK_META` is
+ * named by exactly one item; a `hidden` code by none, and it is never a
+ * member. Item 4 is put as the vendor called it (`lastCallQuestion`) where
+ * `last_call_overruled` is a member, and `ending_stale` is its "Then:"
+ * consequence line, never a question of its own.
+ */
+export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
+  {
+    id: 1,
+    question: REVIEW_ITEM_QUESTION[1],
+    codes: ["same_player_consecutive"],
+  },
+  {
+    id: 2,
+    question: REVIEW_ITEM_QUESTION[2],
+    codes: ["shot_after_point_end", "serve_after_serve_in", "reserve_after_in"],
+  },
+  {
+    id: 3,
+    question: REVIEW_ITEM_QUESTION[3],
+    codes: [
+      "second_serve_as_first",
+      "first_serve_fault_alone",
+      "second_serve_called_out",
+      "serve_in_landing_out",
+    ],
+  },
+  {
+    id: 4,
+    question: REVIEW_ITEM_QUESTION[4],
+    codes: [
+      "last_call_overruled",
+      "winner_disputed",
+      "net_hit_contradicts_height",
+      "ending_suspect_line",
+      "winner_to_error_by_bounce",
+      "ending_stale",
+      "last_landing_missing",
+      "last_shot_unresolved",
+      "result_type_unknown",
+    ],
+  },
+  {
+    id: 5,
+    question: REVIEW_ITEM_QUESTION[5],
+    codes: ["pick_winner", "winner_guessed"],
+  },
+  {
+    id: 6,
+    question: REVIEW_ITEM_QUESTION[6],
+    codes: [
+      "score_side_mismatch",
+      "service_court_repeat",
+      "tiebreak_score_off_six_all",
+      "segment_proposal_differs",
+    ],
+  },
+];
+
+/**
+ * One mark under an item, with where it is in its life and the `dismissed`
+ * key a per-item Dismiss stores for it — `pointEndedKey` for "Did the point
+ * end here?", `missing_point` for "Same side twice" (what its slot's Dismiss
+ * stores), `hintDismissKey` for the rest. "Missing shot?" has none: its
+ * dismissal lives on its `missing_shot` slots.
+ */
+export interface ReviewMember {
+  mark: LabelMark;
+  state: MarkState;
+  dismissKey?: string;
+}
+
+/** One item of a point's flag: the question and the marks that raised it. */
+export interface ReviewItem {
+  id: ReviewItemId;
+  question: string;
+  /** Amber when the item can move the score, grey when it is about the data. */
+  tone: MarkTone;
+  /** `mostOpen` of its members' states. */
+  state: MarkState;
+  /** In the order the marks were gathered: count marks first, then hints. */
+  members: ReviewMember[];
+}
+
+/**
+ * A point's one flag: its items in id order (an item with no members is
+ * absent), amber if any item is, as open as its most open item.
+ *
+ * `demoted` marks the grey flag the design note leaves off the row and out of
+ * the counts — one whose only open item is item 4 and whose open members
+ * there are exactly {`net_hit_contradicts_height`}, {`ending_suspect_line`}
+ * or {`ending_suspect_line`, `winner_to_error_by_bounce`}. On the 8 complete
+ * sessions those were 99 of 907 points, changed on 36–46% against a 52%
+ * base. It is a boolean rather than a null so the open point can still draw
+ * the evidence lines.
+ */
+export interface ReviewFlag {
+  tone: MarkTone;
+  state: MarkState;
+  items: ReviewItem[];
+  demoted: boolean;
+}
+
+/** The `dismissed` key a per-item Dismiss stores for `mark`, if it has one. */
+function memberDismissKey(mark: LabelMark): string | undefined {
+  switch (mark.code) {
+    case "shot_after_point_end":
+      return pointEndedKey(mark.params.shotId);
+    case "service_court_repeat":
+      return "missing_point";
+    case "same_player_consecutive":
+      return undefined;
+    default:
+      return hintDismissKey(mark.code);
+  }
+}
+
+/** The open item-4 member sets a grey flag is demoted for. */
+const DEMOTED_SIGNATURES: readonly (readonly LabelMarkCode[])[] = [
+  ["net_hit_contradicts_height"],
+  ["ending_suspect_line"],
+  ["ending_suspect_line", "winner_to_error_by_bounce"],
+];
+
+/**
+ * Whether a flag is demoted (`ReviewFlag.demoted`): grey, open on item 4
+ * alone, and the codes open there one of `DEMOTED_SIGNATURES`.
+ */
+function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
+  if (tone !== "data") return false;
+  const open = items.filter((item) => item.state === "open");
+  if (open.length !== 1 || open[0].id !== 4) return false;
+  const codes = [
+    ...new Set(
+      open[0].members
+        .filter((member) => member.state === "open")
+        .map((member) => member.mark.code),
+    ),
+  ].sort();
+  return DEMOTED_SIGNATURES.some(
+    (signature) =>
+      signature.length === codes.length &&
+      [...signature].sort().every((code, i) => code === codes[i]),
+  );
+}
+
+/**
+ * An item's tone from its members. Item 1 is `markTone`'s call (a missing
+ * stroke near the end of the rally decides who hit the last ball); item 2 is
+ * amber only for a serve replayed after one in; item 3 only for a double
+ * fault in question or a point stopping on a faulted first serve; item 4
+ * when a counted mark sits under it or the point's winner is the player its
+ * strokes say lost; items 5 and 6 are always the score.
+ */
+function reviewItemTone(
+  id: ReviewItemId,
+  members: readonly ReviewMember[],
+  point: LabelPoint,
+  marks: LabelMarks,
+): MarkTone {
+  const has = (...codes: LabelMarkCode[]) =>
+    members.some((member) => codes.includes(member.mark.code));
+  switch (id) {
+    case 1:
+      return members.some(
+        (member) => markTone(member.mark, point, marks.suggestions) === "score",
+      )
+        ? "score"
+        : "data";
+    case 2:
+      return has("reserve_after_in") ? "score" : "data";
+    case 3:
+      return has("second_serve_called_out", "first_serve_fault_alone")
+        ? "score"
+        : "data";
+    case 4:
+      return members.some((member) => member.mark.tier === "count") ||
+        pointWinnerContradicted(point, marks)
+        ? "score"
+        : "data";
+    case 5:
+    case 6:
+      return "score";
+  }
+}
+
+/**
+ * The point's review flag, or null for a deleted point or one with nothing
+ * to ask. Members are gathered exactly as the row reads them today: the
+ * `count` marks via `pointRowMarkList` with `markStates` (`points` lets
+ * "Same side twice" read settled by an added point), then the hints and the
+ * live row-read marks via `openHintMarks` — so a dismissed hint is not a
+ * member, and "Net or out?" is dropped while "Was the last ball in?" still
+ * has its answer. On a checked point a hint member reads `checked-as-is`,
+ * except "Different ending?" with the winner contradicted, which stays
+ * `open`: the score, as `openFlags` has always read it.
+ */
+export function reviewFlag(
+  point: LabelPoint,
+  marks: LabelMarks,
+  points: readonly LabelPoint[],
+): ReviewFlag | null {
+  if (point.status === "deleted") return null;
+  const { count } = pointRowMarkList(point, marks);
+  const states = markStates(count, point, marks.suggestions, points);
+  const checked = point.checkedAt !== null;
+  const contradicted = checked && pointWinnerContradicted(point, marks);
+  const members: ReviewMember[] = [
+    ...count.map((mark, i) => ({
+      mark,
+      state: states[i],
+      dismissKey: memberDismissKey(mark),
+    })),
+    ...openHintMarks(point, marks).map((mark) => ({
+      mark,
+      state: (!checked || (contradicted && mark.code === "ending_stale")
+        ? "open"
+        : "checked-as-is") as MarkState,
+      dismissKey: memberDismissKey(mark),
+    })),
+  ];
+  const items: ReviewItem[] = [];
+  for (const def of REVIEW_ITEMS) {
+    const mine = members.filter((member) =>
+      def.codes.includes(member.mark.code),
+    );
+    if (mine.length === 0) continue;
+    items.push({
+      id: def.id,
+      question: def.question,
+      tone: reviewItemTone(def.id, mine, point, marks),
+      state: mostOpen(mine.map((member) => member.state)),
+      members: mine,
+    });
+  }
+  if (items.length === 0) return null;
+  const tone = items.some((item) => item.tone === "score") ? "score" : "data";
+  return {
+    tone,
+    state: mostOpen(items.map((item) => item.state)),
+    items,
+    demoted: isDemoted(tone, items),
   };
 }

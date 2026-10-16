@@ -150,6 +150,21 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
   return `${label} ${n} ${n === 1 ? "shot follows" : "shots follow"}`;
 }
 
+/**
+ * The six questions a point's review flag asks, by item id (marks-state.ts
+ * `REVIEW_ITEMS`), in the order they are answered: strokes, then the last
+ * ball, its ending, the winner, the game. Item 4 is put as the vendor called
+ * it (`lastCallQuestion`) where "Was the last ball in?" is among its members.
+ */
+export const REVIEW_ITEM_QUESTION = {
+  1: "Missing shot?",
+  2: "Extra shots / two points in one?",
+  3: "Serves",
+  4: "How did the last ball end?",
+  5: "Who won?",
+  6: "Game & serve order",
+} as const;
+
 /** The action a live hint offers, by code; the rest offer none. */
 export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
