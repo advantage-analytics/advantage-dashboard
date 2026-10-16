@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
+import { matchFilmHref } from "@/lib/match-video/film-entry";
 import { isRecord, type AskSourceMatch } from "@/lib/services/ask/events";
 import {
   readAskShowResponse,
@@ -27,6 +28,11 @@ import { askMatchPlayers } from "./ask-tag-menu";
  * and the rest queued. Over several it is
  * one row per match with its count, each into that match's film.
  *
+ * When the points cannot be read, the button stays for a retry, and an
+ * answer over one match keeps a way into its film: "Open the match's
+ * video", the door the "Watch on video" action used to be. Over several,
+ * the answer's sources already link each match.
+ *
  * `answerId` is the saved answer's (`done.answerId`); an answer that has no
  * id yet, or no sources, has nothing to show and draws nothing.
  *
@@ -36,6 +42,7 @@ import { askMatchPlayers } from "./ask-tag-menu";
 
 export const ASK_SHOW_LABEL = "Show me these points";
 export const ASK_SHOW_FALLBACK = "The points could not be read. Try again.";
+export const ASK_SHOW_FILM_LABEL = "Open the match's video";
 
 export type AskShowPost =
   | { ok: true; value: AskShowResponse }
@@ -170,6 +177,16 @@ export function AskShowMe({
           {state.message}
         </p>
       )}
+      {state.status === "error" && sources.length === 1 && (
+        <Link
+          href={matchFilmHref(sources[0].matchId)}
+          data-ask-show-film=""
+          className="inline-flex w-fit items-center gap-1.5 rounded-sm text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)]"
+        >
+          <Play className="size-3" strokeWidth={1.5} aria-hidden="true" />
+          {ASK_SHOW_FILM_LABEL}
+        </Link>
+      )}
       {state.status === "shown" && state.value.kind === "match" && (
         <>
           {state.value.points.length <= ASK_CLIP_STRIP_MAX && (
@@ -181,7 +198,6 @@ export function AskShowMe({
             />
           )}
           <AskPointList
-            match={state.value.match}
             points={state.value.points}
             filters={state.value.filters}
             truncated={state.value.truncated}

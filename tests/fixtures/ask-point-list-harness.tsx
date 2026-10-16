@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 
 import { AskPointList } from "@/components/dashboard/ask/ask-point-list";
-import type { AskSourceMatch } from "@/lib/services/ask/events";
 import type { AskShowPoint } from "@/lib/services/ask/show";
 
 /**
@@ -11,21 +10,11 @@ import type { AskShowPoint } from "@/lib/services/ask/show";
  * Query string:
  * - `?case=page`   on the Ask page (the default): one link opens the film
  *                  on every point
- * - `&scope=team`  the match names the program's player
  * - `&f=<filters>` the measure's cut, carried on every link
  * - `&truncated=1` the match held more points than the list carries
  * - `&counted=1`   the rows are the points the headline figure counts
  */
 const params = new URLSearchParams(window.location.search);
-
-const MATCH: AskSourceMatch = {
-  matchId: "match-sep-28",
-  opponentName: "Theo Lindqvist",
-  playedOn: "2026-09-28",
-  iWon: true,
-  scoreText: "6-4, 6-3",
-  playerName: params.get("scope") === "team" ? "Ana Sokolov" : null,
-};
 
 const POINTS: AskShowPoint[] = [
   {
@@ -69,7 +58,6 @@ const POINTS: AskShowPoint[] = [
 
 const list = (
   <AskPointList
-    match={MATCH}
     points={POINTS}
     filters={params.get("f")}
     truncated={params.get("truncated") === "1"}

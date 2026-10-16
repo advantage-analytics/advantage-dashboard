@@ -126,6 +126,22 @@ test("one match: the count is announced and focus moves to the point list", asyn
   ).toBeFocused();
 });
 
+test("a refusal: the alert, the button for a retry, and a way into the match's film", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=fail");
+  await page.getByRole("button", { name: "Show me these points" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The points could not be read. Try again.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Show me these points" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "Open the match's video" }),
+  ).toHaveAttribute("href", "/dashboard/matches/match-1?tab=film");
+});
+
 test("several matches: the first two, then All N opens the rest in place", async ({
   page,
 }) => {
