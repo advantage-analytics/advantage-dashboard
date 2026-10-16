@@ -270,8 +270,15 @@ export interface AskTrendVisual {
    */
   points: { label: string; value: AskVisualNumber; matchId?: string }[];
   /**
+   * The points' own series name, set when `baseline` is a different measure
+   * (two measures charted over time) so the key names both lines. Absent,
+   * the key reads "Each match".
+   */
+  label?: string;
+  /**
    * A second series under the same points, drawn dashed — the same measure
-   * across all matches as a flat line, or a per-match average. `values` has
+   * across all matches as a flat line, a per-match average, or a second
+   * measure asked for beside the first. `values` has
    * exactly one number per point, in the same order. Absent for a block with
    * one series, which draws the mean of its own points instead (geometry
    * only; the mean is never printed, since it is not a cell of the result).
@@ -667,10 +674,13 @@ export function readAskVisual(value: unknown): AskVisual | null {
         points.length,
         (item) => readNumber(item, anyNumber),
       );
+      // The points' own name is optional; one that is present must be a label.
+      if (value.label !== undefined && !isLabel(value.label)) return null;
       return values
         ? {
             kind: "trend",
             caption,
+            ...(value.label !== undefined ? { label: value.label } : {}),
             points,
             baseline: { label: value.baseline.label, values },
           }

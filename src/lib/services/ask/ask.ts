@@ -89,6 +89,8 @@ import {
   buildLosingPlaysAnswer,
   buildWinningPlaysAnswer,
   winningPlaysSql,
+  rallyLengthOf,
+  rallyLengthOfPlaysSql,
   winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
@@ -779,6 +781,21 @@ export function scopeFromTags(tags: AskResolvedTags): string | null {
     : `${ASK_ALL_MATCHES_SCOPE} where match_id in (${ids.map((id) => `'${id}'`).join(", ")})`;
 }
 
+/**
+ * Whether a planned scope dropped the question's tags: the question carries
+ * tags, and the scope names none of their match ids and filters by no
+ * player or opponent name. "Show me all the aces" on a tagged match is still
+ * about that match — "all" is every ace in it, not every match. A scope that
+ * narrows by a tag's name (`opponent_name ilike …`) is the planner's to keep.
+ */
+export function ignoresTags(scopeSql: string, tags: AskResolvedTags): boolean {
+  const ids = tags.matchIds.filter((id) => UUID_RE.test(id));
+  if (ids.length === 0) return false;
+  const lower = scopeSql.toLowerCase();
+  if (ids.some((id) => lower.includes(id.toLowerCase()))) return false;
+  return scopeNameFilters(scopeSql).length === 0;
+}
+
 /** What the planner is told about a percentage with no documented definition and no counts beside it. */
 export function undocumentedDetail(columns: readonly string[]): string {
   return `${columns.join(", ")} ${columns.length === 1 ? "is not a documented measure" : "are not documented measures"} and the result holds nothing ${columns.length === 1 ? "it" : "they"} could be made from. Use the documented measures of the Percentages section, or return the two counts ${columns.length === 1 ? "it is" : "each is"} made from beside it.`;
@@ -1151,7 +1168,8 @@ export async function* askQuestion(
             scope_sql: step.ok
               ? step.plan.scope_sql
               : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
-            sql: winningPlaysSql(subject),
+            // "Best plays in short rallies": only the points of that length.
+            sql: winningPlaysSql(subject, rallyLengthOf(input.question)),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
@@ -1543,6 +1561,16 @@ export async function* askQuestion(
         step.plan.scope_sql =
           previous?.scope_sql ?? tagScope ?? ASK_ALL_MATCHES_SCOPE;
       }
+      // A tagged question planned over matches its tags do not name is
+      // answered over exactly the tagged matches: a question answered
+      // without its tags is a different question (`tags.ts`).
+      if (
+        tagScope !== null &&
+        !step.review &&
+        ignoresTags(step.plan.scope_sql, input.tags)
+      ) {
+        step.plan.scope_sql = tagScope;
+      }
       const guard = checkAskSql({
         scopeSql: step.plan.scope_sql,
         sql: step.plan.sql,
@@ -1763,13 +1791,15 @@ export async function* askQuestion(
         // in scope is "no data", said as such — never the match totals.
         plan = step.plan;
         const rows = withScopeCount(ran.rows, ran.matches.length);
-        const written = (
-          step.winning ? buildWinningPlaysAnswer : buildLosingPlaysAnswer
-        )(
-          rows,
-          subjectVoice(step.plays, ran.matches, team),
-          ran.matches.length,
-        );
+        const voice = subjectVoice(step.plays, ran.matches, team);
+        const written = step.winning
+          ? buildWinningPlaysAnswer(
+              rows,
+              voice,
+              ran.matches.length,
+              rallyLengthOfPlaysSql(step.plan.sql),
+            )
+          : buildLosingPlaysAnswer(rows, voice, ran.matches.length);
         result = { matches: ran.matches, rows: written === null ? [] : rows };
         if (written === null) {
           emptyReason = ASK_NO_SHOTS_MESSAGE;

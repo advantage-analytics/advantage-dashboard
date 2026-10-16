@@ -429,11 +429,12 @@ export const ASK_NO_SHOTS_MESSAGE =
 // ── Winning plays ────────────────────────────────────────────────────────────
 
 const WINNING_PLAYS =
-  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b/i;
+  /\b(?:best|winning|strongest|good|top|favou?rite)\s+(?:plays?|patterns?|shots?|strokes?|weapons?)\b|\bstrengths?\b|\b(?:which|what)\s+(?:shots?|plays?|strokes?)\b[^?.!]*\b(?:win|wins|won)\b|\b(?:shots?|plays?|patterns?|strokes?)\b[^?.!]*\bkeep\s+(?:going|doing|using|hitting|playing|running|going to)\b/i;
 
 /**
  * Whether the question asks for winning plays: which strokes, in which
- * direction, won the subject points. Losing plays are asked for first, so
+ * direction, won the subject points — or which to keep going to ("what
+ * patterns should I keep going", "which plays should she keep using"). Losing plays are asked for first, so
  * "winning and losing" is the losing plays' answer, which shows both ends.
  */
 export function asksForWinningPlays(question: string): boolean {
@@ -468,14 +469,17 @@ export function winningPlaysSubject(
  * one before it are already picked out there (migration 20261015090038),
  * so a point is counted once however the vendor numbered its shots.
  */
-export function winningPlaysSql(subject: AskPlaysSubject): string {
+export function winningPlaysSql(
+  subject: AskPlaysSubject,
+  rally: AskRallyLength | null = null,
+): string {
   const theirs = subject === "mine" ? "true" : "false";
   return `with ended as (
   select p.match_id, p.has_shots, p.i_won,
     p.last_mine, p.last_shot_type, p.last_direction, p.last_result,
     p.prev_mine, p.prev_shot_type, p.prev_direction
   from ask.point_plays p
-  where p.match_id in (select match_id from scope)
+  where p.match_id in (select match_id from scope)${rally === null ? "" : `\n${rallyFilter(rally)}`}
 ),
 credited as (
   select last_shot_type as stroke, last_direction as direction, 'winner' as kind
@@ -511,9 +515,123 @@ from ranked
 where place <= ${MAX_ASK_TABLE_ROWS}`;
 }
 
-/** Whether `sql` is one of the two winning-plays queries. */
+/** Whether `sql` is one of the winning-plays queries, with or without a rally length. */
 export function isWinningPlaysSql(sql: string): boolean {
-  return sql === winningPlaysSql("mine") || sql === winningPlaysSql("opponent");
+  const rally = rallyLengthOfPlaysSql(sql);
+  return (
+    sql === winningPlaysSql("mine", rally) ||
+    sql === winningPlaysSql("opponent", rally)
+  );
+}
+
+// ── Rally length ─────────────────────────────────────────────────────────────
+
+/**
+ * The rallies a plays question is narrowed to, in shots, the serve
+ * included: `min` to `max`, `max` null for no upper bound. The bands are
+ * the ones ask.match_stats and ask.point_plays.rally_band count — short
+ * 1–4, medium 5–9, long 10 or more (migration 20261015090038).
+ */
+export interface AskRallyLength {
+  min: number;
+  max: number | null;
+}
+
+export const ASK_SHORT_RALLY: AskRallyLength = { min: 1, max: 4 };
+export const ASK_MEDIUM_RALLY: AskRallyLength = { min: 5, max: 9 };
+export const ASK_LONG_RALLY: AskRallyLength = { min: 10, max: null };
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  twelve: 12,
+  fifteen: 15,
+  twenty: 20,
+};
+const N = String.raw`(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty)`;
+const AT_MOST = new RegExp(
+  String.raw`\b(?:up to|at most|no more than|within(?: the first)?|under|fewer than|less than|max(?:imum)? of)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:less|fewer|under)\b|\b(?:first|opening)\s+${N}\s+shots?\b|\b(?:1|one)\s*(?:-|to)\s*${N}\s+shots?\b`,
+  "i",
+);
+const AT_LEAST = new RegExp(
+  String.raw`\b(?:at least|more than|over)\s+${N}\s*(?:-\s*)?shots?\b|\b${N}\s*\+\s*shots?\b|\b${N}\s*(?:-\s*)?shots?\s+or\s+(?:more|longer)\b`,
+  "i",
+);
+const SHORT_RALLY = /\b(?:short(?:er)?|quick)\s+(?:rall(?:y|ies)|points?)\b/i;
+const MEDIUM_RALLY = /\bmedium(?:[- ]length)?\s+(?:rall(?:y|ies)|points?)\b/i;
+const LONG_RALLY = /\b(?:long(?:er)?|extended)\s+(?:rall(?:y|ies)|points?)\b/i;
+
+function numberOf(word: string | undefined): number | null {
+  if (word === undefined) return null;
+  const lower = word.toLowerCase();
+  const n = /^\d+$/.test(lower) ? Number(lower) : NUMBER_WORDS[lower];
+  return n !== undefined && Number.isFinite(n) && n >= 1 && n <= 50 ? n : null;
+}
+
+/**
+ * The rally length a question narrows its plays to — "short rallies",
+ * "rallies that went up to 4 shots", "points of 10 shots or more" — or null
+ * when it names none. "Under 5 shots" and "fewer than 5" are at most 4.
+ */
+export function rallyLengthOf(question: string): AskRallyLength | null {
+  const most = AT_MOST.exec(question);
+  if (most) {
+    const n = numberOf(most.slice(1).find((group) => group !== undefined));
+    if (n !== null) {
+      const strict = /\b(?:under|fewer than|less than)\b/i.test(most[0]);
+      const max = strict ? n - 1 : n;
+      if (max >= 1) return { min: 1, max };
+    }
+  }
+  const least = AT_LEAST.exec(question);
+  if (least) {
+    const n = numberOf(least.slice(1).find((group) => group !== undefined));
+    if (n !== null) {
+      const strict = /\b(?:more than|over)\b/i.test(least[0]);
+      return { min: strict ? n + 1 : n, max: null };
+    }
+  }
+  if (SHORT_RALLY.test(question)) return ASK_SHORT_RALLY;
+  if (MEDIUM_RALLY.test(question)) return ASK_MEDIUM_RALLY;
+  if (LONG_RALLY.test(question)) return ASK_LONG_RALLY;
+  return null;
+}
+
+/** The query's line that keeps only those rallies. */
+function rallyFilter(rally: AskRallyLength): string {
+  return rally.max === null
+    ? `    and p.rally_length >= ${rally.min}`
+    : `    and p.rally_length between ${rally.min} and ${rally.max}`;
+}
+
+/** The rally length a plays query was narrowed to, read back from its sql. */
+export function rallyLengthOfPlaysSql(sql: string): AskRallyLength | null {
+  const between = /\n {4}and p\.rally_length between (\d+) and (\d+)\n/.exec(
+    sql,
+  );
+  if (between) return { min: Number(between[1]), max: Number(between[2]) };
+  const least = /\n {4}and p\.rally_length >= (\d+)\n/.exec(sql);
+  return least ? { min: Number(least[1]), max: null } : null;
+}
+
+/** "rallies of up to four shots", "rallies of ten shots or more", as a phrase. */
+export function rallyPhrase(rally: AskRallyLength): string {
+  const words = (n: number) =>
+    Object.entries(NUMBER_WORDS).find(([, value]) => value === n)?.[0] ??
+    String(n);
+  if (rally.max === null) return `rallies of ${words(rally.min)} shots or more`;
+  if (rally.min <= 1) {
+    return `rallies of up to ${words(rally.max)} ${rally.max === 1 ? "shot" : "shots"}`;
+  }
+  return `rallies of ${words(rally.min)} to ${words(rally.max)} shots`;
 }
 
 /**
@@ -525,7 +643,9 @@ export function buildWinningPlaysAnswer(
   rows: readonly AskRow[],
   voice: AskPlaysVoice,
   matchCount: number,
+  rally: AskRallyLength | null = null,
 ): string | null {
+  const within = rally === null ? "" : ` in ${rallyPhrase(rally)}`;
   const indexed = rows.map((row, index) => ({ row, ref: `r${index + 1}` }));
   const total = indexed.find((entry) => entry.row.section === "total");
   const plays = indexed.filter((entry) => entry.row.section === "play");
@@ -534,10 +654,10 @@ export function buildWinningPlaysAnswer(
   }
   const cell = (ref: string, column: string) => `{{${ref}.${column}}}`;
   const top = plays[0];
-  const headline = `${sentenceCase(voice.possessive)} best play was the ${phrase(top.row)}: it won ${cell(top.ref, "points")} points — ${cell(top.ref, "winners")} as ${voice.second ? "your" : "their"} own winner and ${cell(top.ref, "errors_drawn")} by drawing an error.`;
+  const headline = `${sentenceCase(voice.possessive)} best play${within} was the ${phrase(top.row)}: it won ${cell(top.ref, "points")} points — ${cell(top.ref, "winners")} as ${voice.second ? "your" : "their"} own winner and ${cell(top.ref, "errors_drawn")} by drawing an error.`;
 
   const table = [
-    `${ASK_VISUAL_LINE_PREFIX} table ${S} The shots that won ${voice.second ? "you" : voice.name} points, by stroke and direction. Most points first.`,
+    `${ASK_VISUAL_LINE_PREFIX} table ${S} The shots that won ${voice.second ? "you" : voice.name} points${within}, by stroke and direction. Most points first.`,
     `COLUMNS: Points won ${S} Winners ${S} Errors drawn`,
     ...plays.map(
       (entry) =>
@@ -547,7 +667,7 @@ export function buildWinningPlaysAnswer(
 
   const paragraphs: string[] = [];
   paragraphs.push(
-    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. The table lists the plays that won the most.`,
+    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points${within}; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. The table lists the plays that won the most.`,
   );
   const withShots = count(total.row.errors_drawn);
   paragraphs.push(
