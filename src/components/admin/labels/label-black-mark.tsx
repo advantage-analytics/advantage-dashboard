@@ -15,6 +15,7 @@ import {
   LAST_BALL_IN_LABEL,
   lastCallAction,
   LOOKS_RIGHT_LABEL,
+  lastCallUnplacedHover,
   markHover,
   ownedEndingPhrase,
   PLACE_BOUNCE_LABEL,
@@ -697,13 +698,25 @@ function chipHover(name: string, lines: readonly string[]): ChipHover {
 /** `lines` with each said once, in order. */
 const once = (lines: readonly string[]) => [...new Set(lines)];
 
-/** An item's open members' evidence lines (`markHover`), each said once. */
-const openEvidence = (item: ReviewItem, names: SideNames) =>
-  once(
-    item.members
-      .filter((member) => member.state === "open")
-      .map((member) => markHover(member.mark, names)),
+/**
+ * An item's open members' evidence lines (`markHover`), each said once. With
+ * no landing on the last ball, "Was the last ball in?" says the vendor's call
+ * alone (`lastCallUnplacedHover`): its own line reads the call against a
+ * landing the well shows as empty.
+ */
+const openEvidence = (item: ReviewItem, names: SideNames) => {
+  const open = item.members.filter((member) => member.state === "open");
+  const unplaced = open.some(
+    (member) => member.mark.code === "last_landing_missing",
   );
+  return once(
+    open.map(({ mark }) =>
+      unplaced && mark.code === "last_call_overruled"
+        ? lastCallUnplacedHover(mark.params.vendorCall)
+        : markHover(mark, names),
+    ),
+  );
+};
 
 /**
  * What the point row draws of its review flag (`reviewFlag`, through

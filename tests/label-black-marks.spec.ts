@@ -665,6 +665,32 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(pointer.html).not.toContain("<button");
   });
 
+  test("with no landing on the last ball, its evidence is the vendor's call alone", () => {
+    const placed = stale();
+    const point = {
+      ...placed,
+      shots: placed.shots.map((s) => ({
+        ...s,
+        landingX: null,
+        landingY: null,
+      })),
+    };
+    const [ace] = point.shots;
+    const marks = marksOf(point, [
+      mark("last_call_overruled", { vendorCall: "out", eventId: ace.eventId! }),
+    ]);
+    const [item] = reviewRows(
+      renderWell(point, marks, { onSelectShot: () => {} }),
+    );
+    expect(item.id).toBe(4);
+    const lines = evidence(item);
+    expect(lines).toContain(
+      "The vendor called the last ball out, and its landing isn’t placed.",
+    );
+    expect(lines).toContain("Place the last bounce to settle Out, Net or In.");
+    expect(lines.some((line) => line.includes("by its landing"))).toBe(false);
+  });
+
   test("item 4 asked as the vendor called the last ball: one answer row, and its Then line", () => {
     const point = stale();
     const [ace] = point.shots;

@@ -182,6 +182,16 @@ export function lastCallQuestion(call: "in" | "out" | "net"): string {
   return `Was the last ball ${call === "net" ? "in the net" : call}?`;
 }
 
+/**
+ * "Was the last ball in?"'s evidence while the last ball has no landing
+ * placed: the vendor's call alone. Its usual line reads the call against the
+ * landing ("in by its landing"), which the "Place the last bounce" line beside
+ * it would contradict.
+ */
+export function lastCallUnplacedHover(call: "in" | "out" | "net"): string {
+  return `The vendor called the last ball ${call === "net" ? "in the net" : call}, and its landing isn’t placed.`;
+}
+
 // ── The open point's review block ───────────────────────────────────────────
 
 /** The block's title: its items are answered top to bottom. */
