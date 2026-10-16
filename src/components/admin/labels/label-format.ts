@@ -115,7 +115,12 @@ export function formatVideoTime(seconds: number): string {
  * offset (label-video.tsx), so a printed time is where a click lands.
  */
 export function formatFileTime(videoTime: number, offset = 0): string {
-  return formatVideoTime(videoTime - offset);
+  return formatVideoTime(fileSeconds(videoTime, offset));
+}
+
+/** A label's `videoTime` → the playing file's seconds. The one place it is done. */
+export function fileSeconds(videoTime: number, offset = 0): number {
+  return videoTime - offset;
 }
 
 /**

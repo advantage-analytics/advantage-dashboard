@@ -46,7 +46,7 @@ import { gameInSetOf, type LabelGame } from "@/lib/services/labels/operations";
 import { sharesVendorRally } from "@/lib/services/labels/point-split";
 import { suggestionState } from "@/lib/services/labels/suggestions";
 import {
-  formatClockTime,
+  formatFileClockTime,
   pointDetail,
   pointSentence,
   withoutGhosts,
@@ -410,7 +410,7 @@ function isNewPoint(
 /**
  * The new point's detail line: "Set who won, then add its shots · between {t1}
  * and {t2}", from the last live stroke of the live point before it and the
- * first of the one after (`formatClockTime`), on the playing file's clock
+ * first of the one after (`formatFileClockTime`), on the playing file's clock
  * (`fileOffset`). With one neighbour timed it reads "after t1" / "before t2";
  * with neither, the words alone.
  */
@@ -433,7 +433,7 @@ function newPointDetail(
   const t2 = after
     ? (live(after).find((shot) => shot.videoTime !== null)?.videoTime ?? null)
     : null;
-  const clock = (t: number) => formatClockTime(t - fileOffset);
+  const clock = (t: number) => formatFileClockTime(t, fileOffset);
   if (t1 !== null && t2 !== null) {
     return `${NEW_POINT_DETAIL} · between ${clock(t1)} and ${clock(t2)}`;
   }
