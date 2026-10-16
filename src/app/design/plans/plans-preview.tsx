@@ -111,7 +111,7 @@ export function PlansPreview() {
               value={stage}
               onChange={setStage}
               options={[
-                { v: "pilot", t: "Now, during the beta" },
+                { v: "pilot", t: "Now, during the pilot" },
                 { v: "paid", t: "From January" },
               ]}
             />
@@ -150,8 +150,8 @@ export function PlansPreview() {
 }
 
 /**
- * Today through Dec 31: the pilot's free 2 hours a month, with January's plans
- * at list price. The pilot perk is 2 free hours on top, granted as credits.
+ * Today through Dec 31: the pilot's free 2 hours a month (covered by the video
+ * vendor until January 1), with January's plans at list price.
  */
 function PilotView({
   billing,
@@ -165,7 +165,7 @@ function PilotView({
     <>
       <Facts
         facts={[
-          { label: "Plan", value: "Free beta" },
+          { label: "Plan", value: "Free pilot" },
           { label: "Price", value: "Free" },
           { label: "Free through", value: s.ends },
         ]}
@@ -175,7 +175,7 @@ function PilotView({
         used={s.used}
         cap={s.cap}
         resets={s.resets}
-        footnote="The beta covers 2 hours of film a month. Nothing is charged before January 2027."
+        footnote="The pilot gives you 2 free hours of film every month until January 1. Nothing is charged before then."
       />
 
       <SettingsCard>
@@ -201,10 +201,9 @@ function PilotView({
           />
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
-          Pilot players get 2 free hours on top of any plan, added as credits
-          when it starts on January 1. Nothing is billed before then. If you
-          don&apos;t choose, you move to Free and keep every match you have
-          uploaded.
+          Choose a plan now and it starts on January 1, when the free pilot
+          hours end. Nothing is billed before then. If you don&apos;t choose,
+          you move to Free and keep every match you have uploaded.
         </SettingsCardFootnote>
       </SettingsCard>
     </>
@@ -416,9 +415,7 @@ function HoursCard({
           <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
             {credits > 0 ? `${credits}h in credits` : "No credits"}
             <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
-              {credits > 0
-                ? "Your 2 free pilot hours. Used after your plan hours run out."
-                : "Used after your plan hours run out. Credits last 12 months."}
+              Used after your plan hours run out. Credits last 12 months.
             </span>
           </span>
           <a href="#credits" className={BTN_SECONDARY}>
