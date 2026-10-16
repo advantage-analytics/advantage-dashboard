@@ -597,6 +597,12 @@ export interface UseUploadMatchWizardReturn {
    * "Add hours" (B4) with no video priced yet.
    */
   paywall: { neededSeconds?: number } | null;
+  /**
+   * Credits can pay for this upload: the BILLED workspace (`eligibilityWorkspace`,
+   * pinned to an existing match's) is personal, and this is not the admin
+   * console. The active workspace is not the question.
+   */
+  canBuyCredits: boolean;
   openAddHours: (neededSeconds?: number) => void;
   closeAddHours: () => void;
   /** Checkout finished: count the new hours and carry on where it stopped. */
@@ -1444,10 +1450,15 @@ export function useUploadMatchWizard({
   const canBuyCredits = !admin && eligibilityWorkspace.kind === "personal";
   const freeHoursReturn = freeHoursReturnOn();
 
-  const openAddHours = useCallback((neededSeconds?: number) => {
-    paywallResumeRef.current = null;
-    setPaywall({ neededSeconds });
-  }, []);
+  const openAddHours = useCallback(
+    (neededSeconds?: number) => {
+      // Credits spend only in the billed workspace when it is personal.
+      if (!canBuyCredits) return;
+      paywallResumeRef.current = null;
+      setPaywall({ neededSeconds });
+    },
+    [canBuyCredits],
+  );
   const closeAddHours = useCallback(() => {
     // Closed by hand: a purchase that lands afterwards counts its hours but
     // no longer carries the wizard forward.
@@ -4145,6 +4156,7 @@ export function useUploadMatchWizard({
     quotaCreditSeconds,
     freeHoursReturnOn: freeHoursReturn,
     paywall,
+    canBuyCredits,
     openAddHours,
     closeAddHours,
     handleCreditsAdded,

@@ -131,7 +131,13 @@ export type FulfilResult =
     }
   | {
       ok: false;
-      reason: "not_credits" | "unpaid" | "bad_metadata" | "wrong_user";
+      /**
+       * `user_gone`: the buyer's account was deleted before the hours were
+       * recorded. Nothing to credit, and a retry cannot change that, so the
+       * webhook acknowledges it rather than failing until Stripe gives up.
+       */
+      reason:
+        "not_credits" | "unpaid" | "bad_metadata" | "wrong_user" | "user_gone";
     };
 
 /**
@@ -175,34 +181,97 @@ export async function fulfilCreditCheckout(params: {
       ? session.payment_intent
       : (session.payment_intent?.id ?? null);
 
-  const { data, error } = await admin
+  const existing = await admin
     .from("video_credits")
-    .upsert(
-      {
-        user_id: userId,
-        seconds,
-        remaining_seconds: seconds,
-        expires_at: expiresAt,
-        source: "purchase",
-        pack: packId,
-        stripe_checkout_session: session.id,
-        stripe_payment_intent: paymentIntent,
-        stripe_event_id: eventId ?? null,
-        amount_cents: session.amount_total,
-        currency: session.currency,
-      },
-      { onConflict: "stripe_checkout_session", ignoreDuplicates: true },
-    )
-    .select("id");
+    .select("id")
+    .eq("stripe_checkout_session", session.id)
+    .maybeSingle();
+  if (existing.error) {
+    throw new Error(`Could not read video credits: ${existing.error.message}`);
+  }
+  if (existing.data) {
+    return { ok: true, created: false, pack: packId, seconds, expiresAt };
+  }
 
+  // A plain insert: every unique column (session, payment intent, event) names
+  // this one purchase, so ANY unique conflict means a concurrent caller —
+  // the webhook racing /api/credits/confirm — recorded it first. That is the
+  // idempotent outcome, not an error.
+  const { error } = await admin.from("video_credits").insert({
+    user_id: userId,
+    seconds,
+    remaining_seconds: seconds,
+    expires_at: expiresAt,
+    source: "purchase",
+    pack: packId,
+    stripe_checkout_session: session.id,
+    stripe_payment_intent: paymentIntent,
+    stripe_event_id: eventId ?? null,
+    amount_cents: session.amount_total,
+    currency: session.currency,
+  });
+
+  if (error?.code === "23505") {
+    return { ok: true, created: false, pack: packId, seconds, expiresAt };
+  }
+  if (error?.code === "23503") {
+    return { ok: false, reason: "user_gone" };
+  }
   if (error) {
     throw new Error(`Could not record video credits: ${error.message}`);
   }
   return {
     ok: true,
-    created: (data ?? []).length > 0,
+    created: true,
     pack: packId,
     seconds,
     expiresAt,
   };
+}
+
+/**
+ * A refund or a dispute takes the purchase's UNSPENT hours away. All sales are
+ * final (Cj, 2026-10-16), but a chargeback or a refund issued by hand from the
+ * Dashboard still returns the money, and the hours must not outlive it. Hours
+ * already spent stay spent — the vendor was paid for them.
+ *
+ * `cap_video_credit` lowers `remaining_seconds` to at most `maxRemaining` in
+ * one statement, so it never races a reservation, and a redelivered event
+ * computes the same cap and changes nothing. A partial refund keeps the share
+ * of the pack still paid for; a full refund or any dispute keeps none.
+ */
+export async function revokeCreditsForCharge(params: {
+  admin: SupabaseClient;
+  paymentIntent: string;
+  /** What the charge was for and how much of it went back, in cents. */
+  amountCents: number;
+  refundedCents: number;
+  disputed: boolean;
+}): Promise<{ found: boolean; remainingSeconds: number | null }> {
+  const { admin, paymentIntent, amountCents, refundedCents, disputed } = params;
+
+  const lot = await admin
+    .from("video_credits")
+    .select("seconds")
+    .eq("stripe_payment_intent", paymentIntent)
+    .maybeSingle();
+  if (lot.error) {
+    throw new Error(`Could not read video credits: ${lot.error.message}`);
+  }
+  if (!lot.data) return { found: false, remainingSeconds: null };
+
+  const paidShare =
+    disputed || amountCents <= 0
+      ? 0
+      : Math.max(0, (amountCents - refundedCents) / amountCents);
+  const maxRemaining = Math.floor((lot.data.seconds as number) * paidShare);
+
+  const { data, error } = await admin.rpc("cap_video_credit", {
+    p_payment_intent: paymentIntent,
+    p_max_remaining: maxRemaining,
+  });
+  if (error) {
+    throw new Error(`Could not revoke video credits: ${error.message}`);
+  }
+  return { found: true, remainingSeconds: (data as number | null) ?? null };
 }

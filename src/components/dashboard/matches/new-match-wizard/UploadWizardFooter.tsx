@@ -27,6 +27,7 @@ export function WizardQuotaMeter() {
       quotaCreditSeconds,
       quotaCapSeconds,
       uploadedFile,
+      freeHoursReturnOn,
     },
     view: { trimSelected },
     meta: { workspaceKind },
@@ -68,7 +69,13 @@ export function WizardQuotaMeter() {
           : remainingQuotaSeconds
       }
       capSeconds={quotaCapSeconds}
-      suffix={workspaceKind === "team" ? "team hours" : "resets on the 1st"}
+      suffix={
+        workspaceKind === "team"
+          ? "team hours"
+          : freeHoursReturnOn
+            ? "resets on the 1st"
+            : "free hours end this month"
+      }
       /* Only once there is a video to price. A resumed draft keeps its trim
          window in localStorage but cannot keep the File, so the handles alone
          would have the meter costing a video that is no longer picked. */

@@ -221,15 +221,13 @@ function OutOfHoursNotice() {
       remainingQuotaSeconds,
       freeHoursReturnOn,
       openAddHours,
+      canBuyCredits,
     },
-    meta: { workspaceKind },
   } = useUploadWizard();
-  const admin = useAdminWizardMode();
 
   if (
-    admin ||
+    !canBuyCredits ||
     !isProcessingProvider ||
-    workspaceKind !== "personal" ||
     remainingQuotaSeconds === undefined ||
     remainingQuotaSeconds > 0
   ) {

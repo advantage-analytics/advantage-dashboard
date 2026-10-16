@@ -10,8 +10,9 @@ import {
 import {
   currentBillingMonth,
   formatPilotEnd,
+  freeHoursReturnOn,
 } from "@/lib/services/splitstep/config";
-import { formatCreditDate } from "@/lib/services/credits/packs";
+import { formatCreditDate, PLAN_HREF } from "@/lib/services/credits/packs";
 import {
   SettingsCard,
   SettingsCardFootnote,
@@ -89,8 +90,8 @@ export default async function UsagePage() {
         <SettingsCardTitle
           trailing={
             <span className="mono text-[11px] text-[var(--ink-500)]">
-              {formatHoursLong(personal.usedSeconds)} /{" "}
-              {formatHoursLong(personal.capSeconds)} free
+              {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
+              {formatHoursLong(personal.capSeconds)} free left
             </span>
           }
         >
@@ -111,7 +112,7 @@ export default async function UsagePage() {
           </span>
           <span className="flex-1" />
           <Link
-            href="/dashboard/settings/plan"
+            href={PLAN_HREF}
             className="inline-flex items-center gap-1 text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
           >
             Manage on Plan
@@ -120,9 +121,9 @@ export default async function UsagePage() {
         </div>
 
         <SettingsCardFootnote>
-          Personal uploads only · Free hours reset{" "}
-          {formatResetDate(personal.billingMonth)} · Free through{" "}
-          {formatPilotEnd()}
+          {freeHoursReturnOn()
+            ? `Personal uploads only · Free hours reset ${formatResetDate(personal.billingMonth)} · Free through ${formatPilotEnd()}`
+            : `Personal uploads only · Free hours end ${formatPilotEnd()}`}
         </SettingsCardFootnote>
       </SettingsCard>
 

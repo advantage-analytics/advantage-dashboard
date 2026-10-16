@@ -11,9 +11,7 @@ import {
   usageFraction,
 } from "@/lib/data/usage-format";
 import { freeHoursReturnOn } from "@/lib/services/splitstep/config";
-
-/** Where "Add hours" goes — the page that sells credits. */
-const PLAN_HREF = "/dashboard/settings/plan";
+import { PLAN_HREF } from "@/lib/services/credits/packs";
 
 /**
  * The workspace's budget, as the last line on a Home page.

@@ -2,9 +2,7 @@ import Link from "next/link";
 import { NewReportsSubline } from "@/components/dashboard/home/new-reports-subline";
 import { advButton } from "@/lib/ui/adv-button";
 import { formatHoursShort } from "@/lib/data/usage-format";
-
-/** Where "Add hours" goes — the page that sells credits. */
-const PLAN_HREF = "/dashboard/settings/plan";
+import { PLAN_HREF } from "@/lib/services/credits/packs";
 import type { PersonalUsage } from "@/lib/data/usage-server";
 
 /**

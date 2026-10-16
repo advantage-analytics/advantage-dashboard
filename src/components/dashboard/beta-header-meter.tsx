@@ -12,7 +12,11 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import { PendingBar } from "@/components/dashboard/loading/pending";
 import type { HoursLeft } from "@/lib/services/splitstep/quota";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import { PLAN_HREF } from "@/lib/services/credits/packs";
+import {
+  currentBillingMonth,
+  freeHoursReturnOn,
+} from "@/lib/services/splitstep/config";
 import {
   formatHoursLong,
   formatHoursShort,
@@ -20,9 +24,6 @@ import {
   monthName,
   usageFraction,
 } from "@/lib/data/usage-format";
-
-/** Where the personal pill goes: the page that owns hours and credits. */
-export const PLAN_HREF = "/dashboard/settings/plan";
 
 /**
  * The header's video-hours pill: the welcome dialog's brand band shrunk to a
@@ -82,8 +83,11 @@ export function BetaMeterPill({
   tier: "beta" | "pilot";
   hours: PillHours | "loading" | null;
   onClick: () => void;
-  /** "Oct 1". Fixed by `/design` so its preview does not drift by month. */
-  resetsOn?: string;
+  /**
+   * "Oct 1". Fixed by `/design` so its preview does not drift by month. Null
+   * means a personal player's free hours end rather than reset (December).
+   */
+  resetsOn?: string | null;
 }) {
   const name = tier === "pilot" ? "Pilot" : "Beta";
   // The hours are a team's, so an empty allowance is "your team's" —
@@ -104,8 +108,14 @@ export function BetaMeterPill({
     ready.remainingSeconds <= ready.capSeconds * 0.2;
   // Only called once it is needed, so the two renders on every page load
   // never pay for the Date and Intl work behind the default.
+  // A team's allowance resets every month; a player's free hours stop after
+  // Dec 31, so in December there is no date to promise them.
   const resetsOnOrDefault = () =>
-    resetsOn ?? formatResetDate(currentBillingMonth());
+    resetsOn !== undefined
+      ? resetsOn
+      : teamHours
+        ? formatResetDate(currentBillingMonth())
+        : freeHoursReturnOn();
 
   const freeOf = ready
     ? `${formatHoursShort(ready.remainingSeconds)} of ${formatHoursShort(ready.capSeconds)}`
@@ -129,14 +139,22 @@ export function BetaMeterPill({
         ? `About the ${tier}`
         : teamHours
           ? out
-            ? outOfHoursDetail(ready, true, resetsOnOrDefault())
+            ? outOfHoursDetail(
+                ready,
+                true,
+                resetsOnOrDefault() ?? formatResetDate(currentBillingMonth()),
+              )
             : `${freeOf} video hours left`
           : out
-            ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
+            ? resetsOnOrDefault()
+              ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
+              : "Free hours have ended. Click to add credits."
             : onCredits
               ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} in credits left.`
               : low
-                ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
+                ? resetsOnOrDefault()
+                  ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
+                  : `${freeOf} free hours left, the last before they end. Add credits on Plan.`
                 : credits > 0
                   ? `${freeOf} free hours left this month, plus ${formatHoursLong(credits)} in credits. Click for Plan.`
                   : `${freeOf} free hours left this month. Click for Plan.`;
@@ -147,7 +165,9 @@ export function BetaMeterPill({
       : !ready
         ? name
         : out
-          ? `${name}: out of video hours until ${resetsOnOrDefault()}`
+          ? resetsOnOrDefault()
+            ? `${name}: out of video hours until ${resetsOnOrDefault()}`
+            : `${name}: out of video hours`
           : `${name}: ${detail}`;
 
   // The ring is the free allowance; on credits it reads full (C3), out of

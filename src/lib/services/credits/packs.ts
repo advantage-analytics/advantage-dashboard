@@ -21,6 +21,9 @@ export const CREDIT_PACKS: readonly CreditPack[] = [
   { id: "5h", hours: 5, priceCents: 6000 },
 ];
 
+/** Settings › Plan — where hours and credits are bought. Every "Add hours" link. */
+export const PLAN_HREF = "/dashboard/settings/plan";
+
 /** Credits last this long from the moment they are bought. */
 export const CREDIT_VALIDITY_MONTHS = 12;
 

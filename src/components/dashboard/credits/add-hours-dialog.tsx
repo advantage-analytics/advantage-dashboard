@@ -176,6 +176,9 @@ function AddHoursContent({
 
   const coveringHours = creditPack(initialPack).hours;
   const hasVideo = neededSeconds !== undefined;
+  // `smallestPackCovering()` falls back to the biggest pack when none covers
+  // the gap on its own; the headline must not promise that one pack does.
+  const onePackCovers = packSeconds(creditPack(initialPack)) >= shortBySeconds;
 
   const fetchClientSecret = useCallback(async () => {
     const response = await fetch("/api/create-checkout-session", {
@@ -227,20 +230,27 @@ function AddHoursContent({
     [fetchClientSecret, onComplete],
   );
 
-  const headline = hasVideo ? (
-    <>
-      {NUMBER_WORDS[coveringHours] ?? coveringHours} more{" "}
-      {coveringHours === 1 ? "hour" : "hours"}
-      <br />
-      and it&rsquo;s in.
-    </>
-  ) : (
-    <>
-      Add video hours
-      <br />
-      and keep going.
-    </>
-  );
+  const headline =
+    hasVideo && !onePackCovers ? (
+      <>
+        Add hours
+        <br />
+        to send this match.
+      </>
+    ) : hasVideo ? (
+      <>
+        {NUMBER_WORDS[coveringHours] ?? coveringHours} more{" "}
+        {coveringHours === 1 ? "hour" : "hours"}
+        <br />
+        and it&rsquo;s in.
+      </>
+    ) : (
+      <>
+        Add video hours
+        <br />
+        and keep going.
+      </>
+    );
 
   const description = hasVideo
     ? freeRemainingSeconds > 0
