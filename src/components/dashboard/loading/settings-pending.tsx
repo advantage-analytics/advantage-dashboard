@@ -446,6 +446,35 @@ function SessionRow({
   );
 }
 
+/** Connections: the instructions card (static, so in ink), then the list. */
+export function SettingsConnectionsPending() {
+  return (
+    <Column label="connections" width={660}>
+      <SettingsCard className="gap-3">
+        <SettingsCardTitle>Use Advantage in Claude</SettingsCardTitle>
+        <Text className="text-[12px] leading-[1.55]">
+          Ask Claude about your matches in claude.ai, Claude Desktop or Claude
+          Code. It reads your statistics the way Ask does and spends your Ask
+          questions; it cannot change anything.
+        </Text>
+        <Text className="text-[12px]">
+          1. In Claude, open Settings → Connectors → Add custom connector.
+        </Text>
+        <Box className="h-[38px] rounded-[8px]" />
+        <Box className="h-[38px] rounded-[8px]" />
+      </SettingsCard>
+      <SettingsCard>
+        <SettingsCardTitle className="pb-2">Connected apps</SettingsCardTitle>
+        <SessionRow
+          title="Claude"
+          detail="Approved Oct 16 · Reads your matches and asks questions"
+          action="Disconnect"
+        />
+      </SettingsCard>
+    </Column>
+  );
+}
+
 /** Plan: the facts strip, then the beta terms — or the program note. */
 export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();

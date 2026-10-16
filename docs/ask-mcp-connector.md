@@ -221,6 +221,16 @@ email"):
 
 ## 5. Connecting
 
+**In the app**: Settings › Connections (`/dashboard/settings/connections`)
+prints the address and the steps below, and lists the apps the person approved
+with Disconnect on each. The list and the revoke call Supabase Auth's
+`GET`/`DELETE /auth/v1/user/oauth/grants` with the person's own token
+(`src/lib/auth/oauth-grants.ts`); revoking ends that client's sessions. The
+help centre's "Using Advantage in Claude" topic points there. Claude is named
+in text only: Anthropic's trademark guidelines allow its logo only with prior
+approval. The draft listing for Claude's Connectors Directory is
+[`ask-mcp-connector-directory-listing.md`](ask-mcp-connector-directory-listing.md).
+
 **claude.ai and Claude Desktop** (custom connectors are shared between them):
 Settings → Connectors → **Add custom connector** → name "Advantage", URL
 `https://app.advantage-analytics.com/api/mcp` → Add → **Connect**. The sign-in
@@ -295,10 +305,6 @@ alone (`supabase/migrations/20261015095315_ask_mcp_usage.sql`).
   refusal are already in place for it.
 - **`@supabase/supabase-js` upgrade**, then the consent page uses
   `auth.oauth.*` instead of `src/lib/auth/oauth-consent.ts`'s two fetches.
-- **Revoking a connection from inside the app.** Supabase stores consents
-  (`auth.oauth_consents`); removing the connector in Claude drops the tokens on
-  that side, and the dashboard's OAuth Apps page can revoke a client, but there
-  is no per-user "connected apps" page here yet.
 - **Resource indicators** (RFC 8707): the metadata advertises
   `resource`, and Supabase records it on the authorization, but the token's
   `aud` stays `authenticated` and the route does not check a resource claim.
