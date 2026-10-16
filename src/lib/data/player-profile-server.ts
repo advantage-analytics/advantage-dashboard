@@ -22,7 +22,10 @@ import {
   type ZoneKey,
   type ZoneStats,
 } from "@/lib/data/serve-zones";
-import { fetchAllPages } from "@/lib/data/paged-query";
+import {
+  fetchServeShotsForMatches,
+  type ServeShotRow,
+} from "@/lib/data/serve-shots-by-match";
 import {
   dualRecordFrom,
   lineHistoryFrom,
@@ -185,28 +188,7 @@ interface DbInsights {
 }
 
 /** A serve row and the point it belongs to, as the map needs them. */
-interface DbServeShotRow {
-  id: string;
-  shot_number: number | null;
-  shot_type: string | null;
-  landing_x: number | null;
-  landing_y: number | null;
-  contact_y: number | null;
-  result: string | null;
-  spin_type: string | null;
-  zone: string | null;
-  point_id: string;
-  points: {
-    id: string;
-    match_id: string;
-    server_is_player1: boolean;
-    set_number: number | null;
-    result_type: string | null;
-    point_score: string | null;
-    game_score: string | null;
-    won_by_player1: boolean | null;
-  } | null;
-}
+type DbServeShotRow = ServeShotRow;
 
 /**
  * How many matches the serve map reads. A season's serve rows are a few
@@ -256,11 +238,10 @@ function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
  * be either side, and reading the wrong one would plot their opponents'
  * serves under their name.
  *
- * Paged through the fail-closed `fetchAllPages` (T2) — a season's serve rows
- * across ten matches sit well past PostgREST's 1000-row cap, so a single
- * request would silently plot a partial map while still reporting
- * `matchCount` as if every match's serves had been read. The order is total
- * (`point_id`, `shot_number`, `id`) so pages never overlap or skip; mirrors
+ * Read through `fetchServeShotsForMatches`, paged fail-closed — a season's
+ * serve rows across ten matches sit well past PostgREST's 1000-row cap, so a
+ * single request would silently plot a partial map while still reporting
+ * `matchCount` as if every match's serves had been read. Mirrors
  * `loadHomeServes` in `home-serve-data.ts`.
  */
 export async function serveMapFor(
@@ -275,22 +256,13 @@ export async function serveMapFor(
   const sideByMatch = new Map(recent.map((r) => [r.id, r.isPlayer1]));
 
   let shotsError: string | null = null;
-  const shots = await fetchAllPages<DbServeShotRow>(async (from, to) => {
-    const { data, error } = await supabase
-      .from("shots")
-      .select(
-        "id, shot_number, shot_type, landing_x, landing_y, contact_y, result, spin_type, zone, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
-      )
-      .in("points.match_id", [...sideByMatch.keys()])
-      .in("shot_type", ["First Serve", "Second Serve"])
-      .order("point_id", { ascending: true })
-      .order("shot_number", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, to);
-    // The helper stops at the first error, so this is set exactly once.
-    if (error) shotsError = error.message;
-    return { data: data as unknown as DbServeShotRow[] | null, error };
-  });
+  const shots = await fetchServeShotsForMatches(
+    supabase,
+    [...sideByMatch.keys()],
+    (msg) => {
+      shotsError = msg;
+    },
+  );
 
   if (!shots) {
     console.error("Failed to fetch serve map shots:", shotsError);

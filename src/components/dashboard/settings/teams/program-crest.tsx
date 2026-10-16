@@ -64,6 +64,7 @@ export function ProgramCrest({
     return (
       // eslint-disable-next-line @next/next/no-img-element -- a ≤512 KB crest at 52px from a public bucket; next/image has no host allow-listed
       <img
+        decoding="async"
         src={crestUrl}
         alt=""
         aria-hidden="true"

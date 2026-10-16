@@ -1,33 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchAllPages } from "@/lib/data/paged-query";
 import { pickServeShot } from "@/lib/data/serve-return-shots";
+import {
+  fetchServeShotsForMatches,
+  type ServeShotRow,
+} from "@/lib/data/serve-shots-by-match";
 import {
   pointToServeDot,
   type ServeDot,
   type ServePointInput,
 } from "@/lib/data/serve-zones";
-type ShotRow = {
-  id: string;
-  shot_number: number | null;
-  shot_type: string | null;
-  landing_x: number | null;
-  landing_y: number | null;
-  contact_y: number | null;
-  spin_type: string | null;
-  zone: string | null;
-  result: string | null;
-  point_id: string;
-  points: {
-    id: string;
-    match_id: string;
-    server_is_player1: boolean;
-    set_number: number | null;
-    result_type: string | null;
-    point_score: string | null;
-    game_score: string | null;
-    won_by_player1: boolean | null;
-  } | null;
-};
+type ShotRow = ServeShotRow;
 
 export interface HomeServeData {
   dots: ServeDot[];
@@ -58,29 +40,13 @@ export async function loadHomeServes(
 
   // Serve rows only: `pointToServeDot` reads just the played serve
   // (`firstShot*`) and a `ServeDot` carries no return, so the rally rows were
-  // dead weight. Paged through the fail-closed helper — four full matches of
-  // serves sit near PostgREST's 1000-row cap, and a truncated read would plot
-  // a partial set that looks complete. The order is total (`id` last) so pages
-  // never overlap or skip; `shot_number` keeps each point's rows earliest
-  // first. `pickServeShot` still guards a point with no serve row downstream.
+  // dead weight. Read from points down and paged fail-closed — see
+  // `fetchServeShotsForMatches`. `pickServeShot` still guards a point with no
+  // serve row downstream.
   let shotsError: string | null = null;
-  const shots = await fetchAllPages<ShotRow>(async (from, to) => {
-    const { data, error } = await supabase
-      .from("shots")
-      .select(
-        "id, shot_number, shot_type, landing_x, landing_y, contact_y, spin_type, zone, result, point_id, points!inner(id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1)",
-      )
-      .in("points.match_id", matchIds)
-      .in("shot_type", ["First Serve", "Second Serve"])
-      .order("point_id", { ascending: true })
-      .order("shot_number", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, to);
-    // The helper stops at the first error, so this is set exactly once.
-    if (error) shotsError = error.message;
-    return { data: data as unknown as ShotRow[] | null, error };
+  const shots = await fetchServeShotsForMatches(supabase, matchIds, (msg) => {
+    shotsError = msg;
   });
-  // Fail closed: a page error is an error, never the rows before it.
   if (!shots) throw new Error(shotsError ?? "Failed to fetch serves");
 
   // Group serve rows by point so the played serve (second if there was one)
