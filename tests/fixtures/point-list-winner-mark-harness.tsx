@@ -111,7 +111,25 @@ const POINTS: MatchPoint[] = [
     player: "player2",
     wonByPlayer1: false,
     pointNumber: 2,
+    pointScore: "15-0",
+    pointScoreRaw: "15-0",
   }),
+  // A frozen score reading (`score_frozen`): the loader defaults the columns
+  // to "0-0" and keeps the nulls in the raw fields; the derivation guessed
+  // the winner. The list draws "—" and says the winner is estimated.
+  point({
+    id: "frozen",
+    pointNumber: 3,
+    gameNumber: 2,
+    gameScore: "0-0",
+    gameScoreRaw: null,
+    pointScore: "0-0",
+    pointScoreRaw: null,
+    winnerGuessed: true,
+    scoreFrozen: true,
+  }),
+  // A later game whose score did read, so the game-score column is real.
+  point({ id: "read", pointNumber: 4, gameNumber: 3, gameScore: "1-1" }),
 ];
 
 const root = createRoot(document.getElementById("root")!);

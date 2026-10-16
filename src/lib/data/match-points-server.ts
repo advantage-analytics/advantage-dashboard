@@ -54,6 +54,20 @@ export interface MatchPoint {
    * without every one of them being touched.
    */
   pointScoreRaw?: string | null;
+  /**
+   * `points.game_score`, untouched — the `pointScoreRaw` of the game column.
+   * Null on a point whose score the vendor's stream never read (a frozen
+   * stretch, `score_frozen`): the Film list and board draw "—" or a blank
+   * there rather than the defaulted `gameScore`'s fabricated "0-0".
+   */
+  gameScoreRaw?: string | null;
+  /**
+   * The derivation guessed who won this point (`winner_guessed`): the score
+   * stream had nothing to read, so the winner is the last stroke's.
+   */
+  winnerGuessed?: boolean;
+  /** The vendor's score reading was stuck on this point (`score_frozen`). */
+  scoreFrozen?: boolean;
   resultType: string;
   eventType: string;
   description: string;
@@ -101,6 +115,7 @@ interface DbPoint {
   game_score: string | null;
   point_score: string | null;
   result_type: string | null;
+  flags: string[] | null;
   won_by_player1: boolean;
   server_is_player1: boolean;
   is_break_point: boolean;
@@ -293,7 +308,7 @@ export async function getMatchPointsFromSupabase(
   const { data: pointsData, error: pointsError } = await supabase
     .from("points")
     .select(
-      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time",
+      "id, point_number, set_number, game_number, set_score, game_score, point_score, result_type, won_by_player1, server_is_player1, is_break_point, is_set_point, is_match_point, rally_length, duration, video_time, flags",
     )
     .eq("match_id", matchId)
     .order("point_number", { ascending: true });
@@ -387,6 +402,9 @@ export async function getMatchPointsFromSupabase(
       gameScore: point.game_score ?? "0-0",
       pointScore: point.point_score ?? "0-0",
       pointScoreRaw: point.point_score,
+      gameScoreRaw: point.game_score,
+      winnerGuessed: point.flags?.includes("winner_guessed") ?? false,
+      scoreFrozen: point.flags?.includes("score_frozen") ?? false,
       resultType,
       eventType: buildEventType(resultType),
       description: buildDescription(resultType, firstShot, lastShot, point),
