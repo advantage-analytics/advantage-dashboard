@@ -42,11 +42,7 @@ function strokeFor(key: string, current: LabelStroke | null) {
     case "v":
       return (current && VOLLEY_OF[current]) ?? "forehand_volley";
     case "s":
-      return current === "first_serve"
-        ? "second_serve"
-        : current === "second_serve"
-          ? "first_serve"
-          : "first_serve";
+      return current === "first_serve" ? "second_serve" : "first_serve";
     default:
       return null;
   }
@@ -61,7 +57,7 @@ export function strokeKeyChange(
   shot: Pick<LabelShot, "stroke" | "spin">,
 ): StrokeKeyChange | null {
   const lower = key.toLowerCase();
-  const spinIndex = ["1", "2", "3", "4"].indexOf(lower);
+  const spinIndex = "1234".indexOf(lower);
   if (spinIndex !== -1) {
     const spin = LABEL_SPINS[spinIndex];
     return shot.spin === spin ? null : { spin };

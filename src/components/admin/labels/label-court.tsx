@@ -213,7 +213,7 @@ export function LabelCourt({
     zoom: NO_ZOOM,
   });
   if (zoomState.zoomed !== zoomed) setZoomState({ zoomed, zoom: NO_ZOOM });
-  const zoom = zoomState.zoomed === zoomed ? zoomState.zoom : NO_ZOOM;
+  const zoom = zoomState.zoom;
   const setZoom = (next: (z: CourtZoom) => CourtZoom) =>
     setZoomState((state) => ({ zoomed: state.zoomed, zoom: next(state.zoom) }));
   const boxRef = useRef<HTMLElement | null>(null);
@@ -231,9 +231,7 @@ export function LabelCourt({
     const box = boxRef.current;
     if (!box) return;
     function onWheel(event: WheelEvent) {
-      const el = boxRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
+      const rect = (box as HTMLElement).getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       event.preventDefault();
       const px = ((event.clientX - rect.left) / rect.width) * 100;
@@ -250,7 +248,11 @@ export function LabelCourt({
 
   const panHandlers = {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
-      if (event.button !== 0) return;
+      // A drag left with no click of its own must not eat this press's.
+      dropClick.current = false;
+      // Unzoomed there is nothing to pan, so a press is a click however much
+      // the hand shakes.
+      if (event.button !== 0 || zoom.scale === 1) return;
       drag.current = {
         id: event.pointerId,
         x: event.clientX,
@@ -325,7 +327,7 @@ export function LabelCourt({
             }
       }
     >
-      <CourtArt view={view} />
+      <CourtArt view={view} thin={thin} />
       <svg
         className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
@@ -396,8 +398,13 @@ export function LabelCourt({
       {net ? (
         <span
           aria-hidden="true"
-          className="mono pointer-events-none absolute -translate-y-1/2 text-[8px] tracking-[1px] text-white/50 uppercase"
-          style={{ left: pct(net.sx), top: pct(net.sy) }}
+          className="mono pointer-events-none absolute origin-left text-[8px] tracking-[1px] text-white/50 uppercase"
+          // Kept at its size under the labeller's zoom, like the marks.
+          style={{
+            left: pct(net.sx),
+            top: pct(net.sy),
+            transform: `translateY(-50%) scale(${thin.toFixed(3)})`,
+          }}
         >
           Net
         </span>
@@ -527,7 +534,14 @@ export function LabelCourt({
  * bottom; the lines are symmetric about the net, so both frames draw the
  * same picture — and a half is just a different `viewBox` onto it.
  */
-function CourtArt({ view }: { view: CourtView }) {
+function CourtArt({
+  view,
+  thin = 1,
+}: {
+  view: CourtView;
+  /** 1 / the labeller's zoom: the lines keep their on-screen width. */
+  thin?: number;
+}) {
   const lines = { vectorEffect: "non-scaling-stroke" } as const;
   return (
     <svg
@@ -544,7 +558,7 @@ function CourtArt({ view }: { view: CourtView }) {
         height={COURT_LENGTH}
         fill={SURFACE_FILL}
       />
-      <g fill="none" stroke={LINE_THIN} strokeWidth="1">
+      <g fill="none" stroke={LINE_THIN} strokeWidth={thin}>
         <line
           x1={-SINGLES_HALF_WIDTH}
           y1="0"
@@ -596,7 +610,7 @@ function CourtArt({ view }: { view: CourtView }) {
         height={COURT_LENGTH}
         fill="none"
         stroke={LINE_STRONG}
-        strokeWidth="1"
+        strokeWidth={thin}
         style={lines}
       />
       <line
@@ -605,7 +619,7 @@ function CourtArt({ view }: { view: CourtView }) {
         x2="6.36"
         y2={NET_Y}
         stroke={NET_LINE}
-        strokeWidth="2"
+        strokeWidth={2 * thin}
         style={lines}
       />
     </svg>
