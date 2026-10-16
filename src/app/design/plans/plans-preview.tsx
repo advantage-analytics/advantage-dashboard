@@ -137,7 +137,7 @@ export function PlansPreview() {
 
         <div className="flex max-w-[640px] flex-col gap-5">
           {stage === "pilot" ? (
-            <PilotView out={out} billing={billing} setBilling={setBilling} />
+            <PilotView out={out} />
           ) : (
             <PaidView out={out} billing={billing} setBilling={setBilling} />
           )}
@@ -149,17 +149,10 @@ export function PlansPreview() {
 
 /**
  * Today through Dec 31: the pilot's free 2 hours a month (covered by the video
- * vendor until January 1), with January's plans at list price.
+ * vendor until January 1), and credit packs once they are used. No plans are
+ * shown or sold before January.
  */
-function PilotView({
-  out,
-  billing,
-  setBilling,
-}: {
-  out: boolean;
-  billing: Billing;
-  setBilling: (b: Billing) => void;
-}) {
+function PilotView({ out }: { out: boolean }) {
   const s = STATE.pilot;
   const used = out ? s.cap : s.used;
   return (
@@ -197,33 +190,8 @@ function PilotView({
       )}
 
       {out && (
-        <CreditPacks note="Paid now, separately from your plan. Credits last 12 months, so any you don't use carry into January." />
+        <CreditPacks note="Paid once, no subscription. Credits last 12 months, so any you don't use carry into January." />
       )}
-
-      <SettingsCard>
-        <SettingsCardTitle
-          className="pb-2"
-          trailing={<BillingSwitch value={billing} onChange={setBilling} />}
-        >
-          Plans from January
-        </SettingsCardTitle>
-        {PLANS.filter((p) => p.monthly > 0).map((p) => (
-          <PlanRow
-            key={p.id}
-            plan={p}
-            billing={billing}
-            action={
-              <span className="text-[11px] text-[var(--ink-500)]">
-                From Jan 1
-              </span>
-            }
-          />
-        ))}
-        <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
-          Draft prices. Plans open for sign-up in December and start on January
-          1, when the free pilot hours end.
-        </SettingsCardFootnote>
-      </SettingsCard>
     </>
   );
 }
