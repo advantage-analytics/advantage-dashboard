@@ -17,7 +17,8 @@ import { POINT_1_SHOTS } from "./fixtures/label-session";
  * the second-to-last stroke, when its ball was out —
  * then "Ending looks stale", "Second serve?", "No landing on the last shot"
  * (with its counted twin "Ending can't be read") and "Serve after a serve in
- * play".
+ * play". The well draws the ones about a stroke under it and asks the rest
+ * in the review block (label-black-marks.spec.ts); these read the rows.
  */
 
 const NAMES = { p1: "Lee", p2: "Vargas" };

@@ -37,3 +37,16 @@ is the runner's. Newest entries at the bottom.
 1. `flag-nav.ts` (`flagStopLabel`, `flagGroups`) still reads `item.question`; using `reviewItemQuestion` would make the header say "Was the last ball out?" as the row does.
 2. Move the "Review · N" copy from `reviewChip` into marks-copy.ts.
 3. `marks.ts` `DATA_MARK_CODES` doc still describes the old grey closed-row chip; reword.
+
+## T4 · Open point: review block replaces the hint line — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `PointHintLine` replaced by `ReviewBlock` (label-black-mark.tsx): "Review · in this order", one row per item with question, evidence and `BlackTextAction` answers; item 4 asks the vendor's call with "Yes, make it …" · "It was in" · "Place the bounce" and carries `ending_stale` as its "Then:" line; stroke-level items show a "N · question — at shot K" pointer beside their unchanged inline rows; per-item Dismiss stores every member key; "Looks right" is the check tick's handler. New pure `review-block.ts` (`reviewBlockRows` for ✓ answered / "Cleared by N"). label-black-shot-row.tsx touched only in the well composition (+9/−24). New copy in marks-copy.ts. Specs: black-marks, review-flag.
+
+**follow-ups:**
+
+1. `BlackShotsWell` docstring in label-black-shot-row.tsx still names `PointHintLine`; fix once the other session's edits to that file land.
+2. Item 3 `first_serve_fault_alone` could offer "Place the bounce" too.
+3. `ReviewBlock` recomputes `reviewFlag` each render; memoise if the rail feels slow.
+4. Item "no" is labelled "Dismiss" (mockup said "No"); answers are 11px, not the mockup's 11.5px.

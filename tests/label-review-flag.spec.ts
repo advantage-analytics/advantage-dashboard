@@ -18,7 +18,10 @@ import {
   REVIEW_ITEMS,
   reviewFlag,
   type ReviewFlag,
+  type ReviewItem,
+  type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
+import { reviewBlockRows } from "@/lib/services/labels/review-block";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import {
   hintDismissKey,
@@ -505,5 +508,94 @@ test.describe("demoted", () => {
       [4, "open"],
     ]);
     expect(flag?.demoted).toBe(true);
+  });
+});
+
+test.describe("reviewBlockRows", () => {
+  /** An item in a state, with one member: what the block reads of it. */
+  const item = (id: ReviewItemId, state: ReviewItem["state"]): ReviewItem => ({
+    id,
+    question: REVIEW_ITEM_QUESTION[id],
+    tone: "score",
+    state,
+    members: [{ mark: sample("winner_disputed"), state }],
+  });
+  const flag = (...items: ReviewItem[]): ReviewFlag => ({
+    tone: "score",
+    state: "open",
+    items,
+    demoted: false,
+  });
+  const drawn = (rows: ReturnType<typeof reviewBlockRows>) =>
+    rows.map((row) => [row.id, row.display, row.clearedBy]);
+
+  test("unchanged: every item as it stands, open or not, in id order", () => {
+    const before = [item(4, "open"), item(1, "open")];
+    expect(
+      drawn(reviewBlockRows(before, flag(item(1, "open"), item(4, "open")))),
+    ).toEqual([
+      [1, "open", null],
+      [4, "open", null],
+    ]);
+    // Nothing held from the open: the flag alone.
+    expect(
+      drawn(reviewBlockRows(null, flag(item(2, "checked-as-is")))),
+    ).toEqual([[2, "done", null]]);
+    expect(reviewBlockRows(null, null)).toEqual([]);
+  });
+
+  test("answered: an item no longer open collapses to done", () => {
+    const before = [item(1, "open"), item(4, "open")];
+    const rows = reviewBlockRows(
+      before,
+      flag(item(1, "settled"), item(4, "open")),
+    );
+    expect(drawn(rows)).toEqual([
+      [1, "done", null],
+      [4, "open", null],
+    ]);
+    expect(rows[0].item.state).toBe("settled");
+    expect(
+      drawn(
+        reviewBlockRows(before, flag(item(1, "dismissed"), item(4, "open"))),
+      ),
+    ).toEqual([
+      [1, "done", null],
+      [4, "open", null],
+    ]);
+  });
+
+  test("cleared: an item gone since the open is put down to the lowest item that changed", () => {
+    const before = [item(1, "open"), item(4, "open"), item(5, "open")];
+    // Answering 1 took 4 and 5 away with it.
+    const rows = reviewBlockRows(before, flag(item(1, "settled")));
+    expect(drawn(rows)).toEqual([
+      [1, "done", null],
+      [4, "cleared", 1],
+      [5, "cleared", 1],
+    ]);
+    // The cleared row keeps the item as it stood, for its question.
+    expect(rows[1].item).toBe(before[1]);
+    // The lowest of two that changed.
+    expect(
+      drawn(
+        reviewBlockRows(
+          [item(2, "open"), item(3, "open"), item(6, "open")],
+          flag(item(2, "settled"), item(3, "settled")),
+        ),
+      ),
+    ).toEqual([
+      [2, "done", null],
+      [3, "done", null],
+      [6, "cleared", 2],
+    ]);
+    // An answer that took its own item away (a split): the lowest gone
+    // before it, and none for the first.
+    expect(
+      drawn(reviewBlockRows([item(2, "open"), item(4, "open")], null)),
+    ).toEqual([
+      [2, "cleared", null],
+      [4, "cleared", 2],
+    ]);
   });
 });

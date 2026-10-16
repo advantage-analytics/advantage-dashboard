@@ -62,7 +62,7 @@ ready).
 
 ## T4 · Open point: review block replaces the hint line
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T3
 - **files:** src/components/admin/labels/label-black-mark.tsx (`PointHintLine` → `ReviewBlock`, `pointHints` → item actions), src/components/admin/labels/label-black-shot-row.tsx (well composition), src/lib/services/labels/review-block.ts (new, pure collapsed-row helper), src/lib/services/labels/marks-copy.ts (answer labels, "Then:" line), tests/label-black-marks.spec.ts, tests/label-after-point-hint.spec.ts, tests/label-review-flag.spec.ts
