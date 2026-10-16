@@ -6,6 +6,7 @@ import { PresenceReport } from "@/components/dashboard/presence-provider";
 import RecentActivity from "./recent-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { getWorkspacePresence } from "@/lib/workspace/presence-server";
 import { getPersonalMatches } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
@@ -52,19 +53,24 @@ export default async function Home() {
   const supabase = await createClient();
   const userId = workspace.viewer.id;
   const billingMonth = currentBillingMonth();
-  // Shared base rows are the only layout prerequisite. The analytics loader
-  // reuses this cached query, rather than issuing an extra existence check.
-  const matches = await getPersonalMatches(userId);
+  // Day zero is decided by the presence read — one `limit(1)` row, over the
+  // same `created_by = me AND program_id IS NULL` predicate as the match list
+  // below — rather than by awaiting every personal match before any region
+  // can start. `cache()` makes this the layout's own in-flight read, not a
+  // second one. Its failure answer is "present", which draws the populated
+  // page and lets each widget's own empty state speak, never a false day zero
+  // over somebody's data.
+  const presence = await getWorkspacePresence(workspace);
   // Keeps the loading fallback's day-zero hint honest across navigation.
   const report = (
     <PresenceReport
       workspaceId={workspace.active.id}
-      matches={matches.length > 0}
+      matches={presence.matches}
     />
   );
   // Day zero reads nothing further — see `HomeDayZeroPage`, which the route's
   // loading fallback also draws.
-  if (matches.length === 0) {
+  if (!presence.matches) {
     return (
       <>
         {report}
@@ -72,7 +78,14 @@ export default async function Home() {
       </>
     );
   }
-  // Past this point the viewer has at least one match.
+  // Past this point the viewer has at least one match. The full list is
+  // started, not awaited: only the regions that draw from it wait for it,
+  // each inside its own Suspense boundary. Not bounded, deliberately — the
+  // win/loss record, match count and season figures are totals over every
+  // personal match, and `getOverallPerformance` shares this cached read; a
+  // limit here would quietly change those numbers. The per-widget slices
+  // below are the bounds.
+  const matches = getPersonalMatches(userId);
   const resources = startHomeResources(
     supabase,
     workspace.active,
@@ -166,7 +179,7 @@ export default async function Home() {
 function startHomeResources(
   supabase: Awaited<ReturnType<typeof createClient>>,
   personal: Workspace,
-  matches: Awaited<ReturnType<typeof getPersonalMatches>>,
+  matches: ReturnType<typeof getPersonalMatches>,
   billingMonth: string,
 ) {
   // A personal workspace is keyed by its owner's id.
@@ -174,20 +187,22 @@ function startHomeResources(
   const performance = getOverallPerformance();
   const usage = getPersonalUsage(personal, billingMonth);
   const season = getPersonalSeasonKpis(userId);
-  const activity = getPersonalActivity(userId, matches);
+  const activity = matches.then((rows) => getPersonalActivity(userId, rows));
   const players = getMyPlayerIds();
-  const recent = players.then((ids) =>
+  const recent = Promise.all([players, matches]).then(([ids, rows]) =>
     loadRecentMatches(
       supabase,
       userId,
       ids,
-      matches.slice(0, 50) as DbRecentMatch[],
+      rows.slice(0, 50) as DbRecentMatch[],
     ),
   );
-  const wonCount = players.then((ids) =>
-    countViewerWins(matches as DbRecentMatch[], ids, userId),
+  const wonCount = Promise.all([players, matches]).then(([ids, rows]) =>
+    countViewerWins(rows as DbRecentMatch[], ids, userId),
   );
-  const serves = loadHomeServes(supabase, userId, matches.slice(0, 4));
+  const serves = matches.then((rows) =>
+    loadHomeServes(supabase, userId, rows.slice(0, 4)),
+  );
   const pins = getAskPins(null, userId);
   return {
     matches,
@@ -206,12 +221,12 @@ function startHomeResources(
 type HomeResources = ReturnType<typeof startHomeResources>;
 async function Title({ resources }: { resources: HomeResources }) {
   const { matches, userId, performance, usage } = resources;
-  const [p, u] = await Promise.all([performance, usage]);
+  const [p, u, rows] = await Promise.all([performance, usage, matches]);
   if (!u) return null;
   return (
     <SeasonTitle
       hasMatches
-      matchCount={matches.length}
+      matchCount={rows.length}
       analyzedMatchCount={p?.analyzedMatchCount ?? 0}
       usage={u}
       userId={userId}
@@ -231,14 +246,19 @@ async function Kpis({ resources }: { resources: HomeResources }) {
 }
 async function Recent({ resources }: { resources: HomeResources }) {
   const { recent, players, wonCount, userId, matches } = resources;
-  const [events, ids, wins] = await Promise.all([recent, players, wonCount]);
+  const [events, ids, wins, rows] = await Promise.all([
+    recent,
+    players,
+    wonCount,
+    matches,
+  ]);
   return (
     <RecentActivity
       userId={userId}
       playerIds={ids}
       hasMatches
       showEmptyAction
-      matchCount={matches.length}
+      matchCount={rows.length}
       wonCount={wins}
       initialEvents={events}
     />
