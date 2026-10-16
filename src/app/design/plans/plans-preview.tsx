@@ -115,16 +115,14 @@ export function PlansPreview() {
                 { v: "paid", t: "From January" },
               ]}
             />
-            {stage === "paid" && (
-              <Segmented
-                value={out ? "out" : "left"}
-                onChange={(v) => setOut(v === "out")}
-                options={[
-                  { v: "left", t: "Hours left" },
-                  { v: "out", t: "Out of hours" },
-                ]}
-              />
-            )}
+            <Segmented
+              value={out ? "out" : "left"}
+              onChange={(v) => setOut(v === "out")}
+              options={[
+                { v: "left", t: "Hours left" },
+                { v: "out", t: "Out of hours" },
+              ]}
+            />
           </div>
         </div>
       </div>
@@ -139,7 +137,7 @@ export function PlansPreview() {
 
         <div className="flex max-w-[640px] flex-col gap-5">
           {stage === "pilot" ? (
-            <PilotView billing={billing} setBilling={setBilling} />
+            <PilotView out={out} billing={billing} setBilling={setBilling} />
           ) : (
             <PaidView out={out} billing={billing} setBilling={setBilling} />
           )}
@@ -154,13 +152,16 @@ export function PlansPreview() {
  * vendor until January 1), with January's plans at list price.
  */
 function PilotView({
+  out,
   billing,
   setBilling,
 }: {
+  out: boolean;
   billing: Billing;
   setBilling: (b: Billing) => void;
 }) {
   const s = STATE.pilot;
+  const used = out ? s.cap : s.used;
   return (
     <>
       <Facts
@@ -172,11 +173,32 @@ function PilotView({
       />
 
       <HoursCard
-        used={s.used}
+        used={used}
         cap={s.cap}
         resets={s.resets}
-        footnote="The pilot gives you 2 free hours of film every month until January 1. Nothing is charged before then."
+        footnote="The pilot gives you 2 free hours of film every month until January 1. Your plan isn't billed before then."
       />
+
+      {out && (
+        <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-6 py-[18px] sm:flex-row sm:items-center">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-medium text-[var(--ink-900)]">
+              You&apos;ve used this month&apos;s 2 free hours.
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--ink-600)]">
+              They come back on {s.resets}. To film another match before then,
+              buy credits below.
+            </span>
+          </span>
+          <a href="#credits" className={BTN_PRIMARY}>
+            Buy credits
+          </a>
+        </div>
+      )}
+
+      {out && (
+        <CreditPacks note="Paid now, separately from your plan. Credits last 12 months, so any you don't use carry into January." />
+      )}
 
       <SettingsCard>
         <SettingsCardTitle
@@ -202,8 +224,8 @@ function PilotView({
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
           Choose a plan now and it starts on January 1, when the free pilot
-          hours end. Nothing is billed before then. If you don&apos;t choose,
-          you move to Free and keep every match you have uploaded.
+          hours end. Your plan isn&apos;t billed before then. If you don&apos;t
+          choose, you move to Free and keep every match you have uploaded.
         </SettingsCardFootnote>
       </SettingsCard>
     </>
@@ -291,35 +313,47 @@ function PaidView({
         </SettingsCardFootnote>
       </SettingsCard>
 
-      <div id="credits">
-        <SettingsCard>
-          <SettingsCardTitle className="pb-2">Credit packs</SettingsCardTitle>
-          {CREDITS.map((c) => (
-            <div
-              key={c.hours}
-              className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-[12px] font-medium text-[var(--ink-900)]">
-                  {c.hours}
-                </span>
-                <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
-                  {c.note}
-                </span>
-              </span>
-              <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
-                {usd(c.price)}
-              </span>
-              <span className="flex w-[96px] shrink-0 justify-end">
-                <button type="button" className={BTN_SECONDARY}>
-                  Buy
-                </button>
-              </span>
-            </div>
-          ))}
-        </SettingsCard>
-      </div>
+      <CreditPacks />
     </>
+  );
+}
+
+/** Hours you buy once, used after plan or pilot hours run out. */
+function CreditPacks({ note }: { note?: string }) {
+  return (
+    <div id="credits">
+      <SettingsCard>
+        <SettingsCardTitle className="pb-2">Credit packs</SettingsCardTitle>
+        {CREDITS.map((c) => (
+          <div
+            key={c.hours}
+            className="flex items-center gap-4 border-t border-[var(--border-hairline)] py-3"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-medium text-[var(--ink-900)]">
+                {c.hours}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-[var(--ink-500)]">
+                {c.note}
+              </span>
+            </span>
+            <span className="tabular shrink-0 text-[13px] text-[var(--ink-900)]">
+              {usd(c.price)}
+            </span>
+            <span className="flex w-[96px] shrink-0 justify-end">
+              <button type="button" className={BTN_SECONDARY}>
+                Buy
+              </button>
+            </span>
+          </div>
+        ))}
+        {note && (
+          <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
+            {note}
+          </SettingsCardFootnote>
+        )}
+      </SettingsCard>
+    </div>
   );
 }
 
