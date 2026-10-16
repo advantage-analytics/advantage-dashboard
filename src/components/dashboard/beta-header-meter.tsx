@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -14,44 +14,51 @@ import { PendingBar } from "@/components/dashboard/loading/pending";
 import type { HoursLeft } from "@/lib/services/splitstep/quota";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import {
+  formatHoursLong,
   formatHoursShort,
   formatResetDate,
+  monthName,
   usageFraction,
 } from "@/lib/data/usage-format";
 
+/** Where the personal pill goes: the page that owns hours and credits. */
+export const PLAN_HREF = "/dashboard/settings/plan";
+
 /**
- * The header's way back to the beta terms: the welcome dialog's brand band
- * shrunk to a pill, carrying the one number people come back for — video
- * hours left this month. Clicking it reopens the dialog. A team workspace's
- * pill says Pilot, as Settings › Plan does (`workspaceTier`).
+ * The header's video-hours pill: the welcome dialog's brand band shrunk to a
+ * pill, carrying the one number people come back for — video hours left. A
+ * personal workspace's pill goes to Settings › Plan, where hours and credits
+ * are bought (frames C1–C4 in `/design/credits`); a team workspace's says
+ * Pilot, as Settings › Plan does (`workspaceTier`), and reopens the dialog.
  *
  * The figure comes from `/api/splitstep/hours-left`, the same peek the upload
- * refuses on, so an individual whose shared beta band is spent sees that
- * rather than their own untouched cap. Advisory: the reservation at submit
- * time still decides. Re-read on every navigation, because the header
- * outlives pages and an upload spends hours without remounting it.
+ * refuses on. Advisory: the reservation at submit time still decides.
+ * Re-read on every navigation, because the header outlives pages and an
+ * upload spends hours without remounting it.
  */
 export function BetaHeaderMeter() {
   const terms = useBetaWelcomeTerms();
   const hours = useHoursLeft();
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const tier = terms.tier ?? "beta";
 
   return (
     <>
       <BetaMeterPill
-        tier={terms.tier ?? "beta"}
+        tier={tier}
         hours={hours}
-        onClick={() => setOpen(true)}
+        onClick={() =>
+          tier === "pilot" ? setOpen(true) : router.push(PLAN_HREF)
+        }
       />
       <BetaWelcomeDialog open={open} onOpenChange={setOpen} terms={terms} />
     </>
   );
 }
 
-type PillHours = Pick<
-  HoursLeft,
-  "remainingSeconds" | "capSeconds" | "bandFull"
->;
+type PillHours = Pick<HoursLeft, "remainingSeconds" | "capSeconds"> &
+  Partial<Pick<HoursLeft, "creditSeconds">>;
 
 /**
  * The pill itself, with no data of its own, so `/design` draws the same one.
@@ -62,8 +69,9 @@ type PillHours = Pick<
  * that failed — the bare tag, never a full ring and never a skeleton that
  * waits on an answer that is not coming.
  *
- * Out of hours is one pill whichever allowance ran out; only the tooltip says
- * which, because to the person it is the same answer — no upload until the 1st.
+ * Personal states (C1–C4): free hours left; running low (the ring stays
+ * white, only the tooltip says it); free spent with credits, where the figure
+ * is the credit balance; and out of everything.
  */
 export function BetaMeterPill({
   tier,
@@ -82,21 +90,56 @@ export function BetaMeterPill({
   // always true together with `tier`, so there is one flag to read, not two.
   const teamHours = tier === "pilot";
   const ready = hours !== "loading" && hours !== null ? hours : null;
-  const out = ready !== null && ready.remainingSeconds <= 0;
-  // Only called once hours are spent, so a still-loading or still-has-hours
-  // pill — the two renders on every page load — never pays for the Date and
-  // Intl work behind the default.
+  const credits = teamHours ? 0 : (ready?.creditSeconds ?? 0);
+  const freeOut = ready !== null && ready.remainingSeconds <= 0;
+  // C3: free hours spent, credits carry it — the figure is credits.
+  const onCredits = freeOut && credits > 0;
+  const out = freeOut && credits <= 0;
+  // C2: running low on free hours with nothing behind them. The ring stays
+  // white; only the tooltip says it (never amber, never red).
+  const low =
+    ready !== null &&
+    !freeOut &&
+    credits <= 0 &&
+    ready.remainingSeconds <= ready.capSeconds * 0.2;
+  // Only called once it is needed, so the two renders on every page load
+  // never pay for the Date and Intl work behind the default.
   const resetsOnOrDefault = () =>
     resetsOn ?? formatResetDate(currentBillingMonth());
+
+  const freeOf = ready
+    ? `${formatHoursShort(ready.remainingSeconds)} of ${formatHoursShort(ready.capSeconds)}`
+    : "";
+
+  const label =
+    !ready || teamHours
+      ? `Free during the ${tier}`
+      : out
+        ? "Out of video hours"
+        : onCredits
+          ? "Using your credits"
+          : low
+            ? "Running low"
+            : `Free during the ${tier}`;
 
   const detail =
     hours === "loading"
       ? "Checking your video hours"
       : !ready
         ? `About the ${tier}`
-        : out
-          ? outOfHoursDetail(ready, teamHours, resetsOnOrDefault())
-          : `${formatHoursShort(ready.remainingSeconds)} of ${formatHoursShort(ready.capSeconds)} video hours left`;
+        : teamHours
+          ? out
+            ? outOfHoursDetail(ready, true, resetsOnOrDefault())
+            : `${freeOf} video hours left`
+          : out
+            ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
+            : onCredits
+              ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} in credits left.`
+              : low
+                ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
+                : credits > 0
+                  ? `${freeOf} free hours left this month, plus ${formatHoursLong(credits)} in credits. Click for Plan.`
+                  : `${freeOf} free hours left this month. Click for Plan.`;
 
   const ariaLabel =
     hours === "loading"
@@ -105,10 +148,22 @@ export function BetaMeterPill({
         ? name
         : out
           ? `${name}: out of video hours until ${resetsOnOrDefault()}`
-          : `${name}: ${detail} this month`;
+          : `${name}: ${detail}`;
+
+  // The ring is the free allowance; on credits it reads full (C3), out of
+  // everything it reads empty (C4).
+  const share = !ready
+    ? 0
+    : onCredits
+      ? 1
+      : 1 -
+        usageFraction(
+          ready.capSeconds - ready.remainingSeconds,
+          ready.capSeconds,
+        );
 
   return (
-    <ChromeTooltip label={`Free during the ${tier}`} detail={detail}>
+    <ChromeTooltip label={label} detail={detail}>
       <button
         type="button"
         onClick={onClick}
@@ -141,19 +196,17 @@ export function BetaMeterPill({
         )}
         {ready && (
           <>
-            <HoursRing
-              tone="inverse"
-              share={
-                1 -
-                usageFraction(
-                  ready.capSeconds - ready.remainingSeconds,
-                  ready.capSeconds,
-                )
-              }
-            />
+            <HoursRing tone="inverse" share={share} />
             <span className="tabular text-[12px] text-white/85">
               {out ? (
                 <span className="font-medium text-white">Out of hours</span>
+              ) : onCredits ? (
+                <>
+                  <span className="font-medium text-white">
+                    {formatHoursShort(credits)}h
+                  </span>{" "}
+                  credits
+                </>
               ) : (
                 <>
                   <span className="font-medium text-white">
@@ -170,19 +223,12 @@ export function BetaMeterPill({
   );
 }
 
-/**
- * Why there are no hours, and when they come back. A spent shared band says
- * "for everyone", or someone who has used half an hour reads the meter as
- * wrong.
- */
+/** A team's empty allowance, and when it comes back. */
 function outOfHoursDetail(
   hours: PillHours,
   teamHours: boolean,
   resetsOn: string,
 ): string {
-  if (hours.bandFull) {
-    return `Free video hours are used up for everyone this month. Yours reset on ${resetsOn}.`;
-  }
   const cap = formatHoursShort(hours.capSeconds);
   const unit = cap === "1" ? "video hour" : "video hours";
   return teamHours
