@@ -379,12 +379,11 @@ export const PointList = memo(function PointList({
           // reads it; null when the match has no real game score column, and
           // "—" on a game whose score the stream never read (`score_frozen`).
           gameScore: showGameScore
-            ? (() => {
-                const raw = readGameScore(point);
-                return raw === null
-                  ? UNREAD_SCORE
-                  : youFirstScore(raw, point.serverIsPlayer1, youIsPlayer1);
-              })()
+            ? (youFirstScore(
+                readGameScore(point) ?? "",
+                point.serverIsPlayer1,
+                youIsPlayer1,
+              ) ?? UNREAD_SCORE)
             : null,
           tiebreak: firstServerIsPlayer1 !== undefined,
           points: [],
