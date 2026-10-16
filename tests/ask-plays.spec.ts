@@ -12,6 +12,9 @@ import {
   buildLosingPlaysAnswer,
   buildWinningPlaysAnswer,
   isLosingPlaysSql,
+  isWinningPlaysSql,
+  rallyLengthOf,
+  rallyLengthOfPlaysSql,
   winningPlaysSql,
   winningPlaysSubject,
   losingPlaysSql,
@@ -505,4 +508,103 @@ test("a count of points won on a shot is not the winning-plays table", () => {
     asksForWinningPlays("How many points did I win on my forehand shots?"),
   ).toBe(false);
   expect(asksForWinningPlays("which shots won him the most points")).toBe(true);
+});
+
+test.describe("winning plays in rallies of a length", () => {
+  // "What are his best patterns of play for short rallies?" and "only
+  // rallies that went up to 4 shots" were answered over every point.
+  for (const [question, rally] of [
+    [
+      "What are his best patterns of play for short rallies?",
+      { min: 1, max: 4 },
+    ],
+    ["best plays in rallies that went up to 4 shots", { min: 1, max: 4 }],
+    ["Her winning shots in points under 5 shots", { min: 1, max: 4 }],
+    ["my best plays within the first three shots", { min: 1, max: 3 }],
+    ["What are my best plays in long rallies?", { min: 10, max: null }],
+    ["best plays in rallies of 7 shots or more", { min: 7, max: null }],
+    ["his strengths in medium rallies", { min: 5, max: 9 }],
+    ["best plays in rallies of 5 to 9 shots", { min: 5, max: 9 }],
+    ["my best plays in 1-4 shots", { min: 1, max: 4 }],
+  ] as const) {
+    test(`reads: ${question}`, () => {
+      expect(asksForWinningPlays(question)).toBe(true);
+      expect(rallyLengthOf(question)).toEqual(rally);
+    });
+  }
+
+  test("a question naming no length reads none", () => {
+    expect(rallyLengthOf("What is this player's best pattern of plays?")).toBe(
+      null,
+    );
+  });
+
+  test("the query keeps only those points, passes the guard and reads back", () => {
+    const sql = winningPlaysSql("mine", { min: 1, max: 4 });
+    expect(sql).toContain("and p.rally_length between 1 and 4");
+    expect(
+      checkAskSql({ scopeSql: "select match_id from ask.matches", sql }),
+    ).toEqual({ ok: true });
+    expect(isWinningPlaysSql(sql)).toBe(true);
+    expect(rallyLengthOfPlaysSql(sql)).toEqual({ min: 1, max: 4 });
+
+    const long = winningPlaysSql("opponent", { min: 10, max: null });
+    expect(long).toContain("and p.rally_length >= 10");
+    expect(isWinningPlaysSql(long)).toBe(true);
+    expect(rallyLengthOfPlaysSql(long)).toEqual({ min: 10, max: null });
+
+    // Unnarrowed, the query is the one it always was.
+    expect(winningPlaysSql("mine", null)).toBe(winningPlaysSql("mine"));
+    expect(winningPlaysSql("mine")).not.toContain("rally_length");
+    expect(rallyLengthOfPlaysSql(winningPlaysSql("mine"))).toBe(null);
+  });
+
+  test("the answer says which rallies it counted", () => {
+    const rows: AskRow[] = [
+      {
+        section: "total",
+        stroke: null,
+        direction: null,
+        points: 40,
+        winners: 30,
+        errors_drawn: 2,
+      },
+      {
+        section: "play",
+        stroke: "Forehand",
+        direction: "Crosscourt",
+        points: 12,
+        winners: 9,
+        errors_drawn: 3,
+      },
+    ];
+    const text =
+      buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 2, {
+        min: 1,
+        max: 4,
+      }) ?? "";
+    expect(text.split("\n")[0]).toBe(
+      "Sam's best play in rallies of up to four shots was the forehand crosscourt: it won {{r2.points}} points — {{r2.winners}} as their own winner and {{r2.errors_drawn}} by drawing an error.",
+    );
+    expect(text).toContain(
+      "won {{r1.points}} points in rallies of up to four shots;",
+    );
+  });
+});
+
+test("which patterns to keep going to is the winning plays", () => {
+  expect(asksForWinningPlays("So what patterns should I keep going")).toBe(
+    true,
+  );
+  expect(asksForWinningPlays("which plays should she keep using?")).toBe(true);
+  expect(asksForLosingPlays("So what patterns should I keep going")).toBe(
+    false,
+  );
+  // Shots that keep missing are a complaint, not the plays to keep.
+  expect(asksForWinningPlays("my backhand shots keep going out, why?")).toBe(
+    false,
+  );
+  expect(asksForWinningPlays("which shots keep going into the net")).toBe(
+    false,
+  );
 });

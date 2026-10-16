@@ -64,6 +64,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/matches/sample` | [`src/app/dashboard/matches/sample/page.tsx`](src/app/dashboard/matches/sample/page.tsx) |
 | `/dashboard/opponents` | [`src/app/dashboard/opponents/page.tsx`](src/app/dashboard/opponents/page.tsx) |
 | `/dashboard/settings/account` | [`src/app/dashboard/settings/account/page.tsx`](src/app/dashboard/settings/account/page.tsx) |
+| `/dashboard/settings/connections` | [`src/app/dashboard/settings/connections/page.tsx`](src/app/dashboard/settings/connections/page.tsx) |
 | `/dashboard/settings` | [`src/app/dashboard/settings/page.tsx`](src/app/dashboard/settings/page.tsx) |
 | `/dashboard/settings/plan` | [`src/app/dashboard/settings/plan/page.tsx`](src/app/dashboard/settings/plan/page.tsx) |
 | `/dashboard/settings/preferences` | [`src/app/dashboard/settings/preferences/page.tsx`](src/app/dashboard/settings/preferences/page.tsx) |
