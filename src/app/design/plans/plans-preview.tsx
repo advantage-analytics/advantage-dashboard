@@ -216,7 +216,7 @@ export function PlansPreview() {
               Video this month
             </SettingsCardTitle>
             <div className="flex items-baseline gap-2">
-              <span className="tabular text-[24px] leading-none font-light tracking-[-0.4px] text-[var(--ink-900)]">
+              <span className="tabular text-title-lg leading-none">
                 {used}
               </span>
               <span className="text-[12px] text-[var(--ink-500)]">
