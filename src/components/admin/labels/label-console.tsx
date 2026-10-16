@@ -62,6 +62,10 @@ import {
 } from "@/lib/services/labels/review-target";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
+  reviewStep,
+  type ReviewAnswer,
+} from "@/lib/services/labels/review-step";
+import {
   applyPointDelete,
   applyPointMove,
   applyPointRestore,
@@ -178,6 +182,7 @@ import type { CourtPoint } from "./court-geometry";
 import {
   tiebreakHitterHalf,
   NO_PLACEMENT,
+  estimatePatch,
   flipPlacement,
   hitterHalf,
   nextPlacement,
@@ -186,13 +191,13 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
-import { courtReview } from "./label-black-mark";
 import { LabelBlackRail } from "./label-black-rail";
 import { strokeChangePatch } from "./label-black-shot-row";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
+import { runReviewAnswer, type ReviewWriteHandlers } from "./review-answer";
 import { labelFilmStops } from "./label-film-stops";
 import {
   DEFAULT_LAYOUT_MODE,
@@ -1642,7 +1647,17 @@ export function LabelConsole({
     );
   }
 
-  function addShot(pointId: string, afterShotId: string | null) {
+  /**
+   * A stroke added after `afterShotId` (or at the end), selected for
+   * placement once it has saved. `follow` is what a review answer knows of it
+   * beyond the add's plan (a second serve, by the server): written once it
+   * has saved, those fields the add did not already give it.
+   */
+  function addShot(
+    pointId: string,
+    afterShotId: string | null,
+    follow?: LabelShotPatch,
+  ) {
     const point = points.find((p) => p.id === pointId);
     if (!point || !operations) return;
     // A draft point cannot take a stroke until its own insert lands.
@@ -1690,14 +1705,21 @@ export function LabelConsole({
       // Select the saved row, unless the labeller picked something else
       // while the add was in flight.
       if (!result) return;
+      const rows = insertShot(points, pointId, result.shot);
       setPlacement((current) =>
         current.shotId === selectedBefore
-          ? placementOf(
-              insertShot(points, pointId, result.shot),
-              result.shot.id,
-            )
+          ? placementOf(rows, result.shot.id)
           : current,
       );
+      const values = labelShotValues(result.shot);
+      const rest = Object.fromEntries(
+        Object.entries(follow ?? {}).filter(
+          ([key, value]) => values[key as keyof typeof values] !== value,
+        ),
+      ) as LabelShotPatch;
+      if (Object.keys(rest).length > 0) {
+        void writeShot(rows, result.shot.id, rest);
+      }
     });
   }
 
@@ -2176,6 +2198,10 @@ export function LabelConsole({
     holdOnEditorFocus,
     patchPoint,
     patchShot: requestPatchShot,
+    // A review answer's own shot write: awaited, so the ending it leads to
+    // is written after it.
+    saveShot: patchShot,
+    addShot,
     removeShotsAfter,
     restoreShots,
     setGameServer,
@@ -2540,28 +2566,36 @@ export function LabelConsole({
       square={fullScreen}
     />
   );
-  // The open point's current review item, asked in the court panel with the
-  // writes the rail's rows have.
-  const review =
+  // The open point's review step (`reviewStep`), asked in the court panel.
+  const step =
     expanded && liveMarks
-      ? courtReview(
-          expanded,
-          liveMarks,
-          points,
-          names,
-          editable
-            ? {
-                onPatchPoint: railHandlers.patchPoint,
-                onPatchShot: railHandlers.patchShot,
-                onRemoveShotsAfter: operable
-                  ? railHandlers.removeShotsAfter
-                  : undefined,
-                operations: operable ? rowOperations : undefined,
-                onSelectShot: railHandlers.selectShot,
-              }
-            : undefined,
-        )
+      ? reviewStep(expanded, liveMarks, points, names, drawsGhosts(liveMarks))
       : null;
+  // An answer's writes, each through the console's own handler for it.
+  const reviewWrites: ReviewWriteHandlers = {
+    patchShot: railHandlers.saveShot,
+    patchPoint: railHandlers.patchPoint,
+    splitPoint: rowOperations.onSplitPoint,
+    removeShotsAfter: railHandlers.removeShotsAfter,
+    dismissSuggestion: rowOperations.onDismissSuggestion,
+    setChecked: rowOperations.onSetChecked,
+    addShot: railHandlers.addShot,
+  };
+  function answerReview(answer: ReviewAnswer) {
+    if (!expanded) return;
+    void runReviewAnswer(answer, expanded.id, reviewWrites);
+  }
+  // "Off screen, so this is an estimate": the placed end's two names in the
+  // stroke's `unclear`, through the rail's shot edit.
+  function setEstimate(estimate: boolean) {
+    const shot =
+      placement.shotId === null ? null : findShot(points, placement.shotId);
+    if (!shot) return;
+    railHandlers.patchShot(
+      shot.id,
+      estimatePatch(shot.unclear, placement.target, estimate),
+    );
+  }
   const courtPanel = (
     <LabelCourtPanel
       point={expanded}
@@ -2569,7 +2603,9 @@ export function LabelConsole({
       placement={placement}
       editable={editable}
       playingShotId={playing?.shotId ?? null}
-      review={review}
+      step={step}
+      onAnswer={operable ? answerReview : undefined}
+      onEstimate={editable ? setEstimate : undefined}
       clock={clock}
       onPlace={place}
       onTarget={setTarget}

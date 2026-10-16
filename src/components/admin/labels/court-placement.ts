@@ -15,19 +15,34 @@
  * - Flip side ({@link flipPlacement}) shows the opposite of either, for a ball
  *   into the net or a contact guessed onto the wrong side. `flipped` never
  *   outlives the end it was pressed for.
+ *
+ * The box on screen can slide at the same size ({@link courtSlide}): back
+ * past the usual run-off for a contact deep behind the baseline — the
+ * run-off grows as the labeller clicks near its edge, the click itself
+ * stored unclamped — and across the net for a landing on the hitter's own
+ * side, which is allowed (a click anywhere is the metres under it).
  */
 
 import { takesServeTurn } from "@/lib/services/labels/game-operations";
 import { tiebreakEndsSwapped } from "@/lib/services/labels/tiebreak-fold";
-import type { LabelShotPatch } from "@/lib/services/labels/edit";
+import type {
+  LabelShotPatch,
+  LabelShotValueField,
+} from "@/lib/services/labels/edit";
 import type { LabelPoint, LabelSide } from "@/lib/services/labels/session";
 import {
+  landedOnOwnSide,
   positionPatch,
+  type ShotEnds,
   type ShotPosition,
 } from "@/lib/services/labels/shot-derived";
 import {
+  USUAL_RUNOFF,
+  behindBaseline,
   halfOf,
   otherHalf,
+  runoffWindowTop,
+  shankWindowTop,
   type CourtHalf,
   type CourtPoint,
 } from "./court-geometry";
@@ -42,6 +57,11 @@ export interface PlacementState {
   half: CourtHalf;
   /** "Flip side" is pressed: `half` is the opposite of the target's usual. */
   flipped: boolean;
+  /**
+   * Metres of run-off the contact's box draws behind the baseline, once a
+   * click near its edge grew it past {@link USUAL_RUNOFF}. Absent: usual.
+   */
+  runoff?: number;
 }
 
 export const NO_PLACEMENT: PlacementState = {
@@ -180,6 +200,98 @@ export function flipPlacement(state: PlacementState): PlacementState {
 /** Metres to the centimetre: a click resolves to ~6 cm, finer is noise. */
 const toCm = (n: number) => Math.round(n * 100) / 100;
 
+/** How much the contact's run-off grows by on a click near its edge. */
+export const RUNOFF_STEP = 2;
+/** The deepest the contact's run-off is ever drawn. */
+export const MAX_RUNOFF = USUAL_RUNOFF + 4 * RUNOFF_STEP; // 11.5
+/** A contact this close to the run-off's back edge grows it. */
+export const RUNOFF_EDGE = 0.5;
+
+/**
+ * The run-off a contact `depth` metres behind the baseline needs drawn: the
+ * usual 3.5 m, else the usual plus whole steps until the contact sits clear
+ * of the edge zone. Capped at {@link MAX_RUNOFF}.
+ */
+export function runoffFor(depth: number): number {
+  let runoff = USUAL_RUNOFF;
+  while (depth > runoff - RUNOFF_EDGE && runoff < MAX_RUNOFF) {
+    runoff += RUNOFF_STEP;
+  }
+  return Math.min(runoff, MAX_RUNOFF);
+}
+
+/**
+ * The run-off the contact's box draws for `state`: what clicks grew it to,
+ * or what the stored contact (`contactY`) needs, whichever is deeper. The
+ * usual 3.5 m while placing a landing.
+ */
+export function placementRunoff(
+  state: PlacementState,
+  contactY: number | null,
+): number {
+  if (state.target !== "contact") return USUAL_RUNOFF;
+  const stored =
+    contactY === null
+      ? USUAL_RUNOFF
+      : runoffFor(behindBaseline(state.half, contactY));
+  return Math.max(state.runoff ?? USUAL_RUNOFF, stored);
+}
+
+/** How the box on screen has slid, at the same size, or null for the half's own. */
+export type CourtSlide =
+  | {
+      kind: "deep";
+      /** Metres of `y` at the box's top edge. */
+      top: number;
+      /** The half whose baseline the run-off is behind. */
+      half: CourtHalf;
+      /** Metres of run-off drawn behind that baseline. */
+      runoff: number;
+    }
+  | {
+      kind: "shank";
+      top: number;
+      /** The hitter's half: the ball came down on it. */
+      half: CourtHalf;
+    };
+
+/**
+ * The slide for the selected stroke, while placing it:
+ *
+ * - its contact, with the run-off past the usual (`placementRunoff`): the
+ *   half's box slid back so its edge is that far behind the baseline;
+ * - its landing, unflipped, when the stored landing is on the hitter's own
+ *   side (`landedOnOwnSide`): the box slid across the net so that side shows
+ *   (`shankWindowTop`).
+ *
+ * Null otherwise — the half's own box.
+ */
+export function courtSlide(
+  state: PlacementState,
+  shot: ShotEnds | null,
+): CourtSlide | null {
+  if (state.shotId === null || !shot) return null;
+  if (state.target === "contact") {
+    const runoff = placementRunoff(state, shot.contactY ?? null);
+    if (runoff <= USUAL_RUNOFF) return null;
+    return {
+      kind: "deep",
+      top: runoffWindowTop(state.half, runoff),
+      half: state.half,
+      runoff,
+    };
+  }
+  if (state.flipped || !landedOnOwnSide(shot) || shot.contactY == null) {
+    return null;
+  }
+  const hitter = halfOf(shot.contactY);
+  return {
+    kind: "shank",
+    top: shankWindowTop(hitter, shot.landingY ?? null),
+    half: hitter,
+  };
+}
+
 /**
  * One court click: the patch it writes to the selected stroke and the state the
  * next click starts from. Null when no stroke is selected.
@@ -189,6 +301,10 @@ const toCm = (n: number) => Math.round(n * 100) / 100;
  * stroke still missing an end keeps its stored value. The next state's half
  * follows the click: after a contact the landing is across the net, after a
  * landing the contact is back on the hitter's half.
+ *
+ * A contact clicked within {@link RUNOFF_EDGE} of the run-off's back edge is
+ * written as clicked, and the contact stays armed with the run-off grown by
+ * {@link RUNOFF_STEP}: the box slides back, so the next click can go deeper.
  */
 export function nextPlacement(
   state: PlacementState,
@@ -198,6 +314,17 @@ export function nextPlacement(
   if (state.shotId === null) return null;
   const x = toCm(point.x);
   const y = toCm(point.y);
+  const patch = positionPatch(shot, state.target, { x, y });
+  if (state.target === "contact") {
+    const runoff = placementRunoff(state, shot.contact_y);
+    const depth = behindBaseline(state.half, y);
+    if (depth > runoff - RUNOFF_EDGE && runoff < MAX_RUNOFF) {
+      return {
+        state: { ...state, runoff: Math.min(MAX_RUNOFF, runoff + RUNOFF_STEP) },
+        patch,
+      };
+    }
+  }
   const next: PlacementState =
     state.target === "contact"
       ? {
@@ -215,7 +342,42 @@ export function nextPlacement(
               : hitterHalfIn(state),
           flipped: false,
         };
-  return { state: next, patch: positionPatch(shot, state.target, { x, y }) };
+  return { state: next, patch };
+}
+
+/** The two `unclear` names of a placement end: `contact_x`, `contact_y`. */
+export function endFields(
+  target: PlacementTarget,
+): [LabelShotValueField, LabelShotValueField] {
+  return target === "contact"
+    ? ["contact_x", "contact_y"]
+    : ["landing_x", "landing_y"];
+}
+
+/** Whether `unclear` calls `target`'s position an estimate (either name). */
+export function isEstimate(
+  unclear: readonly string[],
+  target: PlacementTarget,
+): boolean {
+  const [fx, fy] = endFields(target);
+  return unclear.includes(fx) || unclear.includes(fy);
+}
+
+/**
+ * The `unclear` list the "Off screen, so this is an estimate" box writes for
+ * `target`: both of its names added, or both taken out; every other name as
+ * it was. The list replaces the stored one whole (edit.ts).
+ */
+export function estimatePatch(
+  unclear: readonly string[],
+  target: PlacementTarget,
+  estimate: boolean,
+): LabelShotPatch {
+  const fields = endFields(target);
+  const rest = unclear.filter(
+    (field) => !(fields as readonly string[]).includes(field),
+  ) as LabelShotValueField[];
+  return { unclear: estimate ? [...rest, ...fields] : rest };
 }
 
 /**

@@ -192,20 +192,6 @@ export function lastCallUnplacedHover(call: "in" | "out" | "net"): string {
   return `The vendor called the last ball ${call === "net" ? "in the net" : call}, and its landing isn’t placed.`;
 }
 
-// ── The open point's current review item (the court panel) ──────────────────
-
-/** The item's last answer: the check tick's own write, said in words. */
-export const LOOKS_RIGHT_LABEL = "Looks right";
-
-/** Item 4's second answer, beside "Yes, make it out": the landing was right. */
-export const LAST_BALL_IN_LABEL = "It was in";
-
-/** Item 4's answer that opens the last stroke's landing on the court. */
-export const PLACE_BOUNCE_LABEL = "Place the bounce";
-
-/** An item's "no": every member's question waved away at once. */
-export const REVIEW_DISMISS_LABEL = "Dismiss";
-
 /**
  * "Did the point end here?"'s yes: the ball stays (or is made) out and the N
  * strokes after it go.

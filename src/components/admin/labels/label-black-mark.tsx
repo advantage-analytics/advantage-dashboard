@@ -10,13 +10,9 @@ import type {
 import {
   HINT_ACTION_LABEL,
   hintLabel,
-  LAST_BALL_IN_LABEL,
   lastCallAction,
-  LOOKS_RIGHT_LABEL,
   lastCallUnplacedHover,
   markHover,
-  PLACE_BOUNCE_LABEL,
-  REVIEW_DISMISS_LABEL,
   staleEndingAction,
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
@@ -39,32 +35,24 @@ import {
   type MarkState,
   type MarkTone,
   type ReviewItem,
-  type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
-import { currentReviewItem } from "@/lib/services/labels/review-target";
-import {
-  isMissedResult,
-  liveShotsInOrder,
-  type LabelPoint,
-} from "@/lib/services/labels/session";
+import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
 import {
   hintDismissKey,
   isSuggestionKey,
   pointEndedKey,
 } from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
-import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
-import type { EditContext, LabelRowOperations } from "./label-row-parts";
+import type { EditContext } from "./label-row-parts";
 
 /**
  * The rail's marks: a point's review flag (`reviewFlag`, marks-state.ts) is
  * the one chip on its row (`MarkChip`) — amber when it can move the score,
- * grey when it is about the data — and the open point's current item
- * (`currentReviewItem`) is asked in the court panel (`courtReview`), with the
- * answers it offers. These components only draw: `pointRowMarks`,
- * `pointHints`, `reviewItemAnswers` and `courtReview` decide what, with words
- * and states from marks-copy.ts and marks-state.ts.
+ * grey when it is about the data. The open point's review step is asked in
+ * the court panel (review-step.ts `reviewStep`). These components only draw:
+ * `pointRowMarks` and `pointHints` decide what, with words and states from
+ * marks-copy.ts and marks-state.ts.
  */
 
 export interface MarkChipProps {
@@ -155,199 +143,11 @@ export interface PointHint {
    * The stroke the hint is about, when it is one: "Point ended here" sits
    * under the stroke that ended the point, "Second serve?" under its serve,
    * not on a line away from it. "Was the last ball in?" names none: the
-   * court panel asks it as item 4 (`courtReview`).
+   * court panel asks it as item 4 (`reviewStep`).
    */
   afterShotId?: string;
   /** The key Dismiss stores, for a hint the labeller can wave away. */
   dismissKey?: string;
-}
-
-/**
- * What the current item's answers write through: the hint writes, the
- * console's stroke selection (item 4's "Place the bounce") and its check tick
- * ("Looks right", `operations.onSetChecked`).
- */
-export type ReviewEdit = HintEdit & Pick<EditContext, "onSelectShot">;
-
-/**
- * An open item's answers, each only where the console has the write. Item 4
- * asked as the vendor called the last ball ("Was the last ball out?") is
- * "Yes, make it out" (`lastCallAction`'s patch), "It was in" (a shot patch,
- * when the call was not in already) and "Place the bounce" (selects the
- * last live stroke on the court's landing end); with no landing on the last
- * stroke instead, it leads with "Place the bounce". Every other item is
- * answered through its members' own hint answers (`courtReview`).
- */
-export function reviewItemAnswers(
-  item: ReviewItem,
-  point: LabelPoint,
-  marks: LabelMarks,
-  edit: ReviewEdit | undefined,
-): PointHintAction[] {
-  if (!edit || item.id !== 4) return [];
-  const asks = (code: LabelMarkCode) =>
-    item.members.some(
-      (member) => member.mark.code === code && member.state === "open",
-    );
-  const ghosts = drawsGhosts(marks);
-  const last = liveShotsInOrder(point, ghosts).at(-1);
-  const { onPatchShot, onSelectShot } = edit;
-  const placeBounce: PointHintAction[] =
-    onSelectShot && last
-      ? [
-          {
-            label: PLACE_BOUNCE_LABEL,
-            run: () => onSelectShot(last.id, "landing"),
-          },
-        ]
-      : [];
-  const lastCall = asks("last_call_overruled")
-    ? lastCallAnswer(point, pointRowMarkList(point, marks).count, ghosts)
-    : null;
-  if (lastCall) {
-    const { vendorCall } = lastCall.mark.params;
-    const patch = (result: "in" | "out" | "net") => () =>
-      onPatchShot?.(lastCall.shotId, { result });
-    return [
-      ...(onPatchShot
-        ? [{ label: lastCallAction(vendorCall), run: patch(vendorCall) }]
-        : []),
-      ...(onPatchShot && vendorCall !== "in"
-        ? [{ label: LAST_BALL_IN_LABEL, run: patch("in") }]
-        : []),
-      ...placeBounce,
-    ];
-  }
-  return asks("last_landing_missing") ? placeBounce : [];
-}
-
-/**
- * Item 4's consequence, while "Different ending?" is open under it: its one
- * answer, `staleEndingAction`'s point patch (`hintActions`) — "Make it an
- * ace". Never an item of its own: it is what the last ball's answer leads to.
- */
-function reviewThenAction(
-  item: ReviewItem,
-  point: LabelPoint,
-  edit: ReviewEdit | undefined,
-): PointHintAction | null {
-  if (item.id !== 4) return null;
-  for (const { mark, state } of item.members) {
-    if (mark.code !== "ending_stale" || state !== "open") continue;
-    return hintActions(mark, point, edit)[0] ?? null;
-  }
-  return null;
-}
-
-/**
- * An item's Dismiss: every member's stored key (`ReviewMember.dismissKey`),
- * each said once, through `onDismissSuggestion` — one call a key. Null when
- * no member has one ("Missing shot?" is dismissed at its slot) or the console
- * cannot write.
- */
-export function reviewItemDismiss(
-  item: ReviewItem,
-  point: Pick<LabelPoint, "id">,
-  operations: LabelRowOperations | undefined,
-): PointHintAction | null {
-  const keys = [
-    ...new Set(
-      item.members
-        .map((member) => member.dismissKey)
-        .filter((key): key is string => isSuggestionKey(key)),
-    ),
-  ];
-  if (!operations || keys.length === 0) return null;
-  return {
-    label: REVIEW_DISMISS_LABEL,
-    run: () => {
-      for (const key of keys) operations.onDismissSuggestion(point.id, key);
-    },
-  };
-}
-
-/**
- * The header's "Looks right": the check tick's own handler
- * (`operations.onSetChecked`), never a write of its own. Only on a point not
- * yet checked, where the console can write.
- */
-export function reviewLooksRight(
-  point: Pick<LabelPoint, "id" | "checkedAt">,
-  operations: LabelRowOperations | undefined,
-): PointHintAction | null {
-  if (!operations || point.checkedAt !== null) return null;
-  return {
-    label: LOOKS_RIGHT_LABEL,
-    run: () => operations.onSetChecked(point.id, true),
-  };
-}
-
-/** How one of the current item's answers is drawn. */
-export type CourtReviewAnswerKind = "answer" | "dismiss" | "looks-right";
-
-export interface CourtReviewAnswer extends PointHintAction {
-  kind: CourtReviewAnswerKind;
-}
-
-/**
- * The open point's current review item as the court panel asks it: its
- * number, tone and question (`reviewItemQuestion`), its open members'
- * evidence (`openEvidence`, each said once) and its answers in one row.
- */
-export interface CourtReview {
-  id: ReviewItemId;
-  tone: MarkTone;
-  question: string;
-  evidence: string[];
-  answers: CourtReviewAnswer[];
-}
-
-/**
- * The current item (`currentReviewItem` of `reviewFlag`, a demoted flag's
- * too) with its answers, or null when none is open. The answers are the
- * writes the open point's hints offer, each only with `edit` (read-only:
- * none): item 4's (`reviewItemAnswers`) and its "Make it …"
- * (`reviewThenAction`); a stroke item's own hint answers (`hintActions`) —
- * "Make it a second serve", "Yes, remove N" / "Split here"; item 1 none, its
- * Add shot being the slot's own; then the item's Dismiss and the check
- * tick's "Looks right". Answered, an item is no longer open, and the next
- * open item is current on the next render.
- */
-export function courtReview(
-  point: LabelPoint,
-  marks: LabelMarks,
-  points: readonly LabelPoint[],
-  names: SideNames,
-  edit: ReviewEdit | undefined,
-): CourtReview | null {
-  const item = currentReviewItem(reviewFlag(point, marks, points));
-  if (!item) return null;
-  const answers: CourtReviewAnswer[] = [];
-  const add = (kind: CourtReviewAnswerKind, action: PointHintAction | null) => {
-    if (action) answers.push({ ...action, kind });
-  };
-  if (item.id === 4) {
-    for (const answer of reviewItemAnswers(item, point, marks, edit)) {
-      add("answer", answer);
-    }
-    add("answer", reviewThenAction(item, point, edit));
-  } else if (item.id === 2 || item.id === 3) {
-    for (const member of item.members) {
-      if (member.state !== "open") continue;
-      for (const answer of hintActions(member.mark, point, edit)) {
-        add("answer", answer);
-      }
-    }
-  }
-  add("dismiss", reviewItemDismiss(item, point, edit?.operations));
-  add("looks-right", reviewLooksRight(point, edit?.operations));
-  return {
-    id: item.id,
-    tone: item.tone,
-    question: reviewItemQuestion(item),
-    evidence: openEvidence(item, names),
-    answers,
-  };
 }
 
 /**

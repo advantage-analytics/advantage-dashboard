@@ -5,6 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { runReviewAnswer } from "@/components/admin/labels/review-answer";
 import {
   fromCourt,
   fromCourtInHalf,
@@ -936,8 +937,8 @@ test.describe("a flag jump arms the court for the current review item", () => {
     expect(findGapSource.indexOf("setPlacement(NO_PLACEMENT);")).toBeLessThan(
       findGapSource.indexOf("selectShot(armed.shotId"),
     );
-    // The court panel asks the same item.
-    expect(consoleSource).toContain("review={review}");
+    // The court panel asks the point's review step.
+    expect(consoleSource).toContain("step={step}");
   });
 
   test("↓ and ] still step after a jump that selected a stroke", () => {
@@ -1009,5 +1010,129 @@ test.describe("a flag jump arms the court for the current review item", () => {
       editor: true,
       plain: false,
     });
+  });
+});
+
+test.describe("a review answer's writes go through the console's own handlers", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("each ReviewWrite kind is one call of the handler it names", async () => {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string) =>
+      (...args: unknown[]) =>
+        calls.push([name, ...args]);
+    const handlers = {
+      patchShot: record("patchShot"),
+      patchPoint: record("patchPoint"),
+      splitPoint: record("splitPoint"),
+      removeShotsAfter: record("removeShotsAfter"),
+      dismissSuggestion: record("dismissSuggestion"),
+      setChecked: record("setChecked"),
+      addShot: record("addShot"),
+    };
+    await runReviewAnswer(
+      {
+        writes: [
+          { write: "shot", shotId: "s1", patch: { result: "net" } },
+          { write: "point", patch: { ending: "error", ended_by: "p1" } },
+          { write: "split", shotId: "s2" },
+          { write: "removeAfter", shotId: "s3" },
+          { write: "dismiss", keys: ["hint:a", "hint:b"] },
+          { write: "check" },
+          {
+            write: "addShot",
+            slot: { afterShotId: "s4", hitter: "p1", kind: "second_serve" },
+          },
+          {
+            write: "addShot",
+            slot: { afterShotId: "s5", hitter: null, kind: null },
+          },
+        ],
+      },
+      "pt",
+      handlers,
+    );
+    expect(calls).toEqual([
+      ["patchShot", "s1", { result: "net" }],
+      ["patchPoint", "pt", { ending: "error", ended_by: "p1" }],
+      ["splitPoint", "pt", "s2"],
+      ["removeShotsAfter", "pt", "s3"],
+      ["dismissSuggestion", "pt", "hint:a"],
+      ["dismissSuggestion", "pt", "hint:b"],
+      ["setChecked", "pt", true],
+      // The slot's hitter and stroke follow the add, once it has saved.
+      ["addShot", "pt", "s4", { hitter: "p1", stroke: "second_serve" }],
+      ["addShot", "pt", "s5", undefined],
+    ]);
+  });
+
+  test("a write in flight is waited on before the next", async () => {
+    const order: string[] = [];
+    let release = () => {};
+    const shot = new Promise<void>((resolve) => {
+      release = () => {
+        order.push("shot saved");
+        resolve();
+      };
+    });
+    const noop = () => {};
+    const run = runReviewAnswer(
+      {
+        writes: [
+          { write: "shot", shotId: "s1", patch: { result: "out" } },
+          { write: "point", patch: { winner: "p2" } },
+        ],
+      },
+      "pt",
+      {
+        patchShot: () => shot,
+        patchPoint: () => order.push("point"),
+        splitPoint: noop,
+        removeShotsAfter: noop,
+        dismissSuggestion: noop,
+        setChecked: noop,
+        addShot: noop,
+      },
+    );
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    release();
+    await run;
+    expect(order).toEqual(["shot saved", "point"]);
+  });
+
+  test("the console hands each kind its own handler, the add-shot path included", () => {
+    const wiring = consoleSource.slice(
+      consoleSource.indexOf("const reviewWrites: ReviewWriteHandlers = {"),
+      consoleSource.indexOf("function answerReview("),
+    );
+    for (const line of [
+      "patchShot: railHandlers.saveShot,",
+      "patchPoint: railHandlers.patchPoint,",
+      "splitPoint: rowOperations.onSplitPoint,",
+      "removeShotsAfter: railHandlers.removeShotsAfter,",
+      "dismissSuggestion: rowOperations.onDismissSuggestion,",
+      "setChecked: rowOperations.onSetChecked,",
+      "addShot: railHandlers.addShot,",
+    ]) {
+      expect(wiring, line).toContain(line);
+    }
+    // `saveShot` is the awaited shot write; `addShot` the console's own,
+    // which selects the saved stroke for placement.
+    expect(consoleSource).toContain("saveShot: patchShot,");
+    expect(consoleSource).toMatch(/\n {4}addShot,\n/);
+    expect(consoleSource).toContain(
+      "onAnswer={operable ? answerReview : undefined}",
+    );
+    // The estimate box writes `unclear` through the rail's shot edit.
+    expect(consoleSource).toContain(
+      "estimatePatch(shot.unclear, placement.target, estimate)",
+    );
+    // The old view-model is gone.
+    expect(consoleSource).not.toContain("courtReview");
   });
 });

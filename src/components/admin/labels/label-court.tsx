@@ -16,15 +16,24 @@ import {
   NEAR_SERVICE_Y,
   NET_Y,
   SINGLES_HALF_WIDTH,
+  HALF_HEIGHT,
+  HALF_LEFT,
+  HALF_WIDTH,
+  USUAL_RUNOFF,
+  courtWindowViewBox,
   fromCourt,
-  fromCourtInHalf,
-  halfCourtViewBox,
-  toCourtInHalf,
+  fromCourtInWindow,
+  halfTopY,
+  toCourtInWindow,
   type CourtHalf,
   type CourtPoint,
   type ScreenPoint,
 } from "./court-geometry";
-import type { PlacementTarget } from "./court-placement";
+import {
+  isEstimate,
+  type CourtSlide,
+  type PlacementTarget,
+} from "./court-placement";
 
 /**
  * The court as drawn inside the court panel: the open point's strokes marked on
@@ -51,6 +60,13 @@ import type { PlacementTarget } from "./court-placement";
  * under the cursor is. The zoom holds across near ↔ far, which flips on every
  * placing click, and resets between the whole court and a half. Marks keep
  * their on-screen size at any zoom.
+ *
+ * A half's box can slide at the same size (`slide`, court-placement.ts
+ * `courtSlide`): back past the usual run-off for a deep contact, with a
+ * dashed guide every 2 m behind the baseline and a faint line at the usual
+ * edge; or across the net for a short ball, the hitter's side washed amber.
+ * An end the labeller called an estimate (`unclear`) draws as a dashed amber
+ * ring in place of its mark.
  */
 
 /** One step up from the panel's ground, for the court's surface. */
@@ -59,6 +75,32 @@ const LINE_STRONG = "rgba(255,255,255,0.55)";
 const LINE_THIN = "rgba(255,255,255,0.32)";
 const NET_LINE = "rgba(255,255,255,0.85)";
 const MARK = "rgba(255,255,255,1)";
+/** An end the labeller called an estimate: the rail's amber, dashed. */
+const ESTIMATE = "var(--rail-amber)";
+/** The hitter's side under a short ball. */
+const SHANK_WASH = "var(--rail-amber-wash-faint)";
+const GUIDE_LINE = "rgba(255,255,255,0.12)";
+const USUAL_EDGE_LINE = "rgba(255,255,255,0.28)";
+
+/** Metres of `y` the usual run-off ends at behind `half`'s baseline. */
+function usualEdgeY(half: CourtHalf): number {
+  return half === "near" ? -USUAL_RUNOFF : COURT_LENGTH + USUAL_RUNOFF;
+}
+
+/** The +2 / +4 / … m guides behind `half`'s baseline, out to `runoff`. */
+export function runoffGuides(
+  half: CourtHalf,
+  runoff: number,
+): { metres: number; y: number }[] {
+  const guides: { metres: number; y: number }[] = [];
+  for (let metres = 2; metres <= runoff; metres += 2) {
+    guides.push({
+      metres,
+      y: half === "near" ? -metres : COURT_LENGTH + metres,
+    });
+  }
+  return guides;
+}
 
 /** The art's own height; both views are proportioned against it. */
 const BOX_HEIGHT = 222;
@@ -134,15 +176,21 @@ export interface CourtStroke {
 }
 
 /** A stroke on screen: whichever ends are drawn, in percent of the box. */
+type MarkEnd = ScreenPoint & { opacity: number; estimate: boolean };
+
 interface Mark {
   id: string;
-  hit: (ScreenPoint & { opacity: number }) | null;
-  landed: (ScreenPoint & { opacity: number }) | null;
+  hit: MarkEnd | null;
+  landed: MarkEnd | null;
 }
 
-function marksFor(strokes: readonly CourtStroke[], view: CourtView): Mark[] {
+function marksFor(
+  strokes: readonly CourtStroke[],
+  view: CourtView,
+  top: number,
+): Mark[] {
   const project = (point: CourtPoint) =>
-    view === "whole" ? fromCourt(point) : fromCourtInHalf(view, point);
+    view === "whole" ? fromCourt(point) : fromCourtInWindow(top, point);
   const marks: Mark[] = [];
   for (const { shot, opacity = FULL_OPACITY } of strokes) {
     if (shot.status === "deleted") continue;
@@ -151,6 +199,7 @@ function marksFor(strokes: readonly CourtStroke[], view: CourtView): Mark[] {
         ? {
             ...project({ x: shot.contactX, y: shot.contactY }),
             opacity: opacity.hit,
+            estimate: isEstimate(shot.unclear ?? [], "contact"),
           }
         : null;
     const landed =
@@ -158,6 +207,7 @@ function marksFor(strokes: readonly CourtStroke[], view: CourtView): Mark[] {
         ? {
             ...project({ x: shot.landingX, y: shot.landingY }),
             opacity: opacity.landed,
+            estimate: isEstimate(shot.unclear ?? [], "landing"),
           }
         : null;
     if (!hit && !landed) continue;
@@ -183,7 +233,13 @@ export function LabelCourt({
   prompt = null,
   onPlace,
   fadeOnZoom = false,
+  slide = null,
 }: {
+  /**
+   * The half's box slid at the same size — back for a deep contact, across
+   * the net for a short ball. Ignored on the whole court.
+   */
+  slide?: CourtSlide | null;
   /**
    * Fade the art in when the court changes between the whole court and a half
    * (`label-court-view-in`, globals.css). Opacity only. Near ↔ far does not
@@ -202,9 +258,11 @@ export function LabelCourt({
   /** A click on a half, in metres. Absent: the court is a picture. */
   onPlace?: (point: CourtPoint) => void;
 }) {
-  const marks = marksFor(strokes, view);
-  const placed = marks.length;
   const zoomed = view !== "whole";
+  const slid = zoomed ? slide : null;
+  const top = zoomed ? (slid?.top ?? halfTopY(view)) : 0;
+  const marks = marksFor(strokes, view, top);
+  const placed = marks.length;
   const placing = zoomed && prompt !== null && onPlace !== undefined;
 
   // The labeller's zoom, reset when the court changes scale (whole ↔ half).
@@ -306,7 +364,12 @@ export function LabelCourt({
     placed === 0
       ? "Court with no strokes placed"
       : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`;
-  const net = zoomed ? fromCourtInHalf(view, { x: 6.9, y: NET_Y }) : null;
+  const netAt = zoomed ? fromCourtInWindow(top, { x: 6.9, y: NET_Y }) : null;
+  // A box slid back past the net's line draws no NET label.
+  const net = netAt && netAt.sy >= 0 && netAt.sy <= 100 ? netAt : null;
+  // A label kept at its size under the labeller's zoom, like the marks.
+  const keepSize = (transform: string) =>
+    `${transform} scale(${thin.toFixed(3)})`;
 
   const art = (
     // Keyed by the scale, so a zoom mounts a fresh layer and the fade plays
@@ -327,7 +390,7 @@ export function LabelCourt({
             }
       }
     >
-      <CourtArt view={view} thin={thin} />
+      <CourtArt view={view} top={top} slide={slid} thin={thin} />
       <svg
         className="absolute inset-0 block h-full w-full"
         aria-hidden="true"
@@ -351,7 +414,20 @@ export function LabelCourt({
           ) : null,
         )}
         {marks.map((mark) =>
-          mark.hit ? (
+          mark.hit?.estimate ? (
+            <circle
+              key={`${mark.id}-hit`}
+              data-court-hit=""
+              data-court-estimate="contact"
+              cx={pct(mark.hit.sx)}
+              cy={pct(mark.hit.sy)}
+              r={size.hit + 0.5 / zoom.scale}
+              fill="none"
+              strokeWidth={size.hitStroke * 0.75}
+              strokeDasharray={`${2 * thin} ${2 * thin}`}
+              style={{ ...markStyle(mark.hit.opacity), stroke: ESTIMATE }}
+            />
+          ) : mark.hit ? (
             <circle
               key={`${mark.id}-hit`}
               data-court-hit=""
@@ -366,7 +442,20 @@ export function LabelCourt({
           ) : null,
         )}
         {marks.map((mark) =>
-          mark.landed ? (
+          mark.landed?.estimate ? (
+            <circle
+              key={`${mark.id}-landed`}
+              data-court-landed=""
+              data-court-estimate="landing"
+              cx={pct(mark.landed.sx)}
+              cy={pct(mark.landed.sy)}
+              r={size.hit + 0.5 / zoom.scale}
+              fill="none"
+              strokeWidth={size.hitStroke * 0.75}
+              strokeDasharray={`${2 * thin} ${2 * thin}`}
+              style={{ ...markStyle(mark.landed.opacity), stroke: ESTIMATE }}
+            />
+          ) : mark.landed ? (
             <circle
               key={`${mark.id}-landed`}
               data-court-landed=""
@@ -403,10 +492,49 @@ export function LabelCourt({
           style={{
             left: pct(net.sx),
             top: pct(net.sy),
-            transform: `translateY(-50%) scale(${thin.toFixed(3)})`,
+            transform: keepSize("translateY(-50%)"),
           }}
         >
           Net
+        </span>
+      ) : null}
+      {slid?.kind === "deep"
+        ? runoffGuides(slid.half, slid.runoff).map((guide) => {
+            const at = fromCourtInWindow(top, { x: 0, y: guide.y });
+            return (
+              <span
+                key={guide.metres}
+                aria-hidden="true"
+                data-court-guide={guide.metres}
+                className="mono pointer-events-none absolute right-2 origin-right text-[9px] text-white/40"
+                style={{
+                  top: pct(at.sy),
+                  transform: keepSize("translateY(-50%)"),
+                }}
+              >
+                +{guide.metres} m
+              </span>
+            );
+          })
+        : null}
+      {slid?.kind === "deep" ? (
+        <span
+          aria-hidden="true"
+          data-court-usual-edge=""
+          className="pointer-events-none absolute left-2 origin-left text-[10px] text-white/45"
+          style={{
+            top: pct(
+              fromCourtInWindow(top, {
+                x: 0,
+                y: usualEdgeY(slid.half),
+              }).sy,
+            ),
+            transform: keepSize(
+              slid.half === "near" ? "translateY(-120%)" : "translateY(20%)",
+            ),
+          }}
+        >
+          usual edge
         </span>
       ) : null}
     </span>
@@ -434,6 +562,7 @@ export function LabelCourt({
       type="button"
       data-court-target=""
       data-court-view={view}
+      data-court-slide={slid?.kind}
       aria-label={`${prompt}. ${description}. Anywhere in the box counts, including outside the lines for a ball that went out. Positions can also be typed in the stroke's row.`}
       {...panHandlers}
       onClick={(event) => {
@@ -447,8 +576,8 @@ export function LabelCourt({
         const rect = event.currentTarget.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
         onPlace(
-          toCourtInHalf(
-            view,
+          toCourtInWindow(
+            top,
             artPoint(
               zoom,
               ((event.clientX - rect.left) / rect.width) * 100,
@@ -474,6 +603,7 @@ export function LabelCourt({
       role="img"
       aria-label={description}
       data-court-view={view}
+      data-court-slide={slid?.kind}
       {...panHandlers}
     >
       {art}
@@ -536,21 +666,43 @@ export function LabelCourt({
  */
 function CourtArt({
   view,
+  top,
+  slide = null,
   thin = 1,
 }: {
   view: CourtView;
+  /** A half's box: metres of `y` at its top edge. */
+  top: number;
+  slide?: CourtSlide | null;
   /** 1 / the labeller's zoom: the lines keep their on-screen width. */
   thin?: number;
 }) {
   const lines = { vectorEffect: "non-scaling-stroke" } as const;
+  // The art is drawn top-down: the SVG `y` of a court `y` is 23.77 − y.
+  const svgY = (y: number) => COURT_LENGTH - y;
+  const boxTop = svgY(top);
   return (
     <svg
-      viewBox={view === "whole" ? COURT_VIEW_BOX : halfCourtViewBox(view)}
+      viewBox={view === "whole" ? COURT_VIEW_BOX : courtWindowViewBox(top)}
       preserveAspectRatio="none"
       className="absolute inset-0 block h-full w-full"
       aria-hidden="true"
       data-court-art=""
     >
+      {slide?.kind === "shank" ? (
+        <rect
+          data-court-wash=""
+          x={HALF_LEFT}
+          y={slide.half === "near" ? svgY(NET_Y) : boxTop}
+          width={HALF_WIDTH}
+          height={
+            slide.half === "near"
+              ? boxTop + HALF_HEIGHT - svgY(NET_Y)
+              : svgY(NET_Y) - boxTop
+          }
+          style={{ fill: SHANK_WASH }}
+        />
+      ) : null}
       <rect
         x={-DOUBLES_HALF_WIDTH}
         y="0"
@@ -622,6 +774,31 @@ function CourtArt({
         strokeWidth={2 * thin}
         style={lines}
       />
+      {slide?.kind === "deep" ? (
+        <g data-court-runoff="" strokeWidth={thin}>
+          {runoffGuides(slide.half, slide.runoff).map((guide) => (
+            <line
+              key={guide.metres}
+              x1={HALF_LEFT}
+              y1={svgY(guide.y)}
+              x2={HALF_LEFT + HALF_WIDTH}
+              y2={svgY(guide.y)}
+              stroke={GUIDE_LINE}
+              strokeDasharray="2 5"
+              style={lines}
+            />
+          ))}
+          <line
+            data-court-usual-edge-line=""
+            x1={HALF_LEFT}
+            y1={svgY(usualEdgeY(slide.half))}
+            x2={HALF_LEFT + HALF_WIDTH}
+            y2={svgY(usualEdgeY(slide.half))}
+            stroke={USUAL_EDGE_LINE}
+            style={lines}
+          />
+        </g>
+      ) : null}
     </svg>
   );
 }

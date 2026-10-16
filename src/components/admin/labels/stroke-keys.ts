@@ -21,8 +21,14 @@ import {
  * `strokeChangePatch`, as the Stroke menu does, so a let keeps its rule. A key
  * that would write what the stroke already holds answers null.
  */
-export const STROKE_KEY_HINT =
-  "F forehand · B backhand · V volley · O overhead · S serve · 1–4 spin";
+export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
+  { key: "F", label: "forehand" },
+  { key: "B", label: "backhand" },
+  { key: "V", label: "volley" },
+  { key: "O", label: "overhead" },
+  { key: "S", label: "serve" },
+  { key: "1–4", label: "spin" },
+];
 
 const VOLLEY_OF: Partial<Record<LabelStroke, LabelStroke>> = {
   forehand: "forehand_volley",
