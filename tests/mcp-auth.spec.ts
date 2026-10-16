@@ -1,10 +1,13 @@
 import { expect, test } from "@playwright/test";
+import { readdirSync, readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   consentPath,
   EXPIRED_AUTHORIZATION_ERROR,
   getOAuthAuthorizationDetails,
+  goesToConnector,
+  isConnectorRedirectUri,
   OAUTH_UNAVAILABLE_ERROR,
   parseAuthorizationDetails,
   readAuthorizationId,
@@ -30,6 +33,7 @@ import {
   describeAskViews,
   MCP_QUERY_ROW_CAP,
 } from "@/lib/services/mcp/describe";
+import { ASK_SERVICE_ROLE_CALLS } from "@/lib/services/ask/database";
 import { createRateLimiter } from "@/lib/services/mcp/rate-limit";
 import { createMcpUserReads } from "@/lib/services/mcp/user-reads";
 import { jwtClientId } from "@/lib/supabase/bearer";
@@ -240,6 +244,34 @@ test.describe("describeAskViews", () => {
 // ── The consent page's parsing ─────────────────────────────────────────────
 
 test.describe("the consent page", () => {
+  test("offers Allow only to Claude's callbacks and a loopback one", () => {
+    expect(
+      isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback"),
+    ).toBe(true);
+    expect(
+      isConnectorRedirectUri("https://claude.com/api/mcp/auth_callback"),
+    ).toBe(true);
+    expect(isConnectorRedirectUri("http://localhost:54321/callback")).toBe(
+      true,
+    );
+    expect(isConnectorRedirectUri("http://127.0.0.1:8080/callback")).toBe(true);
+    expect(isConnectorRedirectUri("http://[::1]:8080/callback")).toBe(true);
+
+    expect(isConnectorRedirectUri(null)).toBe(false);
+    expect(isConnectorRedirectUri("not a url")).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://claude.ai/api/mcp/auth_callback/x"),
+    ).toBe(false);
+    expect(
+      isConnectorRedirectUri("https://evil.example/api/mcp/auth_callback"),
+    ).toBe(false);
+    expect(isConnectorRedirectUri("https://localhost/callback")).toBe(false);
+    expect(isConnectorRedirectUri("http://localhost.evil.example/cb")).toBe(
+      false,
+    );
+    expect(isConnectorRedirectUri("http://user:pw@localhost:1/cb")).toBe(false);
+  });
+
   test("reads a URL-safe authorization id and nothing else", () => {
     expect(readAuthorizationId("abc123-XYZ_789")).toBe("abc123-XYZ_789");
     expect(readAuthorizationId("short")).toBeNull();
@@ -249,6 +281,39 @@ test.describe("the consent page", () => {
     expect(consentPath("abc123-XYZ_789")).toBe(
       "/oauth/consent?authorization_id=abc123-XYZ_789",
     );
+  });
+
+  test("follows an earlier consent only back to a connector", () => {
+    expect(
+      goesToConnector({
+        kind: "redirect",
+        redirectUrl: "https://claude.ai/api/mcp/auth_callback?code=abc&state=s",
+      }),
+    ).toBe(true);
+    expect(
+      goesToConnector({
+        kind: "redirect",
+        redirectUrl: "http://localhost:4312/callback?code=abc",
+      }),
+    ).toBe(true);
+    expect(
+      goesToConnector({
+        kind: "redirect",
+        redirectUrl: "https://evil.example/cb?code=abc",
+      }),
+    ).toBe(false);
+    expect(goesToConnector({ kind: "redirect", redirectUrl: "nonsense" })).toBe(
+      false,
+    );
+    expect(
+      goesToConnector({
+        kind: "consent",
+        authorizationId: "abc123-XYZ_789",
+        client: { name: "Other", uri: null },
+        scopes: [],
+        redirectUri: "https://evil.example/cb",
+      }),
+    ).toBe(false);
   });
 
   test("tells a consent request from an already-consented redirect, and garbage from both", () => {
@@ -453,5 +518,67 @@ test.describe("createMcpUserReads", () => {
       )?.args,
     ).toEqual(["program_id", null]);
     expect(await reads.conversation("nope", null)).toBeNull();
+  });
+});
+
+/**
+ * `public.oauth_client_request_guard()` refuses every non-read request from
+ * a connector token except the `ask_*` functions `/api/mcp` calls on the
+ * user's client. Those calls live in the MCP server and the Ask modules it
+ * runs; a new one there that the migration does not list would be refused
+ * only for a live connector, so the two lists are held equal here.
+ */
+test.describe("the connector's read-only guard", () => {
+  const migration = readFileSync(
+    "supabase/migrations/20261016050115_oauth_client_read_only.sql",
+    "utf8",
+  );
+
+  test("allows exactly the user-side ask_* calls the MCP path makes", () => {
+    const listed = migration.match(/\/rpc\/\(([a-z_|]+)\)\$/)?.[1];
+    expect(listed).toBeTruthy();
+    const allowed = new Set(listed!.split("|"));
+
+    const files = [
+      ...readdirSync("src/lib/services/mcp")
+        .filter((name) => name.endsWith(".ts"))
+        .map((name) => `src/lib/services/mcp/${name}`),
+      "src/lib/services/ask/ask.ts",
+      "src/lib/services/ask/cache.ts",
+      "src/lib/services/ask/runs.ts",
+    ];
+    const called = new Set<string>();
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(
+        /rpc\((?:\s*[A-Za-z.]+,\s*)?"(ask_[a-z_]+)"/g,
+      )) {
+        if (!Object.hasOwn(ASK_SERVICE_ROLE_CALLS, match[1])) {
+          called.add(match[1]);
+        }
+      }
+    }
+    expect([...called].sort()).toEqual([...allowed].sort());
+  });
+
+  test("runs for every request, signed out included", () => {
+    expect(migration).toMatch(
+      /grant execute on function public\.oauth_client_request_guard\(\) to anon, authenticated, service_role/,
+    );
+    expect(migration).toMatch(
+      /alter role authenticator set pgrst\.db_pre_request = 'public\.oauth_client_request_guard'/,
+    );
+  });
+
+  test("every Edge Function refuses a connector token", () => {
+    for (const name of readdirSync("supabase/functions")) {
+      const source = readFileSync(
+        `supabase/functions/${name}/index.ts`,
+        "utf8",
+      );
+      expect(source, name).toMatch(
+        /if \(jwtClientId\(token\) !== null\) \{\s*return \{\s*status: 403,/,
+      );
+    }
   });
 });

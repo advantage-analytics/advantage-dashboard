@@ -22,10 +22,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/film/point-list-tone";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
-import {
-  ASK_NO_ADVICE_SENTENCE,
-  type AskSourceMatch,
-} from "@/lib/services/ask/events";
+import { ASK_NO_ADVICE_SENTENCE } from "@/lib/services/ask/events";
 import type { AskAction } from "@/lib/services/ask/actions";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
 import type { AskShowPoint } from "@/lib/services/ask/show-response";
@@ -72,15 +69,6 @@ const WORKSPACE: WorkspaceContextValue = {
     sampleTourDoneAt: null,
     firstReportTourDoneAt: null,
   },
-};
-
-const MATCH: AskSourceMatch = {
-  matchId: "m-demo",
-  opponentName: "Marcus Hale",
-  playedOn: "2026-09-28",
-  iWon: true,
-  scoreText: "6-4, 6-3",
-  playerName: "Theo Lindqvist",
 };
 
 /** One point; the score is the score BEFORE it, server first. */
@@ -640,13 +628,7 @@ const VARIANTS: {
     summary:
       "The real AskPointList, which now draws I, the picked compact line. It used to be the Video tab's rows in a card: every row repeated the 30px mark and a 'Point 8 · Lindqvist served' line, under a heading floating outside the card. A through D below were the first alternatives to that list.",
     render: () => (
-      <AskPointList
-        match={MATCH}
-        points={POINTS}
-        filters="x"
-        counted
-        href="#watch"
-      />
+      <AskPointList points={POINTS} filters="x" counted href="#watch" />
     ),
   },
   {

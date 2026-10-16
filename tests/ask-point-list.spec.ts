@@ -124,10 +124,7 @@ test("one line: a link into the film on every point, the stretch and time beside
 test("a counted cut is the answer's points, and a capped one says it is the first of more", async ({
   page,
 }) => {
-  await openFixture(
-    page,
-    "?case=page&scope=team&f=sp.y_st.2&truncated=1&counted=1",
-  );
+  await openFixture(page, "?case=page&f=sp.y_st.2&truncated=1&counted=1");
   await expect(watch(page)).toHaveText("Watch the 3 points");
   await expect(watch(page)).toHaveAttribute(
     "aria-label",
@@ -144,7 +141,7 @@ test("a cut broader than the figure (every serve for an ace count): the match's 
   page,
 }) => {
   await openFixture(page, "?case=page&f=sv.y");
-  await expect(watch(page)).toHaveText("Watch 3 points");
+  await expect(watch(page)).toHaveText("Watch 3 points in this match");
   await expect(watch(page)).toHaveAttribute(
     "aria-label",
     "Watch 3 points in this match",
@@ -155,6 +152,6 @@ test('no cut and a capped list: the match\'s points, never "all"', async ({
   page,
 }) => {
   await openFixture(page, "?case=page&truncated=1");
-  await expect(watch(page)).toHaveText("Watch 3 points");
+  await expect(watch(page)).toHaveText("Watch 3 points in this match");
   await expect(meta(page)).toContainText("First 3");
 });

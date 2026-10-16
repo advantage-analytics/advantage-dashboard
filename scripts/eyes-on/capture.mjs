@@ -276,6 +276,52 @@ async function settle(page) {
   await page.waitForTimeout(500);
 }
 
+/**
+ * Count the page's requests in flight, for `settleAfterClick`. HMR and other
+ * dev-server channels never finish, so they are not counted.
+ */
+const LONG_LIVED = /\/_next\/webpack-hmr|\/__nextjs|turbopack-hmr/;
+function trackRequests(page) {
+  const inFlight = new Set();
+  const done = (request) => inFlight.delete(request);
+  page.on("request", (request) => {
+    if (!LONG_LIVED.test(request.url())) inFlight.add(request);
+  });
+  page.on("requestfinished", done);
+  page.on("requestfailed", done);
+  return inFlight;
+}
+
+/**
+ * Wait for what a click set off. `settle()` alone is not enough here: after
+ * the page load the network is already idle, so `waitForLoadState
+ * ("networkidle")` returns at once and the screenshot catches the click's
+ * own loading state (a "Show me" still finding its points read as stuck).
+ * Instead: give the click a moment to start its requests, wait until none
+ * is in flight for half a second and nothing on the page is `aria-busy`,
+ * then let the Suspense boundaries and the last paint land as `settle()`
+ * does.
+ */
+async function settleAfterClick(page, inFlight) {
+  await page.waitForTimeout(150);
+  const deadline = Date.now() + SETTLE_TIMEOUT;
+  let quietSince = inFlight.size === 0 ? Date.now() : 0;
+  while (Date.now() < deadline) {
+    if (inFlight.size > 0) quietSince = 0;
+    else if (!quietSince) quietSince = Date.now();
+    if (quietSince && Date.now() - quietSince >= 500) break;
+    await page.waitForTimeout(100);
+  }
+  await page
+    .waitForFunction(
+      () => document.querySelector('[aria-busy="true"]') === null,
+      undefined,
+      { timeout: Math.max(1, deadline - Date.now()) },
+    )
+    .catch(() => {});
+  await settle(page);
+}
+
 async function main() {
   let baseUrl = env.baseUrl;
   let stopServer = () => {};
@@ -417,6 +463,7 @@ async function main() {
     }
     const p = await context.newPage();
     attachCollectors(p, entry);
+    const inFlight = trackRequests(p);
     try {
       const resp = await p.goto(`${baseUrl}${path}`, {
         waitUntil: "domcontentloaded",
@@ -450,7 +497,7 @@ async function main() {
           .or(p.getByRole("tab", { name: label, exact: true }))
           .first();
         await control.click({ timeout: SETTLE_TIMEOUT });
-        await settle(p);
+        await settleAfterClick(p, inFlight);
       }
       await p.screenshot({ path: shotPath, fullPage: true });
     } catch (e) {

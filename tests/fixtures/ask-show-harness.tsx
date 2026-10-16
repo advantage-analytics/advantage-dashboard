@@ -15,6 +15,7 @@ import type { AskShowPoint } from "@/lib/services/ask/show-response";
  * - `match`    one match, three points, no film: the point list
  * - `matches`  seventeen matches: the capped list
  * - `slow`     the request never answers: the busy region
+ * - `fail`     the request is refused: the alert and the way into the film
  */
 const params = new URLSearchParams(window.location.search);
 const kind = params.get("case") ?? "match";
@@ -43,6 +44,13 @@ const point = (pointNumber: number): AskShowPoint => ({
 
 const post = (): Promise<AskShowPost> => {
   if (kind === "slow") return new Promise<AskShowPost>(() => {});
+  if (kind === "fail") {
+    return Promise.resolve({
+      ok: false,
+      message: "The points could not be read. Try again.",
+      code: null,
+    });
+  }
   if (kind === "matches") {
     return Promise.resolve({
       ok: true,
