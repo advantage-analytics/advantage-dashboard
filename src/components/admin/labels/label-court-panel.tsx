@@ -10,6 +10,8 @@ import {
 } from "@/lib/services/labels/session";
 import { cn } from "@/lib/utils";
 import type { CourtPoint } from "./court-geometry";
+import { BlackTextAction, type BlackTextActionInk } from "./label-black-parts";
+import type { CourtReview, CourtReviewAnswer } from "./label-black-mark";
 import {
   placementPrompt,
   type PlacementState,
@@ -22,6 +24,7 @@ import {
   parseCourtMarksKey,
 } from "./label-court-marks";
 import type { SideNames } from "./label-format";
+import { RAIL_TONE_CLASS } from "./label-rail-tone";
 import type { VideoClock } from "./video-clock";
 
 /**
@@ -40,6 +43,11 @@ import type { VideoClock } from "./video-clock";
  *   half the next click belongs on (court-placement.ts), run-off included.
  * - With a stroke selected, editable or not, the court shows that stroke alone
  *   at full strength; one with no coordinates yet is a blank court.
+ * - With an open review item on the point (`review`, label-black-mark.tsx
+ *   `courtReview`), the header asks it: its number and question over the
+ *   placement's context while placing, else its first evidence line, and its
+ *   answers in one row of text actions under it. With none, the header is the
+ *   readout alone.
  */
 
 /** No point open: one shared empty list, so the marks memo holds. */
@@ -135,12 +143,43 @@ export function isPlacing(
   return editable && selectedStroke(point, placement) !== null;
 }
 
+/**
+ * The review header's two lines: the item's question, over the placement's
+ * readout folded to one line while placing ("Shot 5 · landing · Vargas’s
+ * side") so the armed end stays named, else over its first evidence line.
+ */
+function reviewReadout(
+  review: CourtReview,
+  readout: CourtReadout,
+  placing: boolean,
+): CourtReadout {
+  return {
+    title: review.question,
+    subtitle: placing
+      ? [readout.title, readout.subtitle].filter(Boolean).join(" · ")
+      : (review.evidence[0] ?? null),
+  };
+}
+
+/** An answer's ink: the lead answer amber on a score item, the rest quieter. */
+function answerInk(
+  answer: CourtReviewAnswer,
+  index: number,
+  review: CourtReview,
+): BlackTextActionInk {
+  if (answer.kind === "dismiss") return "muted";
+  if (answer.kind === "looks-right") return "quiet";
+  if (index > 0) return "quiet";
+  return review.tone === "score" ? "amber" : "plain";
+}
+
 export function LabelCourtPanel({
   point,
   names,
   placement,
   editable,
   playingShotId = null,
+  review = null,
   clock,
   onPlace,
   onTarget,
@@ -155,6 +194,8 @@ export function LabelCourtPanel({
   editable: boolean;
   /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
+  /** The open point's current review item, with its answers; null with none. */
+  review?: CourtReview | null;
   /** The console's video clock (analysis seconds): what the marks follow. */
   clock: VideoClock;
   /** A click on the zoomed half, in metres. */
@@ -165,12 +206,15 @@ export function LabelCourtPanel({
   const shots = point?.shots ?? NO_SHOTS;
   const selected = selectedStroke(point, placement);
   const placing = editable && selected !== null;
-  const readout = courtReadout(
+  const placementReadout = courtReadout(
     point,
     placing ? placement : null,
     placement.shotId ?? playingShotId,
     names,
   );
+  const readout = review
+    ? reviewReadout(review, placementReadout, placing)
+    : placementReadout;
   const selectedNumber =
     placing && selected
       ? shots.filter((shot) => shot.status !== "deleted").indexOf(selected) + 1
@@ -208,7 +252,10 @@ export function LabelCourtPanel({
   }, [placement.shotId, selected, shots, marksKey]);
 
   return (
-    <div data-court-panel="" className="flex min-h-0 flex-1 flex-col">
+    <div
+      data-court-panel=""
+      className={cn("flex min-h-0 flex-1 flex-col", RAIL_TONE_CLASS.dark)}
+    >
       <span aria-live="polite" className="sr-only" data-court-prompt="">
         {prompt}
       </span>
@@ -216,8 +263,23 @@ export function LabelCourtPanel({
       <div className="flex h-[34px] min-w-0 shrink-0 flex-col gap-0.5">
         <span
           data-court-title=""
+          data-court-review={review ? review.id : undefined}
           className="tabular truncate text-[12px] leading-[15px] font-medium text-white"
         >
+          {review ? (
+            <span
+              aria-hidden="true"
+              data-court-review-number=""
+              className={cn(
+                "mono mr-[6px] text-[11px]",
+                review.tone === "score"
+                  ? "text-[var(--rail-amber)]"
+                  : "text-white/55",
+              )}
+            >
+              {review.id}
+            </span>
+          ) : null}
           {readout.title}
         </span>
         <span
@@ -227,6 +289,24 @@ export function LabelCourtPanel({
           {readout.subtitle}
         </span>
       </div>
+      {review && review.answers.length > 0 ? (
+        <div
+          data-court-review-answers=""
+          className="-ml-1 flex h-6 min-w-0 shrink-0 items-center gap-x-[10px] overflow-hidden"
+        >
+          {review.answers.map((answer, index) => (
+            <BlackTextAction
+              key={`${answer.kind}:${answer.label}`}
+              ink={answerInk(answer, index, review)}
+              data-court-review-answer={answer.kind}
+              aria-label={`${answer.label}: ${review.question}`}
+              onClick={answer.run}
+            >
+              {answer.label}
+            </BlackTextAction>
+          ))}
+        </div>
+      ) : null}
 
       <div
         data-court-box=""

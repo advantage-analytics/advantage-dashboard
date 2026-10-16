@@ -48,12 +48,7 @@ import {
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import {
-  PencilMark,
-  ReviewBlock,
-  pointHints,
-  type PointHint,
-} from "./label-black-mark";
+import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
 import { placementWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
@@ -253,7 +248,7 @@ export function BlackShotsWell({
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
   // The point's hints. One about a stroke is a dashed amber row under it;
-  // the rest are asked by the review block, last in the well. Nothing leads
+  // the rest are asked one at a time in the court panel. Nothing leads
   // the well: a line above the first stroke read as part of the point's
   // header, and its answers as words rather than buttons. Their answers write
   // through the console only where it can write at all.
@@ -339,19 +334,6 @@ export function BlackShotsWell({
         />,
       );
     }
-  }
-  if (marks) {
-    const arrival = rowArrival(arrive());
-    rows.push(
-      <ReviewBlock
-        key="review"
-        point={point}
-        marks={marks}
-        edit={edit}
-        className={arrival.className}
-        style={arrival.style}
-      />,
-    );
   }
   const addArrival = rowArrival(arrive());
   return (

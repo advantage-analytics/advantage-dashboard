@@ -33,6 +33,20 @@ type PanelProps = {
   onTarget: () => void;
   onFlip: () => void;
   fill?: boolean;
+  review?: Review | null;
+};
+
+/** label-black-mark.tsx `CourtReview`, as the panel draws it. */
+type Review = {
+  id: number;
+  tone: "score" | "data";
+  question: string;
+  evidence: string[];
+  answers: {
+    label: string;
+    kind: "answer" | "dismiss" | "looks-right";
+    run: () => void;
+  }[];
 };
 
 type ViewProps = {
@@ -186,6 +200,160 @@ test.describe("the court panel", () => {
     const empty = render({ point: null });
     expect(title(empty)).toBe("Court");
     expect(subtitle(empty)).toBe("No point open");
+  });
+});
+
+test.describe("the current review item", () => {
+  const noop = () => {};
+  const ASKED: Review = {
+    id: 4,
+    tone: "score",
+    question: "Was the last ball out?",
+    evidence: [
+      "The last ball is in by its landing, but the vendor called it out.",
+      "A second line the header does not draw.",
+    ],
+    answers: [
+      { label: "Yes, make it out", kind: "answer", run: noop },
+      { label: "It was in", kind: "answer", run: noop },
+      { label: "Dismiss", kind: "dismiss", run: noop },
+      { label: "Looks right", kind: "looks-right", run: noop },
+    ],
+  };
+  /** The header's title: the item's number, then its words. */
+  const titleOf = (html: string) => {
+    const at = html.indexOf("data-court-title");
+    const span = html.slice(at, html.indexOf("data-court-subtitle", at));
+    return {
+      number: /data-court-review-number=""[^>]*>([^<]*)</.exec(span)?.[1],
+      numberTag: /<span[^>]*data-court-review-number=""[^>]*>/.exec(span)?.[0],
+      words: /<\/span>([^<]*)<\/span>/.exec(span)?.[1],
+    };
+  };
+  /** The answers row's buttons: [kind, words, opening tag]. */
+  const answersOf = (html: string) =>
+    [
+      ...html.matchAll(
+        /<button[^>]*data-court-review-answer="([^"]*)"[^>]*>([^<]*)</g,
+      ),
+    ].map((m) => ({ kind: m[1], label: m[2], tag: m[0] }));
+
+  test("asks it in the header: number, question and its first evidence line; the answers in one row under it", () => {
+    const html = render({ review: ASKED });
+    const head = titleOf(html);
+    expect(head.number).toBe("4");
+    expect(head.numberTag).toContain("text-[var(--rail-amber)]");
+    expect(head.words).toBe("Was the last ball out?");
+    expect(subtitle(html)).toBe(
+      "The last ball is in by its landing, but the vendor called it out.",
+    );
+    expect(html).not.toContain("A second line the header does not draw.");
+    // One row, right under the header and above the court.
+    expect(html.match(/data-court-review-answers=""/g)).toHaveLength(1);
+    expect(html.indexOf("data-court-review-answers")).toBeGreaterThan(
+      html.indexOf("data-court-subtitle"),
+    );
+    expect(html.indexOf("data-court-review-answers")).toBeLessThan(
+      html.indexOf("data-court-box"),
+    );
+    const buttons = answersOf(html);
+    expect(buttons.map((b) => [b.kind, b.label])).toEqual([
+      ["answer", "Yes, make it out"],
+      ["answer", "It was in"],
+      ["dismiss", "Dismiss"],
+      ["looks-right", "Looks right"],
+    ]);
+    // The rail's text action: its pressed state, the lead answer amber.
+    for (const b of buttons) expect(b.tag).toContain("active:scale-[0.96]");
+    expect(buttons[0].tag).toContain("text-[var(--rail-amber)]");
+    expect(buttons[1].tag).not.toContain("rail-amber");
+    expect(buttons[0].tag).toContain(
+      'aria-label="Yes, make it out: Was the last ball out?"',
+    );
+    // The amber the rail defines is defined here too.
+    expect(tagOf(html, "data-court-panel")).toContain("--rail-amber:");
+  });
+
+  test("a data item's number and lead answer are not amber", () => {
+    const html = render({
+      review: {
+        ...ASKED,
+        tone: "data",
+        question: "Serves",
+        answers: [ASKED.answers[0]],
+      },
+    });
+    expect(titleOf(html).numberTag).toContain("text-white/55");
+    expect(titleOf(html).numberTag).not.toContain("rail-amber");
+    expect(answersOf(html)[0].tag).not.toContain("text-[var(--rail-amber)]");
+  });
+
+  test("while placing, the subtitle keeps the armed end and its side", () => {
+    const html = render({
+      review: ASKED,
+      placement: setPlacementTarget(
+        startPlacement("s-return", "far"),
+        "landing",
+      ),
+    });
+    expect(titleOf(html).words).toBe("Was the last ball out?");
+    expect(subtitle(html)).toBe("Shot 2 · landing · Lee’s side");
+    expect(html).toContain("data-court-steps");
+  });
+
+  test("no answers, no row; no item, the panel exactly as before", () => {
+    const quiet = render({ review: { ...ASKED, answers: [] } });
+    expect(quiet).toContain('data-court-review="4"');
+    expect(quiet).not.toContain("data-court-review-answers");
+    const none = render({ review: null });
+    expect(none).toBe(render({}));
+    expect(none).not.toContain("data-court-review");
+    expect(title(none)).toBe("Point 1");
+  });
+
+  test("the console's item, read off a point (`courtReview`), draws as asked", () => {
+    const { courtReview } = createLoader().load(
+      "src/components/admin/labels/label-black-mark.tsx",
+    ) as {
+      courtReview: (
+        point: LabelPoint,
+        marks: unknown,
+        points: readonly LabelPoint[],
+        names: typeof NAMES,
+        edit: Record<string, unknown> | undefined,
+      ) => Review | null;
+    };
+    // The fixture's ace, stored as the receiver's winner: "Different
+    // ending?", asked as item 4 with its "Make it an ace".
+    const ace = labelSessionFixture().points.find(
+      (p) => p.id === FIXTURE_POINT_IDS.P2,
+    )!;
+    const point: LabelPoint = {
+      ...ace,
+      checkedAt: null,
+      ending: "winner",
+      endedBy: "p2",
+      shots: ace.shots.map((s) => ({ ...s, landingX: 0.6, landingY: 17.79 })),
+    };
+    const marks = { points: {}, shots: {}, suggestions: [], serveSides: {} };
+    const asked = courtReview(point, marks, [point], NAMES, {
+      onPatchPoint: noop,
+      operations: { onDismissSuggestion: noop, onSetChecked: noop },
+    });
+    expect(asked?.id).toBe(4);
+    const html = render({ point, review: asked });
+    expect(titleOf(html).words).toBe(asked!.question);
+    expect(answersOf(html).map((b) => b.label)).toEqual(
+      asked!.answers.map((a) => a.label),
+    );
+    expect(answersOf(html).map((b) => b.label)).toEqual([
+      "Make it an ace",
+      "Dismiss",
+      "Looks right",
+    ]);
+    // Read-only: the item, no answers.
+    const readOnly = courtReview(point, marks, [point], NAMES, undefined);
+    expect(readOnly?.answers).toEqual([]);
   });
 });
 

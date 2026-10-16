@@ -55,7 +55,11 @@ import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
-import { drawsGhosts } from "@/lib/services/labels/marks-state";
+import { drawsGhosts, reviewFlag } from "@/lib/services/labels/marks-state";
+import {
+  currentReviewItem,
+  reviewItemTarget,
+} from "@/lib/services/labels/review-target";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   applyPointDelete,
@@ -182,7 +186,7 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
-import { reviewFocusTarget } from "./label-black-mark";
+import { courtReview } from "./label-black-mark";
 import { LabelBlackRail } from "./label-black-rail";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
@@ -238,6 +242,13 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 const PENDING_SHOT_PREFIX = "pending-shot-";
 /** How long the overview's jump waits for full screen to settle. */
 const OPEN_JUMP_DELAY_MS = 450;
+/**
+ * What a flag jump lets go of when it holds focus (`findGap`'s `arm`): a text
+ * field, a select, an editable region or a select editor, any of which would
+ * keep the stroke and spin keys for itself after the jump.
+ */
+const JUMP_BLURS_SELECTOR =
+  "input, textarea, select, [contenteditable='true'], [data-select-editor]";
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
 
@@ -1528,41 +1539,54 @@ export function LabelConsole({
    * video seeks to it; the row is then brought to the rail's top
    * (`jumpToPointId`).
    *
-   * `focusItem` is a flag jump's (`stepToFlag`, the header's flag rows): the
-   * point also opens unfolded, and once its well has rendered focus moves to
-   * what its review block asks first (`reviewFocusTarget`). Nothing else
-   * sets it — a row opened by a click, "Find the gap" or the overview's
-   * open-on-point leaves focus where it was.
+   * `arm` is a flag jump's (`stepToFlag`, the header's flag rows): the point
+   * also opens unfolded, and on a console that may write the stroke its
+   * current review item is about is selected with the court open on the end
+   * it wants placed (`reviewItemTarget`, through `selectShot`, which seeks the
+   * video to the stroke) — the labeller clicks the court once and ↓ or ]
+   * moves on. With no stroke to arm the point opens as it would otherwise.
+   * A text field left focused would keep the keys for itself: a jump lets it
+   * go. Nothing else sets `arm` — a row opened by a click, "Find the gap" or
+   * the overview's open-on-point leaves the court and focus as they were.
    */
   const jumpToPointId = useRef<string | null>(null);
-  const focusOnJump = useRef(false);
   function findGap(
     pointId: string | null,
-    { focusItem = false }: { focusItem?: boolean } = {},
+    { arm = false }: { arm?: boolean } = {},
   ) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
+    const point = live.find((p) => p.id === target);
+    const armed =
+      arm && editable && point && liveMarks
+        ? reviewItemTarget(
+            currentReviewItem(reviewFlag(point, liveMarks, points)),
+            point,
+            liveMarks,
+            drawsGhosts(liveMarks),
+          )
+        : null;
+    if (arm) {
+      const active = document.activeElement as HTMLElement | null;
+      if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
+    }
     setPlacement(NO_PLACEMENT);
     setRestPointId(target);
     holdPoint(target);
-    if (focusItem) setFoldedPointId(null);
-    seekToPointStart(live.find((p) => p.id === target));
+    if (arm) setFoldedPointId(null);
+    if (armed?.shotId) selectShot(armed.shotId, armed.place ?? undefined);
+    else seekToPointStart(point);
     jumpToPointId.current = target;
-    focusOnJump.current = focusItem;
   }
   // The follow scroll moves nothing while held, so this jump is made here once
   // the hold has rendered the row: its top `REFOLLOW_JUMP_INSET_PX` under the
   // rail's. A ref, not state: the request is consumed by the commit after the
-  // hold and must not render anything itself. A flag jump then focuses the
-  // review block's first open item without scrolling for it, so the smooth
-  // scroll is not cut short; a point with no block focuses nothing.
+  // hold and must not render anything itself.
   useEffect(() => {
     const pointId = jumpToPointId.current;
     if (pointId === null) return;
     jumpToPointId.current = null;
-    const focus = focusOnJump.current;
-    focusOnJump.current = false;
     const scroller = scrollerRef.current;
     const row = scroller?.querySelector<HTMLElement>(
       `[data-point-id="${pointId}"]`,
@@ -1580,24 +1604,11 @@ export function LabelConsole({
       },
       REFOLLOW_JUMP_INSET_PX,
     );
-    const smooth = top !== null && !reducedMotionNow();
-    const scrolls = top !== null && Math.abs(scroller.scrollTop - top) >= 1;
     if (top !== null) {
-      scroller.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
-    }
-    if (!focus) return;
-    const well = scroller.querySelector(`[data-shots-well="${pointId}"]`);
-    const target = well ? reviewFocusTarget(well) : null;
-    if (!target) return;
-    target.focus({ preventScroll: true });
-    // The block is the well's last row, so on a long rally the focused action
-    // can sit below the rail once the row is at its top: bring it in, the
-    // least distance, once the jump's own scroll has finished.
-    const reveal = () => target.scrollIntoView({ block: "nearest" });
-    if (smooth && scrolls) {
-      scroller.addEventListener("scrollend", reveal, { once: true });
-    } else {
-      reveal();
+      scroller.scrollTo({
+        top,
+        behavior: reducedMotionNow() ? "auto" : "smooth",
+      });
     }
   });
 
@@ -2170,7 +2181,7 @@ export function LabelConsole({
     fixTiebreakServe,
     setGameType,
     findGap,
-    goToFlag: (pointId: string) => findGap(pointId, { focusItem: true }),
+    goToFlag: (pointId: string) => findGap(pointId, { arm: true }),
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
@@ -2239,7 +2250,7 @@ export function LabelConsole({
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
       const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
-      if (flag) findGap(flag.pointId, { focusItem: true });
+      if (flag) findGap(flag.pointId, { arm: true });
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
@@ -2487,6 +2498,28 @@ export function LabelConsole({
       square={fullScreen}
     />
   );
+  // The open point's current review item, asked in the court panel with the
+  // writes the rail's rows have.
+  const review =
+    expanded && liveMarks
+      ? courtReview(
+          expanded,
+          liveMarks,
+          points,
+          names,
+          editable
+            ? {
+                onPatchPoint: railHandlers.patchPoint,
+                onPatchShot: railHandlers.patchShot,
+                onRemoveShotsAfter: operable
+                  ? railHandlers.removeShotsAfter
+                  : undefined,
+                operations: operable ? rowOperations : undefined,
+                onSelectShot: railHandlers.selectShot,
+              }
+            : undefined,
+        )
+      : null;
   const courtPanel = (
     <LabelCourtPanel
       point={expanded}
@@ -2494,6 +2527,7 @@ export function LabelConsole({
       placement={placement}
       editable={editable}
       playingShotId={playing?.shotId ?? null}
+      review={review}
       clock={clock}
       onPlace={place}
       onTarget={setTarget}

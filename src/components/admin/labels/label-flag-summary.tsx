@@ -138,9 +138,9 @@ export function LabelFlagSummary({
   const groups = flagGroups(openMarks);
   const ink = ROW_INK[tone];
 
-  // A jump from the list moves focus into the landing point's review block
-  // (the console's `goToFlag`): the closing menu must not then hand focus
-  // back to its trigger.
+  // A jump from the list arms the court for the landing point's current
+  // review item (the console's `goToFlag`): the closing menu must not then
+  // hand focus back to its trigger, which would keep the keys for itself.
   const jumped = useRef(false);
   const go = (pointId: string) => {
     jumped.current = open;
