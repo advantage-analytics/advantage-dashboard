@@ -207,25 +207,22 @@ function PilotView({
         >
           Plans from January
         </SettingsCardTitle>
-        {PLANS.map((p) => (
+        {PLANS.filter((p) => p.monthly > 0).map((p) => (
           <PlanRow
             key={p.id}
             plan={p}
             billing={billing}
             action={
-              <button
-                type="button"
-                className={p.monthly > 0 ? BTN_PRIMARY : BTN_SECONDARY}
-              >
-                {p.monthly > 0 ? "Choose" : "Stay free"}
+              <button type="button" className={BTN_PRIMARY}>
+                Choose
               </button>
             }
           />
         ))}
         <SettingsCardFootnote className="mt-0 border-t-0 pt-0">
           Choose a plan now and it starts on January 1, when the free pilot
-          hours end. Your plan isn&apos;t billed before then. If you don&apos;t
-          choose, you move to Free and keep every match you have uploaded.
+          hours end. Your plan isn&apos;t billed before then. Your matches and
+          reports stay either way.
         </SettingsCardFootnote>
       </SettingsCard>
     </>
