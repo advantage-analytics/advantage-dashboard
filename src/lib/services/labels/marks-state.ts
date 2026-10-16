@@ -845,7 +845,8 @@ export interface ReviewItem {
 
 /**
  * A point's one flag: its items in id order (an item with no members is
- * absent), amber if any item is, as open as its most open item.
+ * absent), amber if an open item is (any item, once none is open), as open
+ * as its most open item.
  *
  * `demoted` marks the grey flag the design note leaves off the row and out of
  * the counts — one whose only open item is item 4 and whose open members
@@ -911,14 +912,20 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * amber only for a serve replayed after one in; item 3 only for a double
  * fault in question or a point stopping on a faulted first serve; item 4
  * when a counted mark sits under it or the point's winner is the player its
- * strokes say lost; items 5 and 6 are always the score.
+ * strokes say lost; items 5 and 6 are always the score. Like the flag
+ * (`foldReviewItems`), an item speaks for its open members while any is
+ * open, and for all of them once none is: a settled "Check the ending"
+ * does not keep the grey hints still open beside it amber.
+ * `contradicted` is `pointWinnerContradicted`, when the caller has it.
  */
 function reviewItemTone(
   id: ReviewItemId,
-  members: readonly ReviewMember[],
+  all: readonly ReviewMember[],
   point: LabelPoint,
   marks: LabelMarks,
+  contradicted?: boolean,
 ): MarkTone {
+  const members = openOrAll(all, (member) => member.state);
   const has = (...codes: LabelMarkCode[]) =>
     members.some((member) => codes.includes(member.mark.code));
   switch (id) {
@@ -936,7 +943,7 @@ function reviewItemTone(
         : "data";
     case 4:
       return members.some((member) => member.mark.tier === "count") ||
-        pointWinnerContradicted(point, marks)
+        (contradicted ?? pointWinnerContradicted(point, marks))
         ? "score"
         : "data";
     case 5:
@@ -965,7 +972,7 @@ export function reviewFlag(
   const { count } = pointRowMarkList(point, marks);
   const states = markStates(count, point, marks.suggestions, points);
   const checked = point.checkedAt !== null;
-  const contradicted = checked && pointWinnerContradicted(point, marks);
+  const contradicted = pointWinnerContradicted(point, marks);
   const members: ReviewMember[] = [
     ...count.map((mark, i) => ({
       mark,
@@ -980,7 +987,19 @@ export function reviewFlag(
       dismissKey: memberDismissKey(mark),
     })),
   ];
-  return foldReviewItems(members, point, marks);
+  return foldReviewItems(members, point, marks, contradicted);
+}
+
+/**
+ * The members (or items) a tone speaks for: the open ones while any is open,
+ * every one once none is — as the row's chip always read its marks.
+ */
+function openOrAll<T>(
+  list: readonly T[],
+  state: (entry: T) => MarkState,
+): readonly T[] {
+  const open = list.filter((entry) => state(entry) === "open");
+  return open.length > 0 ? open : list;
 }
 
 /**
@@ -993,6 +1012,8 @@ export function foldReviewItems(
   members: readonly ReviewMember[],
   point: LabelPoint,
   marks: LabelMarks,
+  /** `pointWinnerContradicted`, when the caller has already read it. */
+  contradicted?: boolean,
 ): ReviewFlag | null {
   const items: ReviewItem[] = [];
   for (const def of REVIEW_ITEMS) {
@@ -1003,13 +1024,20 @@ export function foldReviewItems(
     items.push({
       id: def.id,
       question: def.question,
-      tone: reviewItemTone(def.id, mine, point, marks),
+      tone: reviewItemTone(def.id, mine, point, marks, contradicted),
       state: mostOpen(mine.map((member) => member.state)),
       members: mine,
     });
   }
   if (items.length === 0) return null;
-  const tone = items.some((item) => item.tone === "score") ? "score" : "data";
+  // Amber while an open item can move the score, or, with none open, while
+  // any item could: a point whose amber question is answered and whose grey
+  // one is still open is a data point to review, not a score one.
+  const tone = openOrAll(items, (item) => item.state).some(
+    (item) => item.tone === "score",
+  )
+    ? "score"
+    : "data";
   return {
     tone,
     state: mostOpen(items.map((item) => item.state)),

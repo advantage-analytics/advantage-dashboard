@@ -6,7 +6,12 @@
  */
 
 import type { LabelMarks } from "./marks";
-import { REVIEW_ITEMS, reviewFlag, type ReviewItem } from "./marks-state";
+import {
+  REVIEW_ITEMS,
+  reviewFlag,
+  reviewItemQuestion,
+  type ReviewItem,
+} from "./marks-state";
 import type { LabelPoint } from "./session";
 import type { LabelScoreMismatch } from "./set-scores";
 import { gameOverflow, gameUnderflow } from "./game-shift";
@@ -121,11 +126,11 @@ export function slotStops(
 }
 
 /**
- * What a stop is called in a tooltip: its point's first open question, or
- * the score's words.
+ * What a stop is called in a tooltip: its point's first open question, in the
+ * words the row asks it (`reviewItemQuestion`), or the score's words.
  */
 export function flagStopLabel(stop: FlagStop): string {
-  return "items" in stop ? stop.items[0].question : stop.label;
+  return "items" in stop ? reviewItemQuestion(stop.items[0]) : stop.label;
 }
 
 /**

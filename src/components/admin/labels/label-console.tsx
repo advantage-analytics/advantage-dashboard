@@ -1580,15 +1580,25 @@ export function LabelConsole({
       },
       REFOLLOW_JUMP_INSET_PX,
     );
+    const smooth = top !== null && !reducedMotionNow();
+    const scrolls = top !== null && Math.abs(scroller.scrollTop - top) >= 1;
     if (top !== null) {
-      scroller.scrollTo({
-        top,
-        behavior: reducedMotionNow() ? "auto" : "smooth",
-      });
+      scroller.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
     }
     if (!focus) return;
     const well = scroller.querySelector(`[data-shots-well="${pointId}"]`);
-    if (well) reviewFocusTarget(well)?.focus({ preventScroll: true });
+    const target = well ? reviewFocusTarget(well) : null;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    // The block is the well's last row, so on a long rally the focused action
+    // can sit below the rail once the row is at its top: bring it in, the
+    // least distance, once the jump's own scroll has finished.
+    const reveal = () => target.scrollIntoView({ block: "nearest" });
+    if (smooth && scrolls) {
+      scroller.addEventListener("scrollend", reveal, { once: true });
+    } else {
+      reveal();
+    }
   });
 
   function deletePoint(pointId: string) {

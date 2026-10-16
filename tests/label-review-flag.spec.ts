@@ -363,6 +363,37 @@ test.describe("tone", () => {
       flagOf([sample("same_player_consecutive"), sample("pick_winner")])?.tone,
     ).toBe("score");
   });
+
+  test("a tone speaks for what is open: an answered amber question leaves a grey one grey", () => {
+    // The winner settled by an edit; the grey serve hint is still open.
+    const across = flagOf(
+      [sample("pick_winner"), sample("serve_in_landing_out")],
+      point({ status: "edited" }),
+    );
+    expect(across?.items.map((item) => [item.id, item.state])).toEqual([
+      [3, "open"],
+      [5, "settled"],
+    ]);
+    expect(across?.tone).toBe("data");
+
+    // Inside item 4: "Check the ending" settled, "Close to the line" open —
+    // grey, and one of the demoted signatures.
+    const within = flagOf(
+      [sample("winner_disputed"), sample("ending_suspect_line")],
+      point({ status: "edited" }),
+    );
+    expect(tone(within, 4)).toBe("data");
+    expect(within?.tone).toBe("data");
+    expect(within?.demoted).toBe(true);
+
+    // With nothing open, the tone is every item's again.
+    const settled = flagOf(
+      [sample("pick_winner")],
+      point({ status: "edited" }),
+    );
+    expect(settled?.state).toBe("settled");
+    expect(settled?.tone).toBe("score");
+  });
 });
 
 test.describe("state", () => {
