@@ -256,6 +256,9 @@ function AddHoursContent({
         event.preventDefault();
         primaryRef.current?.focus();
       }}
+      // z-[51]: Radix portals the content and the overlay separately, and
+      // the content can land first in the DOM — at an equal z-index the
+      // overlay would paint over the dialog and take its clicks.
       // Checkout is a form a stray click must not throw away.
       onInteractOutside={(event) => {
         if (phase.kind !== "choose" && phase.kind !== "error")
@@ -265,7 +268,7 @@ function AddHoursContent({
         if (phase.kind === "checkout" || phase.kind === "recording")
           event.preventDefault();
       }}
-      className="fixed top-10 left-1/2 z-50 max-h-[calc(100vh-80px)] -translate-x-1/2 overflow-y-auto bg-[var(--surface-card)] outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
+      className="fixed top-10 left-1/2 z-[51] max-h-[calc(100vh-80px)] -translate-x-1/2 overflow-y-auto bg-[var(--surface-card)] outline-none data-[state=open]:animate-in data-[state=open]:duration-300 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2 motion-reduce:data-[state=open]:slide-in-from-top-0"
       style={{
         width: "520px",
         maxWidth: "calc(100vw - 32px)",
