@@ -2751,6 +2751,7 @@ export function LabelConsole({
       placement={placement}
       editable={editable}
       playingShotId={playing?.shotId ?? null}
+      ghosts={drawsGhosts(liveMarks)}
       step={step}
       onAnswer={operable ? answerReview : undefined}
       onEstimate={editable ? setEstimate : undefined}

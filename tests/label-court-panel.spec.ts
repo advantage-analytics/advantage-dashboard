@@ -550,3 +550,23 @@ test.describe("the blue outline while placing", () => {
     expect(off).toContain('data-court-placing="false"');
   });
 });
+
+test("the step's shot line numbers strokes as the rail does: a ghost takes no number", () => {
+  const { stepShotLine } = createLoader().load(
+    "src/components/admin/labels/label-court-panel.tsx",
+  ) as {
+    stepShotLine: (
+      point: LabelPoint,
+      shotId: string | null,
+      names: { p1: string; p2: string },
+      ghosts?: boolean,
+    ) => string | null;
+  };
+  const p4 = labelSessionFixture().points.find(
+    (point) => point.id === FIXTURE_POINT_IDS.P4,
+  )!;
+  // Fault, ghost (removed by the site), second serve: the serve is shot 2
+  // while ghosts are drawn, shot 3 when the session draws none.
+  expect(stepShotLine(p4, "s-p4-serve", NAMES, true)).toMatch(/^Shot 2\b/);
+  expect(stepShotLine(p4, "s-p4-serve", NAMES, false)).toMatch(/^Shot 3\b/);
+});

@@ -11,6 +11,7 @@ import type {
 } from "@/lib/services/labels/review-step";
 import {
   isLetServe,
+  isLiveShot,
   opponent,
   type LabelPoint,
   type LabelShot,
@@ -73,9 +74,13 @@ interface CourtReadout {
   subtitle: string | null;
 }
 
-/** The live strokes, in the rail's numbering (1…n). */
-const liveShots = (point: LabelPoint) =>
-  point.shots.filter((shot) => shot.status !== "deleted");
+/**
+ * The live strokes, in the rail's numbering (1…n): not deleted and, while
+ * the session draws them (`ghosts`, marks.ts `drawsGhosts`), not a stroke
+ * the site removed — the rail numbers a ghost's line not at all.
+ */
+const liveShots = (point: LabelPoint, ghosts = true) =>
+  point.shots.filter((shot) => isLiveShot(shot, ghosts));
 
 /** "Didn’t clear the net · error by Lee" — the short ball's readout. */
 export function shankReadout(hitter: string | null): string {
@@ -101,9 +106,10 @@ function courtReadout(
   litShotId: string | null,
   names: SideNames,
   slide: CourtSlide | null = null,
+  ghosts = true,
 ): CourtReadout {
   if (!point) return { title: "Court", subtitle: "No point open" };
-  const live = liveShots(point);
+  const live = liveShots(point, ghosts);
   const numberOf = (shotId: string | null) => {
     const index = live.findIndex((shot) => shot.id === shotId);
     return index === -1 ? null : index + 1;
@@ -229,9 +235,10 @@ export function stepShotLine(
   point: LabelPoint,
   shotId: string | null,
   names: SideNames,
+  ghosts = true,
 ): string | null {
   if (shotId === null) return null;
-  const live = liveShots(point);
+  const live = liveShots(point, ghosts);
   const index = live.findIndex((shot) => shot.id === shotId);
   if (index === -1) return null;
   const shot = live[index];
@@ -265,6 +272,7 @@ export function LabelCourtPanel({
   placement,
   editable,
   playingShotId = null,
+  ghosts = true,
   step = null,
   onAnswer,
   onEstimate,
@@ -282,6 +290,11 @@ export function LabelCourtPanel({
   editable: boolean;
   /** The stroke on screen in the video — named in the header while nothing is selected. */
   playingShotId?: string | null;
+  /**
+   * Whether the session draws the site's removed strokes as ghosts
+   * (`drawsGhosts`): then they take no number here, as on the rail.
+   */
+  ghosts?: boolean;
   /** The open point's review step (`reviewStep`); null with nothing open. */
   step?: ReviewStep | null;
   /** Makes an answer's writes. Absent (read-only): the answers are not drawn. */
@@ -308,9 +321,12 @@ export function LabelCourtPanel({
     placement.shotId ?? playingShotId,
     names,
     slide,
+    ghosts,
   );
   const selectedNumber =
-    placing && selected ? liveShots(point!).indexOf(selected) + 1 : null;
+    placing && selected
+      ? liveShots(point!, ghosts).indexOf(selected) + 1
+      : null;
   const prompt = placing ? placementPrompt(placement, selectedNumber) : null;
   // The court crossfades between the whole court and the zoomed half
   // (`label-court-view-in`, globals.css) only once the labeller has made it
@@ -489,7 +505,7 @@ export function LabelCourtPanel({
 
   if (step && point) {
     const count = stepCount(keep, step);
-    const shotLine = stepShotLine(point, step.target.shotId, names);
+    const shotLine = stepShotLine(point, step.target.shotId, names, ghosts);
     const score = step.item.tone === "score";
     const contact =
       placing &&
@@ -564,7 +580,10 @@ export function LabelCourtPanel({
             >
               {step.explanation}
             </span>
-            {slide?.kind === "shank" ? (
+            {/* The answer "Didn’t clear by …" says it, detail and all: the
+                readout line would say it twice. */}
+            {slide?.kind === "shank" &&
+            !step.answers.some((answer) => answer.id === "short") ? (
               <span
                 data-court-shank=""
                 className="text-[12px] leading-[18px] font-medium text-[var(--rail-amber)]"
