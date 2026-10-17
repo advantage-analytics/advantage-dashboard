@@ -901,6 +901,18 @@ test.describe("a flag jump lands on the point's review step", () => {
     consoleSource.indexOf("const pointId = jumpToPointId.current;"),
   );
 
+  test("a court click answers the step only on its own stroke, once both ends are placed", () => {
+    const placeSource = consoleSource.slice(
+      consoleSource.indexOf("  function place(point: CourtPoint)"),
+      consoleSource.indexOf("  function setTarget("),
+    );
+    expect(placeSource).toContain(
+      "if (step?.target.shotId === shot.id && placesBothEnds(shot, next.patch)) {",
+    );
+    // `noteAnswered` is called inside that guard and nowhere else in place().
+    expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
+  });
+
   test("`]` and the header's flag rows are the only jumps that arm", () => {
     expect(consoleSource).toMatch(
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,

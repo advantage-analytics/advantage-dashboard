@@ -166,7 +166,6 @@ test.describe("replayWindow", () => {
 test.describe("replayTick", () => {
   const window = { start: 10, stop: 15 };
   test("runs through the window, stops at the stop", () => {
-    expect(replayTick(window, null, 3)).toBe("run");
     expect(replayTick(window, null, 10)).toBe("run");
     expect(replayTick(window, 10, 10.3)).toBe("run");
     expect(replayTick(window, 14.8, 15)).toBe("stop");
@@ -179,9 +178,11 @@ test.describe("replayTick", () => {
     expect(replayTick(window, 12, 12 + REPLAY_SEEK_JUMP_SECONDS + 0.01)).toBe(
       "cancel",
     );
-    // The first tick after the replay's own seek is never one.
-    expect(replayTick(window, null, 40)).toBe("stop");
-    expect(replayTick(window, null, 2)).toBe("run");
+    // Before the replay's own seek has landed, a tick far from its start
+    // still carries the old time: neither the stop nor a seek — it waits.
+    expect(replayTick(window, null, 40)).toBe("wait");
+    expect(replayTick(window, null, 2)).toBe("wait");
+    expect(replayTick(window, null, 3)).toBe("wait");
   });
 });
 
@@ -212,6 +213,19 @@ test.describe("runReplay", () => {
     clock.set(16);
     clock.set(3);
     expect(calls).toHaveLength(3);
+  });
+
+  test("ticks from before the seek landed are waited out, then it plays to the stop", () => {
+    const { calls, clock, deps } = fakePlayer();
+    const handle = runReplay({ start: 11.5, stop: 15 }, deps);
+    // The film was at a later point; its old time ticks once before the seek.
+    clock.set(40.2);
+    expect(handle.running()).toBe(true);
+    expect(calls).toEqual(["seek 11.5", "play"]);
+    for (const t of [11.5, 12.4, 13.3, 14.2]) clock.set(t);
+    expect(handle.running()).toBe(true);
+    clock.set(15.1);
+    expect(calls).toEqual(["seek 11.5", "play", "pause"]);
   });
 
   test("the labeller's own seek lets the replay go without a pause", () => {

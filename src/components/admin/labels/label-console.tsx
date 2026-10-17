@@ -2635,7 +2635,13 @@ export function LabelConsole({
     const next = nextPlacement(placement, point, labelShotValues(shot));
     if (!next) return;
     cancelReplay();
-    noteAnswered();
+    // A placement answers the step only on the stroke the step is about, and
+    // only once that stroke has both ends: a missing contact is placed first
+    // and its landing still to come must not be skipped by the advance, nor
+    // must a placement on some other stroke of the point move the console.
+    if (step?.target.shotId === shot.id && placesBothEnds(shot, next.patch)) {
+      noteAnswered();
+    }
     setPlacement(next.state);
     void patchShot(shot.id, next.patch);
   }
@@ -2664,10 +2670,14 @@ export function LabelConsole({
     />
   );
   // The open point's review step (`reviewStep`), asked in the court panel.
-  const step =
-    expanded && liveMarks
-      ? reviewStep(expanded, liveMarks, points, names, drawsGhosts(liveMarks))
-      : null;
+  // Memoised: the console re-renders on every film tick while it plays.
+  const step = useMemo(
+    () =>
+      expanded && liveMarks
+        ? reviewStep(expanded, liveMarks, points, names, drawsGhosts(liveMarks))
+        : null,
+    [expanded, liveMarks, points, names],
+  );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
   /** A write made here that may close the step: remember what it was about. */
   function noteAnswered() {
@@ -3184,6 +3194,23 @@ function placementOf(
   return hasContact && !hasLanding
     ? setPlacementTarget(start, "landing", shot.contactY)
     : start;
+}
+
+/**
+ * Whether `patch`, a court click's, leaves `shot` with both a contact and a
+ * landing: what a placement must do before it can answer a review step.
+ */
+function placesBothEnds(shot: LabelShot, patch: LabelShotPatch): boolean {
+  const end = (x: "contact" | "landing") => {
+    const px = patch[`${x}_x`];
+    const py = patch[`${x}_y`];
+    const sx =
+      px !== undefined ? px : x === "contact" ? shot.contactX : shot.landingX;
+    const sy =
+      py !== undefined ? py : x === "contact" ? shot.contactY : shot.landingY;
+    return sx !== null && sy !== null;
+  };
+  return end("contact") && end("landing");
 }
 
 /** `points` with one shot replaced; re-sorted into video order on a retime. */

@@ -78,22 +78,29 @@ export const REPLAY_SEEK_BACK_SECONDS = 0.25;
 
 /**
  * What a replay does with a tick of the clock: carry on, pause (the stop
- * reached), or let go (the labeller moved the film themselves — a scrub, a
- * step, a jump back). `last` is the previous tick, null before the first.
+ * reached), let go (the labeller moved the film themselves — a scrub, a
+ * step, a jump back), or wait. `last` is the previous tick the replay took,
+ * null until its own seek has landed: a tick away from the window's start
+ * before then still carries the film's old time (the seek is in flight), so
+ * it is neither the stop nor a seek of the labeller's — `"wait"`, and the
+ * replay keeps waiting for a tick at its start.
  */
 export function replayTick(
   window: ReplayWindow,
   last: number | null,
   now: number,
-): "run" | "stop" | "cancel" {
-  if (
-    last !== null &&
-    (now < last - REPLAY_SEEK_BACK_SECONDS ||
-      now > last + REPLAY_SEEK_JUMP_SECONDS)
+): "run" | "stop" | "cancel" | "wait" {
+  if (last === null) {
+    const landed =
+      now >= window.start - REPLAY_SEEK_BACK_SECONDS &&
+      now <= window.start + REPLAY_SEEK_JUMP_SECONDS;
+    if (!landed) return "wait";
+  } else if (
+    now < last - REPLAY_SEEK_BACK_SECONDS ||
+    now > last + REPLAY_SEEK_JUMP_SECONDS
   ) {
     return "cancel";
   }
-  // A tick before the window (the seek has not landed yet) is still a run.
   return now >= window.stop ? "stop" : "run";
 }
 

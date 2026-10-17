@@ -51,6 +51,8 @@ export function runReplay(
     const now = deps.clock.get();
     if (now === null) return;
     const verdict = replayTick(window, last, now);
+    // A tick before the seek has landed is not the replay's yet.
+    if (verdict === "wait") return;
     last = now;
     if (verdict === "run") return;
     finish();
