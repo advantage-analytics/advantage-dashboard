@@ -6,10 +6,7 @@ import {
   type UploadUrlDeps,
   type UploadUrlMatch,
 } from "@/app/api/splitstep/upload-url/handler";
-import {
-  capRefusalMessage,
-  type QuotaLimit,
-} from "@/lib/services/splitstep/quota";
+import { buildPeek, capRefusalMessage } from "@/lib/services/splitstep/quota";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import { PENDING_APPROVAL_NOTICE } from "@/lib/workspace/upload-eligibility";
 import {
@@ -121,8 +118,8 @@ function harness(input: {
   billableSeconds?: number | null;
   /** Seconds left this month; defaults to plenty. `"throws"` = read failed. */
   remainingSeconds?: number | "throws";
-  /** Which limit the peek reports; "account" unless a test says otherwise. */
-  limit?: QuotaLimit;
+  /** A personal player's credits, on top of `remainingSeconds`. */
+  creditSeconds?: number;
 }): Harness {
   const minted: string[] = [];
   const recorded: Array<{ matchId: string; blobName: string }> = [];
@@ -154,12 +151,11 @@ function harness(input: {
         throw new Error("Could not read processing usage: connection reset");
       }
       const remainingSeconds = input.remainingSeconds ?? CAP_SECONDS;
-      return {
-        remainingSeconds,
-        usedSeconds: CAP_SECONDS - remainingSeconds,
-        capSeconds: CAP_SECONDS,
-        limit: input.limit ?? "account",
-      };
+      return buildPeek(
+        CAP_SECONDS - remainingSeconds,
+        CAP_SECONDS,
+        input.creditSeconds ?? 0,
+      );
     },
     mintUploadSas: ({ blobName }) => {
       if (input.mintThrows) throw new Error("AZURE_STORAGE_ACCOUNT is unset");
@@ -513,15 +509,28 @@ test("a match longer than what is left this month → 429, nothing minted", asyn
   expect(r.json.capSeconds).toBe(CAP_SECONDS);
 });
 
-test("a spent open-beta ceiling → 429, nothing minted", async () => {
+test("a personal match past free hours but inside credits → 200", async () => {
   const h = harness({
-    billableSeconds: 600,
-    remainingSeconds: 0,
-    limit: "open_hours",
+    match: match({ program_id: null, player1_id: VIEWER }),
+    billableSeconds: 1800,
+    remainingSeconds: 600,
+    creditSeconds: 1200,
+  });
+  const r = await call(h);
+  expect(r.status).toBe(200);
+});
+
+test("a personal match past free hours and credits → 429 naming Plan", async () => {
+  const h = harness({
+    match: match({ program_id: null, player1_id: VIEWER }),
+    billableSeconds: 1800,
+    remainingSeconds: 600,
+    creditSeconds: 600,
   });
   const r = await call(h);
   expectDenied(h, 429, r);
-  expect(r.json.error).toMatch(/fully booked/);
+  expect(r.json.error).toMatch(/Add hours on Settings › Plan/);
+  expect(r.json.error).not.toMatch(/fully booked/);
 });
 
 test("a match that exactly fits what is left → 200", async () => {

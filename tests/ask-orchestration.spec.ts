@@ -41,6 +41,7 @@ import {
   databaseHint,
   identicalSiblings,
   ignoresBigPoints,
+  ignoresTags,
   withStoredSpelling,
 } from "@/lib/services/ask/ask";
 import { ASK_ANSWER_FAILED_MESSAGE } from "@/lib/services/ask/answer-render";
@@ -426,7 +427,8 @@ test.describe("a completed answer", () => {
       ],
       matchIds: [MATCH_A, MATCH_B],
       sql: PLAN.sql,
-      scopeSql: PLAN.scope_sql,
+      // The plan named every match; the question's tag is its scope.
+      scopeSql: `select match_id from ask.matches where match_id in ('${MATCH_A}')`,
       mock: false,
     } satisfies AskSavedAnswer);
   });
@@ -3572,5 +3574,74 @@ The team won {{r1.second_serve_won_pct}} of second-serve points.`;
     const saved = saves()[0].args?.p_answer as AskSavedAnswer;
     expect(saved.noAdvice).toBe(true);
     expect(saved).not.toHaveProperty("coach");
+  });
+});
+
+test.describe("a tagged question planned over every match", () => {
+  // "Show me all the aces" on one tagged match came back over every match:
+  // "all" is every ace in that match.
+  const TAGGED: AskResolvedTags = {
+    prompt: [
+      {
+        kind: "match",
+        matchId: MATCH_A,
+        opponentName: "Anna Lee",
+        playedOn: "2026-09-14",
+      },
+    ],
+    saved: [{ kind: "match", id: MATCH_A, label: "Sep 14, 2026 · Anna Lee" }],
+    matchIds: [MATCH_A],
+  };
+
+  test("ignoresTags: a scope naming none of the tags' matches or names", () => {
+    expect(ignoresTags("select match_id from ask.matches", TAGGED)).toBe(true);
+    expect(
+      ignoresTags(
+        "select match_id from ask.matches where has_stats = true",
+        TAGGED,
+      ),
+    ).toBe(true);
+    expect(
+      ignoresTags(
+        `select match_id from ask.matches where match_id in ('${MATCH_A}')`,
+        TAGGED,
+      ),
+    ).toBe(false);
+    // A tag's name as the filter is the planner's to keep.
+    expect(
+      ignoresTags(
+        "select match_id from ask.matches where opponent_name ilike '%anna%'",
+        TAGGED,
+      ),
+    ).toBe(false);
+    // Any other narrowing — a surface, a period — is the planner's too.
+    expect(
+      ignoresTags(
+        "select match_id from ask.matches where surface = 'clay' and played_on >= '2026-01-01'",
+        TAGGED,
+      ),
+    ).toBe(false);
+    // No tags, nothing to keep.
+    expect(ignoresTags("select match_id from ask.matches", NO_TAGS)).toBe(
+      false,
+    );
+  });
+
+  test("runs over exactly the tagged match", async () => {
+    const { db, calls } = fakeDb();
+    const { model } = fakeModel([JSON.stringify(PLAN), ANSWER]);
+
+    const events = await collect(
+      askQuestion(
+        input({ db, model, question: "Show me all the aces", tags: TAGGED }),
+      ),
+    );
+
+    expect(last(events).type).toBe("done");
+    const run = calls.find((call) => call.fn === "ask_run_query");
+    expect(run?.args?.scope_sql).toBe(
+      `select match_id from ask.matches where match_id in ('${MATCH_A}')`,
+    );
+    expect(run?.args?.sql).toBe(PLAN.sql);
   });
 });

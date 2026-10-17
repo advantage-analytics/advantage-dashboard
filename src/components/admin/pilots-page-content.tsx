@@ -134,6 +134,9 @@ export function PilotsPageContent({
                 >
                   {formatHoursShort(row.usedSeconds)} of{" "}
                   {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} h
+                  {row.creditSeconds > 0
+                    ? ` + ${formatHoursShort(row.creditSeconds)} h credits`
+                    : ""}
                 </span>
                 <span className={COL.action}>
                   <button

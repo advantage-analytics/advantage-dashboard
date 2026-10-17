@@ -1384,17 +1384,40 @@ test.describe("frozen score stretch", () => {
     }
   });
 
-  test("a leading warm-up rally is still refused, not kept as a phantom set", () => {
+  test("a leading warm-up rally is dropped, not refused and not kept as a phantom set", () => {
+    // Job c349e3d4 (2026-10-17) was refused for one 0:06 warm-up rally.
     const a = analyzeResults(degraded);
+    const warmup = a.rallies[0].rallyId;
     const t = buildTranscript({
       rallies: a.rallies,
       labels: a.players,
       score: { player1: [10, 6, 5], player2: [6, 3, 2] },
       initialTopIsPlayer1: null,
     });
-    expect(t.ok).toBe(false);
-    expect(t.reason).toBe("1 point(s) resolved no winner");
-    expect(t.guessedRallies).not.toContain(a.rallies[0].rallyId);
+    expect(t.reason).not.toBe("1 point(s) resolved no winner");
+    expect(t.warmupRallies).toEqual([warmup]);
+    expect(t.guessedRallies).not.toContain(warmup);
+    expect(t.reconciliation.unresolvedPoints).not.toContain(warmup);
+    expect(t.points.map((p) => p.rally_id)).not.toContain(warmup);
+  });
+
+  test("a stream that never reads a set score is guessed, not refused", () => {
+    // Job c349e3d4's shape: set score None throughout after the warm-up.
+    const a = analyzeResults(clean);
+    const rallies = a.rallies.map((r) => ({
+      ...r,
+      strokes: r.strokes.map((s) => ({ ...s, predSetScore: null })),
+    }));
+    const t = buildTranscript({
+      rallies,
+      labels: a.players,
+      score: { player1: [6], player2: [4] },
+      initialTopIsPlayer1: null,
+    });
+    const last = rallies[rallies.length - 1].rallyId;
+    expect(
+      t.reconciliation.unresolvedPoints.filter((id) => id !== last),
+    ).toEqual([]);
   });
 
   test("relabelled frozen points keep their line calls and skip the score-side flag", () => {

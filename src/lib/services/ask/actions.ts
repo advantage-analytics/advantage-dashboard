@@ -439,7 +439,7 @@ export function askVisualCsv(visual: AskVisual): AskCsvFile {
       return {
         filename,
         text: rows([
-          ["", "Value", ...(baseline ? [baseline.label] : [])],
+          ["", visual.label ?? "Value", ...(baseline ? [baseline.label] : [])],
           ...visual.points.map((point, index) => [
             point.label,
             point.value.text,

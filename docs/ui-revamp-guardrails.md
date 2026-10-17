@@ -764,6 +764,40 @@ to put a testable seam.
 > (`reserve_processing_quota`, `reserve_individual_quota`), the 2h / 10h / 75h
 > figures, and the open-beta ceiling.
 
+> **A reviewed exception, added 2026-10-16: beta credit packs, from
+> `claude/credit-packs-b7b28b` (PR #468).** Owner decisions (Cj, 2026-10-16,
+> `docs/plans/2027-player-pricing.md`): no shared house pool, so the 20h
+> open-beta ceiling and the pilot pool are removed from the spend; a personal
+> player can buy credits (1h $14, 5h $60, 12 months), which spend only in
+> their personal workspace, after free hours, oldest-expiring first. Frozen
+> files that changed:
+>
+> - `quota.ts` — `reserveQuota()` sends a personal workspace through
+>   `reserve_personal_quota` (free hours, then credits, one transaction) and
+>   every team — collegiate or custom org — through `reserve_processing_quota`;
+>   `reserve_individual_quota`, `pickPeek()` and the `QuotaLimit` bands are
+>   gone. `peekQuota()` adds the player's usable credits to what fits. A
+>   personal refusal names the next step (add hours on Plan, shorten the trim,
+>   or wait for the 1st); a team's keeps the allowance wording.
+> - `config.ts` — `INDIVIDUAL_POOL_MONTHLY_CAP_HOURS` and
+>   `OPEN_BETA_MONTHLY_CEILING_HOURS` are deleted; `freeHoursReturnOn()` says
+>   "Nov 1", or null in December when free hours end rather than reset.
+> - SQL (`20261016123934_video_credits_ledger.sql`): `video_credits`,
+>   `video_credit_spends`, `reserve_personal_quota`, and release/reconcile
+>   returning seconds to the same credit lots. `processing_usage` still means
+>   "free hours this month" (a job paid fully by credits has a 0-second row),
+>   so every reader of it is unchanged. It also revokes the authenticated
+>   user's INSERT/UPDATE/DELETE on `processing_usage`.
+>
+> The wizard: a personal workspace is no longer refused at step 1 (B4 says
+> "out of hours" on the file step instead), and the trim step's Continue — and
+> the re-check in `handleCreateMatch` — open the Add video hours dialog rather
+> than setting `error`, with the same `billableSeconds()` figure. Checkout is
+> Stripe Embedded Checkout inside the dialog, never a redirect: the picked
+> `File` and the trim survive it. Teams and the admin console are unchanged.
+> Unchanged: what is sent to the vendor, the five vendor fields, the trim
+> invariants, and `reserveQuota()` as the only authority.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 

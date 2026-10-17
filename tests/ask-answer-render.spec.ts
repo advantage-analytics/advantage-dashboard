@@ -935,6 +935,105 @@ test.describe("renderAskAnswer — the visual block, each kind", () => {
     expect(words.result.droppedVisuals[0]?.reason).toBe("bad_value");
   });
 
+  test("trend: two measures asked for over time draw two named lines", async () => {
+    // "Team first serve and first serve won, charted": the query returns
+    // both shares per match, and a block that named only the first used to
+    // drop the second.
+    const rows: AskRow[] = [
+      {
+        played_on: "2026-09-19",
+        first_serve_pct: 80.9,
+        first_serve_won_pct: 70,
+      },
+      {
+        played_on: "2026-09-22",
+        first_serve_pct: 68.5,
+        first_serve_won_pct: 61.2,
+      },
+      {
+        played_on: "2026-09-23",
+        first_serve_pct: 57.4,
+        first_serve_won_pct: 55,
+      },
+    ];
+    const expected = {
+      kind: "trend",
+      label: "First serves in",
+      points: [
+        { label: "Sep 19", value: { value: 80.9, text: "80.9%" } },
+        { label: "Sep 22", value: { value: 68.5, text: "68.5%" } },
+        { label: "Sep 23", value: { value: 57.4, text: "57.4%" } },
+      ],
+      baseline: {
+        label: "First-serve points won",
+        values: [
+          { value: 70, text: "70%" },
+          { value: 61.2, text: "61.2%" },
+          { value: 55, text: "55%" },
+        ],
+      },
+    };
+
+    const one = await render(
+      [
+        "Headline.\nCHART: trend | First serves in and first-serve points won.\nPLOT: played_on | first_serve_pct\n",
+      ],
+      rows,
+    );
+    expect(one.result.droppedVisuals).toEqual([]);
+    expect(visualOf(one.events)).toEqual({
+      ...expected,
+      caption: "First serves in and first-serve points won.",
+    });
+    // The saved block reads back whole, label and all.
+    expect(readAskVisual(visualOf(one.events))).toEqual(visualOf(one.events));
+
+    // Named third, the same lines.
+    const both = await render(
+      [
+        "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct | first_serve_won_pct\n",
+      ],
+      rows,
+    );
+    expect(visualOf(both.events)).toEqual({ ...expected, caption: "Caption." });
+
+    // The server's own drawing of the same rows.
+    expect(visualFromRows(rows)).toEqual({
+      ...expected,
+      caption:
+        "First serves in and first-serve points won over time, oldest first.",
+    });
+
+    // The same measure over all matches is still the unnamed baseline, and
+    // a block over a count draws no second line it was not asked for.
+    expect(
+      visualOf(
+        (
+          await render(
+            [
+              "Headline.\nCHART: trend | Caption.\nPLOT: played_on | first_serve_pct\n",
+            ],
+            rows.map((row) => ({
+              played_on: row.played_on,
+              first_serve_pct: row.first_serve_pct,
+              all_first_serve_pct: 60,
+            })),
+          )
+        ).events,
+      ),
+    ).not.toHaveProperty("baseline");
+    expect(
+      visualOf(
+        (
+          await render(
+            ["Headline.\nCHART: trend | Caption.\nPLOT: played_on | aces\n"],
+            rows.map((row, index) => ({ ...row, aces: index })),
+          )
+        ).events,
+      ),
+    ).not.toHaveProperty("baseline");
+  });
+
   test("readAskVisual: a trend's match ids and baseline must be whole, and may be absent", () => {
     const point = (label: string, value: number) => ({
       label,

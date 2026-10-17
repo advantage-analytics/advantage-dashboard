@@ -48,7 +48,7 @@ export function TrendVisual({
   const lastAt = geometry.points[last];
   const linked = points.some((point) => point.matchId !== undefined);
   const words = (index: number) =>
-    `${points[index].label}: ${points[index].value.text}${
+    `${points[index].label}: ${visual.label ? `${visual.label} ` : ""}${points[index].value.text}${
       baseline ? `; ${baseline.label} ${baseline.values[index].text}` : ""
     }`;
   const [hovered, setHovered] = useState<number | null>(null);
@@ -67,7 +67,7 @@ export function TrendVisual({
     <VisualFrame kind="trend" caption={visual.caption}>
       <VisualKey
         items={[
-          { label: "Each match", color: "var(--viz-you)" },
+          { label: visual.label ?? "Each match", color: "var(--viz-you)" },
           {
             label: baseline?.label ?? averageLabel,
             color: "var(--viz-opp-mid)",
