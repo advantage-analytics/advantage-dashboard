@@ -135,6 +135,11 @@ export interface Transcript {
   /** Rallies inside a frozen stretch, games read from the serve. */
   frozenRallies: number[];
   /**
+   * Leading rallies before the stream read any set score: warm-up play,
+   * dropped from the transcript rather than refusing the match.
+   */
+  warmupRallies: number[];
+  /**
    * The score-constrained segmenter's proposal (segmentation.ts). Review-only:
    * it never changes a published row, it only adds
    * `segment_proposal_differs` to the points it disagrees with. Null when the
@@ -462,7 +467,7 @@ export interface BuildOptions {
 
 export function buildTranscript(options: BuildOptions): Transcript {
   const {
-    rallies: streamRallies,
+    rallies: inputRallies,
     labels,
     score,
     initialTopIsPlayer1,
@@ -471,6 +476,23 @@ export function buildTranscript(options: BuildOptions): Transcript {
     lineCalls: streamLineCalls,
     segmenter = proposeSegmentation,
   } = options;
+
+  // Warm-up play before the stream has read any set score is dropped, not
+  // refused. Nothing about it says which game it belongs to, and keeping it
+  // would open a phantom first set and push every real point one set up — but
+  // refusing the match over it (job c349e3d4, 2026-10-17: one 0:06 warm-up
+  // rally, "1 point(s) resolved no winner") threw away every real point to
+  // avoid one that was never a point. A stream that never reads a set score
+  // keeps everything: there is no scored rally to tell warm-up from play.
+  const firstScored = inputRallies.findIndex(
+    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
+  );
+  const warmupRallies =
+    firstScored > 0
+      ? inputRallies.slice(0, firstScored).map((r) => r.rallyId)
+      : [];
+  const streamRallies =
+    firstScored > 0 ? inputRallies.slice(firstScored) : inputRallies;
 
   const gameKeyOf = new Map<number, string>();
   const setKeyOf = new Map<number, string>();
@@ -574,15 +596,8 @@ export function buildTranscript(options: BuildOptions): Transcript {
   // score repeating for a few rallies, then moving on). The point was played,
   // so it is kept on the last stroke's guess rather than refusing the match.
   // The final rally is the exception: reconcile settles it from the entered
-  // score, which beats a guess. So is a warm-up rally before the stream has
-  // read any set score: it has no game to join, and keeping it would open a
-  // phantom first set and push every real point one set up. It stays a
-  // refusal (see collapsedTailStart).
-  const firstScored = rallies.findIndex(
-    (r) => (r.strokes[0]?.predSetScore ?? null) !== null,
-  );
-  const stallsFrom = firstScored === -1 ? winners.length : firstScored;
-  for (let i = stallsFrom; i < winners.length - 1; i += 1) {
+  // score, which beats a guess. Leading warm-up rallies were dropped above.
+  for (let i = 0; i < winners.length - 1; i += 1) {
     if (!winners[i].winner) guess(i);
   }
   guessedRallies.sort((a, b) => a - b);
@@ -607,6 +622,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: 0,
     guessedRallies,
     frozenRallies: frozenList,
+    warmupRallies,
     segmentation: null,
   };
 
@@ -892,6 +908,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     unreturnedServeRate: rallies.length === 0 ? 0 : unreturned / rallies.length,
     guessedRallies,
     frozenRallies: frozenList,
+    warmupRallies,
     segmentation,
   };
 }
