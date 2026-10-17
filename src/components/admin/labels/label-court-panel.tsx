@@ -560,14 +560,14 @@ export function LabelCourtPanel({
             </div>
             <span
               data-court-review-explanation=""
-              className="text-[12.5px] leading-[18px] text-white/60"
+              className="text-[12px] leading-[18px] text-white/60"
             >
               {step.explanation}
             </span>
             {slide?.kind === "shank" ? (
               <span
                 data-court-shank=""
-                className="text-[12.5px] leading-[18px] font-medium text-[var(--rail-amber)]"
+                className="text-[12px] leading-[18px] font-medium text-[var(--rail-amber)]"
               >
                 {readout.subtitle}
               </span>
