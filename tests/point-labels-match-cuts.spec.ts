@@ -278,6 +278,12 @@ test.describe("labels use the filters' words", () => {
     expect(shotLabel(serve)).toBe("First serve · kick");
   });
 
+  test("a guessed winner (winner_guessed) is said in the description", () => {
+    expect(
+      pointDetail({ ...DERIVED_UNRETURNED, winnerGuessed: true }, SV.hands),
+    ).toBe("Kick First Serve T · Winner estimated");
+  });
+
   test("the description names a serve by the filter's spin", () => {
     expect(pointDetail(DERIVED_UNRETURNED, SV.hands)).toBe(
       "Kick First Serve T",

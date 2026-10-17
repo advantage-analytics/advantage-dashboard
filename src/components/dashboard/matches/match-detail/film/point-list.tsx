@@ -55,7 +55,13 @@ import {
   type FollowAffordance,
   type PointFocus,
 } from "./film-timeline";
-import { scoreColumns, youFirstScore } from "./film-score";
+import {
+  readGameScore,
+  readPointScore,
+  scoreColumns,
+  UNREAD_SCORE,
+  youFirstScore,
+} from "./film-score";
 import {
   filmListActive,
   filmListSentence,
@@ -370,13 +376,14 @@ export const PointList = memo(function PointList({
           gameNumber: point.gameNumber,
           serverName: lastNameOf(serverIsYou ? youName : oppName),
           // You-first for a header under the viewer's name, the way the room
-          // reads it; null when the match has no real game score column.
+          // reads it; null when the match has no real game score column, and
+          // "—" on a game whose score the stream never read (`score_frozen`).
           gameScore: showGameScore
-            ? youFirstScore(
-                point.gameScore,
+            ? (youFirstScore(
+                readGameScore(point) ?? "",
                 point.serverIsPlayer1,
                 youIsPlayer1,
-              )
+              ) ?? UNREAD_SCORE)
             : null,
           tiebreak: firstServerIsPlayer1 !== undefined,
           points: [],
@@ -1040,7 +1047,13 @@ export const PointRow = memo(function PointRow({
           )}
           style={t.scoreStyle}
         >
-          {point.pointScore}
+          {readPointScore(point) ?? (
+            // A frozen reading (`score_frozen`): a dash, never a made-up 0-0.
+            <>
+              <span aria-hidden="true">{UNREAD_SCORE}</span>
+              <span className="sr-only">Score not read</span>
+            </>
+          )}
         </span>
       )}
 
