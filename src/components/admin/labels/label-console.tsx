@@ -55,15 +55,17 @@ import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
-import { drawsGhosts, reviewFlag } from "@/lib/services/labels/marks-state";
+import { drawsGhosts } from "@/lib/services/labels/marks-state";
 import {
-  currentReviewItem,
-  reviewItemTarget,
-} from "@/lib/services/labels/review-target";
+  advanceAfterAnswer,
+  replayWindow,
+  stepKeyOf,
+} from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
   reviewStep,
   type ReviewAnswer,
+  type ReviewStep,
 } from "@/lib/services/labels/review-step";
 import {
   applyPointDelete,
@@ -198,6 +200,7 @@ import type { LabelConfirm } from "./label-confirm";
 import { LabelConfirmDialog } from "./label-confirm-dialog";
 import { LabelCourtPanel, isPlacing } from "./label-court-panel";
 import { runReviewAnswer, type ReviewWriteHandlers } from "./review-answer";
+import { runReplay, type ReplayHandle } from "./review-replay";
 import { labelFilmStops } from "./label-film-stops";
 import {
   DEFAULT_LAYOUT_MODE,
@@ -250,14 +253,26 @@ const PENDING_SHOT_PREFIX = "pending-shot-";
 /** How long the overview's jump waits for full screen to settle. */
 const OPEN_JUMP_DELAY_MS = 450;
 /**
- * What a flag jump lets go of when it holds focus (`findGap`'s `arm`): a text
- * field, a select, an editable region or a select editor, any of which would
- * keep the stroke and spin keys for itself after the jump.
+ * What a step's landing lets go of when it holds focus (`landOnStep`: a flag
+ * jump, the auto-advance after an answer): a text field, a select, an
+ * editable region or a select editor, any of which would keep the stroke and
+ * spin keys for itself after the jump.
  */
 const JUMP_BLURS_SELECTOR =
   "input, textarea, select, [contenteditable='true'], [data-select-editor]";
 /** A point row whose insert is still in flight (`insertPoint`), likewise. */
 const PENDING_POINT_PREFIX = "pending-point-";
+
+/**
+ * The add-shot slot a flag jump landed on (`ReviewStep.target.slot`): the
+ * point and the stroke the missing one follows. Nothing is written for it
+ * until the labeller takes the step's "Add the shot" — the rail draws the
+ * slot's row armed, and the court panel asks for it.
+ */
+interface ArmedSlot {
+  pointId: string;
+  afterShotId: string;
+}
 
 /** One frozen `follow`, so re-following while following changes no identity. */
 const FOLLOW: PointFocus = { mode: "follow" };
@@ -501,6 +516,19 @@ export function LabelConsole({
   const [placement, setPlacement] = useState<PlacementState>(() =>
     placementOf(session.points, initialSelectedShotId),
   );
+  const [armedSlot, setArmedSlot] = useState<ArmedSlot | null>(null);
+  // A step's end-of-point replay while it runs (review-replay.ts). A ref:
+  // nothing renders from it, and it is let go from event handlers.
+  const replay = useRef<ReplayHandle | null>(null);
+  function cancelReplay() {
+    replay.current?.cancel();
+    replay.current = null;
+  }
+  // The step an answer, a placement, an add or a dismiss made here was
+  // about: once the rows have changed and the point asks something else,
+  // the console lands on that (`advanceAfterAnswer`). Null until the next
+  // such write — a refresh the labeller did not cause moves nothing.
+  const pendingAdvance = useRef<{ pointId: string; key: string } | null>(null);
   const [saveStatus, dispatchSave] = useReducer(
     saveStatusReducer,
     INITIAL_SAVE_STATUS,
@@ -688,6 +716,8 @@ export function LabelConsole({
   // A row click makes its point current, seeks to its first stroke and holds
   // the rail, or re-follows when the point is the one already playing.
   function togglePoint(pointId: string) {
+    cancelReplay();
+    setArmedSlot(null);
     setPlacement(NO_PLACEMENT);
     setRestPointId(pointId);
     setFoldedPointId(null);
@@ -698,7 +728,15 @@ export function LabelConsole({
 
   // Selecting a stroke starts an edit: it holds the rail and seeks the video to
   // the stroke; playback carries on as it was.
-  function selectShot(shotId: string, target?: PlacementTarget) {
+  // `seek: false` is a step's landing with a replay to run: the replay's own
+  // seek is the one that wins, so there is never a second.
+  function selectShot(
+    shotId: string,
+    target?: PlacementTarget,
+    { seek = true }: { seek?: boolean } = {},
+  ) {
+    if (seek) cancelReplay();
+    setArmedSlot(null);
     // Already selected: a position cell switches the court's end and nothing
     // else — the film stays where the labeller scrubbed it.
     if (target && shotId === placement.shotId) {
@@ -721,7 +759,9 @@ export function LabelConsole({
         ? setPlacementTarget(start, target, shot?.contactY ?? null)
         : start,
     );
-    if (shot?.videoTime != null) player.current?.seekTo(shot.videoTime);
+    if (seek && shot?.videoTime != null) {
+      player.current?.seekTo(shot.videoTime);
+    }
   }
 
   // An editor opening on a point row's own cells is focus landing in a form
@@ -1272,6 +1312,8 @@ export function LabelConsole({
     const before = points.find((point) => point.id === pointId);
     if (!before || !operations) return;
     if (applyDismiss(before, key) === before) return;
+    // A dismiss on the open point may close its step: the next one lands.
+    if (pointId === currentPointId) noteAnswered();
     void runOperation(
       (rows) => replacePoint(rows, pointId, (p) => applyDismiss(p, key)),
       () => operations.dismissSuggestion(pointId, key),
@@ -1541,20 +1583,65 @@ export function LabelConsole({
   }
 
   /**
+   * Where a step lands (`ReviewStep.target`, review-step.ts), as a flag jump
+   * and the auto-advance after an answer both arrive: a focused text field,
+   * select or editable region is let go first, so the stroke and spin keys
+   * work at once; a coordinate item selects its stroke with the court open
+   * on the end it wants placed; a missing stroke arms its add-shot slot —
+   * the rail's "Missing shot?" row, or the lone first serve's second serve
+   * — with nothing selected and nothing written until the labeller takes
+   * the step's "Add the shot"; a step with no target opens the point at its
+   * first stroke. An end-of-point question (`step.replay`) plays the last
+   * strokes through the last ball and pauses just after it, the court armed
+   * on that ball's landing throughout, so one click answers; the replay's
+   * seek is the only one made (`selectShot`'s is skipped).
+   */
+  function landOnStep(point: LabelPoint, step: ReviewStep | null) {
+    cancelReplay();
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
+    const target = step?.target ?? null;
+    const film =
+      step?.replay && liveMarks
+        ? replayWindow(point, step.replay, points, drawsGhosts(liveMarks))
+        : null;
+    if (target?.slot) {
+      setArmedSlot({ pointId: point.id, afterShotId: target.slot.afterShotId });
+      setPlacement(NO_PLACEMENT);
+      const after = findShot(points, target.slot.afterShotId);
+      if (after?.videoTime != null) player.current?.seekTo(after.videoTime);
+    } else if (target?.shotId) {
+      selectShot(target.shotId, target.place ?? undefined, {
+        seek: film === null,
+      });
+    } else {
+      setArmedSlot(null);
+      if (film === null) seekToPointStart(point);
+    }
+    if (film && player.current) {
+      const handle = player.current;
+      replay.current = runReplay(film, {
+        seekTo: (at) => handle.seekTo(at),
+        play: () => handle.play(),
+        pause: () => handle.pause(),
+        clock,
+      });
+    }
+  }
+
+  /**
    * "Find the gap": navigation only. The mismatching set's first point (or,
    * with none, the last labelled point) is made current, the rail held and the
    * video seeks to it; the row is then brought to the rail's top
    * (`jumpToPointId`).
    *
    * `arm` is a flag jump's (`stepToFlag`, the header's flag rows): the point
-   * also opens unfolded, and on a console that may write the stroke its
-   * current review item is about is selected with the court open on the end
-   * it wants placed (`reviewItemTarget`, through `selectShot`, which seeks the
-   * video to the stroke) — the labeller clicks the court once and ↓ or ]
-   * moves on. With no stroke to arm the point opens as it would otherwise.
-   * A text field left focused would keep the keys for itself: a jump lets it
-   * go. Nothing else sets `arm` — a row opened by a click, "Find the gap" or
-   * the overview's open-on-point leaves the court and focus as they were.
+   * also opens unfolded, and on a console that may write it lands on the
+   * point's review step (`reviewStep`, through `landOnStep`) — the labeller
+   * clicks the court or an answer once and the console moves on. With no
+   * step the point opens as it would otherwise. Nothing else sets `arm` — a
+   * row opened by a click, "Find the gap" or the overview's open-on-point
+   * leaves the court and focus as they were.
    */
   const jumpToPointId = useRef<string | null>(null);
   function findGap(
@@ -1565,25 +1652,21 @@ export function LabelConsole({
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
     const point = live.find((p) => p.id === target);
-    const armed =
-      arm && editable && point && liveMarks
-        ? reviewItemTarget(
-            currentReviewItem(reviewFlag(point, liveMarks, points)),
-            point,
-            liveMarks,
-            drawsGhosts(liveMarks),
-          )
-        : null;
-    if (arm) {
-      const active = document.activeElement as HTMLElement | null;
-      if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
-    }
+    cancelReplay();
+    setArmedSlot(null);
     setPlacement(NO_PLACEMENT);
     setRestPointId(target);
     holdPoint(target);
     if (arm) setFoldedPointId(null);
-    if (armed?.shotId) selectShot(armed.shotId, armed.place ?? undefined);
-    else seekToPointStart(point);
+    pendingAdvance.current = null;
+    if (arm && editable && point && liveMarks) {
+      landOnStep(
+        point,
+        reviewStep(point, liveMarks, points, names, drawsGhosts(liveMarks)),
+      );
+    } else {
+      seekToPointStart(point);
+    }
     jumpToPointId.current = target;
   }
   // The follow scroll moves nothing while held, so this jump is made here once
@@ -2234,6 +2317,8 @@ export function LabelConsole({
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
   const undoLastRef = useRef<() => void>(() => {});
+  // Space and ← / →: the labeller driving the film lets a replay go.
+  const cancelReplayRef = useRef<() => void>(() => {});
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
@@ -2316,6 +2401,7 @@ export function LabelConsole({
       return true;
     };
     undoLastRef.current = () => void undoLast();
+    cancelReplayRef.current = cancelReplay;
     jumpAfterOpen.current = (pointId) => findGap(pointId);
     foldOpenPoint.current = () => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return false;
@@ -2465,8 +2551,13 @@ export function LabelConsole({
         stepToFlag.current(key === "]" ? 1 : -1, "score");
       } else if (key === "'" || key === ";") {
         stepToFlag.current(key === "'" ? 1 : -1, "data");
-      } else if (key === " ") player.current?.togglePlay();
-      else player.current?.step(key === "ArrowLeft" ? -1 : 1);
+      } else if (key === " ") {
+        cancelReplayRef.current();
+        player.current?.togglePlay();
+      } else {
+        cancelReplayRef.current();
+        player.current?.step(key === "ArrowLeft" ? -1 : 1);
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -2504,7 +2595,10 @@ export function LabelConsole({
       event.preventDefault();
       event.stopPropagation();
       (document.activeElement as HTMLElement | null)?.blur?.();
-      if (!event.repeat) player.current?.togglePlay();
+      if (!event.repeat) {
+        cancelReplayRef.current();
+        player.current?.togglePlay();
+      }
     }
     window.addEventListener("keydown", onSpace, true);
     return () => window.removeEventListener("keydown", onSpace, true);
@@ -2538,10 +2632,12 @@ export function LabelConsole({
     if (placement.shotId === null) return;
     const shot = findShot(points, placement.shotId);
     if (!shot) return;
-    const step = nextPlacement(placement, point, labelShotValues(shot));
-    if (!step) return;
-    setPlacement(step.state);
-    void patchShot(shot.id, step.patch);
+    const next = nextPlacement(placement, point, labelShotValues(shot));
+    if (!next) return;
+    cancelReplay();
+    noteAnswered();
+    setPlacement(next.state);
+    void patchShot(shot.id, next.patch);
   }
 
   // The court panel's Contact / Landing switch: the stored contact, when there is
@@ -2562,6 +2658,7 @@ export function LabelConsole({
       points={points}
       readout={readout}
       onTime={clock.set}
+      onPause={cancelReplay}
       clockTargetRef={rootRef}
       square={fullScreen}
     />
@@ -2571,6 +2668,41 @@ export function LabelConsole({
     expanded && liveMarks
       ? reviewStep(expanded, liveMarks, points, names, drawsGhosts(liveMarks))
       : null;
+  const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
+  /** A write made here that may close the step: remember what it was about. */
+  function noteAnswered() {
+    if (!expanded || !step) return;
+    pendingAdvance.current = { pointId: expanded.id, key: stepKey };
+  }
+  // Auto-advance: once a write made here has changed the rows (the
+  // optimistic apply, in the same commit as the click), the open point's
+  // step is read again. Another question still open on the point lands
+  // straight away (`landOnStep`: its stroke or slot, the court armed, its
+  // replay); nothing open leaves `]` to reach the next flagged point. Never
+  // from a refresh the labeller did not cause (`pendingAdvance` is null
+  // then), and never under a confirm or an open menu.
+  const landOnStepRef = useRef(landOnStep);
+  landOnStepRef.current = landOnStep;
+  useEffect(() => {
+    const pending = pendingAdvance.current;
+    if (!pending || !expanded || pending.pointId !== expanded.id) return;
+    const verdict = advanceAfterAnswer(pending.key, stepKey);
+    if (verdict === "stay") return;
+    pendingAdvance.current = null;
+    if (verdict !== "advance" || confirm) return;
+    if (
+      document.querySelector(
+        "[role='menu'], [role='dialog'], [role='alertdialog']",
+      )
+    ) {
+      return;
+    }
+    landOnStepRef.current(expanded, step);
+    // `step` and `expanded` move with `stepKey`; the key is the comparison.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepKey, confirm]);
+  // The armed slot belongs to the open point; it goes with the point.
+  if (armedSlot && armedSlot.pointId !== currentPointId) setArmedSlot(null);
   // An answer's writes, each through the console's own handler for it.
   const reviewWrites: ReviewWriteHandlers = {
     patchShot: railHandlers.saveShot,
@@ -2583,6 +2715,12 @@ export function LabelConsole({
   };
   function answerReview(answer: ReviewAnswer) {
     if (!expanded) return;
+    cancelReplay();
+    // An added stroke is the one the labeller places next (`addShot` selects
+    // it once saved): the console stays with it rather than moving on.
+    if (!answer.writes.some((write) => write.write === "addShot")) {
+      noteAnswered();
+    }
     void runReviewAnswer(answer, expanded.id, reviewWrites);
   }
   // "Off screen, so this is an estimate": the placed end's two names in the
@@ -2645,6 +2783,7 @@ export function LabelConsole({
       onTogglePoint={railHandlers.togglePoint}
       editable={editable}
       selectedShotId={placement.shotId}
+      armedSlotAfterShotId={armedSlot?.afterShotId ?? null}
       onSelectShot={railHandlers.selectShot}
       onPatchPoint={railHandlers.patchPoint}
       onPatchShot={railHandlers.patchShot}

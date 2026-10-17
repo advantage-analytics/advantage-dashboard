@@ -929,15 +929,20 @@ function BlackSuggestedShot({
     ? `A shot by ${name} is probably missing here`
     : "A shot is probably missing here";
   const where = time ? ` at ${time}` : "";
+  // A flag jump landed on this slot: the court panel is asking for its "Add
+  // shot", and the row says so with a solid line in place of the dashes.
+  const armed = edit.armedSlotAfterShotId === suggestion.afterShotId;
   return (
     <div
       data-row="suggested-shot"
       data-shot-suggestion={suggestion.key}
+      data-slot-armed={armed ? "" : undefined}
       style={arrival.style}
       className={cn(
         ROW_GRID,
         arrival.className,
-        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)]",
+        armed ? "outline-solid" : "outline-dashed",
       )}
     >
       <Plus

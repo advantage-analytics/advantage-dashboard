@@ -67,6 +67,11 @@ export interface EditContext {
   editable: boolean;
   names: SideNames;
   selectedShotId: string | null;
+  /**
+   * The "Missing shot?" slot a flag jump landed on (the stroke it follows):
+   * its row is drawn armed, the one "Add shot" the court panel is asking for.
+   */
+  armedSlotAfterShotId?: string | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
