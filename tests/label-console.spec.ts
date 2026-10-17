@@ -954,8 +954,12 @@ test.describe("a flag jump lands on the point's review step", () => {
     );
     // A coordinate item: its stroke, on the end the step names.
     expect(landSource).toContain(
-      "selectShot(target.shotId, target.place ?? undefined, {",
+      "selectShot(target.shotId, target.place, { seek: film === null });",
     );
+    // An item with nothing to place: the film at its stroke, the court not
+    // armed (no selection, the placement cleared).
+    expect(landSource).toContain("} else if (target?.shotId) {");
+    expect(landSource).toContain("player.current?.seekTo(shot.videoTime);");
     // A missing stroke: the slot armed, nothing selected, nothing written —
     // the film at the stroke it follows.
     expect(landSource).toContain("if (target?.slot) {");
@@ -980,7 +984,7 @@ test.describe("a flag jump lands on the point's review step", () => {
       "replayWindow(point, step.replay, points, drawsGhosts(liveMarks))",
     );
     // The replay's seek is the one that wins: selectShot's is skipped.
-    expect(landSource).toMatch(/seek: film === null,/);
+    expect(landSource).toMatch(/seek: film === null/);
     expect(landSource).toContain("replay.current = runReplay(film, {");
     expect(landSource).toContain("pause: () => handle.pause(),");
     // Let go when the labeller moves the film, jumps, selects or answers.
@@ -1033,9 +1037,17 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(effect).toContain("}, [stepKey, confirm]);");
     // The writes that arm it: an answer (not one that adds a stroke — that
     // stroke is the one to place next), a court placement, a dismiss.
-    expect(consoleSource).toMatch(
-      /if \(!answer\.writes\.some\(\(write\) => write\.write === "addShot"\)\) \{\n\s*noteAnswered\(\);/,
+    const answerSource = consoleSource.slice(
+      consoleSource.indexOf("  function answerReview("),
+      consoleSource.indexOf("  function setEstimate("),
     );
+    // "Looks right" empties the queue; an added stroke closes its item
+    // without landing anywhere; every other answer notes the step.
+    expect(answerSource).toContain('write.write === "check"');
+    expect(answerSource).toContain("keep: []");
+    expect(answerSource).toContain('write.write === "addShot"');
+    expect(answerSource).toContain("closeQueuedItem();");
+    expect(answerSource).toContain("noteAnswered();");
     const place = consoleSource.slice(
       consoleSource.indexOf("  function place(point: CourtPoint) {"),
       consoleSource.indexOf("  // The court panel's Contact / Landing switch"),

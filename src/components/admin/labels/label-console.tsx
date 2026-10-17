@@ -55,7 +55,10 @@ import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelPointEndingSynced } from "@/lib/services/labels/ending-session";
 import { volleyLinkWrites } from "@/lib/services/labels/volley-link";
 import { labelScores } from "@/lib/services/labels/score";
-import { drawsGhosts } from "@/lib/services/labels/marks-state";
+import {
+  drawsGhosts,
+  type ReviewItemId,
+} from "@/lib/services/labels/marks-state";
 import {
   advanceAfterAnswer,
   replayWindow,
@@ -63,6 +66,7 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
+  openReviewItems,
   reviewStep,
   type ReviewAnswer,
   type ReviewStep,
@@ -1610,10 +1614,18 @@ export function LabelConsole({
       setPlacement(NO_PLACEMENT);
       const after = findShot(points, target.slot.afterShotId);
       if (after?.videoTime != null) player.current?.seekTo(after.videoTime);
+    } else if (target?.shotId && target.place) {
+      selectShot(target.shotId, target.place, { seek: film === null });
     } else if (target?.shotId) {
-      selectShot(target.shotId, target.place ?? undefined, {
-        seek: film === null,
-      });
+      // Nothing to place (a winner pick, the game order): the film goes to
+      // the stroke and the court stays as it is — selecting it would arm
+      // the court for a click the question does not want.
+      setArmedSlot(null);
+      setPlacement(NO_PLACEMENT);
+      const shot = findShot(points, target.shotId);
+      if (film === null && shot?.videoTime != null) {
+        player.current?.seekTo(shot.videoTime);
+      }
     } else {
       setArmedSlot(null);
       if (film === null) seekToPointStart(point);
@@ -2671,18 +2683,56 @@ export function LabelConsole({
   );
   // The open point's review step (`reviewStep`), asked in the court panel.
   // Memoised: the console re-renders on every film tick while it plays.
+  // The open point's queue: the items it had open when it became the open
+  // point, less the ones the labeller has answered here. Any edit settles
+  // every counted mark on a point (marks-state.ts `markState`), so without
+  // it the first answer would take the point's other questions with it; the
+  // queue keeps asking them (`reviewStep`'s `keep`) until each is answered,
+  // dismissed or no longer raised. Set again whenever another point opens.
+  const [reviewQueue, setReviewQueue] = useState<{
+    pointId: string;
+    keep: readonly ReviewItemId[];
+  } | null>(null);
+  if (expanded && liveMarks && reviewQueue?.pointId !== expanded.id) {
+    setReviewQueue({
+      pointId: expanded.id,
+      keep: openReviewItems(expanded, liveMarks, points).map((item) => item.id),
+    });
+  }
+  const keep =
+    expanded && reviewQueue?.pointId === expanded.id
+      ? reviewQueue.keep
+      : undefined;
   const step = useMemo(
     () =>
       expanded && liveMarks
-        ? reviewStep(expanded, liveMarks, points, names, drawsGhosts(liveMarks))
+        ? reviewStep(
+            expanded,
+            liveMarks,
+            points,
+            names,
+            drawsGhosts(liveMarks),
+            keep,
+          )
         : null,
-    [expanded, liveMarks, points, names],
+    [expanded, liveMarks, points, names, keep],
   );
   const stepKey = expanded ? stepKeyOf(expanded.id, step) : "";
+  /** The step's item is answered: the queue stops asking it. */
+  function closeQueuedItem() {
+    if (!expanded || !step) return;
+    const id = step.item.id;
+    setReviewQueue((queue) =>
+      queue && queue.pointId === expanded.id
+        ? { ...queue, keep: queue.keep.filter((kept) => kept !== id) }
+        : queue,
+    );
+  }
   /** A write made here that may close the step: remember what it was about. */
   function noteAnswered() {
     if (!expanded || !step) return;
     pendingAdvance.current = { pointId: expanded.id, key: stepKey };
+    closeQueuedItem();
   }
   // Auto-advance: once a write made here has changed the rows (the
   // optimistic apply, in the same commit as the click), the open point's
@@ -2728,7 +2778,17 @@ export function LabelConsole({
     cancelReplay();
     // An added stroke is the one the labeller places next (`addShot` selects
     // it once saved): the console stays with it rather than moving on.
-    if (!answer.writes.some((write) => write.write === "addShot")) {
+    if (answer.writes.some((write) => write.write === "check")) {
+      // "Looks right" confirms the whole point: nothing left in its queue.
+      const pointId = expanded.id;
+      setReviewQueue((queue) =>
+        queue && queue.pointId === pointId ? { ...queue, keep: [] } : queue,
+      );
+    } else if (answer.writes.some((write) => write.write === "addShot")) {
+      // The item is answered, but the added stroke stays selected for
+      // placement: the queue moves on without landing anywhere.
+      closeQueuedItem();
+    } else {
       noteAnswered();
     }
     void runReviewAnswer(answer, expanded.id, reviewWrites);

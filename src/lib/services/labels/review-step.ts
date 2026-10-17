@@ -25,6 +25,7 @@ import {
   reviewFlag,
   reviewItemQuestion,
   type ReviewItem,
+  type ReviewItemId,
   type ReviewMember,
 } from "./marks-state";
 import { reviewItemTarget, type ReviewTarget } from "./review-target";
@@ -217,20 +218,46 @@ function isFollowUp(item: ReviewItem): boolean {
 }
 
 /**
+ * `item` with the members an edit elsewhere on the point settled asked
+ * again: any change to a point settles every counted mark on it
+ * (marks-state.ts `markState`), but the column's queue (`keep`) closes an
+ * item only when the labeller answers it. Null when nothing is left to ask
+ * (every member dismissed).
+ */
+function reopenSettled(item: ReviewItem): ReviewItem | null {
+  const members = item.members
+    .filter((member) => member.state !== "dismissed")
+    .map((member) =>
+      member.state === "settled"
+        ? { ...member, state: "open" as const }
+        : member,
+    );
+  if (!members.some((member) => member.state === "open")) return null;
+  return { ...item, state: "open", members };
+}
+
+/**
  * The point's open items in the order the column asks them: id order
  * (`reviewFlag`, a demoted flag's too — the open point still asks it), except
  * that an item 2 open only on "Did the point end here?" is asked after item
  * 4 when that is open: the strokes after the point's end are the follow-up
- * to how it ended, not a question before it.
+ * to how it ended, not a question before it. `keep` names the items the
+ * console's queue still has to ask, which an edit elsewhere on the point
+ * may have settled (`reopenSettled`).
  */
 export function openReviewItems(
   point: LabelPoint,
   marks: LabelMarks,
   points: readonly LabelPoint[],
+  keep?: readonly ReviewItemId[],
 ): ReviewItem[] {
   const flag = reviewFlag(point, marks, points);
   if (!flag) return [];
-  const open = flag.items.filter((item) => item.state === "open");
+  const open = flag.items.flatMap((item) => {
+    if (item.state === "open") return [item];
+    const reopened = keep?.includes(item.id) ? reopenSettled(item) : null;
+    return reopened ? [reopened] : [];
+  });
   const ending = open.find((item) => item.id === 4);
   const followUp = open.find(isFollowUp);
   if (!ending || !followUp) return open;
@@ -670,8 +697,10 @@ export function reviewStep(
   points: readonly LabelPoint[],
   names: MarkNames,
   ghosts: boolean,
+  /** The console's queue: items still to ask though an edit settled them. */
+  keep?: readonly ReviewItemId[],
 ): ReviewStep | null {
-  const open = openReviewItems(point, marks, points);
+  const open = openReviewItems(point, marks, points, keep);
   const item = open[0];
   if (!item) return null;
   const target = reviewStepTarget(item, point, marks, ghosts);

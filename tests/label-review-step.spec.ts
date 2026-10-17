@@ -172,6 +172,33 @@ test.describe("n of m and the order", () => {
   });
 });
 
+test.describe("the console's queue (keep)", () => {
+  test("an item an edit settled is asked again while the queue keeps it", () => {
+    // An edit anywhere on the point settles its counted marks.
+    const p = rally({ status: "edited" });
+    const marks = marksOf({
+      [POINT]: [
+        mark("winner_disputed", { scoreWinner: "p2", lastStrokeWinner: "p1" }),
+        mark("winner_guessed", {}),
+      ],
+    });
+    expect(openReviewItems(p, marks, [p])).toEqual([]);
+    const kept = openReviewItems(p, marks, [p], [4, 5]);
+    expect(kept.map((item) => [item.id, item.state])).toEqual([
+      [4, "open"],
+      [5, "open"],
+    ]);
+    // Answered (out of the queue): no longer asked.
+    expect(openReviewItems(p, marks, [p], [5]).map((i) => i.id)).toEqual([5]);
+  });
+
+  test("a dismissed item stays gone whatever the queue says", () => {
+    const p = rally({ status: "edited", dismissed: ["hint:winner_guessed"] });
+    const marks = marksOf({ [POINT]: [mark("winner_guessed", {})] });
+    expect(openReviewItems(p, marks, [p], [5])).toEqual([]);
+  });
+});
+
 test.describe("question and explanation per kind", () => {
   test("a missing contact asks where it was hit", () => {
     const p = rally({}, ["d", { contactX: null, contactY: null }]);
