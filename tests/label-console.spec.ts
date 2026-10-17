@@ -1282,3 +1282,19 @@ test.describe("a review answer's writes go through the console's own handlers", 
     expect(consoleSource).not.toContain("courtReview");
   });
 });
+
+test("several dismisses at once settle by merging, so none of them flickers back", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+  const body = source.slice(
+    source.indexOf(
+      "  function dismissSuggestion(pointId: string, key: string) {",
+    ),
+  );
+  const fn = body.slice(0, body.indexOf("\n  }\n"));
+  expect(fn).toContain("...new Set([...p.dismissed, ...result.dismissed])");
+  expect(fn).toContain("p.dismissed.filter((k) => k !== key)");
+  expect(fn).not.toContain("dismissed: result.dismissed,");
+});

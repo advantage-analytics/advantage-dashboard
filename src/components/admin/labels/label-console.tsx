@@ -1329,15 +1329,21 @@ export function LabelConsole({
     void runOperation(
       (rows) => replacePoint(rows, pointId, (p) => applyDismiss(p, key)),
       () => operations.dismissSuggestion(pointId, key),
+      // Merged, never replaced: an answer dismisses several keys at once, and
+      // a reply that predates the others' writes would wipe their keys from
+      // the rows until the next refresh (the question flickering back).
       (rows, result) =>
         replacePoint(rows, pointId, (p) => ({
           ...p,
-          dismissed: result.dismissed,
+          dismissed: [...new Set([...p.dismissed, ...result.dismissed])],
         })),
+      // Refused: this key alone comes off; the others' writes stand.
       (rows) =>
         replacePoint(rows, pointId, (p) => ({
           ...p,
-          dismissed: before.dismissed,
+          dismissed: before.dismissed.includes(key)
+            ? p.dismissed
+            : p.dismissed.filter((k) => k !== key),
         })),
     );
   }
