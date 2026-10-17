@@ -69,7 +69,7 @@ export function memberShotId(
 
 /**
  * Item 4's members that say only that the ending reads wrong, with no ball to
- * place: taken after every other open member of the item.
+ * place first: taken after every other open member of the item.
  */
 const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
   "ending_stale",
@@ -171,8 +171,11 @@ function memberTarget(
     case "ending_suspect_line":
     case "winner_to_error_by_bounce":
       return [live.at(-2)?.id ?? null, "landing"];
+    // An ending that reads wrong is still the last ball's to settle: the
+    // court opens on its landing, as for the other end-of-point questions.
     case "ending_stale":
     case "result_type_unknown":
+      return [last, "landing"];
     case "pick_winner":
     case "winner_guessed":
       return [last, null];

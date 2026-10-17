@@ -775,10 +775,14 @@ test.describe("reviewItemTarget", () => {
     }
   });
 
-  test("4: a stale or unreadable ending alone is the last stroke with no end; beside a ball, the ball", () => {
-    expect(target(itemOf(4, sample("ending_stale")))).toEqual(at("d", null));
+  test("4: a stale or unreadable ending alone is the last stroke's landing; beside a ball, the ball", () => {
+    // The end-of-point question is the last ball's bounce to settle, so the
+    // court opens on that landing even when only the ending reads wrong.
+    expect(target(itemOf(4, sample("ending_stale")))).toEqual(
+      at("d", "landing"),
+    );
     expect(target(itemOf(4, sample("result_type_unknown")))).toEqual(
-      at("d", null),
+      at("d", "landing"),
     );
     // Listed first, still taken after the line call beside it.
     expect(
