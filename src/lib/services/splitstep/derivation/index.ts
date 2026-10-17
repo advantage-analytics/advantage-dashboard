@@ -122,8 +122,14 @@
  * twice each and rally 51 gained two phantom strokes; each event now keeps
  * one copy per slot. A file with no repeated `event_id` derives exactly as
  * 0.8.1.
+ * 0.8.3 (2026-10-17) drops leading warm-up rallies — those before the stream
+ * reads any set score — instead of refusing the match for them
+ * (transcript.ts `warmupRallies`), and guesses stalls from the first rally
+ * when the stream never reads a set score at all. Job c349e3d4 was refused
+ * for one 0:06 warm-up rally. A stream whose first rally carries a set score
+ * derives exactly as 0.8.2.
  */
-export const DERIVATION_VERSION = "0.8.2-unreconciled";
+export const DERIVATION_VERSION = "0.8.3-unreconciled";
 
 export type {
   RawSplitStepStroke,

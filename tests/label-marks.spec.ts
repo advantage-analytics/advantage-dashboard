@@ -404,17 +404,19 @@ test.describe("buildLabelMarks on the clean fixture", () => {
 
 test.describe("buildLabelMarks on the degraded fixture", () => {
   test("a refused transcript yields no marks at all", () => {
-    // The degraded payload is refused outright (its warm-up rally resolves no
-    // winner — tests/splitstep-transcript.spec.ts), so it has no points to
-    // mark and the labels console would never seed it either.
+    // A transcript with no entered score is refused, so it has no points to
+    // mark and the labels console would never seed it either. (The degraded
+    // payload's warm-up rally used to be the refusal; it is dropped now.)
     const degraded = load("degraded-match.json");
-    expect(degraded.transcript.ok).toBe(false);
-    expect(degraded.transcript.points).toEqual([]);
-    const marks = buildLabelMarks(
-      degraded.transcript,
-      degraded.analysis.rallies,
-      [],
-    );
+    const refused = buildTranscript({
+      rallies: degraded.analysis.rallies,
+      labels: degraded.analysis.players,
+      score: null,
+      initialTopIsPlayer1: null,
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.points).toEqual([]);
+    const marks = buildLabelMarks(refused, degraded.analysis.rallies, []);
     expect(marks).toEqual({
       points: {},
       shots: {},
