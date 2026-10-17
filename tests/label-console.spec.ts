@@ -994,14 +994,25 @@ test.describe("a flag jump lands on the point's review step", () => {
       consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
     );
     expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);
-    for (const fn of ["function togglePoint(", "function findGap("]) {
-      const body = consoleSource.slice(consoleSource.indexOf(fn));
-      expect(body.slice(0, body.indexOf("\n  }\n"))).toContain(
-        "cancelReplay();",
-      );
-    }
+    // A row click lets the replay go; a jump or an answer also stops the
+    // film, so a replay never plays on into the next point.
+    const togglePoint = consoleSource.slice(
+      consoleSource.indexOf("function togglePoint("),
+    );
+    expect(togglePoint.slice(0, togglePoint.indexOf("\n  }\n"))).toContain(
+      "cancelReplay();",
+    );
+    const findGap = consoleSource.slice(
+      consoleSource.indexOf("function findGap("),
+    );
+    expect(findGap.slice(0, findGap.indexOf("\n  }\n"))).toContain(
+      "stopReplay();",
+    );
     expect(consoleSource).toMatch(
-      /function answerReview\(answer: ReviewAnswer\) \{\n {4}if \(!expanded\) return;\n {4}cancelReplay\(\);/,
+      /function answerReview\(answer: ReviewAnswer\) \{\n {4}if \(!expanded\) return;\n {4}stopReplay\(\);/,
+    );
+    expect(consoleSource).toContain(
+      "if (replay.current?.running()) player.current?.pause();",
     );
     const selectShot = consoleSource.slice(
       consoleSource.indexOf("  function selectShot("),

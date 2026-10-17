@@ -528,6 +528,14 @@ export function LabelConsole({
     replay.current?.cancel();
     replay.current = null;
   }
+  // The labeller answered, placed or jumped while the replay was still
+  // running: stop the film where it is too, rather than let it play on into
+  // the next point. A seek, a pause or a key of their own only lets the
+  // replay go (`cancelReplay`).
+  function stopReplay() {
+    if (replay.current?.running()) player.current?.pause();
+    cancelReplay();
+  }
   // The step an answer, a placement, an add or a dismiss made here was
   // about: once the rows have changed and the point asks something else,
   // the console lands on that (`advanceAfterAnswer`). Null until the next
@@ -1601,7 +1609,7 @@ export function LabelConsole({
    * seek is the only one made (`selectShot`'s is skipped).
    */
   function landOnStep(point: LabelPoint, step: ReviewStep | null) {
-    cancelReplay();
+    stopReplay();
     const active = document.activeElement as HTMLElement | null;
     if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
     const target = step?.target ?? null;
@@ -1664,7 +1672,7 @@ export function LabelConsole({
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
     const point = live.find((p) => p.id === target);
-    cancelReplay();
+    stopReplay();
     setArmedSlot(null);
     setPlacement(NO_PLACEMENT);
     setRestPointId(target);
@@ -2646,7 +2654,7 @@ export function LabelConsole({
     if (!shot) return;
     const next = nextPlacement(placement, point, labelShotValues(shot));
     if (!next) return;
-    cancelReplay();
+    stopReplay();
     // A placement answers the step only on the stroke the step is about, and
     // only once that stroke has both ends: a missing contact is placed first
     // and its landing still to come must not be skipped by the advance, nor
@@ -2775,7 +2783,7 @@ export function LabelConsole({
   };
   function answerReview(answer: ReviewAnswer) {
     if (!expanded) return;
-    cancelReplay();
+    stopReplay();
     // An added stroke is the one the labeller places next (`addShot` selects
     // it once saved): the console stays with it rather than moving on.
     if (answer.writes.some((write) => write.write === "check")) {
