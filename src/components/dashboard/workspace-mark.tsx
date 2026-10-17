@@ -24,6 +24,7 @@ export function WorkspaceMark({
     return (
       // eslint-disable-next-line @next/next/no-img-element -- a small crest or avatar from a public bucket; next/image has no host allow-listed
       <img
+        decoding="async"
         src={workspace.iconUrl}
         alt=""
         aria-hidden="true"
