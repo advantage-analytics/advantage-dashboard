@@ -533,7 +533,9 @@ export function LabelConsole({
   // the next point. A seek, a pause or a key of their own only lets the
   // replay go (`cancelReplay`).
   function stopReplay() {
-    if (replay.current?.running()) player.current?.pause();
+    // A replay that already let itself go (a jump it read as a seek) still
+    // started this film: while it plays on, stop it too.
+    if (replay.current && player.current?.isPlaying()) player.current.pause();
     cancelReplay();
   }
   // The step an answer, a placement, an add or a dismiss made here was

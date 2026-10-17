@@ -1012,7 +1012,7 @@ test.describe("a flag jump lands on the point's review step", () => {
       /function answerReview\(answer: ReviewAnswer\) \{\n {4}if \(!expanded\) return;\n {4}stopReplay\(\);/,
     );
     expect(consoleSource).toContain(
-      "if (replay.current?.running()) player.current?.pause();",
+      "if (replay.current && player.current?.isPlaying()) player.current.pause();",
     );
     const selectShot = consoleSource.slice(
       consoleSource.indexOf("  function selectShot("),
