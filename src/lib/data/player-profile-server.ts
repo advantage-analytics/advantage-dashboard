@@ -187,9 +187,6 @@ interface DbInsights {
   player2?: { summary?: string };
 }
 
-/** A serve row and the point it belongs to, as the map needs them. */
-type DbServeShotRow = ServeShotRow;
-
 /**
  * How many matches the serve map reads. A season's serve rows are a few
  * thousand; ten matches is the recent shape of a player's serve, and it
@@ -269,7 +266,7 @@ export async function serveMapFor(
     return { zoneStats: null, matchCount: 0, serves: 0, unavailable: true };
   }
 
-  const shotsByPoint = new Map<string, DbServeShotRow[]>();
+  const shotsByPoint = new Map<string, ServeShotRow[]>();
   for (const shot of shots) {
     if (!shot.points) continue;
     const list = shotsByPoint.get(shot.point_id);

@@ -9,7 +9,6 @@ import {
   type ServeDot,
   type ServePointInput,
 } from "@/lib/data/serve-zones";
-type ShotRow = ServeShotRow;
 
 export interface HomeServeData {
   dots: ServeDot[];
@@ -51,7 +50,7 @@ export async function loadHomeServes(
 
   // Group serve rows by point so the played serve (second if there was one)
   // can be picked by role — see serve-return-shots.ts.
-  const shotsByPoint = new Map<string, ShotRow[]>();
+  const shotsByPoint = new Map<string, ServeShotRow[]>();
   for (const s of shots) {
     if (!s.points) continue;
     const list = shotsByPoint.get(s.point_id);
