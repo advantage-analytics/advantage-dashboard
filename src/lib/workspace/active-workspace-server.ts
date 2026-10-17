@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 // Defined in a client-safe module so the shell can read the same cookie.
 import { WORKSPACE_COOKIE } from "./workspace-cookie";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -327,9 +328,8 @@ export const getWorkspaceContext = cache(
   async (): Promise<WorkspaceContextValue | null> => {
     const supabase = await createClient();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Shared with every other loader in this render — see `getAuthUser`.
+    const user = await getAuthUser();
     if (!user) return null;
 
     // Own row only — `users` RLS is a blanket `auth.uid() = id`, which is also

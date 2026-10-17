@@ -483,3 +483,55 @@ test("an error inside the scheduled sweep is logged, never thrown", async () => 
   expect(scheduled).toHaveLength(1);
   await expect(scheduled[0]()).resolves.toBeUndefined();
 });
+
+function loadBudgeted(vendor: "hangs" | "unconfigured") {
+  const scheduled: (() => unknown)[] = [];
+  const loader = createLoader({
+    globals: { Error, setTimeout, clearTimeout, console },
+    stubs: {
+      "next/server": {
+        after: (fn: () => unknown) => {
+          scheduled.push(fn);
+        },
+      },
+      // A vendor-side stall stands in for a slow poll without a network; a
+      // quick one schedules the results sweep, as the real function does.
+      "@/lib/services/splitstep/reconcile": {
+        reconcileBeforePageRead: () =>
+          vendor === "hangs"
+            ? new Promise<void>(() => {})
+            : Promise.resolve().then(() => {
+                scheduled.push(async () => undefined);
+              }),
+      },
+    },
+  });
+  const mod = loader.load("src/lib/data/reconcile-budget-server.ts");
+  return {
+    read: mod.reconcileWithinBudget as (
+      ids: string[],
+      tag: string,
+      budgetMs: number,
+    ) => Promise<void>,
+    scheduled,
+  };
+}
+
+test("a reconcile inside its budget behaves as before: awaited, sweep deferred", async () => {
+  const { read, scheduled } = loadBudgeted("unconfigured");
+  await read(["m-1"], "match-detail", 1000);
+  // Only the results sweep, which reconcileBeforePageRead itself defers.
+  expect(scheduled).toHaveLength(1);
+});
+
+test("a stalled reconcile releases the render at the budget and finishes after the response", async () => {
+  const { read, scheduled } = loadBudgeted("hangs");
+  const started = Date.now();
+  await read(["m-1"], "match-detail", 50);
+  expect(Date.now() - started).toBeLessThan(1000);
+  // The still-running poll is handed to after(), not dropped.
+  expect(scheduled).toHaveLength(1);
+  // A promise from the vm's realm, so checked by shape, not instanceof.
+  const deferred = scheduled[0]() as { then?: unknown };
+  expect(typeof deferred.then).toBe("function");
+});
