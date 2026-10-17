@@ -28,7 +28,11 @@ import {
   type ReviewItemId,
   type ReviewMember,
 } from "./marks-state";
-import { reviewItemTarget, type ReviewTarget } from "./review-target";
+import {
+  openMissingShot,
+  reviewItemTarget,
+  type ReviewTarget,
+} from "./review-target";
 import {
   isLetServe,
   isServeStroke,
@@ -44,7 +48,7 @@ import {
   landedOnOwnSide,
   shortOfNet,
 } from "./shot-derived";
-import { isSuggestionKey, suggestionState } from "./suggestions";
+import { isSuggestionKey } from "./suggestions";
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 
@@ -281,13 +285,8 @@ function openMissingShotSlot(
   point: LabelPoint,
   marks: LabelMarks,
 ): ReviewSlot | null {
-  const slot = marks.suggestions.find(
-    (s) =>
-      s.kind === "missing_shot" &&
-      s.pointId === point.id &&
-      suggestionState(s, point) === "open",
-  );
-  if (!slot || slot.kind !== "missing_shot") return null;
+  const slot = openMissingShot(point, marks);
+  if (!slot) return null;
   return { afterShotId: slot.afterShotId, hitter: slot.hitter, kind: null };
 }
 
@@ -319,6 +318,16 @@ export function reviewStepTarget(
   return { ...base, slot };
 }
 
+/** The stroke the step's target names, or undefined. */
+function targetStroke(
+  target: ReviewStepTarget,
+  point: LabelPoint,
+): LabelShot | undefined {
+  return target.shotId === null
+    ? undefined
+    : point.shots.find((shot) => shot.id === target.shotId);
+}
+
 /** The question the step puts, by what it asks for. */
 function stepQuestion(
   item: ReviewItem,
@@ -329,10 +338,7 @@ function stepQuestion(
   if (item.id === 3 && hasOpen(item, "first_serve_fault_alone")) {
     return REVIEW_STEP_QUESTION.serve;
   }
-  const stroke =
-    target.shotId === null
-      ? undefined
-      : point.shots.find((shot) => shot.id === target.shotId);
+  const stroke = targetStroke(target, point);
   if (target.place === "landing" && stroke && landingMissing(stroke)) {
     return REVIEW_STEP_QUESTION.landing;
   }
@@ -348,10 +354,7 @@ function stepExplanation(
   names: MarkNames,
   ghosts: boolean,
 ): string {
-  const stroke =
-    target.shotId === null
-      ? undefined
-      : point.shots.find((shot) => shot.id === target.shotId);
+  const stroke = targetStroke(target, point);
   if (target.place === "contact") return CONTACT_EXPLANATION;
   if (item.id === 3 && hasOpen(item, "first_serve_fault_alone")) {
     const serve = liveShotsInOrder(point, ghosts).at(-1);
@@ -391,6 +394,20 @@ export function endingWriteFor(
   return now ? endingPatchTo(point, now) : null;
 }
 
+/** The stored dismiss keys of an item's members (and `extra`), each once. */
+function dismissKeys(
+  item: ReviewItem,
+  extra: readonly string[] = [],
+): string[] {
+  return [
+    ...new Set(
+      [...item.members.map((member) => member.dismissKey), ...extra].filter(
+        (key): key is string => isSuggestionKey(key),
+      ),
+    ),
+  ];
+}
+
 /**
  * A result on `shot`, then the ending it leads to. An answer that only
  * confirms what the rows already hold changes nothing, so on its own it
@@ -407,13 +424,7 @@ function resultWrites(
   const ending = endingWriteFor(point, shotId, result, ghosts);
   const stored = point.shots.find((shot) => shot.id === shotId)?.result;
   if (item && stored === result && ending === null) {
-    const keys = [
-      ...new Set(
-        item.members
-          .map((member) => member.dismissKey)
-          .filter((key): key is string => isSuggestionKey(key)),
-      ),
-    ];
+    const keys = dismissKeys(item);
     return keys.length > 0 ? [{ write: "dismiss", keys }] : [];
   }
   return [
@@ -427,13 +438,7 @@ function dismissAnswer(
   item: ReviewItem,
   extraKeys: readonly string[] = [],
 ): ReviewAnswer | null {
-  const keys = [
-    ...new Set(
-      [...item.members.map((member) => member.dismissKey), ...extraKeys].filter(
-        (key): key is string => isSuggestionKey(key),
-      ),
-    ),
-  ];
+  const keys = dismissKeys(item, extraKeys);
   if (keys.length === 0) return null;
   return {
     id: "dismiss",

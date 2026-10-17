@@ -34,6 +34,20 @@ export function currentReviewItem(
   return flag?.items.find((item) => item.state === "open") ?? null;
 }
 
+/** The point's first open "Missing shot?" suggestion, or null. */
+export function openMissingShot(point: LabelPoint, marks: LabelMarks) {
+  for (const s of marks.suggestions) {
+    if (
+      s.kind === "missing_shot" &&
+      s.pointId === point.id &&
+      suggestionState(s, point) === "open"
+    ) {
+      return s;
+    }
+  }
+  return null;
+}
+
 /**
  * The stroke an open member's inline suggestion row sits under in the well,
  * if it has one: "Missing shot?" at its first open slot, "Did the point end
@@ -48,15 +62,8 @@ export function memberShotId(
 ): string | null {
   const { mark } = member;
   switch (mark.code) {
-    case "same_player_consecutive": {
-      const slot = marks.suggestions.find(
-        (s) =>
-          s.kind === "missing_shot" &&
-          s.pointId === point.id &&
-          suggestionState(s, point) === "open",
-      );
-      return slot && slot.kind === "missing_shot" ? slot.afterShotId : null;
-    }
+    case "same_player_consecutive":
+      return openMissingShot(point, marks)?.afterShotId ?? null;
     case "shot_after_point_end":
     case "second_serve_as_first":
     case "serve_after_serve_in":

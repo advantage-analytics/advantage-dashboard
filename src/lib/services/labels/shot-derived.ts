@@ -74,10 +74,9 @@ export function deriveShotResult(shot: ShotGeometry): LabelShotResult | null {
     return null;
   }
 
+  if (didNotClearNet(contact_y, landing_y)) return "net";
   // Signed depth past the net: positive on the far side, negative on the near.
-  const contactDepth = contact_y - NET_Y;
   const landingDepth = landing_y - NET_Y;
-  if (landingDepth === 0 || contactDepth * landingDepth > 0) return "net";
 
   const insideSidelines = Math.abs(landing_x) <= SINGLES_HALF_WIDTH_M;
 
@@ -103,6 +102,12 @@ export type ShotEnds = Partial<
   Pick<LabelShot, "contactX" | "contactY" | "landingX" | "landingY">
 >;
 
+/** Whether a ball hit from `contactY` came down on that side of the net, or on it. */
+function didNotClearNet(contactY: number, landingY: number): boolean {
+  const landingDepth = landingY - NET_Y;
+  return landingDepth === 0 || (contactY - NET_Y) * landingDepth > 0;
+}
+
 /**
  * Whether the ball came down on the hitter's own side of the net (or on the
  * net line itself) — a shank, or a ball into the net: it never crossed. The
@@ -125,9 +130,7 @@ export function landedOnOwnSide(shot: ShotEnds): boolean {
   ) {
     return false;
   }
-  const contactDepth = contactY - NET_Y;
-  const landingDepth = landingY - NET_Y;
-  return landingDepth === 0 || contactDepth * landingDepth > 0;
+  return didNotClearNet(contactY, landingY);
 }
 
 /**

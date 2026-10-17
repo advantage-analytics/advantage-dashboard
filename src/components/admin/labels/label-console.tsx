@@ -2790,8 +2790,6 @@ export function LabelConsole({
   function answerReview(answer: ReviewAnswer) {
     if (!expanded) return;
     stopReplay();
-    // An added stroke is the one the labeller places next (`addShot` selects
-    // it once saved): the console stays with it rather than moving on.
     if (answer.writes.some((write) => write.write === "check")) {
       // "Looks right" confirms the whole point: nothing left in its queue.
       const pointId = expanded.id;
@@ -2799,8 +2797,9 @@ export function LabelConsole({
         queue && queue.pointId === pointId ? { ...queue, keep: [] } : queue,
       );
     } else if (answer.writes.some((write) => write.write === "addShot")) {
-      // The item is answered, but the added stroke stays selected for
-      // placement: the queue moves on without landing anywhere.
+      // The item is answered, but the added stroke (`addShot` selects it
+      // once saved) stays selected for placement: the queue moves on without
+      // landing anywhere.
       closeQueuedItem();
     } else {
       noteAnswered();

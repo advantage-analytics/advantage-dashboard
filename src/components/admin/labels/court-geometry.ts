@@ -120,11 +120,7 @@ export const HALF_HEIGHT = (HALF_WIDTH * 222) / 276;
 /** Metres of run-off a half's box usually draws behind its baseline. */
 export const USUAL_RUNOFF = HALF_BACK_RUNOFF;
 
-/**
- * Metres of `y` at the top edge of a half's box. With `runoff` past the
- * usual 3.5 m the box keeps its size and slides back, so its baseline edge
- * is `runoff` behind the baseline (`runoffWindowTop`).
- */
+/** Metres of `y` at the top edge of a half's box (`runoffWindowTop` at the usual run-off). */
 export function halfTopY(half: CourtHalf): number {
   return runoffWindowTop(half, HALF_BACK_RUNOFF);
 }
