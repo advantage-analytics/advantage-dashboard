@@ -128,8 +128,12 @@
  * when the stream never reads a set score at all. Job c349e3d4 was refused
  * for one 0:06 warm-up rally. A stream whose first rally carries a set score
  * derives exactly as 0.8.2.
+ * 0.8.4 (2026-10-17) keeps those leading rallies as points instead of
+ * dropping them: each joins the game the first scored rally ended up in, its
+ * winner guessed (`leadingUnscoredRallies`). The uploader
+ * of job c349e3d4 confirmed its 0:06 rally was the first point.
  */
-export const DERIVATION_VERSION = "0.8.3-unreconciled";
+export const DERIVATION_VERSION = "0.8.4-unreconciled";
 
 export type {
   RawSplitStepStroke,
