@@ -391,14 +391,31 @@ export function endingWriteFor(
   return now ? endingPatchTo(point, now) : null;
 }
 
-/** A result on `shot`, then the ending it leads to. */
+/**
+ * A result on `shot`, then the ending it leads to. An answer that only
+ * confirms what the rows already hold changes nothing, so on its own it
+ * would leave the question standing: `item`'s members are dismissed instead
+ * (their stored keys), which closes it as the labeller meant.
+ */
 function resultWrites(
   point: LabelPoint,
   shotId: string,
   result: "in" | "out" | "net",
   ghosts: boolean,
+  item?: ReviewItem,
 ): ReviewWrite[] {
   const ending = endingWriteFor(point, shotId, result, ghosts);
+  const stored = point.shots.find((shot) => shot.id === shotId)?.result;
+  if (item && stored === result && ending === null) {
+    const keys = [
+      ...new Set(
+        item.members
+          .map((member) => member.dismissKey)
+          .filter((key): key is string => isSuggestionKey(key)),
+      ),
+    ];
+    return keys.length > 0 ? [{ write: "dismiss", keys }] : [];
+  }
   return [
     { write: "shot", shotId, patch: { result } },
     ...(ending ? [{ write: "point" as const, patch: ending }] : []),
@@ -468,19 +485,19 @@ function lastBallAnswers(
       id: "in",
       label: `${inLabel}${by}`,
       kind: kindOf("in"),
-      writes: resultWrites(point, target, "in", ghosts),
+      writes: resultWrites(point, target, "in", ghosts, item),
     },
     {
       id: "out",
       label: `Out${by}`,
       kind: kindOf("out"),
-      writes: resultWrites(point, target, "out", ghosts),
+      writes: resultWrites(point, target, "out", ghosts, item),
     },
     {
       id: "net",
       label: `Net${by}`,
       kind: kindOf("net"),
-      writes: resultWrites(point, target, "net", ghosts),
+      writes: resultWrites(point, target, "net", ghosts, item),
     },
   ];
   if (shank) {
@@ -490,7 +507,7 @@ function lastBallAnswers(
       label: `Didn’t clear${by}`,
       kind: kindOf("net", true),
       detail: short === null ? undefined : shankDetail(who, short),
-      writes: resultWrites(point, target, "net", ghosts),
+      writes: resultWrites(point, target, "net", ghosts, item),
     });
   }
   return answers;

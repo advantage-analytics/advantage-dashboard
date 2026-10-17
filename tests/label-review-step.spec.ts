@@ -390,7 +390,7 @@ test.describe("end-of-point answers", () => {
       "Dismiss",
       "Looks right",
     ]);
-    for (const result of ["in", "out", "net"] as const) {
+    for (const result of ["out", "net"] as const) {
       const a = answer(s!.answers, result);
       const after = {
         ...p,
@@ -408,9 +408,12 @@ test.describe("end-of-point answers", () => {
         expected ? { write: "point", patch: expected } : undefined,
       );
     }
-    // In is what the point holds: nothing moves. Out and net are an error
-    // by the hitter, won by the other side.
-    expect(answer(s!.answers, "in").writes).toHaveLength(1);
+    // In is what the point holds: nothing would move, so the answer closes
+    // the question by dismissing its marks instead. Out and net are an
+    // error by the hitter, won by the other side.
+    expect(answer(s!.answers, "in").writes).toEqual([
+      { write: "dismiss", keys: ["hint:winner_disputed"] },
+    ]);
     expect(answer(s!.answers, "out").writes[1]).toEqual({
       write: "point",
       patch: { ending: "error", ended_by: "p2", winner: "p1" },
