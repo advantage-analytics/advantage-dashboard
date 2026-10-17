@@ -28,9 +28,7 @@ import {
   SCORE_MISMATCH_ANSWERS,
   SCORE_MISMATCH_LABEL,
   findGapDescription,
-  onPointsDetail,
   scoreMismatchDetail,
-  toCheckLabel,
 } from "@/lib/services/labels/marks-copy";
 import {
   openFlags,
@@ -303,8 +301,8 @@ export function LabelBlackRail({
   // The mismatch as a flag of its own: counted, jumped to, and a slot after
   // the set's last point (`BlackSetScoreSlot`).
   const setScoreStop = scoreStop(mismatch, points);
-  // The header's open marks, over every live row — marks, not points, as the rows
-  // roll them up. None on the marks-off session.
+  // The header's open flags, over every live row — one per point, as the
+  // row's chip reads it. None on the marks-off session.
   const openMarks = useMemo(
     () => (marks ? openFlags(points, marks) : []),
     [points, marks],

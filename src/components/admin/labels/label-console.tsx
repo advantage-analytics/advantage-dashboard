@@ -182,6 +182,7 @@ import {
   type PlacementState,
   type PlacementTarget,
 } from "./court-placement";
+import { reviewFocusTarget } from "./label-black-mark";
 import { LabelBlackRail } from "./label-black-rail";
 import { LabelBlackView } from "./label-black-view";
 import type { LabelConfirm } from "./label-confirm";
@@ -439,8 +440,9 @@ export function LabelConsole({
       return [{ pointId: s.pointId, afterShotId: s.afterShotId }];
     });
   }, [marks, points]);
-  // The open counts the overview shows, saved on the session whenever they
-  // change, so the Labels list reads the work left without building marks.
+  // The open counts the overview shows — flagged points, amber and grey —
+  // saved on the session whenever they change, so the Labels list reads the
+  // work left without building marks.
   const openCounts = useMemo(() => {
     if (!liveMarks) return null;
     const open = openFlags(points, liveMarks);
@@ -1525,26 +1527,42 @@ export function LabelConsole({
    * with none, the last labelled point) is made current, the rail held and the
    * video seeks to it; the row is then brought to the rail's top
    * (`jumpToPointId`).
+   *
+   * `focusItem` is a flag jump's (`stepToFlag`, the header's flag rows): the
+   * point also opens unfolded, and once its well has rendered focus moves to
+   * what its review block asks first (`reviewFocusTarget`). Nothing else
+   * sets it — a row opened by a click, "Find the gap" or the overview's
+   * open-on-point leaves focus where it was.
    */
   const jumpToPointId = useRef<string | null>(null);
-  function findGap(pointId: string | null) {
+  const focusOnJump = useRef(false);
+  function findGap(
+    pointId: string | null,
+    { focusItem = false }: { focusItem?: boolean } = {},
+  ) {
     const live = points.filter((point) => point.status !== "deleted");
     const target = pointId ?? live[live.length - 1]?.id ?? null;
     if (target === null) return;
     setPlacement(NO_PLACEMENT);
     setRestPointId(target);
     holdPoint(target);
+    if (focusItem) setFoldedPointId(null);
     seekToPointStart(live.find((p) => p.id === target));
     jumpToPointId.current = target;
+    focusOnJump.current = focusItem;
   }
   // The follow scroll moves nothing while held, so this jump is made here once
   // the hold has rendered the row: its top `REFOLLOW_JUMP_INSET_PX` under the
   // rail's. A ref, not state: the request is consumed by the commit after the
-  // hold and must not render anything itself.
+  // hold and must not render anything itself. A flag jump then focuses the
+  // review block's first open item without scrolling for it, so the smooth
+  // scroll is not cut short; a point with no block focuses nothing.
   useEffect(() => {
     const pointId = jumpToPointId.current;
     if (pointId === null) return;
     jumpToPointId.current = null;
+    const focus = focusOnJump.current;
+    focusOnJump.current = false;
     const scroller = scrollerRef.current;
     const row = scroller?.querySelector<HTMLElement>(
       `[data-point-id="${pointId}"]`,
@@ -1562,11 +1580,25 @@ export function LabelConsole({
       },
       REFOLLOW_JUMP_INSET_PX,
     );
-    if (top === null) return;
-    scroller.scrollTo({
-      top,
-      behavior: reducedMotionNow() ? "auto" : "smooth",
-    });
+    const smooth = top !== null && !reducedMotionNow();
+    const scrolls = top !== null && Math.abs(scroller.scrollTop - top) >= 1;
+    if (top !== null) {
+      scroller.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+    }
+    if (!focus) return;
+    const well = scroller.querySelector(`[data-shots-well="${pointId}"]`);
+    const target = well ? reviewFocusTarget(well) : null;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    // The block is the well's last row, so on a long rally the focused action
+    // can sit below the rail once the row is at its top: bring it in, the
+    // least distance, once the jump's own scroll has finished.
+    const reveal = () => target.scrollIntoView({ block: "nearest" });
+    if (smooth && scrolls) {
+      scroller.addEventListener("scrollend", reveal, { once: true });
+    } else {
+      reveal();
+    }
   });
 
   function deletePoint(pointId: string) {
@@ -2138,6 +2170,7 @@ export function LabelConsole({
     fixTiebreakServe,
     setGameType,
     findGap,
+    goToFlag: (pointId: string) => findGap(pointId, { focusItem: true }),
     pullGamePoints,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
@@ -2166,8 +2199,8 @@ export function LabelConsole({
     [operable, points, session.adScoring],
   );
   // The two lists the rail's header steps: what can move the score — the
-  // amber marks, the set that doesn't add up and every amber slot between
-  // the rows — and the grey marks, which are wrong data.
+  // amber flagged points, the set that doesn't add up and every amber slot
+  // between the rows — and the grey flagged points, which are wrong data.
   const flagStops = useMemo(() => {
     const slots: readonly FlagStop[] = slotJumpStops;
     if (!liveMarks) return { score: slots, data: [] as FlagStop[] };
@@ -2206,7 +2239,7 @@ export function LabelConsole({
     stepToFlag.current = (direction, kind) => {
       if (confirm) return;
       const flag = stepFlag(flagStops[kind], points, currentPointId, direction);
-      if (flag) findGap(flag.pointId);
+      if (flag) findGap(flag.pointId, { focusItem: true });
     };
     stepShot.current = (direction) => {
       if (confirm || !expanded || unfoldedPointId !== expanded.id) return;
@@ -2526,7 +2559,7 @@ export function LabelConsole({
       matchScore={session.matchScore}
       onVideoEndsEarly={operable ? railHandlers.videoEndsEarly : undefined}
       onFindGap={operable ? railHandlers.findGap : undefined}
-      onGoToPoint={railHandlers.findGap}
+      onGoToPoint={railHandlers.goToFlag}
     />
   );
 
