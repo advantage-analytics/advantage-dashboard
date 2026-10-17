@@ -48,12 +48,7 @@ import {
   BlackTextAction,
   BlackUndoButton,
 } from "./label-black-parts";
-import {
-  PencilMark,
-  PointHintLine,
-  pointHints,
-  type PointHint,
-} from "./label-black-mark";
+import { PencilMark, pointHints, type PointHint } from "./label-black-mark";
 import { placementWords, positionWords } from "./shot-position-words";
 import {
   EditableCell,
@@ -252,10 +247,9 @@ export function BlackShotsWell({
   // The next row's place in the well, for the stagger; none when the well
   // does not animate.
   const arrive = () => (animate ? rows.length + 1 : undefined);
-  // The point's hints. One about a stroke, or with an answer to click, is a
-  // dashed amber row: under its stroke, or under the rally when it is about
-  // the whole point. The rest are one quiet line, last in the well. Nothing
-  // leads the well: a line above the first stroke read as part of the point's
+  // The point's hints. One about a stroke is a dashed amber row under it;
+  // the rest are asked one at a time in the court panel. Nothing leads
+  // the well: a line above the first stroke read as part of the point's
   // header, and its answers as words rather than buttons. Their answers write
   // through the console only where it can write at all.
   const hints = pointHints(
@@ -267,11 +261,6 @@ export function BlackShotsWell({
   const live = new Set(
     point.shots.filter((s) => s.status !== "deleted").map((s) => s.id),
   );
-  const under = (hint: (typeof hints)[number]) =>
-    hint.afterShotId !== undefined && live.has(hint.afterShotId);
-  const rest = hints.filter((hint) => !under(hint));
-  const offered = rest.filter((hint) => hint.actions.length > 0);
-  const quiet = rest.filter((hint) => hint.actions.length === 0);
   const hintLineAfter = (shotId: string) => {
     for (const hint of hints) {
       if (hint.afterShotId !== shotId) continue;
@@ -345,28 +334,6 @@ export function BlackShotsWell({
         />,
       );
     }
-  }
-  for (const hint of offered) {
-    rows.push(
-      <BlackEndedSuggestion
-        key={`hint-${hint.code}`}
-        hint={hint}
-        point={point}
-        edit={edit}
-        arrive={arrive()}
-      />,
-    );
-  }
-  if (quiet.length > 0) {
-    const arrival = rowArrival(arrive());
-    rows.push(
-      <PointHintLine
-        key="hints"
-        hints={quiet}
-        className={arrival.className}
-        style={arrival.style}
-      />,
-    );
   }
   const addArrival = rowArrival(arrive());
   return (
@@ -962,15 +929,20 @@ function BlackSuggestedShot({
     ? `A shot by ${name} is probably missing here`
     : "A shot is probably missing here";
   const where = time ? ` at ${time}` : "";
+  // A flag jump landed on this slot: the court panel is asking for its "Add
+  // shot", and the row says so with a solid line in place of the dashes.
+  const armed = edit.armedSlotAfterShotId === suggestion.afterShotId;
   return (
     <div
       data-row="suggested-shot"
       data-shot-suggestion={suggestion.key}
+      data-slot-armed={armed ? "" : undefined}
       style={arrival.style}
       className={cn(
         ROW_GRID,
         arrival.className,
-        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)] outline-dashed",
+        "cursor-default rounded-lg bg-[var(--rail-amber-wash-faint)] outline-1 -outline-offset-4 outline-[color:var(--rail-amber-line)]",
+        armed ? "outline-solid" : "outline-dashed",
       )}
     >
       <Plus

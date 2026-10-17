@@ -3,7 +3,8 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { LabelMarks } from "@/lib/services/labels/marks";
-import { markSummary } from "@/lib/services/labels/marks-state";
+import { markHover } from "@/lib/services/labels/marks-copy";
+import { markSummary, reviewFlag } from "@/lib/services/labels/marks-state";
 import {
   liveRowMarks,
   liveScoreMarks,
@@ -495,12 +496,28 @@ test.describe("the console reads them live", () => {
     const html = renderBlack(unchecked, marks);
     const p2 = row(html, P2);
     expect(p2).toContain('data-mark-state="open"');
-    // The open hover reads the LABELLED score — "0–15", server first — not
-    // anything the vendor read.
+    // The chip asks the game item among the point's open items.
     expect(p2).toMatch(
-      /aria-label="[^"]*At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
+      /aria-label="Review · \d\.[^"]*6 · Game &amp; serve order/,
     );
-    expect(html).toContain('aria-label="2 flags to check"');
+    // Its evidence reads the LABELLED score — "0–15", server first — not
+    // anything the vendor read.
+    const live = withLiveScoreMarks(marks, unchecked.points, true);
+    const flag = reviewFlag(
+      unchecked.points.find((p) => p.id === P2)!,
+      live,
+      unchecked.points,
+    );
+    const game = flag?.items.find((item) => item.id === 6);
+    expect(
+      game?.members
+        .map((member) => markHover(member.mark, { p1: "Lee", p2: "Vargas" }))
+        .join(" "),
+    ).toMatch(
+      /At 0–15 the serve should come from the ad side\. This one came from the deuce side\./,
+    );
+    // Two flags on one point: one point to review.
+    expect(html).toContain('aria-label="1 point to review"');
     expect(
       markSummary(
         unchecked.points,

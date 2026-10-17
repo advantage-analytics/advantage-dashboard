@@ -3,14 +3,23 @@ import { expect, test } from "@playwright/test";
 import {
   COURT_LENGTH,
   DOUBLES_HALF_WIDTH,
+  HALF_HEIGHT,
   NET_Y,
+  USUAL_RUNOFF,
+  behindBaseline,
+  courtWindowViewBox,
   fromCourt,
   fromCourtInHalf,
+  fromCourtInWindow,
   halfCourtViewBox,
   halfOf,
+  halfTopY,
   otherHalf,
+  runoffWindowTop,
+  shankWindowTop,
   toCourt,
   toCourtInHalf,
+  toCourtInWindow,
 } from "@/components/admin/labels/court-geometry";
 
 test("fixed points land where the board draws them", () => {
@@ -129,5 +138,59 @@ test.describe("the half-court zoom (board 08i)", () => {
     expect(halfOf(24)).toBe("far");
     expect(otherHalf("near")).toBe("far");
     expect(otherHalf("far")).toBe("near");
+  });
+});
+
+test.describe("slid windows: the half's box size, moved", () => {
+  test("the usual run-off is the half's own box; more slides it back", () => {
+    expect(runoffWindowTop("near", USUAL_RUNOFF)).toBeCloseTo(
+      halfTopY("near"),
+      9,
+    );
+    expect(runoffWindowTop("far", USUAL_RUNOFF)).toBeCloseTo(
+      halfTopY("far"),
+      9,
+    );
+    // 7.5 m behind the near baseline: the box's bottom edge is y = −7.5.
+    const top = runoffWindowTop("near", 7.5);
+    expect(toCourtInWindow(top, { sx: 50, sy: 100 }).y).toBeCloseTo(-7.5, 9);
+    expect(courtWindowViewBox(runoffWindowTop("far", 5.5))).toBe(
+      "-10.085 -5.5 20.17 16.224",
+    );
+    expect(behindBaseline("near", -4)).toBe(4);
+    expect(behindBaseline("far", COURT_LENGTH + 2)).toBeCloseTo(2, 9);
+    expect(behindBaseline("near", 3)).toBe(-3);
+  });
+
+  test("a click is never clamped: the box's edge and past it are metres too", () => {
+    const top = runoffWindowTop("near", 5.5);
+    for (const point of [
+      { x: 0, y: -5.4 },
+      { x: -9.5, y: -6.2 },
+      { x: 3, y: 2 },
+    ]) {
+      const back = toCourtInWindow(top, fromCourtInWindow(top, point));
+      expect(back.x).toBeCloseTo(point.x, 9);
+      expect(back.y).toBeCloseTo(point.y, 9);
+    }
+    expect(toCourtInWindow(top, { sx: 50, sy: 120 }).y).toBeLessThan(-5.5);
+  });
+
+  test("the short ball's window straddles the net with the hitter's side in view", () => {
+    // Near hitter: 9.885 m of the far side above the net, 6.34 m of his own
+    // below it.
+    const near = shankWindowTop("near", 9);
+    expect(near).toBeCloseTo(NET_Y + 9.885, 9);
+    expect(near - HALF_HEIGHT).toBeCloseTo(5.546, 3);
+    // A deeper bounce slides it further, the net always in view.
+    const deeper = shankWindowTop("near", 2);
+    expect(deeper - HALF_HEIGHT).toBeCloseTo(1.5, 9);
+    expect(deeper).toBeGreaterThan(NET_Y);
+    expect(shankWindowTop("near", -3)).toBeCloseTo(halfTopY("near"), 9);
+    // Far hitter: the mirror.
+    const far = shankWindowTop("far", 14.885);
+    expect(far - HALF_HEIGHT).toBeCloseTo(NET_Y - 9.885, 9);
+    expect(shankWindowTop("far", 26)).toBeCloseTo(26.5, 9);
+    expect(shankWindowTop("far", 28)).toBeCloseTo(halfTopY("far"), 9);
   });
 });

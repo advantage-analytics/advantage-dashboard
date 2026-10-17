@@ -24,6 +24,12 @@
  * halfCourtViewBox} is that window in the art's own SVG frame (drawn top-down,
  * far baseline at `0`); {@link toCourtInHalf} and {@link fromCourtInHalf} are
  * its percent conversions, exact inverses too.
+ *
+ * Slid windows: the same box size, moved. A deep contact slides a half's box
+ * back past the usual 3.5 m run-off ({@link runoffWindowTop}); a short ball
+ * slides it across the net ({@link shankWindowTop}). {@link
+ * toCourtInWindow} and {@link fromCourtInWindow} convert against any window
+ * by its top edge, and never clamp.
  */
 
 import {
@@ -111,49 +117,126 @@ export const HALF_WIDTH = 2 * (DOUBLES_HALF_WIDTH + HALF_SIDE_RUNOFF); // 20.17
 /** The half's 276 × 222 box, in metres: 16.224. */
 export const HALF_HEIGHT = (HALF_WIDTH * 222) / 276;
 
-/** Metres of `y` at the top edge of a half's box. */
-function halfTopY(half: CourtHalf): number {
-  return half === "near"
-    ? HALF_HEIGHT - HALF_BACK_RUNOFF // 12.724 — just past the net
-    : COURT_LENGTH + HALF_BACK_RUNOFF; // 27.27 — the far run-off's edge
+/** Metres of run-off a half's box usually draws behind its baseline. */
+export const USUAL_RUNOFF = HALF_BACK_RUNOFF;
+
+/** Metres of `y` at the top edge of a half's box (`runoffWindowTop` at the usual run-off). */
+export function halfTopY(half: CourtHalf): number {
+  return runoffWindowTop(half, HALF_BACK_RUNOFF);
 }
 
 /**
- * A half's window in the art's SVG frame, as `[x, y, width, height]`: the
- * art is drawn top-down with the far baseline at `0`, so the SVG `y` of a
- * court `y` is `23.77 − y`.
+ * The top `y` of a box the half's size whose back edge is `runoff` metres
+ * behind that half's baseline: at 3.5 m, the half's own box (12.724 near,
+ * 27.27 far); further, the same box slid back.
+ */
+export function runoffWindowTop(half: CourtHalf, runoff: number): number {
+  return half === "near" ? HALF_HEIGHT - runoff : COURT_LENGTH + runoff;
+}
+
+/**
+ * Metres a point is behind `half`'s baseline: positive out the back, negative
+ * inside the court.
+ */
+export function behindBaseline(half: CourtHalf, y: number): number {
+  return half === "near" ? -y : y - COURT_LENGTH;
+}
+
+/**
+ * The window's `[x, y, width, height]` in the art's SVG frame for a box the
+ * half's size whose top edge is at `top` metres: the art is drawn top-down
+ * with the far baseline at `0`, so the SVG `y` of a court `y` is
+ * `23.77 − y`.
+ */
+export function courtWindowFrame(
+  top: number,
+): [number, number, number, number] {
+  return [HALF_LEFT, COURT_LENGTH - top, HALF_WIDTH, HALF_HEIGHT];
+}
+
+/** A window's `viewBox`. */
+export function courtWindowViewBox(top: number): string {
+  return courtWindowFrame(top)
+    .map((n) => Number(n.toFixed(3)))
+    .join(" ");
+}
+
+/** Metres → percent of a window's box. Off the box is outside 0–100. */
+export function fromCourtInWindow(
+  top: number,
+  { x, y }: CourtPoint,
+): ScreenPoint {
+  return {
+    sx: ((x - HALF_LEFT) / HALF_WIDTH) * 100,
+    sy: ((top - y) / HALF_HEIGHT) * 100,
+  };
+}
+
+/**
+ * Percent of a window's box → metres, never clamped: a click near the box's
+ * edge is the metres under it. The inverse of {@link fromCourtInWindow}.
+ */
+export function toCourtInWindow(
+  top: number,
+  { sx, sy }: ScreenPoint,
+): CourtPoint {
+  return {
+    x: (sx / 100) * HALF_WIDTH + HALF_LEFT,
+    y: top - (sy / 100) * HALF_HEIGHT,
+  };
+}
+
+/**
+ * A half's window in the art's SVG frame, as `[x, y, width, height]`.
  */
 export function halfCourtFrame(
   half: CourtHalf,
 ): [number, number, number, number] {
-  return [HALF_LEFT, COURT_LENGTH - halfTopY(half), HALF_WIDTH, HALF_HEIGHT];
+  return courtWindowFrame(halfTopY(half));
 }
 
 /** The zoomed art's `viewBox`: `-10.085 11.046 20.17 16.224` for `near`. */
 export function halfCourtViewBox(half: CourtHalf): string {
-  return halfCourtFrame(half)
-    .map((n) => Number(n.toFixed(3)))
-    .join(" ");
+  return courtWindowViewBox(halfTopY(half));
 }
 
 /** Metres → percent of a half's box. Off the box is outside 0–100. */
 export function fromCourtInHalf(
   half: CourtHalf,
-  { x, y }: CourtPoint,
+  point: CourtPoint,
 ): ScreenPoint {
-  return {
-    sx: ((x - HALF_LEFT) / HALF_WIDTH) * 100,
-    sy: ((halfTopY(half) - y) / HALF_HEIGHT) * 100,
-  };
+  return fromCourtInWindow(halfTopY(half), point);
 }
 
 /** Percent of a half's box → metres. The inverse of {@link fromCourtInHalf}. */
-export function toCourtInHalf(
-  half: CourtHalf,
-  { sx, sy }: ScreenPoint,
-): CourtPoint {
-  return {
-    x: (sx / 100) * HALF_WIDTH + HALF_LEFT,
-    y: halfTopY(half) - (sy / 100) * HALF_HEIGHT,
-  };
+export function toCourtInHalf(half: CourtHalf, point: ScreenPoint): CourtPoint {
+  return toCourtInWindow(halfTopY(half), point);
+}
+
+/**
+ * The short ball's window: the half's box size, slid across the net so the
+ * hitter's own side shows under (near) or over (far) the net with the other
+ * side's service boxes beyond it — 9.885 m of the other side, 6.34 m of the
+ * hitter's. A bounce deeper on the hitter's side slides it further, never
+ * past the hitter's own half box (`halfTopY`), so the net stays on screen.
+ */
+export const SHANK_ACROSS = 9.885;
+const SHANK_MARGIN = 0.5;
+
+export function shankWindowTop(
+  hitter: CourtHalf,
+  landingY: number | null,
+): number {
+  if (hitter === "near") {
+    let top = NET_Y + SHANK_ACROSS;
+    if (landingY !== null && landingY - SHANK_MARGIN < top - HALF_HEIGHT) {
+      top = landingY - SHANK_MARGIN + HALF_HEIGHT;
+    }
+    return Math.max(top, halfTopY("near"));
+  }
+  let bottom = NET_Y - SHANK_ACROSS;
+  if (landingY !== null && landingY + SHANK_MARGIN > bottom + HALF_HEIGHT) {
+    bottom = landingY + SHANK_MARGIN - HALF_HEIGHT;
+  }
+  return Math.min(bottom + HALF_HEIGHT, halfTopY("far"));
 }
