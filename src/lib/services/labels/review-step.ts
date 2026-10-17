@@ -597,6 +597,8 @@ function stepAnswers(
   marks: LabelMarks,
   names: MarkNames,
   ghosts: boolean,
+  /** Whether this is the point's last open item. */
+  last = true,
 ): ReviewAnswer[] {
   const answers: ReviewAnswer[] = [];
   const extraDismiss: string[] = [];
@@ -676,11 +678,15 @@ function stepAnswers(
   const dismiss = dismissAnswer(item, extraDismiss);
   if (dismiss) answers.push(dismiss);
   if (point.checkedAt === null) {
+    // "Looks right" confirms what this question is about. On the point's last
+    // open question that is the whole point, so it is the check tick; before
+    // then it closes this question alone (its marks dismissed), so the
+    // "Then:" line's next question still comes.
     answers.push({
       id: "looks-right",
       label: LOOKS_RIGHT_ANSWER,
       kind: "plain",
-      writes: [{ write: "check" }],
+      writes: last || !dismiss ? [{ write: "check" }] : dismiss.writes,
     });
   }
   return answers;
@@ -733,7 +739,15 @@ export function reviewStep(
     question: stepQuestion(item, target, point),
     explanation: stepExplanation(item, target, point, names, ghosts),
     target,
-    answers: stepAnswers(item, target, point, marks, names, ghosts),
+    answers: stepAnswers(
+      item,
+      target,
+      point,
+      marks,
+      names,
+      ghosts,
+      open.length === 1,
+    ),
     then: stepThen(item, open[1]),
     replay: item.id === 4 ? stepReplay(point, ghosts) : null,
   };

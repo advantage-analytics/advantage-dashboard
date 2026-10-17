@@ -74,6 +74,8 @@ const SURFACE_FILL = "rgba(255,255,255,0.07)";
 const LINE_STRONG = "rgba(255,255,255,0.55)";
 const LINE_THIN = "rgba(255,255,255,0.32)";
 const NET_LINE = "rgba(255,255,255,0.85)";
+/** How far down the box (in %) the zoom control reaches over the court. */
+const NET_LABEL_CLEAR_TOP = 12;
 const MARK = "rgba(255,255,255,1)";
 /** An end the labeller called an estimate: the rail's amber, dashed. */
 const ESTIMATE = "var(--rail-amber)";
@@ -366,7 +368,13 @@ export function LabelCourt({
       : `Court with ${placed} ${placed === 1 ? "stroke" : "strokes"} placed`;
   const netAt = zoomed ? fromCourtInWindow(top, { x: 6.9, y: NET_Y }) : null;
   // A box slid back past the net's line draws no NET label.
-  const net = netAt && netAt.sy >= 0 && netAt.sy <= 100 ? netAt : null;
+  const netShown = netAt && netAt.sy >= 0 && netAt.sy <= 100 ? netAt : null;
+  // Near the top edge the label would sit under the zoom control (top
+  // right), so it moves to the court's other side there.
+  const netOnLeft = netShown !== null && netShown.sy < NET_LABEL_CLEAR_TOP;
+  const net = netOnLeft
+    ? fromCourtInWindow(top, { x: -6.9, y: NET_Y })
+    : netShown;
   // A label kept at its size under the labeller's zoom, like the marks.
   const keepSize = (transform: string) =>
     `${transform} scale(${thin.toFixed(3)})`;
@@ -487,12 +495,17 @@ export function LabelCourt({
       {net ? (
         <span
           aria-hidden="true"
-          className="mono pointer-events-none absolute origin-left text-[8px] tracking-[1px] text-white/50 uppercase"
+          className={cn(
+            "mono pointer-events-none absolute text-[8px] tracking-[1px] text-white/50 uppercase",
+            netOnLeft ? "origin-right" : "origin-left",
+          )}
           // Kept at its size under the labeller's zoom, like the marks.
           style={{
             left: pct(net.sx),
             top: pct(net.sy),
-            transform: keepSize("translateY(-50%)"),
+            transform: keepSize(
+              netOnLeft ? "translate(-100%, -50%)" : "translateY(-50%)",
+            ),
           }}
         >
           Net
@@ -506,7 +519,9 @@ export function LabelCourt({
                 key={guide.metres}
                 aria-hidden="true"
                 data-court-guide={guide.metres}
-                className="mono pointer-events-none absolute right-2 origin-right text-[9px] text-white/40"
+                // Left, as "usual edge" is: the zoom control holds the top
+                // right, where a guide label would sit under it.
+                className="mono pointer-events-none absolute left-2 origin-left text-[9px] text-white/40"
                 style={{
                   top: pct(at.sy),
                   transform: keepSize("translateY(-50%)"),

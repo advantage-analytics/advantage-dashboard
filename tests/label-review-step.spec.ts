@@ -199,6 +199,43 @@ test.describe("the console's queue (keep)", () => {
   });
 });
 
+test.describe("Looks right", () => {
+  test("before the point's last question it closes this one; on the last it checks the point", () => {
+    const p = rally();
+    const two = step(
+      p,
+      marksOf({
+        [POINT]: [
+          mark("winner_disputed", {
+            scoreWinner: "p2",
+            lastStrokeWinner: "p1",
+          }),
+          mark("winner_guessed", {}),
+        ],
+      }),
+    );
+    expect(two?.total).toBe(2);
+    expect(answer(two!.answers, "looks-right").writes).toEqual([
+      { write: "dismiss", keys: ["hint:winner_disputed"] },
+    ]);
+    const one = step(
+      p,
+      marksOf({
+        [POINT]: [
+          mark("winner_disputed", {
+            scoreWinner: "p2",
+            lastStrokeWinner: "p1",
+          }),
+        ],
+      }),
+    );
+    expect(one?.total).toBe(1);
+    expect(answer(one!.answers, "looks-right").writes).toEqual([
+      { write: "check" },
+    ]);
+  });
+});
+
 test.describe("question and explanation per kind", () => {
   test("a missing contact asks where it was hit", () => {
     const p = rally({}, ["d", { contactX: null, contactY: null }]);
