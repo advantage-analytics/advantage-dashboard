@@ -152,6 +152,15 @@ state vs. point-in-time.
 The provider is **"Advantage Intelligence"** in every user-visible string. `splitstep` is
 internal naming only.
 
+**No `derivation_failed` blockers (product decision, 2026-10-17).** Once the vendor returns
+results, the match is always published: every point and shot the vendor found is shown,
+even when it is wrong. Never add a refusal to `src/lib/services/splitstep/derivation/` or
+`derive-and-publish.ts`. Where the data is unreadable, guess it (`winner_guessed`), drop
+the input that is not match play (warm-up rallies, `warmupRallies`), or flag it for review,
+and leave `Reconciliation.ok` false so nothing reads the result as verified. When an
+existing refusal fires on a real job, replace it the same way. Job c349e3d4 was refused
+over one warm-up rally.
+
 ### LLM and email
 
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and

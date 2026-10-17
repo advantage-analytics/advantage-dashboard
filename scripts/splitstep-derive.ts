@@ -106,6 +106,11 @@ async function main() {
       `frozen score rallies (games read from the serve, score_frozen): ${t.frozenRallies.join(", ")}`,
     );
   }
+  if (t.warmupRallies.length > 0) {
+    console.log(
+      `warm-up rallies (before any set score, dropped): ${t.warmupRallies.join(", ")}`,
+    );
+  }
   if (t.guessedRallies.length > 0) {
     console.log(
       `guessed rallies (no readable score, winner_guessed): ${t.guessedRallies.join(", ")}`,
