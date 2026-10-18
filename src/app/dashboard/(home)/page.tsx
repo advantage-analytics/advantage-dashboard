@@ -12,6 +12,7 @@ import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
 import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
+import { isUnlimitedCap } from "@/lib/data/usage-format";
 import type { Workspace } from "@/lib/workspace/types";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import {
@@ -311,7 +312,8 @@ async function Pins({ resources }: { resources: HomeResources }) {
 }
 async function Footer({ resources }: { resources: HomeResources }) {
   const u = await resources.usage;
-  if (!u) return null;
+  // An admin's personal workspace has no cap to meter.
+  if (!u || isUnlimitedCap(u.capSeconds)) return null;
   return (
     <UsageFooter
       usedSeconds={u.usedSeconds}

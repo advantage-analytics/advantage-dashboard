@@ -49,6 +49,7 @@ function publicUrlOrNull(
 function personalWorkspace(
   viewer: Viewer,
   individualPilot: boolean,
+  unlimitedVideo: boolean,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -71,6 +72,8 @@ function personalWorkspace(
     canSubmitVideo: true,
     // Read off the viewer's own row — see `Workspace.individualPilot`.
     individualPilot,
+    // `users.is_admin` — see `Workspace.unlimitedVideo`.
+    unlimitedVideo,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -340,7 +343,7 @@ export const getWorkspaceContext = cache(
       supabase
         .from("users")
         .select(
-          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
+          "first_name, last_name, plan, role, created_at, onboarded_at, avatar_path, recording_source, individual_pilot, is_admin, workspace_hint_done_at, activity_hint_done_at, sample_tour_done_at, first_report_tour_done_at",
         )
         .eq("id", user.id)
         .single(),
@@ -357,7 +360,11 @@ export const getWorkspaceContext = cache(
     const viewer = toViewer(user.id, user.email ?? "", row, avatarUrl);
 
     const available = [
-      personalWorkspace(viewer, row?.individual_pilot === true),
+      personalWorkspace(
+        viewer,
+        row?.individual_pilot === true,
+        row?.is_admin === true,
+      ),
       ...programs,
     ];
 

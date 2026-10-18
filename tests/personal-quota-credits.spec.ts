@@ -10,6 +10,7 @@ import {
   splitSpend,
 } from "@/lib/services/splitstep/quota";
 import { smallestPackCovering } from "@/lib/services/credits/packs";
+import { isUnlimitedCap, UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
 
 /**
  * A player's hours without a database: free hours first, then credits, and
@@ -51,6 +52,34 @@ test("a pilot's personal workspace gets 10 hours; nothing else changes", () => {
   expect(monthlyCapSecondsFor({ kind: "team", orgType: "college" })).toBe(
     75 * HOUR,
   );
+});
+
+test("an admin's personal workspace is uncapped; a team they upload into is not", () => {
+  const cap = monthlyCapSecondsFor({
+    kind: "personal",
+    orgType: null,
+    individualPilot: true,
+    unlimitedVideo: true,
+  });
+  expect(cap).toBe(UNLIMITED_CAP_SECONDS);
+  expect(isUnlimitedCap(cap)).toBe(true);
+  // Fits the reserve RPCs' `p_cap_seconds integer`.
+  expect(cap).toBeLessThanOrEqual(2 ** 31 - 1);
+  // Every upload fits the free hours, so no credit is ever spent.
+  expect(splitSpend(buildPeek(500 * HOUR, cap, 4 * HOUR), 3 * HOUR)).toEqual({
+    freeSeconds: 3 * HOUR,
+    creditSeconds: 0,
+    shortBySeconds: 0,
+    fits: true,
+  });
+  expect(
+    monthlyCapSecondsFor({
+      kind: "team",
+      orgType: "college",
+      unlimitedVideo: true,
+    }),
+  ).toBe(75 * HOUR);
+  expect(isUnlimitedCap(75 * HOUR)).toBe(false);
 });
 
 test("personal workspaces and custom orgs take the individual figure; colleges do not", () => {
