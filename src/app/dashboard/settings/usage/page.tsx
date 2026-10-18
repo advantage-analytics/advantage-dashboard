@@ -79,6 +79,7 @@ export default async function UsagePage() {
 
   // E1 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md): both buckets on one meter. Usage keeps the
   // ledger; Plan owns buying, so the packs are not repeated here.
+  const personalUnlimited = isUnlimitedCap(personal.capSeconds);
   const personalBalance = {
     freeCapSeconds: personal.capSeconds,
     freeLeftSeconds: secondsLeft(personal.usedSeconds, personal.capSeconds),
@@ -91,7 +92,7 @@ export default async function UsagePage() {
         <SettingsCardTitle
           trailing={
             <span className="mono text-[11px] text-[var(--ink-500)]">
-              {isUnlimitedCap(personal.capSeconds) ? (
+              {personalUnlimited ? (
                 "Unlimited"
               ) : (
                 <>
@@ -105,9 +106,7 @@ export default async function UsagePage() {
           Your analysis time
         </SettingsCardTitle>
 
-        {!isUnlimitedCap(personal.capSeconds) && (
-          <TwoBucketMeter balance={personalBalance} />
-        )}
+        {!personalUnlimited && <TwoBucketMeter balance={personalBalance} />}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
           <span>
@@ -130,9 +129,11 @@ export default async function UsagePage() {
         </div>
 
         <SettingsCardFootnote>
-          {freeHoursReturnOn()
-            ? `Personal uploads only · Free hours reset ${formatResetDate(personal.billingMonth)} · Free through ${formatPilotEnd()}`
-            : `Personal uploads only · Free hours end ${formatPilotEnd()}`}
+          {personalUnlimited
+            ? "Personal uploads only · Admin accounts have no monthly cap"
+            : freeHoursReturnOn()
+              ? `Personal uploads only · Free hours reset ${formatResetDate(personal.billingMonth)} · Free through ${formatPilotEnd()}`
+              : `Personal uploads only · Free hours end ${formatPilotEnd()}`}
         </SettingsCardFootnote>
       </SettingsCard>
 
