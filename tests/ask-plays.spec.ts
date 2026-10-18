@@ -429,6 +429,7 @@ test.describe("winning plays", () => {
         points: 25,
         winners: 7,
         errors_drawn: 18,
+        points_pct: 12.6,
       },
       {
         section: "play",
@@ -437,6 +438,7 @@ test.describe("winning plays", () => {
         points: 24,
         winners: 12,
         errors_drawn: 12,
+        points_pct: 12.1,
       },
     ];
     const text =
@@ -458,6 +460,73 @@ test.describe("winning plays", () => {
       text: "Emon van Loben Sels's best play was the backhand crosscourt: it won 25 points — 7 as their own winner and 18 by drawing an error.",
     });
     expect(seen.some((event) => event.type === "error")).toBe(false);
+  });
+
+  test("draws a tree whose plays each open the film on the points won with them", async () => {
+    const rows: AskRow[] = [
+      {
+        section: "total",
+        stroke: null,
+        direction: null,
+        points: 49,
+        winners: 41,
+        errors_drawn: 1,
+        points_pct: null,
+      },
+      {
+        section: "play",
+        stroke: "Forehand",
+        direction: "Crosscourt",
+        points: 12,
+        winners: 5,
+        errors_drawn: 7,
+        points_pct: 29.3,
+      },
+      {
+        section: "play",
+        stroke: "First Serve",
+        direction: "T",
+        points: 6,
+        winners: 6,
+        errors_drawn: 0,
+        points_pct: 14.6,
+      },
+    ];
+    const text =
+      buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 1) ?? "";
+    expect(text).toContain("WATCH: plays | mine | won");
+    expect(text).toContain(
+      "Each play below opens the film on the points won with it.",
+    );
+    const { events, result } = await rendered(text, rows);
+    expect(events.some((event) => event.type === "error")).toBe(false);
+    expect(result.droppedVisuals).toEqual([]);
+    expect(result.visual?.kind).toBe("tree");
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(result.visual.countLabel).toBe("Points won");
+    expect(result.visual.partLabel).toBe("Winners");
+    expect(result.visual.shareLabel).toBe("Share of points won");
+    expect(result.visual.branches[0]).toMatchObject({
+      steps: ["Forehand", "crosscourt"],
+      count: { value: 12, text: "12" },
+      part: { value: 5, text: "5" },
+      share: { value: 29.3, text: "29.3%" },
+    });
+    // The forehand crosscourt opens Sam's points won with it in the rally.
+    expect(parseMatchFilters(result.visual.branches[0].watch)).toMatchObject({
+      customPlayer: "you",
+      customStroke: ["Forehand"],
+      customDirection: ["Crosscourt"],
+      resultOutcome: ["won"],
+    });
+    // A serve is no Custom stroke the Video filter offers: no link.
+    expect(result.visual.branches[1].watch).toBeUndefined();
+  });
+
+  test("the query carries each play's share of the points won", () => {
+    expect(winningPlaysSql("mine")).toContain(
+      "round(100.0 * points / nullif(sum(points) over (), 0), 1) as points_pct",
+    );
   });
 });
 

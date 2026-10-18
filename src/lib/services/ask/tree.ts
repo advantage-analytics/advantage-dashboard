@@ -65,13 +65,20 @@ export type AskTreeWatch =
       kind: "plays";
       /** Whose shots. */
       subject: AskPatternPlayer;
+      /**
+       * Only the points the subject won — the winning plays' tree, whose
+       * branches count points won, not every point the shot was hit in.
+       */
+      won?: true;
     };
 
 const PLAYERS: readonly AskPatternPlayer[] = ["mine", "opponent"];
 
 /** The `WATCH:` line's fields for a request, in the order `parseTreeWatch` reads them. */
 export function treeWatchFields(watch: AskTreeWatch): string[] {
-  if (watch.kind === "plays") return ["plays", watch.subject];
+  if (watch.kind === "plays") {
+    return ["plays", watch.subject, ...(watch.won ? ["won"] : [])];
+  }
   return ["plus-one", watch.phase, watch.subject, watch.serveType ?? "any"];
 }
 
@@ -79,11 +86,18 @@ export function treeWatchFields(watch: AskTreeWatch): string[] {
 export function parseTreeWatch(fields: readonly string[]): AskTreeWatch | null {
   const [kind, ...rest] = fields.map((field) => field.trim());
   if (kind === "plays") {
-    const [subject] = rest;
-    if (rest.length !== 1 || !PLAYERS.includes(subject as AskPatternPlayer)) {
+    const [subject, outcome] = rest;
+    if (
+      (rest.length !== 1 && !(rest.length === 2 && outcome === "won")) ||
+      !PLAYERS.includes(subject as AskPatternPlayer)
+    ) {
       return null;
     }
-    return { kind: "plays", subject: subject as AskPatternPlayer };
+    return {
+      kind: "plays",
+      subject: subject as AskPatternPlayer,
+      ...(outcome === "won" ? { won: true as const } : {}),
+    };
   }
   if (kind === "plus-one") {
     const [phase, subject, serveType] = rest;
@@ -143,7 +157,7 @@ const other = (player: AskPatternPlayer): AskPatternPlayer =>
  *   `zone`, then the subject hit `stroke` in `direction` as the returner's
  *   +1 (shot 4).
  * - A plays branch: the subject hit `stroke` in `direction`, anywhere in the
- *   point.
+ *   point — and, for the winning plays (`won`), won it (`treeBranchFilters`).
  */
 export function treeBranchPattern(
   watch: AskTreeWatch,
@@ -205,7 +219,14 @@ export function treeBranchFilters(
   row: AskRow,
 ): MatchFilters | null {
   const pattern = treeBranchPattern(watch, row);
-  return pattern ? patternMatchFilters(pattern) : null;
+  const filters = pattern ? patternMatchFilters(pattern) : null;
+  if (filters === null || watch.kind !== "plays" || !watch.won) return filters;
+  // Won or lost is the viewer's side's (`MatchFilters.resultOutcome`): the
+  // opponent's points won are the viewer's points lost.
+  return {
+    ...filters,
+    resultOutcome: [watch.subject === "mine" ? "won" : "lost"],
+  };
 }
 
 /** The filter as the URL carries it (`?f=`), or null: what a tree branch's `watch` holds. */
