@@ -148,6 +148,7 @@ export function LabelBlackRail({
   editable = false,
   selectedShotId = null,
   armedSlotAfterShotId = null,
+  reviewInline = null,
   onSelectShot,
   onPatchPoint,
   onPatchShot,
@@ -217,6 +218,15 @@ export function LabelBlackRail({
   selectedShotId?: string | null;
   /** The "Missing shot?" slot a flag jump armed (`EditContext`). */
   armedSlotAfterShotId?: string | null;
+  /**
+   * The console's inline review block for the open point
+   * (`ReviewInlineBlock`), drawn in its well under the stroke it is about.
+   */
+  reviewInline?: {
+    pointId: string;
+    afterShotId: string | null;
+    node: React.ReactNode;
+  } | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
@@ -756,6 +766,11 @@ export function LabelBlackRail({
                           marks={marks}
                           playingShotId={playingShotId}
                           animate={openMoved}
+                          inline={
+                            reviewInline?.pointId === point.id
+                              ? reviewInline
+                              : null
+                          }
                         />
                       ) : null}
                     </BlackPointRow>

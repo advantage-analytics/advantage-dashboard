@@ -8,22 +8,11 @@ import {
   startPlacement,
   type PlacementState,
 } from "@/components/admin/labels/court-placement";
-import {
-  NO_OPENED_COUNT,
-  openedCount,
-  stepCount,
-} from "@/components/admin/labels/label-court-panel";
+import type { PointInfo } from "@/components/admin/labels/label-point-info";
 import {
   createVideoClock,
   type VideoClock,
 } from "@/components/admin/labels/video-clock";
-import type { LabelMarks } from "@/lib/services/labels/marks";
-import { drawsGhosts } from "@/lib/services/labels/marks-state";
-import {
-  reviewStep,
-  type ReviewAnswer,
-  type ReviewStep,
-} from "@/lib/services/labels/review-step";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import { tag as tagOf } from "./fixtures/html-probe";
 import {
@@ -45,8 +34,7 @@ type PanelProps = {
   onTarget: () => void;
   onFlip: () => void;
   fill?: boolean;
-  step?: ReviewStep | null;
-  onAnswer?: (answer: ReviewAnswer) => void;
+  info?: PointInfo | null;
   onEstimate?: (estimate: boolean) => void;
 };
 
@@ -204,197 +192,49 @@ test.describe("the court panel", () => {
   });
 });
 
-test.describe("layout A: the review step beside the court", () => {
-  const noop = () => {};
-  /** A step as review-step.ts builds one, on the fixture's return. */
-  const STEP = {
-    item: { id: 4, tone: "score", state: "open", members: [] },
-    index: 1,
-    total: 2,
-    question: "How did the last ball end?",
-    explanation:
-      "Click where it bounced. A bounce on Vargas’s own side means it never cleared the net.",
-    target: { shotId: "s-return", place: "landing", slot: null },
-    answers: [
-      { id: "in", label: "Winner by Vargas", kind: "plain", writes: [] },
-      { id: "out", label: "Out by Vargas", kind: "suggested", writes: [] },
-      {
-        id: "short",
-        label: "Didn’t clear by Vargas",
-        kind: "plain",
-        detail: "Bounced on Vargas’s side, 3.0 m short of the net",
-        writes: [],
-      },
-      { id: "dismiss", label: "Dismiss", kind: "dismiss", writes: [] },
-    ],
-    then: "Then: split or remove the shots after",
-    replay: null,
-  } as unknown as ReviewStep;
+test.describe("the point's information line", () => {
+  const INFO: PointInfo = {
+    score: "30–15",
+    server: "Lee",
+    rallyLength: 3,
+    rallySoFar: 2,
+    openItems: 2,
+  };
 
-  /** The answers' buttons: [kind, id, words, opening tag]. */
-  const answersOf = (html: string) =>
-    [
-      ...html.matchAll(
-        /<button[^>]*data-court-review-answer="([^"]*)" data-court-review-answer-id="([^"]*)"[^>]*>([^<]*)</g,
-      ),
-    ].map((m) => ({ kind: m[1], id: m[2], label: m[3], tag: m[0] }));
-  const text = (html: string, attr: string) =>
-    new RegExp(`${attr}="[^"]*"[^>]*>([^<]*)<`).exec(html)?.[1];
+  test("not placing: one quiet line under the header; absent without one", () => {
+    const html = render({ info: INFO, playingShotId: "s-return" });
+    expect(html).toMatch(
+      /data-court-info=""[^>]*>30–15 · Lee serving · shot 2 of 3 · 2 to review</,
+    );
+    expect(tagOf(html, "data-court-info")).toContain("text-white/55");
+    // Under the header, above the court.
+    expect(html.indexOf("data-court-info")).toBeGreaterThan(
+      html.indexOf("data-court-subtitle"),
+    );
+    expect(html.indexOf("data-court-info")).toBeLessThan(
+      html.indexOf("data-court-box"),
+    );
+    expect(render({ playingShotId: "s-return" })).not.toContain(
+      "data-court-info",
+    );
+    expect(render({ info: null })).toBe(render({}));
+  });
 
-  test("two columns: the step on the left, the court on the right, the foot under it", () => {
+  test("placing: the foot takes the room, the line is not drawn", () => {
     const html = render({
-      step: STEP,
-      onAnswer: noop,
-      placement: setPlacementTarget(
-        startPlacement("s-return", "far"),
-        "landing",
-      ),
+      info: INFO,
+      placement: startPlacement("s-return", "far"),
     });
-    expect(tagOf(html, "data-court-panel")).toContain(
-      'data-court-layout="review"',
-    );
-    const column = html.indexOf("data-court-review-column");
-    const box = html.indexOf("data-court-box");
-    expect(column).toBeGreaterThan(-1);
-    expect(box).toBeGreaterThan(html.indexOf("data-court-review-then"));
-    expect(html.indexOf("data-court-steps")).toBeGreaterThan(box);
-    expect(html.indexOf("data-court-keys")).toBeGreaterThan(box);
-    // The left column, top to bottom.
-    expect(title(html)).toBe("Point 1");
-    expect(subtitle(html)).toBe("Shot 2 · Vargas · backhand");
-    expect(text(html, "data-court-review-question")).toBe(
-      "How did the last ball end?",
-    );
-    expect(text(html, "data-court-review-count")).toBe("1 of 2");
-    expect(text(html, "data-court-review-explanation")).toBe(STEP.explanation);
-    expect(text(html, "data-court-review-then")).toBe(
-      "Then: split or remove the shots after",
-    );
-    // The court's own line names the armed end and its side.
-    expect(text(html, "data-court-side")).toBe("Landing · Lee’s side");
-    // A score item: the amber wash and an amber count.
-    expect(tagOf(html, "data-court-review=")).toContain(
-      "bg-[var(--rail-amber-wash-faint)]",
-    );
-    expect(tagOf(html, "data-court-review-count")).toContain(
-      "text-[var(--rail-amber)]",
-    );
-    // The court stays vertical at the half's box size.
-    expect(html).toContain('data-court-view="near"');
+    expect(html).not.toContain("data-court-info");
+    expect(html).toContain("data-court-steps");
+    expect(html).toContain("data-court-keys");
   });
 
-  test("answers are text actions: amber when suggested, plain ink, Dismiss quiet; a detail under its answer", () => {
-    const html = render({ step: STEP, onAnswer: noop });
-    const buttons = answersOf(html);
-    expect(buttons.map((b) => [b.kind, b.label])).toEqual([
-      ["plain", "Winner by Vargas"],
-      ["suggested", "Out by Vargas"],
-      ["plain", "Didn’t clear by Vargas"],
-      ["dismiss", "Dismiss"],
-    ]);
-    for (const b of buttons) {
-      expect(b.tag).toContain("active:scale-[0.96]");
-      expect(b.tag).toContain("text-[13px]");
-    }
-    expect(buttons[1].tag).toContain("text-[var(--rail-amber)]");
-    expect(buttons[0].tag).toContain("text-white/70");
-    expect(buttons[0].tag).not.toContain("rail-amber");
-    expect(buttons[3].tag).toContain("text-white/50");
-    expect(buttons[1].tag).toContain(
-      'aria-label="Out by Vargas: How did the last ball end?"',
-    );
-    // The detail is a quiet line right under its own answer.
-    const short = html.indexOf('data-court-review-answer-id="short"');
-    const detail = html.indexOf("data-court-review-detail");
-    expect(detail).toBeGreaterThan(short);
-    expect(detail).toBeLessThan(
-      html.indexOf('data-court-review-answer-id="dismiss"'),
-    );
-    expect(text(html, "data-court-review-detail")).toBe(
-      "Bounced on Vargas’s side, 3.0 m short of the net",
-    );
-    // The amber the rail defines is defined here too.
-    expect(tagOf(html, "data-court-panel")).toContain("--rail-amber:");
-  });
-
-  test("a data item is not amber; read-only draws the step with no answers", () => {
-    const data = render({
-      step: { ...STEP, item: { ...STEP.item, tone: "data" } },
-      onAnswer: noop,
-    });
-    expect(tagOf(data, "data-court-review=")).toContain("bg-white/[0.05]");
-    expect(tagOf(data, "data-court-review-count")).toContain("text-white/55");
-    const readOnly = render({ step: STEP });
-    expect(readOnly).toContain('data-court-review="4"');
-    expect(readOnly).not.toContain("data-court-review-answers");
-  });
-
-  test("n of m counts from the point's opening total: answering moves 1 of 2 to 2 of 2", () => {
-    const opened = openedCount(NO_OPENED_COUNT, "p", { total: 2 });
-    expect(stepCount(opened, { total: 2 })).toEqual({ index: 1, total: 2 });
-    // One answered: the same point, one item left — the count keeps.
-    const after = openedCount(opened, "p", { total: 1 });
-    expect(after).toBe(opened);
-    expect(stepCount(after, { total: 1 })).toEqual({ index: 2, total: 2 });
-    // Another point counts afresh; nothing open forgets the point.
-    expect(openedCount(after, "q", { total: 1 })).toEqual({
-      pointId: "q",
-      total: 1,
-    });
-    expect(openedCount(after, "p", null)).toBe(NO_OPENED_COUNT);
-    expect(openedCount(NO_OPENED_COUNT, null, null)).toBe(NO_OPENED_COUNT);
-    // More open than it opened with (an answer opened another): grows.
-    expect(openedCount(after, "p", { total: 3 })).toEqual({
-      pointId: "p",
-      total: 3,
-    });
-  });
-
-  test("no step: the panel exactly as before, placing or not", () => {
-    expect(render({ step: null })).toBe(render({}));
-    expect(render({ step: null })).not.toContain("data-court-review");
-    const landing = setPlacementTarget(
-      startPlacement("s-return", "far"),
-      "landing",
-    );
-    expect(render({ step: null, placement: landing })).toBe(
-      render({ placement: landing }),
-    );
-    expect(title(render({}))).toBe("Point 1");
-  });
-
-  test("the step read off a point (`reviewStep`) draws as built", () => {
-    // The fixture's ace, stored as the receiver's winner: item 4.
-    const ace = labelSessionFixture().points.find(
-      (p) => p.id === FIXTURE_POINT_IDS.P2,
-    )!;
-    const point: LabelPoint = {
-      ...ace,
-      checkedAt: null,
-      ending: "winner",
-      endedBy: "p2",
-      shots: ace.shots.map((s) => ({
-        ...s,
-        contactX: -1,
-        contactY: -0.4,
-        landingX: 0.6,
-        landingY: 17.79,
-      })),
-    };
-    const marks: LabelMarks = {
-      points: {},
-      shots: {},
-      suggestions: [],
-      serveSides: {},
-    } as unknown as LabelMarks;
-    const step = reviewStep(point, marks, [point], NAMES, drawsGhosts(marks))!;
-    expect(step.item.id).toBe(4);
-    const html = render({ point, step, onAnswer: noop });
-    expect(text(html, "data-court-review-question")).toBe(step.question);
-    expect(answersOf(html).map((b) => b.label)).toEqual(
-      step.answers.map((a) => a.label),
-    );
-    expect(text(html, "data-court-review-count")).toBe(`1 of ${step.total}`);
+  test("the review step is never drawn here: no column, no answers", () => {
+    const html = render({ info: INFO });
+    expect(html).not.toContain("data-court-review");
+    expect(html).not.toContain("data-court-layout");
+    expect(html).not.toContain("data-court-side");
   });
 });
 
@@ -427,27 +267,6 @@ test.describe("the slid court and the estimate", () => {
     expect(subtitle(html)).toBe("Didn’t clear the net · error by Vargas");
     // The NET label is still on screen.
     expect(html).toMatch(/>Net</);
-
-    // Asked as a step: the readout in the box, the court's line plain.
-    const step = render({
-      point,
-      placement: landing,
-      step: {
-        item: { id: 4, tone: "score", state: "open", members: [] },
-        index: 1,
-        total: 1,
-        question: "How did the last ball end?",
-        explanation: "x",
-        target: { shotId: "s-return", place: "landing", slot: null },
-        answers: [],
-        then: null,
-        replay: null,
-      } as unknown as ReviewStep,
-    });
-    expect(step).toMatch(
-      /data-court-shank=""[^>]*>Didn’t clear the net · error by Vargas</,
-    );
-    expect(step).toMatch(/data-court-side=""[^>]*>Landing · across the net</);
 
     // Flipped by hand, it is the hitter's whole half as before.
     const flipped = render({ point, placement: flipPlacement(landing) });
@@ -549,24 +368,4 @@ test.describe("the blue outline while placing", () => {
     );
     expect(off).toContain('data-court-placing="false"');
   });
-});
-
-test("the step's shot line numbers strokes as the rail does: a ghost takes no number", () => {
-  const { stepShotLine } = createLoader().load(
-    "src/components/admin/labels/label-court-panel.tsx",
-  ) as {
-    stepShotLine: (
-      point: LabelPoint,
-      shotId: string | null,
-      names: { p1: string; p2: string },
-      ghosts?: boolean,
-    ) => string | null;
-  };
-  const p4 = labelSessionFixture().points.find(
-    (point) => point.id === FIXTURE_POINT_IDS.P4,
-  )!;
-  // Fault, ghost (removed by the site), second serve: the serve is shot 2
-  // while ghosts are drawn, shot 3 when the session draws none.
-  expect(stepShotLine(p4, "s-p4-serve", NAMES, true)).toMatch(/^Shot 2\b/);
-  expect(stepShotLine(p4, "s-p4-serve", NAMES, false)).toMatch(/^Shot 3\b/);
 });
