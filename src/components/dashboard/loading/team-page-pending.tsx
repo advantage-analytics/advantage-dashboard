@@ -2,7 +2,7 @@
 import { ScheduleToolbarPending } from "./list-toolbar-pending";
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { useIsDayZero } from "@/components/dashboard/presence-provider";
+import { PresenceGate } from "@/components/dashboard/presence-provider";
 import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
 import { RosterHeaderButtonsPending } from "@/components/dashboard/team/roster-header-buttons";
 import { ScheduleDayZeroPage } from "@/components/dashboard/schedule/static/schedule-day-zero";
@@ -35,25 +35,30 @@ import {
 
 export function TeamHomePageSkeleton() {
   const { active } = useWorkspace();
-  const dayZero = useIsDayZero("teamHome");
   // Nothing to load: draw the onboarding page this resolves to.
-  if (dayZero && active.kind === "team")
-    return (
-      <TeamHomeDayZeroPage
-        canManage={isProgramStaff(active)}
-        canUpload={canUploadForProgram(active)}
-        teamName={active.name}
-      />
-    );
   return (
-    <TeamHomeSkeleton
-      action={
+    <PresenceGate
+      surface="teamHome"
+      dayZero={
         active.kind === "team" ? (
-          <NewMatchAction
+          <TeamHomeDayZeroPage
+            canManage={isProgramStaff(active)}
             canUpload={canUploadForProgram(active)}
-            canSubmitVideo={active.canSubmitVideo}
+            teamName={active.name}
           />
         ) : null
+      }
+      skeleton={
+        <TeamHomeSkeleton
+          action={
+            active.kind === "team" ? (
+              <NewMatchAction
+                canUpload={canUploadForProgram(active)}
+                canSubmitVideo={active.canSubmitVideo}
+              />
+            ) : null
+          }
+        />
       }
     />
   );
@@ -61,12 +66,20 @@ export function TeamHomePageSkeleton() {
 
 export function RosterPageSkeleton() {
   const { active } = useWorkspace();
-  const dayZero = useIsDayZero("roster");
   // Nothing to load into rows: draw the page this resolves to, not a table.
-  if (dayZero)
-    return (
-      <RosterDayZeroPage canManage={isProgramStaff(active)} buttons={null} />
-    );
+  return (
+    <PresenceGate
+      surface="roster"
+      dayZero={
+        <RosterDayZeroPage canManage={isProgramStaff(active)} buttons={null} />
+      }
+      skeleton={<RosterRowsSkeleton />}
+    />
+  );
+}
+
+function RosterRowsSkeleton() {
+  const { active } = useWorkspace();
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-5 px-14 pt-5 pb-8">
@@ -126,15 +139,23 @@ export function RosterPageSkeleton() {
 
 export function SchedulePageSkeleton() {
   const { active } = useWorkspace();
-  const dayZero = useIsDayZero("schedule");
   // Nothing to load into rows: draw the page this resolves to, not a table.
-  if (dayZero)
-    return (
-      <ScheduleDayZeroPage
-        canCreate={canManageTeamSchedule(active)}
-        canAddOwnMatch={canUploadForProgram(active)}
-      />
-    );
+  return (
+    <PresenceGate
+      surface="schedule"
+      dayZero={
+        <ScheduleDayZeroPage
+          canCreate={canManageTeamSchedule(active)}
+          canAddOwnMatch={canUploadForProgram(active)}
+        />
+      }
+      skeleton={<ScheduleRowsSkeleton />}
+    />
+  );
+}
+
+function ScheduleRowsSkeleton() {
+  const { active } = useWorkspace();
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pt-5 pb-6">

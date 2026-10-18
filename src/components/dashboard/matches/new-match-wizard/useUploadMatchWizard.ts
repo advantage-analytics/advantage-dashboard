@@ -567,6 +567,8 @@ export interface UseUploadMatchWizardReturn {
   videoWarnings: string[];
   /** Facts about the video that are not cautions — drawn grey. */
   videoNotes: string[];
+  /** What this tab will do to the video before it uploads — drawn grey. */
+  videoNotices: string[];
   isProbing: boolean;
   /** Provider-owned media rules, so the wizard never names a vendor. */
   minTrimSeconds: number;
@@ -1015,6 +1017,7 @@ export function useUploadMatchWizard({
   const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
   const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
   const [videoNotes, setVideoNotes] = useState<string[]>([]);
+  const [videoNotices, setVideoNotices] = useState<string[]>([]);
   const [isProbing, setIsProbing] = useState(false);
   /**
    * True from the moment a window start moved far enough to drop the
@@ -2559,6 +2562,7 @@ export function useUploadMatchWizard({
       setUploadError(null);
       setVideoWarnings([]);
       setVideoNotes([]);
+      setVideoNotices([]);
       setVideoProbe(null);
       setUploadedFile(null);
       setIsProbing(true);
@@ -2578,6 +2582,7 @@ export function useUploadMatchWizard({
         setVideoProbe(summary);
         setVideoWarnings(result.warnings ?? []);
         setVideoNotes(result.notes ?? []);
+        setVideoNotices(result.notices ?? []);
         setUploadedFile({
           name: file.name,
           size: formatFileSize(file.size),
@@ -2700,6 +2705,7 @@ export function useUploadMatchWizard({
     setVideoProbe(null);
     setVideoWarnings([]);
     setVideoNotes([]);
+    setVideoNotices([]);
     setUploadedFile(null);
     setUploadError(null);
     forgetCameraAnswers();
@@ -4147,6 +4153,7 @@ export function useUploadMatchWizard({
     videoProbe,
     videoWarnings,
     videoNotes,
+    videoNotices,
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
     remainingQuotaSeconds,

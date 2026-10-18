@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { NewReportsSubline } from "@/components/dashboard/home/new-reports-subline";
 import { advButton } from "@/lib/ui/adv-button";
-import { formatHoursShort } from "@/lib/data/usage-format";
+import { formatHoursShort, isUnlimitedCap } from "@/lib/data/usage-format";
 import { PLAN_HREF } from "@/lib/services/credits/packs";
 import type { PersonalUsage } from "@/lib/data/usage-server";
 
@@ -50,28 +50,29 @@ export function SeasonTitle({
   const leftSeconds = Math.max(0, usage.capSeconds - usage.usedSeconds);
   // Free hours first; once they are spent the credits carry the line, and
   // with neither it says so with the one next step (D3 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)).
-  const hoursLeft =
-    leftSeconds > 0 ? (
-      <>
-        <span className="tabular">{formatHoursShort(leftSeconds)}</span> h left
-        this month
-      </>
-    ) : usage.creditSeconds > 0 ? (
-      <>
-        <span className="tabular">{formatHoursShort(usage.creditSeconds)}</span>{" "}
-        h in credits
-      </>
-    ) : (
-      <>
-        Out of video hours ·{" "}
-        <Link
-          href={PLAN_HREF}
-          className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Add hours
-        </Link>
-      </>
-    );
+  const hoursLeft = isUnlimitedCap(usage.capSeconds) ? (
+    <>Unlimited video hours</>
+  ) : leftSeconds > 0 ? (
+    <>
+      <span className="tabular">{formatHoursShort(leftSeconds)}</span> h left
+      this month
+    </>
+  ) : usage.creditSeconds > 0 ? (
+    <>
+      <span className="tabular">{formatHoursShort(usage.creditSeconds)}</span> h
+      in credits
+    </>
+  ) : (
+    <>
+      Out of video hours ·{" "}
+      <Link
+        href={PLAN_HREF}
+        className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+      >
+        Add hours
+      </Link>
+    </>
+  );
 
   const awaitingFirstReport =
     hasMatches && analyzedMatchCount === 0 && matchCount > 0;

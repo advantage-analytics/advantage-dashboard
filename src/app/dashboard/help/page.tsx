@@ -439,10 +439,14 @@ export default function HelpCenterPage() {
                   If your file is over {MAX_VIDEO_GB} GB
                 </span>
                 <p className={proseClass}>
-                  Shorten it rather than compress it. Photos on iPhone, Mac and
-                  Windows can trim a video without lowering its resolution —
-                  keep a run of complete games, such as one set, and upload
-                  that. If trimming isn&rsquo;t an option, write to{" "}
+                  When your browser can, it&rsquo;s compressed in this tab
+                  before it uploads, at the same resolution and frame rate —
+                  keep the tab open, since a full match takes a while. When it
+                  can&rsquo;t, the wizard says so as you pick the file. Then
+                  trim it to complete games (Photos on iPhone, Mac and Windows
+                  can, without lowering its resolution), or shrink it with a
+                  free tool like HandBrake: keep the resolution, pick a constant
+                  frame rate and export MP4 (H.264). If neither works, write to{" "}
                   <a
                     href={`mailto:${SUPPORT_EMAIL}?subject=Large%20match%20file`}
                     className={linkClass}

@@ -24,7 +24,7 @@ import {
   TwoBucketMeter,
   type HoursBalance,
 } from "@/components/dashboard/credits/two-bucket-meter";
-import { formatHoursLong } from "@/lib/data/usage-format";
+import { formatHoursLong, isUnlimitedCap } from "@/lib/data/usage-format";
 import {
   CREDIT_PACKS,
   creditPack,
@@ -126,7 +126,10 @@ export function PersonalPlan({
         nextExpiry={nextExpiry ?? (added ? added.expiresAt : undefined)}
       />
 
-      {severity === "ok" && !packsOpen ? (
+      {/* An admin's free hours cover every upload, so credits would never
+          be spent — no packs to sell. */}
+      {isUnlimitedCap(freeCapSeconds) ? null : severity === "ok" &&
+        !packsOpen ? (
         <PacksLine onSeePacks={() => setPacksOpen(true)} />
       ) : (
         <PacksCard freeEnds={freeEnds} onBuy={setDialogPack} />
@@ -178,6 +181,20 @@ function HoursCard({
   const severity = balanceSeverity(balance);
   const figureColor =
     severity === "ok" ? "var(--ink-900)" : SEVERITY_FILL[severity];
+
+  // An admin's personal workspace — no cap, so no meter and no reset date.
+  if (isUnlimitedCap(balance.freeCapSeconds)) {
+    return (
+      <SettingsCard className="gap-3.5 bg-[var(--surface-card)]">
+        <SettingsCardTitle>Video hours</SettingsCardTitle>
+        <span className="text-title-lg text-[var(--ink-900)]">Unlimited</span>
+        <SettingsCardFootnote>
+          Admin accounts have no monthly cap. Credits are never spent
+          {credits > 0 ? `; you have ${formatHoursLong(credits)} unused.` : "."}
+        </SettingsCardFootnote>
+      </SettingsCard>
+    );
+  }
 
   return (
     <SettingsCard className="gap-3.5 bg-[var(--surface-card)]">

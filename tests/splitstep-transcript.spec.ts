@@ -1384,10 +1384,11 @@ test.describe("frozen score stretch", () => {
     }
   });
 
-  test("a leading warm-up rally is dropped, not refused and not kept as a phantom set", () => {
-    // Job c349e3d4 (2026-10-17) was refused for one 0:06 warm-up rally.
+  test("a leading rally before any set score is kept as a point in the opening game", () => {
+    // Job c349e3d4 (2026-10-17): refused for its 0:06 rally, then dropped it
+    // as warm-up — the uploader confirmed it was the first point.
     const a = analyzeResults(degraded);
-    const warmup = a.rallies[0].rallyId;
+    const lead = a.rallies[0].rallyId;
     const t = buildTranscript({
       rallies: a.rallies,
       labels: a.players,
@@ -1395,14 +1396,16 @@ test.describe("frozen score stretch", () => {
       initialTopIsPlayer1: null,
     });
     expect(t.reason).not.toBe("1 point(s) resolved no winner");
-    expect(t.warmupRallies).toEqual([warmup]);
-    expect(t.guessedRallies).not.toContain(warmup);
-    expect(t.reconciliation.unresolvedPoints).not.toContain(warmup);
-    expect(t.points.map((p) => p.rally_id)).not.toContain(warmup);
+    expect(t.leadingUnscoredRallies).toEqual([lead]);
+    expect(t.reconciliation.unresolvedPoints).not.toContain(lead);
+    const [first, second] = t.points;
+    expect(first.rally_id).toBe(lead);
+    // Same set as the next point: no phantom opening set.
+    expect(first.set_number).toBe(second.set_number);
   });
 
   test("a stream that never reads a set score is guessed, not refused", () => {
-    // Job c349e3d4's shape: set score None throughout after the warm-up.
+    // A stream with no set score at all is left as it is, and guessed.
     const a = analyzeResults(clean);
     const rallies = a.rallies.map((r) => ({
       ...r,

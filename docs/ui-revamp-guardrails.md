@@ -62,7 +62,13 @@ timestamps, even when the window is the whole clip (`decideTrim` → `transcode`
 every local check passes; a viewer's often cannot, and the first 4K HEVC match (Rhodri v
 Bao, 2026-10-08) raised a media error in the label console and ran the vendor's GPU out of
 memory. It is still one file — stored, sent to the vendor and played — so no clock moves.
-**Never scale below 1080p** (the vendor's floor) and never change the frame rate here. A
+**Never scale below 1080p** (the vendor's floor) and never change the frame rate here.
+**Over the upload limit (October 2026, reviewed).** A file over `MAX_VIDEO_SIZE_BYTES` is
+no longer refused at pick time when the browser can re-encode: `decideTrim` cuts the window
+copy-only when that alone fits, and otherwise takes the same re-encode at a bitrate that
+fits the limit — same start, resolution and frame rate, so no clock moves. It never uploads
+an oversize original: `prepareVideoForUpload` throws `OversizeVideoError` instead, before any
+upload URL or budget is spent. A
 browser that cannot convert uploads the original, as with every other skip, and the wizard
 says so at pick time (`conversionNotice` in `splitstep-validator.ts`).
 `scripts/scan-video-codecs.ts` lists stored videos that predate this.

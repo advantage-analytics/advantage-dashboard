@@ -37,6 +37,13 @@ export interface ValidationResult {
    * rate. Shown quietly beside what it qualifies; a warning is drawn yellow.
    */
   notes?: string[];
+  /**
+   * What will happen to the file on its way up — it is fine as it is, but this
+   * tab will do something to it first (compress one over the upload limit).
+   * Says nothing about whether the file meets a requirement, so it marks no
+   * requirement; drawn as the grey strip under the file.
+   */
+  notices?: string[];
   details?: {
     sheetsValidated?: string[];
     totalRows?: Record<string, number>;

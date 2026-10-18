@@ -6,7 +6,14 @@ import * as React from "react";
 import * as jsx from "react/jsx-runtime";
 import ts from "typescript";
 
-function route(matchRows: { id: string; date: string }[], failure = false) {
+/**
+ * `presenceFails` mirrors `getWorkspacePresence`'s own failure answer: it
+ * never rejects, it resolves to "present everywhere".
+ */
+function route(
+  matchRows: { id: string; date: string }[],
+  presenceFails = false,
+) {
   const pending = new Promise<never>(() => {});
   const reads: string[] = [];
   const exports: { default?: () => Promise<React.ReactElement> } = {};
@@ -46,12 +53,19 @@ function route(matchRows: { id: string; date: string }[], failure = false) {
               viewer: { id: "viewer" },
             }),
           };
+        if (id.includes("presence-server"))
+          return {
+            getWorkspacePresence: async () => ({
+              workspaceId: "viewer",
+              matches: presenceFails || matchRows.length > 0,
+            }),
+          };
         if (id === "@/lib/supabase/server")
           return { createClient: async () => ({ from: () => query }) };
         if (id.includes("personal-matches-server"))
           return {
             getPersonalMatches: async () => {
-              if (failure) throw new Error("database failed");
+              reads.push("matches");
               return matchRows;
             },
           };
@@ -131,6 +145,9 @@ test("Home returns its frame while independent analytics and serve reads remain 
     ),
   ]);
   expect(contentProps(result).hasMatches).toBe(true);
+  // The reads chained on the match list start once it lands, not before the
+  // page returns — let those microtasks run.
+  await new Promise((settle) => setTimeout(settle, 0));
   expect(home.reads).toEqual(
     expect.arrayContaining([
       "performance",
@@ -159,12 +176,13 @@ test("Empty account selects day zero before analytics and skips recent/serve/usa
   expect(home.reads).not.toContain("usage");
   expect(home.reads).not.toContain("performance");
   expect(home.reads).not.toContain("kpis");
+  expect(home.reads).not.toContain("matches");
 });
 
-test("Failed base query cannot become a first-match offer", async () => {
+test("Failed presence read cannot become a first-match offer", async () => {
   const home = route([], true);
-  await expect(home.render()).rejects.toThrow("database failed");
-  expect(home.reads).toEqual([]);
+  const result = await home.render();
+  expect(contentProps(result).hasMatches).toBe(true);
 });
 
 test("Recent matches does not wait for full-history performance", () => {
