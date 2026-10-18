@@ -36,8 +36,10 @@ import type {
 /** The columns a shot reset writes: its seed, and `kept`. */
 export type ShotResetWrite = LabelShotSeedValues & { status: "kept" };
 
-/** The columns a point reset writes: its seed, and `unchanged`. */
-export type PointResetWrite = LabelPointSeedValues & { status: "unchanged" };
+/** The columns a point reset writes: its seed (less the game type), and `unchanged`. */
+export type PointResetWrite = Omit<LabelPointSeedValues, "game_type"> & {
+  status: "unchanged";
+};
 
 /** The whole point reset: its own columns, and each stroke whose hitter goes back. */
 export type PlannedPointReset =
@@ -103,7 +105,10 @@ export function planPointReset(current: {
     if (shot.seed === null || shot.seed.hitter === shot.hitter) continue;
     shots.push(planShotHitter(shot, shot.seed.hitter));
   }
-  return { ok: true, write: { ...current.seed, status: "unchanged" }, shots };
+  // The seeded game type is for the opening scorecard, never a value Reset
+  // puts back: a game's type is set for the whole game by its own operation.
+  const { game_type: _gameType, ...values } = current.seed;
+  return { ok: true, write: { ...values, status: "unchanged" }, shots };
 }
 
 /** Whether the console offers Reset on a shot: edited, with a seed. */

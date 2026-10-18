@@ -16,6 +16,12 @@
 
 import { planTiebreakFold, tiebreakFolds } from "./tiebreak-fold";
 import { readAllPages } from "@/lib/data/admin-range-read";
+import {
+  parseFinalScore,
+  parseMatchScore,
+  readBestOf,
+} from "@/lib/data/labels-server";
+import { enteredScore, matchTiebreakSet } from "./set-scores";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   readJobAdScoring,
@@ -93,6 +99,14 @@ interface ShiftSessionRow {
   ad_scoring: boolean | null;
   job_id: string | null;
   match_id: string | null;
+  /** `label_sessions.final_score` (jsonb), the entered score's fallback. */
+  final_score?: unknown;
+}
+
+/** The match row the fold reads: the entered score and the format. */
+interface MatchScoreRow {
+  score: unknown;
+  format: unknown;
 }
 
 /** One UPDATE's worth of moved points: the values, the status they were read with, their ids. */
@@ -151,17 +165,28 @@ type GamePlan =
  * The run both writes share: the session's gate and scoring in one read, the
  * points, the plan — twice when a point changes server — then the grouped
  * writes and the flipped strokes. `plan` is the pure rule over the rows.
+ *
+ * `readScore` reads the match's `score` beside its `format` (one read, in
+ * place of the scoring fallback's) and hands the plan the deciding set the
+ * entered score spells as a match tiebreak (set-scores.ts
+ * `matchTiebreakSet`); without it the plan is handed null and the match row
+ * is read only when the scoring falls back to it, as before.
  */
 async function runGamePlan(
   supabase: AdminClient,
   sessionId: string,
-  plan: (points: readonly ShiftPoint[], adScoring: boolean) => GamePlan,
+  plan: (
+    points: readonly ShiftPoint[],
+    adScoring: boolean,
+    matchTiebreakSet: number | null,
+  ) => GamePlan,
   failed: string,
+  options: { readScore?: boolean } = {},
 ): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id, match_id")
+    .select("status, ad_scoring, job_id, match_id, final_score")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -178,8 +203,11 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
-    // The match's format, the last fallback, beside the job's.
-    readMatchAdScoring(supabase, session),
+    // The match's format, the last fallback, beside the job's — with its
+    // score when the plan reads the entered score.
+    options.readScore
+      ? readMatchScore(supabase, session.match_id)
+      : readMatchAdScoring(supabase, session),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
@@ -199,6 +227,15 @@ async function runGamePlan(
     job.data?.ad_scoring,
     readFormatAdScoring(match.data?.format),
   );
+  const tiebreakSet = options.readScore
+    ? matchTiebreakSet(
+        enteredScore(
+          parseFinalScore(session.final_score ?? null),
+          parseMatchScore((match.data as MatchScoreRow | null)?.score ?? null),
+        ),
+        readBestOf(match.data?.format),
+      )
+    : null;
 
   // The plan with no shots yet says whether any point moves under a new
   // server. Only then are shots read — the whole session's, not the moved
@@ -209,7 +246,7 @@ async function runGamePlan(
     ...toGamePoint(row),
     shots: [],
   }));
-  const dry = plan(shiftPoints, adScoring);
+  const dry = plan(shiftPoints, adScoring, tiebreakSet);
   if ("error" in dry) return dry;
   const byId = new Map(shiftPoints.map((point) => [point.id, point]));
   const switching = dry.writes.some(
@@ -220,7 +257,7 @@ async function runGamePlan(
     const owned = await readShotsOfSession(supabase, sessionId);
     if ("error" in owned) return owned;
     shiftPoints = withShots(shiftPoints, owned.shots);
-    const full = plan(shiftPoints, adScoring);
+    const full = plan(shiftPoints, adScoring, tiebreakSet);
     if ("error" in full) return full;
     planned = full;
   }
@@ -277,10 +314,25 @@ export async function writeLabelGameShift(params: {
   );
 }
 
+/** The match's entered score beside its format, when the session has a match. */
+async function readMatchScore(
+  supabase: AdminClient,
+  matchId: string | null,
+): Promise<{ data: MatchScoreRow | null; error: { message: string } | null }> {
+  if (!matchId) return { data: null, error: null };
+  return supabase
+    .from("matches")
+    .select("score, format")
+    .eq("id", matchId)
+    .maybeSingle<MatchScoreRow>();
+}
+
 /**
- * Make the game after 6–6 in set `setNumber` a tiebreak and fold the vendor's
- * split games into it (tiebreak-fold.ts), read and planned on the rows as
- * they stand now. Never throws.
+ * Make the game after 6–6 in set `setNumber` a tiebreak — or, where the
+ * entered score spells set `setNumber` as a match tiebreak, make its first
+ * game that and fold the whole set in — folding the vendor's split games
+ * into it (tiebreak-fold.ts), read and planned on the rows as they stand
+ * now. Never throws.
  */
 export async function writeLabelTiebreakFold(params: {
   supabase: AdminClient;
@@ -300,16 +352,20 @@ export async function writeLabelTiebreakFold(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => {
-      const fold = tiebreakFolds(points, adScoring).find(
+    (points, adScoring, tiebreakSet) => {
+      const fold = tiebreakFolds(points, adScoring, tiebreakSet).find(
         (f) => f.setNumber === setNumber,
       );
       if (!fold) {
-        return { error: "That set is not at 6–6 before an ordinary game." };
+        return {
+          error:
+            "That set is not at 6–6 before an ordinary game, and the entered score does not make it a match tiebreak.",
+        };
       }
       return planTiebreakFold(points, fold);
     },
     "Could not make the tiebreak",
+    { readScore: true },
   );
 }
 

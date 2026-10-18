@@ -231,7 +231,11 @@ import {
   stepFlag,
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
-import { sessionScoreMismatch } from "@/lib/services/labels/set-scores";
+import {
+  enteredScore,
+  matchTiebreakSet,
+  sessionScoreMismatch,
+} from "@/lib/services/labels/set-scores";
 import {
   planTiebreakFold,
   tiebreakFolds,
@@ -515,6 +519,18 @@ export function LabelConsole({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
   });
+  // The deciding set the entered score — the match record's, else the
+  // labeller's own reading — spells as a 10-point match tiebreak
+  // (set-scores.ts). "Make it a match tiebreak" offers to fold it, and the
+  // shift and pull slots leave its vendor-cut games alone.
+  const matchTiebreakSetNumber = useMemo(
+    () =>
+      matchTiebreakSet(
+        enteredScore(sessionFields.finalScore, session.matchScore),
+        session.bestOf,
+      ),
+    [sessionFields.finalScore, session.matchScore, session.bestOf],
+  );
   // The current point while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
     initialExpandedPointId !== undefined
@@ -1446,7 +1462,12 @@ export function LabelConsole({
    */
   function shiftGameOverflow(fromPointId: string) {
     if (!operations) return;
-    const plan = planGameShift(points, session.adScoring, fromPointId);
+    const plan = planGameShift(
+      points,
+      session.adScoring,
+      fromPointId,
+      matchTiebreakSetNumber,
+    );
     if ("error" in plan) return refuse(plan.error);
     runGameShift(plan, () =>
       operations.shiftGameOverflow(session.id, fromPointId),
@@ -1460,10 +1481,16 @@ export function LabelConsole({
    */
   function foldTiebreak(setNumber: number) {
     if (!operations?.foldTiebreak) return;
-    const fold = tiebreakFolds(points, session.adScoring).find(
-      (f) => f.setNumber === setNumber,
-    );
-    if (!fold) return refuse("That set is not at 6–6 before an ordinary game.");
+    const fold = tiebreakFolds(
+      points,
+      session.adScoring,
+      matchTiebreakSetNumber,
+    ).find((f) => f.setNumber === setNumber);
+    if (!fold) {
+      return refuse(
+        "That set is not at 6–6 before an ordinary game, and the entered score does not make it a match tiebreak.",
+      );
+    }
     const plan = planTiebreakFold(points, fold);
     if ("error" in plan) return refuse(plan.error);
     const fold_ = operations.foldTiebreak;
@@ -1478,7 +1505,12 @@ export function LabelConsole({
    */
   function pullGamePoints(gameKey: string) {
     if (!operations) return;
-    const plan = planGamePull(points, gameKey, session.adScoring);
+    const plan = planGamePull(
+      points,
+      gameKey,
+      session.adScoring,
+      matchTiebreakSetNumber,
+    );
     if ("error" in plan) return refuse(plan.error);
     if ("kind" in plan) return refuse(GAME_PULL_ADD_POINT);
     runGameShift(plan, () => operations.pullGamePoints(session.id, gameKey));
@@ -2387,8 +2419,11 @@ export function LabelConsole({
   // The rail's amber slots as stops, read off the rows once for the keys
   // here and the rail's header — marks or none.
   const slotJumpStops = useMemo(
-    () => (operable ? slotStops(points, session.adScoring) : NO_SLOT_STOPS),
-    [operable, points, session.adScoring],
+    () =>
+      operable
+        ? slotStops(points, session.adScoring, matchTiebreakSetNumber)
+        : NO_SLOT_STOPS,
+    [operable, points, session.adScoring, matchTiebreakSetNumber],
   );
   // The two lists the rail's header steps: what can move the score — the
   // amber flagged points, the set that doesn't add up and every amber slot
@@ -2986,6 +3021,7 @@ export function LabelConsole({
       onFollow={followPlayback}
       points={points}
       adScoring={session.adScoring}
+      matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
       names={names}
       marks={liveMarks}

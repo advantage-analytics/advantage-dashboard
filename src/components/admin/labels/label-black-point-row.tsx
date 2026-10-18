@@ -37,7 +37,10 @@ import {
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { pointResetScope } from "@/lib/services/labels/reset";
-import type { TiebreakFold } from "@/lib/services/labels/tiebreak-fold";
+import {
+  tiebreakTarget,
+  type TiebreakFold,
+} from "@/lib/services/labels/tiebreak-fold";
 import {
   tiebreakServeReason,
   type TiebreakServeOrder,
@@ -667,9 +670,11 @@ export const BlackGameOverflow = memo(function BlackGameOverflow({
 });
 
 /**
- * The tiebreak at 6–6 (tiebreak-fold.ts): a slot above the game after 6–6,
- * saying which of the vendor's games the tiebreak spans and the count they
- * make, player 1 first. "Make it a tiebreak" folds them into one tiebreak
+ * The tiebreak at 6–6, or the entered match tiebreak (tiebreak-fold.ts): a
+ * slot above the game after 6–6 — or above the deciding set the entered
+ * score spells as a 10-point match tiebreak — saying which of the vendor's
+ * games the tiebreak spans and the count they make, player 1 first. "Make
+ * it a tiebreak" / "Make it a match tiebreak" folds them into one tiebreak
  * game with its 1-2-2 serve order.
  */
 export const BlackTiebreakFold = memo(function BlackTiebreakFold({
@@ -686,9 +691,11 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   const last = gameInSetOf(points, fold.games.at(-1) ?? fold.game);
   const games = first === last ? `Game ${first}` : `Games ${first}–${last}`;
   const count = `${fold.points.p1}–${fold.points.p2}`;
+  const match = fold.type === "match_tiebreak";
+  const target = tiebreakTarget(fold.type);
   const reason = fold.winner
-    ? `${games} make ${count}, ${edit.names[fold.winner]} first to 7`
-    : `${games} make ${count}, nobody to 7 yet`;
+    ? `${games} make ${count}, ${edit.names[fold.winner]} first to ${target}`
+    : `${games} make ${count}, nobody to ${target} yet`;
   const details = [
     "The first server serves one point, then two each in turn",
     "Ends change after every six points",
@@ -696,11 +703,11 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   if (fold.games.length > 1) {
     details.push(`Folds ${fold.games.length} games into one`);
   }
-  const label = "Make it a tiebreak";
+  const label = match ? "Make it a match tiebreak" : "Make it a tiebreak";
   const button = (
     <BlackTextAction
       ink="amber"
-      data-tiebreak-fold-make=""
+      data-tiebreak-fold-make={fold.type}
       aria-label={`${label}: ${reason}`}
       onClick={(event) => {
         event.stopPropagation();
@@ -714,7 +721,7 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
     icon: Merge,
     row: "tiebreak-fold",
     anchor: fold.pointIds[0] ?? "",
-    title: "Tiebreak at 6–6?",
+    title: match ? "Match tiebreak?" : "Tiebreak at 6–6?",
     reason,
     action: operations?.onFoldTiebreak ? button : null,
     actionLabel: label,

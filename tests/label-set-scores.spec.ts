@@ -2,10 +2,12 @@ import { expect, test } from "@playwright/test";
 
 import { labelScores, type ScorablePoint } from "@/lib/services/labels/score";
 import type { LabelSide } from "@/lib/services/labels/session";
+import { parseMatchScore } from "@/lib/data/labels-server";
 import {
   enteredScore,
   formatSets,
   labelSetScores,
+  matchTiebreakSet,
   mismatchGameKey,
   scoreMismatch,
   scoreMismatchSentence,
@@ -343,5 +345,145 @@ test.describe("the chip's sentence", () => {
     // The first reason's game is where the chip goes; none, nowhere.
     expect(mismatchGameKey(mismatch([short, over]))).toBe("2·11");
     expect(mismatchGameKey(mismatch([]))).toBeNull();
+  });
+});
+
+test.describe("matchTiebreakSet", () => {
+  // The record as the wizard stores a deciding-set match tiebreak: the third
+  // set entered as 0–1 games, its points in the tiebreak arrays.
+  const RECORD = {
+    player1: [6, 6, 0],
+    player2: [7, 3, 1],
+    player1_tiebreaks: [5, null, 8],
+    player2_tiebreaks: [7, null, 10],
+  };
+
+  test("the exact entered score: a 0–1 third set with its points 8–10 is set 3", () => {
+    const score = parseMatchScore(RECORD);
+    expect(score).toEqual(RECORD);
+    expect(matchTiebreakSet(enteredScore(null, score), 3)).toBe(3);
+    // The games alone say so — the tiebreak points are not required.
+    expect(
+      matchTiebreakSet(
+        enteredScore(null, { player1: [6, 6, 0], player2: [7, 3, 1] }),
+        3,
+      ),
+    ).toBe(3);
+    // Player 1 taking it reads the same way.
+    expect(
+      matchTiebreakSet(
+        [
+          [7, 6],
+          [3, 6],
+          [1, 0],
+        ],
+        3,
+      ),
+    ).toBe(3);
+  });
+
+  test("the console's own final_score (games only) triggers the rule where it is the source", () => {
+    const stored = [
+      [6, 7],
+      [6, 3],
+      [1, 0],
+    ];
+    expect(matchTiebreakSet(enteredScore(stored, null), 3)).toBe(3);
+    // The match record outranks it, as `enteredScore` always has it.
+    expect(
+      matchTiebreakSet(
+        enteredScore(stored, { player1: [6, 6, 6], player2: [7, 3, 4] }),
+        3,
+      ),
+    ).toBeNull();
+  });
+
+  test("a real third set, a best-of-5 at 1–1, a 1–0 set that is not deciding, and nothing entered", () => {
+    expect(
+      matchTiebreakSet(
+        [
+          [6, 7],
+          [6, 3],
+          [6, 4],
+        ],
+        3,
+      ),
+    ).toBeNull();
+    // Best of 5 at one set each: the third set is not the deciding one, so
+    // a 1–0 there is not a match tiebreak.
+    expect(
+      matchTiebreakSet(
+        [
+          [6, 7],
+          [6, 3],
+          [1, 0],
+        ],
+        5,
+      ),
+    ).toBeNull();
+    // Best of 5 at two sets each: the fifth is, whether entered as the
+    // fifth of five or as the last of a level match.
+    expect(
+      matchTiebreakSet(
+        [
+          [6, 7],
+          [6, 3],
+          [4, 6],
+          [6, 4],
+          [0, 1],
+        ],
+        5,
+      ),
+    ).toBe(5);
+    // A 1–0 opener, or a 1–0 second set with the first already won: not
+    // deciding — an unfinished set entered as 1–0 stays a set of games.
+    expect(
+      matchTiebreakSet(
+        [
+          [1, 0],
+          [6, 4],
+        ],
+        3,
+      ),
+    ).toBeNull();
+    expect(
+      matchTiebreakSet(
+        [
+          [6, 4],
+          [1, 0],
+        ],
+        3,
+      ),
+    ).toBeNull();
+    expect(matchTiebreakSet(null, 3)).toBeNull();
+    expect(matchTiebreakSet([], 3)).toBeNull();
+  });
+
+  test("the set tally stays games-only: one decided match tiebreak is the 1–0 the record entered", () => {
+    ids = 0;
+    const tiebreak: ScorablePoint[] = [
+      ...Array.from({ length: 8 }, () => [
+        won(3, 20, "p1"),
+        won(3, 20, "p2"),
+      ]).flat(),
+      won(3, 20, "p1"),
+      won(3, 20, "p1"),
+    ].map((point) => ({ ...point, gameType: "match_tiebreak" as const }));
+    const points = [
+      ...game(1, 1, "p2", 4),
+      ...game(2, 2, "p1", 4),
+      ...tiebreak,
+    ];
+    const labelled = labelSetScores(points, labelScores(points, true).games);
+    expect(labelled.find((set) => set.setNumber === 3)?.games).toEqual([1, 0]);
+    // 10–8 in points is not held against the 8–10 the record stores — the
+    // tiebreak points never block publish.
+    expect(
+      scoreMismatch(labelled, [
+        [0, 1],
+        [1, 0],
+        [1, 0],
+      ]),
+    ).toBeNull();
   });
 });

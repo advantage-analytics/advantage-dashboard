@@ -12,6 +12,7 @@
  * `planDismiss`.
  */
 
+import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import type { LabelSuggestion } from "./marks";
 import type { Planned } from "./operations";
 import { isMissedResult, type LabelPoint, type LabelShot } from "./session";
@@ -103,8 +104,11 @@ export function addedPointBetween(
  * the pair's first vendor stroke (`afterEventId` — what `planAddedShot`
  * writes for a stroke added after it). Deleting that added stroke opens the
  * suggestion again. It is `done` too once the pair's first stroke reads out
- * or net (`effectiveShotResult`, so placed coordinates win): the point ended
- * on it. Done outranks dismissed: the stroke is there either way.
+ * or net (`effectiveShotResult`, so placed coordinates win) with no more than
+ * `MAX_DEAD_TAIL` live strokes after it: the point ended on it. A miss deeper
+ * in the rally answers nothing — the rally went on, so the vendor's bounce
+ * was wrong, not the gap. Done outranks dismissed: the stroke is there
+ * either way.
  *
  * A `missing_point` is `done` once the flagged point's ending is
  * `let_replayed` — the second serve from that side was the same point played
@@ -127,18 +131,22 @@ export function suggestionState(
     ) {
       return "done";
     }
-    // The pair's first ball out or in the net: the point ended on it, the
-    // second stroke was a swing at a dead ball, and nothing is missing.
-    if (
-      after !== null &&
-      point.shots.some(
-        (shot) =>
-          shot.status !== "deleted" &&
-          shot.eventId === after &&
-          isMissedResult(effectiveShotResult(shot)),
-      )
-    ) {
-      return "done";
+    // The pair's first ball out or in the net AT THE POINT'S END: the point
+    // ended on it, the second stroke was a swing at a dead ball, and nothing
+    // is missing. Only while at most `MAX_DEAD_TAIL` live strokes follow it —
+    // a "miss" three or more strokes before the rally's end is a mis-tracked
+    // bounce (both coordinates read on the hitter's side), not an ending, and
+    // the gap after it is still in question.
+    if (after !== null) {
+      const live = point.shots.filter((shot) => shot.status !== "deleted");
+      const at = live.findIndex((shot) => shot.eventId === after);
+      if (
+        at !== -1 &&
+        isMissedResult(effectiveShotResult(live[at])) &&
+        live.length - 1 - at <= MAX_DEAD_TAIL
+      ) {
+        return "done";
+      }
     }
   } else {
     if (point.ending === "let_replayed") return "done";

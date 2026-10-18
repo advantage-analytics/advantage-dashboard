@@ -11,6 +11,8 @@ import {
 } from "@/lib/services/labels/marks";
 import { markState } from "@/lib/services/labels/marks-state";
 import { planAddedShot } from "@/lib/services/labels/operations";
+import { reviewStep } from "@/lib/services/labels/review-step";
+import { effectiveShotResult } from "@/lib/services/labels/shot-derived";
 import type {
   LabelPoint,
   LabelSession,
@@ -241,6 +243,208 @@ test.describe("suggestionState", () => {
     expect(
       suggestionState(missingPoint, { ...point, dismissed: ["missing_point"] }),
     ).toBe("dismissed");
+  });
+});
+
+/**
+ * A rally where one player hit four strokes in a row (vendor events 5–8),
+ * so three "Missing shot?" slots are open after strokes 5, 6 and 7. Stroke
+ * 5's vendor bounce is mis-tracked — contact and landing both on the
+ * hitter's near side, so it derives `net` — although three live strokes
+ * follow it. Court frame: net at y = 11.885.
+ */
+function fourInARow(): LabelPoint {
+  const point = labelSessionFixture().points.find((p) => p.id === P4)!;
+  const shot = (
+    id: string,
+    eventId: number,
+    hitter: "p1" | "p2",
+    stroke: LabelShot["stroke"],
+    videoTime: number,
+    geometry: Partial<LabelShot>,
+  ): LabelShot =>
+    labelShot(id, P4, {
+      eventId,
+      hitter,
+      stroke,
+      videoTime,
+      result: "in",
+      ...geometry,
+    });
+  return {
+    ...point,
+    server: "p2",
+    winner: "p2",
+    ending: "error",
+    endedBy: "p1",
+    shots: [
+      shot("s4", 4, "p2", "first_serve", 100.0, {
+        contactX: -0.33,
+        contactY: 22.295,
+        landingX: 2.99,
+        landingY: 5.135,
+      }),
+      shot("s5", 5, "p1", "forehand", 101.4, {
+        contactX: 3.98,
+        contactY: -1.105,
+        landingX: 0.96,
+        landingY: 6.145,
+      }),
+      shot("s6", 6, "p1", "forehand", 102.9, {
+        contactX: 0.98,
+        contactY: -1.375,
+        landingX: null,
+        landingY: null,
+      }),
+      shot("s7", 7, "p1", "forehand", 104.1, {
+        contactX: 0.16,
+        contactY: 4.045,
+        landingX: 2.06,
+        landingY: 21.495,
+      }),
+      shot("s8", 8, "p1", "overhead", 105.6, {
+        contactX: -0.04,
+        contactY: 7.245,
+        landingX: null,
+        landingY: null,
+        result: "out",
+      }),
+    ],
+  };
+}
+
+const slotAfter = (
+  eventId: number,
+  afterShotId: string,
+): Extract<LabelSuggestion, { kind: "missing_shot" }> => ({
+  kind: "missing_shot",
+  key: `missing_shot:${eventId}`,
+  pointId: P4,
+  afterShotId,
+  hitter: "p2",
+  videoTime: null,
+});
+const FOUR_SLOTS = [slotAfter(5, "s5"), slotAfter(6, "s6"), slotAfter(7, "s7")];
+
+test.describe("a point with several open slots", () => {
+  test("a mis-tracked bounce three strokes before the end answers nothing", () => {
+    const point = fourInARow();
+    // The premise: stroke 5 reads `net` off its coordinates …
+    expect(effectiveShotResult(point.shots[1])).toBe("net");
+    // … but three live strokes follow it, so the point did not end there
+    // and the slot after it is still a question.
+    expect(suggestionState(FOUR_SLOTS[0], point)).toBe("open");
+    expect(suggestionState(FOUR_SLOTS[1], point)).toBe("open");
+    expect(suggestionState(FOUR_SLOTS[2], point)).toBe("open");
+
+    // The end-of-point case stays answered: a miss with one or two strokes
+    // after it (a swing at the dead ball) is the point's end.
+    const endsOnFive: LabelPoint = {
+      ...point,
+      shots: point.shots.slice(0, 3),
+    };
+    expect(suggestionState(FOUR_SLOTS[0], endsOnFive)).toBe("done");
+    const twoAfter: LabelPoint = { ...point, shots: point.shots.slice(0, 4) };
+    expect(suggestionState(FOUR_SLOTS[0], twoAfter)).toBe("done");
+    // Deleting the trailing strokes down to two is what makes it the end.
+    const deletedTail: LabelPoint = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s8"
+          ? { ...s, status: "deleted", statusBeforeDelete: "kept" }
+          : s,
+      ),
+    };
+    expect(suggestionState(FOUR_SLOTS[0], deletedTail)).toBe("done");
+  });
+
+  test('"Missing shot?" stays open while any slot is, settles once none is', () => {
+    const point = fourInARow();
+    const mark = { ...pairMark(), params: { hitter: "p1" } } as LabelMark;
+    expect(markState(mark, point, FOUR_SLOTS)).toBe("open");
+
+    // One slot answered with "Add shot" while two are still open: open.
+    const plan = planAddedShot(point, "s5");
+    if ("error" in plan) throw new Error(plan.error);
+    const added: LabelShot = {
+      ...point.shots[0],
+      id: "s-new",
+      eventId: null,
+      afterEventId: plan.write.after_event_id,
+      status: plan.write.status,
+      hitter: plan.write.hitter,
+      stroke: null,
+      result: null,
+      spin: null,
+      videoTime: plan.write.video_time,
+    };
+    const [a, b, c, d, e] = point.shots;
+    const oneAdded: LabelPoint = { ...point, shots: [a, b, added, c, d, e] };
+    expect(suggestionState(FOUR_SLOTS[0], oneAdded)).toBe("done");
+    expect(markState(mark, oneAdded, FOUR_SLOTS)).toBe("open");
+    // One dismissed, two open: open. All three dismissed: dismissed.
+    expect(
+      markState(mark, { ...point, dismissed: ["missing_shot:5"] }, FOUR_SLOTS),
+    ).toBe("open");
+    expect(
+      markState(
+        mark,
+        {
+          ...point,
+          dismissed: ["missing_shot:5", "missing_shot:6", "missing_shot:7"],
+        },
+        FOUR_SLOTS,
+      ),
+    ).toBe("dismissed");
+    // Every slot answered or waved away, one of them with a shot: settled.
+    expect(
+      markState(
+        mark,
+        { ...oneAdded, dismissed: ["missing_shot:6", "missing_shot:7"] },
+        FOUR_SLOTS,
+      ),
+    ).toBe("settled");
+
+    // An edit elsewhere on the point does not answer an open gap: the mark
+    // stays open until the point is checked, when the general reading
+    // (`checked` for an edited point) applies.
+    const edited: LabelPoint = { ...point, status: "edited" };
+    expect(markState(mark, edited, FOUR_SLOTS)).toBe("open");
+    expect(
+      markState(
+        mark,
+        { ...edited, checkedAt: "2026-10-18T10:00:00Z" },
+        FOUR_SLOTS,
+      ),
+    ).toBe("checked");
+    expect(
+      markState(
+        mark,
+        { ...point, checkedAt: "2026-10-18T10:00:00Z" },
+        FOUR_SLOTS,
+      ),
+    ).toBe("checked-as-is");
+
+    // The review flag asks it: item 1, at the first open slot.
+    const marks: LabelMarks = {
+      points: { [point.id]: [mark] },
+      shots: {},
+      suggestions: FOUR_SLOTS,
+      serveSides: {},
+    };
+    const s = reviewStep(
+      point,
+      marks,
+      [point],
+      { p1: "Lee", p2: "Vargas" },
+      true,
+    );
+    expect(s?.item.id).toBe(1);
+    expect(s?.target.slot).toEqual({
+      afterShotId: "s5",
+      hitter: "p2",
+      kind: null,
+    });
   });
 });
 

@@ -132,6 +132,44 @@ export function enteredScore(
   return null;
 }
 
+/**
+ * The set the entered score says was played as a 10-point match tiebreak, or
+ * null when none was. The wizard stores a match tiebreak by convention —
+ * the deciding set entered as 1–0 or 0–1 games, its points in the tiebreak
+ * arrays (ScoreBlock.tsx `isTiebreakSet`, score-state.ts `setWinner`) — and
+ * no format flag says so anywhere, so this reads the games alone: the
+ * tiebreak points are not required, and the console's own `final_score`
+ * (games only) is read the same way.
+ *
+ * The deciding set is the one at index `bestOf - 1`, or the last entered set
+ * when the sets before it were level with each player one set from the match.
+ * A 1–0 set anywhere else is not a match tiebreak — an unfinished opener
+ * entered as 1–0 stays a set of games.
+ */
+export function matchTiebreakSet(
+  entered: readonly (readonly number[])[] | null,
+  bestOf: number,
+): number | null {
+  if (!entered || entered.length === 0) return null;
+  const toWin = Math.ceil(bestOf / 2);
+  const decidingIndex = (() => {
+    if (entered.length >= bestOf) return bestOf - 1;
+    const won = { p1: 0, p2: 0 };
+    for (const [a = 0, b = 0] of entered.slice(0, -1)) {
+      if (a > b) won.p1 += 1;
+      else if (b > a) won.p2 += 1;
+    }
+    return won.p1 === toWin - 1 && won.p2 === toWin - 1
+      ? entered.length - 1
+      : null;
+  })();
+  if (decidingIndex === null) return null;
+  const [a = 0, b = 0] = entered[decidingIndex] ?? [];
+  return Math.max(a, b) === 1 && Math.min(a, b) === 0
+    ? decidingIndex + 1
+    : null;
+}
+
 /** Why a set's labelled pair is what it is: one game, and what is wrong with it. */
 export type LabelScoreReason =
   | ({ kind: "unfinished" } & UnfinishedGame)

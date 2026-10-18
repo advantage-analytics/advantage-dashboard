@@ -97,6 +97,8 @@ export function tiebreakServeStops(
 export function slotStops(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  /** set-scores.ts `matchTiebreakSet`: the fold's set, which never overflows. */
+  matchTiebreakSet: number | null = null,
 ): ScoreStop[] {
   const numberOf = new Map(points.map((p) => [p.id, p.pointIndex + 1]));
   const stop = (pointId: string | undefined, label: string): ScoreStop[] =>
@@ -104,17 +106,20 @@ export function slotStops(
       ? []
       : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
   return [
-    ...gameOverflow(points, adScoring).flatMap((game) =>
+    ...gameOverflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
       stop(game.leftovers[0]?.id, "Game already won, with points after it"),
     ),
-    ...gameUnderflow(points, adScoring).flatMap((game) =>
+    ...gameUnderflow(points, adScoring, matchTiebreakSet).flatMap((game) =>
       stop(
         game.lastPointId,
         `Game ${game.gameInSet} isn’t finished at ${game.score}`,
       ),
     ),
-    ...tiebreakFolds(points, adScoring).flatMap((fold) =>
-      stop(fold.pointIds[0], "Tiebreak at 6–6?"),
+    ...tiebreakFolds(points, adScoring, matchTiebreakSet).flatMap((fold) =>
+      stop(
+        fold.pointIds[0],
+        fold.type === "match_tiebreak" ? "Match tiebreak?" : "Tiebreak at 6–6?",
+      ),
     ),
     ...tiebreakServeStops(tiebreakServeOrders(points)),
     // No slot of its own in the rail: the clock says a set ended where the

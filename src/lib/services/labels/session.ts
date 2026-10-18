@@ -13,7 +13,7 @@
  * per render, gated by `marksEnabled`, and never stored on a row.
  */
 
-import type { MatchScore } from "@/lib/services/splitstep/derivation";
+import type { MatchScore as FoldedMatchScore } from "@/lib/services/splitstep/derivation";
 import type {
   LabelEnding,
   LabelPointSeedValues,
@@ -32,8 +32,21 @@ export type {
   LabelShotSeedValues,
   LabelSide,
   LabelStroke,
-  MatchScore,
 };
+
+/**
+ * `matches.score` as the labels read it: the derivation's games per set
+ * (`player1` / `player2`), plus the tiebreak points the wizard stores beside
+ * them when it has them — one entry per set, null for a set with no
+ * tiebreak. The wizard spells a deciding-set match tiebreak as a set of 1–0
+ * / 0–1 games with its points in these arrays (ScoreBlock.tsx
+ * `isTiebreakSet`), so set-scores.ts `matchTiebreakSet` reads the games and
+ * never needs the points.
+ */
+export interface MatchScore extends FoldedMatchScore {
+  player1_tiebreaks?: (number | null)[];
+  player2_tiebreaks?: (number | null)[];
+}
 
 export type LabelPointStatus = "unchanged" | "edited" | "added" | "deleted";
 export type LabelShotStatus = "kept" | "edited" | "added" | "deleted";
@@ -331,6 +344,12 @@ export interface LabelSession {
    * none. Read-only here: labels code never writes `matches`.
    */
   matchScore: MatchScore | null;
+  /**
+   * `matches.format.best_of`, else 3 — which set is the deciding one, for
+   * set-scores.ts `matchTiebreakSet` to read a 1–0 deciding set as the
+   * 10-point match tiebreak the wizard stores it as.
+   */
+  bestOf: number;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

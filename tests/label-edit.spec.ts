@@ -576,7 +576,7 @@ test.describe("the stored seed", () => {
     expect(parseLabelPointSeed(noSide)).toBeNull();
   });
 
-  test("a point seed carrying game_type has it dropped, not trusted", () => {
+  test("a point seed's game_type comes through when it names a game type, and is dropped otherwise", () => {
     const pointSeed = {
       set_number: 1,
       game_number: 13,
@@ -586,9 +586,24 @@ test.describe("the stored seed", () => {
       ending: "winner",
       ended_by: "p2",
     };
-    const parsed = parseLabelPointSeed({ ...pointSeed, game_type: "tiebreak" });
-    expect(parsed).toEqual(pointSeed);
-    expect(parsed).not.toHaveProperty("game_type");
+    // The type the point was seeded with, for the opening scorecard.
+    expect(
+      parseLabelPointSeed({ ...pointSeed, game_type: "match_tiebreak" }),
+    ).toEqual({ ...pointSeed, game_type: "match_tiebreak" });
+    expect(
+      parseLabelPointSeed({ ...pointSeed, game_type: "tiebreak" }),
+    ).toEqual({ ...pointSeed, game_type: "tiebreak" });
+    // Not one of the three, or not a string: dropped, not rejected — and a
+    // seed older than the key reads as no type.
+    expect(parseLabelPointSeed({ ...pointSeed, game_type: "lucky" })).toEqual(
+      pointSeed,
+    );
+    expect(parseLabelPointSeed({ ...pointSeed, game_type: 7 })).toEqual(
+      pointSeed,
+    );
+    expect(parseLabelPointSeed(pointSeed)).not.toHaveProperty("game_type");
+    // Still never a field the status rule measures.
+    expect(LABEL_POINT_SEED_FIELDS).not.toContain("game_type");
   });
 });
 

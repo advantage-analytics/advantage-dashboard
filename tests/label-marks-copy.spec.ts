@@ -415,9 +415,29 @@ test.describe("a flag's life", () => {
     expect(markState(missing, point({ dismissed: ["missing_shot:7"] }))).toBe(
       "open",
     );
-    expect(markState(missing, point({ status: "edited" }), slots)).toBe(
-      "settled",
-    );
+    expect(markState(missing, point({ status: "edited" }))).toBe("settled");
+    // With them, an edit elsewhere on the point answers nothing about a gap
+    // still open: the mark stays open until the point is checked, when the
+    // general reading applies (`checked` for an edited point).
+    expect(markState(missing, point({ status: "edited" }), slots)).toBe("open");
+    expect(
+      markState(
+        missing,
+        point({ status: "edited", checkedAt: CHECKED_AT }),
+        slots,
+      ),
+    ).toBe("checked");
+    // One slot answered while the other is open: still open — the second
+    // gap is as unanswered as it was.
+    expect(
+      markState(
+        missing,
+        point({
+          shots: [shot(), shot({ status: "added", afterEventId: 7 }), shot()],
+        }),
+        slots,
+      ),
+    ).toBe("open");
     // Another mark on the point is untouched by the slots.
     expect(
       markState(

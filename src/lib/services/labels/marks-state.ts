@@ -136,8 +136,10 @@ function missingShotStates(
  * Where a `count` mark is in its life. `points` — the session's rows in rail
  * order — lets a "Same side twice" question read settled once a point was
  * added between the two (`missingPointAdded`); without them that answer is
- * not seen. "Missing shot?" reads its slots the same way: settled once one is
- * answered with "Add shot", dismissed once every one is dismissed.
+ * not seen. "Missing shot?" reads its slots the same way: open while any slot
+ * is open, settled once none is and one was answered with "Add shot" (or the
+ * point ended on the pair's first stroke), dismissed once every one is
+ * dismissed.
  */
 export function markState(
   mark: LabelMark,
@@ -165,12 +167,23 @@ export function markState(
     return "dismissed";
   }
 
+  // "Missing shot?" is as open as its slots. A point with several gaps (one
+  // player hitting three or four strokes in a row) opens a slot per gap, and
+  // answering one of them answers nothing about the others — so the mark
+  // settles only once no slot is open: settled when one was answered with
+  // "Add shot" or the point ended on the pair's first stroke, dismissed when
+  // every one was waved away. While a slot is still open an unchecked point
+  // keeps the mark open even if the labeller edited it elsewhere: an edit
+  // that leaves the gap in place has not answered the gap. Once the point is
+  // checked the general reading below applies (`checked` for an edited point,
+  // `checked-as-is` otherwise), as it does for every other count mark.
   if (mark.code === "same_player_consecutive") {
     const slots = missingShotStates(point, suggestions);
-    if (slots.includes("done")) return checked ? "checked" : "settled";
-    if (slots.length > 0 && slots.every((s) => s === "dismissed")) {
+    if (slots.length > 0 && !slots.includes("open")) {
+      if (slots.includes("done")) return checked ? "checked" : "settled";
       return "dismissed";
     }
+    if (slots.includes("open") && !checked) return "open";
   }
 
   // A counted mark whose question the well asks ("Was the last ball in?")

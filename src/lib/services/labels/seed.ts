@@ -22,13 +22,16 @@ import {
   type SplitStepStroke,
   type Transcript,
 } from "@/lib/services/splitstep/derivation";
+import { rotateServers } from "./game-operations";
 import {
   compareNullsLast,
   isLabelSpin,
   labelSideOf,
   type LabelSiteRemoval,
   type LabelSpin,
+  type MatchScore,
 } from "./session";
+import { enteredScore, matchTiebreakSet } from "./set-scores";
 
 export type LabelSide = "p1" | "p2";
 
@@ -86,6 +89,9 @@ export interface LabelShotSeedValues {
   video_time: number | null;
 }
 
+/** `label_points.game_type`'s vocabulary; the type lives in session.ts. */
+export type LabelPointSeedGameType = "game" | "tiebreak" | "match_tiebreak";
+
 /** `label_points.seed`: the point's own labelled fields, as seeded. */
 export interface LabelPointSeedValues {
   set_number: number | null;
@@ -95,6 +101,16 @@ export interface LabelPointSeedValues {
   winner: LabelSide | null;
   ending: LabelEnding | null;
   ended_by: LabelSide | null;
+  /**
+   * The game's type as seeded — `match_tiebreak` for the deciding set the
+   * entered score spells as one (set-scores.ts `matchTiebreakSet`), `game`
+   * otherwise. Added after the other keys, so a stored seed without it reads
+   * as `game`. Read by the opening scorecard alone (scorecard.ts
+   * `seededScorePoints`): it is not one of edit.ts's
+   * `LABEL_POINT_SEED_FIELDS`, so it never makes a point `edited`, and Reset
+   * leaves the row's type where the labeller put it.
+   */
+  game_type?: LabelPointSeedGameType;
 }
 
 /** One `label_shots` row before it has a session or a point id. */
@@ -137,11 +153,15 @@ export interface LabelPointSeed {
   /** Who struck the last ball; null when no stroke carries a result. */
   ended_by: LabelSide | null;
   /**
-   * Always an ordinary game: the vendor's data cannot tell a tiebreak apart,
-   * so the labeller marks those by hand. Not in `seed` — a game-level
-   * annotation the `unchanged` comparison and Reset leave alone.
+   * An ordinary game, except in the set the entered score spells as a
+   * 10-point match tiebreak (`matchTiebreakSet`): the vendor's data cannot
+   * tell a tiebreak apart, so a 6–6 tiebreak is still the labeller's call,
+   * but a deciding set entered as 1–0 is one by the wizard's own convention
+   * and seeds as `match_tiebreak`. Carried in `seed` for the opening
+   * scorecard; a game-level annotation the `unchanged` comparison and Reset
+   * leave alone (edit.ts `LABEL_POINT_SEED_FIELDS`).
    */
-  game_type: "game";
+  game_type: LabelPointSeedGameType;
   status: "unchanged";
   /** The point's fields above (serve_side null), frozen for Reset. */
   seed: LabelPointSeedValues;
@@ -364,6 +384,71 @@ function droppedShotType(stroke: SplitStepStroke): string | null {
   return null;
 }
 
+/** What the seed reads of the match record beside the transcript. */
+export interface LabelSeedMatch {
+  /** `matches.score`; null when the record has none. */
+  score?: MatchScore | null;
+  /** `matches.format.best_of`, else 3 — as persist-transcript.ts reads it. */
+  bestOf?: number;
+}
+
+/** The game shape a point of the match-tiebreak set is seeded with. */
+interface MatchTiebreakShape {
+  setNumber: number;
+  /** The set's first game number: the one game every point of the set takes. */
+  gameNumber: number;
+  /** Who serves each of the set's points, by `point_number` (`rotateServers`). */
+  serverByPoint: Map<number, LabelSide>;
+}
+
+/**
+ * The deciding set the entered score spells as a 10-point match tiebreak
+ * (set-scores.ts `matchTiebreakSet`), with the shape its points take: one
+ * game — the set's first game number, so the console's bands and set tally
+ * read it as the one match-tiebreak game score.ts scores — and the 1-2-2
+ * serve order from the set's first point's server. The vendor cuts a
+ * tiebreak into several "games" as the serve changes hands; the seed folds
+ * them, as "Make it a match tiebreak" does for a session seeded before this
+ * (tiebreak-fold.ts).
+ *
+ * The rotation sets each point's `server` and nothing else. A point whose
+ * strokes contradict that server is NOT switched here as the console's fold
+ * would switch it (player-swap.ts `planPlayerSwap`): at seed time the
+ * derivation's winner, folded under the entered score, outranks a serve
+ * order assumed from the first point, so the contradiction is left for the
+ * console's "serve order is off" slot (tiebreak-serve.ts) to put right.
+ * Null when the entered score names no match tiebreak or the transcript has
+ * no point in that set.
+ */
+function matchTiebreakShape(
+  transcript: Transcript,
+  match: LabelSeedMatch,
+): MatchTiebreakShape | null {
+  const setNumber = matchTiebreakSet(
+    enteredScore(null, match.score ?? null),
+    match.bestOf ?? 3,
+  );
+  if (setNumber === null) return null;
+  const inSet = transcript.points.filter((p) => p.set_number === setNumber);
+  if (inSet.length === 0) return null;
+  const first = labelSideOf(inSet[0].server_is_player1);
+  const servers = rotateServers(
+    inSet.map((p) => ({
+      status: "unchanged" as const,
+      ending: labelEnding(p.result_type),
+    })),
+    "match_tiebreak",
+    first,
+  );
+  return {
+    setNumber,
+    gameNumber: inSet[0].game_number,
+    serverByPoint: new Map(
+      inSet.map((p, i) => [p.point_number, servers[i]] as const),
+    ),
+  };
+}
+
 /**
  * Build the seed rows for one transcript: one label point per transcript point
  * and one label shot per vendor stroke in that point's rally, the transcript's
@@ -371,11 +456,18 @@ function droppedShotType(stroke: SplitStepStroke): string | null {
  * stroke the parse layer dropped as unusable is in neither. Throws when a shot
  * has no raw stroke: the transcript and the file were not built from the same
  * payload.
+ *
+ * `match` — the record's `score` and `best_of` — lets the seed type the
+ * deciding set the entered score spells as a match tiebreak
+ * (`matchTiebreakShape`); without it every point is an ordinary game.
  */
 export function buildLabelSeed(
   transcript: Transcript,
   rawStrokes: readonly RawSplitStepStroke[],
+  match: LabelSeedMatch = {},
 ): LabelSeed {
+  const tiebreak = matchTiebreakShape(transcript, match);
+
   // The copy of a repeated event the parse layer kept, so the frozen vendor
   // row agrees with the stroke the transcript was built from.
   const rawById = new Map<number, RawSplitStepStroke>();
@@ -442,25 +534,37 @@ export function buildLabelSeed(
       };
     });
 
+    const inTiebreak =
+      tiebreak !== null && point.set_number === tiebreak.setNumber;
     const row = {
       set_number: point.set_number,
-      game_number: point.game_number,
-      server: labelSideOf(point.server_is_player1),
+      // One game for the whole match tiebreak, and its 1-2-2 serve order:
+      // in the frozen seed too, so the rows read `unchanged` and Reset puts
+      // the tiebreak's shape back, not the vendor's split games.
+      game_number: inTiebreak ? tiebreak.gameNumber : point.game_number,
+      server: inTiebreak
+        ? (tiebreak.serverByPoint.get(point.point_number) ??
+          labelSideOf(point.server_is_player1))
+        : labelSideOf(point.server_is_player1),
       winner: resolved.get(point.rally_id)
         ? labelSideOf(point.won_by_player1)
         : null,
       ending: labelEnding(point.result_type),
       ended_by: endedBy(ordered),
     };
+    const game_type: LabelPointSeedGameType = inTiebreak
+      ? "match_tiebreak"
+      : "game";
     return {
       point_index: index,
       vendor_rally_ids: [point.rally_id],
       ...row,
-      game_type: "game",
+      game_type,
       status: "unchanged",
       // serve_side is never seeded (the column stays null), but the frozen
-      // seed names it so Reset clears a serve side the labeller set.
-      seed: { ...row, serve_side: null },
+      // seed names it so Reset clears a serve side the labeller set. The
+      // game type rides along for the opening scorecard (scorecard.ts).
+      seed: { ...row, serve_side: null, game_type },
       shots,
     };
   });

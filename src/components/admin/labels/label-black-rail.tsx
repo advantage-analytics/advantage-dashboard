@@ -140,6 +140,7 @@ export function LabelBlackRail({
   points,
   scores,
   adScoring = true,
+  matchTiebreakSet = null,
   playOnLets,
   names,
   marks = null,
@@ -207,6 +208,12 @@ export function LabelBlackRail({
   /** `labelScores(points, adScoring)`, computed once by the console. */
   scores: LabelScores;
   adScoring?: boolean;
+  /**
+   * The deciding set the entered score spells as a match tiebreak
+   * (set-scores.ts `matchTiebreakSet`), computed once by the console: the
+   * fold offers it and the shift and pull slots leave it alone.
+   */
+  matchTiebreakSet?: number | null;
   /** `session.playOnLets`: false offers `Let` on a serve row's result. */
   playOnLets?: boolean;
   names: SideNames;
@@ -351,6 +358,7 @@ export function LabelBlackRail({
       points,
       scores: pointScores,
       adScoring,
+      matchTiebreakSet,
       playOnLets,
       tone,
     }),
@@ -370,6 +378,7 @@ export function LabelBlackRail({
       points,
       pointScores,
       adScoring,
+      matchTiebreakSet,
       playOnLets,
       tone,
     ],
@@ -383,16 +392,17 @@ export function LabelBlackRail({
     () => openPointSuggestions(points, marks),
     [points, marks],
   );
-  // The tiebreak at 6–6, by the first point it folds: on editable sessions.
+  // The tiebreak at 6–6 and the entered match tiebreak, by the first point
+  // each folds: on editable sessions.
   const foldBefore = useMemo(
     () =>
       new Map(
-        (editable ? tiebreakFolds(points, adScoring) : []).map((fold) => [
-          fold.pointIds[0],
-          fold,
-        ]),
+        (editable
+          ? tiebreakFolds(points, adScoring, matchTiebreakSet)
+          : []
+        ).map((fold) => [fold.pointIds[0], fold]),
       ),
-    [editable, points, adScoring],
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // A game band in the air, and the point its drop would land above — set
   // only where `planGameBoundary` has something to move.
@@ -439,14 +449,20 @@ export function LabelBlackRail({
   // The games that run over, by their first leftover point. Read off the
   // labeller's own rows, so on every editable session — marks on or off.
   const overflowBefore = useMemo(
-    () => (editable ? overflowBeforePoints(points, adScoring) : NO_OVERFLOW),
-    [editable, points, adScoring],
+    () =>
+      editable
+        ? overflowBeforePoints(points, adScoring, matchTiebreakSet)
+        : NO_OVERFLOW,
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // The games that end short, by their last live point. On the same sessions
   // as the slot above.
   const underflowAfter = useMemo(
-    () => (editable ? underflowAfterPoints(points, adScoring) : NO_UNDERFLOW),
-    [editable, points, adScoring],
+    () =>
+      editable
+        ? underflowAfterPoints(points, adScoring, matchTiebreakSet)
+        : NO_UNDERFLOW,
+    [editable, points, adScoring, matchTiebreakSet],
   );
   // The chip's "Go to game": the band (or slot) carrying the game's key,
   // brought to the scroller's top.
@@ -1004,11 +1020,12 @@ export function bandOutcomeShown(
 function overflowBeforePoints(
   points: readonly LabelPoint[],
   adScoring: boolean,
+  matchTiebreakSet: number | null,
 ): ReadonlyMap<string, OverflowSlot> {
   const before = new Map<string, OverflowSlot>();
-  for (const overflow of gameOverflow(points, adScoring)) {
+  for (const overflow of gameOverflow(points, adScoring, matchTiebreakSet)) {
     const from = overflow.leftovers[0].id;
-    const plan = planGameShift(points, adScoring, from);
+    const plan = planGameShift(points, adScoring, from, matchTiebreakSet);
     before.set(from, {
       overflow,
       summary: "error" in plan ? null : plan.summary,
