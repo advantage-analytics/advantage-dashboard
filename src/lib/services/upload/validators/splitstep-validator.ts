@@ -77,23 +77,11 @@ import {
 import { normaliseReason } from "@/lib/match-video/playback-format";
 import {
   exceedsUploadLimit,
+  formatGigabytes,
   oversizeVideoMessage,
+  uploadLimitGigabytes,
 } from "@/lib/video/trim-plan";
 import type { ValidationResult } from "../types";
-
-/**
- * Render a byte count the way the vendor's limit is written.
- *
- * Decimal, not binary. `MAX_VIDEO_SIZE_BYTES` is 8e9 - 1 because the vendor's
- * bound is decimal and exclusive, so dividing by 1024³ printed a *different*
- * number than the limit it was describing: a 8.1 GB file rendered as "7.5 GB"
- * against a maximum that also rendered as "7.5 GB" — a refusal that named the
- * same figure twice and gave the user nothing to act on. It also disagreed
- * with the "Under 8 GB" the requirements panel shows two inches away.
- */
-function formatGigabytes(bytes: number): string {
-  return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-}
 
 /**
  * "a or b" for two, "a, b, c or d" for more. The allowlist grew from two
@@ -307,7 +295,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     // A notice, not a warning: nothing about the file is at risk, and a
     // warning would turn the resolution row yellow over its size.
     notices.push(
-      `This video is ${formatGigabytes(probe.sizeBytes)}, over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB limit, so it will be compressed in this tab when the match is saved, then uploaded. Keep the tab open: a full match can take a while.`,
+      `This video is ${formatGigabytes(probe.sizeBytes)}, over the ${uploadLimitGigabytes()} limit, so it will be compressed in this tab when the match is saved, then uploaded. Keep the tab open: a full match can take a while.`,
     );
   } else {
     const conversion = conversionNotice(probe);

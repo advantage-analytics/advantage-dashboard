@@ -127,14 +127,13 @@ export function decideTrim(input: TrimInputs): TrimDecision {
 
   // Over the limit: a lossless cut is enough when the kept share fits; any
   // other way down is the re-encode. See the module comment.
+  const copyFits =
+    !wholeClip &&
+    end > start &&
+    remuxedSizeEstimate(input, start, end) <= TRANSCODE_MAX_OUTPUT_BYTES;
   const shrink =
     exceedsUploadLimit(input.fileSizeBytes) &&
-    (Boolean(input.forceReencode) ||
-      !(
-        !wholeClip &&
-        end > start &&
-        remuxedSizeEstimate(input, start, end) <= TRANSCODE_MAX_OUTPUT_BYTES
-      ));
+    (Boolean(input.forceReencode) || !copyFits);
   const reencode = Boolean(input.normalise) || shrink;
 
   if (shrink && input.canTranscode !== true) {
@@ -190,6 +189,21 @@ export function decideTrim(input: TrimInputs): TrimDecision {
   return { kind: "remux", startSeconds: start, endSeconds: end };
 }
 
+/**
+ * Render a byte count the way the vendor's limit is written: decimal, not
+ * binary. `MAX_VIDEO_SIZE_BYTES` is 8e9 - 1 because the vendor's bound is
+ * decimal and exclusive, so dividing by 1024³ printed a different number than
+ * the limit it described ("7.5 GB" against a "7.5 GB" maximum).
+ */
+export function formatGigabytes(bytes: number): string {
+  return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+}
+
+/** The upload limit as the whole number the requirements panel shows. */
+export function uploadLimitGigabytes(): string {
+  return `${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB`;
+}
+
 /** Whether a file is too large to upload as it is. */
 export function exceedsUploadLimit(sizeBytes: number): boolean {
   return sizeBytes > MAX_VIDEO_SIZE_BYTES;
@@ -204,7 +218,6 @@ export function oversizeVideoMessage(
   sizeBytes: number,
   reason: TrimSkipReason | null,
 ): string {
-  const gb = (bytes: number) => `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   const why =
     reason === "no-encoder"
       ? "this browser can't compress this video"
@@ -213,7 +226,7 @@ export function oversizeVideoMessage(
         : reason === null
           ? "this browser can't read it to compress it"
           : "compressing it in this tab didn't work";
-  return `This video is ${gb(sizeBytes)}, over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB limit, and ${why}. Export it at 1080p as an MP4 (H.264, constant frame rate) under the limit and add it again.`;
+  return `This video is ${formatGigabytes(sizeBytes)}, over the ${uploadLimitGigabytes()} limit, and ${why}. Export it at 1080p as an MP4 (H.264, constant frame rate) under the limit and add it again.`;
 }
 
 /** A copy-only cut's size: the kept share of the file, plus container slack. */
