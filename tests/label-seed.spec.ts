@@ -8,9 +8,9 @@ import {
   BASELINE_M,
   buildTranscript,
   DERIVATION_VERSION,
-  type MatchScore,
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
+import type { MatchScore } from "@/lib/services/labels/session";
 import {
   buildLabelSeed,
   endedBy,
@@ -273,10 +273,13 @@ test.describe("buildLabelSeed", () => {
 test.describe("a deciding set the entered score spells as a match tiebreak", () => {
   // The fixture's third set (6–0 as the vendor's games fold it) entered as
   // the wizard stores a 10-point match tiebreak: 1–0 games in the deciding
-  // set. The vendor still cut it into several games.
+  // set, its points in the tiebreak arrays. The vendor still cut it into
+  // several games.
   const ENTERED: MatchScore = {
     player1: [SCORE.player1[0], SCORE.player1[1], 1],
     player2: [SCORE.player2[0], SCORE.player2[1], 0],
+    player1_tiebreaks: [null, null, 10],
+    player2_tiebreaks: [null, null, 6],
   };
   const typed = buildLabelSeed(transcript, clean, {
     score: ENTERED,
@@ -337,11 +340,19 @@ test.describe("a deciding set the entered score spells as a match tiebreak", () 
     ]);
   });
 
-  test("a record with no match tiebreak, no record at all, or a tiebreak set the transcript never reaches, types nothing", () => {
+  test("a record with no match tiebreak, a retirement, no record at all, or a tiebreak set the transcript never reaches, types nothing", () => {
     expect(
       buildLabelSeed(transcript, clean, { score: SCORE, bestOf: 3 }),
     ).toEqual(seed);
     expect(buildLabelSeed(transcript, clean, { score: null })).toEqual(seed);
+    // The same 1–0 third set with no tiebreak points is a retirement.
+    const retired: MatchScore = {
+      player1: ENTERED.player1,
+      player2: ENTERED.player2,
+    };
+    expect(
+      buildLabelSeed(transcript, clean, { score: retired, bestOf: 3 }),
+    ).toEqual(seed);
     // Best of 5 with a 1–0 third set: not the deciding set.
     expect(
       buildLabelSeed(transcript, clean, { score: ENTERED, bestOf: 5 }),
@@ -350,6 +361,8 @@ test.describe("a deciding set the entered score spells as a match tiebreak", () 
     const fourth: MatchScore = {
       player1: [...SCORE.player1, 1],
       player2: [...SCORE.player2, 0],
+      player1_tiebreaks: [null, null, null, 10],
+      player2_tiebreaks: [null, null, null, 7],
     };
     expect(
       buildLabelSeed(transcript, clean, { score: fourth, bestOf: 5 }),
@@ -709,15 +722,16 @@ test.describe("seedLabelSession", () => {
 });
 
 test.describe("seedLabelSessionForJob and the entered score", () => {
-  test("the match row's score and best_of reach the seed: a 1–0 deciding set seeds as a match tiebreak", async () => {
+  const TIEBREAK_RECORD = {
+    player1: [SCORE.player1[0], SCORE.player1[1], 1],
+    player2: [SCORE.player2[0], SCORE.player2[1], 0],
+    player1_tiebreaks: [null, null, 10],
+    player2_tiebreaks: [null, null, 8],
+  };
+
+  test("the match row's score and best_of reach the seed: a 1–0 deciding set with its points seeds as a match tiebreak", async () => {
     const fake = fakeClient({
-      match: {
-        ...MATCH,
-        score: {
-          player1: [SCORE.player1[0], SCORE.player1[1], 1],
-          player2: [SCORE.player2[0], SCORE.player2[1], 0],
-        },
-      },
+      match: { ...MATCH, score: TIEBREAK_RECORD },
     });
     const result = await seedWith(fake);
     expect(result).toEqual({ sessionId: "new-session", existing: false });
@@ -737,5 +751,37 @@ test.describe("seedLabelSessionForJob and the entered score", () => {
     ).toBe(true);
     // One read of the match, as before: the transcript's own.
     expect(fake.reads.filter((t) => t === "matches")).toHaveLength(1);
+  });
+
+  test("best_of is read as labels-server's `readBestOf` reads it: a format without one is best of 3", async () => {
+    const typesOf = async (format: unknown) => {
+      const fake = fakeClient({
+        match: {
+          ...MATCH,
+          score: TIEBREAK_RECORD,
+          format: format as typeof MATCH.format,
+        },
+      });
+      expect(await seedWith(fake)).toEqual({
+        sessionId: "new-session",
+        existing: false,
+      });
+      const rows = fake.writes
+        .filter((w) => w.table === "label_points")
+        .flatMap((w) => w.rows as Array<Record<string, unknown>>);
+      return new Set(
+        rows.filter((row) => row.set_number === 3).map((row) => row.game_type),
+      );
+    };
+    // No `best_of`, a null format, a malformed one: 3, so set 3 decides.
+    expect(await typesOf({ ad_scoring: true })).toEqual(
+      new Set(["match_tiebreak"]),
+    );
+    expect(await typesOf(null)).toEqual(new Set(["match_tiebreak"]));
+    expect(await typesOf({ best_of: "3" })).toEqual(
+      new Set(["match_tiebreak"]),
+    );
+    // Best of 5: the third set is not the deciding one.
+    expect(await typesOf({ best_of: 5 })).toEqual(new Set(["game"]));
   });
 });

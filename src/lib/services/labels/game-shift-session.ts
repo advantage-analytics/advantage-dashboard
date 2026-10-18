@@ -16,17 +16,12 @@
 
 import { planTiebreakFold, tiebreakFolds } from "./tiebreak-fold";
 import { readAllPages } from "@/lib/data/admin-range-read";
-import {
-  parseFinalScore,
-  parseMatchScore,
-  readBestOf,
-} from "@/lib/data/labels-server";
-import { enteredScore, matchTiebreakSet } from "./set-scores";
+import { parseMatchScore, readBestOf } from "@/lib/data/labels-server";
+import { matchTiebreakSet } from "./set-scores";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   readJobAdScoring,
   readFormatAdScoring,
-  readMatchAdScoring,
   resolveLabelAdScoring,
 } from "./ad-scoring";
 import {
@@ -99,8 +94,6 @@ interface ShiftSessionRow {
   ad_scoring: boolean | null;
   job_id: string | null;
   match_id: string | null;
-  /** `label_sessions.final_score` (jsonb), the entered score's fallback. */
-  final_score?: unknown;
 }
 
 /** The match row the fold reads: the entered score and the format. */
@@ -162,15 +155,18 @@ type GamePlan =
   | { error: string };
 
 /**
- * The run both writes share: the session's gate and scoring in one read, the
- * points, the plan — twice when a point changes server — then the grouped
- * writes and the flipped strokes. `plan` is the pure rule over the rows.
+ * The run every write here shares: the session's gate and scoring in one
+ * read, the points, the plan — twice when a point changes server — then the
+ * grouped writes and the flipped strokes. `plan` is the pure rule over the
+ * rows.
  *
- * `readScore` reads the match's `score` beside its `format` (one read, in
- * place of the scoring fallback's) and hands the plan the deciding set the
- * entered score spells as a match tiebreak (set-scores.ts
- * `matchTiebreakSet`); without it the plan is handed null and the match row
- * is read only when the scoring falls back to it, as before.
+ * The match row is read once, its `score` beside its `format` (`readMatchScore`,
+ * in place of the scoring fallback's own read): the format is the scoring's
+ * last fallback, and the score hands the plan the deciding set the match
+ * record spells as a match tiebreak (set-scores.ts `matchTiebreakSet`) —
+ * the same set the console plans with, so the shift and pull leave its
+ * vendor-cut games alone as the console's slots do. A session with no match
+ * reads nothing and the plan is handed null.
  */
 async function runGamePlan(
   supabase: AdminClient,
@@ -181,12 +177,11 @@ async function runGamePlan(
     matchTiebreakSet: number | null,
   ) => GamePlan,
   failed: string,
-  options: { readScore?: boolean } = {},
 ): Promise<LabelGameShiftResult> {
   // One read of the session: its gate and what its scoring resolves from.
   const { data: session, error: sessionError } = await supabase
     .from("label_sessions")
-    .select("status, ad_scoring, job_id, match_id, final_score")
+    .select("status, ad_scoring, job_id, match_id")
     .eq("id", sessionId)
     .maybeSingle<ShiftSessionRow>();
   if (sessionError) {
@@ -203,11 +198,8 @@ async function runGamePlan(
       .order("point_index")
       .returns<GameRow[]>(),
     readJobAdScoring(supabase, session),
-    // The match's format, the last fallback, beside the job's — with its
-    // score when the plan reads the entered score.
-    options.readScore
-      ? readMatchScore(supabase, session.match_id)
-      : readMatchAdScoring(supabase, session),
+    // The match's score and format in one read, beside the job's.
+    readMatchScore(supabase, session.match_id),
   ]);
   if (job.error) {
     return { error: `Could not read the job's scoring: ${job.error.message}` };
@@ -227,15 +219,10 @@ async function runGamePlan(
     job.data?.ad_scoring,
     readFormatAdScoring(match.data?.format),
   );
-  const tiebreakSet = options.readScore
-    ? matchTiebreakSet(
-        enteredScore(
-          parseFinalScore(session.final_score ?? null),
-          parseMatchScore((match.data as MatchScoreRow | null)?.score ?? null),
-        ),
-        readBestOf(match.data?.format),
-      )
-    : null;
+  const tiebreakSet = matchTiebreakSet(
+    parseMatchScore(match.data?.score ?? null),
+    readBestOf(match.data?.format),
+  );
 
   // The plan with no shots yet says whether any point moves under a new
   // server. Only then are shots read — the whole session's, not the moved
@@ -309,7 +296,8 @@ export async function writeLabelGameShift(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => planGameShift(points, adScoring, fromPointId),
+    (points, adScoring, tiebreakSet) =>
+      planGameShift(points, adScoring, fromPointId, tiebreakSet),
     "Could not move the points",
   );
 }
@@ -365,7 +353,6 @@ export async function writeLabelTiebreakFold(params: {
       return planTiebreakFold(points, fold);
     },
     "Could not make the tiebreak",
-    { readScore: true },
   );
 }
 
@@ -395,8 +382,8 @@ export async function writeLabelGamePull(params: {
   return runGamePlan(
     params.supabase,
     sessionId,
-    (points, adScoring) => {
-      const plan = planGamePull(points, key, adScoring);
+    (points, adScoring, tiebreakSet) => {
+      const plan = planGamePull(points, key, adScoring, tiebreakSet);
       return "kind" in plan ? { error: NO_PULL } : plan;
     },
     "Could not pull the points in",

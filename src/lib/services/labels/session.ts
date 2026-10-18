@@ -40,8 +40,8 @@ export type {
  * them when it has them — one entry per set, null for a set with no
  * tiebreak. The wizard spells a deciding-set match tiebreak as a set of 1–0
  * / 0–1 games with its points in these arrays (ScoreBlock.tsx
- * `isTiebreakSet`), so set-scores.ts `matchTiebreakSet` reads the games and
- * never needs the points.
+ * `isTiebreakSet`), and set-scores.ts `matchTiebreakSet` needs both halves:
+ * a 1–0 deciding set with no tiebreak points is a retirement, not a tiebreak.
  */
 export interface MatchScore extends FoldedMatchScore {
   player1_tiebreaks?: (number | null)[];
@@ -241,11 +241,22 @@ export function isLiveShot(
   return shot.status !== "deleted" && !(ghosts && isGhostShot(shot));
 }
 
+/** What `liveShotsInOrder` reads of a stroke: whether it is live, and its order. */
+export type LiveOrderableShot = Pick<
+  LabelShot,
+  | "id"
+  | "videoTime"
+  | "eventId"
+  | "siteRemoval"
+  | "siteRemovalRestoredAt"
+  | "status"
+>;
+
 /** The point's live strokes (`isLiveShot`) in video order. */
-export function liveShotsInOrder(
-  point: { shots: readonly LabelShot[] },
+export function liveShotsInOrder<T extends LiveOrderableShot>(
+  point: { shots: readonly T[] },
   ghosts: boolean,
-): LabelShot[] {
+): T[] {
   return orderLabelShots(
     point.shots.filter((shot) => isLiveShot(shot, ghosts)),
   );

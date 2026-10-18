@@ -37,10 +37,8 @@ import {
 } from "@/lib/services/labels/session";
 import { pointChanged } from "@/lib/services/labels/marks-state";
 import { pointResetScope } from "@/lib/services/labels/reset";
-import {
-  tiebreakTarget,
-  type TiebreakFold,
-} from "@/lib/services/labels/tiebreak-fold";
+import { TIEBREAK_TARGET } from "@/lib/services/labels/score";
+import type { TiebreakFold } from "@/lib/services/labels/tiebreak-fold";
 import {
   tiebreakServeReason,
   type TiebreakServeOrder,
@@ -692,7 +690,7 @@ export const BlackTiebreakFold = memo(function BlackTiebreakFold({
   const games = first === last ? `Game ${first}` : `Games ${first}–${last}`;
   const count = `${fold.points.p1}–${fold.points.p2}`;
   const match = fold.type === "match_tiebreak";
-  const target = tiebreakTarget(fold.type);
+  const target = TIEBREAK_TARGET[fold.type];
   const reason = fold.winner
     ? `${games} make ${count}, ${edit.names[fold.winner]} first to ${target}`
     : `${games} make ${count}, nobody to ${target} yet`;

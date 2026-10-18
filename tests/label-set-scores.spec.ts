@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { labelScores, type ScorablePoint } from "@/lib/services/labels/score";
-import type { LabelSide } from "@/lib/services/labels/session";
+import type { LabelSide, MatchScore } from "@/lib/services/labels/session";
 import { parseMatchScore } from "@/lib/data/labels-server";
 import {
   enteredScore,
@@ -357,81 +357,138 @@ test.describe("matchTiebreakSet", () => {
     player1_tiebreaks: [5, null, 8],
     player2_tiebreaks: [7, null, 10],
   };
+  const score = (
+    player1: number[],
+    player2: number[],
+    tiebreaks?: [(number | null)[], (number | null)[]],
+  ): MatchScore => ({
+    player1,
+    player2,
+    ...(tiebreaks
+      ? { player1_tiebreaks: tiebreaks[0], player2_tiebreaks: tiebreaks[1] }
+      : {}),
+  });
 
   test("the exact entered score: a 0–1 third set with its points 8–10 is set 3", () => {
-    const score = parseMatchScore(RECORD);
-    expect(score).toEqual(RECORD);
-    expect(matchTiebreakSet(enteredScore(null, score), 3)).toBe(3);
-    // The games alone say so — the tiebreak points are not required.
+    const parsed = parseMatchScore(RECORD);
+    expect(parsed).toEqual(RECORD);
+    expect(matchTiebreakSet(parsed, 3)).toBe(3);
+    // Player 1 taking it reads the same way, and a 7-point match tiebreak
+    // counts: the winner's points need only reach 7.
     expect(
       matchTiebreakSet(
-        enteredScore(null, { player1: [6, 6, 0], player2: [7, 3, 1] }),
+        score(
+          [7, 3, 1],
+          [6, 6, 0],
+          [
+            [7, null, 10],
+            [5, null, 8],
+          ],
+        ),
         3,
       ),
     ).toBe(3);
-    // Player 1 taking it reads the same way.
     expect(
       matchTiebreakSet(
-        [
-          [7, 6],
-          [3, 6],
-          [1, 0],
-        ],
+        score(
+          [7, 3, 1],
+          [6, 6, 0],
+          [
+            [7, null, 7],
+            [5, null, 3],
+          ],
+        ),
         3,
       ),
     ).toBe(3);
   });
 
-  test("the console's own final_score (games only) triggers the rule where it is the source", () => {
+  test("a 1–0 deciding set with no tiebreak points is a retirement, not a match tiebreak", () => {
+    // 6–4, 3–6, 1–0 ret.: the games alone never say tiebreak.
+    expect(matchTiebreakSet(score([6, 3, 1], [4, 6, 0]), 3)).toBeNull();
+    // Arrays present but the deciding set's entry null: the same retirement.
+    expect(
+      matchTiebreakSet(
+        score(
+          [6, 3, 1],
+          [4, 6, 0],
+          [
+            [null, null, null],
+            [null, null, null],
+          ],
+        ),
+        3,
+      ),
+    ).toBeNull();
+    // The loser's points entered, the winner's missing or short of 7: not one.
+    expect(
+      matchTiebreakSet(
+        score(
+          [6, 3, 1],
+          [4, 6, 0],
+          [
+            [null, null, null],
+            [null, null, 5],
+          ],
+        ),
+        3,
+      ),
+    ).toBeNull();
+    expect(
+      matchTiebreakSet(
+        score(
+          [6, 3, 1],
+          [4, 6, 0],
+          [
+            [null, null, 6],
+            [null, null, 4],
+          ],
+        ),
+        3,
+      ),
+    ).toBeNull();
+  });
+
+  test("the console's own final_score is games only: nothing is inferred from it", () => {
+    // `enteredScore` folds it into pairs for the set tally, but the match
+    // tiebreak is read from the record alone — a session with no record has
+    // none, whatever its stored score spells.
     const stored = [
       [6, 7],
       [6, 3],
       [1, 0],
     ];
-    expect(matchTiebreakSet(enteredScore(stored, null), 3)).toBe(3);
-    // The match record outranks it, as `enteredScore` always has it.
-    expect(
-      matchTiebreakSet(
-        enteredScore(stored, { player1: [6, 6, 6], player2: [7, 3, 4] }),
-        3,
-      ),
-    ).toBeNull();
+    expect(enteredScore(stored, null)).toEqual(stored);
+    expect(matchTiebreakSet(null, 3)).toBeNull();
+    // A record whose games say 1–0 with no tiebreak arrays at all: none.
+    expect(matchTiebreakSet(score([6, 6, 1], [7, 3, 0]), 3)).toBeNull();
   });
 
   test("a real third set, a best-of-5 at 1–1, a 1–0 set that is not deciding, and nothing entered", () => {
-    expect(
-      matchTiebreakSet(
-        [
-          [6, 7],
-          [6, 3],
-          [6, 4],
-        ],
-        3,
-      ),
-    ).toBeNull();
+    expect(matchTiebreakSet(score([6, 6, 6], [7, 3, 4]), 3)).toBeNull();
     // Best of 5 at one set each: the third set is not the deciding one, so
-    // a 1–0 there is not a match tiebreak.
-    expect(
-      matchTiebreakSet(
-        [
-          [6, 7],
-          [6, 3],
-          [1, 0],
-        ],
-        5,
-      ),
-    ).toBeNull();
+    // a 1–0 there is not a match tiebreak even with its points entered.
+    const tiebreakThird = score(
+      [6, 6, 1],
+      [7, 3, 0],
+      [
+        [5, null, 10],
+        [7, null, 8],
+      ],
+    );
+    expect(matchTiebreakSet(tiebreakThird, 5)).toBeNull();
     // Best of 5 at two sets each: the fifth is, whether entered as the
     // fifth of five or as the last of a level match.
     expect(
       matchTiebreakSet(
-        [
-          [6, 7],
-          [6, 3],
-          [4, 6],
-          [6, 4],
-          [0, 1],
-        ],
+        score(
+          [6, 6, 4, 6, 0],
+          [7, 3, 6, 4, 1],
+          [
+            [5, null, null, null, 8],
+            [7, null, null, null, 10],
+          ],
+        ),
         5,
       ),
     ).toBe(5);
@@ -439,24 +496,32 @@ test.describe("matchTiebreakSet", () => {
     // deciding — an unfinished set entered as 1–0 stays a set of games.
     expect(
       matchTiebreakSet(
-        [
-          [1, 0],
-          [6, 4],
-        ],
+        score(
+          [1, 6],
+          [0, 4],
+          [
+            [10, null],
+            [8, null],
+          ],
+        ),
         3,
       ),
     ).toBeNull();
     expect(
       matchTiebreakSet(
-        [
-          [6, 4],
-          [1, 0],
-        ],
+        score(
+          [6, 1],
+          [4, 0],
+          [
+            [null, 10],
+            [null, 8],
+          ],
+        ),
         3,
       ),
     ).toBeNull();
     expect(matchTiebreakSet(null, 3)).toBeNull();
-    expect(matchTiebreakSet([], 3)).toBeNull();
+    expect(matchTiebreakSet(score([], []), 3)).toBeNull();
   });
 
   test("the set tally stays games-only: one decided match tiebreak is the 1–0 the record entered", () => {

@@ -31,7 +31,7 @@ import {
   type LabelSpin,
   type MatchScore,
 } from "./session";
-import { enteredScore, matchTiebreakSet } from "./set-scores";
+import { matchTiebreakSet } from "./set-scores";
 
 export type LabelSide = "p1" | "p2";
 
@@ -424,10 +424,7 @@ function matchTiebreakShape(
   transcript: Transcript,
   match: LabelSeedMatch,
 ): MatchTiebreakShape | null {
-  const setNumber = matchTiebreakSet(
-    enteredScore(null, match.score ?? null),
-    match.bestOf ?? 3,
-  );
+  const setNumber = matchTiebreakSet(match.score ?? null, match.bestOf ?? 3);
   if (setNumber === null) return null;
   const inSet = transcript.points.filter((p) => p.set_number === setNumber);
   if (inSet.length === 0) return null;

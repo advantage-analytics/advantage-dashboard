@@ -232,7 +232,6 @@ import {
   type FlagStop,
 } from "@/lib/services/labels/flag-nav";
 import {
-  enteredScore,
   matchTiebreakSet,
   sessionScoreMismatch,
 } from "@/lib/services/labels/set-scores";
@@ -519,17 +518,13 @@ export function LabelConsole({
     finalScore: session.finalScore,
     videoEndsEarly: session.videoEndsEarly,
   });
-  // The deciding set the entered score — the match record's, else the
-  // labeller's own reading — spells as a 10-point match tiebreak
-  // (set-scores.ts). "Make it a match tiebreak" offers to fold it, and the
-  // shift and pull slots leave its vendor-cut games alone.
+  // The deciding set the match record spells as a 10-point match tiebreak
+  // (set-scores.ts) — never the labeller's own `final_score`, which is games
+  // only. "Make it a match tiebreak" offers to fold it, and the shift and
+  // pull slots leave its vendor-cut games alone.
   const matchTiebreakSetNumber = useMemo(
-    () =>
-      matchTiebreakSet(
-        enteredScore(sessionFields.finalScore, session.matchScore),
-        session.bestOf,
-      ),
-    [sessionFields.finalScore, session.matchScore, session.bestOf],
+    () => matchTiebreakSet(session.matchScore, session.bestOf),
+    [session.matchScore, session.bestOf],
   );
   // The current point while nothing is playing: see the file comment.
   const [restPointId, setRestPointId] = useState<string | null>(() =>
@@ -1710,7 +1705,11 @@ export function LabelConsole({
         player.current?.seekTo(shot.videoTime);
       }
     } else {
+      // A step about no stroke (a winner pick with nothing to play back, the
+      // game order): the stroke the last answer placed must not stay selected,
+      // or the block would keep asking where it was hit.
       setArmedSlot(null);
+      setPlacement(NO_PLACEMENT);
       if (film === null) seekToPointStart(point);
     }
     if (film && player.current) {
@@ -2735,18 +2734,20 @@ export function LabelConsole({
     const next = nextPlacement(placement, point, labelShotValues(shot));
     if (!next) return;
     stopReplay();
-    // In review mode a placement answers the inline block's stroke, and only
-    // once that stroke has both ends: a missing contact is placed first and
-    // its landing still to come must not be skipped by the advance. On the
-    // step's own stroke it notes the step; on a stroke with no step about
-    // it (the one an answer added) the console moves on regardless.
-    if (
-      reviewMode &&
-      inlineAnchor?.strokeId === shot.id &&
-      placesBothEnds(shot, next.patch)
-    ) {
-      if (step?.target.shotId === shot.id) noteAnswered();
-      else notePlaced();
+    // A placement answers the step only once its stroke has both ends: a
+    // missing contact is placed first and its landing still to come must not
+    // be skipped. On the step's own stroke the item is answered — in review
+    // mode the step is noted and the console moves on, outside it the queue
+    // only stops asking (the labeller chose this stroke; nothing lands for
+    // them). In review mode a stroke with no step about it (the one an
+    // answer added) forces the move on regardless.
+    if (placesBothEnds(shot, next.patch)) {
+      if (step?.target.shotId === shot.id) {
+        if (reviewMode) noteAnswered();
+        else closeQueuedItem();
+      } else if (reviewMode && inlineAnchor?.strokeId === shot.id) {
+        notePlaced();
+      }
     }
     setPlacement(next.state);
     void patchShot(shot.id, next.patch);
@@ -2985,6 +2986,7 @@ export function LabelConsole({
               anchor={inlineAnchor}
               placement={placement}
               editable={editable}
+              ghosts={drawsGhosts(liveMarks)}
               count={step ? stepCount(keptOpened, step) : null}
               onAnswer={operable ? answerReview : undefined}
               onEstimate={editable ? setEstimate : undefined}

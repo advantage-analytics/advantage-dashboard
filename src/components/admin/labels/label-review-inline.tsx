@@ -10,6 +10,7 @@ import {
 } from "@/lib/services/labels/review-step";
 import {
   isLiveShot,
+  liveShotsInOrder,
   type LabelPoint,
   type LabelShot,
 } from "@/lib/services/labels/session";
@@ -24,8 +25,12 @@ import {
 } from "./court-placement";
 import { BlackTextAction, type BlackTextActionInk } from "./label-black-parts";
 import { LabelCourt, type CourtStroke } from "./label-court";
-import { CourtEndControls, shankReadout } from "./label-court-panel";
-import { STROKE_LABEL, type SideNames } from "./label-format";
+import {
+  CourtEndControls,
+  TARGET_WORD,
+  shankReadout,
+} from "./label-court-panel";
+import type { SideNames } from "./label-format";
 
 /**
  * The review step, asked in the rail: one block under the stroke row the
@@ -100,13 +105,15 @@ export interface InlineReviewAnchor {
 }
 
 /**
- * Where the open point's review block goes, in review mode: under the
- * selected stroke while that is one of the point's live strokes (the step's
- * target, or the stroke an answer just added — selected on its contact once
- * saved, so the court follows it), else under the stroke the step names
- * (for a missing-shot slot, the stroke the slot follows), else at the
- * well's end for a step about no stroke. Null with nothing to ask and
- * nothing selected: no block.
+ * Where the open point's review block goes, in review mode. With a step, its
+ * own target wins: under the stroke the step names (for a missing-shot slot,
+ * the stroke the slot follows), or at the well's end for a step about no
+ * stroke — a winner pick, the game order — whatever is still selected, so
+ * the stroke the last answer placed cannot keep the block on itself and the
+ * point-level question unanswerable. With no step, under the selected stroke
+ * while that is one of the point's live strokes (the one an answer just
+ * added — selected on its contact once saved, so the court follows it).
+ * Null with nothing to ask and nothing selected: no block.
  */
 export function inlineReviewAnchor(
   point: LabelPoint,
@@ -114,15 +121,14 @@ export function inlineReviewAnchor(
   placement: PlacementState,
   ghosts: boolean,
 ): InlineReviewAnchor | null {
+  if (step) return { shotId: step.target.shotId, strokeId: step.target.shotId };
   const selected =
     placement.shotId === null
       ? null
       : (point.shots.find(
           (shot) => shot.id === placement.shotId && isLiveShot(shot, ghosts),
         ) ?? null);
-  if (selected) return { shotId: selected.id, strokeId: selected.id };
-  if (!step) return null;
-  return { shotId: step.target.shotId, strokeId: step.target.shotId };
+  return selected ? { shotId: selected.id, strokeId: selected.id } : null;
 }
 
 // ── Copy ────────────────────────────────────────────────────────────────────
@@ -133,36 +139,6 @@ export const ANSWER_INK: Record<ReviewAnswerKind, BlackTextActionInk> = {
   plain: "plain",
   dismiss: "quiet",
 };
-
-const TARGET_WORD: Record<PlacementTarget, string> = {
-  contact: "Contact",
-  landing: "Landing",
-};
-
-/** The live strokes, in the rail's numbering (1…n). */
-const liveShots = (point: LabelPoint, ghosts: boolean) =>
-  point.shots.filter((shot) => isLiveShot(shot, ghosts));
-
-/** "Shot 1 · Lee · first serve" — the stroke a step is about. */
-export function stepShotLine(
-  point: LabelPoint,
-  shotId: string | null,
-  names: SideNames,
-  ghosts = true,
-): string | null {
-  if (shotId === null) return null;
-  const live = liveShots(point, ghosts);
-  const index = live.findIndex((shot) => shot.id === shotId);
-  if (index === -1) return null;
-  const shot = live[index];
-  return [
-    `Shot ${index + 1}`,
-    shot.hitter ? names[shot.hitter] : null,
-    shot.stroke ? STROKE_LABEL[shot.stroke].toLowerCase() : null,
-  ]
-    .filter((part) => part !== null)
-    .join(" · ");
-}
 
 /** "7.1 m back · 2.4 m off centre" — a contact placed behind its baseline. */
 export function contactDepthReadout(
@@ -212,6 +188,7 @@ export function ReviewInlineBlock({
   anchor,
   placement,
   editable,
+  ghosts = true,
   count = null,
   onAnswer,
   onEstimate,
@@ -227,6 +204,12 @@ export function ReviewInlineBlock({
   placement: PlacementState;
   /** Whether a court click may write. */
   editable: boolean;
+  /**
+   * Whether the session draws the site's removed strokes as ghosts
+   * (`drawsGhosts`): the prompt numbers the stroke as the rail does, and a
+   * ghost takes no number.
+   */
+  ghosts?: boolean;
   /** "n of m" for the step; null draws none. */
   count?: { index: number; total: number } | null;
   /** Makes an answer's writes. Absent (read-only): the answers are not drawn. */
@@ -245,9 +228,11 @@ export function ReviewInlineBlock({
         ) ?? null);
   const placing = editable && stroke !== null && placement.shotId === stroke.id;
   const slide = placing && stroke ? courtSlide(placement, stroke) : null;
-  const number =
-    stroke === null ? null : liveShots(point, true).indexOf(stroke) + 1;
-  const prompt = placing ? placementPrompt(placement, number || null) : null;
+  const index =
+    stroke === null ? -1 : liveShotsInOrder(point, ghosts).indexOf(stroke);
+  const prompt = placing
+    ? placementPrompt(placement, index === -1 ? null : index + 1)
+    : null;
   const strokes: CourtStroke[] = stroke ? [{ shot: stroke }] : [];
   const score = step?.item.tone === "score";
   // The step's question, or the placement's while a stroke with no step
@@ -413,11 +398,13 @@ export function ReviewInlineBlock({
           />
         </div>
         {placing ? (
-          <CourtEndControls
-            placement={placement}
-            onTarget={onTarget}
-            onFlip={onFlip}
-          />
+          <div className="flex h-6 items-center gap-3">
+            <CourtEndControls
+              placement={placement}
+              onTarget={onTarget}
+              onFlip={onFlip}
+            />
+          </div>
         ) : null}
       </div>
     </div>

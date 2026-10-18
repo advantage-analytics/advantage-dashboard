@@ -81,6 +81,7 @@ type BlockProps = {
   anchor: { shotId: string | null; strokeId: string | null };
   placement: PlacementState;
   editable: boolean;
+  ghosts?: boolean;
   count?: { index: number; total: number } | null;
   onAnswer?: (answer: ReviewAnswer) => void;
   onEstimate?: (estimate: boolean) => void;
@@ -346,31 +347,108 @@ test.describe("the inline block", () => {
   });
 });
 
+/** A step about no stroke — a winner pick with nothing to replay. */
+const pointLevel = (step: ReviewStep): ReviewStep => ({
+  ...step,
+  target: { shotId: null, place: null, slot: null },
+  replay: null,
+});
+
 test.describe("where the block sits (`inlineReviewAnchor`)", () => {
   const point = acePoint();
   const step = stepOf(point);
   const ghosts = drawsGhosts(EMPTY_MARKS);
 
-  test("the step's stroke when nothing is selected; the selected live stroke otherwise", () => {
+  test("with a step, its own target wins — whatever is selected", () => {
     expect(inlineReviewAnchor(point, step, NO_PLACEMENT, ghosts)).toEqual({
       shotId: "s-ace",
       strokeId: "s-ace",
     });
-    // The selected stroke — the one an answer added — wins over the step's.
+    // A stroke still selected (the one the last answer placed) does not
+    // move the block off the step's stroke …
     expect(
       inlineReviewAnchor(P1, step, startPlacement("s-added", "near"), ghosts),
-    ).toEqual({ shotId: "s-added", strokeId: "s-added" });
-    // A selection that is not one of the point's live strokes is ignored.
-    expect(
-      inlineReviewAnchor(P1, step, startPlacement("s-phantom", "near"), ghosts),
     ).toEqual({ shotId: "s-ace", strokeId: "s-ace" });
+    // … and a step about no stroke sits at the well's end with it still
+    // selected, so a winner pick after a placement is answerable.
+    expect(
+      inlineReviewAnchor(
+        point,
+        pointLevel(step),
+        startPlacement("s-ace", "near"),
+        ghosts,
+      ),
+    ).toEqual({ shotId: null, strokeId: null });
   });
 
-  test("no step and nothing selected: no block", () => {
+  test("no step: the selected live stroke (the one an answer added), else no block", () => {
     expect(inlineReviewAnchor(point, null, NO_PLACEMENT, ghosts)).toBeNull();
+    expect(
+      inlineReviewAnchor(P1, null, startPlacement("s-added", "near"), ghosts),
+    ).toEqual({ shotId: "s-added", strokeId: "s-added" });
     expect(
       inlineReviewAnchor(P1, null, startPlacement("s-return", "far"), ghosts),
     ).toEqual({ shotId: "s-return", strokeId: "s-return" });
+    // A selection that is not one of the point's live strokes is ignored.
+    expect(
+      inlineReviewAnchor(P1, null, startPlacement("s-phantom", "near"), ghosts),
+    ).toBeNull();
+  });
+
+  test("a point-level step draws its answers while a stroke is still selected: the block is the step's, not the placement's", () => {
+    const step = pointLevel(stepOf(point));
+    const html = renderBlock({
+      point,
+      step,
+      anchor: { shotId: null, strokeId: null },
+      placement: startPlacement("s-ace", "near"),
+      count: { index: 2, total: 2 },
+      onAnswer: () => {},
+    });
+    expect(text(html, "data-review-question")).toBe(step.question);
+    expect(answersOf(html).map((a) => a.id)).toEqual(
+      step.answers.map((a) => a.id),
+    );
+    expect(html).toContain('data-review-inline="4"');
+    // Nothing is being placed on it: no court controls, no placing line.
+    expect(html).not.toContain("data-court-steps");
+    expect(html).not.toContain("data-review-side");
+  });
+});
+
+test.describe("the placement prompt numbers the stroke as the rail does", () => {
+  const p4 = labelSessionFixture().points.find(
+    (point) => point.id === FIXTURE_POINT_IDS.P4,
+  )!;
+  const promptOf = (shotId: string, ghosts: boolean) =>
+    text(
+      renderBlock({
+        point: p4,
+        anchor: { shotId, strokeId: shotId },
+        placement: startPlacement(shotId, "near"),
+        ghosts,
+      } as Partial<BlockProps> & { point: LabelPoint }),
+      "data-review-prompt",
+    );
+
+  test("a ghost before the stroke takes no number while ghosts are drawn, and a ghost itself has none", () => {
+    expect(promptOf("s-p4-serve", true)).toBe("Click where shot 2 was hit");
+    expect(promptOf("s-p4-serve", false)).toBe("Click where shot 3 was hit");
+    // The ghost selected while drawn as one: no number, so no prompt.
+    expect(promptOf("s-p4-ghost", true)).toBe("");
+    expect(promptOf("s-p4-ghost", false)).toBe("Click where shot 2 was hit");
+  });
+
+  test("Contact / Landing and Flip side share one 24px row, as under the court panel", () => {
+    const html = renderBlock({
+      point: p4,
+      anchor: { shotId: "s-p4-serve", strokeId: "s-p4-serve" },
+      placement: startPlacement("s-p4-serve", "near"),
+    });
+    expect(html).toContain(
+      '<div class="flex h-6 items-center gap-3"><span role="group"',
+    );
+    expect(html).toContain("data-court-flip");
   });
 
   test("the well draws it under that stroke's row, after its suggestion rows; at the end with no stroke", () => {
@@ -432,25 +510,6 @@ test("n of m counts from the point's opening total: answering moves 1 of 2 to 2 
     pointId: "p",
     total: 3,
   });
-});
-
-test("the step's shot line numbers strokes as the rail does: a ghost takes no number", () => {
-  const { stepShotLine } = createLoader().load(
-    "src/components/admin/labels/label-review-inline.tsx",
-  ) as {
-    stepShotLine: (
-      point: LabelPoint,
-      shotId: string | null,
-      names: typeof NAMES,
-      ghosts?: boolean,
-    ) => string | null;
-  };
-  const p4 = labelSessionFixture().points.find(
-    (point) => point.id === FIXTURE_POINT_IDS.P4,
-  )!;
-  expect(stepShotLine(p4, "s-p4-serve", NAMES, true)).toMatch(/^Shot 2\b/);
-  expect(stepShotLine(p4, "s-p4-serve", NAMES, false)).toMatch(/^Shot 3\b/);
-  expect(stepShotLine(p4, null, NAMES)).toBeNull();
 });
 
 test.describe("the court panel's information line (`pointInfoLine`)", () => {

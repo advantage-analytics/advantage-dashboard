@@ -66,7 +66,17 @@ export type MarkStateShot = Pick<
   LabelShot,
   "status" | "siteRemovalRestoredAt"
 > &
-  Partial<Pick<LabelShot, "afterEventId" | "eventId" | "statusBeforeDelete">> &
+  Partial<
+    Pick<
+      LabelShot,
+      | "id"
+      | "afterEventId"
+      | "eventId"
+      | "videoTime"
+      | "siteRemoval"
+      | "statusBeforeDelete"
+    >
+  > &
   ResultReadableShot;
 
 export type MarkStatePoint = Pick<
@@ -123,9 +133,15 @@ function missingShotStates(
     (s) => s.kind === "missing_shot" && s.pointId === point.id,
   );
   if (!mine?.length) return [];
+  // The rows a rule may have been handed without them read as a stroke with
+  // no id, time or site removal: live, in row order.
   const shots = point.shots.map((shot) => ({
     ...shot,
+    id: shot.id ?? "",
     afterEventId: shot.afterEventId ?? null,
+    eventId: shot.eventId ?? null,
+    videoTime: shot.videoTime ?? null,
+    siteRemoval: shot.siteRemoval ?? null,
   }));
   return mine.map((s) =>
     suggestionState(s, { dismissed: point.dismissed, shots }),

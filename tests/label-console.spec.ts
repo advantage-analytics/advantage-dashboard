@@ -903,23 +903,34 @@ test.describe("a flag jump lands on the point's review step", () => {
     consoleSource.indexOf("const pointId = jumpToPointId.current;"),
   );
 
-  test("a court click answers the step only on its own stroke, once both ends are placed", () => {
+  test("a court click answers the step only on its own stroke, once both ends are placed — closing its item outside review mode too", () => {
     const placeSource = consoleSource.slice(
       consoleSource.indexOf("  function place(point: CourtPoint)"),
       consoleSource.indexOf("  function setTarget("),
     );
-    // Only in review mode, only on the inline block's stroke, only once both
-    // ends are placed: the step's own stroke notes the step, a stroke with no
-    // step about it (the one an answer added) forces the move on.
+    // Only once both ends are placed. The step's own stroke: in review mode
+    // the step is noted (and the console moves on), outside it the queue
+    // stops asking the item and nothing lands. A stroke with no step about
+    // it (the one an answer added) forces the move on, in review mode only.
     expect(placeSource).toMatch(
-      /if \(\n\s+reviewMode &&\n\s+inlineAnchor\?\.strokeId === shot\.id &&\n\s+placesBothEnds\(shot, next\.patch\)\n\s+\) \{/,
+      /if \(placesBothEnds\(shot, next\.patch\)\) \{\n\s+if \(step\?\.target\.shotId === shot\.id\) \{\n\s+if \(reviewMode\) noteAnswered\(\);\n\s+else closeQueuedItem\(\);\n\s+\} else if \(reviewMode && inlineAnchor\?\.strokeId === shot\.id\) \{\n\s+notePlaced\(\);\n\s+\}\n\s+\}/,
     );
-    expect(placeSource).toContain(
-      "if (step?.target.shotId === shot.id) noteAnswered();",
-    );
-    expect(placeSource).toContain("else notePlaced();");
     expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
+    expect(placeSource.match(/closeQueuedItem\(\)/g)).toHaveLength(1);
     expect(placeSource.match(/notePlaced\(\)/g)).toHaveLength(1);
+  });
+
+  test("landing on a step about no stroke clears the selection, so the point-level question is the one asked", () => {
+    // The last branch — no slot, no stroke (a winner pick with nothing to
+    // replay, the game order) — lets go of the stroke the last answer placed;
+    // with it still selected the block would keep asking where it was hit.
+    expect(landSource).toMatch(
+      /\} else \{\n(\s+\/\/[^\n]*\n)*\s+setArmedSlot\(null\);\n\s+setPlacement\(NO_PLACEMENT\);\n\s+if \(film === null\) seekToPointStart\(point\);\n\s+\}/,
+    );
+    // The inline block numbers its stroke as the rail does.
+    expect(consoleSource).toMatch(
+      /<ReviewInlineBlock\n(\s+[a-zA-Z]+=\{[^\n]*\}\n)*\s+ghosts=\{drawsGhosts\(liveMarks\)\}/,
+    );
   });
 
   test("`]` and the header's flag rows are the only jumps that arm", () => {

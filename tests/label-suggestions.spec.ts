@@ -19,6 +19,7 @@ import type {
   LabelShot,
 } from "@/lib/services/labels/session";
 import {
+  DEAD_BALL_TAIL,
   applyDismiss,
   planDismiss,
   suggestionState,
@@ -356,6 +357,52 @@ test.describe("a point with several open slots", () => {
       ),
     };
     expect(suggestionState(FOUR_SLOTS[0], deletedTail)).toBe("done");
+    // The tail is the labels' own count: two strokes after the miss at most.
+    expect(DEAD_BALL_TAIL).toBe(2);
+  });
+
+  test("the tail counts LIVE strokes in rally order: a ghost is out of it while ghosts are drawn", () => {
+    const point = fourInARow();
+    // The site removed stroke 8: drawn as a ghost it is not in the rally, so
+    // only stroke 7 follows the miss and the slot after 5 is answered. With
+    // ghosts off (no marks) it is back in the rally and the slot stays open.
+    const ghostTail: LabelPoint = {
+      ...point,
+      shots: point.shots.map((s) =>
+        s.id === "s8"
+          ? {
+              ...s,
+              siteRemoval: "hit_after_fault",
+              siteRemovalRestoredAt: null,
+            }
+          : s,
+      ),
+    };
+    expect(suggestionState(FOUR_SLOTS[0], ghostTail)).toBe("done");
+    expect(suggestionState(FOUR_SLOTS[0], ghostTail, undefined, false)).toBe(
+      "open",
+    );
+    // Restored, it is live again.
+    const restored: LabelPoint = {
+      ...ghostTail,
+      shots: ghostTail.shots.map((s) =>
+        s.id === "s8" ? { ...s, siteRemovalRestoredAt: "2026-10-18" } : s,
+      ),
+    };
+    expect(suggestionState(FOUR_SLOTS[0], restored)).toBe("open");
+    // Rally order is the video's, not the rows': the same rows reversed
+    // still put three strokes after the miss.
+    const reversed: LabelPoint = {
+      ...point,
+      shots: [...point.shots].reverse(),
+    };
+    expect(suggestionState(FOUR_SLOTS[0], reversed)).toBe("open");
+    expect(
+      suggestionState(FOUR_SLOTS[0], {
+        ...reversed,
+        shots: reversed.shots.filter((s) => s.id !== "s8"),
+      }),
+    ).toBe("done");
   });
 
   test('"Missing shot?" stays open while any slot is, settles once none is', () => {

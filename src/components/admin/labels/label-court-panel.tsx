@@ -177,7 +177,8 @@ export function isPlacing(
   return editable && selectedStroke(point, placement) !== null;
 }
 
-const TARGET_WORD: Record<PlacementTarget, string> = {
+/** The end being placed, as the switch and the placing lines name it. */
+export const TARGET_WORD: Record<PlacementTarget, string> = {
   contact: "Contact",
   landing: "Landing",
 };

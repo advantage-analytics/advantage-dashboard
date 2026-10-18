@@ -12,11 +12,26 @@
  * `planDismiss`.
  */
 
-import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import type { LabelSuggestion } from "./marks";
 import type { Planned } from "./operations";
-import { isMissedResult, type LabelPoint, type LabelShot } from "./session";
+import {
+  isMissedResult,
+  liveShotsInOrder,
+  type LabelPoint,
+  type LabelShot,
+  type LiveOrderableShot,
+} from "./session";
 import { effectiveShotResult, type ResultReadableShot } from "./shot-derived";
+
+/**
+ * The most live strokes a point's end can carry after the ball that missed:
+ * the loser's swing at the dead ball, and at most one more. A "miss" with
+ * more strokes than this after it is a mis-tracked bounce, not the point's
+ * end. The labels' own constant: the derivation's `MAX_DEAD_TAIL` (flags.ts)
+ * happens to be the same number, but it bounds the vendor's stream, and
+ * this bounds the labeller's rows — the two may part.
+ */
+export const DEAD_BALL_TAIL = 2;
 
 export type SuggestionState = "open" | "dismissed" | "done";
 
@@ -50,11 +65,13 @@ export type SuggestionPoint = Pick<LabelPoint, "dismissed"> & {
   /** Read for a `missing_point`: a replayed let answers it. Optional for a shot's. */
   ending?: LabelPoint["ending"];
   /**
-   * `eventId` and the result columns are read for a `missing_shot` alone: the
-   * pair's first stroke ruled out or in the net answers it.
+   * Read for a `missing_shot` alone: `afterEventId` for the added stroke,
+   * and for the pair's first stroke ruled out or in the net at the point's
+   * end, whether each stroke is live and where it sits in the rally
+   * (`liveShotsInOrder`) and its result columns (`effectiveShotResult`).
    */
-  shots: readonly (Pick<LabelShot, "status" | "afterEventId"> &
-    Partial<Pick<LabelShot, "eventId">> &
+  shots: readonly (LiveOrderableShot &
+    Pick<LabelShot, "afterEventId"> &
     ResultReadableShot)[];
 };
 
@@ -105,10 +122,11 @@ export function addedPointBetween(
  * writes for a stroke added after it). Deleting that added stroke opens the
  * suggestion again. It is `done` too once the pair's first stroke reads out
  * or net (`effectiveShotResult`, so placed coordinates win) with no more than
- * `MAX_DEAD_TAIL` live strokes after it: the point ended on it. A miss deeper
- * in the rally answers nothing — the rally went on, so the vendor's bounce
- * was wrong, not the gap. Done outranks dismissed: the stroke is there
- * either way.
+ * `DEAD_BALL_TAIL` live strokes after it in rally order — not deleted, and
+ * not a ghost while the session draws ghosts (`ghosts`, `drawsGhosts`): the
+ * point ended on it. A miss deeper in the rally answers nothing — the rally
+ * went on, so the vendor's bounce was wrong, not the gap. Done outranks
+ * dismissed: the stroke is there either way.
  *
  * A `missing_point` is `done` once the flagged point's ending is
  * `let_replayed` — the second serve from that side was the same point played
@@ -120,6 +138,7 @@ export function suggestionState(
   suggestion: StatefulSuggestion,
   point: SuggestionPoint,
   points?: readonly SuggestionNeighbour[],
+  ghosts = true,
 ): SuggestionState {
   if (suggestion.kind === "missing_shot") {
     const after = afterEventIdOf(suggestion.key);
@@ -133,17 +152,17 @@ export function suggestionState(
     }
     // The pair's first ball out or in the net AT THE POINT'S END: the point
     // ended on it, the second stroke was a swing at a dead ball, and nothing
-    // is missing. Only while at most `MAX_DEAD_TAIL` live strokes follow it —
-    // a "miss" three or more strokes before the rally's end is a mis-tracked
-    // bounce (both coordinates read on the hitter's side), not an ending, and
-    // the gap after it is still in question.
+    // is missing. Only while at most `DEAD_BALL_TAIL` live strokes follow it
+    // in rally order — a "miss" three or more strokes before the rally's end
+    // is a mis-tracked bounce (both coordinates read on the hitter's side),
+    // not an ending, and the gap after it is still in question.
     if (after !== null) {
-      const live = point.shots.filter((shot) => shot.status !== "deleted");
+      const live = liveShotsInOrder(point, ghosts);
       const at = live.findIndex((shot) => shot.eventId === after);
       if (
         at !== -1 &&
         isMissedResult(effectiveShotResult(live[at])) &&
-        live.length - 1 - at <= MAX_DEAD_TAIL
+        live.length - 1 - at <= DEAD_BALL_TAIL
       ) {
         return "done";
       }

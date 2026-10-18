@@ -9,7 +9,8 @@
  *   folded in, game after game, until a player is first to 7 and two clear;
  * - **the match tiebreak** (`match_tiebreak`): the deciding set the entered
  *   score spells as a 10-point match tiebreak (set-scores.ts
- *   `matchTiebreakSet` — a 1–0 / 0–1 set, the wizard's convention) whose
+ *   `matchTiebreakSet` — a 1–0 / 0–1 set with its tiebreak points entered,
+ *   the wizard's convention) whose
  *   games are still ordinary ones. Its first game becomes the match tiebreak
  *   and every live point of the set folds in, until a player is first to 10
  *   and two clear. A session seeded after seed.ts learnt the convention is
@@ -206,11 +207,6 @@ export function planTiebreakFold(
     };
   });
   return { ok: true, writes, shots };
-}
-
-/** The target a fold's type is played to: 7 at 6–6, 10 in a match tiebreak. */
-export function tiebreakTarget(type: TiebreakFoldType): number {
-  return TIEBREAK_TARGET[type];
 }
 
 /**
