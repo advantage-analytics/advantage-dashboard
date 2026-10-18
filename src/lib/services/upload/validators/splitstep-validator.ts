@@ -264,6 +264,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
 
   const warnings: string[] = [];
   const notes: string[] = [];
+  const notices: string[] = [];
 
   if (fps === null) {
     // Says three things on purpose: what we could not do, that the requirement
@@ -303,8 +304,10 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
       };
     }
     // Subsumes the conversion notice: it is the same re-encode, said once.
-    warnings.push(
-      `This video is ${formatGigabytes(probe.sizeBytes)}, over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB limit, so it will be compressed to 1080p H.264 in this tab before it uploads. Keep the tab open: a full match can take a while.`,
+    // A notice, not a warning: nothing about the file is at risk, and a
+    // warning would turn the resolution row yellow over its size.
+    notices.push(
+      `This video is ${formatGigabytes(probe.sizeBytes)}, over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB limit, so it will be compressed in this tab when the match is saved, then uploaded. Keep the tab open: a full match can take a while.`,
     );
   } else {
     const conversion = conversionNotice(probe);
@@ -315,6 +318,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     success: true,
     warnings: warnings.length > 0 ? warnings : undefined,
     notes: notes.length > 0 ? notes : undefined,
+    notices: notices.length > 0 ? notices : undefined,
     details,
   };
 }

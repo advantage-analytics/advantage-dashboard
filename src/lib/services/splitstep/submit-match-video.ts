@@ -64,6 +64,16 @@ const LIVENESS_CHECK_MS = 30_000;
 const LIVENESS_COMMIT_ATTEMPTS = 3;
 
 /** Bytes moved so far, and what that implies. */
+/**
+ * Time left on a re-encode from its pace so far, or 0 while there is too
+ * little of it to say. Its rate is steady enough that a straight line holds.
+ */
+function remainingSeconds(progress: number, startedAt: number): number {
+  const elapsed = (Date.now() - startedAt) / 1000;
+  if (!startedAt || progress < 0.01 || elapsed < 15) return 0;
+  return Math.round((elapsed * (1 - progress)) / progress);
+}
+
 export interface VideoUploadProgress {
   /**
    * `preparing` while the window is being cut out of the file in the browser,
@@ -75,6 +85,11 @@ export interface VideoUploadProgress {
    * copying it: minutes of work, and worth its own word on screen.
    */
   converting?: boolean;
+  /**
+   * Set when that re-encode is there to bring a file over the upload limit
+   * under it, rather than to fix its format.
+   */
+  compressing?: boolean;
   pct: number;
   bytesUploaded: number;
   bytesTotal: number;
@@ -305,6 +320,9 @@ export async function uploadAndSubmitVideo({
 
       let lastSentTenth = -1;
       let converting = false;
+      // Over the limit, a re-encode is the compression that lets it upload.
+      const oversize = exceedsUploadLimit(pickedFile.size);
+      let convertStartedAt = 0;
       try {
         const prepared = await prepareVideoForUpload(pickedFile, {
           startSeconds: trim.startSeconds,
@@ -312,6 +330,7 @@ export async function uploadAndSubmitVideo({
           signal: controller.signal,
           onMode: (mode) => {
             converting = mode === "transcode";
+            convertStartedAt = Date.now();
           },
           onProgress: (progress) => {
             const tenth = Math.round(progress * 1000);
@@ -323,11 +342,14 @@ export async function uploadAndSubmitVideo({
               progress: {
                 stage: "preparing",
                 converting,
+                compressing: converting && oversize,
                 pct: tenth / 10,
                 bytesUploaded: 0,
                 bytesTotal: pickedFile.size,
                 speed: 0,
-                etaSeconds: 0,
+                etaSeconds: converting
+                  ? remainingSeconds(progress, convertStartedAt)
+                  : 0,
               },
             });
           },

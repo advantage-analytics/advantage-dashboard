@@ -90,7 +90,9 @@ test.describe("over the limit — shrunk in the tab when it can be", () => {
   test("a browser that can re-encode accepts it, and says it will compress", () => {
     const result = evaluateVideoProbe(probe({ ...big, canConvert: true }));
     expect(result.success).toBe(true);
-    const said = result.warnings?.join(" ") ?? "";
+    // A notice, not a warning: the requirement rows stay green.
+    expect(result.warnings).toBeUndefined();
+    const said = result.notices?.join(" ") ?? "";
     expect(said).toContain("This video is 23.0 GB, over the 8 GB limit");
     expect(said).toContain("Keep the tab open");
   });
@@ -111,7 +113,8 @@ test.describe("over the limit — shrunk in the tab when it can be", () => {
     const result = evaluateVideoProbe(
       probe({ ...big, videoCodec: "hevc", canConvert: true }),
     );
-    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings).toBeUndefined();
+    expect(result.notices).toHaveLength(1);
   });
 });
 
