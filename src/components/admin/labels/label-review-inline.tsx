@@ -104,18 +104,6 @@ export interface InlineReviewAnchor {
   strokeId: string | null;
 }
 
-/**
- * Where the open point's review block goes, in review mode. A stroke just
- * added and not yet placed comes first (`addedAndUnplaced`): the court opens
- * on it, contact first. Otherwise, with a step, its own target wins: under the stroke the step names (for a missing-shot slot,
- * the stroke the slot follows), or at the well's end for a step about no
- * stroke — a winner pick, the game order — whatever is still selected, so
- * the stroke the last answer placed cannot keep the block on itself and the
- * point-level question unanswerable. With no step, under the selected stroke
- * while that is one of the point's live strokes (the one an answer just
- * added — selected on its contact once saved, so the court follows it).
- * Null with nothing to ask and nothing selected: no block.
- */
 /** A stroke the labeller added that still lacks its contact or its landing. */
 function addedAndUnplaced(
   shot: Pick<
@@ -129,6 +117,18 @@ function addedAndUnplaced(
   return !contact || !landing;
 }
 
+/**
+ * Where the open point's review block goes, in review mode. A stroke just
+ * added and not yet placed comes first (`addedAndUnplaced`): the court opens
+ * on it, contact first. Otherwise, with a step, its own target wins: under the stroke the step names (for a missing-shot slot,
+ * the stroke the slot follows), or at the well's end for a step about no
+ * stroke — a winner pick, the game order — whatever is still selected, so
+ * the stroke the last answer placed cannot keep the block on itself and the
+ * point-level question unanswerable. With no step, under the selected stroke
+ * while that is one of the point's live strokes (the one an answer just
+ * added — selected on its contact once saved, so the court follows it).
+ * Null with nothing to ask and nothing selected: no block.
+ */
 export function inlineReviewAnchor(
   point: LabelPoint,
   step: ReviewStep | null,

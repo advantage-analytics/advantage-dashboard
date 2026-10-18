@@ -27,6 +27,7 @@ import {
   compareNullsLast,
   isLabelSpin,
   labelSideOf,
+  type LabelGameType,
   type LabelSiteRemoval,
   type LabelSpin,
   type MatchScore,
@@ -89,9 +90,6 @@ export interface LabelShotSeedValues {
   video_time: number | null;
 }
 
-/** `label_points.game_type`'s vocabulary; the type lives in session.ts. */
-export type LabelPointSeedGameType = "game" | "tiebreak" | "match_tiebreak";
-
 /** `label_points.seed`: the point's own labelled fields, as seeded. */
 export interface LabelPointSeedValues {
   set_number: number | null;
@@ -110,7 +108,7 @@ export interface LabelPointSeedValues {
    * `LABEL_POINT_SEED_FIELDS`, so it never makes a point `edited`, and Reset
    * leaves the row's type where the labeller put it.
    */
-  game_type?: LabelPointSeedGameType;
+  game_type?: LabelGameType;
 }
 
 /** One `label_shots` row before it has a session or a point id. */
@@ -161,7 +159,7 @@ export interface LabelPointSeed {
    * scorecard; a game-level annotation the `unchanged` comparison and Reset
    * leave alone (edit.ts `LABEL_POINT_SEED_FIELDS`).
    */
-  game_type: LabelPointSeedGameType;
+  game_type: LabelGameType;
   status: "unchanged";
   /** The point's fields above (serve_side null), frozen for Reset. */
   seed: LabelPointSeedValues;
@@ -549,9 +547,7 @@ export function buildLabelSeed(
       ending: labelEnding(point.result_type),
       ended_by: endedBy(ordered),
     };
-    const game_type: LabelPointSeedGameType = inTiebreak
-      ? "match_tiebreak"
-      : "game";
+    const game_type: LabelGameType = inTiebreak ? "match_tiebreak" : "game";
     return {
       point_index: index,
       vendor_rally_ids: [point.rally_id],

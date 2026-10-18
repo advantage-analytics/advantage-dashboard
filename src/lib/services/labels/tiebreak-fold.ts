@@ -42,7 +42,6 @@ import { planPlayerSwap, type ShotSwapWrite } from "./player-swap";
 import {
   isCountedPoint,
   labelScores,
-  TIEBREAK_TARGET,
   tiebreakDecided,
   type ScorablePoint,
 } from "./score";
