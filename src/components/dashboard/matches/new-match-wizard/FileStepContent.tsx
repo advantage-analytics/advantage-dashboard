@@ -70,6 +70,11 @@ export interface FileStepContentProps {
   warnings: string[];
   /** Facts about the file that are not cautions. They join row 1's line. */
   notes?: string[];
+  /**
+   * What this tab will do to the file before it uploads. Grey, under the file,
+   * in place of "Nothing is uploading yet" — it says when, too.
+   */
+  notices?: string[];
   /** Probing a video, validating or reading an export. */
   busy: boolean;
   /** Why the file was refused. */
@@ -282,6 +287,7 @@ function FileStepContentImpl({
   probe,
   warnings,
   notes = [],
+  notices = [],
   busy,
   error,
   parsingState,
@@ -530,7 +536,18 @@ function FileStepContentImpl({
             </div>
           ))}
 
-          {isVideo && warnings.length === 0 && (
+          {notices.map((n) => (
+            <div key={n} className={noteStripCls}>
+              <Info
+                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <NoticeText>{n}</NoticeText>
+            </div>
+          ))}
+
+          {isVideo && warnings.length === 0 && notices.length === 0 && (
             /* The honest thing about timing: nothing has left the machine. */
             <div className={noteStripCls}>
               <Info

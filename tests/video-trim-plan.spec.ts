@@ -4,6 +4,7 @@ import { normaliseReason } from "@/lib/match-video/playback-format";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 import {
   decideTrim,
+  exceedsUploadLimit,
   remuxedFileName,
   remuxedJobWindow,
   TRANSCODE_BITRATE_30FPS,
@@ -221,4 +222,101 @@ test("a browser that cannot re-encode still cuts a window, and says why a whole 
     kind: "skip",
     reason: "no-encoder",
   });
+});
+
+/**
+ * Over the upload limit the original can't go up, so the rules pick whichever
+ * way down is cheapest: a copy when the window alone fits, otherwise the
+ * re-encode. Shaped on a real one: 23 GB of 1080p60 H.264 over 2 h 20 min.
+ */
+const oversize = {
+  startSeconds: 0,
+  endSeconds: 8400,
+  sourceDurationSeconds: 8400,
+  fileSizeBytes: 23_000_000_000,
+  opfsAvailable: true,
+  quotaFreeBytes: 50_000_000_000,
+  normalise: null,
+  frameRate: 60,
+  canTranscode: true,
+};
+
+test("the upload limit is the vendor's decimal bound", () => {
+  expect(exceedsUploadLimit(MAX_VIDEO_SIZE_BYTES)).toBe(false);
+  expect(exceedsUploadLimit(MAX_VIDEO_SIZE_BYTES + 1)).toBe(true);
+});
+
+test("an oversize whole match is re-encoded to fit, even as H.264 1080p", () => {
+  const decision = decideTrim(oversize);
+  if (decision.kind !== "transcode") throw new Error("expected a transcode");
+  expect(decision).toMatchObject({ startSeconds: 0, endSeconds: 8400 });
+  // 2 h 20 min can't have the full 60 fps rate and stay under the limit.
+  expect(decision.videoBitrate).toBeLessThan(TRANSCODE_BITRATE_60FPS);
+  expect(decision.videoBitrate).toBeGreaterThan(6_000_000);
+  expect(((decision.videoBitrate + 320_000) / 8) * 8400).toBeLessThan(
+    MAX_VIDEO_SIZE_BYTES,
+  );
+});
+
+test("an oversize file whose window alone fits is cut without re-encoding", () => {
+  // Fifteen minutes of a 9 GB, one-hour recording: about 2.4 GB kept.
+  expect(
+    decideTrim({
+      ...oversize,
+      fileSizeBytes: 9_000_000_000,
+      sourceDurationSeconds: 3600,
+      startSeconds: 2700,
+      endSeconds: 3600,
+    }),
+  ).toEqual({ kind: "remux", startSeconds: 2700, endSeconds: 3600 });
+});
+
+test("an oversize window that still doesn't fit as a copy is re-encoded", () => {
+  // Cutting the first ten minutes of the 23 GB match keeps ~21 GB.
+  expect(decideTrim({ ...oversize, startSeconds: 600 }).kind).toBe("transcode");
+});
+
+test("an oversize file this browser can't re-encode is a skip, never a copy", () => {
+  expect(decideTrim({ ...oversize, canTranscode: false })).toEqual({
+    kind: "skip",
+    reason: "no-encoder",
+  });
+  expect(
+    decideTrim({ ...oversize, startSeconds: 600, canTranscode: false }),
+  ).toEqual({ kind: "skip", reason: "no-encoder" });
+});
+
+test("an oversize re-encode needs room for its own output", () => {
+  expect(decideTrim({ ...oversize, quotaFreeBytes: 4_000_000_000 })).toEqual({
+    kind: "skip",
+    reason: "no-quota",
+  });
+  expect(decideTrim({ ...oversize, opfsAvailable: false })).toEqual({
+    kind: "skip",
+    reason: "no-opfs",
+  });
+});
+
+test("an oversize file the worker couldn't read is a skip, not a whole-file copy", () => {
+  expect(decideTrim({ ...oversize, canTranscode: undefined })).toEqual({
+    kind: "skip",
+    reason: "no-encoder",
+  });
+});
+
+test("a copy that came out over the limit is re-encoded on the retry", () => {
+  const fits = {
+    ...oversize,
+    fileSizeBytes: 9_000_000_000,
+    sourceDurationSeconds: 3600,
+    startSeconds: 2700,
+    endSeconds: 3600,
+  };
+  expect(decideTrim(fits).kind).toBe("remux");
+  expect(decideTrim({ ...fits, forceReencode: true }).kind).toBe("transcode");
+  // Only ever for a file over the limit: a format-safe file that fits stays a copy.
+  expect(
+    decideTrim({ ...fits, fileSizeBytes: 5_000_000_000, forceReencode: true })
+      .kind,
+  ).toBe("remux");
 });

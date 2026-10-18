@@ -96,6 +96,7 @@ markers is hand-written — edit it as things move.
 | `/design/file-step` | [`src/app/design/file-step/page.tsx`](src/app/design/file-step/page.tsx) |
 | `/design/labels` | [`src/app/design/labels/page.tsx`](src/app/design/labels/page.tsx) |
 | `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
+| `/design/upload-progress` | [`src/app/design/upload-progress/page.tsx`](src/app/design/upload-progress/page.tsx) |
 | `/invitations/[inviteId]` | [`src/app/invitations/[inviteId]/page.tsx`](src/app/invitations/[inviteId]/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
 | `/m/[token]` | [`src/app/m/[token]/page.tsx`](src/app/m/[token]/page.tsx) |
