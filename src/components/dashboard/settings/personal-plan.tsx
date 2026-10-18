@@ -126,7 +126,10 @@ export function PersonalPlan({
         nextExpiry={nextExpiry ?? (added ? added.expiresAt : undefined)}
       />
 
-      {severity === "ok" && !packsOpen ? (
+      {/* An admin's free hours cover every upload, so credits would never
+          be spent — no packs to sell. */}
+      {isUnlimitedCap(freeCapSeconds) ? null : severity === "ok" &&
+        !packsOpen ? (
         <PacksLine onSeePacks={() => setPacksOpen(true)} />
       ) : (
         <PacksCard freeEnds={freeEnds} onBuy={setDialogPack} />
