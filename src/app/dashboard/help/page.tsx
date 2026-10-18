@@ -414,11 +414,12 @@ export default function HelpCenterPage() {
                   .
                 </p>
                 <p className={proseClass}>
-                  Over {MAX_VIDEO_GB} GB? In Chrome or Edge the file is
+                  Over {MAX_VIDEO_GB} GB? When your browser can, the file is
                   compressed in the tab before it uploads — keep the tab open,
-                  since a full match takes a while. In other browsers, shrink it
-                  first with a free tool like HandBrake: keep the resolution,
-                  pick a constant frame rate, export MP4 (H.264) and tick Web
+                  since a full match takes a while. When it can&rsquo;t, the
+                  wizard says so as you pick the file: shrink it first with a
+                  free tool like HandBrake — keep the resolution, pick a
+                  constant frame rate, export MP4 (H.264) and tick Web
                   Optimized.
                 </p>
               </div>

@@ -296,3 +296,27 @@ test("an oversize re-encode needs room for its own output", () => {
     reason: "no-opfs",
   });
 });
+
+test("an oversize file the worker couldn't read is a skip, not a whole-file copy", () => {
+  expect(decideTrim({ ...oversize, canTranscode: undefined })).toEqual({
+    kind: "skip",
+    reason: "no-encoder",
+  });
+});
+
+test("a copy that came out over the limit is re-encoded on the retry", () => {
+  const fits = {
+    ...oversize,
+    fileSizeBytes: 9_000_000_000,
+    sourceDurationSeconds: 3600,
+    startSeconds: 2700,
+    endSeconds: 3600,
+  };
+  expect(decideTrim(fits).kind).toBe("remux");
+  expect(decideTrim({ ...fits, forceReencode: true }).kind).toBe("transcode");
+  // Only ever for a file over the limit: a format-safe file that fits stays a copy.
+  expect(
+    decideTrim({ ...fits, fileSizeBytes: 5_000_000_000, forceReencode: true })
+      .kind,
+  ).toBe("remux");
+});

@@ -67,7 +67,22 @@ export async function prepareVideoForUpload(
   file: File,
   options: Parameters<typeof prepareInBrowser>[1],
 ): Promise<PreparedVideo> {
-  const prepared = await prepareInBrowser(file, options);
+  let prepared = await prepareInBrowser(file, options);
+  if (
+    prepared.trimmed &&
+    prepared.mode === "remux" &&
+    exceedsUploadLimit(file.size) &&
+    exceedsUploadLimit(prepared.file.size)
+  ) {
+    // The copy was estimated from the window's share of the file, and this
+    // window held more than its share. The re-encode's size follows its own
+    // bitrate, so it fits where the copy didn't.
+    await discardPreparedVideo(prepared.storageName);
+    prepared = await prepareInBrowser(file, {
+      ...options,
+      forceReencode: true,
+    });
+  }
   if (!exceedsUploadLimit(prepared.file.size)) return prepared;
   if (prepared.trimmed) await discardPreparedVideo(prepared.storageName);
   // A cut that came out larger than a picked file which already fit: send
@@ -89,6 +104,7 @@ async function prepareInBrowser(
     onProgress,
     onMode,
     signal,
+    forceReencode,
   }: {
     startSeconds: number;
     endSeconds: number;
@@ -97,6 +113,8 @@ async function prepareInBrowser(
     /** Fired once, before the first progress, when a file will be written. */
     onMode?: (mode: PreparedMode) => void;
     signal?: AbortSignal;
+    /** Re-encode even where a copy was estimated to fit; see `TrimInputs`. */
+    forceReencode?: boolean;
   },
 ): Promise<PreparedVideo> {
   if (signal?.aborted) throw new TrimCancelledError();
@@ -144,6 +162,7 @@ async function prepareInBrowser(
       startSeconds,
       endSeconds,
       outputName: storageName,
+      forceReencode,
     } satisfies TrimWorkerRequest);
   });
   worker.terminate();

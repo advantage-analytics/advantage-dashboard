@@ -106,7 +106,7 @@ test.describe("over the limit — shrunk in the tab when it can be", () => {
     }
     expect(
       evaluateVideoProbe(probe({ ...big, canConvert: false })).error,
-    ).toContain("can't compress video");
+    ).toContain("can't compress this video");
   });
 
   test("an oversize HEVC file is told once, not twice", () => {

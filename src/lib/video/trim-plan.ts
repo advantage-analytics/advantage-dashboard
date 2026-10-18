@@ -110,6 +110,11 @@ export interface TrimInputs {
    * a trimmed window is still cut rather than the whole recording uploaded.
    */
   canTranscode?: boolean;
+  /**
+   * Re-encode even where a copy-only cut was estimated to fit the upload
+   * limit: the copy was made and came out over it (`prepareVideoForUpload`).
+   */
+  forceReencode?: boolean;
 }
 
 export function decideTrim(input: TrimInputs): TrimDecision {
@@ -124,15 +129,18 @@ export function decideTrim(input: TrimInputs): TrimDecision {
   // other way down is the re-encode. See the module comment.
   const shrink =
     exceedsUploadLimit(input.fileSizeBytes) &&
-    !(
-      !wholeClip &&
-      end > start &&
-      remuxedSizeEstimate(input, start, end) <= TRANSCODE_MAX_OUTPUT_BYTES
-    );
+    (Boolean(input.forceReencode) ||
+      !(
+        !wholeClip &&
+        end > start &&
+        remuxedSizeEstimate(input, start, end) <= TRANSCODE_MAX_OUTPUT_BYTES
+      ));
   const reencode = Boolean(input.normalise) || shrink;
 
-  if (shrink && input.canTranscode === false) {
+  if (shrink && input.canTranscode !== true) {
     // A copy can't bring it under the limit, so a cut would be refused anyway.
+    // Unknown counts as no: a worker that couldn't read the track has nothing
+    // to hand an encoder, and would copy the whole file instead.
     return { kind: "skip", reason: "no-encoder" };
   }
 
@@ -199,7 +207,7 @@ export function oversizeVideoMessage(
   const gb = (bytes: number) => `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   const why =
     reason === "no-encoder"
-      ? "this browser can't compress video (Chrome or Edge can)"
+      ? "this browser can't compress this video"
       : reason === "no-opfs" || reason === "no-quota"
         ? "this browser doesn't have room to store the compressed copy"
         : reason === null

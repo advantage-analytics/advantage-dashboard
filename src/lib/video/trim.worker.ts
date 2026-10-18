@@ -233,6 +233,7 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
       normalise: sourceVideo?.normalise ?? null,
       frameRate: sourceVideo?.frameRate ?? null,
       canTranscode: sourceVideo?.canTranscode,
+      forceReencode: msg.forceReencode,
     });
     if (decision.kind === "skip" || !root) {
       post({

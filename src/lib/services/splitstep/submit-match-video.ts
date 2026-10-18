@@ -63,7 +63,6 @@ const LIVENESS_CHECK_MS = 30_000;
 /** How many times a forced check asks before going on without an answer. */
 const LIVENESS_COMMIT_ATTEMPTS = 3;
 
-/** Bytes moved so far, and what that implies. */
 /**
  * Time left on a re-encode from its pace so far, or 0 while there is too
  * little of it to say. Its rate is steady enough that a straight line holds.
@@ -74,6 +73,7 @@ function remainingSeconds(progress: number, startedAt: number): number {
   return Math.round((elapsed * (1 - progress)) / progress);
 }
 
+/** Bytes moved so far, and what that implies. */
 export interface VideoUploadProgress {
   /**
    * `preparing` while the window is being cut out of the file in the browser,
