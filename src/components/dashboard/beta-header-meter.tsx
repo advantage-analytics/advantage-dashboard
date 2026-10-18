@@ -21,6 +21,7 @@ import {
   formatHoursLong,
   formatHoursShort,
   formatResetDate,
+  isUnlimitedCap,
   monthName,
   usageFraction,
 } from "@/lib/data/usage-format";
@@ -94,6 +95,8 @@ export function BetaMeterPill({
   // always true together with `tier`, so there is one flag to read, not two.
   const teamHours = tier === "pilot";
   const ready = hours !== "loading" && hours !== null ? hours : null;
+  // An admin's personal workspace — no cap, so nothing to count down.
+  const unlimited = ready !== null && isUnlimitedCap(ready.capSeconds);
   const credits = teamHours ? 0 : (ready?.creditSeconds ?? 0);
   const freeOut = ready !== null && ready.remainingSeconds <= 0;
   // C3: free hours spent, credits carry it — the figure is credits.
@@ -121,8 +124,9 @@ export function BetaMeterPill({
     ? `${formatHoursShort(ready.remainingSeconds)} of ${formatHoursShort(ready.capSeconds)}`
     : "";
 
-  const label =
-    !ready || teamHours
+  const label = unlimited
+    ? "Unlimited video hours"
+    : !ready || teamHours
       ? `Free during the ${tier}`
       : out
         ? "Out of video hours"
@@ -137,27 +141,29 @@ export function BetaMeterPill({
       ? "Checking your video hours"
       : !ready
         ? `About the ${tier}`
-        : teamHours
-          ? out
-            ? outOfHoursDetail(
-                ready,
-                true,
-                resetsOnOrDefault() ?? formatResetDate(currentBillingMonth()),
-              )
-            : `${freeOf} video hours left`
-          : out
-            ? resetsOnOrDefault()
-              ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
-              : "Free hours have ended. Click to add credits."
-            : onCredits
-              ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} in credits left.`
-              : low
-                ? resetsOnOrDefault()
-                  ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
-                  : `${freeOf} free hours left, the last before they end. Add credits on Plan.`
-                : credits > 0
-                  ? `${freeOf} free hours left this month, plus ${formatHoursLong(credits)} in credits. Click for Plan.`
-                  : `${freeOf} free hours left this month. Click for Plan.`;
+        : unlimited
+          ? "Admin accounts have no monthly cap. Click for Plan."
+          : teamHours
+            ? out
+              ? outOfHoursDetail(
+                  ready,
+                  true,
+                  resetsOnOrDefault() ?? formatResetDate(currentBillingMonth()),
+                )
+              : `${freeOf} video hours left`
+            : out
+              ? resetsOnOrDefault()
+                ? `Free hours come back ${resetsOnOrDefault()}. Click to add credits.`
+                : "Free hours have ended. Click to add credits."
+              : onCredits
+                ? `Free hours are used for ${monthName(currentBillingMonth())}. ${formatHoursLong(credits)} in credits left.`
+                : low
+                  ? resetsOnOrDefault()
+                    ? `${freeOf} free hours left. They reset ${resetsOnOrDefault()}, or add credits on Plan.`
+                    : `${freeOf} free hours left, the last before they end. Add credits on Plan.`
+                  : credits > 0
+                    ? `${freeOf} free hours left this month, plus ${formatHoursLong(credits)} in credits. Click for Plan.`
+                    : `${freeOf} free hours left this month. Click for Plan.`;
 
   const ariaLabel =
     hours === "loading"
@@ -174,7 +180,7 @@ export function BetaMeterPill({
   // everything it reads empty (C4).
   const share = !ready
     ? 0
-    : onCredits
+    : unlimited || onCredits
       ? 1
       : 1 -
         usageFraction(
@@ -218,7 +224,9 @@ export function BetaMeterPill({
           <>
             <HoursRing tone="inverse" share={share} />
             <span className="tabular text-[12px] text-white/85">
-              {out ? (
+              {unlimited ? (
+                <span className="font-medium text-white">Unlimited</span>
+              ) : out ? (
                 <span className="font-medium text-white">Out of hours</span>
               ) : onCredits ? (
                 <>

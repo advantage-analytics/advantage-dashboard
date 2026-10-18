@@ -4,6 +4,21 @@
  */
 
 /**
+ * The cap an admin's personal workspace draws (`Workspace.unlimitedVideo`).
+ *
+ * A real number rather than Infinity because it is handed to the reserve RPCs
+ * as `p_cap_seconds integer`: int4's ceiling, so the reservation still files a
+ * ledger row and the SQL compares without overflowing. Every meter that shows
+ * a cap asks `isUnlimitedCap()` first and says "Unlimited" instead of
+ * 596,523 hours.
+ */
+export const UNLIMITED_CAP_SECONDS = 2_147_483_647;
+
+export function isUnlimitedCap(capSeconds: number): boolean {
+  return capSeconds >= UNLIMITED_CAP_SECONDS;
+}
+
+/**
  * Seconds as `H:MM` — "0:36", "62:10".
  *
  * Hours, not minutes, because the numbers this page shows sit either side of
