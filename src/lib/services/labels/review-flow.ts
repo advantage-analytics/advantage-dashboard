@@ -123,12 +123,18 @@ export function stepKey(pointId: string, item: ReviewItem): string {
   return `${pointId}/${item.id}:${open.join(",")}`;
 }
 
-/** The step's key, or "" with no step. */
+/**
+ * The step's key, or "" with no step. A "Missing shot?" asks its gaps one at
+ * a time, so the slot it is at is part of the key: answering one gap (add,
+ * dismiss) moves the step to the next and the console lands on it.
+ */
 export function stepKeyOf(
   pointId: string,
-  step: Pick<ReviewStep, "item"> | null,
+  step: (Pick<ReviewStep, "item"> & Partial<Pick<ReviewStep, "target">>) | null,
 ): string {
-  return step ? stepKey(pointId, step.item) : "";
+  if (!step) return "";
+  const slot = step.target?.slot?.afterShotId;
+  return `${stepKey(pointId, step.item)}${slot ? `>${slot}` : ""}`;
 }
 
 /**
