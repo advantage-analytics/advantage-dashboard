@@ -381,6 +381,44 @@ test.describe("where the block sits (`inlineReviewAnchor`)", () => {
     ).toEqual({ shotId: null, strokeId: null });
   });
 
+  test("a stroke just added and not yet placed owns the court, contact first, even with a step open", () => {
+    // "Add the shot" answered the step; its new stroke is what is left of it.
+    const fresh = {
+      ...P1,
+      shots: P1.shots.map((shot) =>
+        shot.id === "s-added"
+          ? {
+              ...shot,
+              contactX: null,
+              contactY: null,
+              landingX: null,
+              landingY: null,
+            }
+          : shot,
+      ),
+    };
+    expect(
+      inlineReviewAnchor(
+        fresh,
+        step,
+        startPlacement("s-added", "near"),
+        ghosts,
+      ),
+    ).toEqual({ shotId: "s-added", strokeId: "s-added" });
+    // Contact placed, landing still to come: it keeps the court.
+    const half = {
+      ...fresh,
+      shots: fresh.shots.map((shot) =>
+        shot.id === "s-added"
+          ? { ...shot, contactX: -2.3, contactY: -1.02 }
+          : shot,
+      ),
+    };
+    expect(
+      inlineReviewAnchor(half, step, startPlacement("s-added", "far"), ghosts),
+    ).toEqual({ shotId: "s-added", strokeId: "s-added" });
+  });
+
   test("no step: the selected live stroke (the one an answer added), else no block", () => {
     expect(inlineReviewAnchor(point, null, NO_PLACEMENT, ghosts)).toBeNull();
     expect(

@@ -1497,3 +1497,34 @@ test("several dismisses at once settle by merging, so none of them flickers back
   expect(fn).toContain("p.dismissed.filter((k) => k !== key)");
   expect(fn).not.toContain("dismissed: result.dismissed,");
 });
+
+test("clicking into the row a flag jump selected, or editing a cell, ends review mode", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+  const rowSource = readFileSync(
+    "src/components/admin/labels/label-black-shot-row.tsx",
+    "utf8",
+  );
+  // The already-selected row's click is the labeller's: review mode ends.
+  expect(rowSource).toMatch(
+    /if \(!selected\) onSelectShot\?\.\(shot\.id\);\n\s*else edit\.onExitReview\?\.\(\);/,
+  );
+  expect(consoleSource).toContain(
+    "const exitReview = useCallback(() => setReviewMode(false), []);",
+  );
+  expect(consoleSource).toContain("onExitReview={exitReview}");
+  // A cell editor in a row ends it too — not the review block's own controls,
+  // and before the hold check, so a held (jumped-to) point still exits.
+  const focus = consoleSource.slice(
+    consoleSource.indexOf("  function holdOnEditorFocus("),
+  );
+  const body = focus.slice(0, focus.indexOf("\n  }\n"));
+  expect(body).toContain(
+    'if (!target.closest("[data-review-inline]")) setReviewMode(false);',
+  );
+  expect(body.indexOf("setReviewMode(false)")).toBeLessThan(
+    body.indexOf("if (held) return;"),
+  );
+});

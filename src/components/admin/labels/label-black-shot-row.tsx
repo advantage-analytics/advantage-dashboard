@@ -442,8 +442,11 @@ export function BlackShotRow({
   const lit = selected || playing;
   const fault = isFault(shot);
   const changed = shot.status === "edited" || shot.status === "added";
+  // A click on the row already selected (the one a flag jump landed on) is
+  // the labeller taking it over: review mode ends, the selection stays.
   const select = () => {
     if (!selected) onSelectShot?.(shot.id);
+    else edit.onExitReview?.();
   };
   // A position cell selects the row on its own end, even when already selected.
   const pick = (target: "contact" | "landing") =>

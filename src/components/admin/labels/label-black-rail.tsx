@@ -151,6 +151,7 @@ export function LabelBlackRail({
   armedSlotAfterShotId = null,
   reviewInline = null,
   onSelectShot,
+  onExitReview,
   onPatchPoint,
   onPatchShot,
   operations,
@@ -236,6 +237,8 @@ export function LabelBlackRail({
   } | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /** A click into the row a flag jump selected: leave review mode. */
+  onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   /** Absent: no ⋯ menu, no tick, no Add shot — the rows are read-only. */
@@ -348,6 +351,7 @@ export function LabelBlackRail({
       selectedShotId,
       armedSlotAfterShotId,
       onSelectShot,
+      onExitReview,
       onPatchPoint,
       onPatchShot,
       operations: editable ? operations : undefined,
@@ -368,6 +372,7 @@ export function LabelBlackRail({
       selectedShotId,
       armedSlotAfterShotId,
       onSelectShot,
+      onExitReview,
       onPatchPoint,
       onPatchShot,
       operations,

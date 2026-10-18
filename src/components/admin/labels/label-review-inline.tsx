@@ -105,8 +105,9 @@ export interface InlineReviewAnchor {
 }
 
 /**
- * Where the open point's review block goes, in review mode. With a step, its
- * own target wins: under the stroke the step names (for a missing-shot slot,
+ * Where the open point's review block goes, in review mode. A stroke just
+ * added and not yet placed comes first (`addedAndUnplaced`): the court opens
+ * on it, contact first. Otherwise, with a step, its own target wins: under the stroke the step names (for a missing-shot slot,
  * the stroke the slot follows), or at the well's end for a step about no
  * stroke — a winner pick, the game order — whatever is still selected, so
  * the stroke the last answer placed cannot keep the block on itself and the
@@ -115,19 +116,39 @@ export interface InlineReviewAnchor {
  * added — selected on its contact once saved, so the court follows it).
  * Null with nothing to ask and nothing selected: no block.
  */
+/** A stroke the labeller added that still lacks its contact or its landing. */
+function addedAndUnplaced(
+  shot: Pick<
+    LabelShot,
+    "status" | "contactX" | "contactY" | "landingX" | "landingY"
+  >,
+): boolean {
+  if (shot.status !== "added") return false;
+  const contact = shot.contactX !== null && shot.contactY !== null;
+  const landing = shot.landingX !== null && shot.landingY !== null;
+  return !contact || !landing;
+}
+
 export function inlineReviewAnchor(
   point: LabelPoint,
   step: ReviewStep | null,
   placement: PlacementState,
   ghosts: boolean,
 ): InlineReviewAnchor | null {
-  if (step) return { shotId: step.target.shotId, strokeId: step.target.shotId };
   const selected =
     placement.shotId === null
       ? null
       : (point.shots.find(
           (shot) => shot.id === placement.shotId && isLiveShot(shot, ghosts),
         ) ?? null);
+  // A stroke the labeller has just added and not yet placed both ends of is
+  // the one to place next — contact first, then landing — whatever the step
+  // says: "Add the shot" answered the step's question, and its new stroke
+  // is what is left of it.
+  if (selected && addedAndUnplaced(selected)) {
+    return { shotId: selected.id, strokeId: selected.id };
+  }
+  if (step) return { shotId: step.target.shotId, strokeId: step.target.shotId };
   return selected ? { shotId: selected.id, strokeId: selected.id } : null;
 }
 

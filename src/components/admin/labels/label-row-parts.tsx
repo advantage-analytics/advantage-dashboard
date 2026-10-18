@@ -74,6 +74,11 @@ export interface EditContext {
   armedSlotAfterShotId?: string | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
+  /**
+   * The labeller clicked into the row a flag jump selected: their own
+   * selection now, so the console leaves review mode (nothing moves on).
+   */
+  onExitReview?: () => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
   onPatchShot?: (shotId: string, patch: LabelShotPatch) => void;
   operations?: LabelRowOperations;

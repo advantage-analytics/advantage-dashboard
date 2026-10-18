@@ -824,8 +824,10 @@ export function LabelConsole({
   // An editor opening on a point row's own cells is focus landing in a form
   // control inside that row; the row's click handler ignores cell clicks, so
   // this is where that edit holds the rail.
+  // Stable, so the rail's memoised rows keep their props between renders.
+  const exitReview = useCallback(() => setReviewMode(false), []);
+
   function holdOnEditorFocus(event: FocusEvent<HTMLDivElement>) {
-    if (held) return;
     const target = event.target as Element;
     // A dropdown's trigger is a button (`SelectEditor`), not a form control.
     if (
@@ -835,6 +837,10 @@ export function LabelConsole({
     )
       return;
     if (!target.closest("[data-point-id]")) return;
+    // An edit of the labeller's own in a row ends review mode — but not the
+    // review block's own controls (its estimate box).
+    if (!target.closest("[data-review-inline]")) setReviewMode(false);
+    if (held) return;
     holdPoint(currentPointId);
   }
 
@@ -3034,6 +3040,7 @@ export function LabelConsole({
       armedSlotAfterShotId={armedSlot?.afterShotId ?? null}
       reviewInline={reviewInline}
       onSelectShot={railHandlers.selectShot}
+      onExitReview={exitReview}
       onPatchPoint={railHandlers.patchPoint}
       onPatchShot={railHandlers.patchShot}
       operations={operable ? rowOperations : undefined}
