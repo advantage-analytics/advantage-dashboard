@@ -75,6 +75,46 @@ test.describe("size boundary — the guide's 'under 8,000,000,000 bytes'", () =>
   });
 });
 
+test.describe("over the limit — shrunk in the tab when it can be", () => {
+  const big = { sizeBytes: 23_000_000_000, videoCodec: "avc" };
+
+  test("the upload wizard leaves an oversize file to the probe", () => {
+    expect(
+      checkVideoFileBasics(
+        { name: "m.mp4", size: 23_000_000_000 },
+        { allowOversize: true },
+      ),
+    ).toBeNull();
+  });
+
+  test("a browser that can re-encode accepts it, and says it will compress", () => {
+    const result = evaluateVideoProbe(probe({ ...big, canConvert: true }));
+    expect(result.success).toBe(true);
+    const said = result.warnings?.join(" ") ?? "";
+    expect(said).toContain("This video is 23.0 GB, over the 8 GB limit");
+    expect(said).toContain("Keep the tab open");
+  });
+
+  test("one that can't, or can't read it, refuses with the fix", () => {
+    for (const canConvert of [false, null, undefined]) {
+      const result = evaluateVideoProbe(probe({ ...big, canConvert }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("over the 8 GB limit");
+      expect(result.error).toContain("under the limit and add it again");
+    }
+    expect(
+      evaluateVideoProbe(probe({ ...big, canConvert: false })).error,
+    ).toContain("can't compress video");
+  });
+
+  test("an oversize HEVC file is told once, not twice", () => {
+    const result = evaluateVideoProbe(
+      probe({ ...big, videoCodec: "hevc", canConvert: true }),
+    );
+    expect(result.warnings).toHaveLength(1);
+  });
+});
+
 test.describe("container", () => {
   test("accepts every documented container, case-insensitively", () => {
     for (const ext of ACCEPTED_VIDEO_EXTENSIONS) {

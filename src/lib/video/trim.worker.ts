@@ -45,7 +45,7 @@ import {
   type NormaliseReason,
 } from "@/lib/match-video/playback-format";
 
-import { decideTrim, type PreparedMode } from "./trim-plan";
+import { decideTrim, exceedsUploadLimit, type PreparedMode } from "./trim-plan";
 import type { TrimWorkerRequest, TrimWorkerResponse } from "./trim-protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -75,8 +75,14 @@ interface SourceVideo {
 /**
  * What the plan needs to know about the picture. Null when it cannot be read,
  * which leaves the file on the copy-only path it has always taken.
+ *
+ * `oversize` asks for the encoder facts even for a file already in the safe
+ * shape: one over the upload limit may need the re-encode to fit.
  */
-async function readSourceVideo(input: Input): Promise<SourceVideo | null> {
+async function readSourceVideo(
+  input: Input,
+  oversize: boolean,
+): Promise<SourceVideo | null> {
   try {
     const track = await input.getPrimaryVideoTrack();
     if (!track) return null;
@@ -91,7 +97,7 @@ async function readSourceVideo(input: Input): Promise<SourceVideo | null> {
     const normalise = normaliseReason({ videoCodec, codedWidth, codedHeight });
     let frameRate: number | null = null;
     let canTranscode = false;
-    if (normalise) {
+    if (normalise || oversize) {
       const [decodes, encodes] = await Promise.all([
         track.canDecode(),
         canEncodeVideo(PLAYBACK_SAFE_VIDEO_CODEC, {
@@ -101,7 +107,7 @@ async function readSourceVideo(input: Input): Promise<SourceVideo | null> {
       ]);
       canTranscode = decodes && encodes;
     }
-    if (normalise && canTranscode) {
+    if ((normalise || oversize) && canTranscode) {
       // Only read when it will be used, and only a sample: without a limit
       // this walks every packet, which for a container with no index (MKV,
       // WebM) means reading the whole file before anything is written.
@@ -212,7 +218,10 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
       quotaFreeBytes = null;
     }
 
-    const sourceVideo = await readSourceVideo(input);
+    const sourceVideo = await readSourceVideo(
+      input,
+      exceedsUploadLimit(msg.file.size),
+    );
 
     const decision = decideTrim({
       startSeconds: msg.startSeconds,

@@ -19,6 +19,14 @@
  * one file we store, send and play, so no clock moves. Never below 1080p: that
  * is the vendor's floor.
  *
+ * ── Over the upload limit ───────────────────────────────────────────────────
+ * A file over `MAX_VIDEO_SIZE_BYTES` (a long 1080p60 recording runs 20 GB and
+ * more) can't go up as shot, so it is never a skip that uploads the original.
+ * When the selected window alone fits, it is cut without re-encoding; when it
+ * doesn't, it takes the same re-encode as above, whose bitrate ceiling keeps
+ * the output inside the limit. Anything that stops either is refused by the
+ * caller (`OversizeVideoError` in trim.ts) instead of uploaded.
+ *
  * ── When we don't ───────────────────────────────────────────────────────────
  * Every "skip" uploads the original untouched and sends the vendor the window
  * as before, which is exactly the pre-trim behaviour. A skip is never an
@@ -112,11 +120,27 @@ export function decideTrim(input: TrimInputs): TrimDecision {
     start <= WHOLE_CLIP_TOLERANCE_SECONDS &&
     end >= input.sourceDurationSeconds - WHOLE_CLIP_TOLERANCE_SECONDS;
 
-  if (input.normalise && end > start && input.canTranscode === false) {
+  // Over the limit: a lossless cut is enough when the kept share fits; any
+  // other way down is the re-encode. See the module comment.
+  const shrink =
+    exceedsUploadLimit(input.fileSizeBytes) &&
+    !(
+      !wholeClip &&
+      end > start &&
+      remuxedSizeEstimate(input, start, end) <= TRANSCODE_MAX_OUTPUT_BYTES
+    );
+  const reencode = Boolean(input.normalise) || shrink;
+
+  if (shrink && input.canTranscode === false) {
+    // A copy can't bring it under the limit, so a cut would be refused anyway.
+    return { kind: "skip", reason: "no-encoder" };
+  }
+
+  if (reencode && end > start && input.canTranscode === false) {
     // Nothing here can fix the format. A real cut is still worth making; the
     // whole clip would be a byte-for-byte copy, so say why it goes up as shot.
     if (wholeClip) return { kind: "skip", reason: "no-encoder" };
-  } else if (input.normalise && end > start) {
+  } else if (reencode && end > start) {
     if (!input.opfsAvailable) return { kind: "skip", reason: "no-opfs" };
     // The window as asked, even when it is the whole clip to within the
     // tolerance: callers place their own clocks from the start they requested
@@ -150,13 +174,48 @@ export function decideTrim(input: TrimInputs): TrimDecision {
   // The cut copy is at most the kept share of the file, plus container slack.
   // Unknown quota is allowed through: the write fails cleanly if it's short,
   // and that failure falls back to the original like any other.
-  const share = (end - start) / input.sourceDurationSeconds;
-  const needed = input.fileSizeBytes * share * 1.05;
+  const needed = remuxedSizeEstimate(input, start, end);
   if (input.quotaFreeBytes !== null && input.quotaFreeBytes < needed) {
     return { kind: "skip", reason: "no-quota" };
   }
 
   return { kind: "remux", startSeconds: start, endSeconds: end };
+}
+
+/** Whether a file is too large to upload as it is. */
+export function exceedsUploadLimit(sizeBytes: number): boolean {
+  return sizeBytes > MAX_VIDEO_SIZE_BYTES;
+}
+
+/**
+ * Why a file over the upload limit can't go up, and what to do about it.
+ * `reason` is why this browser couldn't shrink it; null when it was never
+ * tried because the file couldn't be read here.
+ */
+export function oversizeVideoMessage(
+  sizeBytes: number,
+  reason: TrimSkipReason | null,
+): string {
+  const gb = (bytes: number) => `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  const why =
+    reason === "no-encoder"
+      ? "this browser can't compress video (Chrome or Edge can)"
+      : reason === "no-opfs" || reason === "no-quota"
+        ? "this browser doesn't have room to store the compressed copy"
+        : reason === null
+          ? "this browser can't read it to compress it"
+          : "compressing it in this tab didn't work";
+  return `This video is ${gb(sizeBytes)}, over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)} GB limit, and ${why}. Export it at 1080p as an MP4 (H.264, constant frame rate) under the limit and add it again.`;
+}
+
+/** A copy-only cut's size: the kept share of the file, plus container slack. */
+function remuxedSizeEstimate(
+  input: Pick<TrimInputs, "fileSizeBytes" | "sourceDurationSeconds">,
+  start: number,
+  end: number,
+): number {
+  const share = (end - start) / input.sourceDurationSeconds;
+  return input.fileSizeBytes * share * 1.05;
 }
 
 /**

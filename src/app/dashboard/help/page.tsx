@@ -413,6 +413,14 @@ export default function HelpCenterPage() {
                   </a>
                   .
                 </p>
+                <p className={proseClass}>
+                  Over {MAX_VIDEO_GB} GB? In Chrome or Edge the file is
+                  compressed in the tab before it uploads — keep the tab open,
+                  since a full match takes a while. In other browsers, shrink it
+                  first with a free tool like HandBrake: keep the resolution,
+                  pick a constant frame rate, export MP4 (H.264) and tick Web
+                  Optimized.
+                </p>
               </div>
 
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>

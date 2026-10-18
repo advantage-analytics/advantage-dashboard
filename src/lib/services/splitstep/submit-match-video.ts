@@ -10,8 +10,9 @@ import {
 } from "@/lib/services/splitstep/job-liveness";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
-import { remuxedJobWindow } from "@/lib/video/trim-plan";
+import { exceedsUploadLimit, remuxedJobWindow } from "@/lib/video/trim-plan";
 import {
+  OversizeVideoError,
   TrimCancelledError,
   discardPreparedVideo,
   prepareVideoForUpload,
@@ -356,6 +357,13 @@ export async function uploadAndSubmitVideo({
       } finally {
         window.clearInterval(heartbeat);
       }
+    }
+
+    // The vendor refuses a file over the limit at submit, after the whole
+    // transfer. `prepareVideoForUpload` already refuses one it couldn't shrink;
+    // this covers a caller that passed no window.
+    if (exceedsUploadLimit(file.size)) {
+      throw new OversizeVideoError(file.size, "failed");
     }
 
     // Before asking for a URL: the route records the blob name on the match's
