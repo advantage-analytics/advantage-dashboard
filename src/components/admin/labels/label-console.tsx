@@ -2953,11 +2953,13 @@ export function LabelConsole({
       server: expanded.server ? names[expanded.server] : null,
       rallyLength: live.length,
       rallySoFar: at === -1 ? null : at + 1,
+      // The same queue the review asks from (`keep`): a question an edit
+      // elsewhere on the point settled is still to review until answered.
       openItems: liveMarks
-        ? openReviewItems(expanded, liveMarks, points).length
+        ? openReviewItems(expanded, liveMarks, points, keep).length
         : 0,
     };
-  }, [expanded, liveMarks, playing, scores, names, points]);
+  }, [expanded, liveMarks, playing, scores, names, points, keep]);
   // While the inline block owns placement the left court follows the film
   // with nothing selected: one placement surface at a time.
   const panelPlacement = reviewActive ? NO_PLACEMENT : placement;

@@ -273,9 +273,10 @@ test.describe("the inline block", () => {
     expect(contact).toContain('data-review-inline="placing"');
     expect(text(contact, "data-review-question")).toBe("Where was it hit?");
     expect(text(contact, "data-review-side")).toBe("Contact · Lee’s side");
-    // Not the step's answers or count: it is about another stroke.
+    // Not the step's answers — it is about another stroke — but the step's
+    // count: the added stroke is what is left of the step's question.
     expect(contact).not.toContain("data-review-answers");
-    expect(contact).not.toContain("data-review-count");
+    expect(contact).toContain("data-review-count");
     expect(text(contact, "data-review-then")).toBe(
       "Then: say how the last ball ended",
     );

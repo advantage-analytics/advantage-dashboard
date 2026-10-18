@@ -306,7 +306,9 @@ export function ReviewInlineBlock({
           >
             {question}
           </span>
-          {count && ownStep ? (
+          {/* An added stroke being placed is still the step's question (its
+              "Add the shot" answered it), so it keeps the step's count. */}
+          {count ? (
             <span
               data-review-count=""
               className={cn(
