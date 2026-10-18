@@ -1,4 +1,8 @@
-import { formatHoursLong, usageFraction } from "@/lib/data/usage-format";
+import {
+  formatHoursLong,
+  isUnlimitedCap,
+  usageFraction,
+} from "@/lib/data/usage-format";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import {
   formatHoursCap,
@@ -36,6 +40,18 @@ export function FooterMeter({
   suffix: string;
 }) {
   const priced = selectedSeconds !== undefined && selectedSeconds > 0;
+  // An admin's personal workspace: no cap, so no bar — just what it spends.
+  if (isUnlimitedCap(capSeconds)) {
+    return (
+      <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
+        <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+          {priced
+            ? `Spends ${formatHoursTenths(selectedSeconds)} h · Unlimited hours`
+            : "Unlimited hours"}
+        </span>
+      </span>
+    );
+  }
   const usedSeconds = Math.max(0, capSeconds - remainingSeconds);
   const usedFraction = usageFraction(usedSeconds, capSeconds);
   // The bar draws what will have been spent once the match is saved, so a

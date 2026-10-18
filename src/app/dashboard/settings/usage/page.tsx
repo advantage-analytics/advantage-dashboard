@@ -6,6 +6,7 @@ import {
   formatHoursLong,
   formatResetDate,
   secondsLeft,
+  isUnlimitedCap,
 } from "@/lib/data/usage-format";
 import {
   currentBillingMonth,
@@ -90,15 +91,23 @@ export default async function UsagePage() {
         <SettingsCardTitle
           trailing={
             <span className="mono text-[11px] text-[var(--ink-500)]">
-              {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
-              {formatHoursLong(personal.capSeconds)} free left
+              {isUnlimitedCap(personal.capSeconds) ? (
+                "Unlimited"
+              ) : (
+                <>
+                  {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
+                  {formatHoursLong(personal.capSeconds)} free left
+                </>
+              )}
             </span>
           }
         >
           Your analysis time
         </SettingsCardTitle>
 
-        <TwoBucketMeter balance={personalBalance} />
+        {!isUnlimitedCap(personal.capSeconds) && (
+          <TwoBucketMeter balance={personalBalance} />
+        )}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
           <span>
