@@ -92,19 +92,25 @@ callback processing
 EXPIRY="$(date -u -d '+6 hours' +%Y-%m-%dT%H:%MZ)"
 URL="$(az_b generate-sas --name "$SOURCE" --permissions r --expiry "$EXPIRY" --as-user --full-uri -o tsv)"
 
+# Every read of the upload is over HTTP from Blob, and a 1–6 GB read can
+# stall: the first live run lost its connection mid-file and encoded a
+# truncated copy (the timeline check refused it). Reconnect and resume.
+NET=(-reconnect 1 -reconnect_on_network_error 1 -reconnect_on_http_error 5xx
+  -reconnect_delay_max 30 -rw_timeout 60000000)
+
 # What the upload is.
 # One entry per call: ffprobe prints a section's fields in its own order.
 probe_stream() {
-  ffprobe -v error -select_streams v:0 -show_entries "stream=$1" -of csv=p=0 "$URL"
+  ffprobe -v error "${NET[@]}" -select_streams v:0 -show_entries "stream=$1" -of csv=p=0 "$URL"
 }
 CODEC="$(probe_stream codec_name)"
 PIXFMT="$(probe_stream pix_fmt)"
 HEIGHT="$(probe_stream height)"
-BITRATE="$(ffprobe -v error -show_entries format=bit_rate -of csv=p=0 "$URL")"
-DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$URL")"
-FPS="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$URL" | awk -F/ '{ if ($2>0) printf "%.3f", $1/$2; else print 30 }')"
+BITRATE="$(ffprobe -v error "${NET[@]}" -show_entries format=bit_rate -of csv=p=0 "$URL")"
+DURATION="$(ffprobe -v error "${NET[@]}" -show_entries format=duration -of csv=p=0 "$URL")"
+FPS="$(ffprobe -v error "${NET[@]}" -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$URL" | awk -F/ '{ if ($2>0) printf "%.3f", $1/$2; else print 30 }')"
 MID="$(awk -v d="$DURATION" 'BEGIN { printf "%d", d / 2 }')"
-GAP="$(ffprobe -v error -select_streams v:0 -read_intervals "${MID}%+30" \
+GAP="$(ffprobe -v error "${NET[@]}" -select_streams v:0 -read_intervals "${MID}%+30" \
   -show_entries packet=pts_time,flags -of csv=p=0 "$URL" \
   | awk -F, '$2 ~ /K/ { if (seen) { g = $1 - last; if (g > max) max = g } last = $1; seen = 1 } END { printf "%.2f", max + 0 }')"
 log "codec=$CODEC pix=$PIXFMT h=$HEIGHT bitrate=$BITRATE fps=$FPS keyframe-gap=$GAP"
@@ -126,7 +132,7 @@ OUT="$WORK/out.mp4"
 encode() {
   rm -f "$OUT"
   if [[ "$MODE" == remux ]]; then
-    ffmpeg -nostdin -v error -y -i "$URL" -map 0:v:0 -map '0:a:0?' -c copy \
+    ffmpeg -nostdin -v error -y "${NET[@]}" -i "$URL" -map 0:v:0 -map '0:a:0?' -c copy \
       -movflags +faststart "$OUT"
   else
     # At most 4 Mbps at 1080p30 (5 at 60 fps), and never much above the
@@ -136,7 +142,7 @@ encode() {
     local ceiling=4000000 maxrate
     if awk -v f="$FPS" 'BEGIN { exit !(f > 40) }'; then ceiling=5000000; fi
     maxrate="$(awk -v s="$BITRATE" -v c="$ceiling" 'BEGIN { m = s * 1.2; if (m < 1000000) m = 1000000; if (m > c) m = c; printf "%d", m }')"
-    ffmpeg -nostdin -v error -y -i "$URL" -map 0:v:0 -map '0:a:0?' \
+    ffmpeg -nostdin -v error -y "${NET[@]}" -i "$URL" -map 0:v:0 -map '0:a:0?' \
       -c:v libx264 -preset veryfast -profile:v high -pix_fmt yuv420p \
       -vf "scale=-2:'min(1080,ih)'" -crf 23 -maxrate "$maxrate" -bufsize "$((maxrate * 2))" \
       -force_key_frames 'expr:gte(t,n_forced*2)' -fps_mode passthrough \
@@ -149,7 +155,9 @@ encode() {
 # drop) at the same time to the millisecond, and the same duration. Times are
 # compared in seconds because the two files' time bases differ.
 shown_times() {
-  ffprobe -v error -select_streams v:0 -show_entries packet=pts_time \
+  local net=()
+  [[ "$1" == http* ]] && net=("${NET[@]}")
+  ffprobe -v error "${net[@]}" -select_streams v:0 -show_entries packet=pts_time \
     -of csv=p=0 "$1" | awk '$1 != "N/A" && $1 >= 0' | sort -g
 }
 shown_times "$URL" >"$WORK/before.txt"
