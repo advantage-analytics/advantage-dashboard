@@ -555,6 +555,47 @@ test.describe("the last rally stroke keeps the vendor's in and net calls", () =>
     expect(lastCallContradictsWinner(lost, "B")).toBe(false);
   });
 
+  test.describe("a missed return stays a miss beside its Service Winner", () => {
+    // 0.8.5 calls a return struck and missed a Service Winner, and the
+    // Return › Result "Error" cut finds it by the return's own result, so the
+    // two must agree whatever the vendor called the return.
+    const missedReturn = (call: Partial<SplitStepStroke>) =>
+      rally([
+        stroke({ strokeType: "serve", strokeSide: "overhead" }),
+        stroke({ playerLabel: "B", ...call }),
+      ]);
+    for (const [name, call, expected] of [
+      ["called in", { in: true, netHit: false }, "Out"],
+      ["called out", { in: false, netHit: false }, "Out"],
+      [
+        "called in the net",
+        { in: false, netHit: true, heightAtNetM: 0.6 },
+        "Net",
+      ],
+      [
+        "called in, with a net cord",
+        { in: true, netHit: true, heightAtNetM: 0.9 },
+        "Net",
+      ],
+    ] as const) {
+      test(`${name}: Service Winner, return ${expected}, unflagged`, () => {
+        const r = missedReturn(call);
+        expect(classifyPoint(r, "A")).toBe("Service Winner");
+        expect(resultOfLast(r, "A")).toBe(expected);
+        expect(lastCallContradictsWinner(r, "A")).toBe(false);
+      });
+    }
+
+    test("a return the returner won keeps the vendor's call", () => {
+      // Not a missed return: the returner won, so the rule above is silent
+      // and a kept net call reads against the winner as anywhere else.
+      const r = missedReturn({ in: false, netHit: true, heightAtNetM: 0.6 });
+      expect(classifyPoint(r, "B")).toBe("Forehand Winner");
+      expect(resultOfLast(r, "B")).toBe("Net");
+      expect(lastCallContradictsWinner(r, "B")).toBe(true);
+    });
+  });
+
   test("no winner, no flag", () => {
     const r = ending({ in: false, netHit: true, heightAtNetM: 0.6 });
     expect(lastCallContradictsWinner(r, null)).toBe(false);
@@ -595,8 +636,11 @@ test.describe("the last rally stroke keeps the vendor's in and net calls", () =>
       );
       expect(hasFlag).toBe(readsAgainst);
       if (hasFlag) flagged += 1;
-      // Serves never read against the winner: the stats rely on it.
+      // Serves never read against the winner: the stats rely on it. Nor does
+      // a missed return beside its Service Winner.
       if (isServe) expect((last.result === "In") === hitterWon).toBe(true);
+      if (point.result_type === "Service Winner" && !isServe)
+        expect(last.result).not.toBe("In");
     }
     expect(flagged).toBeGreaterThan(0);
   });

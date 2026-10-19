@@ -140,8 +140,9 @@
  * where it measured better than the score fold — in, or in the net when its
  * own net height agrees — instead of rewriting it to fit the fold's winner
  * (result-type.ts `trustedLastCall`). Where the kept call and the winner
- * disagree the point gains `last_call_contradicts_winner`; an out call, and
- * every serve, still follow the fold. Only `shots.result` on last rally
+ * disagree the point gains `last_call_contradicts_winner`; an out call, a
+ * missed return (0.8.5's Service Winner) and every serve still follow the
+ * fold. Only `shots.result` on last rally
  * strokes and that flag can move: games, servers, winners, result_type and
  * scores do not, and neither does any serve-in statistic.
  */
@@ -254,6 +255,7 @@ export {
 
 export {
   classifyPoint,
+  isMissedReturn,
   lastCallContradictsWinner,
   shotResult,
   trustedLastCall,

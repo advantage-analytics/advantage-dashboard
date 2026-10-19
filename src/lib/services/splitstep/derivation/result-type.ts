@@ -101,21 +101,35 @@ export function classifyPoint(
   // ending-derived.ts) and SwingVision records it — not an unforced error by
   // the returner. It stays findable as a miss by the return's own result
   // (Return › Result "Error").
-  const serveIndex = lastServeIndex(rally);
-  if (
-    serveIndex !== -1 &&
-    rally.strokes.length - 1 === serveIndex + 1 &&
-    winner === rally.server &&
-    last.playerLabel !== rally.server
-  ) {
-    return "Service Winner";
-  }
+  if (isMissedReturn(rally, winner)) return "Service Winner";
 
   const side = last.strokeSide ? SIDE_LABEL[last.strokeSide] : null;
   const won = last.playerLabel === winner;
 
   if (won) return (side ? `${side} Winner` : "Winner") as ResultType;
   return (side ? `${side} Unforced Error` : "Unforced Error") as ResultType;
+}
+
+/**
+ * The return is the rally's only stroke after the deciding serve, the
+ * returner struck it, and the server won the point: a serve touched and
+ * missed. `classifyPoint` calls it a Service Winner and `shotResult` keeps the
+ * return a miss, so the two never disagree on it.
+ */
+export function isMissedReturn(
+  rally: SplitStepRally,
+  winner: string | null,
+): boolean {
+  const last = rally.strokes[rally.strokes.length - 1];
+  const serveIndex = lastServeIndex(rally);
+  return (
+    !!last &&
+    last.strokeType !== "serve" &&
+    serveIndex !== -1 &&
+    rally.strokes.length - 1 === serveIndex + 1 &&
+    winner === rally.server &&
+    last.playerLabel !== rally.server
+  );
 }
 
 /** The `shots.result` vocabulary already in the table. */
@@ -146,8 +160,8 @@ export function trustedLastCall(stroke: SplitStepStroke): "In" | "Net" | null {
 
 /**
  * The last rally stroke's stored result names a different winner than the
- * fold: a kept call the result_type reads the other way. Serves are excluded —
- * their result stays structural (see `shotResult`).
+ * fold: a kept call the result_type reads the other way. Serves and missed
+ * returns are excluded — their result follows the fold (see `shotResult`).
  */
 export function lastCallContradictsWinner(
   rally: SplitStepRally,
@@ -155,6 +169,7 @@ export function lastCallContradictsWinner(
 ): boolean {
   const last = rally.strokes[rally.strokes.length - 1];
   if (!winner || !last || last.strokeType === "serve") return false;
+  if (isMissedReturn(rally, winner)) return false;
   const call = trustedLastCall(last);
   return call !== null && (call === "In") !== (last.playerLabel === winner);
 }
@@ -171,7 +186,7 @@ export function lastCallContradictsWinner(
  * call, so the vendor's call stands where it has measured better than the
  * fold (`trustedLastCall`), even when it disagrees with the point's winner —
  * the point carries `last_call_contradicts_winner` instead of a rewritten
- * ball. Until 0.8.6 this stroke was always In for the fold's winner and Out or
+ * ball — except on a missed return (`isMissedReturn`). Until 0.8.6 this stroke was always In for the fold's winner and Out or
  * Net for the loser, which turned correct net calls into In.
  *
  * Returns null for a stroke played on a ball that was already dead (a swing at
@@ -203,6 +218,12 @@ export function shotResult(params: {
   }
 
   if (!isLast) return "In";
+  // A missed return stays a miss whatever the call: its point is a Service
+  // Winner, and the Return › Result "Error" cut finds it by this result. The
+  // vendor called one in on 2 of 307 such points across the 22 labelled jobs,
+  // none of them labelled, so no measurement argues for the call here; the
+  // point still carries `winner_disputed`, which reads the same call.
+  if (isMissedReturn(rally, winner)) return missed;
   return (
     trustedLastCall(stroke) ?? (stroke.playerLabel === winner ? "In" : missed)
   );
