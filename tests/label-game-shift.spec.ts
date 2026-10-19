@@ -2003,6 +2003,24 @@ test.describe("planGameSplit", () => {
     });
   });
 
+  test("a stale tiebreak type on a point inside a regular game does not block it", () => {
+    // Points 4–5 still say tiebreak, but they share game 1's number, so the
+    // rail shows them in game 1 under its "game" header.
+    const points = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },
+    ]).map((p, i) => ({
+      ...p,
+      gameType: i >= 4 ? ("match_tiebreak" as const) : p.gameType,
+      shots: [],
+    }));
+    const plan = planGameSplit(points, points[4].id);
+    if (!("ok" in plan)) throw new Error(plan.error);
+    expect(plan.writes.map((w) => w.id)).toEqual([points[4].id, points[5].id]);
+    for (const write of plan.writes) {
+      expect(write).toMatchObject({ game_number: 2, game_type: "game" });
+    }
+  });
+
   test("the new game reads as its own game on the scoreboard, in row order", () => {
     const points = match([
       { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1", "p2", "p2"] },

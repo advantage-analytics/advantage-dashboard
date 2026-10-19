@@ -463,14 +463,16 @@ export function planGameSplit(
   if (at.setNumber === null || at.gameNumber === null) {
     return { error: "Put this point in a game first." };
   }
-  if ((at.gameType ?? "game") !== "game") {
-    return { error: "A tiebreak is one game — it cannot be split." };
-  }
   const game = points
     .filter(
       (point) => point.status !== "deleted" && gameKey(point) === gameKey(at),
     )
     .sort((a, b) => a.pointIndex - b.pointIndex);
+  // The game's type is its first point's, as the rail's header reads it — a
+  // point can carry a stale type (a folded tiebreak undone by hand).
+  if ((game[0]?.gameType ?? "game") !== "game") {
+    return { error: "A tiebreak is one game — it cannot be split." };
+  }
   const index = game.findIndex((point) => point.id === atPointId);
   if (index <= 0) {
     return { error: "This point already starts its game." };
