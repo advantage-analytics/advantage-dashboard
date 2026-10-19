@@ -227,16 +227,21 @@ test.describe("point endings credit", () => {
 });
 
 test.describe("derived Service winner option", () => {
-  test("never an answer, so the panel leaves it out", () => {
+  test("a missed return is the answer; an unreturned serve stays an ace", () => {
     expect(serveResultOf(DERIVED_UNRETURNED, DERIVED)).toBe("ace");
-    const rallied = { ...DERIVED_UNRETURNED, rallyLength: 2 };
-    expect(serveResultOf(rallied, DERIVED)).not.toBe("service-winner");
+    expect(
+      optionAvailability([DERIVED_UNRETURNED], DERIVED).serveResult.has(
+        "service-winner",
+      ),
+    ).toBe(false);
+    const missedReturn = { ...DERIVED_UNRETURNED, rallyLength: 2 };
+    expect(serveResultOf(missedReturn, DERIVED)).toBe("service-winner");
     expect(
       optionAvailability(
-        [DERIVED_UNRETURNED, rallied],
+        [DERIVED_UNRETURNED, missedReturn],
         DERIVED,
       ).serveResult.has("service-winner"),
-    ).toBe(false);
+    ).toBe(true);
     expect(serveResultOf(SV_SERVICE_WINNER, SV)).toBe("service-winner");
   });
 });
