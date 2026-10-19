@@ -927,10 +927,9 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(landSource).toMatch(
       /\} else \{\n(\s+\/\/[^\n]*\n)*\s+setArmedSlot\(null\);\n\s+setPlacement\(NO_PLACEMENT\);\n\s+if \(film === null\) seekToPointStart\(point\);\n\s+\}/,
     );
-    // The inline block numbers its stroke as the rail does.
-    expect(consoleSource).toMatch(
-      /<ReviewInlineBlock\n(\s+[a-zA-Z]+=\{[^\n]*\}\n)*\s+ghosts=\{drawsGhosts\(liveMarks\)\}/,
-    );
+    // The rail notes the step under its stroke; no inline block asks it.
+    expect(consoleSource).toContain("<ReviewNote");
+    expect(consoleSource).not.toContain("<ReviewInlineBlock");
   });
 
   test("`]` and the header's flag rows are the only jumps that arm", () => {
@@ -1034,9 +1033,6 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(findGap.slice(0, findGap.indexOf("\n  }\n"))).toContain(
       "stopReplay();",
     );
-    expect(consoleSource).toMatch(
-      /function answerReview\(answer: ReviewAnswer\) \{\n {4}if \(!expanded\) return;\n {4}stopReplay\(\);/,
-    );
     expect(consoleSource).toContain(
       "if (replay.current && player.current?.isPlaying()) player.current.pause();",
     );
@@ -1082,21 +1078,7 @@ test.describe("a flag jump lands on the point's review step", () => {
       "const stop = nextReviewStop(points, liveMarks, fromPointId, 1);",
     );
     expect(effect).toContain("}, [stepKey, points, confirm, reviewMode]);");
-    // The writes that arm it: an answer (not one that adds a stroke — that
-    // stroke is the one to place next), a court placement, a dismiss.
-    const answerSource = consoleSource.slice(
-      consoleSource.indexOf("  function answerReview("),
-      consoleSource.indexOf("  function setEstimate("),
-    );
-    // "Looks right" notes the step and empties the queue, so the tick's
-    // settling moves on to the next flagged point; an added stroke closes
-    // its item without landing anywhere; every other answer notes the step.
-    expect(answerSource).toContain('write.write === "check"');
-    expect(answerSource).toContain("keep: []");
-    expect(answerSource.match(/noteAnswered\(\);/g)).toHaveLength(2);
-    expect(answerSource).toContain('write.write === "addShot"');
-    expect(answerSource).toContain("closeQueuedItem();");
-    expect(answerSource).toContain("noteAnswered();");
+    // The writes that arm it: a court placement, a dismiss.
     const place = consoleSource.slice(
       consoleSource.indexOf("  function place(point: CourtPoint) {"),
       consoleSource.indexOf("  // The court panel's Contact / Landing switch"),
@@ -1108,7 +1090,8 @@ test.describe("a flag jump lands on the point's review step", () => {
     // A jump clears it: the next flagged point is `]`'s to reach, not the
     // console's own.
     expect(findGapSource).toContain("pendingAdvance.current = null;");
-    expect(consoleSource.match(/noteAnswered\(\);/g)).toHaveLength(4);
+    // Two callers now: a placement and a dismiss (answers are gone).
+    expect(consoleSource.match(/noteAnswered\(\);/g)).toHaveLength(2);
   });
 
   test("↓ and ] still step after a jump that selected a stroke", () => {
@@ -1236,12 +1219,9 @@ test.describe("review mode: the step asked inline in the rail", () => {
     expect(consoleSource).toMatch(
       /const inlineAnchor =\n\s+reviewMode && expanded\n\s+\? inlineReviewAnchor\(expanded, step, placement, drawsGhosts\(liveMarks\)\)\n\s+: null;/,
     );
-    expect(consoleSource).toContain(
-      "const reviewActive = inlineAnchor !== null;",
-    );
-    expect(consoleSource).toContain(
-      "const panelPlacement = reviewActive ? NO_PLACEMENT : placement;",
-    );
+    // The left court is the one placement surface, in review too.
+    expect(consoleSource).not.toContain("reviewActive");
+    expect(consoleSource).toContain("const panelPlacement = placement;");
     expect(consoleSource).toContain("placement={panelPlacement}");
     // The old column's props are gone from the panel.
     expect(consoleSource).not.toContain(
@@ -1280,7 +1260,7 @@ test.describe("review mode: the step asked inline in the rail", () => {
     serveSides: {},
   } as unknown as LabelMarks;
 
-  test("in review mode the step sits under its stroke's row and owns the one placing court; the left panel follows the film", () => {
+  test("in review mode the step is a one-line note under its stroke's row; the left panel is the one placing court", () => {
     const html = render({
       session: reviewSession(),
       marks: EMPTY_MARKS,
@@ -1291,43 +1271,23 @@ test.describe("review mode: the step asked inline in the rail", () => {
       initialVideoTime: 2490.2,
       ...SAVES,
     });
-    const block = html.indexOf('data-review-inline="4"');
-    expect(block).toBeGreaterThan(html.indexOf('data-shot-id="s-ace"'));
+    const note = html.indexOf('data-review-inline="4"');
+    expect(note).toBeGreaterThan(html.indexOf('data-shot-id="s-ace"'));
     // Inside the point's own well, under its one stroke.
     expect(shotPanel(html, FIXTURE_POINT_IDS.P2)).toContain(
       'data-review-inline="4"',
     );
     expect(count(html, /data-review-inline=/g)).toBe(1);
-    // One placing court, the block's; the left panel is a picture of the
-    // whole court with nothing selected, and its info line.
+    // The note has no court, no question and no answers.
+    const line = html.slice(note, html.indexOf("</div>", note));
+    expect(line).not.toContain("data-court");
+    expect(html).not.toContain("data-review-question");
+    expect(html).not.toContain("data-review-answers");
+    // One placing court, the left panel's, zoomed to the selected end.
     expect(count(html, /data-court-target=""/g)).toBe(1);
-    expect(html.indexOf("data-court-target")).toBeGreaterThan(block);
-    const panel = html.slice(
-      html.indexOf("data-court-panel"),
-      html.indexOf("data-court-box"),
-    );
-    expect(panel).not.toContain("data-court-steps");
-    expect(tagOf(html, "data-court-panel")).not.toContain("review");
-    expect(html).toMatch(/data-court-panel=""[\s\S]*?data-court-view="whole"/);
-    // The film is on the ace: the line counts the rally so far.
-    expect(html).toMatch(
-      /data-court-info=""[^>]*>0–15 · Lee serving · shot 1 of 1 · 1 to review</,
-    );
-    // The block's court is zoomed to the selected end's half with the
-    // stroke's own marks — an initial selection opens on the contact; a
-    // flag jump's landing would pick the step's end (`landOnStep`).
-    const inline = html.slice(block);
-    expect(inline).toContain('data-court-view="near"');
-    expect(inline).toContain('data-selected-ring="contact"');
-    expect(inline).toMatch(
-      /data-review-question=""[^>]*>How did the last ball end\?</,
-    );
-    // The answers need the console's operations (`operable`), which this
-    // render has none of: the question stands, its answers do not.
-    expect(inline).not.toContain("data-review-answers");
-    expect(consoleSource).toContain(
-      "onAnswer={operable ? answerReview : undefined}",
-    );
+    const panel = html.slice(html.indexOf("data-court-panel"));
+    expect(panel).toContain("data-court-target");
+    expect(html).toMatch(/data-court-panel=""[\s\S]*?data-court-view="near"/);
   });
 
   test("outside review mode the same selection is the left panel's: no block, the panel zoomed", () => {
@@ -1450,29 +1410,9 @@ test.describe("a review answer's writes go through the console's own handlers", 
     expect(order).toEqual(["shot saved", "point"]);
   });
 
-  test("the console hands each kind its own handler, the add-shot path included", () => {
-    const wiring = consoleSource.slice(
-      consoleSource.indexOf("const reviewWrites: ReviewWriteHandlers = {"),
-      consoleSource.indexOf("function answerReview("),
-    );
-    for (const line of [
-      "patchShot: railHandlers.saveShot,",
-      "patchPoint: railHandlers.patchPoint,",
-      "splitPoint: rowOperations.onSplitPoint,",
-      "removeShotsAfter: railHandlers.removeShotsAfter,",
-      "dismissSuggestion: rowOperations.onDismissSuggestion,",
-      "setChecked: rowOperations.onSetChecked,",
-      "addShot: railHandlers.addShot,",
-    ]) {
-      expect(wiring, line).toContain(line);
-    }
-    // `saveShot` is the awaited shot write; `addShot` the console's own,
-    // which selects the saved stroke for placement.
-    expect(consoleSource).toContain("saveShot: patchShot,");
-    expect(consoleSource).toMatch(/\n {4}addShot,\n/);
-    expect(consoleSource).toContain(
-      "onAnswer={operable ? answerReview : undefined}",
-    );
+  test("the console asks no questions itself: no answers are wired; the estimate box still writes unclear", () => {
+    expect(consoleSource).not.toContain("answerReview");
+    expect(consoleSource).not.toContain("runReviewAnswer");
     // The estimate box writes `unclear` through the rail's shot edit.
     expect(consoleSource).toContain(
       "estimatePatch(shot.unclear, placement.target, estimate)",
