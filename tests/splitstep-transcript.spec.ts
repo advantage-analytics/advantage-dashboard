@@ -9,6 +9,7 @@ import {
   buildTranscript,
   classifyPoint,
   flagPoint,
+  lastCallContradictsWinner,
   lastServeIndex,
   parseStrokes,
   playedRally,
@@ -371,7 +372,7 @@ test.describe("shots.result is structural, not the in flag", () => {
     ).toBe("In");
   });
 
-  test("the last stroke follows the point winner, not the flag", () => {
+  test("a last stroke called out follows the point winner, not the flag", () => {
     const r = rally([
       stroke({ strokeType: "serve" }),
       stroke({ playerLabel: "B", in: false }),
@@ -412,6 +413,152 @@ test.describe("shots.result is structural, not the in flag", () => {
         winner: "A",
       }),
     ).toBe("In");
+  });
+});
+
+test.describe("the last rally stroke keeps the vendor's in and net calls", () => {
+  // Since 0.8.6. The fold's winner used to decide this ball outright, which
+  // turned correct net calls into In. Measured over 938 labelled last rally
+  // strokes: the in and net calls beat the fold, the out call does not.
+  const resultOfLast = (r: SplitStepRally, winner: string) =>
+    shotResult({
+      stroke: r.strokes[r.strokes.length - 1],
+      index: r.strokes.length - 1,
+      rally: r,
+      serveIndex: lastServeIndex(r),
+      winner,
+    });
+  const ending = (last: Partial<SplitStepStroke>) =>
+    rally([
+      stroke({ strokeType: "serve", strokeSide: "overhead" }),
+      stroke({ playerLabel: "B" }),
+      stroke({ playerLabel: "A", ...last }),
+    ]);
+
+  test("a net call on the fold's winner stays Net, and the point is flagged", () => {
+    const r = ending({ in: false, netHit: true, heightAtNetM: 0.6 });
+    expect(resultOfLast(r, "A")).toBe("Net");
+    expect(lastCallContradictsWinner(r, "A")).toBe(true);
+    // The winner and result_type are not rewritten to fit the ball either.
+    expect(classifyPoint(r, "A")).toBe("Forehand Winner");
+  });
+
+  test("a net call with no height reading is kept", () => {
+    const r = ending({ in: false, netHit: true, heightAtNetM: null });
+    expect(resultOfLast(r, "A")).toBe("Net");
+    expect(lastCallContradictsWinner(r, "A")).toBe(true);
+  });
+
+  test("an in call on the fold's loser stays In, and the point is flagged", () => {
+    const r = ending({ in: true });
+    expect(resultOfLast(r, "B")).toBe("In");
+    expect(lastCallContradictsWinner(r, "B")).toBe(true);
+    expect(classifyPoint(r, "B")).toBe("Forehand Unforced Error");
+  });
+
+  test("an out call defers to the fold: In for its winner, unflagged", () => {
+    const r = ending({ in: false, netHit: false });
+    expect(resultOfLast(r, "A")).toBe("In");
+    expect(lastCallContradictsWinner(r, "A")).toBe(false);
+    expect(resultOfLast(r, "B")).toBe("Out");
+    expect(lastCallContradictsWinner(r, "B")).toBe(false);
+  });
+
+  test("a net call the vendor's own net height contradicts defers to the fold", () => {
+    // height_at_net_m 1.5 clears the 1.07 m post height: the call disagrees
+    // with itself, and there the fold was right 8 times in 14.
+    const r = ending({ in: false, netHit: true, heightAtNetM: 1.5 });
+    expect(resultOfLast(r, "A")).toBe("In");
+    expect(lastCallContradictsWinner(r, "A")).toBe(false);
+    expect(resultOfLast(r, "B")).toBe("Net");
+  });
+
+  test("an in call on a net cord stays In", () => {
+    // net_hit is contact anywhere in the flight; in says where it landed.
+    const r = ending({ in: true, netHit: true, heightAtNetM: 0.9 });
+    expect(resultOfLast(r, "A")).toBe("In");
+    expect(lastCallContradictsWinner(r, "A")).toBe(false);
+  });
+
+  test("calls that agree with the fold are unflagged", () => {
+    expect(lastCallContradictsWinner(ending({ in: true }), "A")).toBe(false);
+    const net = ending({ in: false, netHit: true, heightAtNetM: 0.6 });
+    expect(resultOfLast(net, "B")).toBe("Net");
+    expect(lastCallContradictsWinner(net, "B")).toBe(false);
+  });
+
+  test("mid-rally strokes stay structural whatever the call", () => {
+    const r = ending({});
+    r.strokes[1] = stroke({ playerLabel: "B", in: false, netHit: true });
+    expect(
+      shotResult({
+        stroke: r.strokes[1],
+        index: 1,
+        rally: r,
+        serveIndex: 0,
+        winner: "A",
+      }),
+    ).toBe("In");
+  });
+
+  test("a serve that ends the point stays structural, and is never flagged", () => {
+    // Serve results feed first_serves_in / second_serves_in: an unreturned
+    // serve the server won must stay In beside its Service Winner.
+    const r = rally([
+      stroke({ strokeType: "serve", in: false }),
+      stroke({ strokeType: "serve", in: false }),
+    ]);
+    expect(resultOfLast(r, "A")).toBe("In");
+    expect(lastCallContradictsWinner(r, "A")).toBe(false);
+    const lost = rally([stroke({ strokeType: "serve", in: true })]);
+    expect(resultOfLast(lost, "B")).toBe("Out");
+    expect(lastCallContradictsWinner(lost, "B")).toBe(false);
+  });
+
+  test("no winner, no flag", () => {
+    const r = ending({ in: false, netHit: true, heightAtNetM: 0.6 });
+    expect(lastCallContradictsWinner(r, null)).toBe(false);
+  });
+
+  test("on a real payload the flag marks exactly the points whose last ball reads against the winner", () => {
+    const a = analyzeResults(clean);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    const key = keysFor(a.rallies);
+    const probe = reconcile({
+      winners,
+      labels: a.players,
+      score: { player1: [], player2: [] },
+      gameKeyOf: (id) => key.get(id)?.game ?? "",
+      setKeyOf: (id) => key.get(id)?.set ?? "",
+    });
+    const [p1, p2] = a.players;
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      score: {
+        player1: probe.foldedSets.map((s) => s[p1] ?? 0),
+        player2: probe.foldedSets.map((s) => s[p2] ?? 0),
+      },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+
+    let flagged = 0;
+    for (const point of t.points) {
+      const last = point.shots[point.shots.length - 1];
+      if (!last || last.result === null) continue;
+      const isServe = /Serve$/.test(last.shot_type ?? "");
+      const hitterWon = last.is_player1 === point.won_by_player1;
+      const readsAgainst = !isServe && (last.result === "In") !== hitterWon;
+      const hasFlag = point.flags.includes(
+        POINT_FLAGS.LAST_CALL_CONTRADICTS_WINNER,
+      );
+      expect(hasFlag).toBe(readsAgainst);
+      if (hasFlag) flagged += 1;
+      // Serves never read against the winner: the stats rely on it.
+      if (isServe) expect((last.result === "In") === hitterWon).toBe(true);
+    }
+    expect(flagged).toBeGreaterThan(0);
   });
 });
 

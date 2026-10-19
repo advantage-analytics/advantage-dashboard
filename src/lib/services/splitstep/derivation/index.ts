@@ -132,8 +132,17 @@
  * dropping them: each joins the game the first scored rally ended up in, its
  * winner guessed (`leadingUnscoredRallies`). The uploader
  * of job c349e3d4 confirmed its 0:06 rally was the first point.
+ * 0.8.6 (2026-10-18) stores the vendor's call on a point's last rally stroke
+ * where it measured better than the score fold — in, or in the net when its
+ * own net height agrees — instead of rewriting it to fit the fold's winner
+ * (result-type.ts `trustedLastCall`). Where the kept call and the winner
+ * disagree the point gains `last_call_contradicts_winner`; an out call, and
+ * every serve, still follow the fold. Only `shots.result` on last rally
+ * strokes and that flag can move: games, servers, winners, result_type and
+ * scores do not, and neither does any serve-in statistic. Numbered past
+ * 0.8.5, which a label session was already seeded with from another branch.
  */
-export const DERIVATION_VERSION = "0.8.4-unreconciled";
+export const DERIVATION_VERSION = "0.8.6-unreconciled";
 
 export type {
   RawSplitStepStroke,
@@ -242,7 +251,9 @@ export {
 
 export {
   classifyPoint,
+  lastCallContradictsWinner,
   shotResult,
+  trustedLastCall,
   shotNumber,
   lastServeIndex,
   type ResultType,
@@ -252,6 +263,7 @@ export {
 export {
   flagPoint,
   flagStroke,
+  netHitContradictsHeight,
   pointsPlayed,
   POINT_FLAGS,
   SHOT_FLAGS,
