@@ -153,7 +153,12 @@ test.describe("writeLabelSessionComplete", () => {
     ).toEqual({
       ok: true,
       status: "complete",
-      published: { points: 10, shots: 40, insightsRequested: true },
+      published: {
+        points: 10,
+        shots: 40,
+        insightsRequested: true,
+        leftOut: [],
+      },
     });
     // The lease lands first, so a second tab finds it taken.
     expect(order).toEqual([`publish ${SESSION_ID} after rpc`]);
@@ -276,7 +281,12 @@ test.describe("writeLabelSessionComplete", () => {
     ).toEqual({
       ok: true,
       status: "complete",
-      published: { points: 10, shots: 40, insightsRequested: true },
+      published: {
+        points: 10,
+        shots: 40,
+        insightsRequested: true,
+        leftOut: [],
+      },
     });
   });
 
@@ -424,9 +434,9 @@ test.describe("completeWarnings", () => {
       "2 points of 3 not checked",
       "Game 1 unfinished (15–15)",
       "Game 2 unfinished (0–0)",
-      "Set 1 labelled 0–0, the match record says 6–3, so publishing will refuse",
+      "Set 1 labelled 0–0, the match record says 6–3 — it publishes as labelled",
       // The fixture's open point: its strokes disagree with its winner.
-      "Point 4's strokes say player 2 won, not the labelled winner, so publishing will refuse",
+      "Point 4's strokes say player 2 won, not the labelled winner — it publishes with the labelled winner",
     ]);
   });
 
@@ -524,7 +534,7 @@ test.describe("completeWarnings", () => {
       `Point ${second.pointIndex + 1}'s ending will be taken from its strokes (a service winner by ${NAMES.p1})`,
     );
     expect(warnings).toContain(
-      `Point ${third.pointIndex + 1} has no ending its strokes can settle, so publishing will refuse`,
+      `Point ${third.pointIndex + 1} has no ending its strokes can settle — it publishes with no ending`,
     );
   });
 
@@ -542,7 +552,7 @@ test.describe("completeWarnings", () => {
       }),
     ).toEqual([
       "2 points of 3 not checked",
-      "Point 4's strokes say player 2 won, not the labelled winner, so publishing will refuse",
+      "Point 4's strokes say player 2 won, not the labelled winner — it publishes with the labelled winner",
     ]);
   });
 

@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils";
  * Read off the same pure rules the rail draws from, so the two never
  * disagree: `openFlags` / `flagGroups` for what is flagged, `labelSetScores`
  * for the score, `completeWarnings` (computed by the console, handed in as
- * `warnings`) for what a publish would refuse, `buildAppliedRows` +
+ * `warnings`) for what a publish writes partly or leaves out, `buildAppliedRows` +
  * `expectedStats` for the statistics — the rows a publish would write,
  * counted.
  *
@@ -592,7 +592,16 @@ interface CheckItem {
   pointId?: string;
 }
 
-const REFUSES = "publishing will refuse";
+/**
+ * The endings `completeWarnings` gives a point a publish writes only partly,
+ * or leaves out. None blocks a publish any more (2026-10-18); each stays an
+ * open check.
+ */
+const PUBLISHED_PAST = [
+  ", so it is left out",
+  " — it publishes with no ending",
+  " — it publishes with the labelled winner",
+];
 
 /** The route to publishing, as the things that must be true first. */
 function publishChecks({
@@ -619,9 +628,11 @@ function publishChecks({
     (sum, set) => sum + set.unfinished.length + set.overflow.length,
     0,
   );
-  // What publishing refuses beyond the score: a point it cannot write.
-  const refused = warnings.filter(
-    (warning) => warning.includes(REFUSES) && !warning.startsWith("Set "),
+  // A point the publish writes only partly, or leaves out.
+  const partial = warnings.filter(
+    (warning) =>
+      !warning.startsWith("Set ") &&
+      PUBLISHED_PAST.some((tail) => warning.endsWith(tail)),
   );
   const plural = (n: number, one: string, many = `${one}s`) =>
     `${n} ${n === 1 ? one : many}`;
@@ -642,8 +653,8 @@ function publishChecks({
           }
         : differing.length > 0
           ? {
-              // With marks on, a publish refuses a set that disagrees.
-              state: marks ? "blocking" : "open",
+              // Published as labelled either way; the record still disagrees.
+              state: "open",
               title: "Score adds up",
               detail: differing
                 .map(
@@ -658,11 +669,14 @@ function publishChecks({
               title: "Score adds up",
               detail: "Every labelled set matches the match record.",
             },
-    refused.length > 0
+    partial.length > 0
       ? {
-          state: "blocking",
+          state: "open",
           title: "Every point can be written",
-          detail: refused[0].replace(`, so ${REFUSES}`, ""),
+          detail:
+            partial.length === 1
+              ? partial[0]
+              : `${partial[0]} (and ${partial.length - 1} more)`,
         }
       : {
           state: "done",

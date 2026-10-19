@@ -51,16 +51,9 @@ function plan(
   } as unknown as ReturnType<typeof planApply>;
 }
 
-test("a build problem, a score mismatch not accepted, or no points: refused, nothing touched", async () => {
+test("a score mismatch not accepted, or no points: refused, nothing touched", async () => {
   const refuse = async (p: ReturnType<typeof planApply>, acceptScore = false) =>
     publishPlanned({ db: UNTOUCHED, context: CONTEXT, plan: p, acceptScore });
-
-  const problem = await refuse(plan({ problems: ["Point 4 has no winner"] }));
-  expect(problem).toEqual({
-    ok: false,
-    error:
-      "Not published: a problem needs fixing first — Point 4 has no winner",
-  });
 
   const mismatch = await refuse(plan({ mismatch: true }));
   expect(mismatch).toEqual({
@@ -72,6 +65,26 @@ test("a build problem, a score mismatch not accepted, or no points: refused, not
   expect(await refuse(plan({ points: 0 }))).toEqual({
     ok: false,
     error: "Not published: there are no points to write.",
+  });
+});
+
+test("a build problem no longer refuses: the publish goes on past it", async () => {
+  // With no job the publish stops at the backup — after the problems, which
+  // it reaches and passes; a problem used to stop it first.
+  const jobless = {
+    ...CONTEXT,
+    session: { ...CONTEXT.session, jobId: null },
+  } as ApplyContext;
+  const result = await publishPlanned({
+    db: UNTOUCHED,
+    context: jobless,
+    plan: plan({ problems: ["Point 4 has no winner"] }),
+    acceptScore: true,
+  });
+  expect(result).toEqual({
+    ok: false,
+    error:
+      "Not published: the match's video job is gone, so the backup would have nowhere to be recorded.",
   });
 });
 
