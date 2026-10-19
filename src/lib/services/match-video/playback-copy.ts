@@ -96,16 +96,25 @@ export function playbackColumns(report: PlaybackReport): {
 /**
  * Write a report onto every job that plays this upload (a resubmitted match's
  * jobs share it). Returns how many rows took it.
+ *
+ * Only `ready` writes over a ready copy. A repeat run for the same upload — a
+ * queue message delivered twice, a backfill of a match already done — reports
+ * `processing` and maybe `failed`, and either would leave a good copy unplayed
+ * (seen in the 2026-10-19 backfill). A new upload clears the copy anyway, in
+ * the database (`processing_jobs_guard_storage_keys`).
  */
 export async function applyPlaybackReport(
   db: ReturnType<typeof createAdminClient>,
   report: PlaybackReport,
 ): Promise<number> {
-  const { data, error } = await db
+  let update = db
     .from("processing_jobs")
     .update(playbackColumns(report))
-    .eq("video_object_key", report.sourceKey)
-    .select("id");
+    .eq("video_object_key", report.sourceKey);
+  if (report.status !== "ready") {
+    update = update.or("playback_status.is.null,playback_status.neq.ready");
+  }
+  const { data, error } = await update.select("id");
   if (error)
     throw new Error(`Could not record the playback copy: ${error.message}`);
   return data?.length ?? 0;

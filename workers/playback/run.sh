@@ -40,8 +40,9 @@ callback() {
   local body sig
   body="$(jq -nc --arg source "$SOURCE" --arg status "$1" --arg playback "${DEST:-}" \
     --arg error "${2:-}" --arg mode "${MODE:-}" \
-    '{sourceKey:$source, status:$status, playbackKey:($playback|select(.!="")),
-      error:($error|select(.!="")), mode:($mode|select(.!=""))}')"
+    'def blank: if . == "" then null else . end;
+     {sourceKey:$source, status:$status, playbackKey:($playback|blank),
+      error:($error|blank), mode:($mode|blank)}')"
   sig="$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$PLAYBACK_CALLBACK_SECRET" -hex | awk '{print $NF}')"
   curl -fsS -X POST "$CALLBACK_URL" -H 'content-type: application/json' \
     -H "x-playback-signature: $sig" --data "$body" -o /dev/null --max-time 30 \
@@ -88,12 +89,28 @@ trap 'fail "unexpected error on line $LINENO"' ERR
 
 callback processing
 
-EXPIRY="$(date -u -d '+6 hours' +%Y-%m-%dT%H:%MZ)"
-URL="$(az_b generate-sas --name "$SOURCE" --permissions r --expiry "$EXPIRY" --as-user --full-uri -o tsv)"
+# The upload comes to local disk first. Reading it over HTTP from ffmpeg
+# stalled on long connect timeouts even inside the region — the backfill's
+# large files spent hours reconnecting — while the CLI's download retries and
+# reads in parallel. The replica's disk is 8 GiB: the largest upload (6.1 GB)
+# plus its ≤4 Mbps re-encode still fits.
+mkdir -p "$WORK"
+SRC="$WORK/source"
+rm -f "$SRC"
+az_b download --name "$SOURCE" --file "$SRC" --max-connections 8 --no-progress -o none
+URL="$SRC"
 
 # What the upload is.
-read -r CODEC PIXFMT HEIGHT < <(ffprobe -v error -select_streams v:0 \
-  -show_entries stream=codec_name,pix_fmt,height -of csv=p=0:s=' ' "$URL")
+# One entry per call: ffprobe prints a section's fields in its own order,
+# and its CSV can trail a separator (an HEVC .mov gave "1/600,"), so read the
+# bare value, first line only.
+probe_stream() {
+  ffprobe -v error -select_streams v:0 -show_entries "stream=$1" \
+    -of default=noprint_wrappers=1:nokey=1 "$URL" | head -n 1
+}
+CODEC="$(probe_stream codec_name)"
+PIXFMT="$(probe_stream pix_fmt)"
+HEIGHT="$(probe_stream height)"
 BITRATE="$(ffprobe -v error -show_entries format=bit_rate -of csv=p=0 "$URL")"
 DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$URL")"
 FPS="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$URL" | awk -F/ '{ if ($2>0) printf "%.3f", $1/$2; else print 30 }')"
@@ -103,7 +120,10 @@ GAP="$(ffprobe -v error -select_streams v:0 -read_intervals "${MID}%+30" \
   | awk -F, '$2 ~ /K/ { if (seen) { g = $1 - last; if (g > max) max = g } last = $1; seen = 1 } END { printf "%.2f", max + 0 }')"
 log "codec=$CODEC pix=$PIXFMT h=$HEIGHT bitrate=$BITRATE fps=$FPS keyframe-gap=$GAP"
 
-if [[ "$CODEC" == h264 && "$PIXFMT" == yuv420p ]] && (( HEIGHT <= 1080 )) \
+# yuvj420p is the same 4:2:0 at full range — what phones record — and plays
+# everywhere yuv420p does.
+if [[ "$CODEC" == h264 && ( "$PIXFMT" == yuv420p || "$PIXFMT" == yuvj420p ) ]] \
+  && (( HEIGHT <= 1080 )) \
   && (( BITRATE <= REMUX_MAX_BITRATE )) \
   && awk -v g="$GAP" -v m="$REMUX_MAX_KEYFRAME_GAP" 'BEGIN { exit !(g > 0 && g <= m) }'; then
   MODE=remux
@@ -111,8 +131,11 @@ else
   MODE=transcode
 fi
 
-mkdir -p "$WORK"
 OUT="$WORK/out.mp4"
+# The upload's own clock: an encoder on the default 1/fps grid rounds a
+# phone's variable timestamps by up to half a frame (the first 60 fps
+# re-encodes failed the timeline check), so encode and mux on the source's.
+TIMESCALE="$(probe_stream time_base | awk -F/ '{ print $2 }')"
 
 encode() {
   rm -f "$OUT"
@@ -131,6 +154,7 @@ encode() {
       -c:v libx264 -preset veryfast -profile:v high -pix_fmt yuv420p \
       -vf "scale=-2:'min(1080,ih)'" -crf 23 -maxrate "$maxrate" -bufsize "$((maxrate * 2))" \
       -force_key_frames 'expr:gte(t,n_forced*2)' -fps_mode passthrough \
+      -enc_time_base:v "1:$TIMESCALE" -video_track_timescale "$TIMESCALE" \
       -c:a aac -b:a 128k -ac 2 -movflags +faststart "$OUT"
   fi
 }
@@ -169,7 +193,7 @@ fi
 
 az_b upload --name "$DEST" --file "$OUT" --overwrite --content-type video/mp4 \
   --max-connections 8 --no-progress -o none
-rm -f "$OUT"
+rm -f "$OUT" "$SRC"
 callback ready
 done_msg
 log "ready ($MODE)"
