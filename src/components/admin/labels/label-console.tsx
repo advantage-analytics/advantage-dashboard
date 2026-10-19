@@ -2436,8 +2436,13 @@ export function LabelConsole({
   // ↑ and ↓: the previous and next stroke of the open point.
   const stepShot = useRef<(direction: 1 | -1) => void>(() => {});
   // F B V O S and 1–4: the selected stroke's Stroke or Spin (stroke-keys.ts).
+  // A adds a stroke; C switches the court between contact and landing.
   // True when the key was the selected stroke's to take.
   const strokeKey = useRef<(key: string) => boolean>(() => false);
+  // A: add a stroke after the selected one, else after the open point's last.
+  // C: the court's other end — contact ↔ landing — for the selected stroke.
+  const addShotKey = useRef<() => boolean>(() => false);
+  const endKey = useRef<() => boolean>(() => false);
   // Escape with no stroke selected: fold the open point's rows away.
   const foldOpenPoint = useRef<() => boolean>(() => false);
   // ⌘Z: the header's Undo.
@@ -2514,6 +2519,23 @@ export function LabelConsole({
       // A cell left focused in the old row would keep the keys for itself.
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(shots[next].id);
+    };
+    addShotKey.current = () => {
+      if (!operable || confirm || !expanded) return false;
+      const selected =
+        placement.shotId !== null &&
+        expanded.shots.some(
+          (shot) => shot.id === placement.shotId && shot.status !== "deleted",
+        )
+          ? placement.shotId
+          : null;
+      addShot(expanded.id, selected);
+      return true;
+    };
+    endKey.current = () => {
+      if (!editable || confirm || placement.shotId === null) return false;
+      setTarget(placement.target === "contact" ? "landing" : "contact");
+      return true;
     };
     strokeKey.current = (key) => {
       if (!operable || confirm || placement.shotId === null) return false;
@@ -2624,6 +2646,31 @@ export function LabelConsole({
             "[role='menu'], [role='dialog'], [role='alertdialog']",
           ) &&
           strokeKey.current(key)
+        ) {
+          event.preventDefault();
+          return;
+        }
+      }
+      // A and C: add a stroke, switch contact ↔ landing. Same reach as the
+      // stroke keys: not from a text field, a menu or a dialog.
+      const lower = key.length === 1 ? key.toLowerCase() : key;
+      if (
+        (lower === "a" || lower === "c") &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.defaultPrevented &&
+        !event.repeat
+      ) {
+        const target = event.target as Element | null;
+        if (
+          !target?.closest?.(
+            "input, select, textarea, [contenteditable='true'], [role='menu'], [role='dialog'], [role='alertdialog']",
+          ) &&
+          !document.querySelector(
+            "[role='menu'], [role='dialog'], [role='alertdialog']",
+          ) &&
+          (lower === "a" ? addShotKey.current() : endKey.current())
         ) {
           event.preventDefault();
           return;

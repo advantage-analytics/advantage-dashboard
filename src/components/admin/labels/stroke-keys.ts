@@ -28,6 +28,9 @@ export const STROKE_KEY_HINTS: readonly { key: string; label: string }[] = [
   { key: "O", label: "overhead" },
   { key: "S", label: "serve" },
   { key: "1–4", label: "spin" },
+  // The console's own keys, not the stroke's (label-console.tsx).
+  { key: "C", label: "contact / landing" },
+  { key: "A", label: "add shot" },
 ];
 
 const VOLLEY_OF: Partial<Record<LabelStroke, LabelStroke>> = {

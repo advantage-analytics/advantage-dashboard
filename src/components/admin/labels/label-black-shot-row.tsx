@@ -370,6 +370,7 @@ export function BlackShotsWell({
             type="button"
             data-add-shot=""
             onClick={() => operations.onAddShot(point.id, null)}
+            aria-keyshortcuts="A"
             style={addArrival.style}
             // The row's own tracks, so the plus sits under the numbers and
             // the words under the times, at any rail width.

@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+import { readFileSync } from "node:fs";
+
 import {
+  STROKE_KEY_HINTS,
   isStrokeKey,
   strokeKeyChange,
 } from "@/components/admin/labels/stroke-keys";
@@ -79,6 +82,39 @@ test.describe("stroke keys", () => {
     for (const key of ["f", "B", "v", "o", "S", "1", "4"]) {
       expect(isStrokeKey(key)).toBe(true);
     }
+  });
+});
+
+test.describe("A adds a shot, C switches contact and landing", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("the legend under the court names both, after the stroke keys", () => {
+    expect(STROKE_KEY_HINTS.slice(-2)).toEqual([
+      { key: "C", label: "contact / landing" },
+      { key: "A", label: "add shot" },
+    ]);
+    // Neither is a stroke key: they never change the selected stroke.
+    expect(isStrokeKey("a")).toBe(false);
+    expect(isStrokeKey("c")).toBe(false);
+  });
+
+  test("A adds after the selected live stroke, else after the point's last; C flips the court's end", () => {
+    expect(source).toContain("addShot(expanded.id, selected);");
+    expect(source).toMatch(
+      /shot\.id === placement\.shotId && shot\.status !== "deleted",\n\s+\)\n\s+\? placement\.shotId\n\s+: null;/,
+    );
+    expect(source).toContain(
+      'setTarget(placement.target === "contact" ? "landing" : "contact");',
+    );
+    // Same reach as the stroke keys: never from a field, a menu or a dialog,
+    // never with a modifier, never on a held key.
+    expect(source).toContain('(lower === "a" || lower === "c") &&');
+    expect(source).toContain(
+      '(lower === "a" ? addShotKey.current() : endKey.current())',
+    );
   });
 });
 
