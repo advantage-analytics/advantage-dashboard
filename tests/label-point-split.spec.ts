@@ -21,6 +21,7 @@ import type { LabelPoint, LabelSession } from "@/lib/services/labels/session";
 import { tag } from "./fixtures/html-probe";
 import {
   FIXTURE_POINT_IDS,
+  appliedOps,
   fakeLabelClient,
   labelSessionFixture,
   labelShotRow,
@@ -361,7 +362,6 @@ test.describe("the console's rows", () => {
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const UUID = (n: number) => `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${n}`;
 const SHOT = (n: number) => `bbbbbbbb-bbbb-4bbb-8bbb-00000000000${n}`;
-const NEW_ROW_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 const POINT_ROWS = points().map((p, i) => ({
   id: UUID(i + 1),
@@ -373,78 +373,71 @@ const POINT_ROWS = points().map((p, i) => ({
   server: p.server,
   game_type: p.gameType,
   vendor_rally_ids: p.vendorRallyIds,
+  winner: p.winner,
+  ending: p.ending,
+  ended_by: p.endedBy,
 }));
 
-/** Point 1's shots as the writer reads them: `rally` is the JSON text path. */
+/**
+ * Point 1's shots, whole, as the writer reads them (`rally` is the JSON text
+ * path): Lee's serve, Vargas's backhand return, a deleted phantom and Lee's
+ * added forehand out. Split at the return, the anchor keeps the serve alone —
+ * an ace — and the new point Vargas's point on Lee's error.
+ */
 const SHOT_ROWS = [
   {
-    id: SHOT(1),
-    video_time: 2472.0,
-    event_id: 101,
-    status: "kept",
+    ...labelShotRow(SHOT(1), UUID(1), {
+      stroke: "first_serve",
+      video_time: 2472.0,
+      event_id: 101,
+    }),
     rally: "1001",
   },
   {
-    id: SHOT(2),
-    video_time: 2473.1,
-    event_id: 102,
-    status: "edited",
+    ...labelShotRow(SHOT(2), UUID(1), {
+      hitter: "p2",
+      stroke: "backhand",
+      video_time: 2473.1,
+      event_id: 102,
+      status: "edited",
+    }),
     rally: "1001",
   },
   {
-    id: SHOT(3),
-    video_time: 2473.6,
-    event_id: 103,
-    status: "deleted",
+    ...labelShotRow(SHOT(3), UUID(1), {
+      video_time: 2473.6,
+      event_id: 103,
+      status: "deleted",
+      status_before_delete: "kept",
+      delete_reason: "not_a_stroke",
+    }),
     rally: "1001",
   },
   {
-    id: SHOT(4),
-    video_time: 2474.4,
-    event_id: null,
-    status: "added",
+    ...labelShotRow(SHOT(4), UUID(1), {
+      result: "out",
+      video_time: 2474.4,
+      event_id: null,
+      status: "added",
+    }),
     rally: null,
   },
 ];
 
-/**
- * The split's own reads, plus what the ending each half then derives is
- * read from: `endingShots` by point id (the console's full shot rows; none
- * unless given) and the point row the reconcile reads back, which takes each
- * `label_points` update it is sent.
- */
+/** The split's reads, and its one transactional write (`label_apply_edit`). */
 function fakeClient(rows: {
   session?: Record<string, unknown> | null;
   anchor?: Record<string, unknown> | null;
   points?: Record<string, unknown>[];
   shots?: Record<string, unknown>[];
-  endingShots?: Record<string, Record<string, unknown>[]>;
-  /** The anchor's compare-and-set matched nothing — another tab got there first. */
+  /** A row was not as read — another tab got there first (LB409). */
   racedAnchor?: boolean;
 }) {
-  const endingPoints: Record<string, Record<string, unknown>> = {};
   return fakeLabelClient((call) => {
-    if (call.op === "update") {
-      if (call.table === "label_points" && "updated_at" in call.filters) {
-        const id = String(call.filters.id);
-        endingPoints[id] = { ...endingPoints[id], ...call.values };
-      }
-      if (rows.racedAnchor && "status" in call.filters) {
-        return { data: [], error: null };
-      }
-      return undefined;
-    }
-    if (call.op === "insert") {
-      return {
-        data: {
-          id: NEW_ROW_ID,
-          ...call.values,
-          status_before_delete: null,
-          note: null,
-          dismissed: [],
-        },
-        error: null,
-      };
+    if (call.op === "rpc") {
+      return rows.racedAnchor
+        ? { data: null, error: { message: "0 of 1", code: "LB409" } }
+        : undefined;
     }
     if (call.table === "label_sessions") {
       return {
@@ -459,23 +452,6 @@ function fakeClient(rows: {
       if ("session_id" in call.filters) {
         return { data: rows.points ?? POINT_ROWS, error: null };
       }
-      if (call.columns?.includes("updated_at")) {
-        const id = String(call.filters.id);
-        endingPoints[id] ??= {
-          id,
-          updated_at: "2026-10-01T10:00:00+00:00",
-          status: id === NEW_ROW_ID ? "added" : "edited",
-          seed: null,
-          set_number: 1,
-          game_number: 1,
-          server: "p1",
-          serve_side: null,
-          winner: null,
-          ending: null,
-          ended_by: null,
-        };
-        return { data: endingPoints[id], error: null };
-      }
       return {
         data:
           rows.anchor === undefined
@@ -485,171 +461,112 @@ function fakeClient(rows: {
       };
     }
     if (call.table === "label_shots") {
-      return call.columns?.includes("rally:")
-        ? { data: rows.shots ?? SHOT_ROWS, error: null }
-        : {
-            data: rows.endingShots?.[String(call.filters.label_point_id)] ?? [],
-            error: null,
-          };
+      return { data: rows.shots ?? SHOT_ROWS, error: null };
     }
     return undefined;
   });
 }
 
+type Op = {
+  op: string;
+  table: string;
+  ids?: string[];
+  set?: Record<string, unknown>;
+  values?: Record<string, unknown>;
+  expect_status?: string;
+};
 const writes = (fake: ReturnType<typeof fakeClient>) =>
   fake.calls.filter((c) => c.op !== "select");
+const ops = (fake: ReturnType<typeof fakeClient>) =>
+  appliedOps(fake.calls) as Op[];
 
 test.describe("writeLabelPointSplit", () => {
-  test("the gate, the reads, then the shifts highest first, ONE insert, ONE move of the shots and ONE anchor update — label_points and label_shots only", async () => {
+  test("the reads, then ONE transactional write: the shifts, the insert, the shots' move and the guarded anchor", async () => {
     const fake = fakeClient({});
     const result = await writeLabelPointSplit({
       supabase: fake.supabase,
       pointId: UUID(1),
       shotId: SHOT(2),
     });
-    expect(result).toMatchObject({
-      ok: true,
-      point: {
-        id: NEW_ROW_ID,
-        pointIndex: 1,
-        setNumber: 1,
-        gameNumber: 1,
-        server: "p1",
-        gameType: "game",
-        status: "added",
-        // The frozen vendor strokes' rally, read off `vendor->>pred_rally_id`.
-        vendorRallyIds: [1001],
-        winner: null,
-        ending: null,
-        endedBy: null,
-        seed: null,
-        shots: [],
-      },
-      // The serve stays, so the anchor keeps the rally too.
-      anchor: { id: UUID(1), status: "edited", vendor_rally_ids: [1001] },
-    });
     expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
       ["label_points", "select"],
       ["label_sessions", "select"],
       ["label_points", "select"],
       ["label_shots", "select"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "insert"],
-      ["label_shots", "update"],
-      ["label_points", "update"],
-      // Each half's rows and row, read for the ending it now derives: with
-      // no rows to read here, nothing is written.
-      ["label_shots", "select"],
-      ["label_points", "select"],
-      ["label_shots", "select"],
-      ["label_points", "select"],
+      ["label_apply_edit", "rpc"],
     ]);
     expect(fake.calls[3].columns).toContain("rally:vendor->>pred_rally_id");
     expect(fake.calls[3].filters).toEqual({ label_point_id: UUID(1) });
-    expect(fake.calls[10].filters).toEqual({ label_point_id: NEW_ROW_ID });
-    expect(fake.calls[12].filters).toEqual({ label_point_id: UUID(1) });
-    const [s4, s3, s2, insert, move, anchor] = writes(fake);
-    expect([s4, s3, s2].map((w) => [w.filters.id, w.values])).toEqual([
-      [UUID(4), { point_index: 4 }],
-      [UUID(3), { point_index: 3 }],
-      [UUID(2), { point_index: 2 }],
-    ]);
-    expect(insert.values).toEqual({
-      session_id: SESSION_ID,
-      point_index: 1,
-      set_number: 1,
-      game_number: 1,
-      server: "p1",
-      game_type: "game",
-      status: "added",
-      vendor_rally_ids: [1001],
-      serve_side: null,
-      winner: null,
-      ending: null,
-      ended_by: null,
-      seed: null,
-      checked_at: null,
-    });
-    // The shots: one update, by id list, the new point's id — nothing else.
-    expect(move).toEqual({
-      table: "label_shots",
-      op: "update",
-      values: { label_point_id: NEW_ROW_ID },
-      filters: {},
-      in: { id: [SHOT(2), SHOT(3), SHOT(4)] },
-    });
-    // Compare-and-set on the status the anchor was read with.
-    expect(anchor).toEqual({
+    expect(fake.calls[4].values?.p_session).toBe(SESSION_ID);
+
+    const [s4, s3, s2, insert, move, anchor, ...rest] = ops(fake);
+    expect(rest).toEqual([]);
+    expect([s4, s3, s2]).toEqual(
+      [4, 3, 2].map((n) => ({
+        op: "update",
+        table: "label_points",
+        ids: [UUID(n)],
+        set: { point_index: n },
+      })),
+    );
+    const newId = String(insert.values?.id);
+    expect(newId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(insert).toEqual({
+      op: "insert",
       table: "label_points",
+      values: {
+        id: newId,
+        point_index: 1,
+        set_number: 1,
+        game_number: 1,
+        server: "p1",
+        game_type: "game",
+        status: "added",
+        vendor_rally_ids: [1001],
+        serve_side: null,
+        // The ending its moved strokes derive, in the same insert.
+        winner: "p2",
+        ending: "error",
+        ended_by: "p1",
+        seed: null,
+        checked_at: null,
+      },
+    });
+    // The shots: one update, by id list, onto the new point — nothing else.
+    expect(move).toEqual({
       op: "update",
-      values: { status: "edited", vendor_rally_ids: [1001] },
-      filters: { id: UUID(1), status: "edited" },
+      table: "label_shots",
+      ids: [SHOT(2), SHOT(3), SHOT(4)],
+      set: { label_point_id: newId },
     });
-    for (const call of fake.calls) {
-      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
-      expect(["select", "update", "insert"]).toContain(call.op);
-    }
-  });
-
-  test("an anchor changed in another tab since the read is reported: the shifted rows, the new point and its moved shots stand, and no ending is read", async () => {
-    const raced = fakeClient({ racedAnchor: true });
-    expect(
-      await writeLabelPointSplit({
-        supabase: raced.supabase,
-        pointId: UUID(1),
-        shotId: SHOT(2),
-      }),
-    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
-    expect(raced.calls.map((c) => [c.table, c.op]).slice(4)).toEqual([
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "update"],
-      ["label_points", "insert"],
-      ["label_shots", "update"],
-      ["label_points", "update"],
-    ]);
-    expect(writes(raced).at(-1)?.filters).toEqual({
-      id: UUID(1),
-      status: "edited",
-    });
-  });
-
-  test("both halves take the ending their rows now derive, statuses as the split wrote them", async () => {
-    // Split at the return: the anchor keeps Lee's serve alone — an ace,
-    // where it said Lee's error — and the new point gets the return and
-    // Lee's forehand out, Vargas's point on his error.
-    const serve = labelShotRow(SHOT(1), UUID(1), {
-      stroke: "first_serve",
-      video_time: 2472.0,
-    });
-    const back = labelShotRow(SHOT(2), NEW_ROW_ID, {
-      hitter: "p2",
-      stroke: "backhand",
-      video_time: 2473.1,
-    });
-    const out = labelShotRow(SHOT(4), NEW_ROW_ID, {
-      result: "out",
-      status: "added",
-      video_time: 2474.4,
-    });
-    const fake = fakeClient({
-      endingShots: { [UUID(1)]: [serve], [NEW_ROW_ID]: [back, out] },
-    });
-    const result = await writeLabelPointSplit({
-      supabase: fake.supabase,
-      pointId: UUID(1),
-      shotId: SHOT(2),
+    // Guarded on the status the anchor was read with; its ending in the same
+    // write.
+    expect(anchor).toEqual({
+      op: "update",
+      table: "label_points",
+      ids: [UUID(1)],
+      set: {
+        status: "edited",
+        vendor_rally_ids: [1001],
+        ending: "ace",
+        ended_by: "p1",
+        winner: "p1",
+      },
+      expect_status: "edited",
     });
     expect(result).toMatchObject({
       ok: true,
       point: {
-        id: NEW_ROW_ID,
+        id: newId,
+        pointIndex: 1,
         status: "added",
+        // The frozen vendor strokes' rally, read off `vendor->>pred_rally_id`.
+        vendorRallyIds: [1001],
         ending: "error",
         endedBy: "p1",
         winner: "p2",
+        seed: null,
+        shots: [],
       },
       anchor: {
         id: UUID(1),
@@ -660,17 +577,19 @@ test.describe("writeLabelPointSplit", () => {
         winner: "p1",
       },
     });
-    const endings = writes(fake).filter((w) => "updated_at" in w.filters);
-    expect(endings.map((w) => [w.filters.id, w.values])).toEqual([
-      [
-        NEW_ROW_ID,
-        { ending: "error", ended_by: "p1", winner: "p2", status: "added" },
-      ],
-      [
-        UUID(1),
-        { ending: "ace", ended_by: "p1", winner: "p1", status: "edited" },
-      ],
-    ]);
+  });
+
+  test("an anchor changed in another tab since the read is reported, and nothing of the split is written", async () => {
+    const raced = fakeClient({ racedAnchor: true });
+    expect(
+      await writeLabelPointSplit({
+        supabase: raced.supabase,
+        pointId: UUID(1),
+        shotId: SHOT(2),
+      }),
+    ).toEqual({ error: "This row changed in another tab. Reload to see it." });
+    // One call, rolled back whole by the database; nothing read after it.
+    expect(raced.calls.map((c) => c.op).slice(4)).toEqual(["rpc"]);
   });
 
   test("a session labelled without marks takes a split — a manual edit", async () => {
