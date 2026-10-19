@@ -151,7 +151,7 @@ encode() {
       -c:v libx264 -preset veryfast -profile:v high -pix_fmt yuv420p \
       -vf "scale=-2:'min(1080,ih)'" -crf 23 -maxrate "$maxrate" -bufsize "$((maxrate * 2))" \
       -force_key_frames 'expr:gte(t,n_forced*2)' -fps_mode passthrough \
-      -enc_time_base:v demux -video_track_timescale "$TIMESCALE" \
+      -enc_time_base:v "1:$TIMESCALE" -video_track_timescale "$TIMESCALE" \
       -c:a aac -b:a 128k -ac 2 -movflags +faststart "$OUT"
   fi
 }
