@@ -21,7 +21,9 @@
 #   identity     playback-worker
 #   environment  playback-env (Consumption, logs off)
 #   job          playback-worker — event-triggered by the queue, 4 vCPU / 8 GiB,
-#                4 h replica timeout, one message per execution, ≤3 at once
+#                4 h replica timeout, one message per execution, ≤3 at once.
+#                Visible messages only: one being worked on is hidden for 4 h,
+#                and counting it would start a new execution every minute.
 #
 # Cost at today's scale: inside Container Apps' monthly free grant (about 16
 # hours of 4 vCPU), Event Grid's first 100k operations and queue pennies.
@@ -100,6 +102,7 @@ common=(
   --min-executions 0 --max-executions 3 --polling-interval 60
   --scale-rule-name queue --scale-rule-type azure-queue
   --scale-rule-metadata "accountName=$ACCT" "queueName=$QUEUE" "queueLength=1"
+    "queueLengthStrategy=visibleonly"
   --scale-rule-identity "$ID_ID"
   --secrets "callback-secret=$PLAYBACK_CALLBACK_SECRET"
   --env-vars "AZURE_CLIENT_ID=$ID_CLIENT" "STORAGE_ACCOUNT=$ACCT" "STORAGE_CONTAINER=$CONT"
