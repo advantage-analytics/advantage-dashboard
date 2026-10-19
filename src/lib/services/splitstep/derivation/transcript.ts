@@ -33,6 +33,7 @@ import {
 } from "./reconcile";
 import {
   classifyPoint,
+  lastCallContradictsWinner,
   lastServeIndex,
   shotNumber,
   shotResult,
@@ -856,6 +857,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
           adScoring,
           lineCalls,
         }).filter((f) => !(frozen && f === POINT_FLAGS.SCORE_SIDE_MISMATCH)),
+        ...(lastCallContradictsWinner(kept, winner)
+          ? [POINT_FLAGS.LAST_CALL_CONTRADICTS_WINNER]
+          : []),
         ...(rec.settledWinners[i]?.via === "guess"
           ? [POINT_FLAGS.WINNER_GUESSED]
           : []),
