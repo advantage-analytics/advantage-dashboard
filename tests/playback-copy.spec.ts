@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 import {
+  applyPlaybackReport,
   parsePlaybackReport,
   playbackColumns,
   playbackKeyFor,
@@ -92,4 +93,48 @@ test("processing and failed keep a copy already made; ready sets it", () => {
     playback_error: null,
     playback_object_key: "playback/u/m/original.mp4",
   });
+});
+
+test("only a ready report writes over a ready copy", async () => {
+  const sourceKey = "videos/u/m/original.mp4";
+  const seen: { values: unknown; filters: string[] }[] = [];
+  const db = {
+    from: () => {
+      const call = { values: undefined as unknown, filters: [] as string[] };
+      seen.push(call);
+      const builder = {
+        update: (values: unknown) => ((call.values = values), builder),
+        eq: (column: string, value: unknown) => (
+          call.filters.push(`${column}=${value}`),
+          builder
+        ),
+        or: (filter: string) => (call.filters.push(`or(${filter})`), builder),
+        select: async () => ({ data: [{ id: "j" }], error: null }),
+      };
+      return builder;
+    },
+  } as unknown as Parameters<typeof applyPlaybackReport>[0];
+
+  await applyPlaybackReport(
+    db,
+    parsePlaybackReport({ sourceKey, status: "processing" })!,
+  );
+  await applyPlaybackReport(
+    db,
+    parsePlaybackReport({ sourceKey, status: "failed", error: "x" })!,
+  );
+  await applyPlaybackReport(
+    db,
+    parsePlaybackReport({
+      sourceKey,
+      status: "ready",
+      playbackKey: "playback/u/m/original.mp4",
+    })!,
+  );
+  const guard = "or(playback_status.is.null,playback_status.neq.ready)";
+  expect(seen.map((c) => c.filters)).toEqual([
+    [`video_object_key=${sourceKey}`, guard],
+    [`video_object_key=${sourceKey}`, guard],
+    [`video_object_key=${sourceKey}`],
+  ]);
 });
