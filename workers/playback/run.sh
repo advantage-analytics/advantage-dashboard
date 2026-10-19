@@ -120,30 +120,39 @@ encode() {
     ffmpeg -nostdin -v error -y -i "$URL" -map 0:v:0 -map '0:a:0?' -c copy \
       -movflags +faststart "$OUT"
   else
-    # ~2–3 Mbps at 1080p30, a little more at 60 fps; a keyframe every 2 s by
-    # time, so variable-frame-rate phone footage keeps its own timestamps.
-    local maxrate=4M bufsize=8M
-    if awk -v f="$FPS" 'BEGIN { exit !(f > 40) }'; then maxrate=5M; bufsize=10M; fi
+    # At most 4 Mbps at 1080p30 (5 at 60 fps), and never much above the
+    # upload's own rate: a 0.7 Mbps upload re-encoded only for its keyframes
+    # came out twice its size uncapped. A keyframe every 2 s by time, so
+    # variable-frame-rate phone footage keeps its own timestamps.
+    local ceiling=4000000 maxrate
+    if awk -v f="$FPS" 'BEGIN { exit !(f > 40) }'; then ceiling=5000000; fi
+    maxrate="$(awk -v s="$BITRATE" -v c="$ceiling" 'BEGIN { m = s * 1.2; if (m < 1000000) m = 1000000; if (m > c) m = c; printf "%d", m }')"
     ffmpeg -nostdin -v error -y -i "$URL" -map 0:v:0 -map '0:a:0?' \
       -c:v libx264 -preset veryfast -profile:v high -pix_fmt yuv420p \
-      -vf "scale=-2:'min(1080,ih)'" -crf 23 -maxrate "$maxrate" -bufsize "$bufsize" \
+      -vf "scale=-2:'min(1080,ih)'" -crf 23 -maxrate "$maxrate" -bufsize "$((maxrate * 2))" \
       -force_key_frames 'expr:gte(t,n_forced*2)' -fps_mode passthrough \
       -c:a aac -b:a 128k -ac 2 -movflags +faststart "$OUT"
   fi
 }
 
-# Same timeline or nothing: video start time, frame count and duration.
-fingerprint() {
-  ffprobe -v error -select_streams v:0 -count_packets \
-    -show_entries stream=start_time,nb_read_packets -of csv=p=0 "$1"
+# Same timeline or nothing: every SHOWN video frame (presentation time ≥ 0 —
+# an edit list hides pre-roll packets with negative times, which a copy may
+# drop) at the same time to the millisecond, and the same duration. Times are
+# compared in seconds because the two files' time bases differ.
+shown_times() {
+  ffprobe -v error -select_streams v:0 -show_entries packet=pts_time \
+    -of csv=p=0 "$1" | awk '$1 != "N/A" && $1 >= 0' | sort -g
 }
-BEFORE="$(fingerprint "$URL")"
+shown_times "$URL" >"$WORK/before.txt"
 same_timeline() {
-  local after out_duration
-  after="$(fingerprint "$OUT")"
+  local out_duration
+  shown_times "$OUT" >"$WORK/after.txt"
   out_duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$OUT")"
-  log "timeline: upload $BEFORE ${DURATION}s, copy $after ${out_duration}s"
-  [[ "$BEFORE" == "$after" ]] \
+  log "timeline: upload $(wc -l <"$WORK/before.txt") frames ${DURATION}s," \
+    "copy $(wc -l <"$WORK/after.txt") frames ${out_duration}s"
+  [[ "$(wc -l <"$WORK/before.txt")" == "$(wc -l <"$WORK/after.txt")" ]] \
+    && paste "$WORK/before.txt" "$WORK/after.txt" \
+      | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > 0.001) exit 1 }' \
     && awk -v a="$DURATION" -v b="$out_duration" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < 0.1) }'
 }
 
