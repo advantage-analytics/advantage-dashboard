@@ -116,13 +116,26 @@ function foldFrom(
   gameNumber: number,
   type: TiebreakFoldType,
 ): TiebreakFold {
+  // From the game's first row on, in row order: a game number is a key, not
+  // an order (a game started mid-set takes the highest number plus one), so
+  // "the games after" are the rows after, never the numbers above.
+  const start = Math.min(
+    ...points
+      .filter(
+        (point) =>
+          point.status !== "deleted" &&
+          point.setNumber === setNumber &&
+          point.gameNumber === gameNumber,
+      )
+      .map((point) => point.pointIndex),
+  );
   const after = points
     .filter(
       (point) =>
         point.status !== "deleted" &&
         point.setNumber === setNumber &&
         point.gameNumber !== null &&
-        point.gameNumber >= gameNumber,
+        point.pointIndex >= start,
     )
     .sort((a, b) => a.pointIndex - b.pointIndex);
   const count = { p1: 0, p2: 0 };

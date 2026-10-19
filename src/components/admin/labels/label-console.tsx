@@ -48,6 +48,7 @@ import {
   GAME_PULL_ADD_POINT,
   planGamePull,
   planGameShift,
+  planGameSplit,
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
@@ -1476,6 +1477,18 @@ export function LabelConsole({
   }
 
   /**
+   * "Start a new game here" (`planGameSplit`): the point and the rest of its
+   * game become a new game, planned here on the rows as they stand.
+   */
+  function startGameAt(atPointId: string) {
+    if (!operations?.splitGame) return;
+    const plan = planGameSplit(points, atPointId);
+    if ("error" in plan) return refuse(plan.error);
+    const split = operations.splitGame;
+    runGameShift(plan, () => split(session.id, atPointId));
+  }
+
+  /**
    * The tiebreak at 6–6 (`tiebreak-fold.ts`): the game after it becomes a
    * tiebreak, the vendor's split games fold into it, and its serve order is
    * set — planned here on the rows as they stand, written by the server.
@@ -2353,6 +2366,7 @@ export function LabelConsole({
     onDismissSuggestion: dismissSuggestion,
     onInsertPoint: insertPoint,
     onShiftGameOverflow: shiftGameOverflow,
+    onStartGame: operations?.splitGame ? startGameAt : undefined,
     onFoldTiebreak: foldTiebreak,
     onSplitPoint: splitPoint,
     onCombinePoints: combinePoints,
@@ -3337,6 +3351,11 @@ export interface LabelConsoleOperations {
   pullGamePoints: (
     sessionId: string,
     gameKey: string,
+  ) => Promise<LabelGameShiftResult>;
+  /** Starts a new game at a point (`planGameSplit`). Same answer. */
+  splitGame?: (
+    sessionId: string,
+    atPointId: string,
   ) => Promise<LabelGameShiftResult>;
   /** Makes set `setNumber`'s game after 6–6 a tiebreak. Same answer. */
   foldTiebreak?: (
