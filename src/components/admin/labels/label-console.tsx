@@ -263,7 +263,7 @@ import {
   playingRowKey,
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
-import { isStrokeKey, strokeKeyChange } from "./stroke-keys";
+import { hasEarlierServe, isStrokeKey, strokeKeyChange } from "./stroke-keys";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
@@ -2496,7 +2496,12 @@ export function LabelConsole({
       if (!operable || confirm || placement.shotId === null) return false;
       const shot = findShot(points, placement.shotId);
       if (!shot || shot.status === "deleted") return false;
-      const change = strokeKeyChange(key, shot);
+      const owner = points.find((p) => p.shots.some((s) => s.id === shot.id));
+      const change = strokeKeyChange(
+        key,
+        shot,
+        owner ? hasEarlierServe(owner, shot.id, drawsGhosts(marks)) : false,
+      );
       if (change) {
         requestPatchShot(
           shot.id,
