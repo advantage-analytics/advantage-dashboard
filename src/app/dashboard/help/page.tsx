@@ -9,6 +9,7 @@ import type { StepState } from "@/components/dashboard/shared/vertical-steps";
 import { EXPORT_GUIDE_URL, SUPPORT_EMAIL } from "@/lib/constants";
 import {
   MAX_VIDEO_SIZE_BYTES,
+  PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS,
   formatPilotEnd,
   getMonthlyCapHours,
 } from "@/lib/services/splitstep/config";
@@ -151,8 +152,16 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
         action: "Previous or next point",
         note: "On the Film tab.",
       },
-      { keys: ["J", "L"], action: "Back or forward 5 seconds" },
-      { keys: ["S"], action: "Show saved points only" },
+      {
+        keys: ["J", "L"],
+        action: "Back or forward 5 seconds",
+        note: "On the Film tab.",
+      },
+      {
+        keys: ["S"],
+        action: "Show saved points only",
+        note: "On the Film tab.",
+      },
     ],
   },
   {
@@ -440,8 +449,11 @@ export default function HelpCenterPage() {
                   An HDR, HEVC or 4K video is converted in this tab before it
                   uploads, and HDR colour can&rsquo;t survive the conversion, so
                   the saved video looks paler and flatter than on your phone.
-                  Analysis isn&rsquo;t affected — only how the video looks. A
-                  1080p H.264 file without HDR uploads exactly as recorded.
+                  Analysis isn&rsquo;t affected — only how the video looks. If
+                  your browser can&rsquo;t convert it, it uploads as recorded
+                  and some browsers won&rsquo;t play it back — Most Compatible
+                  avoids that. A 1080p H.264 file without HDR uploads exactly as
+                  recorded, unless it&rsquo;s over {MAX_VIDEO_GB} GB.
                 </p>
               </div>
 
@@ -553,8 +565,9 @@ export default function HelpCenterPage() {
                 <span className={blockLabelClass}>Video hours</span>
                 <p className={proseClass}>
                   Each month includes {getMonthlyCapHours("individual")} free
-                  hours for your personal uploads, through {formatPilotEnd()}.
-                  Past that, credit packs start at{" "}
+                  hours for your personal uploads (
+                  {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} for pilot players),
+                  through {formatPilotEnd()}. Past that, credit packs start at{" "}
                   {packPerHour(CREDIT_PACKS[0])} on{" "}
                   <Link href={PLAN_HREF} className={linkClass}>
                     Settings › Plan
@@ -755,10 +768,11 @@ export default function HelpCenterPage() {
             >
               <h2 className={topicHeadingClass}>Sharing a match</h2>
               <p className={`${proseClass} max-w-[560px]`}>
-                Share on a match page makes a link anyone can open, with no
-                sign-in. Statistics are always on it; Visualizations start
-                ticked and Video starts clear. On a team match, only staff can
-                add the video unless the program lets players.
+                Press Share on a match page and choose Anyone with the link: it
+                makes a link anyone can open, with no sign-in. Statistics are
+                always on it; Visualizations start ticked and Video starts
+                clear. On a team match, only staff can add the video unless the
+                program lets players.
               </p>
 
               <div className="flex flex-col gap-2.5">
@@ -780,10 +794,10 @@ export default function HelpCenterPage() {
                 <Link href="/dashboard/ask" className={linkClass}>
                   Ask
                 </Link>{" "}
-                answers questions about your matches in plain words, with every
-                number read from your own statistics. In a team workspace, Ask
-                covers the program&apos;s matches; what you ask there stays
-                private to you.
+                answers questions about your own matches in plain words, with
+                every number read from your statistics. In a team workspace, the
+                team&apos;s Ask covers the program&apos;s matches; what you ask
+                there stays private to you.
               </p>
 
               <div className="flex flex-col gap-2.5">
