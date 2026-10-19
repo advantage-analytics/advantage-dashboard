@@ -92,8 +92,8 @@ EXPIRY="$(date -u -d '+6 hours' +%Y-%m-%dT%H:%MZ)"
 URL="$(az_b generate-sas --name "$SOURCE" --permissions r --expiry "$EXPIRY" --as-user --full-uri -o tsv)"
 
 # What the upload is.
-read -r CODEC PIXFMT HEIGHT < <(ffprobe -v error -select_streams v:0 \
-  -show_entries stream=codec_name,pix_fmt,height -of csv=p=0:s=' ' "$URL")
+IFS=, read -r CODEC PIXFMT HEIGHT < <(ffprobe -v error -select_streams v:0 \
+  -show_entries stream=codec_name,pix_fmt,height -of csv=p=0 "$URL")
 BITRATE="$(ffprobe -v error -show_entries format=bit_rate -of csv=p=0 "$URL")"
 DURATION="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$URL")"
 FPS="$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$URL" | awk -F/ '{ if ($2>0) printf "%.3f", $1/$2; else print 30 }')"
