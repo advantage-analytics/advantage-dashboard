@@ -41,6 +41,7 @@ import {
   restoreLabelShots,
   unmarkLabelPointChecked,
   writeLabelPointMove,
+  writeLabelPointsMove,
   writeLabelShotAdd,
   writeLabelShotDelete,
   writeLabelShotRestore,
@@ -52,6 +53,7 @@ import {
   FIXTURE_POINT_IDS,
   POINT_1_SHOTS,
   POINT_4_SHOTS,
+  appliedOps,
   fakeLabelClient,
   labelSessionFixture,
   labelShot,
@@ -737,6 +739,11 @@ function fakeClient(rows: {
 }) {
   let point = rows.point === undefined ? OWNING_POINT : rows.point;
   return fakeLabelClient((call) => {
+    if (call.op === "rpc") {
+      return rows.raced
+        ? { data: null, error: { message: "0 of 1", code: "LB409" } }
+        : undefined;
+    }
     if (call.op === "update") {
       if (rows.raced) return { data: [], error: null };
       if (call.table === "label_points" && point) {
@@ -773,9 +780,12 @@ function fakeClient(rows: {
         : { data: rows.shot ?? null, error: null };
     }
     if (call.table === "label_points") {
-      return "game_number" in call.filters
-        ? { data: rows.gamePoints ?? [], error: null }
-        : { data: point, error: null };
+      if ("game_number" in call.filters) {
+        return { data: rows.gamePoints ?? [], error: null };
+      }
+      // A move reads its points by id list.
+      if (call.in?.id) return { data: point ? [point] : [], error: null };
+      return { data: point, error: null };
     }
     return undefined;
   });
@@ -1372,19 +1382,22 @@ test.describe("the services", () => {
       switchServer: false,
     });
     expect(result).toHaveProperty("error");
-    expect(fake.calls.some((c) => c.op === "update")).toBe(false);
-    // It asked the destination game's other live points.
+    expect(fake.calls.some((c) => c.op === "update" || c.op === "rpc")).toBe(
+      false,
+    );
+    // It asked the destination game's live points (the moved ones are left
+    // out of the count by id, in the plan).
     expect(
       fake.calls.find(
         (c) => c.table === "label_points" && "game_number" in c.filters,
       ),
     ).toMatchObject({
       filters: { session_id: SESSION_ID, set_number: 1, game_number: 4 },
-      negated: { status: "deleted", id: POINT_ID },
+      negated: { status: "deleted" },
     });
   });
 
-  test("a switch the strokes contradict flips the point, then its strokes in grouped writes — label_points and label_shots, no delete", async () => {
+  test("a switch the strokes contradict flips the point and its strokes in ONE transactional write, grouped — label_points and label_shots, no delete", async () => {
     const shotRow = (id: string, fields: Record<string, unknown>) =>
       labelShotRow(id, POINT_ID, fields);
     const fake = fakeClient({
@@ -1467,58 +1480,68 @@ test.describe("the services", () => {
         },
       ],
     });
-    // The point first (compare-and-set), then one write per distinct
-    // value tuple, by id list, in the order the tuples first appear.
-    const updates = fake.calls.filter((c) => c.op === "update");
-    expect(updates.map((c) => c.table)).toEqual([
-      "label_points",
-      "label_shots",
-      "label_shots",
-      "label_shots",
-      "label_shots",
-    ]);
-    expect(updates[0]).toMatchObject({
-      filters: { id: POINT_ID, status: "unchanged" },
-      values: {
-        set_number: 1,
-        game_number: 4,
-        status: "edited",
-        server: "p2",
-        winner: "p2",
-        ended_by: "p1",
-      },
-    });
-    // Each group compare-and-set on the status its strokes were read with;
+    // One transaction: the point first, guarded on the status it was read
+    // with, then one write per distinct value tuple, by id list, in the order
+    // the tuples first appear, each guarded on its strokes' status as read.
     // `was` itself is never a column written.
-    expect(updates.slice(1).map((c) => [c.values, c.in, c.filters])).toEqual([
-      [
-        { hitter: "p2", status: "edited", status_before_delete: null },
-        { id: [SHOT_ID] },
-        { status: "kept" },
-      ],
-      [
-        { hitter: "p1", status: "edited", status_before_delete: null },
-        { id: [OTHER_SHOT] },
-        { status: "kept" },
-      ],
-      [
-        { hitter: "p2", status: "deleted", status_before_delete: "edited" },
-        { id: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"] },
-        { status: "deleted" },
-      ],
-      [
-        { hitter: "p1", status: "added", status_before_delete: null },
-        { id: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"] },
-        { status: "added" },
-      ],
+    expect(fake.calls.filter((c) => c.op === "update")).toEqual([]);
+    expect(appliedOps(fake.calls)).toEqual([
+      {
+        op: "update",
+        table: "label_points",
+        ids: [POINT_ID],
+        set: {
+          set_number: 1,
+          game_number: 4,
+          status: "edited",
+          server: "p2",
+          winner: "p2",
+          ended_by: "p1",
+        },
+        expect_status: "unchanged",
+      },
+      {
+        op: "update",
+        table: "label_shots",
+        ids: [SHOT_ID],
+        set: { hitter: "p2", status: "edited", status_before_delete: null },
+        expect_status: "kept",
+      },
+      {
+        op: "update",
+        table: "label_shots",
+        ids: [OTHER_SHOT],
+        set: { hitter: "p1", status: "edited", status_before_delete: null },
+        expect_status: "kept",
+      },
+      {
+        op: "update",
+        table: "label_shots",
+        ids: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"],
+        set: {
+          hitter: "p2",
+          status: "deleted",
+          status_before_delete: "edited",
+        },
+        expect_status: "deleted",
+      },
+      {
+        op: "update",
+        table: "label_shots",
+        ids: ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"],
+        set: { hitter: "p1", status: "added", status_before_delete: null },
+        expect_status: "added",
+      },
     ]);
     for (const call of fake.calls) {
-      expect(call.table).toMatch(/^label_(points|shots|sessions)$/);
-      expect(["select", "update"]).toContain(call.op);
+      expect(call.table).toMatch(
+        /^(label_(points|shots|sessions)|label_apply_edit)$/,
+      );
+      expect(["select", "rpc"]).toContain(call.op);
     }
   });
 
-  test("a point that races away is not moved, and no stroke is touched", async () => {
+  test("a point that races away is not moved, and no stroke is touched — the one write rolls back whole", async () => {
     const fake = fakeClient({
       point: pointRow,
       gamePoints: [{ server: "p2", point_index: 20 }],
@@ -1540,8 +1563,82 @@ test.describe("the services", () => {
       }),
     ).toEqual({ error: "This row changed in another tab. Reload to see it." });
     expect(
-      fake.calls.filter((c) => c.op === "update").map((c) => c.table),
-    ).toEqual(["label_points"]);
+      fake.calls.filter((c) => c.op !== "select").map((c) => c.op),
+    ).toEqual(["rpc"]);
+  });
+
+  test("a dragged header's points move in ONE write, each counting the ones moved before it", async () => {
+    const SECOND = "cccccccc-cccc-4ccc-8ccc-000000000002";
+    const first = { ...pointRow, point_index: 5, winner: null, seed: null };
+    const second = { ...first, id: SECOND, point_index: 6 };
+    const fake = fakeLabelClient((call) => {
+      if (call.op === "rpc") return undefined;
+      if (call.table === "label_sessions") {
+        return {
+          data: { status: "labelling", marks_enabled: false },
+          error: null,
+        };
+      }
+      if (call.table === "label_shots") return { data: [], error: null };
+      if ("game_number" in call.filters) {
+        // Game 4 as read: one point of its own, served by p2 — the first
+        // moved point joins it on p2, and the second counts both.
+        return {
+          data: [{ id: "x", server: "p2", point_index: 20 }],
+          error: null,
+        };
+      }
+      return { data: [second, first], error: null };
+    });
+    const result = await writeLabelPointsMove({
+      supabase: fake.supabase,
+      pointIds: [POINT_ID, SECOND],
+      to: { setNumber: 1, gameNumber: 4 },
+      switchServer: true,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      moves: [
+        { id: POINT_ID, server: "p2", setNumber: 1, gameNumber: 4 },
+        { id: SECOND, server: "p2", setNumber: 1, gameNumber: 4 },
+      ],
+    });
+    // Reads: the points, then the gate, the game and the strokes side by
+    // side; then one transaction.
+    expect(fake.calls.map((c) => [c.table, c.op])).toEqual([
+      ["label_points", "select"],
+      ["label_sessions", "select"],
+      ["label_points", "select"],
+      ["label_shots", "select"],
+      ["label_apply_edit", "rpc"],
+    ]);
+    expect(fake.calls[0].in).toEqual({ id: [POINT_ID, SECOND] });
+    const ops = appliedOps(fake.calls) as {
+      ids: string[];
+      set: Record<string, unknown>;
+      expect_status: string;
+    }[];
+    expect(ops.map((op) => [op.ids, op.set.server, op.expect_status])).toEqual([
+      [[POINT_ID], "p2", "unchanged"],
+      [[SECOND], "p2", "unchanged"],
+    ]);
+
+    // Refusals before anything is read.
+    for (const pointIds of [
+      [],
+      "nope",
+      ["bad"],
+      new Array(201).fill(POINT_ID),
+    ]) {
+      expect(
+        await writeLabelPointsMove({
+          supabase: fake.supabase,
+          pointIds,
+          to: { setNumber: 1, gameNumber: 4 },
+          switchServer: true,
+        }),
+      ).toHaveProperty("error");
+    }
   });
 
   test("checked sets checked_at, and unchecking clears it", async () => {

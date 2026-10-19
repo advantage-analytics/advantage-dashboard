@@ -96,6 +96,7 @@ import type {
   LabelAddShotResult,
   LabelCheckedResult,
   LabelMovePointResult,
+  LabelMovePointsResult,
   LabelPointStatusResult,
   LabelShotStatusResult,
   LabelShotsRemoveResult,
@@ -1992,7 +1993,8 @@ export function LabelConsole({
    * The run's moves. Every point takes its new game at once — one at a time
    * would leave a game a point short between two writes, and the slots that
    * read the score would ask about a state the run is only passing through.
-   * The writes then go in order; a refused one puts it and the rest back.
+   * The server takes the whole run in one write (`movePoints`), and a refusal
+   * puts every point back.
    * A tiebreak on either side of the boundary then has its serve order put
    * right.
    */
@@ -2026,14 +2028,36 @@ export function LabelConsole({
       pointMovePutBack(current, before);
     setPoints((current) => steps.reduce(moved, current));
     dispatchSave({ type: "start" });
-    for (const [i, { before }] of steps.entries()) {
-      const result = await settle(operations.movePoint(before.id, to, true));
+    if (operations.movePoints) {
+      // One write for the whole run: it lands whole or not at all.
+      const result = await settle(
+        operations.movePoints(
+          steps.map(({ before }) => before.id),
+          to,
+          true,
+        ),
+      );
       if ("error" in result) {
-        setPoints((current) => steps.slice(i).reduce(putBack, current));
+        setPoints((current) => steps.reduce(putBack, current));
         dispatchSave({ type: "failure", message: result.error });
         return;
       }
-      setPoints((current) => pointMoveSettled(current, before.id, result));
+      setPoints((current) =>
+        result.moves.reduce(
+          (rows, { id, ...move }) => pointMoveSettled(rows, id, move),
+          current,
+        ),
+      );
+    } else {
+      for (const [i, { before }] of steps.entries()) {
+        const result = await settle(operations.movePoint(before.id, to, true));
+        if ("error" in result) {
+          setPoints((current) => steps.slice(i).reduce(putBack, current));
+          dispatchSave({ type: "failure", message: result.error });
+          return;
+        }
+        setPoints((current) => pointMoveSettled(current, before.id, result));
+      }
     }
     dispatchSave({ type: "success", at: Date.now() });
     // A tiebreak that gained or lost points has every turn behind them
@@ -3290,6 +3314,12 @@ export interface LabelConsoleOperations {
     to: LabelGame,
     switchServer: boolean,
   ) => Promise<LabelMovePointResult>;
+  /** A dragged header's points in one write; absent, one `movePoint` each. */
+  movePoints?: (
+    pointIds: string[],
+    to: LabelGame,
+    switchServer: boolean,
+  ) => Promise<LabelMovePointsResult>;
   setChecked: (
     pointId: string,
     checked: boolean,

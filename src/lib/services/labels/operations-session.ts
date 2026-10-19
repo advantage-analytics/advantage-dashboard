@@ -30,10 +30,12 @@ import {
   writeShotTombstones,
   type LabelWriteDependencies,
 } from "./edit-session";
+import { applyLabelEdit, type LabelEditOp } from "./apply-edit-session";
 import {
   endingSyncFailed,
   withSyncedPoint,
   readPointShots,
+  readShotsOfPoints,
   syncEndingAfterShotChange,
   type LabelPointEndingSynced,
 } from "./ending-session";
@@ -98,6 +100,11 @@ export type LabelMovePointResult = LabelOpResult<{
   /** The strokes flipped with the players (player-swap.ts); empty when none. */
   shots: ShotSwapWrite[];
 }>;
+/** One point of a multi-point move, as `LabelMovePointResult` with its id. */
+export type LabelMovedPoint = Extract<LabelMovePointResult, { ok: true }> & {
+  id: string;
+};
+export type LabelMovePointsResult = LabelOpResult<{ moves: LabelMovedPoint[] }>;
 export type LabelCheckedResult = LabelOpResult<{ checkedAt: string | null }>;
 /** Every live stroke after one, tombstoned; the point when that moved its ending. */
 export type LabelShotsRemoveResult = LabelOpResult<
@@ -189,6 +196,36 @@ export async function writeShotSwaps(
     }
   }
   return null;
+}
+
+/**
+ * A swap's flipped strokes as `label_apply_edit` updates: one per distinct
+ * value tuple and status as read (`was`), guarded on `was` — `writeShotSwaps`'
+ * groups, inside the edit's one transaction, so a miss writes none of it.
+ */
+export function shotSwapOps(shots: readonly ShotSwapWrite[]): LabelEditOp[] {
+  const groups = new Map<
+    string,
+    { values: Omit<ShotSwapWrite, "id" | "was">; was: string; ids: string[] }
+  >();
+  for (const { id, was, ...values } of shots) {
+    const key = JSON.stringify([
+      values.hitter,
+      values.status,
+      values.status_before_delete,
+      was,
+    ]);
+    const group = groups.get(key);
+    if (group) group.ids.push(id);
+    else groups.set(key, { values, was, ids: [id] });
+  }
+  return [...groups.values()].map((group) => ({
+    op: "update",
+    table: "label_shots",
+    ids: group.ids,
+    set: { ...group.values },
+    expect_status: group.was,
+  }));
 }
 
 /**
@@ -612,20 +649,40 @@ export async function writeLabelPointRestore(params: {
   return failed ? { error: failed } : { ok: true, status: plan.write.status };
 }
 
+/** The most points one move takes: a header dragged across a whole set. */
+const MAX_MOVED_POINTS = 200;
+
+type MoveRow = PointStateRow & { point_index: number };
+
 /**
- * Move a point into game `to` (`planPointMove`). The point's row is written
- * first (compare-and-set), then its flipped strokes in grouped UPDATEs. The
- * shots are read only when the server would switch.
+ * Move points into game `to`, in order (`planPointMove` each) — one point for
+ * "Move to game…", the run a dragged game header passed. Each point's
+ * destination server counts the points moved before it, as the console plans
+ * the drag. One read of the points, then the gate, the game and (when the
+ * server may switch) their strokes side by side, then every write in one
+ * transaction (`applyLabelEdit`): each point's row guarded on the status it
+ * was read with, and its flipped strokes on theirs. A miss writes nothing.
  */
-export async function writeLabelPointMove(params: {
+export async function writeLabelPointsMove(params: {
   supabase: AdminClient;
-  pointId: unknown;
+  pointIds: unknown;
   to: unknown;
   switchServer: unknown;
-}): Promise<LabelMovePointResult> {
+}): Promise<LabelMovePointsResult> {
   const { supabase } = params;
-  const pointId = normaliseId(params.pointId);
-  if (!pointId) return { error: "Invalid point id." };
+  if (
+    !Array.isArray(params.pointIds) ||
+    params.pointIds.length === 0 ||
+    params.pointIds.length > MAX_MOVED_POINTS
+  ) {
+    return { error: "Name the points to move." };
+  }
+  const pointIds: string[] = [];
+  for (const raw of params.pointIds) {
+    const id = normaliseId(raw);
+    if (!id) return { error: "Invalid point id." };
+    if (!pointIds.includes(id)) pointIds.push(id);
+  }
   if (!isLabelGame(params.to)) {
     return { error: "A game is a set and a game number, both 1 or more." };
   }
@@ -636,89 +693,130 @@ export async function writeLabelPointMove(params: {
     setNumber: params.to.setNumber,
     gameNumber: params.to.gameNumber,
   };
+  const switchServer = params.switchServer;
 
-  const read = await readPointState(supabase, pointId);
-  if ("error" in read) return read;
-
-  const { data: others, error: othersError } = await supabase
+  const { data: found, error: readError } = await supabase
     .from("label_points")
-    .select("server, point_index")
-    .eq("session_id", read.row.session_id)
-    .eq("set_number", to.setNumber)
-    .eq("game_number", to.gameNumber)
-    .neq("status", "deleted")
-    .neq("id", pointId)
-    .returns<{ server: LabelSide | null; point_index: number }[]>();
-  if (othersError) {
-    return { error: `Could not read that game: ${othersError.message}` };
+    .select(
+      "id, session_id, point_index, status, status_before_delete, server, set_number, game_number, serve_side, winner, ending, ended_by, seed",
+    )
+    .in("id", pointIds)
+    .returns<MoveRow[]>();
+  if (readError) {
+    return { error: `Could not read the point: ${readError.message}` };
   }
-  const destination = gameServer(
-    (others ?? []).map((p) => ({
-      server: p.server,
-      pointIndex: p.point_index,
-    })),
-  );
-
-  // The strokes matter only to a move that switches the server — and one
-  // not yet confirmed is refused by the plan before any of them is read.
-  const switches =
-    params.switchServer &&
-    destination !== null &&
-    destination !== read.row.server;
-  let shots: LabelShot[] = [];
-  if (switches) {
-    const owned = await readPointShots(supabase, pointId);
-    if ("error" in owned) return owned;
-    shots = owned.shots;
+  const rows = new Map((found ?? []).map((row) => [row.id, row]));
+  if (pointIds.some((id) => !rows.has(id)))
+    return { error: "Point not found." };
+  const sessionId = rows.get(pointIds[0])!.session_id;
+  if ([...rows.values()].some((row) => row.session_id !== sessionId)) {
+    return { error: "These points are not of one session." };
   }
 
-  const plan = planPointMove(
-    {
-      status: read.row.status,
-      server: read.row.server,
-      setNumber: read.row.set_number,
-      gameNumber: read.row.game_number,
-      serveSide: read.row.serve_side,
-      winner: read.row.winner,
-      ending: read.row.ending,
-      endedBy: read.row.ended_by,
-      seed: parseLabelPointSeed(read.row.seed ?? null),
-      shots,
-    },
-    to,
-    destination,
-    params.switchServer,
-  );
-  if ("error" in plan) return plan;
-  const failed = await updateIfUnchanged(
+  // The strokes matter only to a move that may switch the server; one not
+  // yet confirmed is refused by the plan before any of them is used.
+  const [gate, othersRead, shotsRead] = await Promise.all([
+    readSessionGate(supabase, sessionId),
+    supabase
+      .from("label_points")
+      .select("id, server, point_index")
+      .eq("session_id", sessionId)
+      .eq("set_number", to.setNumber)
+      .eq("game_number", to.gameNumber)
+      .neq("status", "deleted")
+      .returns<
+        { id: string; server: LabelSide | null; point_index: number }[]
+      >(),
+    switchServer
+      ? readShotsOfPoints(supabase, pointIds)
+      : Promise.resolve({ shots: [] as LabelShot[] }),
+  ]);
+  if ("error" in gate) return gate;
+  if (othersRead.error) {
+    return { error: `Could not read that game: ${othersRead.error.message}` };
+  }
+  if ("error" in shotsRead) return shotsRead;
+
+  const moving = new Set(pointIds);
+  const inGame = (othersRead.data ?? [])
+    .filter((p) => !moving.has(p.id))
+    .map((p) => ({ server: p.server, pointIndex: p.point_index }));
+  const ops: LabelEditOp[] = [];
+  const moves: LabelMovedPoint[] = [];
+  for (const id of pointIds) {
+    const row = rows.get(id)!;
+    const plan = planPointMove(
+      {
+        status: row.status,
+        server: row.server,
+        setNumber: row.set_number,
+        gameNumber: row.game_number,
+        serveSide: row.serve_side,
+        winner: row.winner,
+        ending: row.ending,
+        endedBy: row.ended_by,
+        seed: parseLabelPointSeed(row.seed ?? null),
+        shots: shotsRead.shots.filter((shot) => shot.labelPointId === id),
+      },
+      to,
+      gameServer(inGame),
+      switchServer,
+    );
+    if ("error" in plan) return plan;
+    ops.push(
+      {
+        op: "update",
+        table: "label_points",
+        ids: [id],
+        set: { ...plan.write },
+        expect_status: row.status,
+      },
+      ...shotSwapOps(plan.shots),
+    );
+    const server = plan.write.server ?? row.server;
+    inGame.push({ server, pointIndex: row.point_index });
+    moves.push({
+      ok: true,
+      id,
+      status: plan.write.status,
+      server,
+      setNumber: plan.write.set_number,
+      gameNumber: plan.write.game_number,
+      winner: "winner" in plan.write ? (plan.write.winner ?? null) : row.winner,
+      endedBy:
+        "ended_by" in plan.write ? (plan.write.ended_by ?? null) : row.ended_by,
+      shots: plan.shots,
+    });
+  }
+
+  const applied = await applyLabelEdit(
     supabase,
-    "label_points",
-    pointId,
-    read.row.status,
-    { ...plan.write },
-    "move the point",
+    sessionId,
+    ops,
+    pointIds.length > 1 ? "move the points" : "move the point",
   );
-  if (failed) return { error: failed };
-  const swapFailed = await writeShotSwaps(
-    supabase,
-    plan.shots,
-    "switch the point's players",
-  );
-  if (swapFailed) return { error: swapFailed };
-  return {
-    ok: true,
-    status: plan.write.status,
-    server: plan.write.server ?? read.row.server,
-    setNumber: plan.write.set_number,
-    gameNumber: plan.write.game_number,
-    winner:
-      "winner" in plan.write ? (plan.write.winner ?? null) : read.row.winner,
-    endedBy:
-      "ended_by" in plan.write
-        ? (plan.write.ended_by ?? null)
-        : read.row.ended_by,
-    shots: plan.shots,
-  };
+  if ("error" in applied) return applied;
+  return { ok: true, moves };
+}
+
+/** One point into game `to`: `writeLabelPointsMove` with a list of one. */
+export async function writeLabelPointMove(params: {
+  supabase: AdminClient;
+  pointId: unknown;
+  to: unknown;
+  switchServer: unknown;
+}): Promise<LabelMovePointResult> {
+  const pointId = normaliseId(params.pointId);
+  if (!pointId) return { error: "Invalid point id." };
+  const result = await writeLabelPointsMove({
+    supabase: params.supabase,
+    pointIds: [pointId],
+    to: params.to,
+    switchServer: params.switchServer,
+  });
+  if ("error" in result) return result;
+  const { id: _id, ...move } = result.moves[0];
+  return move;
 }
 
 /** Set a point's `checked_at` to now, or clear it. */
@@ -844,6 +942,20 @@ export function moveLabelPoint(
     deps,
     (supabase) => writeLabelPointMove({ supabase, pointId, to, switchServer }),
     "move the point",
+  );
+}
+
+export function moveLabelPoints(
+  pointIds: unknown,
+  to: unknown,
+  switchServer: unknown,
+  deps: LabelWriteDependencies = defaults,
+): Promise<LabelMovePointsResult> {
+  return gated(
+    deps,
+    (supabase) =>
+      writeLabelPointsMove({ supabase, pointIds, to, switchServer }),
+    "move the points",
   );
 }
 

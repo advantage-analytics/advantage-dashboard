@@ -16,6 +16,7 @@ import {
   deleteLabelShot,
   markLabelPointChecked,
   moveLabelPoint,
+  moveLabelPoints,
   removeLabelShotsAfter,
   restoreLabelPoint,
   restoreLabelShot,
@@ -24,6 +25,7 @@ import {
   type LabelAddShotResult,
   type LabelCheckedResult,
   type LabelMovePointResult,
+  type LabelMovePointsResult,
   type LabelPointStatusResult,
   type LabelShotStatusResult,
   type LabelShotsRemoveResult,
@@ -208,6 +210,20 @@ export async function moveLabelPointAction(
 ): Promise<LabelMovePointResult> {
   return withLabelOp("Move point", () =>
     moveLabelPoint(pointId, to, switchServer),
+  );
+}
+
+/**
+ * The points a dragged game header passed, into the game beside it, in one
+ * write (`moveLabelPoints`); one undo step.
+ */
+export async function moveLabelPointsAction(
+  pointIds: string[],
+  to: LabelGame,
+  switchServer: boolean,
+): Promise<LabelMovePointsResult> {
+  return withLabelOp("Move game boundary", () =>
+    moveLabelPoints(pointIds, to, switchServer),
   );
 }
 
