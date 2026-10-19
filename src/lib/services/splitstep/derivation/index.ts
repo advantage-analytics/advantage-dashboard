@@ -132,8 +132,12 @@
  * dropping them: each joins the game the first scored rally ended up in, its
  * winner guessed (`leadingUnscoredRallies`). The uploader
  * of job c349e3d4 confirmed its 0:06 rally was the first point.
+ * 0.8.5 (2026-10-18) calls a return struck and missed a `Service Winner`, the
+ * server's (result-type.ts `classifyPoint`), where it was the returner's
+ * Unforced Error — the label console's rule and SwingVision's. Only those
+ * points' result_type moves; games, servers, winners and scores do not.
  */
-export const DERIVATION_VERSION = "0.8.4-unreconciled";
+export const DERIVATION_VERSION = "0.8.5-unreconciled";
 
 export type {
   RawSplitStepStroke,

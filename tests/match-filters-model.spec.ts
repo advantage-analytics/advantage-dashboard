@@ -1029,18 +1029,18 @@ test("Serve › Result on a derived match: Ace = an unreturned serve the server 
     "df",
   ]);
 
-  // A service winner with an intermediate stroke is not an unreturned serve,
-  // so it is no ace — and "Service winner" is never an answer on a derived
-  // match (the option is hidden; its return reads the miss instead).
+  // A service winner with a stroke after the serve — the derivation's missed
+  // return (0.8.3) — is not an unreturned serve, so it is no ace: it is the
+  // "Service winner" answer, the only one a derived match gives.
   const withStroke = [
     ...points,
-    pt({ id: "sw-3", resultType: "Service Winner", rallyLength: 3 }),
+    pt({ id: "sw-2", resultType: "Service Winner", rallyLength: 2 }),
   ];
   expect(run(withStroke, { serveResult: ["service-winner"] }, DERIVED)).toEqual(
-    [],
+    ["sw-2"],
   );
   expect(run(withStroke, { serveResult: ["ace"] }, DERIVED)).not.toContain(
-    "sw-3",
+    "sw-2",
   );
 });
 
