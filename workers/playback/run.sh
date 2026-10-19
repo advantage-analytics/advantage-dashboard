@@ -101,9 +101,12 @@ az_b download --name "$SOURCE" --file "$SRC" --max-connections 8 --no-progress -
 URL="$SRC"
 
 # What the upload is.
-# One entry per call: ffprobe prints a section's fields in its own order.
+# One entry per call: ffprobe prints a section's fields in its own order,
+# and its CSV can trail a separator (an HEVC .mov gave "1/600,"), so read the
+# bare value, first line only.
 probe_stream() {
-  ffprobe -v error -select_streams v:0 -show_entries "stream=$1" -of csv=p=0 "$URL"
+  ffprobe -v error -select_streams v:0 -show_entries "stream=$1" \
+    -of default=noprint_wrappers=1:nokey=1 "$URL" | head -n 1
 }
 CODEC="$(probe_stream codec_name)"
 PIXFMT="$(probe_stream pix_fmt)"
