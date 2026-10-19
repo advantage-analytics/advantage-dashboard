@@ -13,6 +13,7 @@ import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import {
+  PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
   type PlaybackJobRow,
 } from "@/lib/data/match-video-choice";
@@ -629,10 +630,11 @@ const LABEL_PLAYBACK_TTL_SECONDS = 8 * 60 * 60;
  * The labelled job's own file, signed for playback. Not `getMatchVideo`: that
  * loader goes through the viewer's own RLS and plays the NEWEST job. A label
  * session is pinned to one job, so this asks `choosePlaybackFile` about exactly
- * that job, and signs with `mintPlaybackSas`. Vendor copy FIRST, our upload as
- * the fallback (the offset rule is unchanged): measured 2026-10-14, uploads ran
- * 8–12 Mbps against a 10–15 Mbps link to the container, so the console stalled
- * on every seek; the vendor's re-encode is the same 1080p at about 2 Mbps.
+ * that job, and signs with `mintPlaybackSas`. The playback copy first — the
+ * upload's own timeline and sound, index at the front, ≤1080p H.264 (2026-10-19)
+ * — then, for a job without one yet, the vendor copy before our upload: an
+ * upload that skipped the browser re-encode can run 8–20 Mbps against a 1–17
+ * Mbps link to the container, where the vendor's re-encode runs about 2.
  */
 async function loadJobVideo(
   db: AdminClient,
@@ -642,7 +644,7 @@ async function loadJobVideo(
 
   const { data: job, error } = await db
     .from("processing_jobs")
-    .select("video_object_key, trimmed_object_key, start_time_seconds")
+    .select(PLAYBACK_JOB_COLUMNS)
     .eq("id", jobId)
     .maybeSingle<PlaybackJobRow>();
   if (error) throw new Error(`Could not read the job: ${error.message}`);
