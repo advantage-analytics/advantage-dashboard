@@ -499,7 +499,7 @@ test.describe("winning plays", () => {
     // The film holds every point won with the shot in the rally — more than
     // the ones it ended — and the copy says so.
     expect(text).toContain(
-      "Each rally shot below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts.",
+      "Each linked play below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts.",
     );
     expect(text).toContain(
       "A play's points won are its winners and the errors it drew.",
@@ -511,8 +511,8 @@ test.describe("winning plays", () => {
     if (result.visual?.kind !== "tree") throw new Error("no tree");
     expect(result.visual.countLabel).toBe("Points won");
     expect(result.visual.partLabel).toBe("Winners");
-    // The key reads "Points won, as a share".
-    expect(result.visual.shareLabel).toBe("Points won");
+    // The export's header and the screen reader name the share as one.
+    expect(result.visual.shareLabel).toBe("Share of points won");
     expect(result.visual.branches[0]).toMatchObject({
       steps: ["Forehand", "crosscourt"],
       count: { value: 12, text: "12" },
@@ -612,6 +612,18 @@ test.describe("winning plays", () => {
     expect(buildWinningPlaysAnswer([total, middle], voice, 1)).not.toContain(
       "opens the film",
     );
+  });
+
+  test("beside a branch with no link, the film is promised for the linked plays only", async () => {
+    const middle = { ...play("Backhand", 9), direction: "Middle" };
+    const rows = [total, play("Forehand", 12), middle];
+    const text =
+      buildWinningPlaysAnswer(rows, losingPlaysVoice("mine", "Sam"), 1) ?? "";
+    expect(text).toContain("Each linked play below opens the film");
+    const { result } = await rendered(text, rows);
+    if (result.visual?.kind !== "tree") throw new Error("no tree");
+    expect(result.visual.branches[0].watch).toBeDefined();
+    expect(result.visual.branches[1].watch).toBeUndefined();
   });
 
   test("a rally length with no filter band draws no links rather than other rallies", () => {

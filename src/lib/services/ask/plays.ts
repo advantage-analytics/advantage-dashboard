@@ -727,7 +727,7 @@ export function buildWinningPlaysAnswer(
   const tree = [
     `${ASK_VISUAL_LINE_PREFIX} tree ${S} ${caption}`,
     `COLUMNS: Stroke ${S} Direction`,
-    `SERIES: Points won ${S} Winners ${S} Points won`,
+    `SERIES: Points won ${S} Winners ${S} Share of points won`,
     ...(watch
       ? [`${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields(watch).join(` ${S} `)}`]
       : []),
@@ -739,7 +739,7 @@ export function buildWinningPlaysAnswer(
 
   const paragraphs: string[] = [];
   paragraphs.push(
-    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points${within}; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. A play's points won are its winners and the errors it drew.${linked ? " Each rally shot below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts." : ""}`,
+    `${sentenceCase(voice.name)} won ${cell(total.ref, "points")} points${within}; ${cell(total.ref, "winners")} of them ended on a recorded shot of ${voice.second ? "yours" : "theirs"} — ${voice.second ? "your" : "their"} own winner, or the shot before the other side missed. A play's points won are its winners and the errors it drew.${linked ? " Each linked play below opens the film on every point won with it anywhere in the rally, so the film can hold more points than the play counts." : ""}`,
   );
   const withShots = count(total.row.errors_drawn);
   paragraphs.push(
