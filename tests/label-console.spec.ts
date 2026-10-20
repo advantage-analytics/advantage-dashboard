@@ -5,6 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { runReviewAnswer } from "@/components/admin/labels/review-answer";
 import {
   fromCourt,
   fromCourtInHalf,
@@ -884,204 +885,416 @@ test.describe("the rail's rows hold still while the film moves", () => {
   });
 });
 
-test.describe("a flag jump lands with the first open item focused (T5)", () => {
-  const MARK = "src/components/admin/labels/label-black-mark.tsx";
-  const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+test.describe("a flag jump lands on the point's review step", () => {
   const consoleSource = readFileSync(
     "src/components/admin/labels/label-console.tsx",
     "utf8",
   );
+  /** `landOnStep`'s body, up to `findGap`'s comment after it. */
+  const landSource = consoleSource.slice(
+    consoleSource.indexOf("  function landOnStep("),
+    consoleSource.indexOf('"Find the gap": navigation only.'),
+  );
+  /** `findGap`'s body, up to the jump effect after it. */
+  const findGapSource = consoleSource.slice(
+    consoleSource.indexOf("  function findGap("),
+    consoleSource.indexOf("const pointId = jumpToPointId.current;"),
+  );
 
-  function mark(code: LabelMarkCode, params: object): LabelMark {
-    const meta = LABEL_MARK_META[code];
-    return { code, tier: meta.tier, scope: meta.scope, params } as LabelMark;
-  }
-
-  /** The fixture's second point — one serve, an ace — unchecked. */
-  function flaggedPoint(fields: Partial<LabelPoint> = {}): LabelPoint {
-    const seeded = labelSessionFixture().points.find(
-      (p) => p.id === FIXTURE_POINT_IDS.P2,
-    )!;
-    return {
-      ...seeded,
-      checkedAt: null,
-      note: null,
-      shots: seeded.shots.map((s) => ({
-        ...s,
-        landingX: 0.6,
-        landingY: 17.79,
-      })),
-      ...fields,
-    };
-  }
-
-  /** A serve in, a return long, then a swing at the dead ball. */
-  function endedEarly(): LabelPoint {
-    const point = flaggedPoint();
-    const [ace] = point.shots;
-    return {
-      ...point,
-      shots: [
-        { ...ace, videoTime: 1 },
-        {
-          ...ace,
-          id: "s-long",
-          eventId: 202,
-          hitter: "p2",
-          stroke: "backhand",
-          result: "out",
-          videoTime: 2,
-        },
-        {
-          ...ace,
-          id: "s-dead-1",
-          eventId: 203,
-          hitter: "p2",
-          stroke: "forehand",
-          result: null,
-          landingX: null,
-          landingY: null,
-          videoTime: 3,
-        },
-      ],
-      winner: "p1",
-      ending: "error",
-      endedBy: "p2",
-    };
-  }
-
-  function marksOf(point: LabelPoint, pointMarks: LabelMark[]): LabelMarks {
-    return {
-      points: { [point.id]: pointMarks },
-      shots: {},
-      suggestions: [],
-      serveSides: {},
-    };
-  }
-
-  /** The point's row and its open well, as the rail draws them. */
-  function wellPage(point: LabelPoint, marks: LabelMarks | null): string {
-    const { BlackShotsWell } = createLoader().load(WELL) as {
-      BlackShotsWell: React.ComponentType<Record<string, unknown>>;
-    };
-    const well = renderToStaticMarkup(
-      React.createElement(BlackShotsWell, {
-        point,
-        edit: editContext(),
-        marks,
-        animate: false,
-      }),
+  test("a court click answers the step only on its own stroke, once both ends are placed", () => {
+    const placeSource = consoleSource.slice(
+      consoleSource.indexOf("  function place(point: CourtPoint)"),
+      consoleSource.indexOf("  function setTarget("),
     );
-    return `<div data-row="point" data-point-id="${point.id}"><button type="button" data-point-go="">Point</button></div>${well}`;
-  }
-
-  /**
-   * What the console's jump effect does once the well is drawn: focus
-   * `reviewFocusTarget(well)`, without scrolling for it. Run in the page.
-   */
-  async function jumpFocus(page: Page, pointId: string) {
-    const { reviewFocusTarget } = createLoader().load(MARK) as {
-      reviewFocusTarget: (well: Element) => HTMLElement | null;
-    };
-    return page.evaluate(
-      ({ source, pointId }) => {
-        const target = new Function(`return (${source})`)() as (
-          well: Element,
-        ) => HTMLElement | null;
-        const well = document.querySelector(`[data-shots-well="${pointId}"]`);
-        if (well) target(well)?.focus({ preventScroll: true });
-        const active = document.activeElement;
-        const item = active?.closest("[data-review-item]");
-        return {
-          focused: active !== document.body && active !== null,
-          inBlock: Boolean(active?.closest("[data-review-block]")),
-          item: item?.getAttribute("data-review-item") ?? null,
-          suggestion:
-            active
-              ?.closest("[data-row^='suggested']")
-              ?.getAttribute("data-point-hint") ?? null,
-          text: active?.textContent ?? null,
-        };
-      },
-      { source: reviewFocusTarget.toString(), pointId },
+    expect(placeSource).toContain(
+      "if (step?.target.shotId === shot.id && placesBothEnds(shot, next.patch)) {",
     );
-  }
+    // `noteAnswered` is called inside that guard and nowhere else in place().
+    expect(placeSource.match(/noteAnswered\(\)/g)).toHaveLength(1);
+  });
 
-  test("`]` and the header's flag rows are the only jumps that ask for focus", () => {
-    // The keys go through `stepToFlag`, which asks; "Find the gap", the
-    // overview's open-on-point and a clicked row do not.
+  test("`]` and the header's flag rows are the only jumps that arm", () => {
     expect(consoleSource).toMatch(
       /stepToFlag\.current\(key === "\]" \? 1 : -1, "score"\)/,
     );
     expect(consoleSource).toContain(
-      "if (flag) findGap(flag.pointId, { focusItem: true });",
+      "if (flag) findGap(flag.pointId, { arm: true });",
     );
     expect(consoleSource).toContain(
-      "goToFlag: (pointId: string) => findGap(pointId, { focusItem: true }),",
+      "goToFlag: (pointId: string) => findGap(pointId, { arm: true }),",
     );
     expect(consoleSource).toContain("onGoToPoint={railHandlers.goToFlag}");
+    // "Find the gap", the overview's open-on-point and a clicked row do not.
     expect(consoleSource).toContain(
       "onFindGap={operable ? railHandlers.findGap : undefined}",
     );
     expect(consoleSource).toContain(
       "jumpAfterOpen.current = (pointId) => findGap(pointId);",
     );
-    expect(consoleSource.match(/focusItem: true/g)).toHaveLength(2);
-    // The effect focuses after the scroll, and only on a flag jump.
-    const effect = consoleSource.slice(
-      consoleSource.indexOf("const pointId = jumpToPointId.current;"),
-    );
-    expect(effect.indexOf("scroller.scrollTo(")).toBeLessThan(
-      effect.indexOf("reviewFocusTarget(well)"),
-    );
-    expect(effect).toMatch(/if \(!focus\) return;/);
+    expect(consoleSource.match(/arm: true/g)).toHaveLength(2);
+    // The old block focus and the older target are gone.
+    expect(consoleSource).not.toContain("reviewFocusTarget");
+    expect(consoleSource).not.toContain("focusItem");
+    expect(consoleSource).not.toContain("reviewItemTarget");
+    expect(consoleSource).not.toContain("currentReviewItem");
   });
 
-  test("after `]`, focus is on the landing point's lowest-numbered open item, inside its review block", async ({
-    page,
-  }) => {
-    // Two open items, both asked in the block: the ending (4) and the
-    // winner (5), stored the other way round so the order is the block's.
-    const point = flaggedPoint();
-    const disputed = mark("winner_disputed", {
-      scoreWinner: "p2",
-      lastStrokeWinner: "p1",
-    });
-    const guessed = mark("winner_guessed", {});
-    const html = wellPage(point, marksOf(point, [guessed, disputed]));
-    const open = [
-      ...html.matchAll(
-        /data-review-item="(\d)"[^>]*data-review-item-state="open"/g,
+  test("the jump lands on `reviewStep`'s target: a stroke on its end, or a slot", () => {
+    // Only where a click may write; the point opens unfolded so ↓ steps on.
+    expect(findGapSource).toMatch(/arm && editable && point && liveMarks/);
+    expect(findGapSource).toContain("if (arm) setFoldedPointId(null);");
+    expect(findGapSource).toMatch(
+      /landOnStep\(\s*point,\s*reviewStep\(point, liveMarks, points, names, drawsGhosts\(liveMarks\)\),\s*\)/,
+    );
+    // With no step the point opens as before, at its first stroke.
+    expect(findGapSource).toContain("seekToPointStart(point);");
+    // The placement is cleared before the step is landed on, never after.
+    expect(findGapSource.indexOf("setPlacement(NO_PLACEMENT);")).toBeLessThan(
+      findGapSource.indexOf("landOnStep("),
+    );
+    // A coordinate item: its stroke, on the end the step names.
+    expect(landSource).toContain(
+      "selectShot(target.shotId, target.place, { seek: film === null });",
+    );
+    // An item with nothing to place: the film at its stroke, the court not
+    // armed (no selection, the placement cleared).
+    expect(landSource).toContain("} else if (target?.shotId) {");
+    expect(landSource).toContain("player.current?.seekTo(shot.videoTime);");
+    // A missing stroke: the slot armed, nothing selected, nothing written —
+    // the film at the stroke it follows.
+    expect(landSource).toContain("if (target?.slot) {");
+    expect(landSource).toContain(
+      "setArmedSlot({ pointId: point.id, afterShotId: target.slot.afterShotId });",
+    );
+    expect(landSource).toContain(
+      "if (after?.videoTime != null) player.current?.seekTo(after.videoTime);",
+    );
+    expect(landSource).not.toContain("addShot(");
+    // No target: the point at its first stroke, as a plain open.
+    expect(landSource).toContain("if (film === null) seekToPointStart(point);");
+    // The court panel asks the point's review step; the rail draws the slot.
+    expect(consoleSource).toContain("step={step}");
+    expect(consoleSource).toContain(
+      "armedSlotAfterShotId={armedSlot?.afterShotId ?? null}",
+    );
+  });
+
+  test("an end-of-point step replays the last strokes: one seek, paused after the last ball", () => {
+    expect(landSource).toContain(
+      "replayWindow(point, step.replay, points, drawsGhosts(liveMarks))",
+    );
+    // The replay's seek is the one that wins: selectShot's is skipped.
+    expect(landSource).toMatch(/seek: film === null/);
+    expect(landSource).toContain("replay.current = runReplay(film, {");
+    expect(landSource).toContain("pause: () => handle.pause(),");
+    // Let go when the labeller moves the film, jumps, selects or answers.
+    expect(consoleSource).toContain("onPause={cancelReplay}");
+    const keys = consoleSource.slice(
+      consoleSource.indexOf('if (key === "Enter") checkOpenPoint.current();'),
+      consoleSource.indexOf('window.addEventListener("keydown", onKeyDown);'),
+    );
+    expect(keys.match(/cancelReplayRef\.current\(\);/g)).toHaveLength(2);
+    // A row click lets the replay go; a jump or an answer also stops the
+    // film, so a replay never plays on into the next point.
+    const togglePoint = consoleSource.slice(
+      consoleSource.indexOf("function togglePoint("),
+    );
+    expect(togglePoint.slice(0, togglePoint.indexOf("\n  }\n"))).toContain(
+      "cancelReplay();",
+    );
+    const findGap = consoleSource.slice(
+      consoleSource.indexOf("function findGap("),
+    );
+    expect(findGap.slice(0, findGap.indexOf("\n  }\n"))).toContain(
+      "stopReplay();",
+    );
+    expect(consoleSource).toMatch(
+      /function answerReview\(answer: ReviewAnswer\) \{\n {4}if \(!expanded\) return;\n {4}stopReplay\(\);/,
+    );
+    expect(consoleSource).toContain(
+      "if (replay.current && player.current?.isPlaying()) player.current.pause();",
+    );
+    const selectShot = consoleSource.slice(
+      consoleSource.indexOf("  function selectShot("),
+      consoleSource.indexOf(
+        "  // An editor opening on a point row's own cells",
       ),
-    ].map((m) => Number(m[1]));
-    expect(open.length).toBeGreaterThan(1);
-    await page.setContent(html);
-    const landed = await jumpFocus(page, point.id);
-    expect(landed.inBlock).toBe(true);
-    expect(Number(landed.item)).toBe(Math.min(...open));
-  });
-
-  test("a first open item that asks on its stroke focuses that stroke's suggestion row instead", async ({
-    page,
-  }) => {
-    const point = endedEarly();
-    const html = wellPage(point, marksOf(point, []));
-    expect(html).toMatch(
-      /data-review-item="2"[^>]*data-review-state="pointer"[^>]*data-review-item-state="open"/,
     );
-    await page.setContent(html);
-    const landed = await jumpFocus(page, point.id);
-    expect(landed.inBlock).toBe(false);
-    expect(landed.suggestion).toBe("shot_after_point_end");
+    expect(selectShot).toContain("if (seek) cancelReplay();");
+    expect(selectShot).toContain("if (seek && shot?.videoTime != null) {");
   });
 
-  test("a stop with no review block focuses nothing, and throws nothing", async ({
+  test("auto-advance: after a write made here the point's next step lands; never from a refresh", () => {
+    const effect = consoleSource.slice(
+      consoleSource.indexOf("const landOnStepRef = useRef(landOnStep);"),
+      consoleSource.indexOf("// The armed slot belongs to the open point"),
+    );
+    // Only a write of the console's own arms it (`noteAnswered`).
+    expect(effect).toContain("const pending = pendingAdvance.current;");
+    expect(effect).toContain(
+      "if (!pending || !expanded || pending.pointId !== expanded.id) return;",
+    );
+    expect(effect).toContain(
+      "const verdict = advanceAfterAnswer(pending.key, stepKey);",
+    );
+    expect(effect).toContain('if (verdict === "stay") return;');
+    expect(effect).toContain("pendingAdvance.current = null;");
+    // Not under a confirm, a menu or a dialog.
+    expect(effect).toContain('if (verdict !== "advance" || confirm) return;');
+    expect(effect).toContain(
+      "\"[role='menu'], [role='dialog'], [role='alertdialog']\"",
+    );
+    expect(effect).toContain("landOnStepRef.current(expanded, step);");
+    expect(effect).toContain("}, [stepKey, confirm]);");
+    // The writes that arm it: an answer (not one that adds a stroke — that
+    // stroke is the one to place next), a court placement, a dismiss.
+    const answerSource = consoleSource.slice(
+      consoleSource.indexOf("  function answerReview("),
+      consoleSource.indexOf("  function setEstimate("),
+    );
+    // "Looks right" empties the queue; an added stroke closes its item
+    // without landing anywhere; every other answer notes the step.
+    expect(answerSource).toContain('write.write === "check"');
+    expect(answerSource).toContain("keep: []");
+    expect(answerSource).toContain('write.write === "addShot"');
+    expect(answerSource).toContain("closeQueuedItem();");
+    expect(answerSource).toContain("noteAnswered();");
+    const place = consoleSource.slice(
+      consoleSource.indexOf("  function place(point: CourtPoint) {"),
+      consoleSource.indexOf("  // The court panel's Contact / Landing switch"),
+    );
+    expect(place).toContain("noteAnswered();");
+    expect(consoleSource).toContain(
+      "if (pointId === currentPointId) noteAnswered();",
+    );
+    // A jump clears it: the next flagged point is `]`'s to reach, not the
+    // console's own.
+    expect(findGapSource).toContain("pendingAdvance.current = null;");
+    expect(consoleSource.match(/noteAnswered\(\);/g)).toHaveLength(3);
+  });
+
+  test("↓ and ] still step after a jump that selected a stroke", () => {
+    // ↓ walks from the selected stroke of the unfolded point; ] steps flags
+    // from the current point. Neither reads anything the jump leaves behind.
+    const stepShot = consoleSource.slice(
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+      consoleSource.indexOf("undoLastRef.current = () =>"),
+    );
+    expect(stepShot).toContain("unfoldedPointId !== expanded.id");
+    expect(stepShot).toContain(
+      "shots.findIndex((shot) => shot.id === placement.shotId)",
+    );
+    const stepFlag = consoleSource.slice(
+      consoleSource.indexOf("stepToFlag.current = (direction, kind) => {"),
+      consoleSource.indexOf("stepShot.current = (direction) => {"),
+    );
+    expect(stepFlag).toContain(
+      "stepFlag(flagStops[kind], points, currentPointId, direction)",
+    );
+  });
+
+  test("a landing lets go of a focused text field, and only of one — a jump's and an advance's alike", async ({
     page,
   }) => {
-    const point = flaggedPoint();
-    await page.setContent(wellPage(point, null));
-    const landed = await jumpFocus(page, point.id);
-    expect(landed.focused).toBe(false);
-    expect(landed.item).toBeNull();
+    const selector = /const JUMP_BLURS_SELECTOR =\s*"([^"]+)";/.exec(
+      consoleSource,
+    )?.[1];
+    expect(selector).toBeTruthy();
+    // Blurred in landOnStep, before anything is selected or armed — the one
+    // road both a flag jump and the auto-advance take.
+    expect(landSource).toContain(
+      "if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();",
+    );
+    expect(landSource.indexOf("active.blur()")).toBeLessThan(
+      landSource.indexOf("if (target?.slot) {"),
+    );
+    expect(consoleSource.match(/active\.blur\(\)/g)).toHaveLength(1);
+    await page.setContent(`
+      <input id="input" />
+      <textarea id="textarea"></textarea>
+      <select id="select"><option>a</option></select>
+      <div id="editable" contenteditable="true" tabindex="0">x</div>
+      <div data-select-editor=""><button id="editor" type="button">Forehand</button></div>
+      <button id="plain" type="button">Point</button>
+    `);
+    const blurred = await page.evaluate((selector) => {
+      const out: Record<string, boolean> = {};
+      for (const id of [
+        "input",
+        "textarea",
+        "select",
+        "editable",
+        "editor",
+        "plain",
+      ]) {
+        const el = document.getElementById(id) as HTMLElement;
+        el.focus();
+        // What the landing does with the focused element.
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest?.(selector)) active.blur();
+        out[id] = document.activeElement !== el;
+      }
+      return out;
+    }, selector!);
+    expect(blurred).toEqual({
+      input: true,
+      textarea: true,
+      select: true,
+      editable: true,
+      editor: true,
+      plain: false,
+    });
   });
+
+  test("the armed slot's row is drawn solid in the rail", () => {
+    const row = readFileSync(
+      "src/components/admin/labels/label-black-shot-row.tsx",
+      "utf8",
+    );
+    expect(row).toContain(
+      "const armed = edit.armedSlotAfterShotId === suggestion.afterShotId;",
+    );
+    expect(row).toContain('data-slot-armed={armed ? "" : undefined}');
+    expect(row).toContain('armed ? "outline-solid" : "outline-dashed"');
+  });
+});
+
+test.describe("a review answer's writes go through the console's own handlers", () => {
+  const consoleSource = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+
+  test("each ReviewWrite kind is one call of the handler it names", async () => {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string) =>
+      (...args: unknown[]) =>
+        calls.push([name, ...args]);
+    const handlers = {
+      patchShot: record("patchShot"),
+      patchPoint: record("patchPoint"),
+      splitPoint: record("splitPoint"),
+      removeShotsAfter: record("removeShotsAfter"),
+      dismissSuggestion: record("dismissSuggestion"),
+      setChecked: record("setChecked"),
+      addShot: record("addShot"),
+    };
+    await runReviewAnswer(
+      {
+        writes: [
+          { write: "shot", shotId: "s1", patch: { result: "net" } },
+          { write: "point", patch: { ending: "error", ended_by: "p1" } },
+          { write: "split", shotId: "s2" },
+          { write: "removeAfter", shotId: "s3" },
+          { write: "dismiss", keys: ["hint:a", "hint:b"] },
+          { write: "check" },
+          {
+            write: "addShot",
+            slot: { afterShotId: "s4", hitter: "p1", kind: "second_serve" },
+          },
+          {
+            write: "addShot",
+            slot: { afterShotId: "s5", hitter: null, kind: null },
+          },
+        ],
+      },
+      "pt",
+      handlers,
+    );
+    expect(calls).toEqual([
+      ["patchShot", "s1", { result: "net" }],
+      ["patchPoint", "pt", { ending: "error", ended_by: "p1" }],
+      ["splitPoint", "pt", "s2"],
+      ["removeShotsAfter", "pt", "s3"],
+      ["dismissSuggestion", "pt", "hint:a"],
+      ["dismissSuggestion", "pt", "hint:b"],
+      ["setChecked", "pt", true],
+      // The slot's hitter and stroke follow the add, once it has saved.
+      ["addShot", "pt", "s4", { hitter: "p1", stroke: "second_serve" }],
+      ["addShot", "pt", "s5", undefined],
+    ]);
+  });
+
+  test("a write in flight is waited on before the next", async () => {
+    const order: string[] = [];
+    let release = () => {};
+    const shot = new Promise<void>((resolve) => {
+      release = () => {
+        order.push("shot saved");
+        resolve();
+      };
+    });
+    const noop = () => {};
+    const run = runReviewAnswer(
+      {
+        writes: [
+          { write: "shot", shotId: "s1", patch: { result: "out" } },
+          { write: "point", patch: { winner: "p2" } },
+        ],
+      },
+      "pt",
+      {
+        patchShot: () => shot,
+        patchPoint: () => order.push("point"),
+        splitPoint: noop,
+        removeShotsAfter: noop,
+        dismissSuggestion: noop,
+        setChecked: noop,
+        addShot: noop,
+      },
+    );
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    release();
+    await run;
+    expect(order).toEqual(["shot saved", "point"]);
+  });
+
+  test("the console hands each kind its own handler, the add-shot path included", () => {
+    const wiring = consoleSource.slice(
+      consoleSource.indexOf("const reviewWrites: ReviewWriteHandlers = {"),
+      consoleSource.indexOf("function answerReview("),
+    );
+    for (const line of [
+      "patchShot: railHandlers.saveShot,",
+      "patchPoint: railHandlers.patchPoint,",
+      "splitPoint: rowOperations.onSplitPoint,",
+      "removeShotsAfter: railHandlers.removeShotsAfter,",
+      "dismissSuggestion: rowOperations.onDismissSuggestion,",
+      "setChecked: rowOperations.onSetChecked,",
+      "addShot: railHandlers.addShot,",
+    ]) {
+      expect(wiring, line).toContain(line);
+    }
+    // `saveShot` is the awaited shot write; `addShot` the console's own,
+    // which selects the saved stroke for placement.
+    expect(consoleSource).toContain("saveShot: patchShot,");
+    expect(consoleSource).toMatch(/\n {4}addShot,\n/);
+    expect(consoleSource).toContain(
+      "onAnswer={operable ? answerReview : undefined}",
+    );
+    // The estimate box writes `unclear` through the rail's shot edit.
+    expect(consoleSource).toContain(
+      "estimatePatch(shot.unclear, placement.target, estimate)",
+    );
+    // The old view-model is gone.
+    expect(consoleSource).not.toContain("courtReview");
+  });
+});
+
+test("several dismisses at once settle by merging, so none of them flickers back", () => {
+  const source = readFileSync(
+    "src/components/admin/labels/label-console.tsx",
+    "utf8",
+  );
+  const body = source.slice(
+    source.indexOf(
+      "  function dismissSuggestion(pointId: string, key: string) {",
+    ),
+  );
+  const fn = body.slice(0, body.indexOf("\n  }\n"));
+  expect(fn).toContain("...new Set([...p.dismissed, ...result.dismissed])");
+  expect(fn).toContain("p.dismissed.filter((k) => k !== key)");
+  expect(fn).not.toContain("dismissed: result.dismissed,");
 });

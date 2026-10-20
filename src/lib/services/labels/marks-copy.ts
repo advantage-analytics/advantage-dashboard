@@ -192,42 +192,6 @@ export function lastCallUnplacedHover(call: "in" | "out" | "net"): string {
   return `The vendor called the last ball ${call === "net" ? "in the net" : call}, and its landing isn’t placed.`;
 }
 
-// ── The open point's review block ───────────────────────────────────────────
-
-/** The block's title: its items are answered top to bottom. */
-export const REVIEW_BLOCK_TITLE = "Review · in this order";
-
-/** The header's one action: the check tick's own write, said in words. */
-export const LOOKS_RIGHT_LABEL = "Looks right";
-
-/** Item 4's second answer, beside "Yes, make it out": the landing was right. */
-export const LAST_BALL_IN_LABEL = "It was in";
-
-/** Item 4's answer that opens the last stroke's landing on the court. */
-export const PLACE_BOUNCE_LABEL = "Place the bounce";
-
-/** An item's "no": every member's question waved away at once. */
-export const REVIEW_DISMISS_LABEL = "Dismiss";
-
-/** Item 4's consequence line: "Then: an error by Lee", the derived ending. */
-export function reviewThenLine(phrase: string): string {
-  return `Then: ${phrase}`;
-}
-
-/** An item asked at its stroke: "3 · Serves — at shot 2". */
-export function reviewPointerLine(
-  id: number,
-  question: string,
-  shot: number,
-): string {
-  return `${id} · ${question} — at shot ${shot}`;
-}
-
-/** A row an earlier answer took away: "Cleared by 1", or plainly "Cleared". */
-export function clearedByLabel(id: number | null): string {
-  return id === null ? "Cleared" : `Cleared by ${id}`;
-}
-
 /**
  * "Did the point end here?"'s yes: the ball stays (or is made) out and the N
  * strokes after it go.

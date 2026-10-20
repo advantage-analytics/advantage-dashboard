@@ -148,6 +148,7 @@ export function LabelBlackRail({
   onTogglePoint,
   editable = false,
   selectedShotId = null,
+  armedSlotAfterShotId = null,
   onSelectShot,
   onPatchPoint,
   onPatchShot,
@@ -217,6 +218,8 @@ export function LabelBlackRail({
   onTogglePoint?: (pointId: string) => void;
   editable?: boolean;
   selectedShotId?: string | null;
+  /** The "Missing shot?" slot a flag jump armed (`EditContext`). */
+  armedSlotAfterShotId?: string | null;
   /** `target` opens the court on that end: a position cell was clicked. */
   onSelectShot?: (shotId: string, target?: "contact" | "landing") => void;
   onPatchPoint?: (pointId: string, patch: LabelPointPatch) => void;
@@ -329,6 +332,7 @@ export function LabelBlackRail({
       editable,
       names,
       selectedShotId,
+      armedSlotAfterShotId,
       onSelectShot,
       onPatchPoint,
       onPatchShot,
@@ -348,6 +352,7 @@ export function LabelBlackRail({
       editable,
       names,
       selectedShotId,
+      armedSlotAfterShotId,
       onSelectShot,
       onPatchPoint,
       onPatchShot,

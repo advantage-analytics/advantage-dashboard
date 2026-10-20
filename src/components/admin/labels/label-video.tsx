@@ -70,6 +70,8 @@ export interface LabelVideoHandle {
   isPlaying: () => boolean;
   /** Start the film; a no-op while it plays. */
   play: () => void;
+  /** Stop the film where it is; a no-op while it is paused. */
+  pause: () => void;
   /** The previous (-1) or next (1) point, as the transport's glyphs step. */
   step: (direction: -1 | 1) => void;
 }
@@ -108,6 +110,8 @@ export const LabelVideoPlayer = forwardRef<
     readout?: LabelVideoReadout;
     /** The file's position on the analysis clock, on every report. */
     onTime?: (videoTime: number) => void;
+    /** The element paused, by whoever asked: the transport, a click, a seek's end. */
+    onPause?: () => void;
     /** Playable on first render — for specs. A real element starts pending. */
     initialReady?: boolean;
     /** A media error on first render — for specs. */
@@ -125,6 +129,7 @@ export const LabelVideoPlayer = forwardRef<
     points,
     readout = NO_READOUT,
     onTime,
+    onPause,
     initialReady = false,
     initialFailure = null,
     clockTargetRef,
@@ -325,6 +330,10 @@ export const LabelVideoPlayer = forwardRef<
         const el = videoRef.current;
         if (el?.paused) void el.play().catch(noop);
       },
+      pause() {
+        const el = videoRef.current;
+        if (el && !el.paused) el.pause();
+      },
       step,
     }),
     [offset, seek, togglePlay, step],
@@ -426,7 +435,10 @@ export const LabelVideoPlayer = forwardRef<
           )}
           onClick={togglePlay}
           onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
+          onPause={() => {
+            setPlaying(false);
+            onPause?.();
+          }}
           onLoadedMetadata={settle}
           onLoadedData={() => {
             settling.onLoadedData();

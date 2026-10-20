@@ -10,10 +10,15 @@ import {
   type LabelMarks,
 } from "@/lib/services/labels/marks";
 import {
+  drawsGhosts,
   pointEndedEarly,
   reviewFlag,
-  type ReviewItem,
 } from "@/lib/services/labels/marks-state";
+import { reviewStep } from "@/lib/services/labels/review-step";
+import {
+  runReviewAnswer,
+  type ReviewWriteHandlers,
+} from "@/components/admin/labels/review-answer";
 import type { LabelPoint } from "@/lib/services/labels/session";
 import {
   FIXTURE_POINT_IDS,
@@ -24,10 +29,11 @@ import {
 import { tag } from "./fixtures/html-probe";
 import { createLoader } from "./fixtures/vm-modules";
 
-/** What the rail's rows DRAW of the marks: one chip for the point's flag, the open point's review block, nothing for hidden. */
+/** What the rail's rows DRAW of the marks: one chip for the point's flag, the open point's current review item (asked in the court panel), nothing for hidden. */
 
 const ROW = "src/components/admin/labels/label-black-point-row.tsx";
 const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
+const MARK = "src/components/admin/labels/label-black-mark.tsx";
 const FORMAT = "src/components/admin/labels/label-black-format.ts";
 
 /** The fixture session's two players, as the console's `sideNames` has them. */
@@ -178,64 +184,44 @@ function chips(html: string): Chip[] {
 
 const pencils = (html: string) => html.match(/data-pencil=""/g)?.length ?? 0;
 
-interface ReviewRow {
-  id: number;
-  /** `open`, `pointer`, `done` or `cleared`. */
-  state: string;
-  /** The row's words, tags stripped, one space between pieces. */
-  text: string;
-  /** The row's markup, for its attributes and buttons. */
-  html: string;
+/**
+ * The open point's review step as the court panel asks it (review-step.ts
+ * `reviewStep`): its item, question, explanation and answers — data, which
+ * the panel draws only with a console that can write.
+ */
+function review(point: LabelPoint, marks: LabelMarks) {
+  const step = reviewStep(point, marks, [point], NAMES, drawsGhosts(marks));
+  return step
+    ? {
+        id: step.item.id,
+        tone: step.item.tone,
+        question: step.question,
+        explanation: step.explanation,
+        answers: step.answers,
+      }
+    : null;
 }
 
-/** The open point's review block, or "" when the well draws none. */
-function reviewBlock(html: string): string {
-  const from = html.indexOf("data-review-block");
-  if (from === -1) return "";
-  const to = html.indexOf("data-add-shot", from);
-  return html.slice(
-    from,
-    to === -1 ? undefined : html.lastIndexOf("<button", to),
-  );
+/** A review's answers' words, in order. */
+const answers = (r: ReturnType<typeof review>) =>
+  r?.answers.map((a) => a.label);
+
+/** Handlers that record each write the console would make, by name. */
+function recorder(calls: unknown[][]): ReviewWriteHandlers {
+  const record =
+    (name: string) =>
+    (...args: unknown[]) =>
+      calls.push([name, ...args]);
+  return {
+    patchShot: record("shot"),
+    patchPoint: record("point"),
+    splitPoint: record("split"),
+    removeShotsAfter: record("remove"),
+    dismissSuggestion: record("dismiss"),
+    setChecked: record("checked"),
+    addShot: record("add"),
+  };
 }
-
-/** The block's rows in order: each item's id, how it is drawn and its words. */
-function reviewRows(html: string): ReviewRow[] {
-  const block = reviewBlock(html);
-  const starts = [
-    ...block.matchAll(
-      /<div[^>]*data-review-item="(\d)"[^>]*data-review-state="([a-z]+)"[^>]*>/g,
-    ),
-  ];
-  return starts.map((match, i) => {
-    const row = block.slice(
-      match.index,
-      i + 1 < starts.length ? starts[i + 1].index : undefined,
-    );
-    return {
-      id: Number(match[1]),
-      state: match[2],
-      text: unescape(row.replace(/<[^>]*>/g, " "))
-        .replace(/\s+/g, " ")
-        .trim(),
-      html: row,
-    };
-  });
-}
-
-/** A row's evidence lines, in order. */
-const evidence = (row: ReviewRow) =>
-  [...row.html.matchAll(/data-review-evidence=""[^>]*>([^<]*)</g)].map((m) =>
-    unescape(m[1]),
-  );
-
-/** The words of a stretch's buttons carrying `attr`, in order. */
-const buttons = (html: string, attr: string) =>
-  [
-    ...html.matchAll(
-      new RegExp(`<button[^>]*${attr}[^>]*>(?:<[^>]*>)*([^<]*)<`, "g"),
-    ),
-  ].map((m) => unescape(m[1]));
 
 /** One mark of every code, on the fixture's point and its one stroke. */
 const EVERY_HIDDEN: LabelMark[] = [
@@ -350,16 +336,11 @@ test.describe("a closed row draws only what can change the score", () => {
     // the open point still asks it.
     const netOnly = marksOf(point, [], { [shot.id]: [NET_HIT] });
     expect(renderRow(point, netOnly)).not.toContain("data-mark-chip");
-    // Its block draws the item with its evidence, and no header.
-    const demoted = renderWell(point, netOnly);
-    expect(reviewBlock(demoted)).toContain('data-review-demoted=""');
-    expect(demoted).not.toContain("data-review-header");
-    const [asked, ...more] = reviewRows(demoted);
-    expect(more).toHaveLength(0);
-    expect([asked.id, asked.state]).toEqual([4, "open"]);
-    expect(evidence(asked)).toEqual([
-      "Marked as hitting the net, but the ball’s height says it cleared it.",
-    ]);
+    // The open point still asks it: the court panel's item 4.
+    const asked = review(point, netOnly)!;
+    expect(asked.id).toBe(4);
+    // The fixture's stroke has no contact: the step asks for it first.
+    expect(asked.question).toBe("Where was it hit?");
 
     // Beside a counted mark on the same item, the hints are that one question.
     const withCount = renderRow(
@@ -421,7 +402,6 @@ test.describe("a closed row draws only what can change the score", () => {
     for (const html of [renderRow(point, marks), renderWell(point, marks)]) {
       expect(html).not.toContain("data-mark-chip");
       expect(html).not.toContain("data-point-hint");
-      expect(html).not.toContain("data-review-block");
       for (const words of [
         "shot removed",
         "Score not read",
@@ -432,95 +412,67 @@ test.describe("a closed row draws only what can change the score", () => {
         expect(html, words).not.toContain(words);
       }
     }
+    expect(review(point, marks)).toBeNull();
   });
 });
 
-test.describe("the open point's review block", () => {
-  test("replaces the quiet line: a header, then each item with its question and evidence — and no chip", () => {
+test.describe("the open point's current review item", () => {
+  test("is asked in the court panel, not the well: its question, evidence and answers — and no chip", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
-    const html = renderWell(
+    const marks = marksOf(
       point,
-      marksOf(
-        point,
-        [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
-        {
-          [shot.id]: [NET_HIT],
-        },
-      ),
+      [mark("ending_suspect_line", {}), mark("serve_fault", {})], // serve_fault is hidden
+      {
+        [shot.id]: [NET_HIT],
+      },
     );
+    const html = renderWell(point, marks);
     expect(html).not.toContain("data-point-hints");
-    expect(html.match(/data-review-block=""/g)).toHaveLength(1);
-    // Last in the well, under the rally it is about.
-    expect(html.indexOf("data-review-block")).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
-    );
-    const block = reviewBlock(html);
-    expect(block).toContain("data-review-header");
-    expect(block).toContain("Review · in this order");
-    expect(buttons(block, "data-review-looks-right")).toEqual(["Looks right"]);
-    const rows = reviewRows(html);
-    expect(rows.map((row) => [row.id, row.state])).toEqual([[4, "open"]]);
-    expect(rows[0].text.startsWith("4 How did the last ball end?")).toBe(true);
-    expect(evidence(rows[0])).toEqual([
-      "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.",
-      "Marked as hitting the net, but the ball’s height says it cleared it.",
-    ]);
-    // Both are hints with a key: the item's Dismiss, and no other answer.
-    expect(buttons(rows[0].html, "data-review-answer=")).toEqual([]);
-    expect(buttons(rows[0].html, "data-review-dismiss")).toEqual(["Dismiss"]);
+    expect(html).not.toContain("data-review");
+    expect(html).not.toContain("Review · in this order");
     expect(chips(html)).toHaveLength(0);
+    const item = review(point, marks)!;
+    expect([item.id, item.question]).toEqual([4, "Where was it hit?"]);
+    // The last ball's endings by its hitter, the item's Dismiss (both are
+    // hints with a key), then the check tick.
+    expect(item.answers.map((a) => [a.kind, a.label])).toEqual([
+      ["suggested", "Ace by Lee"],
+      ["plain", "Out by Lee"],
+      ["plain", "Net by Lee"],
+      ["dismiss", "Dismiss"],
+      ["plain", "Looks right"],
+    ]);
   });
 
-  test("Dismiss stores every member's key, one call a key; Looks right is the check tick's write", () => {
-    const { reviewItemDismiss, reviewLooksRight } = createLoader().load(
-      "src/components/admin/labels/label-black-mark.tsx",
-    ) as {
-      reviewItemDismiss: (
-        item: ReviewItem,
-        point: { id: string },
-        operations: unknown,
-      ) => { label: string; run: () => void } | null;
-      reviewLooksRight: (
-        point: { id: string; checkedAt: string | null },
-        operations: unknown,
-      ) => { label: string; run: () => void } | null;
-    };
+  test("Dismiss stores every member's key, one call a key; Looks right is the check tick's write", async () => {
     const point = fixturePoint();
     const shot = point.shots[0];
     const marks = marksOf(point, [DISPUTED, mark("ending_suspect_line", {})], {
       [shot.id]: [NET_HIT],
     });
-    const [item] = reviewFlag(point, marks, [point])!.items;
+    const item = review(point, marks)!;
     const calls: unknown[][] = [];
-    const operations = {
-      ...ROW_OPERATIONS,
-      onDismissSuggestion: (...args: unknown[]) =>
-        calls.push(["dismiss", ...args]),
-      onSetChecked: (...args: unknown[]) => calls.push(["checked", ...args]),
-    };
-    const dismiss = reviewItemDismiss(item, point, operations)!;
+    const dismiss = item.answers.find((a) => a.kind === "dismiss")!;
     expect(dismiss.label).toBe("Dismiss");
-    dismiss.run();
+    await runReviewAnswer(dismiss, point.id, recorder(calls));
     expect(calls).toEqual([
       ["dismiss", point.id, "hint:winner_disputed"],
       ["dismiss", point.id, "hint:ending_suspect_line"],
       ["dismiss", point.id, "hint:net_hit_contradicts_height"],
     ]);
-    // Nothing to write with, nothing offered.
-    expect(reviewItemDismiss(item, point, undefined)).toBeNull();
 
     calls.length = 0;
-    const looksRight = reviewLooksRight(point, operations)!;
+    const looksRight = item.answers.find((a) => a.id === "looks-right")!;
     expect(looksRight.label).toBe("Looks right");
-    looksRight.run();
+    await runReviewAnswer(looksRight, point.id, recorder(calls));
     expect(calls).toEqual([["checked", point.id, true]]);
+    // A checked point is not offered it.
+    const checked = { ...point, checkedAt: "2026-10-12T00:00:00Z" };
     expect(
-      reviewLooksRight(
-        { ...point, checkedAt: "2026-10-12T00:00:00Z" },
-        operations,
-      ),
-    ).toBeNull();
+      review(checked, marks)?.answers.some((a) => a.id === "looks-right") ??
+        false,
+    ).toBe(false);
   });
 });
 
@@ -553,14 +505,14 @@ test.describe("a stroke row's tail", () => {
 });
 
 test.describe("a session with no marks", () => {
-  test("the same rows carry nothing: no chip, no review block, and the pencil as before", () => {
+  test("the same rows carry nothing: no chip, no review item, and the pencil as before", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
     const marks = marksOf(point, [DISPUTED, mark("serve_fault", {})], {
       [shot.id]: [NET_HIT],
     });
     expect(renderRow(point, marks)).toContain("data-mark-chip");
-    expect(renderWell(point, marks)).toContain("data-review-block");
+    expect(review(point, marks)).not.toBeNull();
 
     const without = renderRow(point, null);
     expect(without).not.toContain("data-mark-chip");
@@ -580,7 +532,6 @@ test.describe("a session with no marks", () => {
     const well = renderWell(point, null);
     expect(well).not.toContain("data-mark-chip");
     expect(well).not.toContain("data-point-hint");
-    expect(well).not.toContain("data-review-block");
 
     // The fixture's edited first point: its one pencil, marks or none.
     const first = labelSessionFixture().points.find(
@@ -592,7 +543,6 @@ test.describe("a session with no marks", () => {
 });
 
 test.describe("the hints read off the rows, with their answers", () => {
-  const MARK = "src/components/admin/labels/label-black-mark.tsx";
   type Hint = {
     code: string;
     label: string;
@@ -623,28 +573,23 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("the ending the strokes add up to is item 4's Then line; a stroke's hint keeps its row under the stroke, and the block points to it", () => {
+  test("the ending the strokes add up to is item 4's answer; a stroke's hint keeps its row under the stroke, and the panel asks its item", () => {
     const html = renderWell(stale(), marksOf(stale(), []));
     // No row of its own, and never an item of its own.
     expect(html).not.toContain('data-point-hint="ending_stale"');
-    const [item, ...more] = reviewRows(html);
-    expect(more).toHaveLength(0);
-    expect([item.id, item.state]).toEqual([4, "open"]);
-    expect(html.indexOf("data-review-block")).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
-    );
-    expect(tag(item.html, "data-review-then")).toBeTruthy();
-    expect(item.text).toContain("Then: an ace by Lee");
-    const button = /<button[^>]*data-review-then-action=""[^>]*>([^<]*)</.exec(
-      item.html,
-    );
-    expect(button?.[1]).toBe("Make it an ace");
-    // The rail's pressed state, as every text action in it.
-    expect(button?.[0]).toContain("active:scale-[0.96]");
     expect(chips(html)).toHaveLength(0);
+    const item = review(stale(), marksOf(stale(), []))!;
+    expect(item.id).toBe(4);
+    expect(answers(item)).toEqual([
+      "Ace by Lee",
+      "Out by Lee",
+      "Net by Lee",
+      "Dismiss",
+      "Looks right",
+    ]);
 
     // "Second serve?" names its stroke: the row sits right under that serve,
-    // with its answer, and the block points to it without a second copy.
+    // with its answer; the panel asks item 3 with the same answer.
     const serves = renderWell(retyped(), marksOf(retyped(), []));
     expect(tag(serves, 'data-point-hint="second_serve_as_first"')).toContain(
       'data-row="suggested-end"',
@@ -655,14 +600,13 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(serves).toMatch(
       /<button[^>]*data-point-hint-action="second_serve_as_first"[^>]*>.*?<span[^>]*>Make it a second serve</,
     );
-    const [pointer, ...others] = reviewRows(serves);
-    expect(others).toHaveLength(0);
-    expect([pointer.id, pointer.state]).toEqual([3, "pointer"]);
-    expect(tag(pointer.html, "data-review-item")).toContain(
-      'aria-label="3 · Serves — at shot 2"',
-    );
-    expect(pointer.text).toBe("3 Serves — at shot 2");
-    expect(pointer.html).not.toContain("<button");
+    const asked = review(retyped(), marksOf(retyped(), []))!;
+    expect([asked.id, asked.question]).toEqual([3, "Serves"]);
+    expect(answers(asked)).toEqual([
+      "Make it a second serve",
+      "Dismiss",
+      "Looks right",
+    ]);
   });
 
   test("with no landing on the last ball, its evidence is the vendor's call alone", () => {
@@ -679,19 +623,20 @@ test.describe("the hints read off the rows, with their answers", () => {
     const marks = marksOf(point, [
       mark("last_call_overruled", { vendorCall: "out", eventId: ace.eventId! }),
     ]);
-    const [item] = reviewRows(
-      renderWell(point, marks, { onSelectShot: () => {} }),
-    );
-    expect(item.id).toBe(4);
-    const lines = evidence(item);
-    expect(lines).toContain(
+    expect(review(point, marks)?.id).toBe(4);
+    // The row's chip says it, a line each.
+    const [chip] = chips(renderRow(point, marks));
+    const lines = [chip.label];
+    expect(lines.join(" ")).toContain(
       "The vendor called the last ball out, and its landing isn’t placed.",
     );
-    expect(lines).toContain("Place the last bounce to settle Out, Net or In.");
+    expect(lines.join(" ")).toContain(
+      "Place the last bounce to settle Out, Net or In.",
+    );
     expect(lines.some((line) => line.includes("by its landing"))).toBe(false);
   });
 
-  test("item 4 asked as the vendor called the last ball: one answer row, and its Then line", () => {
+  test("item 4 asked as the vendor called the last ball: one answer row, its ending's answer in it", async () => {
     const point = stale();
     const [ace] = point.shots;
     const call = mark("last_call_overruled", {
@@ -700,89 +645,30 @@ test.describe("the hints read off the rows, with their answers", () => {
     });
     const marks = marksOf(point, [call, mark("ending_suspect_line", {})]);
     const html = renderWell(point, marks, { onSelectShot: () => {} });
-    // Asked in the block, not under the last ball.
+    // Asked in the court panel, not under the last ball.
     expect(html).not.toContain('data-point-hint="last_call_overruled"');
-    const [item, ...more] = reviewRows(html);
-    expect(more).toHaveLength(0);
-    expect(item.id).toBe(4);
-    expect(item.text.startsWith("4 Was the last ball out?")).toBe(true);
-    expect(evidence(item)).toEqual([
-      "The last ball is in by its landing, but the vendor called it out. Watch the bounce: if it was out, change the result.",
-      "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.",
-      "The shots add up to an ace by Lee, not the ending this point has. Check the clip: change it, or leave it if the shots are what's wrong.",
-    ]);
-    expect(item.html.match(/data-review-answers=""/g)).toHaveLength(1);
-    expect(buttons(item.html, "data-review-answer=")).toEqual([
-      "Yes, make it out",
-      "It was in",
-      "Place the bounce",
-    ]);
-    expect(buttons(item.html, "data-review-dismiss")).toEqual(["Dismiss"]);
-    expect(item.html.match(/data-review-then=""/g)).toHaveLength(1);
-    expect(item.text).toContain("Then: an ace by Lee");
-    expect(buttons(item.html, "data-review-then-action")).toEqual([
-      "Make it an ace",
-    ]);
-
-    // The writes: the vendor's call, "in", and the last stroke's landing.
-    const { reviewItemAnswers } = createLoader().load(MARK) as {
-      reviewItemAnswers: (
-        item: ReviewItem,
-        point: LabelPoint,
-        marks: LabelMarks,
-        edit: Record<string, unknown>,
-      ) => { label: string; run: () => void }[];
-    };
-    const calls: unknown[][] = [];
-    const edit = {
-      onPatchShot: (...args: unknown[]) => calls.push(["shot", ...args]),
-      onSelectShot: (...args: unknown[]) => calls.push(["select", ...args]),
-    };
-    const flagged = reviewFlag(point, marks, [point])!.items[0];
-    for (const answer of reviewItemAnswers(flagged, point, marks, edit)) {
-      answer.run();
-    }
-    expect(calls).toEqual([
-      ["shot", ace.id, { result: "out" }],
-      ["shot", ace.id, { result: "in" }],
-      ["select", ace.id, "landing"],
-    ]);
-
-    // A call of "in" has no "It was in"; no landing leads with the bounce.
-    const outBall = {
+    // With its contact placed, the step asks how the last ball ended.
+    const placed = {
       ...point,
-      shots: [
-        {
-          ...ace,
-          result: "out" as const,
-          seed: { ...ace.seed!, result: "out" as const },
-        },
-      ],
+      shots: point.shots.map((s) => ({ ...s, contactX: -1, contactY: -0.4 })),
     };
-    const inCall = marksOf(outBall, [
-      mark("last_call_overruled", { vendorCall: "in", eventId: ace.eventId! }),
+    const item = review(placed, marksOf(placed, [call]))!;
+    expect(item.id).toBe(4);
+    expect(item.question).toBe("How did the last ball end?");
+    expect(item.answers.map((a) => [a.kind, a.label])).toEqual([
+      ["plain", "Ace by Lee"],
+      ["suggested", "Out by Lee"],
+      ["plain", "Net by Lee"],
+      ["dismiss", "Dismiss"],
+      ["plain", "Looks right"],
     ]);
-    expect(
-      reviewItemAnswers(
-        reviewFlag(outBall, inCall, [outBall])!.items.find((i) => i.id === 4)!,
-        outBall,
-        inCall,
-        edit,
-      ).map((a) => a.label),
-    ).toEqual(["Yes, make it in", "Place the bounce"]);
-    const unplaced = fixturePoint({
-      shots: fixturePoint().shots.map((s) => ({
-        ...s,
-        landingX: null,
-        landingY: null,
-      })),
-    });
-    const landing = marksOf(unplaced, []);
-    const [noLanding] = reviewFlag(unplaced, landing, [unplaced])!.items;
-    expect(noLanding.id).toBe(4);
-    expect(
-      reviewItemAnswers(noLanding, unplaced, landing, edit).map((a) => a.label),
-    ).toEqual(["Place the bounce"]);
+    // The vendor's call is the suggested answer, written through the
+    // console's own shot write.
+    const out = item.answers.find((a) => a.kind === "suggested")!;
+    const calls: unknown[][] = [];
+    await runReviewAnswer(out, placed.id, recorder(calls));
+    // A lone serve out settles no ending by itself: the shot write alone.
+    expect(calls).toEqual([["shot", ace.id, { result: "out" }]]);
   });
 
   test("the answers are the point patch and the shot patch, through the console's two writes", () => {
@@ -982,7 +868,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     };
   };
 
-  test("“Point ended here” is a suggestion row under the stroke that ended the point; the review block closes the well", () => {
+  test("“Point ended here” is a suggestion row under the stroke that ended the point; the panel asks its item first", () => {
     const point = endedEarly();
     const html = renderWell(point, marksOf(point, []));
     const at = (needle: string) => {
@@ -993,19 +879,18 @@ test.describe("the hints read off the rows, with their answers", () => {
     const ended = at('data-point-hint="shot_after_point_end"');
     expect(ended).toBeGreaterThan(at('data-shot-id="s-long"'));
     expect(ended).toBeLessThan(at('data-shot-id="s-dead-1"'));
-    // "No landing on the last shot" is about the point: item 4 of the block,
-    // the well's last row. "Did the point end here?" is item 2, a pointer.
-    expect(at('data-review-item="4"')).toBeGreaterThan(
-      html.lastIndexOf('data-row="shot"'),
-    );
-    expect(html.match(/data-review-block=""/g)).toHaveLength(1);
-    expect(reviewRows(html).map((row) => [row.id, row.state])).toEqual([
-      [2, "pointer"],
-      [4, "open"],
-    ]);
-    expect(reviewRows(html)[0].text).toBe(
-      "2 Extra shots / two points in one? — at shot 2",
-    );
+    // The panel asks item 4 ("No landing on the last shot", about the
+    // point) first, then item 2 as its follow-up (review-step.ts
+    // `openReviewItems`); the well draws neither as a block.
+    expect(html).not.toContain("data-review");
+    expect(
+      reviewFlag(point, marksOf(point, []), [point])!.items.map((i) => i.id),
+    ).toEqual([2, 4]);
+    const item = review(point, marksOf(point, []))!;
+    expect(item.id).toBe(4);
+    expect(
+      reviewStep(point, marksOf(point, []), [point], NAMES, true)?.then,
+    ).toBe("Then: split or remove the shots after");
     expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
   });
 
@@ -1031,7 +916,8 @@ test.describe("the hints read off the rows, with their answers", () => {
     const gone = { ...point, dismissed: ["point_ended:s-long"] };
     const after = renderWell(gone, marksOf(gone, []), edit);
     expect(after).not.toContain('data-point-hint="shot_after_point_end"');
-    expect(reviewRows(after).map((row) => row.id)).toEqual([4]);
+    // Answered, the next open item is the panel's.
+    expect(review(gone, marksOf(gone, []))?.id).toBe(4);
     // Read-only: nothing to dismiss with.
     expect(
       renderWell(point, marksOf(point, []), { editable: false }),
@@ -1157,9 +1043,19 @@ test.describe("the hints read off the rows, with their answers", () => {
     // Drawn: the words with the count, and a button for each answer. The
     // point's own hint leads the well; "Point ended here" follows its stroke.
     const html = renderWell(point, marksOf(point, []), edit);
-    expect(evidence(reviewRows(html)[1])).toEqual([
-      "Place the last bounce to settle Out, Net or In.",
+    // The panel asks how the point ended first; the follow-up comes after.
+    expect(answers(review(point, marksOf(point, [])))).toEqual([
+      "Winner by Vargas",
+      "Out by Vargas",
+      "Net by Vargas",
+      "Dismiss",
+      "Looks right",
     ]);
+    const answered = { ...point, dismissed: ["point_ended:s-long"] };
+    expect(
+      reviewStep(answered, marksOf(answered, []), [answered], NAMES, true)
+        ?.then ?? null,
+    ).toBeNull();
     expect(tag(html, "data-suggestion-text")).toContain(
       "Did the point end here? 1 shot follows",
     );
@@ -1181,13 +1077,14 @@ test.describe("the hints read off the rows, with their answers", () => {
     const readOnly = renderWell(stale(), marksOf(stale(), []), {
       editable: false,
     });
-    const [item] = reviewRows(readOnly);
-    expect(item.text).toContain("Then: an ace by Lee");
     expect(readOnly).not.toContain("data-point-hint-action");
     expect(readOnly).not.toContain("<button");
+    // Read-only, the step is still the item: the panel draws no answers
+    // without a console that writes (label-court-panel.spec.ts).
+    expect(review(stale(), marksOf(stale(), []))?.id).toBe(4);
     // The rows in step with the ending: no hint at all.
     const inStep = renderWell(fixturePoint(), marksOf(fixturePoint(), []));
     expect(inStep).not.toContain("data-point-hint");
-    expect(inStep).not.toContain("data-review-block");
+    expect(review(fixturePoint(), marksOf(fixturePoint(), []))).toBeNull();
   });
 });

@@ -21,7 +21,10 @@ import {
   type ReviewItem,
   type ReviewItemId,
 } from "@/lib/services/labels/marks-state";
-import { reviewBlockRows } from "@/lib/services/labels/review-block";
+import {
+  currentReviewItem,
+  reviewItemTarget,
+} from "@/lib/services/labels/review-target";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
 import {
   hintDismissKey,
@@ -542,8 +545,7 @@ test.describe("demoted", () => {
   });
 });
 
-test.describe("reviewBlockRows", () => {
-  /** An item in a state, with one member: what the block reads of it. */
+test.describe("currentReviewItem", () => {
   const item = (id: ReviewItemId, state: ReviewItem["state"]): ReviewItem => ({
     id,
     question: REVIEW_ITEM_QUESTION[id],
@@ -551,82 +553,297 @@ test.describe("reviewBlockRows", () => {
     state,
     members: [{ mark: sample("winner_disputed"), state }],
   });
-  const flag = (...items: ReviewItem[]): ReviewFlag => ({
-    tone: "score",
+  const flag = (demoted: boolean, ...items: ReviewItem[]): ReviewFlag => ({
+    tone: "data",
     state: "open",
     items,
-    demoted: false,
-  });
-  const drawn = (rows: ReturnType<typeof reviewBlockRows>) =>
-    rows.map((row) => [row.id, row.display, row.clearedBy]);
-
-  test("unchanged: every item as it stands, open or not, in id order", () => {
-    const before = [item(4, "open"), item(1, "open")];
-    expect(
-      drawn(reviewBlockRows(before, flag(item(1, "open"), item(4, "open")))),
-    ).toEqual([
-      [1, "open", null],
-      [4, "open", null],
-    ]);
-    // Nothing held from the open: the flag alone.
-    expect(
-      drawn(reviewBlockRows(null, flag(item(2, "checked-as-is")))),
-    ).toEqual([[2, "done", null]]);
-    expect(reviewBlockRows(null, null)).toEqual([]);
+    demoted,
   });
 
-  test("answered: an item no longer open collapses to done", () => {
-    const before = [item(1, "open"), item(4, "open")];
-    const rows = reviewBlockRows(
-      before,
-      flag(item(1, "settled"), item(4, "open")),
+  test("the first open item in id order; none open, or no flag, is none", () => {
+    expect(
+      currentReviewItem(
+        flag(false, item(1, "settled"), item(3, "open"), item(4, "open")),
+      )?.id,
+    ).toBe(3);
+    expect(currentReviewItem(flag(false, item(2, "checked-as-is")))).toBeNull();
+    expect(currentReviewItem(null)).toBeNull();
+    // A demoted flag is still asked on the open point.
+    expect(currentReviewItem(flag(true, item(4, "open")))?.id).toBe(4);
+  });
+
+  test("answered, the next open item is current", () => {
+    const before = flag(false, item(2, "open"), item(4, "open"));
+    const after = flag(false, item(2, "settled"), item(4, "open"));
+    expect(currentReviewItem(before)?.id).toBe(2);
+    expect(currentReviewItem(after)?.id).toBe(4);
+  });
+});
+
+test.describe("reviewItemTarget", () => {
+  /**
+   * A four-stroke rally, every contact and landing placed: p1's first serve
+   * (a), then b, c, d. `d` is the last ball, seeded as it stands.
+   */
+  const stroke = (
+    id: string,
+    t: number,
+    over: Partial<LabelShot> = {},
+  ): LabelShot => {
+    const shot = labelShot(id, POINT, {
+      eventId: 100 + t,
+      hitter: t % 2 === 1 ? "p1" : "p2",
+      stroke: "forehand",
+      result: "in",
+      contactX: 1,
+      contactY: 1,
+      landingX: 2,
+      landingY: 20,
+      videoTime: t,
+      ...over,
+    });
+    return {
+      ...shot,
+      seed: {
+        hitter: shot.hitter,
+        stroke: shot.stroke,
+        result: shot.result,
+        spin: shot.spin,
+        contact_x: shot.contactX,
+        contact_y: shot.contactY,
+        landing_x: shot.landingX,
+        landing_y: shot.landingY,
+        video_time: shot.videoTime,
+      },
+    };
+  };
+  const rally = (...over: [string, Partial<LabelShot>][]) =>
+    point({
+      shots: [
+        stroke("a", 1, { stroke: "first_serve" }),
+        stroke("b", 2),
+        stroke("c", 3),
+        stroke("d", 4),
+      ].map((shot) => ({
+        ...shot,
+        ...Object.assign(
+          {},
+          ...over.filter(([id]) => id === shot.id).map(([, fields]) => fields),
+        ),
+      })),
+    });
+  /** An item of `id` whose members are `marks`, open unless a state is given. */
+  const itemOf = (
+    id: ReviewItemId,
+    ...members: (LabelMark | [LabelMark, ReviewItem["state"]])[]
+  ): ReviewItem => {
+    const list = members.map((m) =>
+      Array.isArray(m)
+        ? { mark: m[0], state: m[1] }
+        : { mark: m, state: "open" as const },
     );
-    expect(drawn(rows)).toEqual([
-      [1, "done", null],
-      [4, "open", null],
-    ]);
-    expect(rows[0].item.state).toBe("settled");
-    expect(
-      drawn(
-        reviewBlockRows(before, flag(item(1, "dismissed"), item(4, "open"))),
-      ),
-    ).toEqual([
-      [1, "done", null],
-      [4, "open", null],
-    ]);
+    return {
+      id,
+      question: REVIEW_ITEM_QUESTION[id],
+      tone: "score",
+      state: "open",
+      members: list,
+    };
+  };
+  const target = (
+    item: ReviewItem | null,
+    p: LabelPoint = rally(),
+    marks: LabelMarks = marksOf({}),
+  ) => reviewItemTarget(item, p, marks, true);
+  const at = (shotId: string | null, place: "contact" | "landing" | null) => ({
+    shotId,
+    place,
   });
 
-  test("cleared: an item gone since the open is put down to the lowest item that changed", () => {
-    const before = [item(1, "open"), item(4, "open"), item(5, "open")];
-    // Answering 1 took 4 and 5 away with it.
-    const rows = reviewBlockRows(before, flag(item(1, "settled")));
-    expect(drawn(rows)).toEqual([
-      [1, "done", null],
-      [4, "cleared", 1],
-      [5, "cleared", 1],
-    ]);
-    // The cleared row keeps the item as it stood, for its question.
-    expect(rows[1].item).toBe(before[1]);
-    // The lowest of two that changed.
+  test("1: the stroke before the first open missing-shot slot, no end", () => {
+    const slot = (afterShotId: string, n: number): LabelSuggestion => ({
+      kind: "missing_shot",
+      key: `missing_shot:${n}`,
+      pointId: POINT,
+      afterShotId,
+      hitter: "p2",
+      videoTime: null,
+    });
+    // The slot after b is done (a stroke was added there): c's is the open one.
+    const p = rally();
+    const done = {
+      ...p,
+      shots: [
+        ...p.shots,
+        labelShot("added", POINT, { status: "added", afterEventId: 102 }),
+      ],
+    };
+    const marks = marksOf({}, {}, [slot("b", 102), slot("c", 103)]);
     expect(
-      drawn(
-        reviewBlockRows(
-          [item(2, "open"), item(3, "open"), item(6, "open")],
-          flag(item(2, "settled"), item(3, "settled")),
+      target(itemOf(1, sample("same_player_consecutive")), done, marks),
+    ).toEqual(at("c", null));
+    // No open slot: no stroke to select.
+    expect(target(itemOf(1, sample("same_player_consecutive")))).toEqual(
+      at(null, null),
+    );
+  });
+
+  test("2: the point-ended and serve-after-serve strokes, a re-serve at the first; no end", () => {
+    expect(
+      target(
+        itemOf(2, mark("shot_after_point_end", { shotId: "c", after: ["d"] })),
+      ),
+    ).toEqual(at("c", null));
+    expect(
+      target(itemOf(2, mark("serve_after_serve_in", { shotId: "d" }))),
+    ).toEqual(at("d", null));
+    expect(target(itemOf(2, sample("reserve_after_in")))).toEqual(
+      at("a", null),
+    );
+  });
+
+  test("3: each serve question at its serve, on the landing where a bounce settles it", () => {
+    expect(
+      target(
+        itemOf(
+          3,
+          mark("serve_in_landing_out", { shotId: "a", landing: "out" }),
         ),
       ),
-    ).toEqual([
-      [2, "done", null],
-      [3, "done", null],
-      [6, "cleared", 2],
-    ]);
-    // An answer that took its own item away (a split): the lowest gone
-    // before it, and none for the first.
+    ).toEqual(at("a", "landing"));
     expect(
-      drawn(reviewBlockRows([item(2, "open"), item(4, "open")], null)),
-    ).toEqual([
-      [2, "cleared", null],
-      [4, "cleared", 2],
+      target(itemOf(3, mark("second_serve_as_first", { shotId: "b" }))),
+    ).toEqual(at("b", null));
+    expect(target(itemOf(3, sample("first_serve_fault_alone")))).toEqual(
+      at("d", "landing"),
+    );
+    // The last second serve, not the last stroke.
+    const seconds = rally(
+      ["b", { stroke: "second_serve" }],
+      ["c", { stroke: "second_serve" }],
+    );
+    expect(
+      target(itemOf(3, sample("second_serve_called_out")), seconds),
+    ).toEqual(at("c", "landing"));
+    // No second serve to name: the next open member that names a stroke.
+    expect(
+      target(
+        itemOf(
+          3,
+          sample("second_serve_called_out"),
+          sample("first_serve_fault_alone"),
+        ),
+      ),
+    ).toEqual(at("d", "landing"));
+  });
+
+  test("4: the called ball, the last ball, or the ball before the winner — on the landing", () => {
+    // The vendor's call is on d; a phantom swing after it is the last stroke.
+    const p = rally();
+    const phantom = {
+      ...p,
+      shots: [...p.shots, stroke("e", 5, { result: null })],
+    };
+    const call = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: 104,
+    });
+    expect(
+      target(itemOf(4, call), phantom, marksOf({ [POINT]: [call] })),
+    ).toEqual(at("d", "landing"));
+    // No answer to write (the call is on another ball): the last stroke.
+    const elsewhere = mark("last_call_overruled", {
+      vendorCall: "out",
+      eventId: 1,
+    });
+    expect(
+      target(itemOf(4, elsewhere), phantom, marksOf({ [POINT]: [elsewhere] })),
+    ).toEqual(at("e", "landing"));
+    for (const code of [
+      "last_landing_missing",
+      "last_shot_unresolved",
+      "net_hit_contradicts_height",
+      "winner_disputed",
+    ] as const) {
+      expect(target(itemOf(4, sample(code))), code).toEqual(at("d", "landing"));
+    }
+    for (const code of [
+      "ending_suspect_line",
+      "winner_to_error_by_bounce",
+    ] as const) {
+      expect(target(itemOf(4, sample(code))), code).toEqual(at("c", "landing"));
+    }
+  });
+
+  test("4: a stale or unreadable ending alone is the last stroke's landing; beside a ball, the ball", () => {
+    // The end-of-point question is the last ball's bounce to settle, so the
+    // court opens on that landing even when only the ending reads wrong.
+    expect(target(itemOf(4, sample("ending_stale")))).toEqual(
+      at("d", "landing"),
+    );
+    expect(target(itemOf(4, sample("result_type_unknown")))).toEqual(
+      at("d", "landing"),
+    );
+    // Listed first, still taken after the line call beside it.
+    expect(
+      target(itemOf(4, sample("ending_stale"), sample("ending_suspect_line"))),
+    ).toEqual(at("c", "landing"));
+  });
+
+  test("5 at the last stroke, 6 at the first; no end", () => {
+    expect(target(itemOf(5, sample("pick_winner")))).toEqual(at("d", null));
+    expect(target(itemOf(5, sample("winner_guessed")))).toEqual(at("d", null));
+    for (const code of [
+      "score_side_mismatch",
+      "service_court_repeat",
+      "tiebreak_score_off_six_all",
+      "segment_proposal_differs",
+    ] as const) {
+      expect(target(itemOf(6, sample(code))), code).toEqual(at("a", null));
+    }
+  });
+
+  test("a stroke with no contact opens on the contact first; an end of none stays none", () => {
+    const noContact = rally(["d", { contactX: null, contactY: null }]);
+    expect(target(itemOf(4, sample("winner_disputed")), noContact)).toEqual(
+      at("d", "contact"),
+    );
+    expect(target(itemOf(5, sample("pick_winner")), noContact)).toEqual(
+      at("d", null),
+    );
+    // A contact called unclear is not asked for.
+    const unclear = rally([
+      "d",
+      { contactX: null, contactY: null, unclear: ["contact_x", "contact_y"] },
     ]);
+    expect(target(itemOf(4, sample("winner_disputed")), unclear)).toEqual(
+      at("d", "landing"),
+    );
+  });
+
+  test("only open members, only live strokes; nothing to select is no target", () => {
+    // The answered member is passed over for the open one.
+    expect(
+      target(
+        itemOf(
+          4,
+          [sample("winner_disputed"), "settled"],
+          sample("ending_suspect_line"),
+        ),
+      ),
+    ).toEqual(at("c", "landing"));
+    // A deleted last stroke: the one before it is last.
+    const deleted = rally(["d", { status: "deleted" }]);
+    expect(target(itemOf(5, sample("pick_winner")), deleted)).toEqual(
+      at("c", null),
+    );
+    // A stroke named by a member that is no longer live.
+    expect(
+      target(itemOf(2, mark("serve_after_serve_in", { shotId: "d" })), deleted),
+    ).toEqual(at(null, null));
+    expect(target(itemOf(5, sample("pick_winner")), point())).toEqual(
+      at(null, null),
+    );
+    expect(target(null)).toEqual(at(null, null));
   });
 });

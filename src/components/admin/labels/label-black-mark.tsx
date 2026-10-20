@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Flag, Pencil } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import type {
@@ -9,20 +8,11 @@ import type {
   LabelMarks,
 } from "@/lib/services/labels/marks";
 import {
-  clearedByLabel,
   HINT_ACTION_LABEL,
   hintLabel,
-  LAST_BALL_IN_LABEL,
   lastCallAction,
-  LOOKS_RIGHT_LABEL,
   lastCallUnplacedHover,
   markHover,
-  ownedEndingPhrase,
-  PLACE_BOUNCE_LABEL,
-  REVIEW_BLOCK_TITLE,
-  REVIEW_DISMISS_LABEL,
-  reviewPointerLine,
-  reviewThenLine,
   staleEndingAction,
   removeAfterLabel,
 } from "@/lib/services/labels/marks-copy";
@@ -46,37 +36,23 @@ import {
   type MarkTone,
   type ReviewItem,
 } from "@/lib/services/labels/marks-state";
-import {
-  memberShotId,
-  reviewBlockRows,
-  reviewItemPointer,
-  wellShotNumbers,
-} from "@/lib/services/labels/review-block";
-import {
-  isMissedResult,
-  liveShotsInOrder,
-  type LabelPoint,
-} from "@/lib/services/labels/session";
+import { isMissedResult, type LabelPoint } from "@/lib/services/labels/session";
 import {
   hintDismissKey,
   isSuggestionKey,
   pointEndedKey,
 } from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
-import { pointSentence } from "./label-black-format";
-import { BlackTextAction } from "./label-black-parts";
 import type { SideNames } from "./label-format";
-import { railInk } from "./label-rail-tone";
-import type { EditContext, LabelRowOperations } from "./label-row-parts";
+import type { EditContext } from "./label-row-parts";
 
 /**
  * The rail's marks: a point's review flag (`reviewFlag`, marks-state.ts) is
  * the one chip on its row (`MarkChip`) — amber when it can move the score,
- * grey when it is about the data — and the open point asks the same flag in
- * its well as a review block (`ReviewBlock`), item by item with the answers
- * each offers. These components only draw: `pointRowMarks`, `pointHints`,
- * `reviewItemAnswers` and review-block.ts decide what, with words and states
- * from marks-copy.ts and marks-state.ts.
+ * grey when it is about the data. The open point's review step is asked in
+ * the court panel (review-step.ts `reviewStep`). These components only draw:
+ * `pointRowMarks` and `pointHints` decide what, with words and states from
+ * marks-copy.ts and marks-state.ts.
  */
 
 export interface MarkChipProps {
@@ -167,462 +143,11 @@ export interface PointHint {
    * The stroke the hint is about, when it is one: "Point ended here" sits
    * under the stroke that ended the point, "Second serve?" under its serve,
    * not on a line away from it. "Was the last ball in?" names none: the
-   * review block asks it as item 4.
+   * court panel asks it as item 4 (`reviewStep`).
    */
   afterShotId?: string;
   /** The key Dismiss stores, for a hint the labeller can wave away. */
   dismissKey?: string;
-}
-
-/** The block's quiet ink: its title and an item's evidence lines. */
-const EVIDENCE_INK = railInk(0.45);
-/** The "Then:" line, a step above the evidence. */
-const THEN_INK = railInk(0.5);
-/** A collapsed row's words and number. */
-const DONE_INK = railInk(0.3);
-
-/**
- * What the block's answers write through: the hint writes, the console's
- * stroke selection (item 4's "Place the bounce") and its check tick (the
- * header's "Looks right", `operations.onSetChecked`).
- */
-export type ReviewEdit = HintEdit & Pick<EditContext, "onSelectShot">;
-
-/** Item 4's "Then:" line: the ending the strokes add up to, and its write. */
-interface ReviewThen {
-  phrase: string;
-  action: PointHintAction | null;
-}
-
-/**
- * An open item's answers, each only where the console has the write. Item 4
- * asked as the vendor called the last ball ("Was the last ball out?") is
- * "Yes, make it out" (`lastCallAction`'s patch), "It was in" (a shot patch,
- * when the call was not in already) and "Place the bounce" (selects the
- * last live stroke on the court's landing end); with no landing on the last
- * stroke instead, it leads with "Place the bounce". Every other item is
- * answered at its stroke or not at all here: the block adds no second copy
- * of a stroke row's answers.
- */
-export function reviewItemAnswers(
-  item: ReviewItem,
-  point: LabelPoint,
-  marks: LabelMarks,
-  edit: ReviewEdit | undefined,
-): PointHintAction[] {
-  if (!edit || item.id !== 4) return [];
-  const asks = (code: LabelMarkCode) =>
-    item.members.some(
-      (member) => member.mark.code === code && member.state === "open",
-    );
-  const ghosts = drawsGhosts(marks);
-  const last = liveShotsInOrder(point, ghosts).at(-1);
-  const { onPatchShot, onSelectShot } = edit;
-  const placeBounce: PointHintAction[] =
-    onSelectShot && last
-      ? [
-          {
-            label: PLACE_BOUNCE_LABEL,
-            run: () => onSelectShot(last.id, "landing"),
-          },
-        ]
-      : [];
-  const lastCall = asks("last_call_overruled")
-    ? lastCallAnswer(point, pointRowMarkList(point, marks).count, ghosts)
-    : null;
-  if (lastCall) {
-    const { vendorCall } = lastCall.mark.params;
-    const patch = (result: "in" | "out" | "net") => () =>
-      onPatchShot?.(lastCall.shotId, { result });
-    return [
-      ...(onPatchShot
-        ? [{ label: lastCallAction(vendorCall), run: patch(vendorCall) }]
-        : []),
-      ...(onPatchShot && vendorCall !== "in"
-        ? [{ label: LAST_BALL_IN_LABEL, run: patch("in") }]
-        : []),
-      ...placeBounce,
-    ];
-  }
-  return asks("last_landing_missing") ? placeBounce : [];
-}
-
-/**
- * Item 4's "Then:" line, while "Different ending?" is open under it: the
- * ending the strokes add up to (`ownedEndingPhrase`) with its one answer,
- * `staleEndingAction`'s point patch (`hintActions`). Never an item of its
- * own: it is what the last ball's answer leads to.
- */
-function reviewThen(
-  item: ReviewItem,
-  point: LabelPoint,
-  names: SideNames,
-  edit: ReviewEdit | undefined,
-): ReviewThen | null {
-  if (item.id !== 4) return null;
-  for (const { mark, state } of item.members) {
-    if (mark.code !== "ending_stale" || state !== "open") continue;
-    const { ending, endedBy, winner } = mark.params;
-    return {
-      phrase: ownedEndingPhrase(ending, endedBy, winner, names),
-      action: hintActions(mark, point, edit)[0] ?? null,
-    };
-  }
-  return null;
-}
-
-/**
- * An item's Dismiss: every member's stored key (`ReviewMember.dismissKey`),
- * each said once, through `onDismissSuggestion` — one call a key. Null when
- * no member has one ("Missing shot?" is dismissed at its slot) or the console
- * cannot write.
- */
-export function reviewItemDismiss(
-  item: ReviewItem,
-  point: Pick<LabelPoint, "id">,
-  operations: LabelRowOperations | undefined,
-): PointHintAction | null {
-  const keys = [
-    ...new Set(
-      item.members
-        .map((member) => member.dismissKey)
-        .filter((key): key is string => isSuggestionKey(key)),
-    ),
-  ];
-  if (!operations || keys.length === 0) return null;
-  return {
-    label: REVIEW_DISMISS_LABEL,
-    run: () => {
-      for (const key of keys) operations.onDismissSuggestion(point.id, key);
-    },
-  };
-}
-
-/**
- * The header's "Looks right": the check tick's own handler
- * (`operations.onSetChecked`), never a write of its own. Only on a point not
- * yet checked, where the console can write.
- */
-export function reviewLooksRight(
-  point: Pick<LabelPoint, "id" | "checkedAt">,
-  operations: LabelRowOperations | undefined,
-): PointHintAction | null {
-  if (!operations || point.checkedAt !== null) return null;
-  return {
-    label: LOOKS_RIGHT_LABEL,
-    run: () => operations.onSetChecked(point.id, true),
-  };
-}
-
-/**
- * Where a jump to a flagged point puts focus, read off its rendered shots
- * well: the first `BlackTextAction` of the block's first open item, which is
- * its lowest-numbered (the items are drawn in order). A pointer item asks on
- * its stroke instead, so the target is the first action of the inline
- * suggestion row under that stroke — the missing-shot slot for "Same side
- * twice", otherwise the dashed row of the code it names — before the next
- * stroke's row. Null with no block, no open item, or no action to take (a
- * read-only well), and the caller then focuses nothing.
- *
- * DOM only and self-contained: it reads the rows' data attributes, so the
- * console needs no hook in the shot rows, and a spec can run it in a page.
- */
-export function reviewFocusTarget(well: Element): HTMLElement | null {
-  const item = well.querySelector(
-    '[data-review-block] [data-review-item-state="open"]',
-  );
-  if (!item) return null;
-  if (item.getAttribute("data-review-state") !== "pointer") {
-    return item.querySelector<HTMLElement>("button");
-  }
-  const shotId = item.getAttribute("data-review-shot");
-  const code = item.getAttribute("data-review-code");
-  const stroke = Array.from(well.querySelectorAll("[data-shot-id]")).find(
-    (row) => row.getAttribute("data-shot-id") === shotId,
-  );
-  if (!stroke) return null;
-  const strokeRows = ["shot", "deleted-shot", "ghost-shot"];
-  let fallback: Element | null = null;
-  for (
-    let row = stroke.nextElementSibling;
-    row && !strokeRows.includes(row.getAttribute("data-row") ?? "");
-    row = row.nextElementSibling
-  ) {
-    const kind = row.getAttribute("data-row");
-    if (kind !== "suggested-shot" && kind !== "suggested-end") continue;
-    const match =
-      code === "same_player_consecutive"
-        ? kind === "suggested-shot"
-        : row.getAttribute("data-point-hint") === code;
-    if (match) return row.querySelector<HTMLElement>("button");
-    fallback ??= row;
-  }
-  return fallback?.querySelector<HTMLElement>("button") ?? null;
-}
-
-/**
- * The open point's review block, the last row of the shots well: the
- * point's flag (`reviewFlag`) as its items in
- * the order they are answered, under a "Review · in this order" header whose
- * "Looks right" is the check tick's own write. A demoted flag draws the same
- * items with no header: the row leaves it off, the open point still asks.
- *
- * Each open item is its number, its question (`reviewItemQuestion`), its open
- * members' evidence (`markHover`, each said once), its answers
- * (`reviewItemAnswers`) and a Dismiss that stores every member's key. An item
- * that lives on its strokes (`reviewItemPointer`) is one pointer line to the
- * stroke instead: its suggestion row there keeps its answers. Items answered
- * while the point is open collapse to what became of them
- * (`stateHoverParts`), and items an answer took away to "Cleared by N"
- * (`reviewBlockRows`), against the items as they stood when the well opened —
- * held from the first render, since the well mounts as the point opens.
- * Nothing at all when no item is open now and none was then.
- *
- * Every item row says what it is now in `data-review-item-state` — `open`
- * for a pointer line too, `done` or `cleared` once answered — so a jump finds
- * the first one still asking (`reviewFocusTarget`). A pointer line also names
- * its stroke (`data-review-shot`) and the code asked there
- * (`data-review-code`).
- */
-export function ReviewBlock({
-  point,
-  marks,
-  edit,
-  className,
-  style,
-}: {
-  point: LabelPoint;
-  marks: LabelMarks;
-  edit: EditContext;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
-  const flag = reviewFlag(point, marks, edit.points);
-  const [previous] = useState(() => flag?.items ?? null);
-  const isOpen = (items: readonly ReviewItem[] | null | undefined) =>
-    items?.some((item) => item.state === "open") ?? false;
-  if (!isOpen(flag?.items) && !isOpen(previous)) return null;
-  const { names } = edit;
-  const writes = edit.editable ? edit : undefined;
-  const operations = writes?.operations;
-  const rows = reviewBlockRows(previous, flag);
-  const numbers = wellShotNumbers(point, drawsGhosts(marks));
-  const sentence = pointSentence(point, names);
-  const pointAdded = missingPointAdded(point, marks.suggestions, edit.points);
-  const looksRight = reviewLooksRight(point, operations);
-  return (
-    <div
-      data-review-block=""
-      data-review-demoted={flag?.demoted ? "" : undefined}
-      className={cn(
-        "mx-[10px] my-[6px] flex shrink-0 cursor-default flex-col rounded-[6px] bg-[var(--rail-amber-wash-faint)] px-[10px] py-[8px]",
-        className,
-      )}
-      style={style}
-    >
-      {flag?.demoted ? null : (
-        <div
-          data-review-header=""
-          className="flex h-[18px] items-center justify-between gap-3"
-        >
-          <span
-            className="text-[10px] font-medium tracking-[1.5px] uppercase"
-            style={{ color: EVIDENCE_INK }}
-          >
-            {REVIEW_BLOCK_TITLE}
-          </span>
-          {looksRight ? (
-            <BlackTextAction
-              ink="quiet"
-              data-review-looks-right=""
-              onClick={(event) => {
-                event.stopPropagation();
-                looksRight.run();
-              }}
-            >
-              {looksRight.label}
-            </BlackTextAction>
-          ) : null}
-        </div>
-      )}
-      {rows.map((row, index) => {
-        const { item } = row;
-        const question = reviewItemQuestion(item);
-        const rule = index > 0 || !flag?.demoted;
-        const numberInk =
-          row.display !== "open"
-            ? DONE_INK
-            : item.tone === "score"
-              ? "var(--rail-amber)"
-              : EVIDENCE_INK;
-        const number = (
-          <span
-            aria-hidden="true"
-            className="mono tabular pt-px text-[11px] leading-[16px]"
-            style={{ color: numberInk }}
-          >
-            {row.id}
-          </span>
-        );
-        const frame = cn(
-          "grid grid-cols-[16px_1fr] gap-x-[6px] py-[6px]",
-          rule &&
-            "shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-white)_6%,transparent)]",
-        );
-        if (row.display !== "open") {
-          const member =
-            item.members.find((m) => m.state === item.state) ?? item.members[0];
-          const parts = stateHoverParts(
-            member.mark,
-            member.state,
-            names,
-            sentence,
-            pointAdded,
-          );
-          const words =
-            row.display === "done"
-              ? `✓ ${parts.detail ?? parts.name}`
-              : `– ${question} ${clearedByLabel(row.clearedBy)}`;
-          return (
-            <div
-              key={row.id}
-              data-review-item={row.id}
-              data-review-state={row.display}
-              data-review-item-state={row.display}
-              className={frame}
-            >
-              {number}
-              <span
-                className="min-w-0 truncate text-[11px] leading-[16px]"
-                style={{ color: DONE_INK }}
-              >
-                {words}
-              </span>
-            </div>
-          );
-        }
-        const shot = reviewItemPointer(item, point, marks, numbers);
-        if (shot !== null) {
-          const line = reviewPointerLine(row.id, question, shot);
-          // The open member at the stroke the line names, for the jump's focus
-          // (`reviewFocusTarget`): its inline row is under that stroke.
-          const at = item.members
-            .filter((member) => member.state === "open")
-            .map((member) => ({
-              code: member.mark.code,
-              shotId: memberShotId(member, point, marks),
-            }))
-            .find(
-              ({ shotId }) => shotId !== null && numbers.get(shotId) === shot,
-            );
-          return (
-            <div
-              key={row.id}
-              data-review-item={row.id}
-              data-review-state="pointer"
-              data-review-item-state="open"
-              data-review-shot={at?.shotId ?? undefined}
-              data-review-code={at?.code}
-              aria-label={line}
-              className={frame}
-            >
-              {number}
-              <span className="min-w-0 truncate text-[12px] leading-[16px] text-white/[0.92]">
-                {question}
-                <span style={{ color: EVIDENCE_INK }}> — at shot {shot}</span>
-              </span>
-            </div>
-          );
-        }
-        const evidence = openEvidence(item, names);
-        const answers = reviewItemAnswers(item, point, marks, writes);
-        const then = reviewThen(item, point, names, writes);
-        const dismiss = reviewItemDismiss(item, point, operations);
-        return (
-          <div
-            key={row.id}
-            data-review-item={row.id}
-            data-review-state="open"
-            data-review-item-state="open"
-            className={frame}
-          >
-            {number}
-            <div className="flex min-w-0 flex-col gap-[3px]">
-              <span className="text-[12px] leading-[16px] text-white/[0.92]">
-                {question}
-              </span>
-              {evidence.map((line) => (
-                <span
-                  key={line}
-                  data-review-evidence=""
-                  className="text-[11px] leading-[15px]"
-                  style={{ color: EVIDENCE_INK }}
-                >
-                  {line}
-                </span>
-              ))}
-              {answers.length > 0 || dismiss ? (
-                <span
-                  data-review-answers=""
-                  className="-ml-1 flex flex-wrap items-center gap-x-[10px]"
-                >
-                  {answers.map((answer, i) => (
-                    <BlackTextAction
-                      key={answer.label}
-                      ink={i === 0 ? "amber" : "quiet"}
-                      data-review-answer={row.id}
-                      aria-label={`${answer.label}: ${question}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        answer.run();
-                      }}
-                    >
-                      {answer.label}
-                    </BlackTextAction>
-                  ))}
-                  {dismiss ? (
-                    <BlackTextAction
-                      ink="muted"
-                      data-review-dismiss={row.id}
-                      aria-label={`${dismiss.label}: ${question}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        dismiss.run();
-                      }}
-                    >
-                      {dismiss.label}
-                    </BlackTextAction>
-                  ) : null}
-                </span>
-              ) : null}
-              {then ? (
-                <span
-                  data-review-then=""
-                  className="-ml-1 flex flex-wrap items-center gap-x-[10px] text-[11px] leading-[16px]"
-                  style={{ color: THEN_INK }}
-                >
-                  <span className="px-1">{reviewThenLine(then.phrase)}</span>
-                  {then.action ? (
-                    <BlackTextAction
-                      ink="quiet"
-                      data-review-then-action=""
-                      aria-label={`${then.action.label}: ${reviewThenLine(then.phrase)}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        then.action!.run();
-                      }}
-                    >
-                      {then.action.label}
-                    </BlackTextAction>
-                  ) : null}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /**
@@ -813,7 +338,8 @@ export function pointHints(
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
   // "Was the last ball in?" is a counted mark; its answer is offered (in the
-  // review block) until the labeller changes the last ball's result.
+  // court panel's current item) until the labeller changes the last ball's
+  // result.
   const lastCall = lastCallAnswer(point, count, ghosts);
   const hints = [
     ...(lastCall ? [lastCall.mark] : []),
