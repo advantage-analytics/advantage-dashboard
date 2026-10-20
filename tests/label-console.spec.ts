@@ -950,11 +950,8 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(consoleSource).toContain(
       "jumpAfterOpen.current = (pointId) => findGap(pointId);",
     );
-    // The third is the auto-advance's own jump to the next flagged point.
-    expect(consoleSource.match(/arm: true/g)).toHaveLength(3);
-    expect(consoleSource).toMatch(
-      /if \(stop && stop\.pointId !== fromPointId\)\s+findGap\(stop\.pointId, \{ arm: true \}\);/,
-    );
+    // Only those two: a corrected point stays put, never jumping on itself.
+    expect(consoleSource.match(/arm: true/g)).toHaveLength(2);
     // The old block focus and the older target are gone.
     expect(consoleSource).not.toContain("reviewFocusTarget");
     expect(consoleSource).not.toContain("focusItem");
@@ -1072,14 +1069,13 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(effect).toContain(
       "\"[role='menu'], [role='dialog'], [role='alertdialog']\"",
     );
-    // Another item on the point lands; none goes on to the next flagged point.
+    // Another item on the point lands; with none left the console stays on
+    // the corrected point — the next flagged point is `]`'s to reach.
     expect(effect).toContain(
       'if (verdict === "advance") landOnStepRef.current(expanded, step);',
     );
-    expect(effect).toContain("else reviewJumpRef.current(expanded.id);");
-    expect(effect).toContain(
-      "const stop = nextReviewStop(points, liveMarks, fromPointId, 1);",
-    );
+    expect(effect).not.toContain("reviewJumpRef");
+    expect(effect).not.toContain("nextReviewStop");
     expect(effect).toContain("}, [stepKey, points, confirm, reviewMode]);");
     // The writes that arm it: a court placement, a dismiss.
     const place = consoleSource.slice(

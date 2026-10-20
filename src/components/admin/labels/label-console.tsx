@@ -67,7 +67,6 @@ import {
 } from "@/lib/services/labels/review-flow";
 import { withLiveScoreMarks } from "@/lib/services/labels/score-marks";
 import {
-  nextReviewStop,
   openReviewItems,
   reviewStep,
   type ReviewStep,
@@ -2965,20 +2964,13 @@ export function LabelConsole({
   // rows (the optimistic apply, in the same commit as the click), the open
   // point's step is read again. Another question still open on the point
   // lands straight away (`landOnStep`: its stroke or slot, the court armed,
-  // its replay); nothing open goes on to the next flagged point
-  // (`nextReviewStop`, through the same jump `]` makes). Never from a
+  // its replay); nothing open stays on the corrected point — the next
+  // flagged point is `]`'s to reach, never the console's own. Never from a
   // refresh the labeller did not cause (`pendingAdvance` is null then),
   // never once they have selected something of their own (review mode off),
   // and never under a confirm or an open menu.
   const landOnStepRef = useRef(landOnStep);
   landOnStepRef.current = landOnStep;
-  const reviewJumpRef = useRef((fromPointId: string) => void fromPointId);
-  reviewJumpRef.current = (fromPointId) => {
-    if (!liveMarks) return;
-    const stop = nextReviewStop(points, liveMarks, fromPointId, 1);
-    if (stop && stop.pointId !== fromPointId)
-      findGap(stop.pointId, { arm: true });
-  };
   useEffect(() => {
     const pending = pendingAdvance.current;
     if (!pending || !expanded || pending.pointId !== expanded.id) return;
@@ -2998,7 +2990,6 @@ export function LabelConsole({
       return;
     }
     if (verdict === "advance") landOnStepRef.current(expanded, step);
-    else reviewJumpRef.current(expanded.id);
     // `step` and `expanded` move with `stepKey`; the key is the comparison.
     // `points` is here for a forced advance, whose key does not move.
     // eslint-disable-next-line react-hooks/exhaustive-deps

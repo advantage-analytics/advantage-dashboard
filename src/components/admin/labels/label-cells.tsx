@@ -296,8 +296,9 @@ export function SelectEditor({
 
 /**
  * Writes on Enter or when focus leaves, and only when the text parses and says
- * something new. Text that does not parse is marked invalid and never written:
- * Enter keeps it open, leaving throws it away.
+ * something new. Enter on text that parses also lets go of the field, so the
+ * console's own keys work again. Text that does not parse is marked invalid
+ * and never written: Enter keeps it open, leaving throws it away.
  */
 export function TextEditor({
   label,
@@ -352,7 +353,10 @@ export function TextEditor({
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            if (commit()) setDraft(null);
+            // The blur commits (`onBlur`); unreadable text keeps the field.
+            if (draft === null || parse(draft) !== undefined) {
+              event.currentTarget.blur();
+            }
           } else if (event.key === "Escape") {
             // Revert; the cell closes the editor as the key bubbles on.
             setDraft(null);
