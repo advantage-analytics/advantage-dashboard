@@ -69,7 +69,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
       <button
         type="button"
         onClick={filmFilters.clearAll}
-        className="cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        className="cursor-pointer rounded-[var(--radius-element)] text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
       >
         {filmStripAction(filmFilters)}
       </button>
