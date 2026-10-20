@@ -430,6 +430,79 @@ export function planGameShift(
   };
 }
 
+/** A new game started at a point: the moved rows and flipped strokes. */
+export type PlannedGameSplit =
+  | { ok: true; writes: GameShiftWrite[]; shots: ShotSwapWrite[] }
+  | { error: string };
+
+/**
+ * "Start a new game here": the game header the vendor never drew, added
+ * above `atPointId`. That point and every live point after it in its game
+ * become a new game — same set, an ordinary game, served by the other
+ * player from the game it leaves — and a moved point whose own strokes say
+ * the old server served it switches players, as a shift's do.
+ *
+ * The new game takes the session's highest game number plus one, as a game
+ * the shift opens does, so no other row is renumbered and none reads as
+ * edited. A game number is a key, not an order: the rail reads games in row
+ * order, and the publish numbers them in play order (apply.ts).
+ *
+ * Refused on the first live point of its game (the header is already
+ * there), inside a tiebreak (a tiebreak is one game), and on a tombstone or a
+ * point with no game.
+ */
+export function planGameSplit(
+  points: readonly ShiftPoint[],
+  atPointId: string,
+): PlannedGameSplit {
+  const at = points.find((point) => point.id === atPointId);
+  if (!at) return { error: "That point is not a point of this session." };
+  if (at.status === "deleted") {
+    return { error: "Restore this point before starting a game at it." };
+  }
+  if (at.setNumber === null || at.gameNumber === null) {
+    return { error: "Put this point in a game first." };
+  }
+  const game = points
+    .filter(
+      (point) => point.status !== "deleted" && gameKey(point) === gameKey(at),
+    )
+    .sort((a, b) => a.pointIndex - b.pointIndex);
+  // The game's type is its first point's, as the rail's header reads it — a
+  // point can carry a stale type (a folded tiebreak undone by hand).
+  if ((game[0]?.gameType ?? "game") !== "game") {
+    return { error: "A tiebreak is one game — it cannot be split." };
+  }
+  const index = game.findIndex((point) => point.id === atPointId);
+  if (index <= 0) {
+    return { error: "This point already starts its game." };
+  }
+  const moved = game.slice(index);
+  let highest = 0;
+  for (const point of points) {
+    if (point.gameNumber !== null && point.gameNumber > highest) {
+      highest = point.gameNumber;
+    }
+  }
+  const server = gameFirstServer(game.slice(0, index));
+  const to: Destination = {
+    setNumber: at.setNumber,
+    gameNumber: highest + 1,
+    gameType: "game",
+    server: server ? opponent(server) : null,
+    opened: true,
+  };
+  const writes: GameShiftWrite[] = [];
+  const swaps = new Map<string, PlayerSwap | null>();
+  for (const point of moved) {
+    const { write, swap } = shiftWrite(point, to);
+    writes.push(write);
+    swaps.set(point.id, swap);
+  }
+  const { shots } = flippedShots(swaps);
+  return { ok: true, writes, shots };
+}
+
 /** The strokes the cascade's swaps flip, and how many points switched. */
 function flippedShots(swaps: ReadonlyMap<string, PlayerSwap | null>): {
   shots: ShotSwapWrite[];

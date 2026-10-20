@@ -7,7 +7,8 @@ import { emailOrigin } from "@/lib/site-url";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
-  weight: ["300", "400", "500", "600", "700"],
+  // No `weight` list: Inter is a variable font, and listing weights makes
+  // next/font emit (and preload) one file per weight instead of one file.
   display: "swap",
 });
 
@@ -17,8 +18,11 @@ const mono = Roboto_Mono({
   // was resolving it to Inter — so Roboto Mono was downloaded for every visitor
   // and never rendered. The theme key now points here instead.
   variable: "--font-roboto-mono",
-  weight: ["400", "500", "600", "700"],
+  // Variable font — one file, as for Inter. Not preloaded: it sets only
+  // numerals and code, never the first paint's text, so it should not compete
+  // with the page's LCP for bandwidth.
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {

@@ -1,4 +1,7 @@
-import type { FilmStop } from "@/components/dashboard/matches/match-detail/film/film-timeline";
+import {
+  nextStop,
+  type FilmStop,
+} from "@/components/dashboard/matches/match-detail/film/film-timeline";
 import { POINT_TAIL_SECONDS } from "@/lib/services/labels/playback";
 import type { LabelPoint } from "@/lib/services/labels/session";
 
@@ -70,4 +73,28 @@ export function labelFilmStops(
       end: Math.max(end, serve),
     };
   });
+}
+
+/** How much of the next point must be buffered already to skip warming it. */
+export const READ_AHEAD_COVER_SECONDS = 4;
+
+/**
+ * Where the console's read-ahead element should sit: the start of the point
+ * after the playhead, unless the playing element already holds its opening
+ * {@link READ_AHEAD_COVER_SECONDS} (`buffered`, file clock). Null when there
+ * is no next point or nothing to fetch. The labeller's usual next move is that
+ * row, so its first frames are on hand before the click.
+ */
+export function readAheadTarget(
+  stops: readonly LabelFilmStop[],
+  filmTime: number,
+  buffered: readonly { start: number; end: number }[],
+): number | null {
+  const next = nextStop(stops, filmTime);
+  if (!next) return null;
+  const want = next.start + READ_AHEAD_COVER_SECONDS;
+  const held = buffered.some(
+    (range) => range.start <= next.start && range.end >= want,
+  );
+  return held ? null : next.start;
 }

@@ -12,6 +12,7 @@ import { formatClock } from "@/components/dashboard/matches/match-detail/format-
 import {
   ENDING_LABEL,
   STROKE_LABEL,
+  fileSeconds,
   pointSummary,
   spinLabel,
   type SideNames,
@@ -88,6 +89,10 @@ export function pointSentence(point: SentencePoint, names: SideNames): string {
 export const formatClockTime = (seconds: number): string =>
   formatClock(seconds);
 
+/** A label's `videoTime` on the rail's clock, read on the playing file. */
+export const formatFileClockTime = (videoTime: number, offset = 0): string =>
+  formatClockTime(fileSeconds(videoTime, offset));
+
 /** "Second serve" → "Second Serve", as the rail's detail line spells a serve. */
 function titleCase(text: string): string {
   return text.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
@@ -106,7 +111,11 @@ function titleCase(text: string): string {
  *   · live let serves close the line: "1 let", "2 lets"; none, nothing.
  * A part with nothing to say is left out, with its middot.
  */
-export function pointDetail(point: Pick<LabelPoint, "shots">): string {
+export function pointDetail(
+  point: Pick<LabelPoint, "shots">,
+  /** `LabelVideo.startTimeSeconds`: the time is on the playing file's clock. */
+  fileOffset = 0,
+): string {
   const live = liveShots(point);
   const last = live.at(-1);
   const parts: string[] = [];
@@ -124,7 +133,7 @@ export function pointDetail(point: Pick<LabelPoint, "shots">): string {
 
   const timed = live.find((shot) => shot.videoTime !== null);
   if (timed && timed.videoTime !== null) {
-    parts.push(formatClockTime(timed.videoTime));
+    parts.push(formatFileClockTime(timed.videoTime, fileOffset));
   }
 
   const { rally } = pointSummary(point);

@@ -42,6 +42,7 @@ import {
   type AskFeedback,
 } from "@/lib/services/ask/feedback";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user-server";
 
 export type {
   AskMatchOption,
@@ -51,14 +52,13 @@ export type {
   AskTagOptions,
 } from "@/lib/data/ask-tags";
 
-/** The signed-in user's id, or null. One auth read per request. */
-const getViewerId = cache(async function getViewerId(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.id ?? null;
-});
+/**
+ * The signed-in user's id, or null. Rides `getAuthUser()`, so a dashboard
+ * render shares the layout's one auth read rather than making its own.
+ */
+async function getViewerId(): Promise<string | null> {
+  return (await getAuthUser())?.id ?? null;
+}
 
 /** `getPersonalMatches()`'s columns plus the schedule link `programSide()` reads. */
 const TEAM_MATCH_COLUMNS =

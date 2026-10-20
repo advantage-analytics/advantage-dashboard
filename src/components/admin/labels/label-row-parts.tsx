@@ -44,6 +44,8 @@ export interface LabelRowOperations {
   onInsertPoint: (anchorPointId: string, position?: InsertPosition) => void;
   /** Move a game's leftover points into the next game (`game-shift.ts`). */
   onShiftGameOverflow: (fromPointId: string) => void;
+  /** Start a new game at a point (`planGameSplit`); absent: not offered. */
+  onStartGame?: (atPointId: string) => void;
   /** Make set `setNumber`'s game after 6–6 a tiebreak (`tiebreak-fold.ts`). */
   onFoldTiebreak?: (setNumber: number) => void;
   /** Split a point at one of its shots (`point-split.ts`). */
@@ -111,6 +113,11 @@ export interface EditContext {
   playOnLets?: boolean;
   /** The ground the rail's rows are drawn on (`label-rail-tone.ts`); absent, dark. */
   tone?: RailTone;
+  /**
+   * `LabelVideo.startTimeSeconds`: every time a row prints or takes is on the
+   * playing file's clock (`formatFileTime`). Absent, 0 — the analysis clock.
+   */
+  fileOffset?: number;
 }
 
 /** The playing point's span on the FILE clock, which `--film-t` carries. */

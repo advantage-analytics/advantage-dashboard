@@ -48,6 +48,7 @@ import {
   GAME_PULL_ADD_POINT,
   planGamePull,
   planGameShift,
+  planGameSplit,
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
@@ -69,7 +70,6 @@ import {
   nextReviewStop,
   openReviewItems,
   reviewStep,
-  type ReviewAnswer,
   type ReviewStep,
 } from "@/lib/services/labels/review-step";
 import {
@@ -263,7 +263,7 @@ import {
   playingRowKey,
 } from "./video-clock";
 import { useBrowserFullscreen } from "./use-browser-fullscreen";
-import { isStrokeKey, strokeKeyChange } from "./stroke-keys";
+import { hasEarlierServe, isStrokeKey, strokeKeyChange } from "./stroke-keys";
 
 /** Ids of rows drawn optimistically while their insert is in flight. */
 const PENDING_SHOT_PREFIX = "pending-shot-";
@@ -1476,6 +1476,18 @@ export function LabelConsole({
   }
 
   /**
+   * "Start a new game here" (`planGameSplit`): the point and the rest of its
+   * game become a new game, planned here on the rows as they stand.
+   */
+  function startGameAt(atPointId: string) {
+    if (!operations?.splitGame) return;
+    const plan = planGameSplit(points, atPointId);
+    if ("error" in plan) return refuse(plan.error);
+    const split = operations.splitGame;
+    runGameShift(plan, () => split(session.id, atPointId));
+  }
+
+  /**
    * The tiebreak at 6–6 (`tiebreak-fold.ts`): the game after it becomes a
    * tiebreak, the vendor's split games fold into it, and its serve order is
    * set — planned here on the rows as they stand, written by the server.
@@ -2246,15 +2258,28 @@ export function LabelConsole({
     if (!before || !operations) return Promise.resolve(null);
     // A reset can move the stroke's time, so it re-sorts like a time edit.
     const settlePoint = settlePointOf(shotId);
+    // A reset point is asked again: its check goes, as the server clears it
+    // (reset-session.ts), and comes back if the reset fails.
+    const checkedBefore = pointOfShot(points, shotId)?.checkedAt ?? null;
     return runOperation(
-      (rows) => updateShot(rows, shotId, true, applyShotReset),
+      (rows) =>
+        setCheckedOfShot(
+          updateShot(rows, shotId, true, applyShotReset),
+          shotId,
+          null,
+        ),
       () => operations.resetShot(shotId),
       (rows, result) =>
         settlePoint(
           replaceShot(rows, shotId, (s) => ({ ...s, status: result.status })),
           result,
         ),
-      (rows) => updateShot(rows, shotId, true, () => before),
+      (rows) =>
+        setCheckedOfShot(
+          updateShot(rows, shotId, true, () => before),
+          shotId,
+          checkedBefore,
+        ),
     );
   }
 
@@ -2376,6 +2401,7 @@ export function LabelConsole({
     onDismissSuggestion: dismissSuggestion,
     onInsertPoint: insertPoint,
     onShiftGameOverflow: shiftGameOverflow,
+    onStartGame: operations?.splitGame ? startGameAt : undefined,
     onFoldTiebreak: foldTiebreak,
     onSplitPoint: splitPoint,
     onCombinePoints: combinePoints,
@@ -2541,7 +2567,12 @@ export function LabelConsole({
       if (!operable || confirm || placement.shotId === null) return false;
       const shot = findShot(points, placement.shotId);
       if (!shot || shot.status === "deleted") return false;
-      const change = strokeKeyChange(key, shot);
+      const owner = points.find((p) => p.shots.some((s) => s.id === shot.id));
+      const change = strokeKeyChange(
+        key,
+        shot,
+        owner ? hasEarlierServe(owner, shot.id, drawsGhosts(marks)) : false,
+      );
       if (change) {
         requestPatchShot(
           shot.id,
@@ -3046,6 +3077,7 @@ export function LabelConsole({
       adScoring={session.adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
+      fileOffset={fileOffset}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}
@@ -3357,6 +3389,11 @@ export interface LabelConsoleOperations {
     sessionId: string,
     gameKey: string,
   ) => Promise<LabelGameShiftResult>;
+  /** Starts a new game at a point (`planGameSplit`). Same answer. */
+  splitGame?: (
+    sessionId: string,
+    atPointId: string,
+  ) => Promise<LabelGameShiftResult>;
   /** Makes set `setNumber`'s game after 6–6 a tiebreak. Same answer. */
   foldTiebreak?: (
     sessionId: string,
@@ -3494,6 +3531,19 @@ function updateShot(
     );
     return { ...point, shots: resort ? orderLabelShots(shots) : shots };
   });
+}
+
+/** The checked mark of the point that holds `shotId`. */
+function setCheckedOfShot(
+  points: readonly LabelPoint[],
+  shotId: string,
+  checkedAt: string | null,
+): LabelPoint[] {
+  return points.map((point) =>
+    point.shots.some((shot) => shot.id === shotId)
+      ? { ...point, checkedAt }
+      : point,
+  );
 }
 
 function replacePoint(

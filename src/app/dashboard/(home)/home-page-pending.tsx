@@ -1,7 +1,7 @@
 "use client";
 
 import { HomePageSkeleton } from "@/components/dashboard/loading/page-skeletons";
-import { useIsDayZero } from "@/components/dashboard/presence-provider";
+import { PresenceGate } from "@/components/dashboard/presence-provider";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { HomeDayZeroPage } from "./home-day-zero-page";
 
@@ -11,9 +11,16 @@ import { HomeDayZeroPage } from "./home-day-zero-page";
  */
 export function HomePagePending() {
   const { active, viewer } = useWorkspace();
-  const dayZero = useIsDayZero("home");
   // A team workspace is redirected to Team Home; never offer it personal copy.
-  if (dayZero && active.kind === "personal")
-    return <HomeDayZeroPage userId={viewer.id} />;
-  return <HomePageSkeleton />;
+  return (
+    <PresenceGate
+      surface="home"
+      dayZero={
+        active.kind === "personal" ? (
+          <HomeDayZeroPage userId={viewer.id} />
+        ) : null
+      }
+      skeleton={<HomePageSkeleton />}
+    />
+  );
 }

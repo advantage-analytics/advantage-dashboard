@@ -8,6 +8,7 @@ import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import { readGameScore } from "@/components/dashboard/matches/match-detail/film/film-score";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { surnameLabels } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
@@ -300,9 +301,12 @@ export function PerformanceTrackerChart() {
     readoutDiff === 0
       ? "Level"
       : `${readoutDiff > 0 ? youName : oppName} +${Math.abs(readoutDiff)} on margin`;
+  // A point the score stream never read (`score_frozen`) has no game score:
+  // the line stops at the margin rather than printing the coerced "0-0".
+  const readoutGameScore = readoutPoint ? readGameScore(readoutPoint) : null;
   const marginLine =
-    showScores && readoutPoint
-      ? `${marginBase} · ${readoutPoint.gameScore}`
+    showScores && readoutGameScore
+      ? `${marginBase} · ${readoutGameScore}`
       : marginBase;
 
   // Mono line: time from `videoTime`, dropped when the point has none so the

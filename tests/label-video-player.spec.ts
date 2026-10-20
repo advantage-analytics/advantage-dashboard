@@ -3,7 +3,11 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { playingStopAt } from "@/components/dashboard/matches/match-detail/film/film-timeline";
-import { labelFilmStops } from "@/components/admin/labels/label-film-stops";
+import {
+  READ_AHEAD_COVER_SECONDS,
+  labelFilmStops,
+  readAheadTarget,
+} from "@/components/admin/labels/label-film-stops";
 import {
   POINT_TAIL_SECONDS,
   playingRowAt,
@@ -50,6 +54,29 @@ function withShots(
 ): LabelPoint[] {
   return list.map((p) => (p.id === pointId ? { ...p, shots } : p));
 }
+
+test.describe("read-ahead", () => {
+  test("warms the next point unless its opening is already buffered", () => {
+    const stops = labelFilmStops(points(), 0);
+    const [p1, p2] = stops;
+    // Inside P1, nothing buffered: warm P2.
+    expect(readAheadTarget(stops, p1.start + 1, [])).toBe(p2.start);
+    // The playing element already holds P2's opening seconds: nothing to do.
+    expect(
+      readAheadTarget(stops, p1.start + 1, [
+        { start: p1.start, end: p2.start + READ_AHEAD_COVER_SECONDS },
+      ]),
+    ).toBeNull();
+    // Buffered up to just short of it still warms it.
+    expect(
+      readAheadTarget(stops, p1.start + 1, [
+        { start: p1.start, end: p2.start + 1 },
+      ]),
+    ).toBe(p2.start);
+    // On the last point there is no next one.
+    expect(readAheadTarget(stops, p2.start + 1, [])).toBeNull();
+  });
+});
 
 test.describe("the player's stops", () => {
   test("one stop per point with a live, timed stroke, on the console's windows", () => {

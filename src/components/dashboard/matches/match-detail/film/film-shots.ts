@@ -189,6 +189,9 @@ export function pointDetail(
   if (point.isBreakPoint) parts.push("Break point");
   if (point.isSetPoint) parts.push("Set point");
   if (point.isMatchPoint) parts.push("Match point");
+  // The derivation had no score to read and named the winner from the last
+  // stroke (`winner_guessed`) — said in the row, so the mark is not read as fact.
+  if (point.winnerGuessed) parts.push("Winner estimated");
 
   return parts.join(" · ") || "Rally";
 }
