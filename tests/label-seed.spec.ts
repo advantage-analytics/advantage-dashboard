@@ -10,7 +10,7 @@ import {
   DERIVATION_VERSION,
   type RawSplitStepStroke,
 } from "@/lib/services/splitstep/derivation";
-import type { MatchScore } from "@/lib/services/labels/session";
+import { isServeStroke, type MatchScore } from "@/lib/services/labels/session";
 import {
   buildLabelSeed,
   endedBy,
@@ -433,11 +433,11 @@ test.describe("seedEnding", () => {
     // on a serve the server won comes from the score, and the landing is
     // tracking noise. The console's deriveEnding reads it the same way.
     const unreturned = seed.points.filter((point, i) => {
-      const live = point.shots.filter((s) => s.site_removal === null);
+      const last = point.shots.filter((s) => s.site_removal === null).at(-1);
       return (
         transcript.points[i].result_type === "Service Winner" &&
-        live.at(-1)?.result === "in" &&
-        live.at(-1)?.stroke?.endsWith("_serve")
+        last?.result === "in" &&
+        isServeStroke(last.stroke)
       );
     });
     expect(unreturned.length).toBeGreaterThan(0);
