@@ -92,6 +92,12 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     expect(pointScoreOf("Ad–40")).toBe("AD-40");
     expect(pointScoreOf("40–Ad")).toBe("40-AD");
     expect(pointScoreOf("3–2")).toBe("3-2");
+    // A tiebreak's call is player 1 first; with player 2 serving it is
+    // written server-first, the column's order.
+    expect(pointScoreOf("1–0", true)).toBe("0-1");
+    expect(pointScoreOf("5–3", true)).toBe("3-5");
+    expect(pointScoreOf("4–4", true)).toBe("4-4");
+    expect(pointScoreOf("5–3", false)).toBe("5-3");
     // A point past the end of its game has no honest starting score.
     expect(pointScoreOf("Game–30")).toBeNull();
     expect(pointScoreOf(null)).toBeNull();

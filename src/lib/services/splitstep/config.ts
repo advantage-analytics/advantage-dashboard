@@ -258,45 +258,33 @@ export function getPilotIndividualCapSeconds(): number {
  */
 export const PILOT_INDIVIDUAL_MAX_PLAYERS = 20;
 
-/**
- * The individual tier's allocation with the vendor, through December, in two
- * bands. Every workspace `quotaTierFor()` puts on the individual figure
- * (personal workspaces and self-serve custom orgs) has its own cap, and ALSO
- * draws from one of these, by who is uploading:
- *
- * - the PILOT pool: the hand-picked players (`users.individual_pilot`, see
- *   20260925024406_individual_pool_quota.sql). Sized as a full list at their
- *   own 10h each, so it never refuses before a player's own cap does — it
- *   was a shared 10h until 2026-10-02, when pilots moved to 10h per person;
- * - the OPEN-BETA ceiling: everyone else, 2h each, under a house-wide monthly
- *   ceiling so a rush of signups cannot outspend it
- *   (20260925053330_individual_open_tier.sql).
- *
- * See `reserveQuota()`.
- */
-export const INDIVIDUAL_POOL_MONTHLY_CAP_HOURS =
-  PILOT_INDIVIDUAL_MAX_PLAYERS * PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS;
-
-export function getIndividualPoolCapSeconds(): number {
-  return INDIVIDUAL_POOL_MONTHLY_CAP_HOURS * 60 * 60;
-}
-
-/**
- * The open-beta band's monthly ceiling, across every non-pilot individual.
- * 20h is a starting figure pending the vendor's confirmation of a total for
- * this band. Set it to 0 to pause open video; the pilot pool is unaffected.
- */
-export const OPEN_BETA_MONTHLY_CEILING_HOURS = 20;
-
-export function getOpenBetaCeilingSeconds(): number {
-  return OPEN_BETA_MONTHLY_CEILING_HOURS * 60 * 60;
-}
-
 /** First of the current month, UTC — the `processing_usage.billing_month` key. */
 export function currentBillingMonth(now: Date = new Date()): string {
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${month}-01`;
+}
+
+/**
+ * When free hours next come back — `"Nov 1"` — or null when they do not,
+ * because the next month starts after `PILOT_ENDS_AT` (free hours end Dec 31
+ * and nothing replaces them until the January plans are decided).
+ *
+ * UTC, like the billing month it steps from. Every "free hours come back …"
+ * line reads this, so December stops promising a reset that will not happen.
+ */
+export function freeHoursReturnOn(now: Date = new Date()): string | null {
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  );
+  if (next.getTime() > new Date(`${PILOT_ENDS_AT}T00:00:00Z`).getTime()) {
+    return null;
+  }
+  return next.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 /**

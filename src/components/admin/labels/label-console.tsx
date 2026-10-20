@@ -3047,6 +3047,7 @@ export function LabelConsole({
       adScoring={session.adScoring}
       matchTiebreakSet={matchTiebreakSetNumber}
       playOnLets={session.playOnLets}
+      fileOffset={fileOffset}
       names={names}
       marks={liveMarks}
       expandedPointId={unfoldedPointId}
