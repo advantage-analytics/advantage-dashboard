@@ -13,6 +13,7 @@ import {
   MAX_ZOOM,
   NO_ZOOM,
   artPoint,
+  moveWindow,
   panBy,
   runoffGuides,
   zoomAbout,
@@ -28,6 +29,14 @@ import {
   setPlacementTarget,
   startPlacement,
 } from "@/components/admin/labels/court-placement";
+import {
+  COURT_LENGTH,
+  HALF_HEIGHT,
+  NET_Y,
+  halfTopY,
+  runoffWindowTop,
+  toCourtInWindow,
+} from "@/components/admin/labels/court-geometry";
 import type { ShotPosition } from "@/lib/services/labels/shot-derived";
 
 test.describe("stroke keys", () => {
@@ -168,6 +177,51 @@ test.describe("court zoom", () => {
     const z = zoomAbout(NO_ZOOM, 2, 0, 0);
     expect(panBy(z, 500, 500)).toEqual({ scale: 2, x: 0, y: 0 });
     expect(panBy(z, -500, -500)).toEqual({ scale: 2, x: -100, y: -100 });
+  });
+
+  test("a half's box moves up and down the court, as far as the deepest run-off", () => {
+    const near = halfTopY("near");
+    expect(moveWindow(near, 3)).toBeCloseTo(near + 3);
+    // Past the net: the near box moved up shows the far side's service box.
+    const across = moveWindow(near, 8);
+    expect(toCourtInWindow(across, { sx: 50, sy: 0 }).y).toBeGreaterThan(
+      NET_Y + 6,
+    );
+    // Bounded at the deepest run-off behind either baseline.
+    expect(moveWindow(near, -100)).toBeCloseTo(
+      runoffWindowTop("near", MAX_RUNOFF),
+    );
+    expect(moveWindow(halfTopY("far"), 100)).toBeCloseTo(
+      runoffWindowTop("far", MAX_RUNOFF),
+    );
+    expect(runoffWindowTop("far", MAX_RUNOFF) - HALF_HEIGHT).toBeLessThan(
+      COURT_LENGTH,
+    );
+  });
+
+  test("a click on a moved box lands where the court under it is", () => {
+    const top = moveWindow(halfTopY("near"), -4);
+    // The box's bottom edge is HALF_HEIGHT below its top.
+    expect(toCourtInWindow(top, { sx: 50, sy: 100 }).y).toBeCloseTo(
+      top - HALF_HEIGHT,
+    );
+  });
+
+  test("a pinch zooms, a scroll or a drag pans, and a drag never places", () => {
+    const source = readFileSync(
+      "src/components/admin/labels/label-court.tsx",
+      "utf8",
+    );
+    expect(source).toContain("if (event.ctrlKey) {");
+    expect(source).toMatch(/top: moveWindow\(\s*state\.top,/);
+    expect(source).toMatch(/top: moveWindow\(start\.top, /);
+    // A press on an unzoomed half can start a drag now; the whole court's cannot.
+    expect(source).toContain(
+      "if (event.button !== 0 || (zoom.scale === 1 && !zoomed)) return;",
+    );
+    // The click a drag ends with is still dropped, and a click reads the moved box.
+    expect(source).toContain("if (dropClick.current) {");
+    expect(source).toMatch(/toCourtInWindow\(\s*top,\s*artPoint\(/);
   });
 
   test("a click maps back through the zoom", () => {
