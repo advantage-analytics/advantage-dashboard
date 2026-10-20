@@ -1689,6 +1689,7 @@ export function LabelConsole({
         matchScore: session.matchScore,
         games: scores.games,
         names,
+        matchTiebreakSet: matchTiebreakSetNumber,
       }),
     });
   }
@@ -3263,6 +3264,7 @@ export function LabelConsole({
             matchScore: session.matchScore,
             games: scores.games,
             names,
+            matchTiebreakSet: matchTiebreakSetNumber,
           })}
           complete={status === "complete"}
           upload={upload}

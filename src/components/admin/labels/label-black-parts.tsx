@@ -164,6 +164,7 @@ export function gameSlot({
     | "game-underflow"
     | "tiebreak-fold"
     | "tiebreak-serve"
+    | "game-serve-repeat"
     | "set-score";
   anchor: string;
   rootData?: Record<string, string>;
