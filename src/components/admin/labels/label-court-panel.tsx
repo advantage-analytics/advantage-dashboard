@@ -428,6 +428,7 @@ export function CourtEndControls({
               type="button"
               aria-pressed={on}
               data-court-step={target}
+              aria-keyshortcuts="C"
               onClick={() => onTarget(target)}
               className={cn(
                 "h-5 cursor-pointer rounded-[5px] px-[9px] text-[11px] transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",
